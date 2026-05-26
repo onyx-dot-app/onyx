@@ -1,25 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import useSWR from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  createChatSession,
-  personaIncludesRetrieval,
-} from "@/app/app/services/lib";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useAgents } from "@/hooks/useAgents";
 import useChatSessions from "@/hooks/useChatSessions";
-import useChatController, { OnSubmitProps } from "@/hooks/useChatController";
+import useChatController from "@/hooks/useChatController";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useAgentController from "@/hooks/useAgentController";
 import { useLlmManager, useFilters } from "@/lib/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useUser } from "@/providers/UserProvider";
 import {
-  useChatSessionStore,
   useCurrentMessageHistory,
   useCurrentChatState,
   useIsReady,
@@ -29,23 +31,26 @@ import ChatScrollContainer, {
 } from "@/sections/chat/ChatScrollContainer";
 import ChatUI from "@/sections/chat/ChatUI";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
-import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/interfaces";
 import TutorChatHeader from "@/refresh-pages/tutor/TutorChatHeader";
 import TutorHistoryPanel from "@/refresh-pages/tutor/TutorHistoryPanel";
 import TutorSuggestions from "@/refresh-pages/tutor/TutorSuggestions";
 import TutorNoAgent from "@/refresh-pages/tutor/TutorNoAgent";
 import TutorPickerView from "@/refresh-pages/tutor/TutorPickerView";
+import TutorInstructorInsights from "@/refresh-pages/tutor/TutorInstructorInsights";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
-import { Button } from "@opal/components";
-import { SvgChevronDown } from "@opal/icons";
+import { Button, SidebarTab } from "@opal/components";
+import { SvgBarChart, SvgChevronDown, SvgUsers } from "@opal/icons";
 import Dropzone from "react-dropzone";
-import { cn } from "@/lib/utils";
+import { useEmbeddedMode } from "@/hooks/useEmbeddedMode";
+import { UserRole } from "@/lib/types";
 
 export default function TutorChatPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isAdmin, isCurator } = useUser();
-  const isInstructor = isAdmin || isCurator;
+  const { user, isAdmin } = useUser();
+  const isInstructor = isAdmin || user?.role === UserRole.CURATOR;
+  const isEmbedded = useEmbeddedMode();
 
   // URL params from LTI launch
   const assistantIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
@@ -56,6 +61,12 @@ export default function TutorChatPage() {
     searchParams?.get(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID) ?? null;
   const ltiCanvasCourseNodeId =
     searchParams?.get(SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID) ?? null;
+  const requestedTutorTab = searchParams?.get(SEARCH_PARAM_NAMES.TUTOR_TAB);
+  const showInstructorTabs = isEmbedded && isInstructor && projectId !== null;
+  const activeTutorTab =
+    showInstructorTabs && requestedTutorTab === "insights"
+      ? "insights"
+      : "chat";
 
   // State
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -104,10 +115,9 @@ export default function TutorChatPage() {
     return agents.find((a) => a.id === assistantId) ?? null;
   }, [assistantId, agents]);
 
-  const { selectedAgent, setSelectedAgentFromId, liveAgent } =
-    useAgentController({
-      selectedChatSession: currentChatSession,
-    });
+  const { setSelectedAgentFromId, liveAgent } = useAgentController({
+    selectedChatSession: currentChatSession,
+  });
 
   // Use the tutor agent if we have one, otherwise fall back to the controller's agent
   const effectiveAgent = tutorAgent ?? liveAgent;
@@ -140,25 +150,22 @@ export default function TutorChatPage() {
     setSelectedAgentFromId,
   });
 
-  const {
-    onMessageSelection,
-    currentSessionFileTokenCount,
-    sessionFetchError,
-  } = useChatSessionController({
-    existingChatSessionId: currentChatSessionId,
-    searchParams: searchParams!,
-    filterManager,
-    setSelectedAgentFromId,
-    setSelectedDocuments,
-    setCurrentMessageFiles,
-    chatSessionIdRef,
-    loadedIdSessionRef,
-    chatInputBarRef,
-    isInitialLoad,
-    submitOnLoadPerformed,
-    refreshChatSessions,
-    onSubmit,
-  });
+  const { onMessageSelection, currentSessionFileTokenCount } =
+    useChatSessionController({
+      existingChatSessionId: currentChatSessionId,
+      searchParams: searchParams!,
+      filterManager,
+      setSelectedAgentFromId,
+      setSelectedDocuments,
+      setCurrentMessageFiles,
+      chatSessionIdRef,
+      loadedIdSessionRef,
+      chatInputBarRef,
+      isInitialLoad,
+      submitOnLoadPerformed,
+      refreshChatSessions,
+      onSubmit,
+    });
 
   // Chat state from store
   const currentChatState = useCurrentChatState();
@@ -195,6 +202,7 @@ export default function TutorChatPage() {
   // New conversation handler
   const handleNewConversation = useCallback(() => {
     const params = new URLSearchParams();
+    if (isEmbedded) params.set(SEARCH_PARAM_NAMES.EMBEDDED, "true");
     if (assistantId)
       params.set(SEARCH_PARAM_NAMES.PERSONA_ID, String(assistantId));
     if (projectId) params.set(SEARCH_PARAM_NAMES.PROJECT_ID, String(projectId));
@@ -206,12 +214,20 @@ export default function TutorChatPage() {
         ltiCanvasCourseNodeId
       );
     router.push(`/tutor?${params.toString()}`);
-  }, [router, assistantId, projectId, ltiContextId, ltiCanvasCourseNodeId]);
+  }, [
+    router,
+    isEmbedded,
+    assistantId,
+    projectId,
+    ltiContextId,
+    ltiCanvasCourseNodeId,
+  ]);
 
   // Manage tutors: jump back to the picker for the current course.
   const handleManageTutors = useCallback(() => {
     if (!ltiContextId) return;
     const params = new URLSearchParams();
+    if (isEmbedded) params.set(SEARCH_PARAM_NAMES.EMBEDDED, "true");
     params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
     if (projectId) params.set(SEARCH_PARAM_NAMES.PROJECT_ID, String(projectId));
     if (ltiCanvasCourseNodeId)
@@ -220,12 +236,13 @@ export default function TutorChatPage() {
         ltiCanvasCourseNodeId
       );
     router.push(`/tutor?${params.toString()}`);
-  }, [router, ltiContextId, projectId, ltiCanvasCourseNodeId]);
+  }, [router, isEmbedded, ltiContextId, projectId, ltiCanvasCourseNodeId]);
 
   // Select a session from history
   const handleSelectSession = useCallback(
     (sessionId: string) => {
       const params = new URLSearchParams();
+      if (isEmbedded) params.set(SEARCH_PARAM_NAMES.EMBEDDED, "true");
       params.set(SEARCH_PARAM_NAMES.CHAT_ID, sessionId);
       if (assistantId)
         params.set(SEARCH_PARAM_NAMES.PERSONA_ID, String(assistantId));
@@ -241,7 +258,14 @@ export default function TutorChatPage() {
       router.push(`/tutor?${params.toString()}`);
       setHistoryOpen(false);
     },
-    [router, assistantId, projectId, ltiContextId, ltiCanvasCourseNodeId]
+    [
+      router,
+      isEmbedded,
+      assistantId,
+      projectId,
+      ltiContextId,
+      ltiCanvasCourseNodeId,
+    ]
   );
 
   // Submit message handler
@@ -277,14 +301,67 @@ export default function TutorChatPage() {
     setHistoryOpen((prev) => !prev);
   }, []);
 
+  const handleTutorTabChange = useCallback(
+    (tab: "chat" | "insights") => {
+      const params = new URLSearchParams(searchParams?.toString());
+      if (isEmbedded) params.set(SEARCH_PARAM_NAMES.EMBEDDED, "true");
+      if (tab === "insights") {
+        params.set(SEARCH_PARAM_NAMES.TUTOR_TAB, "insights");
+      } else {
+        params.delete(SEARCH_PARAM_NAMES.TUTOR_TAB);
+      }
+      router.replace(`/tutor?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams, isEmbedded]
+  );
+
+  const renderWithInstructorShell = useCallback(
+    (content: ReactNode) => {
+      if (!showInstructorTabs) {
+        return content;
+      }
+
+      return (
+        <div className="flex h-full w-full bg-background-neutral-00">
+          <div className="flex h-full w-[3.25rem] shrink-0 flex-col gap-2 border-r border-border-01 bg-background-tint-02 px-2 py-3">
+            <SidebarTab
+              folded
+              icon={SvgUsers}
+              selected={activeTutorTab === "chat"}
+              onClick={() => handleTutorTabChange("chat")}
+            >
+              Tutors
+            </SidebarTab>
+            <SidebarTab
+              folded
+              icon={SvgBarChart}
+              selected={activeTutorTab === "insights"}
+              onClick={() => handleTutorTabChange("insights")}
+            >
+              Insights
+            </SidebarTab>
+          </div>
+          <div className="min-h-0 flex-1">{content}</div>
+        </div>
+      );
+    },
+    [activeTutorTab, handleTutorTabChange, showInstructorTabs]
+  );
+
   // Loading state
   if (!isReady) return <OnyxInitializingLoader />;
+
+  if (activeTutorTab === "insights" && projectId !== null) {
+    return renderWithInstructorShell(
+      <TutorInstructorInsights projectId={projectId} />
+    );
+  }
 
   // No agentId chosen yet — render the picker if we know the course context,
   // otherwise fall back to the legacy no-agent state.
   if (!assistantId) {
     if (ltiContextId) {
-      return (
+      return renderWithInstructorShell(
         <TutorPickerView
           ltiContextId={ltiContextId}
           projectId={projectId}
@@ -293,20 +370,20 @@ export default function TutorChatPage() {
       );
     }
     if (!isLoadingAgents) {
-      return <TutorNoAgent />;
+      return renderWithInstructorShell(<TutorNoAgent />);
     }
   }
 
   // We have an agentId but the agent itself failed to resolve.
   if (!effectiveAgent && !isLoadingAgents) {
-    return <TutorNoAgent />;
+    return renderWithInstructorShell(<TutorNoAgent />);
   }
 
   const hasMessages = currentChatSessionId && messageHistory.length > 0;
   const hasStarterMessages =
     (effectiveAgent?.starter_messages?.length ?? 0) > 0;
 
-  return (
+  return renderWithInstructorShell(
     <div className="flex h-full w-full">
       {/* History panel (collapsible) */}
       {historyOpen && (

@@ -1,3 +1,4 @@
+from datetime import date
 from datetime import datetime
 from uuid import UUID
 
@@ -154,6 +155,38 @@ class ChatSessionSnapshot(BaseModel):
     assistant_name: str | None
     time_created: datetime
     flow_type: SessionType
+
+
+class LtiInstructorDailyTrend(BaseModel):
+    date: date
+    session_count: int
+    message_count: int
+
+
+class LtiInstructorThemeCluster(BaseModel):
+    label: str
+    summary: str
+    count: int
+    friction_score: int
+    representative_question: str | None = None
+
+
+class LtiInstructorThemeAnalysis(BaseModel):
+    clusters: list[LtiInstructorThemeCluster] = []
+    summary: str | None = None
+
+
+class LtiInstructorTrendsResponse(BaseModel):
+    start: datetime
+    end: datetime
+    total_sessions: int
+    total_messages: int
+    daily: list[LtiInstructorDailyTrend]
+    feedback_count: int
+    thumbs_down_count: int
+    thumbs_down_rate: float
+    themes: list[LtiInstructorThemeCluster] | None = None
+    summary: str | None = None
 
 
 class QuestionAnswerPairSnapshot(BaseModel):
