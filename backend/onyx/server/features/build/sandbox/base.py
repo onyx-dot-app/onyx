@@ -503,11 +503,24 @@ class SandboxManager(ABC):
     ) -> Generator["ACPEvent", None, None]:
         """Stream translated ACP events for an opencode session (parent
         or child). Never terminates on its own; caller closes via
-        ``GeneratorExit``. Empty under ACP."""
+        ``GeneratorExit``. Empty under ACP.
+
+        ``directory`` is the in-sandbox session path
+        (``/workspace/sessions/{build_session_id}``) — opencode-serve
+        scopes its session store per-directory, so the hydrate REST call
+        needs it. Without it, the delta-before-``message.updated`` race
+        falls back to the negative-cache path and drops in-flight
+        deltas for the current step on subagent streams.
+        """
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             return
         bus = self._get_or_create_event_bus(sandbox_id)
         state = _TurnState(session_id=opencode_session_id)
+        client = self._build_serve_client(sandbox_id)
+
+        def fetch_message(mid: str) -> dict[str, Any] | None:
+            return client.get_message(opencode_session_id, mid, directory=directory)
+
         sub = bus.subscribe(opencode_session_id)
         try:
             last_event = time.monotonic()
@@ -524,10 +537,13 @@ class SandboxManager(ABC):
                 last_event = time.monotonic()
                 if raw.get("type") == "server.connected":
                     continue
-                for acp_event in translate_opencode_event(raw, state):
+                for acp_event in translate_opencode_event(
+                    raw, state, fetch_message=fetch_message
+                ):
                     yield acp_event
         finally:
             bus.unsubscribe(sub)
+            client.close()
 
     # =====================================================================
     # opencode serve transport — shared plumbing
