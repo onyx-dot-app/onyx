@@ -9,15 +9,19 @@ pre-registered when the pod was created.
 
 from __future__ import annotations
 
-import inspect
-from typing import Any
+from datetime import datetime
 from typing import cast
+from unittest.mock import MagicMock
 from unittest.mock import patch
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.server.features.build.api import sessions_api
+from onyx.db.enums import SandboxStatus
+from onyx.db.models import Sandbox
+from onyx.db.models import User
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.manager import get_all_build_mode_llm_configs
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.manage.llm.models import LLMProviderView
@@ -200,35 +204,69 @@ class TestGetAllBuildModeLlmConfigs:
         assert configs[0] == _OPENAI_DEFAULT
 
 
-class TestProvisionCallsitesPassAllLlmConfigs:
-    """Both ``sandbox_manager.provision()`` callsites must pass
-    ``all_llm_configs`` — bypassing it causes the multi-provider
-    config to collapse to ``[default]`` and per-prompt overrides fail.
-    Guards against the regression that motivated this helper.
+class TestSessionManagerProvisionForwardsAllLlmConfigs:
+    """``SessionManager._provision_sandbox`` must forward the full
+    multi-provider list to ``sandbox_manager.provision()`` — passing only
+    the default collapses ``opencode.json`` and per-prompt model
+    overrides start failing with "Model not found" until pod restart.
     """
 
-    def test_session_manager_provision_passes_all_llm_configs(self) -> None:
-        source = _get_source(SessionManager._provision_sandbox)
-        assert "all_llm_configs=" in source, (
-            "_provision_sandbox must forward all_llm_configs to "
-            "sandbox_manager.provision()"
-        )
-        assert "get_all_build_mode_llm_configs" in source, (
-            "_provision_sandbox must build all_llm_configs via "
-            "get_all_build_mode_llm_configs"
+    def test_provision_passes_all_llm_configs(self) -> None:
+        sandbox_id = uuid4()
+        user_id = uuid4()
+        tenant_id = "tenant-x"
+
+        sandbox = MagicMock(spec=Sandbox)
+        sandbox.id = sandbox_id
+        user = MagicMock(spec=User)
+
+        sandbox_manager = MagicMock()
+        sandbox_manager.provision.return_value = SandboxInfo(
+            sandbox_id=sandbox_id,
+            directory_path="/workspace/sessions",
+            status=SandboxStatus.RUNNING,
+            last_heartbeat=datetime.now(),
         )
 
-    def test_restore_session_passes_all_llm_configs(self) -> None:
-        source = _get_source(sessions_api.restore_session)
-        assert "all_llm_configs=" in source, (
-            "restore_session must forward all_llm_configs when calling "
-            "sandbox_manager.provision() on a sleeping/terminated pod"
-        )
-        assert "get_all_build_mode_llm_configs" in source, (
-            "restore_session must build all_llm_configs via "
-            "get_all_build_mode_llm_configs"
-        )
+        manager = SessionManager.__new__(SessionManager)
+        manager._db_session = cast(Session, MagicMock())  # type: ignore[attr-defined]
+        manager._sandbox_manager = sandbox_manager  # type: ignore[attr-defined]
 
+        expected_configs = [
+            _OPENAI_DEFAULT,
+            LLMProviderConfig(
+                provider="anthropic",
+                model_name="claude-opus-4-7",
+                api_key="k-anthropic",
+                api_base=None,
+            ),
+        ]
 
-def _get_source(fn: Any) -> str:
-    return inspect.getsource(fn)
+        with (
+            patch(
+                "onyx.server.features.build.session.manager.ensure_sandbox_pat",
+                return_value="pat-token",
+            ),
+            patch(
+                "onyx.server.features.build.session.manager.get_all_build_mode_llm_configs",
+                return_value=expected_configs,
+            ) as mock_get_all_configs,
+            patch(
+                "onyx.server.features.build.session.manager.update_sandbox_status__no_commit"
+            ),
+        ):
+            manager._provision_sandbox(
+                sandbox=sandbox,
+                user=user,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                llm_config=_OPENAI_DEFAULT,
+            )
+
+        mock_get_all_configs.assert_called_once()
+        sandbox_manager.provision.assert_called_once()
+        kwargs = sandbox_manager.provision.call_args.kwargs
+        assert kwargs["all_llm_configs"] == expected_configs
+        assert kwargs["llm_config"] == _OPENAI_DEFAULT
+        assert kwargs["sandbox_id"] == sandbox_id
+        assert kwargs["onyx_pat"] == "pat-token"
