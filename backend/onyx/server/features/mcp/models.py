@@ -155,6 +155,12 @@ class MCPToolCreateRequest(BaseModel):
         None,
         description="Admin's credential key-value pairs for template substitution and storage",
     )
+    admin_credentials_changed: dict[str, bool] = Field(
+        default_factory=dict,
+        description=(
+            "Per-field flags marking which `admin_credentials` were edited"
+        ),  # True = use value from request, False = use stored value
+    )
     existing_server_id: Optional[int] = Field(
         None, description="ID of existing server to update (for editing)"
     )
