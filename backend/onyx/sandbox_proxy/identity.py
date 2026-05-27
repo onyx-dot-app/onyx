@@ -143,28 +143,6 @@ class IdentityResolver:
     ) -> UUID | None:
         """Validate a sandbox-supplied `BuildSession` id against its owner.
 
-        The id arrives in-band (the `Proxy-Authorization` username, set by
-        the `session-proxy-tag` opencode plugin) and is forgeable, so it is
-        trusted only if its `user_id` matches the user resolved from the
-        source IP. This bounds a tampered tag to the same user; mismatches
-        fail closed.
-
-        Status is intentionally not filtered: this is the session that
-        originated the egress regardless of its current status.
-        """
-        with self._session_factory(tenant_id) as db:
-            stmt = (
-                select(BuildSession.id)
-                .where(BuildSession.id == session_id)
-                .where(BuildSession.user_id == user_id)
-            )
-            return db.scalar(stmt)
-
-    def resolve_session_by_id(
-        self, session_id: UUID, user_id: UUID, tenant_id: str
-    ) -> UUID | None:
-        """Validate a sandbox-supplied `BuildSession` id against its owner.
-
         The session id arrives in-band as the `Proxy-Authorization`
         username (set by the `session-proxy-tag` opencode plugin from the
         session's workspace path). It is trusted only after confirming the
