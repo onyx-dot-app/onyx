@@ -62,7 +62,8 @@ def test_validate_file_rejects_oversize() -> None:
 
 
 def test_validate_file_rejects_empty() -> None:
-    """A zero-byte file is rejected."""
+    """A zero-byte file is rejected with an empty-file message, not a size-cap one."""
     is_valid, error = validate_file(0)
     assert is_valid is False
     assert error is not None
+    assert "empty" in error.lower()

@@ -29,24 +29,6 @@ logger = setup_logger()
 SAFE_FILENAME_PATTERN = re.compile(r"[^a-zA-Z0-9._-]")
 
 
-def validate_file_size(size: int) -> bool:
-    """Validate file size against limit.
-
-    Args:
-        size: File size in bytes
-
-    Returns:
-        True if the file size is allowed, False otherwise
-    """
-    if size <= 0:
-        return False
-
-    if size > MAX_UPLOAD_FILE_SIZE_BYTES:
-        return False
-
-    return True
-
-
 def sanitize_filename(filename: str) -> str:
     """Sanitize filename to prevent path traversal and other issues.
 
@@ -99,7 +81,10 @@ def validate_file(size: int) -> tuple[bool, str | None]:
     Returns:
         Tuple of (is_valid, error_message). error_message is None if valid.
     """
-    if not validate_file_size(size):
+    if size <= 0:
+        return False, "File is empty"
+
+    if size > MAX_UPLOAD_FILE_SIZE_BYTES:
         return (
             False,
             f"File size exceeds maximum allowed size of {MAX_UPLOAD_FILE_SIZE_BYTES} bytes",
