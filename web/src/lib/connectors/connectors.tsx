@@ -2040,6 +2040,7 @@ export interface JiraConfig {
 export interface JiraServiceManagementConfig {
   jira_base_url: string;
   jsm_project_key: string;
+  scoped_token?: boolean;
   comment_email_blacklist?: string[];
   jsm_issue_types?: string[];
   labels_to_skip?: string[];
