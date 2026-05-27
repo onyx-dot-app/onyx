@@ -108,12 +108,6 @@ export { Table } from "@opal/components/table/components";
 export { createTableColumns } from "@opal/components/table/columns";
 export type { DataTableProps } from "@opal/components/table/components";
 
-/* Separator */
-export {
-  Separator,
-  type SeparatorProps,
-} from "@opal/components/separator/components";
-
 /* ShadowDiv */
 export {
   ShadowDiv,
