@@ -168,9 +168,8 @@ class IdentityResolver:
         mismatch the gate fails the request closed (there is no
         most-recent-active fallback).
 
-        Status is intentionally not filtered: this id came from the
-        session that actually originated the egress, so it is the correct
-        routing target regardless of its current status.
+        Status is intentionally not filtered: this is the session that
+        originated the egress regardless of its current status.
         """
         with self._session_factory(tenant_id) as db:
             stmt = (
