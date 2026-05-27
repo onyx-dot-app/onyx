@@ -302,9 +302,11 @@ def test_read_opencode_password_roundtrips_via_docker_inspect(
     opencode-serve in the container loaded — otherwise every request 401s.
     This is the load-bearing invariant the Docker port adds, and a unit
     test with a mocked container can't catch a divergence between
-    `build_container_create_kwargs` and `_read_opencode_password`."""
+    `build_container_create_kwargs` and `_load_serve_connection_info`."""
     pool = _pool_container
-    pw = pool.manager._read_opencode_password(pool.sandbox_id)
+    info = pool.manager._load_serve_connection_info(pool.sandbox_id)
+    assert info is not None
+    pw = info.password
     assert pw is not None
     # token_urlsafe(32) produces 43-char output; allow slack for future
     # changes but the absolute floor is 32 chars for any reasonable secret.

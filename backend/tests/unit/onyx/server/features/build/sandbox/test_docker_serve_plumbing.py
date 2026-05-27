@@ -5,10 +5,10 @@ docker-sandbox-serve port — no Docker engine required. We use
 ``object.__new__(DockerSandboxManager)`` to bypass ``_initialize``
 (which would try to open the Docker socket) and verify:
 
-- ``_serve_base_url`` produces the expected container-name URL.
-- ``_read_opencode_password`` round-trips the cleartext password from a
-  mocked container's ``inspect.Config.Env``, returns ``None`` for legacy
-  containers, and returns ``None`` when the container is gone.
+- ``_load_serve_connection_info`` produces the expected container-name
+  URL + cleartext password from a mocked container's ``inspect.Config.Env``,
+  yields a ``None`` password for legacy containers, and returns ``None``
+  when the container is gone.
 - ``_render_session_files`` returns ``None`` for ``opencode.json`` under
   ``AGENT_TRANSPORT=serve`` (so snapshots stay clean) and a JSON blob
   under ``AGENT_TRANSPORT=acp``.
@@ -55,17 +55,24 @@ def _bare_manager() -> DockerSandboxManager:
     return mgr
 
 
-def test_serve_base_url_uses_container_name_and_port() -> None:
+def test_load_serve_connection_info_uses_container_name_and_port() -> None:
     """Sandboxes are addressed by container name on the bridge network.
     K8s does the same thing with a Service DNS name."""
     mgr = _bare_manager()
-    url = mgr._serve_base_url(_SBX)
-    assert url == f"http://sandbox-12345678:{OPENCODE_SERVE_PORT}"
+    fake_container = MagicMock()
+    fake_container.attrs = {"Config": {"Env": []}}
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker.containers.get.return_value = fake_container
+
+    info = mgr._load_serve_connection_info(_SBX)
+    assert info is not None
+    assert info.base_url == f"http://sandbox-12345678:{OPENCODE_SERVE_PORT}"
 
 
-def test_read_opencode_password_parses_from_container_env() -> None:
+def test_load_serve_connection_info_parses_password_from_container_env() -> None:
     """The cleartext password lives in the container's env (Docker
-    Engine API). Decoded on every read; never persisted on disk."""
+    Engine API). Decoded on every load; cached by the mixin so the hot
+    path doesn't re-hit ``docker inspect``."""
     mgr = _bare_manager()
     fake_container = MagicMock()
     fake_container.attrs = {
@@ -81,11 +88,12 @@ def test_read_opencode_password_parses_from_container_env() -> None:
     mgr._docker = MagicMock()  # type: ignore[attr-defined]
     mgr._docker.containers.get.return_value = fake_container
 
-    pw = mgr._read_opencode_password(_SBX)
-    assert pw == "correct-horse-battery-staple"
+    info = mgr._load_serve_connection_info(_SBX)
+    assert info is not None
+    assert info.password == "correct-horse-battery-staple"
 
 
-def test_read_opencode_password_returns_none_for_legacy_container() -> None:
+def test_load_serve_connection_info_yields_none_password_for_legacy() -> None:
     """A container provisioned before this code landed has no
     ``OPENCODE_SERVER_PASSWORD`` in env. The bus then falls back to
     no-auth and logs a warning."""
@@ -97,20 +105,22 @@ def test_read_opencode_password_returns_none_for_legacy_container() -> None:
     mgr._docker = MagicMock()  # type: ignore[attr-defined]
     mgr._docker.containers.get.return_value = fake_container
 
-    assert mgr._read_opencode_password(_SBX) is None
+    info = mgr._load_serve_connection_info(_SBX)
+    assert info is not None
+    assert info.password is None
 
 
-def test_read_opencode_password_returns_none_when_container_missing() -> None:
+def test_load_serve_connection_info_returns_none_when_container_missing() -> None:
     """terminate() races provision() — looking up a deleted container
     should fail gracefully, not raise."""
     mgr = _bare_manager()
     mgr._docker = MagicMock()  # type: ignore[attr-defined]
     mgr._docker.containers.get.side_effect = dsm.NotFound("gone")
 
-    assert mgr._read_opencode_password(_SBX) is None
+    assert mgr._load_serve_connection_info(_SBX) is None
 
 
-def test_read_opencode_password_handles_password_with_equals_sign() -> None:
+def test_load_serve_connection_info_handles_password_with_equals_sign() -> None:
     """``token_urlsafe(32)`` can produce ``=`` chars at the tail. The
     parser must split on the FIRST equals only."""
     mgr = _bare_manager()
@@ -126,7 +136,9 @@ def test_read_opencode_password_handles_password_with_equals_sign() -> None:
     mgr._docker = MagicMock()  # type: ignore[attr-defined]
     mgr._docker.containers.get.return_value = fake_container
 
-    assert mgr._read_opencode_password(_SBX) == weird_password
+    info = mgr._load_serve_connection_info(_SBX)
+    assert info is not None
+    assert info.password == weird_password
 
 
 @pytest.fixture
@@ -193,13 +205,13 @@ def test_prompt_slot_serializes_on_docker_under_serve(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The K8s prompt_slot test asserts the lock contract for K8s; the
-    Docker manager inherits the same base impl, so the same invariant
+    Docker manager inherits the same mixin impl, so the same invariant
     must hold for Docker too. This catches a regression where Docker
     forgot to call ``_init_serve_state`` and the lock dict would be
     missing."""
-    import onyx.server.features.build.sandbox.base as sandbox_base
+    from onyx.server.features.build.sandbox import serve_transport
 
-    monkeypatch.setattr(sandbox_base, "AGENT_TRANSPORT", AgentTransport.SERVE)
+    monkeypatch.setattr(serve_transport, "AGENT_TRANSPORT", AgentTransport.SERVE)
     mgr = _bare_manager()
 
     other_session = UUID("00000000-0000-0000-0000-000000000001")

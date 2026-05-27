@@ -34,6 +34,22 @@ Sandbox containers run with:
   network. As a result api_server / postgres / redis / minio /
   model_server are NOT reachable by service name from inside the sandbox.
 
+Threat model — Docker vs Kubernetes parity gap
+----------------------------------------------
+The LLM provider ``api_key`` is passed into the sandbox container via
+``OPENCODE_CONFIG_CONTENT`` (a Docker env var). Docker stores env vars in
+plaintext on the host's container metadata; anyone with access to the
+Docker daemon (e.g. operators running ``docker inspect``) can read it.
+This differs from the K8s backend, which loads the same config from a
+namespaced ``Secret`` (RBAC-scoped, mounted into env at boot).
+
+Self-hosted docker-compose deployers should treat host access to the
+Docker daemon as access to the LLM provider key. The single-process
+nature of docker-compose makes this practically equivalent to
+``cat .env`` — but the failure mode is more subtle (the key shows up
+in any ``docker inspect`` paste), so it's worth calling out. See the
+docker-opencode-serve.md doc for the operator-facing note.
+
 Outbound communication is intentionally limited to:
 
 1. Public internet over HTTPS (the bridge has default internet egress;
@@ -59,10 +75,9 @@ import shlex
 import tarfile
 import threading
 import time
-from collections.abc import Callable
 from collections.abc import Generator
-from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 from typing import TypedDict
 from uuid import UUID
 
@@ -114,6 +129,7 @@ from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
 )
@@ -279,8 +295,7 @@ def build_sandbox_labels(
     return labels
 
 
-@dataclass(frozen=True)
-class _RenderedSessionFiles:
+class _RenderedSessionFiles(NamedTuple):
     """Output of ``_render_session_files``.
 
     Both fields are already shell-escaped for ``printf '%s' '...'``.
@@ -290,6 +305,18 @@ class _RenderedSessionFiles:
 
     agents_md: str
     opencode_json: str | None
+
+
+def _opencode_json_write_snippet(opencode_json: str | None, session_path: str) -> str:
+    """Shell line for the per-session opencode.json under ACP, or a
+    no-op comment under serve (where the file is redundant — opencode-serve
+    already loaded its provider config from OPENCODE_CONFIG_CONTENT)."""
+    if opencode_json is None:
+        return (
+            "# AGENT_TRANSPORT=serve: opencode.json is container-level "
+            "via OPENCODE_CONFIG_CONTENT"
+        )
+    return f"printf '%s' '{opencode_json}' > {session_path}/opencode.json"
 
 
 class ContainerCreateKwargs(TypedDict):
@@ -527,13 +554,27 @@ class DockerSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
         *,
-        all_llm_configs: list[LLMProviderConfig] | None = None,  # noqa: ARG002 — see opencode-serve-migration §Multi-provider; Docker is single-provider today
+        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning")
         if not SANDBOX_API_SERVER_URL:
             raise ValueError(
                 "SANDBOX_API_SERVER_URL must be set for Docker sandbox provisioning"
+            )
+
+        if all_llm_configs is not None and len(all_llm_configs) > 1:
+            # Docker is single-provider today — opencode-serve loads only
+            # one provider's config at container startup. Per-prompt
+            # ``agent_provider`` overrides will fail at runtime with a
+            # generic "provider not registered" from opencode. Warn at
+            # provision so operators see this before the first request.
+            logger.warning(
+                "DockerSandboxManager.provision received %d LLM configs but only "
+                "the primary provider %r is bootstrapped; per-prompt provider "
+                "overrides will fail until Docker grows multi-provider support.",
+                len(all_llm_configs),
+                llm_config.provider,
             )
 
         logger.info(
@@ -543,9 +584,11 @@ class DockerSandboxManager(SandboxManager):
             tenant_id,
         )
 
-        # Re-provision: clear tombstone so subscribes can build a fresh bus.
+        # Re-provision: clear tombstone + cached connection info so
+        # subscribes can build a fresh bus against the new container.
         with self._event_buses_lock:
             self._terminated_sandboxes.discard(sandbox_id)
+        self._invalidate_serve_connection_info(sandbox_id)
 
         container = self._reuse_existing_container(sandbox_id)
         if container is None:
@@ -646,16 +689,9 @@ class DockerSandboxManager(SandboxManager):
             raise RuntimeError(f"Failed to create sandbox container: {e}") from e
 
     def terminate(self, sandbox_id: UUID) -> None:
-        # Tombstone + pop under one lock so subscribe can't race a fresh bus in.
-        with self._event_buses_lock:
-            self._terminated_sandboxes.add(sandbox_id)
-            doomed_keys = [k for k in self._event_buses if k[0] == sandbox_id]
-            doomed_buses = [self._event_buses.pop(k) for k in doomed_keys]
-        for bus in doomed_buses:
-            try:
-                bus.close()
-            except Exception:  # noqa: BLE001 — never let cleanup break terminate
-                logger.exception("PodEventBus close failed for sandbox %s", sandbox_id)
+        # Tombstone, pop every per-directory bus, and drop cached connection
+        # info — all in the mixin so the contract is shared with K8s.
+        self._close_all_sandbox_buses(sandbox_id)
 
         container = self._get_container(sandbox_id)
         if container is not None:
@@ -769,10 +805,8 @@ class DockerSandboxManager(SandboxManager):
             if nextjs_port is not None
             else ""
         )
-        opencode_json_write = (
-            f"printf '%s' '{rendered.opencode_json}' > {session_path}/opencode.json"
-            if rendered.opencode_json is not None
-            else "# serve transport: opencode.json is container-level (OPENCODE_CONFIG_CONTENT)"
+        opencode_json_write = _opencode_json_write_snippet(
+            rendered.opencode_json, session_path
         )
         setup_script = f"""
 set -e
@@ -822,6 +856,10 @@ echo "Session workspace setup complete"
         session_id: UUID,
         nextjs_port: int | None = None,  # noqa: ARG002
     ) -> None:
+        # Release the per-session event bus first so its SSE reader thread
+        # + httpx connection don't leak when the session goes away.
+        self._close_session_buses(sandbox_id, session_id)
+
         container = self._get_container(sandbox_id)
         if container is None:
             logger.debug(
@@ -1072,10 +1110,8 @@ fi
             nextjs_port=nextjs_port,
             skills_section=skills_section,
         )
-        opencode_json_write = (
-            f"printf '%s' '{rendered.opencode_json}' > {session_path}/opencode.json"
-            if rendered.opencode_json is not None
-            else "# AGENT_TRANSPORT=serve: opencode.json is container-level via OPENCODE_CONFIG_CONTENT"
+        opencode_json_write = _opencode_json_write_snippet(
+            rendered.opencode_json, session_path
         )
         script = f"""
 set -e
@@ -1089,20 +1125,16 @@ printf '%s' '{rendered.agents_md}' > {session_path}/AGENTS.md
         except ExecError as e:
             raise RuntimeError(f"Failed to regenerate session config: {e}") from e
 
-    def _serve_base_url(self, sandbox_id: UUID) -> str:
-        """Container-name URL on the sandbox bridge network.
+    def _load_serve_connection_info(
+        self, sandbox_id: UUID
+    ) -> ServeConnectionInfo | None:
+        """Build the serve connection info from the Docker container.
 
-        api_server must be on ``SANDBOX_DOCKER_NETWORK`` (the
-        ``onyx_craft_sandbox`` bridge) for this to resolve — same
-        requirement as the push-daemon path.
-        """
-        return f"http://{_sandbox_container_name(sandbox_id)}:{OPENCODE_SERVE_PORT}"
-
-    def _read_opencode_password(self, sandbox_id: UUID) -> str | None:
-        """Pull the per-container HTTP Basic password out of the
-        container's env (via ``docker inspect``). Returns ``None`` for
-        legacy containers provisioned before this code landed; the bus
-        falls back to no-auth in that case (logged loudly).
+        Single read of ``docker inspect``: the base URL is derived from
+        the deterministic container name; the password lives in the
+        container's env (set at create time by
+        ``build_container_create_kwargs``). Cached by the mixin so the
+        hot path doesn't hit dockerd on every prompt.
         """
         container = self._get_container(sandbox_id)
         if container is None:
@@ -1111,45 +1143,18 @@ printf '%s' '{rendered.agents_md}' > {session_path}/AGENTS.md
             env_list = ((container.attrs or {}).get("Config") or {}).get("Env") or []
         except (APIError, NotFound):
             return None
+        password: str | None = None
         prefix = f"{OPENCODE_SERVER_PASSWORD_ENV}="
         for entry in env_list:
             if entry.startswith(prefix):
-                return entry[len(prefix) :]
-        return None
-
-    def send_message(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        message: str,
-        *,
-        opencode_session_id: str | None = None,
-        agent_provider: str | None = None,
-        agent_model: str | None = None,
-        on_opencode_session_resolved: Callable[[str], None] | None = None,
-    ) -> Generator[ACPEvent, None, None]:
-        """Stream ACP events for one user message. Branches on
-        ``AGENT_TRANSPORT``:
-
-        - ``serve`` (default post-migration): drive long-lived
-          ``opencode serve`` HTTP inside the container via the base-class
-          ``_send_message_via_serve``.
-        - ``acp`` (rollback): exec ``opencode acp`` once per message via
-          :class:`DockerACPExecClient`. Deletion happens in the
-          drop-acp-layer follow-up.
-        """
-        if AGENT_TRANSPORT == AgentTransport.SERVE:
-            yield from self._send_message_via_serve(
-                sandbox_id,
-                session_id,
-                message,
-                opencode_session_id,
-                agent_provider,
-                agent_model,
-                on_opencode_session_resolved=on_opencode_session_resolved,
-            )
-            return
-        yield from self._send_message_via_acp(sandbox_id, session_id, message)
+                password = entry[len(prefix) :]
+                break
+        return ServeConnectionInfo(
+            base_url=(
+                f"http://{_sandbox_container_name(sandbox_id)}:{OPENCODE_SERVE_PORT}"
+            ),
+            password=password,
+        )
 
     def _send_message_via_acp(
         self,

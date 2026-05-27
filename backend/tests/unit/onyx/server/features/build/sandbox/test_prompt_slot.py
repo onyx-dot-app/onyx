@@ -20,14 +20,13 @@ Bypasses ``_initialize`` (no K8s config needed) — pure lock logic.
 
 from __future__ import annotations
 
-import threading
 from uuid import UUID
 from uuid import uuid4
 
 import pytest
 
-import onyx.server.features.build.sandbox.base as sandbox_base
 from onyx.server.features.build.configs import AgentTransport
+from onyx.server.features.build.sandbox import serve_transport
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
@@ -37,19 +36,19 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 def _serve_transport(monkeypatch: pytest.MonkeyPatch) -> None:
     """The lock is a no-op outside SERVE mode — force it on for these tests.
 
-    ``prompt_slot`` lives on the SandboxManager base class, so we patch the
-    transport flag where the lock body reads it.
+    ``prompt_slot`` lives on the ``_ServeMixin`` (composed into
+    ``SandboxManager``) post-refactor; the transport flag is read at the
+    mixin module.
     """
-    monkeypatch.setattr(sandbox_base, "AGENT_TRANSPORT", AgentTransport.SERVE)
+    monkeypatch.setattr(serve_transport, "AGENT_TRANSPORT", AgentTransport.SERVE)
 
 
 @pytest.fixture
 def mgr() -> KubernetesSandboxManager:
-    """KubernetesSandboxManager with just the prompt-lock state populated —
+    """KubernetesSandboxManager with just the serve-transport state populated —
     skips _initialize so no kube config is required."""
     m: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
-    m._prompt_locks = {}  # type: ignore[attr-defined]
-    m._prompt_locks_meta = threading.Lock()  # type: ignore[attr-defined]
+    m._init_serve_state()
     return m
 
 
@@ -133,7 +132,7 @@ def test_prompt_slot_yields_true_when_not_in_serve_mode(
     """Outside SERVE mode (i.e., ACP transport), the slot is a no-op —
     it should always yield True without touching the lock dict, because
     each ACP call exec's its own opencode process and can't race."""
-    monkeypatch.setattr(sandbox_base, "AGENT_TRANSPORT", AgentTransport.ACP)
+    monkeypatch.setattr(serve_transport, "AGENT_TRANSPORT", AgentTransport.ACP)
     # Two concurrent acquires on the same session both succeed — no lock.
     with mgr.prompt_slot(_SBX, _SES) as first:
         assert first is True

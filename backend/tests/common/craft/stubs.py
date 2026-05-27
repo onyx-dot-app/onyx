@@ -63,6 +63,7 @@ from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 
 _UNSET = object()
 
@@ -120,6 +121,11 @@ class StubSandboxManager(SandboxManager):
     """
 
     def __init__(self) -> None:
+        # Initialize serve-transport state from _ServeMixin so any test
+        # that ends up reaching prompt_slot/list_subagents on the stub
+        # gets the dicts/locks it expects.
+        self._init_serve_state()
+
         # Return-value hooks.
         self.provision_returns: SandboxInfo | None = None
         self.health_check_returns: bool | None = None
@@ -456,11 +462,27 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("get_upload_stats")
         return self.get_upload_stats_returns
 
-    def _serve_base_url(self, sandbox_id: UUID) -> str:
-        return f"http://stub-{str(sandbox_id)[:8]}:4096"
+    def _load_serve_connection_info(
+        self, sandbox_id: UUID
+    ) -> ServeConnectionInfo | None:
+        # Stub doesn't drive a real opencode-serve — return a deterministic
+        # URL + no password so any code path that touches the cache gets a
+        # reasonable value.
+        return ServeConnectionInfo(
+            base_url=f"http://stub-{str(sandbox_id)[:8]}:4096",
+            password=None,
+        )
 
-    def _read_opencode_password(self, sandbox_id: UUID) -> str | None:  # noqa: ARG002
-        return None
+    def _send_message_via_acp(
+        self,
+        sandbox_id: UUID,  # noqa: ARG002
+        session_id: UUID,  # noqa: ARG002
+        message: str,  # noqa: ARG002
+    ) -> Generator[ACPEvent, None, None]:
+        # The stub overrides ``send_message`` directly, so this leg is
+        # unreachable. Defined to satisfy the ABC.
+        raise _not_configured("_send_message_via_acp")
+        yield  # pragma: no cover — make this a generator function
 
     def write_files_to_sandbox(
         self,

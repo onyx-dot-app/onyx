@@ -32,7 +32,6 @@ future refactor that flattens the key back to ``sandbox_id`` (or scopes
 
 from __future__ import annotations
 
-import threading
 from collections.abc import Generator
 from queue import Empty
 from typing import Any
@@ -55,26 +54,33 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 def _serve_transport(monkeypatch: pytest.MonkeyPatch) -> None:
     """``list_subagents`` and bus creation only kick in under SERVE.
 
-    The methods live on ``SandboxManager`` (base) post-refactor, so we
-    patch the transport flag where the read happens.
+    The methods live on ``_ServeMixin`` (composed into ``SandboxManager``)
+    post-refactor; the transport flag is read at the mixin module.
     """
+    from onyx.server.features.build.sandbox import serve_transport
+
     monkeypatch.setattr(sandbox_base, "AGENT_TRANSPORT", AgentTransport.SERVE)
+    monkeypatch.setattr(serve_transport, "AGENT_TRANSPORT", AgentTransport.SERVE)
 
 
 @pytest.fixture
 def mgr() -> Generator[KubernetesSandboxManager, None, None]:
-    """Manager with just the event-bus state initialized — skips
-    ``_initialize`` so no kube config is required. Stubs the two helpers
-    ``_get_or_create_event_bus`` calls so we don't need real auth or pod
-    URLs."""
-    m: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
-    m._event_buses = {}  # type: ignore[attr-defined]
-    m._event_buses_lock = threading.Lock()  # type: ignore[attr-defined]
-    m._terminated_sandboxes = set()  # type: ignore[attr-defined]
+    """Manager with just the serve-transport state initialized — skips
+    ``_initialize`` so no kube config is required. Stubs
+    ``_load_serve_connection_info`` so the mixin's caching layer doesn't
+    need a real Secret read."""
+    from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 
-    # Stub auth + URL lookups so we don't touch K8s.
-    m._read_opencode_password = lambda _sandbox_id: None  # type: ignore[assignment]
-    m._serve_base_url = lambda sandbox_id: f"http://{sandbox_id}.invalid:4096"  # type: ignore[assignment]
+    m: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
+    m._init_serve_state()  # initializes _event_buses, _terminated_sandboxes, etc.
+
+    # Stub the cached connection-info loader so we don't touch K8s.
+    m._load_serve_connection_info = (  # type: ignore[assignment]
+        lambda sandbox_id: ServeConnectionInfo(
+            base_url=f"http://{sandbox_id}.invalid:4096",
+            password=None,
+        )
+    )
 
     try:
         yield m

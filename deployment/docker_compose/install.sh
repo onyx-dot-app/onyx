@@ -242,6 +242,15 @@ refresh_docker_sudo() {
 }
 refresh_docker_sudo
 
+# is_using_sudo: returns 0 iff DOCKER_SUDO currently runs commands under sudo.
+# Wraps the convention so callers don't open-code ``[[ "${DOCKER_SUDO[0]}" ==
+# "sudo" ]]`` everywhere — that pattern is forced by the ``env``-anchor
+# workaround (see comment above DOCKER_SUDO=). A future contributor reading
+# ``is_using_sudo`` doesn't need to know about bash 3.2 parsing quirks.
+is_using_sudo() {
+    [[ "${DOCKER_SUDO[0]}" == "sudo" ]]
+}
+
 # Ensures a required file is present. With --local, verifies the file exists on
 # disk. Otherwise, downloads it from the given URL. Returns 0 on success, 1 on
 # failure (caller should handle the exit).
@@ -576,7 +585,7 @@ fi
 # group membership in that case. The downstream daemon check will exit with
 # a clearer message if the daemon really is down.
 refresh_docker_sudo
-if [[ "${DOCKER_SUDO[0]}" == "sudo" ]]; then
+if is_using_sudo; then
     if ! id -nG "$USER" | grep -qw docker; then
         if ! getent group docker &> /dev/null; then
             sudo groupadd docker
@@ -1311,7 +1320,7 @@ if [ $UP_EXIT -ne 0 ]; then
     (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps)
     echo ""
     print_info "Check the logs of any unhealthy service:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $([[ "${DOCKER_SUDO[0]}" == "sudo" ]] && echo "sudo ")$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $(is_using_sudo && echo "sudo ")$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
     exit 1
@@ -1329,7 +1338,7 @@ else
     echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers started  ⚠️${NC}"
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     print_info "Services may still be initializing. Check status with:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $([[ "${DOCKER_SUDO[0]}" == "sudo" ]] && echo "sudo ")$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} ps)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $(is_using_sudo && echo "sudo ")$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} ps)"
 fi
 echo ""
 print_info "Access Onyx at:"

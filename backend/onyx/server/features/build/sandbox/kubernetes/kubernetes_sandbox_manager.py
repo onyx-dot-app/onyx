@@ -47,7 +47,6 @@ import socket
 import tarfile
 import threading
 import time
-from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterator
 from pathlib import Path
@@ -115,6 +114,7 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import RetriableWriteError
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
 )
@@ -1291,10 +1291,12 @@ class KubernetesSandboxManager(SandboxManager):
             )
 
         try:
-            # Re-provision: clear the tombstone so future subscribes can
-            # build a fresh bus against the new pod.
+            # Re-provision: clear the tombstone + cached connection info so
+            # future subscribes build a fresh bus against the new pod with
+            # the new Secret's password.
             with self._event_buses_lock:
                 self._terminated_sandboxes.discard(sandbox_id)
+            self._invalidate_serve_connection_info(sandbox_id)
 
             # Secret must exist before the Pod (env references it via
             # secretKeyRef). Pre-load every configured provider so
@@ -1530,19 +1532,9 @@ class KubernetesSandboxManager(SandboxManager):
 
     def terminate(self, sandbox_id: UUID) -> None:
         """Tear down the per-pod event bus, then delete Service + Pod."""
-        # Tombstone + pop all buses for this sandbox (one per directory)
-        # under one lock so a concurrent subscribe can't race in and create
-        # a fresh bus against the dying pod.
-        with self._event_buses_lock:
-            self._terminated_sandboxes.add(sandbox_id)
-            doomed_keys = [k for k in self._event_buses if k[0] == sandbox_id]
-            doomed_buses = [self._event_buses.pop(k) for k in doomed_keys]
-        for bus in doomed_buses:
-            try:
-                bus.close()
-            except Exception:  # noqa: BLE001 — never let cleanup break terminate
-                logger.exception("PodEventBus close failed for sandbox %s", sandbox_id)
-
+        # Tombstone, pop every per-directory bus, and drop cached connection
+        # info — same contract as Docker, lives on the shared mixin.
+        self._close_all_sandbox_buses(sandbox_id)
         self._cleanup_kubernetes_resources(str(sandbox_id))
         logger.info("Terminated Kubernetes sandbox %s", sandbox_id)
 
@@ -1745,6 +1737,10 @@ echo "Session workspace setup complete"
             nextjs_port: Optional port where Next.js server is running (unused in K8s,
                         we use PID file instead)
         """
+        # Drop the per-session event bus first so its reader thread + httpx
+        # connection don't leak past the session's lifetime.
+        self._close_session_buses(sandbox_id, session_id)
+
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
@@ -2169,41 +2165,9 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         )
         return acp_client
 
-    def send_message(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        message: str,
-        *,
-        opencode_session_id: str | None = None,
-        agent_provider: str | None = None,
-        agent_model: str | None = None,
-        on_opencode_session_resolved: Callable[[str], None] | None = None,
-    ) -> Generator[ACPEvent, None, None]:
-        """Stream ACP events for one user message. Transport selected by
-        ``AGENT_TRANSPORT`` (configs.py).
-
-        - ``serve``: long-lived ``opencode serve`` inside the pod, driven
-          via :class:`OpencodeServeClient`. Requires ``opencode_session_id``
-          (or a successful preflight via :meth:`ensure_opencode_session`).
-          ``agent_provider``/``agent_model`` become the per-prompt model
-          override (``body["model"]`` on ``POST .../prompt_async``).
-        - ``acp`` (default): ephemeral ``opencode acp`` exec'd per message.
-          Documented in :meth:`_send_message_via_acp` — preserved here
-          unchanged for the rollback window of the migration plan.
-        """
-        if AGENT_TRANSPORT == AgentTransport.SERVE:
-            yield from self._send_message_via_serve(
-                sandbox_id,
-                session_id,
-                message,
-                opencode_session_id,
-                agent_provider,
-                agent_model,
-                on_opencode_session_resolved=on_opencode_session_resolved,
-            )
-            return
-        yield from self._send_message_via_acp(sandbox_id, session_id, message)
+    # ``send_message`` lives on the base class; it dispatches to
+    # ``_send_message_via_serve`` (in :class:`_ServeMixin`) or
+    # ``_send_message_via_acp`` (below) based on ``AGENT_TRANSPORT``.
 
     def _send_message_via_acp(
         self,
@@ -2322,13 +2286,22 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
                     e,
                 )
 
-    def _serve_base_url(self, sandbox_id: UUID) -> str:
-        """In-cluster URL for opencode-serve. Routes via Service (not pod IP)
-        because telepresence drops arbitrary pod-IP traffic."""
+    def _load_serve_connection_info(
+        self, sandbox_id: UUID
+    ) -> ServeConnectionInfo | None:
+        """Build the serve connection info from the per-pod Secret.
+
+        URL is the in-cluster Service DNS, not the pod IP — telepresence
+        drops arbitrary pod-IP traffic, so the Service form is the one
+        that survives dev/local environments.
+        """
         service_name = self._get_service_name(str(sandbox_id))
-        return (
-            f"http://{service_name}.{self._namespace}.svc.cluster.local"
-            f":{OPENCODE_SERVE_PORT}"
+        return ServeConnectionInfo(
+            base_url=(
+                f"http://{service_name}.{self._namespace}.svc.cluster.local"
+                f":{OPENCODE_SERVE_PORT}"
+            ),
+            password=self._read_opencode_password(sandbox_id),
         )
 
     def list_directory(
