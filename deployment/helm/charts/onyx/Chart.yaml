@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.10
+version: 0.5.11
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,9 +16,11 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: fixed
-      description: Allow sandbox NetworkPolicy traffic to the configured
-        Next.js dev server port range.
+    - kind: changed
+      description: Inject `extraEnvFromSecret` into the `sandbox-proxy`
+        Deployment so the proxy receives credentials (e.g.
+        `ENCRYPTION_KEY_SECRET`) from the same Secret as the api_server,
+        enabling it to decrypt DB columns for egress credential injection.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0
