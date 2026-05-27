@@ -1,21 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { cn } from "@opal/utils";
-import { Text } from "@opal/components";
+import { Tag, Text } from "@opal/components";
 import { SvgBubbleText, SvgChevronDown } from "@opal/icons";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
-import {
-  TimelineRow,
-  TimelineRowRailVariant,
-} from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
-import { TimelineSurface } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
-import { SvgLoader } from "@/app/craft/components/tool-cards/helpers";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 // MinimalMarkdown's default `p` goes through MemoizedParagraph which forces
@@ -74,84 +68,66 @@ const THINKING_MARKDOWN_OVERRIDES = {
 interface ThinkingCardProps {
   content: string;
   isStreaming: boolean;
-  isFirstStep?: boolean;
-  isLastStep?: boolean;
-  railVariant?: TimelineRowRailVariant;
 }
 
-function renderRailIcon(isStreaming: boolean) {
-  const baseClass =
-    "h-(--timeline-icon-size) w-(--timeline-icon-size) shrink-0";
-  if (isStreaming) {
-    return (
-      <SvgLoader
-        className={cn(baseClass, "stroke-status-info-05 animate-spin")}
-      />
-    );
-  }
-  return <SvgBubbleText className={cn(baseClass, "stroke-text-03")} />;
+function formatTokenCount(chars: number): string {
+  // ~4 chars per token; coarse but consistent with Claude/OpenAI's "Thought for Ns"
+  // approximations when wall-clock timing isn't tracked.
+  const tokens = Math.round(chars / 4);
+  if (tokens < 1000) return `${tokens} tokens`;
+  return `${(tokens / 1000).toFixed(1)}k tokens`;
 }
 
 export default function ThinkingCard({
   content,
   isStreaming,
-  isFirstStep = true,
-  isLastStep = true,
-  railVariant = "rail",
 }: ThinkingCardProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const chip = useMemo(() => formatTokenCount(content.length), [content]);
 
   if (!content) return null;
 
   return (
-    <TimelineRow
-      railVariant={railVariant}
-      icon={renderRailIcon(isStreaming)}
-      showIcon={railVariant === "rail"}
-      isFirst={isFirstStep}
-      isLast={isLastStep}
-    >
-      <TimelineSurface
-        className="flex flex-col"
-        roundedTop={isFirstStep}
-        roundedBottom={isLastStep}
-      >
-        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <CollapsibleTrigger asChild>
-            <button
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <button
+          className={cn(
+            "group w-full text-left px-3 py-2 rounded-md transition-colors",
+            "hover:bg-background-tint-02"
+          )}
+        >
+          <div className="flex items-center gap-2 min-w-0 w-full">
+            <SvgBubbleText className="size-4 shrink-0 stroke-text-03" />
+            <Text font="main-ui-muted" color="text-04" nowrap>
+              {isStreaming ? "Thinking" : "Thought"}
+            </Text>
+            {!isStreaming && (
+              <span className="shrink-0">
+                <Tag title={chip} size="sm" color="gray" />
+              </span>
+            )}
+            <SvgChevronDown
               className={cn(
-                "group w-full text-left px-3 py-2 rounded-md transition-colors",
-                "hover:bg-background-tint-02"
+                "size-4 stroke-text-03 transition-all duration-150 shrink-0 ml-auto",
+                "group-hover:stroke-text-05",
+                !isOpen && "-rotate-90"
               )}
-            >
-              <div className="flex items-center gap-2 min-w-0 w-full">
-                <Text font="main-ui-muted" color="text-04" nowrap>
-                  Thinking
-                </Text>
-                <SvgChevronDown
-                  className={cn(
-                    "size-4 stroke-text-03 transition-all duration-150 shrink-0 ml-auto",
-                    "group-hover:stroke-text-05",
-                    !isOpen && "-rotate-90"
-                  )}
-                />
-              </div>
-            </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="px-3 pb-2 pt-0">
-              <div className="py-1 max-h-48 overflow-y-auto">
-                <MinimalMarkdown
-                  content={normalizeThinking(content)}
-                  className="text-text-03 prose-sm"
-                  streaming={isStreaming}
-                  components={THINKING_MARKDOWN_OVERRIDES}
-                />
-              </div>
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-      </TimelineSurface>
-    </TimelineRow>
+            />
+          </div>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="px-3 pb-2 pt-0">
+          <div className="py-1 max-h-48 overflow-y-auto">
+            <MinimalMarkdown
+              content={normalizeThinking(content)}
+              className="text-text-03 prose-sm"
+              streaming={isStreaming}
+              components={THINKING_MARKDOWN_OVERRIDES}
+            />
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

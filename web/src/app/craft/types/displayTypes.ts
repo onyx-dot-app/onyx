@@ -54,6 +54,13 @@ export type ToolCallName =
   | "todowrite"
   | "webfetch"
   | "websearch"
+  // opencode 1.15.x additions:
+  | "lsp"
+  | "apply_patch"
+  | "skill"
+  | "list"
+  | "question"
+  | "invalid"
   | "unknown";
 
 export interface ToolCallState {

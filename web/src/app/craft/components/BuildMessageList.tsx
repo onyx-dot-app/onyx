@@ -6,14 +6,16 @@ import Logo from "@/refresh-components/Logo";
 import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
-import { TimelineRoot } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRoot";
-import TimelineRow from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import CraftToolGroup from "@/app/craft/components/tool-cards/CraftToolGroup";
 import TodoListCard from "@/app/craft/components/TodoListCard";
 import UserMessage from "@/app/craft/components/UserMessage";
 import { BuildMessage } from "@/app/craft/types/streamingTypes";
-import { StreamItem, ToolCallState } from "@/app/craft/types/displayTypes";
+import {
+  StreamItem,
+  ToolCallState,
+  TodoListState,
+} from "@/app/craft/types/displayTypes";
 
 interface BuildMessageListProps {
   messages: BuildMessage[];
@@ -25,15 +27,14 @@ interface BuildMessageListProps {
   messagesEndRef?: React.RefObject<HTMLDivElement>;
 }
 
-// Items that render on the timeline rail. Text + todo_list break the rail.
-const RAIL_TYPES = new Set<StreamItem["type"]>(["thinking", "tool_call"]);
-
 /**
  * BuildMessageList - Displays the conversation history with FIFO rendering.
  *
- * User messages are right-aligned bubbles. Agent activity (thinking +
- * tool calls + text) renders chronologically inside a single timeline,
- * with the rail connecting contiguous runs of thinking + tool rows.
+ * Per-turn structure after filtering:
+ *   [Working block | single tool card], [last thinking?], [final text]
+ * The in-progress turn additionally pins the latest TodoListCard to the top
+ * (sticky) and surfaces a "working on…" pill at the bottom while a tool is
+ * mid-stream.
  */
 export default function BuildMessageList({
   messages,
@@ -59,26 +60,27 @@ export default function BuildMessageList({
 
   const renderStreamItems = (
     rawItems: StreamItem[],
-    isCurrentStream = false
-  ) => {
-    // Target structure per turn: [Working block, last thinking?, final text].
-    // - Hide every settled thinking that occurs before the last tool_call —
-    //   it's pre-tool narration, not useful to the user.
-    // - Keep ONLY the last settled thinking, and only if it sits after every
-    //   tool_call in the turn (i.e. it's post-tool reasoning, not a hidden
-    //   pre-tool one that happened to be the last).
+    opts: { isCurrentStream: boolean; extractLatestTodo: boolean }
+  ): { nodes: React.ReactNode[]; pinnedTodo: TodoListState | null } => {
+    // Per-turn structure: [Working block, last thinking?, final text].
+    // - Drop every settled thinking before the last tool_call (pre-tool narration).
+    // - Keep only the last settled thinking, and only if it sits after the last
+    //   tool_call (post-tool reasoning; never a hidden pre-tool one that
+    //   happened to be the last).
     // - Keep only the LAST text item.
-    // - All tool_calls survive here; the grouping walker below rolls
-    //   consecutive runs into a single "Working" card.
-    // Still-streaming items are kept so they don't flicker out mid-stream.
+    // - All tool_calls survive; the grouping walker below rolls consecutive
+    //   runs into a single "Working" card.
     let lastThinkingIdx = -1;
     let lastToolIdx = -1;
     let lastTextIdx = -1;
+    let latestTodoIdx = -1;
     rawItems.forEach((it, idx) => {
       if (it.type === "thinking") lastThinkingIdx = idx;
       if (it.type === "tool_call") lastToolIdx = idx;
       if (it.type === "text") lastTextIdx = idx;
+      if (it.type === "todo_list") latestTodoIdx = idx;
     });
+
     const items = rawItems.filter((it, idx) => {
       if (it.type === "thinking" && !it.isStreaming) {
         if (idx !== lastThinkingIdx) return false;
@@ -87,17 +89,35 @@ export default function BuildMessageList({
       if (it.type === "text" && !it.isStreaming && idx !== lastTextIdx) {
         return false;
       }
+      // Always collapse to a single todo_list per turn — either pinned at
+      // the top of the streaming column, or rendered inline at the latest
+      // index for history.
+      if (it.type === "todo_list" && idx !== latestTodoIdx) {
+        return false;
+      }
+      if (opts.extractLatestTodo && it.type === "todo_list") {
+        return false;
+      }
       return true;
     });
+
     const nodes: React.ReactNode[] = [];
+    const pinnedTodo =
+      opts.extractLatestTodo && latestTodoIdx !== -1
+        ? (
+            rawItems[latestTodoIdx] as {
+              type: "todo_list";
+              todoList: TodoListState;
+            }
+          ).todoList
+        : null;
+
     let i = 0;
     while (i < items.length) {
       const item = items[i]!;
       const prev = items[i - 1];
 
       if (item.type === "tool_call") {
-        // Consume a contiguous run of tool_calls — any tool, any order.
-        // Rendered as a single "Working" card when more than one.
         const runStart = i;
         const groupTools: ToolCallState[] = [item.toolCall];
         let j = i + 1;
@@ -108,26 +128,14 @@ export default function BuildMessageList({
           j++;
         }
         const runEnd = j - 1;
-        const after = items[j];
-        const isFirstStep = !prev || !RAIL_TYPES.has(prev.type);
-        const isLastStep = !after || !RAIL_TYPES.has(after.type);
 
         if (groupTools.length === 1) {
-          nodes.push(
-            <CraftToolCard
-              key={item.id}
-              toolCall={item.toolCall}
-              isFirstStep={isFirstStep}
-              isLastStep={isLastStep}
-            />
-          );
+          nodes.push(<CraftToolCard key={item.id} toolCall={item.toolCall} />);
         } else {
           nodes.push(
             <CraftToolGroup
               key={`group-${items[runStart]!.id}`}
               toolCalls={groupTools}
-              isFirstStep={isFirstStep}
-              isLastStep={isLastStep}
             />
           );
         }
@@ -136,23 +144,28 @@ export default function BuildMessageList({
       }
 
       const next = items[i + 1];
-      const isFirstStep = !prev || !RAIL_TYPES.has(prev.type);
-      const isLastStep = !next || !RAIL_TYPES.has(next.type);
+      const prevIsAgentAction =
+        !!prev && (prev.type === "thinking" || prev.type === "tool_call");
+      const nextIsAgentAction =
+        !!next && (next.type === "thinking" || next.type === "tool_call");
 
       switch (item.type) {
         case "text": {
-          const prevIsRail = !!prev && RAIL_TYPES.has(prev.type);
-          const nextIsRail = !!next && RAIL_TYPES.has(next.type);
-          const spacingClass = cn(prevIsRail && "mt-3", nextIsRail && "mb-3");
+          // Visual recession: tool work above the final text should feel like
+          // the supporting cast. Add breathing room around the answer.
           nodes.push(
-            <TimelineRow key={item.id} railVariant="spacer">
-              <div className={spacingClass || undefined}>
-                <TextChunk
-                  content={item.content}
-                  isStreaming={isCurrentStream && item.isStreaming}
-                />
-              </div>
-            </TimelineRow>
+            <div
+              key={item.id}
+              className={cn(
+                prevIsAgentAction && "mt-3",
+                nextIsAgentAction && "mb-3"
+              )}
+            >
+              <TextChunk
+                content={item.content}
+                isStreaming={opts.isCurrentStream && item.isStreaming}
+              />
+            </div>
           );
           break;
         }
@@ -162,40 +175,54 @@ export default function BuildMessageList({
               key={item.id}
               content={item.content}
               isStreaming={item.isStreaming}
-              isFirstStep={isFirstStep}
-              isLastStep={isLastStep}
             />
           );
           break;
         case "todo_list":
           nodes.push(
-            <TimelineRow key={item.id} railVariant="spacer">
-              <TodoListCard
-                todoList={item.todoList}
-                defaultOpen={item.todoList.isOpen}
-              />
-            </TimelineRow>
+            <TodoListCard
+              key={item.id}
+              todoList={item.todoList}
+              defaultOpen={item.todoList.isOpen}
+            />
           );
           break;
       }
       i++;
     }
-    return nodes;
+    return { nodes, pinnedTodo };
   };
 
   const renderAgentMessage = (message: BuildMessage) => {
     const savedStreamItems = message.message_metadata?.streamItems as
       | StreamItem[]
       | undefined;
+    const savedRender =
+      savedStreamItems && savedStreamItems.length > 0
+        ? renderStreamItems(savedStreamItems, {
+            isCurrentStream: false,
+            extractLatestTodo: true,
+          })
+        : null;
 
     return (
       <div key={message.id} className="flex items-start gap-3 py-4">
         <div className="shrink-0 mt-0.5">
           <Logo folded size={24} />
         </div>
-        <div className="flex-1 flex flex-col gap-3 min-w-0">
-          {savedStreamItems && savedStreamItems.length > 0 ? (
-            <TimelineRoot>{renderStreamItems(savedStreamItems)}</TimelineRoot>
+        <div className="flex-1 flex flex-col gap-2 min-w-0">
+          {savedRender ? (
+            <>
+              {savedRender.pinnedTodo && (
+                <div className="sticky top-2 z-10">
+                  <TodoListCard
+                    todoList={savedRender.pinnedTodo}
+                    defaultOpen={savedRender.pinnedTodo.isOpen}
+                  />
+                </div>
+              )}
+              {savedRender.nodes}
+            </>
           ) : (
             <TextChunk content={message.content} />
           )}
@@ -203,6 +230,13 @@ export default function BuildMessageList({
       </div>
     );
   };
+
+  const streamRender = hasStreamItems
+    ? renderStreamItems(streamItems, {
+        isCurrentStream: true,
+        extractLatestTodo: true,
+      })
+    : null;
 
   return (
     <div className="flex flex-col items-center px-4 pb-4">
@@ -220,15 +254,21 @@ export default function BuildMessageList({
             <div className="shrink-0 mt-0.5">
               <Logo folded size={24} />
             </div>
-            <div className="flex-1 flex flex-col gap-3 min-w-0">
+            <div className="flex-1 flex flex-col gap-2 min-w-0">
+              {streamRender?.pinnedTodo && (
+                <div className="sticky top-2 z-10">
+                  <TodoListCard
+                    todoList={streamRender.pinnedTodo}
+                    defaultOpen={streamRender.pinnedTodo.isOpen}
+                  />
+                </div>
+              )}
               {!hasStreamItems ? (
                 <div className="h-6 flex items-center">
                   <BlinkingBar />
                 </div>
               ) : (
-                <TimelineRoot>
-                  {renderStreamItems(streamItems, true)}
-                </TimelineRoot>
+                streamRender?.nodes
               )}
             </div>
           </div>

@@ -96,6 +96,15 @@ const NAME_MAP: Record<string, ToolName> = {
   todo_write: "todowrite",
   webfetch: "webfetch",
   websearch: "websearch",
+  // opencode 1.15.x additions:
+  lsp: "lsp",
+  apply_patch: "apply_patch",
+  applypatch: "apply_patch",
+  skill: "skill",
+  list: "list",
+  ls: "list",
+  question: "question",
+  invalid: "invalid",
 };
 
 function resolveToolName(p: Record<string, unknown>): ToolName {
@@ -135,6 +144,13 @@ const TOOL_KIND_MAP: Record<ToolName, ToolKind> = {
   todowrite: "other",
   webfetch: "other",
   websearch: "search",
+  // opencode 1.15.x additions:
+  lsp: "other",
+  apply_patch: "edit",
+  skill: "other",
+  list: "read",
+  question: "other",
+  invalid: "other",
   unknown: "other",
 };
 
@@ -314,6 +330,13 @@ function buildTitle(
     todowrite: "Updating todos",
     webfetch: "Fetching web content",
     websearch: "Searching web",
+    // opencode 1.15.x additions:
+    lsp: "Checking code",
+    apply_patch: "Applying patch",
+    skill: "Running skill",
+    list: "Listing files",
+    question: "Asking",
+    invalid: "Validating",
     unknown: "Running tool",
   };
 
