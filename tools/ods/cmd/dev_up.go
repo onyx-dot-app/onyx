@@ -153,10 +153,28 @@ func worktreeGitMount(root string) (string, bool) {
 // the socket is not accessible.
 func sshAgentMount() (string, bool) {
 	sock := os.Getenv("SSH_AUTH_SOCK")
+
+	// On macOS the default SSH_AUTH_SOCK is a launchd socket
+	// (/private/tmp/com.apple.launchd.*/Listeners) that Docker Desktop cannot
+	// reliably bind-mount into its Linux VM. For that case -- or when
+	// SSH_AUTH_SOCK is unset entirely (common on macOS where launchd manages
+	// the agent implicitly) -- use Docker Desktop's built-in ssh-agent
+	// forwarding. Custom agents (1Password, GPG, Secretive, etc.) at normal
+	// filesystem paths fall through to the regular bind-mount below.
+	if runtime.GOOS == "darwin" {
+		if sock == "" || strings.Contains(sock, "com.apple.launchd") {
+			const dockerDesktopSSHSock = "/run/host-services/ssh-auth.sock"
+			mount := fmt.Sprintf("type=bind,source=%s,target=/tmp/ssh-agent.sock", dockerDesktopSSHSock)
+			log.Debugf("Forwarding SSH agent via Docker Desktop helper: %s", dockerDesktopSSHSock)
+			return mount, true
+		}
+	}
+
 	if sock == "" {
 		log.Warn("SSH_AUTH_SOCK not set — SSH agent forwarding disabled (git over SSH won't work inside the container)")
 		return "", false
 	}
+
 	if _, err := os.Stat(sock); err != nil {
 		log.Warnf("SSH_AUTH_SOCK=%s not accessible — SSH agent forwarding disabled: %v", sock, err)
 		return "", false
