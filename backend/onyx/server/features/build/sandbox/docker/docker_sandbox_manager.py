@@ -70,7 +70,6 @@ import threading
 import time
 from collections.abc import Generator
 from pathlib import Path
-from typing import NamedTuple
 from typing import TypedDict
 from uuid import UUID
 
@@ -286,18 +285,6 @@ def build_sandbox_labels(
     if compose_project:
         labels["com.docker.compose.project"] = compose_project
     return labels
-
-
-class _RenderedSessionFiles(NamedTuple):
-    """Output of ``_render_session_files``.
-
-    Both fields are already shell-escaped for ``printf '%s' '...'``.
-    ``opencode_json`` is ``None`` when the per-session file is not
-    needed (serve transport loads its provider config from env).
-    """
-
-    agents_md: str
-    opencode_json: str | None
 
 
 def _opencode_json_write_snippet(opencode_json: str | None, session_path: str) -> str:
@@ -724,10 +711,11 @@ class DockerSandboxManager(SandboxManager):
         skills_section: str,
         user_name: str | None = None,
         user_role: str | None = None,
-    ) -> _RenderedSessionFiles:
-        """Render shell-escaped session config files. ``opencode_json`` is None
-        under serve transport (config came from OPENCODE_CONFIG_CONTENT at
-        container startup); only acp transport needs the per-session file."""
+    ) -> tuple[str, str | None]:
+        """Return ``(agents_md, opencode_json)`` shell-escaped for
+        ``printf '%s' '...'``. ``opencode_json`` is ``None`` under serve
+        (config came from ``OPENCODE_CONFIG_CONTENT`` at container startup);
+        only ACP needs the per-session file."""
         agent_instructions = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_section=skills_section,
@@ -749,14 +737,9 @@ class DockerSandboxManager(SandboxManager):
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
                 )
             )
-        # Escape single quotes for ``printf '%s' '...'``.
-        return _RenderedSessionFiles(
-            agents_md=agent_instructions.replace("'", "'\\''"),
-            opencode_json=(
-                opencode_json.replace("'", "'\\''")
-                if opencode_json is not None
-                else None
-            ),
+        return (
+            agent_instructions.replace("'", "'\\''"),
+            opencode_json.replace("'", "'\\''") if opencode_json is not None else None,
         )
 
     def setup_session_workspace(
@@ -781,7 +764,7 @@ class DockerSandboxManager(SandboxManager):
 
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
-        rendered = self._render_session_files(
+        agents_md, opencode_json = self._render_session_files(
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
@@ -794,9 +777,7 @@ class DockerSandboxManager(SandboxManager):
             if nextjs_port is not None
             else ""
         )
-        opencode_json_write = _opencode_json_write_snippet(
-            rendered.opencode_json, session_path
-        )
+        opencode_json_write = _opencode_json_write_snippet(opencode_json, session_path)
         setup_script = f"""
 set -e
 echo "Creating session directory: {session_path}"
@@ -823,7 +804,7 @@ else
     mkdir -p {session_path}/outputs/web
 fi
 ln -sf {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
-printf '%s' '{rendered.agents_md}' > {session_path}/AGENTS.md
+printf '%s' '{agents_md}' > {session_path}/AGENTS.md
 {opencode_json_write}
 {nextjs_start}
 echo "Session workspace setup complete"
@@ -1092,19 +1073,17 @@ fi
         ``.opencode-data/`` — the symlink and config files are regenerated
         here so restored sessions still see the pushed skill files.
         """
-        rendered = self._render_session_files(
+        agents_md, opencode_json = self._render_session_files(
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
         )
-        opencode_json_write = _opencode_json_write_snippet(
-            rendered.opencode_json, session_path
-        )
+        opencode_json_write = _opencode_json_write_snippet(opencode_json, session_path)
         script = f"""
 set -e
 mkdir -p {session_path}/.opencode
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
-printf '%s' '{rendered.agents_md}' > {session_path}/AGENTS.md
+printf '%s' '{agents_md}' > {session_path}/AGENTS.md
 {opencode_json_write}
 """
         try:

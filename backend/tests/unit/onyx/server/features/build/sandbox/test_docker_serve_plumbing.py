@@ -153,13 +153,13 @@ def test_render_session_files_returns_none_for_opencode_json_under_serve(
     ``OPENCODE_CONFIG_CONTENT`` at startup) and would pollute snapshots."""
     monkeypatch.setattr(dsm, "AGENT_TRANSPORT", AgentTransport.SERVE)
     mgr = _bare_manager()
-    rendered = mgr._render_session_files(
+    agents_md, opencode_json = mgr._render_session_files(
         llm_config=llm_config,
         nextjs_port=None,
         skills_section="",
     )
-    assert rendered.agents_md  # not empty
-    assert rendered.opencode_json is None
+    assert agents_md  # not empty
+    assert opencode_json is None
 
 
 def test_render_session_files_writes_opencode_json_under_acp(
@@ -170,15 +170,15 @@ def test_render_session_files_writes_opencode_json_under_acp(
     still emitted because each exec'd ``opencode acp`` invocation reads it."""
     monkeypatch.setattr(dsm, "AGENT_TRANSPORT", AgentTransport.ACP)
     mgr = _bare_manager()
-    rendered = mgr._render_session_files(
+    _agents_md, opencode_json = mgr._render_session_files(
         llm_config=llm_config,
         nextjs_port=None,
         skills_section="",
     )
-    assert rendered.opencode_json is not None
+    assert opencode_json is not None
     # Shell-escaped single quotes are present in the rendered form; the raw
     # JSON should still round-trip after the substitution is reversed.
-    raw = rendered.opencode_json.replace("'\\''", "'")
+    raw = opencode_json.replace("'\\''", "'")
     parsed: Any = json.loads(raw)
     assert "openai" in parsed.get("provider", {})
 
