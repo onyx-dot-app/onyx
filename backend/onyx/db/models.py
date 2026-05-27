@@ -3670,6 +3670,11 @@ class Persona(Base):
         String(length=PROMPT_LENGTH), nullable=True
     )
     datetime_aware: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Controls whether the agent's answers include inline citations ([[1]](...))
+    # and a sources list. Defaults to True (citations shown).
+    include_citations: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
 
     uploaded_image_id: Mapped[str | None] = mapped_column(String, nullable=True)
     icon_name: Mapped[str | None] = mapped_column(String, nullable=True)
