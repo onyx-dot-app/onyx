@@ -192,6 +192,8 @@ class PersonaUpsertRequest(BaseModel):
     replace_base_system_prompt: bool = False
     task_prompt: str
     datetime_aware: bool
+    # When False, the agent's answers omit inline citations and the sources list
+    include_citations: bool = True
 
 
 class MinimalPersonaSnapshot(BaseModel):
@@ -344,6 +346,7 @@ class PersonaSnapshot(BaseModel):
     replace_base_system_prompt: bool = False
     task_prompt: str | None = None
     datetime_aware: bool = True
+    include_citations: bool = True
 
     @classmethod
     def from_model(cls, persona: Persona) -> "PersonaSnapshot":
@@ -398,6 +401,7 @@ class PersonaSnapshot(BaseModel):
             replace_base_system_prompt=persona.replace_base_system_prompt,
             task_prompt=persona.task_prompt,
             datetime_aware=persona.datetime_aware,
+            include_citations=persona.include_citations,
         )
 
 
@@ -473,6 +477,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             replace_base_system_prompt=persona.replace_base_system_prompt,
             task_prompt=persona.task_prompt,
             datetime_aware=persona.datetime_aware,
+            include_citations=persona.include_citations,
         )
 
 
