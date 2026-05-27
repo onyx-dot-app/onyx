@@ -19,7 +19,11 @@ auth:
   postgresql:
     values:
       username: "postgres"
-      password: "postgres"
+      # Must match the docker-compose Postgres the tests use (compose default
+      # POSTGRES_PASSWORD=password, backend default also "password"). The
+      # sandbox-proxy is the only in-cluster component that reads the DB, and
+      # it authenticates with this secret; a mismatch fails-closed as 403.
+      password: "password"
   redis:
     values:
       redis_password: "password"
