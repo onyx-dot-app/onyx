@@ -41,7 +41,7 @@ export default meta;
 type Story = StoryObj<typeof Spacer>;
 
 export const VerticalRem: Story = {
-  args: { vertical: true, rem: 2 },
+  args: { orientation: "vertical", rem: 2 },
   decorators: [
     (Story) => (
       <div
@@ -74,6 +74,6 @@ export const VerticalRem: Story = {
   ],
 };
 
-export const HorizontalPixels: Story = {
-  args: { horizontal: true, pixels: 32 },
+export const HorizontalRem: Story = {
+  args: { orientation: "horizontal", rem: 2 },
 };
