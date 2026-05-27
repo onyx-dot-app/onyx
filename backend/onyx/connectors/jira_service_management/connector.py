@@ -1,25 +1,19 @@
 import copy
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import Any
 
 from jira import JIRA
-from jira.resources import Issue
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
-from onyx.configs.app_configs import JIRA_CONNECTOR_MAX_TICKET_SIZE
 from onyx.configs.app_configs import JIRA_SLIM_PAGE_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     is_atlassian_date_error,
 )
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import UnexpectedValidationError
@@ -30,64 +24,28 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.jira.access import get_project_permissions
 from onyx.connectors.jira.connector import (
-    _FIELD_ASSIGNEE,
-    _FIELD_ASSIGNEE_EMAIL,
-    _FIELD_CREATED,
-    _FIELD_DUEDATE,
-    _FIELD_ISSUETYPE,
     _FIELD_KEY,
-    _FIELD_LABELS,
-    _FIELD_PARENT,
-    _FIELD_PRIORITY,
     _FIELD_PROJECT,
-    _FIELD_PROJECT_NAME,
-    _FIELD_REPORTER,
-    _FIELD_REPORTER_EMAIL,
-    _FIELD_RESOLUTION,
-    _FIELD_RESOLUTION_DATE,
-    _FIELD_RESOLUTION_DATE_KEY,
-    _FIELD_STATUS,
-    _FIELD_UPDATED,
     _is_cloud_client,
     _perform_jql_search,
     JiraConnectorCheckpoint,
     make_checkpoint_callback,
 )
-from onyx.connectors.jira.connector import bulk_fetch_issues
-from onyx.connectors.jira.connector import (
-    enhanced_search_ids,
-)
 from onyx.connectors.jira.connector import process_jira_issue
-from onyx.connectors.jira.utils import best_effort_basic_expert_info
 from onyx.connectors.jira.utils import best_effort_get_field_from_issue
 from onyx.connectors.jira.utils import build_jira_client
 from onyx.connectors.jira.utils import build_jira_url
-from onyx.connectors.jira.utils import extract_text_from_adf
-from onyx.connectors.jira.utils import get_comment_strs
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
-from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 ONE_HOUR = 3600
-
-# Jira Service Management specific issue types
-JSM_ISSUE_TYPES = [
-    "Incident",
-    "Service Request",
-    "Problem",
-    "Change",
-    "Change Task",
-    "Post-Incident Review",
-]
 
 
 class JiraServiceManagementConnector(
@@ -155,9 +113,10 @@ class JiraServiceManagementConnector(
         """
         Build a JQL query targeting a specific JSM project.
 
-        If jsm_issue_types is provided, also filters by those issue types
-        (e.g., Incident, Service Request, Problem, Change).
-        If not provided, all issue types in the JSM project are included.
+        If jsm_issue_types is provided with non-blank entries, also filters by
+        those issue types (e.g., Incident, Service Request, Problem, Change).
+        If empty, blank-only, or not provided, all issue types in the JSM
+        project are included.
         """
         start_date_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
             "%Y-%m-%d %H:%M"
@@ -168,12 +127,13 @@ class JiraServiceManagementConnector(
 
         jql = f"project = {self.quoted_jsm_project_key}"
 
-        # Optionally filter by JSM-specific issue types
+        # Only add issuetype filter when there are non-blank entries to avoid
+        # producing `issuetype in ()` which Jira rejects.
         if self.jsm_issue_types:
-            issue_type_clause = ", ".join(
-                f'"{it.strip()}"' for it in self.jsm_issue_types if it.strip()
-            )
-            jql += f" AND issuetype in ({issue_type_clause})"
+            cleaned = [it.strip() for it in self.jsm_issue_types if it.strip()]
+            if cleaned:
+                issue_type_clause = ", ".join(f'"{t}"' for t in cleaned)
+                jql += f" AND issuetype in ({issue_type_clause})"
 
         jql += f" AND updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
 
@@ -188,7 +148,11 @@ class JiraServiceManagementConnector(
         return None
 
     def _load_from_checkpoint(
-        self, start: float, end: float, checkpoint: JiraConnectorCheckpoint, include_permissions: bool
+        self,
+        start: float,
+        end: float,
+        checkpoint: JiraConnectorCheckpoint,
+        include_permissions: bool,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         jql = self._build_jsm_jql(start, end)
         starting_offset = checkpoint.offset or 0
