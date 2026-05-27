@@ -179,10 +179,6 @@ _PROXY_DNS_RETRY_ATTEMPTS = 5
 _PROXY_DNS_RETRY_BACKOFF_S = 0.5
 
 
-_PROXY_DNS_RETRY_ATTEMPTS = 5
-_PROXY_DNS_RETRY_BACKOFF_S = 0.5
-
-
 def _resolve_proxy_ip() -> str:
     if not SANDBOX_PROXY_HOST:
         raise RuntimeError("_resolve_proxy_ip called without SANDBOX_PROXY_HOST")
