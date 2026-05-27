@@ -17,8 +17,10 @@ from collections.abc import Generator
 from queue import Empty
 from typing import Any
 
+import httpx
 import pytest
 
+from onyx.server.features.build.sandbox.opencode import event_bus as event_bus_mod
 from onyx.server.features.build.sandbox.opencode.event_bus import _extract_session_id
 from onyx.server.features.build.sandbox.opencode.event_bus import _parse_sse_block
 from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
@@ -385,6 +387,64 @@ def test_close_signals_subscribers_even_with_full_queue(bus: PodEventBus) -> Non
 def test_close_is_idempotent(bus: PodEventBus) -> None:
     bus.close()
     bus.close()  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# /event request scoping — directory query parameter
+# ---------------------------------------------------------------------------
+#
+# opencode-serve's ``Instance.provide`` middleware reads ``?directory=`` off
+# the /event request and routes the subscription to that directory's
+# Instance. Without the query param, the SSE stream only sees the default
+# Instance (server.connected + server.heartbeat) and session events for
+# /workspace/sessions/<id> never arrive — sessions on the same pod silently
+# fail or cross-talk depending on which one connected first. These tests
+# pin the wire-level contract.
+
+
+class _CapturingStream:
+    """Stand-in for ``httpx.stream``'s return value. Records the kwargs the
+    bus passed (URL, params, auth, timeout) and raises a ``ConnectError`` on
+    ``__enter__`` so ``_read_one_stream`` exits without trying to consume a
+    response body."""
+
+    captured: dict[str, Any] = {}
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        type(self).captured = {"args": args, "kwargs": kwargs}
+
+    def __enter__(self) -> Any:
+        raise httpx.ConnectError("test stop")
+
+    def __exit__(self, *_: Any) -> None:
+        return None
+
+
+def test_read_one_stream_passes_directory_as_query_param(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the bus is constructed with ``directory=...``, the GET /event
+    call MUST include ``?directory=...`` so opencode-serve scopes the
+    subscription to that Instance. Without this param, no session events
+    are delivered — which is exactly the bug this PR fixes."""
+    monkeypatch.setattr(event_bus_mod.httpx, "stream", _CapturingStream)
+    bus = PodEventBus(
+        base_url="http://test.invalid:4096",
+        auth=None,
+        directory="/workspace/sessions/abc-123",
+    )
+    try:
+        with pytest.raises(httpx.ConnectError):
+            bus._read_one_stream()
+    finally:
+        bus.close()
+
+    kwargs = _CapturingStream.captured["kwargs"]
+    args = _CapturingStream.captured["args"]
+    assert kwargs["params"] == {"directory": "/workspace/sessions/abc-123"}
+    # The directory must travel as a query param, not be baked into the path —
+    # the URL stays the bare /event endpoint.
+    assert args == ("GET", "http://test.invalid:4096/event")
 
 
 # ---------------------------------------------------------------------------
