@@ -69,8 +69,6 @@ from onyx.file_store.staging import build_raw_file_callback
 from onyx.file_store.staging import RawFileCallback
 from onyx.file_store.staging import reap_prior_attempt_staged_files
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.indexing.persistent_indexing import build_generic_connector_failure
-from onyx.indexing.persistent_indexing import record_generic_failure
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
 from onyx.redis.redis_hierarchy import ensure_source_node_exists
@@ -608,8 +606,6 @@ def connector_document_extraction(
             checkpoint=checkpoint,
         )
 
-    # Initialize loop state before the try so the except block can reference
-    # batch_num when reporting/recording errors under PERSISTENT_INDEXING.
     batch_num = last_batch_num  # starts at 0 if no last batch
     total_doc_batches_queued = 0
     total_failures = 0
@@ -927,49 +923,13 @@ def connector_document_extraction(
                     )
                     raise e
 
-                if PERSISTENT_INDEXING:
-                    # Persistent indexing: record this as a generic EntityFailure
-                    # and let check_indexing_completion resolve the attempt as
-                    # COMPLETED_WITH_ERRORS instead of marking it FAILED.
-                    logger.info(
-                        "PERSISTENT_INDEXING enabled; recording docfetching "
-                        "failure as ConnectorFailure for attempt %s",
-                        index_attempt_id,
-                    )
-                    failure = build_generic_connector_failure(
-                        exc=e,
-                        entity_id=(
-                            f"docfetching:{db_connector.source.value}"
-                            f":cc_pair_{cc_pair_id}:batch_{batch_num}"
-                        ),
-                    )
-                    record_generic_failure(
-                        index_attempt_id=index_attempt_id,
-                        cc_pair_id=cc_pair_id,
-                        source=db_connector.source,
-                        tenant_id=tenant_id,
-                        failure=failure,
-                    )
-                    # Set total_batches so check_indexing_completion can resolve
-                    # the attempt. Without this the attempt would hang in
-                    # IN_PROGRESS forever. If this DB write fails we have no
-                    # way to land COMPLETED_WITH_ERRORS cleanly — fall through
-                    # to mark_attempt_failed below as a safety net.
-                    try:
-                        IndexingCoordination.set_total_batches(
-                            db_session=db_session_temp,
-                            index_attempt_id=index_attempt_id,
-                            total_batches=batch_num,
-                        )
-                        return
-                    except Exception:
-                        logger.exception(
-                            "Failed to set total_batches during persistent "
-                            "indexing recovery for attempt %s; falling back "
-                            "to mark_attempt_failed",
-                            index_attempt_id,
-                        )
-
+                # PERSISTENT_INDEXING deliberately does NOT catch unhandled
+                # connector-generator exceptions: we can't isolate the failing
+                # entity from a black-box raise, and silently landing the
+                # attempt as COMPLETED_WITH_ERRORS would let the system advance
+                # past potentially-missed source data. Operators need a FAILED
+                # signal here to triage. Threshold disable + docprocessing
+                # per-batch recovery still apply.
                 mark_attempt_failed(
                     index_attempt_id,
                     db_session_temp,

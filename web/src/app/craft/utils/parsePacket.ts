@@ -48,6 +48,13 @@ export function parsePacket(raw: unknown): ParsedPacket {
     case "artifact_created":
       return parseArtifact(p);
 
+    case "approval_requested":
+      return {
+        type: "approval_requested",
+        approvalId: (p.approval_id ?? "") as string,
+        sessionId: (p.session_id ?? "") as string,
+      };
+
     case "error":
       return { type: "error", message: (p.message ?? "") as string };
 

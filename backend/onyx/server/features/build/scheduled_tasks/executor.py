@@ -258,8 +258,13 @@ def run_scheduled_task_logic(
     # Phase 2: drive the agent. We open a fresh session inside the drive
     # because the agent loop can be long-running and we don't want a
     # single open transaction for the duration. Multiple scheduled runs
-    # can execute against the same sandbox concurrently — there is no
-    # serialization with the interactive `send_message` path.
+    # can execute against the same sandbox concurrently. Each scheduled
+    # run creates its own BuildSession, so the prompt_slot lock (keyed
+    # on build_session_id) doesn't normally contend — but the executor
+    # still acquires it inside `_drive_agent` for symmetry with the
+    # interactive `_stream_cli_agent_response` path, so any future
+    # architecture that lets scheduled and interactive runs share a
+    # BuildSession is automatically protected.
     try:
         _drive_agent(
             run_id=run_id,
@@ -364,8 +369,20 @@ def _drive_agent(
         state = BuildStreamingState(turn_index=0)
         deadline = time.monotonic() + budget_seconds
 
+        # Mirror the interactive path's serialization invariant. Each
+        # scheduled run has a fresh BuildSession so the lock never
+        # contends today, but acquire it anyway so any future change
+        # that lets scheduled and interactive runs share a build_session
+        # inherits the protection without needing to remember to add it.
+        sandbox_manager = session_manager._sandbox_manager
+
         approval_required = False
         final_event_count = 0
+        # Acquire the per-build_session lock for the duration of the
+        # agent loop. __enter__/__exit__ used directly (rather than a
+        # `with`) to avoid reindenting the existing try/except block.
+        prompt_slot_cm = sandbox_manager.prompt_slot(sandbox_id, session_id)
+        prompt_slot_cm.__enter__()
         try:
             for acp_event in session_manager._yield_acp_events(
                 sandbox_id, session_id, task_prompt
@@ -491,6 +508,11 @@ def _drive_agent(
                 )
             logger.exception("Scheduled run %s failed", run_id)
             return False
+        finally:
+            # Release the prompt slot on every exit path (clean completion,
+            # approval gate, budget exceeded, exception). Matches the
+            # interactive path's finally in _stream_cli_agent_response.
+            prompt_slot_cm.__exit__(None, None, None)
 
 
 # Re-export for the Celery task wrapper.

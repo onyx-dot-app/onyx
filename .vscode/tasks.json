@@ -218,6 +218,55 @@
         "clear": true
       },
       "problemMatcher": []
+    },
+    {
+      "label": "craft: up (cluster + sandbox image + .env.k8s)",
+      "detail": "One-command Craft setup: kind cluster + Onyx helm install + sandbox image build/load + .env.k8s bootstrap. Idempotent.",
+      "type": "shell",
+      "command": "${workspaceFolder}/deployment/helm/dev/craft-up.sh",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "craft: down (teardown + telepresence quit)",
+      "detail": "Symmetric teardown: telepresence quit + delete kind cluster. Does not touch .vscode/.env.k8s. Pass --remove-images to also remove locally-built sandbox/backend images.",
+      "type": "shell",
+      "command": "${workspaceFolder}/deployment/helm/dev/craft-down.sh",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "craft: rebuild sandbox image",
+      "detail": "Rebuild onyxdotapp/sandbox:dev and load it into the kind node. Use after editing backend/onyx/server/features/build/sandbox/kubernetes/docker/.",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "docker build -t onyxdotapp/sandbox:dev backend/onyx/server/features/build/sandbox/kubernetes/docker && kind load docker-image onyxdotapp/sandbox:dev --name onyx-dev"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
     }
   ]
 }

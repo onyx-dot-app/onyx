@@ -1,15 +1,15 @@
-"""External-dependency-unit tests for PERSISTENT_INDEXING.
+"""External-dependency-unit tests for PERSISTENT_INDEXING (docfetching side).
 
-Exercises `run_docfetching_entrypoint` against a mock connector that either:
-  (a) yields docs/failures then raises an unhandled exception, or
-  (b) yields more `ConnectorFailure`s than the >3-failures-AND->10%-ratio
-      threshold would normally tolerate.
+Exercises `run_docfetching_entrypoint` against a mock checkpointed connector.
+PERSISTENT_INDEXING's docfetching-side contract:
 
-In both cases, with PERSISTENT_INDEXING patched to True, the attempt must
-not be marked FAILED; instead a `ConnectorFailure` is recorded against
-the attempt and `check_indexing_completion` can later resolve it to
-COMPLETED_WITH_ERRORS. With PERSISTENT_INDEXING False (default), the
-attempt is marked FAILED as before.
+  - It DISABLES the >3-failures-AND->10%-ratio threshold abort, so a flood of
+    connector-yielded `ConnectorFailure`s no longer fails the attempt.
+  - It does NOT swallow unhandled exceptions raised from the connector
+    generator itself — those still mark the attempt FAILED (we can't isolate
+    the bad entity and silently advancing risks skipping source data).
+
+Per-batch docprocessing catch-all recovery is exercised separately.
 
 Runs against real Postgres + real file_store; the celery `send_task`
 is mocked because docprocessing is a separate pod and not under test.
@@ -34,7 +34,6 @@ from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import InputType
 from onyx.connectors.models import TextSection
 from onyx.db.enums import EmbeddingPrecision
@@ -265,20 +264,17 @@ def test_unhandled_exception_default_marks_attempt_failed(
         _teardown_attempt(db_session, cc_pair_id, search_settings_id, attempt_id)
 
 
-def test_unhandled_exception_persistent_mode_records_entity_failure(
+def test_unhandled_exception_persistent_mode_still_marks_failed(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     initialize_file_store: None,  # noqa: ARG001
     register_mock_connector: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """With PERSISTENT_INDEXING True, an unhandled exception inside the
-    connector generator is converted into an EntityFailure and the attempt
-    is NOT marked FAILED — it stays IN_PROGRESS for the completion monitor
-    to resolve as COMPLETED_WITH_ERRORS once all queued batches finish."""
-    # Patch the captured constant at every site that reads it. (See app_configs
-    # — the value is captured at import time, so patching os.environ does not
-    # affect already-imported modules.)
+    """Even with PERSISTENT_INDEXING True, an unhandled exception inside the
+    connector generator still marks the attempt FAILED — there's no entity
+    context to isolate the failing item, so silently advancing would risk
+    skipping source data. Operators must triage by fixing the connector."""
     monkeypatch.setattr(
         "onyx.background.indexing.run_docfetching.PERSISTENT_INDEXING", True
     )
@@ -291,34 +287,22 @@ def test_unhandled_exception_persistent_mode_records_entity_failure(
 
     try:
         mock_app = MagicMock()
-        # No raise expected — persistent mode swallows the exception.
-        run_docfetching_entrypoint(
-            app=mock_app,
-            index_attempt_id=attempt_id,
-            tenant_id=TEST_TENANT_ID,
-            connector_credential_pair_id=cc_pair_id,
-        )
+        with pytest.raises(RuntimeError, match="simulated_persistent_mode_kaboom"):
+            run_docfetching_entrypoint(
+                app=mock_app,
+                index_attempt_id=attempt_id,
+                tenant_id=TEST_TENANT_ID,
+                connector_credential_pair_id=cc_pair_id,
+            )
 
         db_session.expire_all()
         attempt = get_index_attempt(db_session, attempt_id)
         assert attempt is not None
-        # Attempt is NOT FAILED; completion monitor will resolve it later.
-        assert attempt.status != IndexingStatus.FAILED, (
-            f"Expected attempt to not be FAILED under PERSISTENT_INDEXING; "
-            f"got {attempt.status}"
-        )
+        assert attempt.status == IndexingStatus.FAILED
 
-        # Generic catch-all recorded exactly one EntityFailure.
+        # No generic catch-all was triggered; no entity-level failure rows.
         errors = get_index_attempt_errors(attempt_id, db_session)
-        assert len(errors) == 1
-        err = errors[0]
-        assert err.entity_id is not None
-        assert err.document_id is None
-        # entity_id format: docfetching:{source}:cc_pair_{id}:batch_{n}
-        assert err.entity_id.startswith(
-            f"docfetching:{DocumentSource.MOCK_CONNECTOR.value}:cc_pair_{cc_pair_id}"
-        )
-        assert "simulated_persistent_mode_kaboom" in (err.failure_message or "")
+        assert len(errors) == 0
     finally:
         _teardown_attempt(db_session, cc_pair_id, search_settings_id, attempt_id)
 
@@ -401,48 +385,3 @@ def test_threshold_default_aborts_attempt(
         assert attempt.status == IndexingStatus.FAILED
     finally:
         _teardown_attempt(db_session, cc_pair_id, search_settings_id, attempt_id)
-
-
-def test_persistent_mode_uses_entity_failure_when_no_doc_context(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-    initialize_file_store: None,  # noqa: ARG001
-    register_mock_connector: None,  # noqa: ARG001
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """When the connector raises immediately with no doc context, the
-    catch-all records an EntityFailure (not a DocumentFailure) since we
-    have no doc id to associate the error with."""
-    monkeypatch.setattr(
-        "onyx.background.indexing.run_docfetching.PERSISTENT_INDEXING", True
-    )
-
-    cc_pair_id, search_settings_id, attempt_id = _seed_attempt(db_session)
-
-    # No docs, no yielded failures, just immediate raise.
-    _MOCK_BEHAVIOR["raise_at_end"] = True
-
-    try:
-        mock_app = MagicMock()
-        run_docfetching_entrypoint(
-            app=mock_app,
-            index_attempt_id=attempt_id,
-            tenant_id=TEST_TENANT_ID,
-            connector_credential_pair_id=cc_pair_id,
-        )
-
-        db_session.expire_all()
-        errors = get_index_attempt_errors(attempt_id, db_session)
-        assert len(errors) == 1
-        err = errors[0]
-        assert isinstance(err.entity_id, str), (
-            f"Expected EntityFailure, got document_id={err.document_id}"
-        )
-        assert err.document_id is None
-    finally:
-        _teardown_attempt(db_session, cc_pair_id, search_settings_id, attempt_id)
-
-
-# Suppress unused-import warnings for symbols referenced only by name in
-# docstrings / type comments above.
-_ = EntityFailure

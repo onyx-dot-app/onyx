@@ -28,19 +28,19 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from acp.schema import AgentMessageChunk
-from acp.schema import Error
-from acp.schema import PromptResponse
-from acp.schema import ToolCallProgress
-from acp.schema import ToolCallStart
 from kubernetes import client
 from kubernetes.client.rest import ApiException
+from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
+from onyx.db.models import Sandbox
+from onyx.db.models import User
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
+from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
 from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.sandbox.base import ACPEvent
+from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
+from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
@@ -110,30 +110,6 @@ def _provisioned_sandbox(
     _wait_until_healthy(manager, sandbox_id)
 
 
-def _opencode_pids(k8s: client.CoreV1Api, pod_name: str) -> list[str]:
-    """Return the list of PIDs in the sandbox container running ``opencode acp``.
-
-    Uses ``ps`` and filters out the matching ``grep`` line so the call is
-    deterministic. PIDs are returned as strings (their textual form is what
-    we compare across calls).
-    """
-    raw = pod_exec(
-        k8s,
-        pod_name,
-        SANDBOX_NAMESPACE,
-        "ps -eo pid,args 2>/dev/null | grep -E 'opencode +acp' | grep -v grep || true",
-    )
-    pids: list[str] = []
-    for line in (raw or "").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        head = line.split(None, 1)
-        if head and head[0].isdigit():
-            pids.append(head[0])
-    return pids
-
-
 def _read_pod_file(k8s: client.CoreV1Api, pod_name: str, path: str) -> str:
     return pod_exec(k8s, pod_name, SANDBOX_NAMESPACE, f"cat {path}")
 
@@ -196,13 +172,13 @@ def test_provisioned_pod_has_sandbox_image_directories(
 def test_session_workspace_setup_creates_expected_tree(
     k8s_manager: KubernetesSandboxManager,  # noqa: ARG001 — required to build live_pod
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """After ``setup_session_workspace``, the session dir contains the
     canonical tree: ``outputs/``, ``attachments/``, ``AGENTS.md``,
     ``opencode.json``, and the ``.opencode/skills`` symlink.
     """
-    _, session_id, pod_name = live_pod
+    _, session_id, pod_name = pool_session
     session_path = f"/workspace/sessions/{session_id}"
 
     # Directories
@@ -260,67 +236,16 @@ def test_session_workspace_setup_creates_expected_tree(
     )
 
 
-def test_send_message_streams_acp_events(
-    k8s_manager: KubernetesSandboxManager,
-    live_pod: tuple[UUID, UUID, str],
-) -> None:
-    """``send_message`` streams ACP events including a tool_call cycle and
-    at least one ``AgentMessageChunk``.
-    """
-    sandbox_id, session_id, _ = live_pod
-
-    events: list[ACPEvent] = []
-    for event in k8s_manager.send_message(
-        sandbox_id, session_id, "List the files in the current directory."
-    ):
-        events.append(event)
-
-    assert events, "send_message should yield at least one event"
-
-    # A timeout Error is acceptable in CI — the LLM may take longer than
-    # ACP_MESSAGE_TIMEOUT. What matters is that we received real ACP events
-    # before the timeout fired.
-    non_timeout_errors = [
-        e
-        for e in events
-        if isinstance(e, Error) and "timeout" not in (e.message or "").lower()
-    ]
-    assert not non_timeout_errors, (
-        f"send_message streamed non-timeout Error events: {non_timeout_errors}"
-    )
-
-    chunks = [e for e in events if isinstance(e, AgentMessageChunk)]
-    tool_starts = [e for e in events if isinstance(e, ToolCallStart)]
-    tool_progress = [e for e in events if isinstance(e, ToolCallProgress)]
-
-    # With 37+ events before timeout, we should have at least some of these.
-    assert chunks or tool_starts, (
-        "Expected at least one AgentMessageChunk or ToolCallStart before timeout"
-    )
-    assert tool_starts, (
-        "Expected at least one ToolCallStart event from the 'list files' prompt"
-    )
-    assert tool_progress, (
-        "Expected at least one ToolCallProgress event after a ToolCallStart"
-    )
-
-    prompt_responses = [e for e in events if isinstance(e, PromptResponse)]
-    if prompt_responses:
-        assert prompt_responses[-1].stop_reason is not None, (
-            "PromptResponse should report a stop_reason"
-        )
-
-
 def test_push_signed_tarball_lands_under_mount_path(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """``write_files_to_sandbox`` with a ``{slug}/SKILL.md`` fileset must
     land the file at ``/workspace/managed/skills/<slug>/SKILL.md`` after
     the in-pod daemon extracts the tarball.
     """
-    sandbox_id, _, pod_name = live_pod
+    sandbox_id, _, pod_name = pool_session
     slug = f"push-test-{uuid4().hex[:8]}"
     body = f"---\nname: {slug}\ndescription: pushed bundle\n---\n# v1\n"
 
@@ -363,10 +288,10 @@ def test_push_signed_tarball_lands_under_mount_path(
 def test_push_second_call_replaces_previous_via_atomic_swap(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """Push v1 then v2; the post-push file content reflects v2 (atomic swap)."""
-    sandbox_id, _, pod_name = live_pod
+    sandbox_id, _, pod_name = pool_session
     slug = f"swap-test-{uuid4().hex[:8]}"
     mount_path = f"/workspace/managed/skills/{slug}"
     target = f"{mount_path}/SKILL.md"
@@ -396,7 +321,7 @@ def test_push_second_call_replaces_previous_via_atomic_swap(
 def test_push_with_bad_signature_returns_401(
     k8s_manager: KubernetesSandboxManager,  # noqa: ARG001 — required to build live_pod
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """A push request with a deliberately wrong signature returns 401 from
     the in-pod daemon.
@@ -405,7 +330,7 @@ def test_push_with_bad_signature_returns_401(
     header and timestamp), but supplies a garbage signature so the daemon's
     Ed25519 verify fails.
     """
-    sandbox_id, _, pod_name = live_pod
+    sandbox_id, _, pod_name = pool_session
 
     pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
     pod_ip = pod.status.pod_ip
@@ -566,6 +491,10 @@ def test_managed_directory_is_read_only_from_sandbox_container(
 
     Without this, a compromised agent could swap a pushed skill bundle
     after the daemon extracts it.
+
+    Stays on ``live_pod`` (not ``pool_session``) because the sidecar
+    write in the second half lands a stray ``/workspace/managed/probe.txt``
+    that pool cleanup doesn't sweep.
     """
     _, _, pod_name = live_pod
 
@@ -601,6 +530,121 @@ def test_managed_directory_is_read_only_from_sandbox_container(
     assert "sidecar-write" in read_from_sandbox, (
         f"sandbox should see files the sidecar wrote. Got: {read_from_sandbox!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Egress proxy: the sandbox must reach the outside world ONLY via the proxy.
+# Run against the live container to catch runtime resolution / iptables bugs
+# that pod-spec unit tests can't observe.
+# ---------------------------------------------------------------------------
+
+
+_proxy_required = pytest.mark.skipif(
+    not SANDBOX_PROXY_HOST,
+    reason="SANDBOX_PROXY_HOST not set; proxy not deployed in this env",
+)
+
+
+@_proxy_required
+def test_sandbox_etc_hosts_resolves_proxy_alias(
+    k8s_manager: KubernetesSandboxManager,
+    k8s_client: client.CoreV1Api,
+) -> None:
+    """The main container's /etc/hosts must contain the `sandbox-proxy` alias.
+
+    kubelet manages /etc/hosts per-container so initContainer writes don't
+    propagate; host_aliases on the PodSpec is the only path that works.
+    """
+    sandbox_id = uuid4()
+    try:
+        _provisioned_sandbox(k8s_manager, sandbox_id)
+        pod_name = k8s_manager._get_pod_name(sandbox_id)
+        hosts = pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            "cat /etc/hosts",
+            container="sandbox",
+        )
+        assert "sandbox-proxy" in hosts, (
+            f"main container /etc/hosts missing sandbox-proxy alias: {hosts!r}"
+        )
+    finally:
+        k8s_manager.terminate(sandbox_id)
+        wait_for_pod_deletion(
+            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
+        )
+
+
+@_proxy_required
+def test_sandbox_egress_only_flows_via_proxy(
+    k8s_manager: KubernetesSandboxManager,
+    k8s_client: client.CoreV1Api,
+    db_session: Session,
+    test_user: User,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """End-to-end: TLS through the proxy reaches the internet while direct
+    egress is blocked by iptables. Catches missing host_aliases, broken CA
+    trust, iptables misconfiguration, or proxy-listen-port drift.
+
+    The proxy gates egress on identity (pod IP -> Sandbox row -> owning user),
+    so a Sandbox row matching this pod's id must exist; otherwise the gate
+    fail-closes with 403 ``unidentified_sandbox`` even for non-gated hosts.
+    """
+    # Create the Sandbox DB row the way the app does (create_sandbox__no_commit,
+    # as SessionManager._provision_sandbox uses), then provision the pod for that
+    # id with an explicit test llm_config. The proxy gates egress on identity
+    # (pod -> Sandbox row -> owner), so the row must exist or the gate fail-closes
+    # (403 unidentified_sandbox) even for non-gated hosts. We avoid
+    # SessionManager.ensure_sandbox_running because it resolves a DB-configured
+    # default LLM provider, which the K8s CI database doesn't have.
+    sandbox = create_sandbox__no_commit(db_session, test_user.id)
+    sandbox_id = sandbox.id
+    db_session.commit()
+    try:
+        _provisioned_sandbox(k8s_manager, sandbox_id)
+        update_sandbox_status__no_commit(db_session, sandbox_id, SandboxStatus.RUNNING)
+        db_session.commit()
+        pod_name = k8s_manager._get_pod_name(sandbox_id)
+
+        # Proxied egress: exercises HTTPS_PROXY, /etc/hosts, CA bundle, and proxy.
+        proxied = pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            "curl -s -o /dev/null -w '%{http_code}' https://www.example.com",
+            container="sandbox",
+        )
+        assert proxied.strip() == "200", (
+            f"proxied egress should return 200, got {proxied!r}"
+        )
+
+        # Direct egress: --noproxy bypasses HTTPS_PROXY; iptables must block it
+        # (curl exits non-zero and writes 000 on failure).
+        direct = pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            (
+                "curl --noproxy '*' -s -o /dev/null --max-time 5 "
+                "-w '%{http_code}' https://1.1.1.1 || echo BLOCKED:$?"
+            ),
+            container="sandbox",
+        )
+        assert "200" not in direct, (
+            f"direct egress should be blocked, but got HTTP 200: {direct!r}"
+        )
+        assert "BLOCKED:" in direct or direct.strip().startswith("000"), (
+            f"direct egress should fail closed, got {direct!r}"
+        )
+    finally:
+        db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).delete()
+        db_session.commit()
+        k8s_manager.terminate(sandbox_id)
+        wait_for_pod_deletion(
+            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
+        )
 
 
 def test_terminate_removes_pod_and_marks_db(
@@ -660,156 +704,4 @@ def test_pod_name_uses_full_uuid_not_first_8_chars() -> None:
     assert manager._get_pod_name(uuid_a) != manager._get_pod_name(uuid_b), (
         "pod name must encode the full UUID so distinct sandboxes do not "
         "collide on the first 8 hex chars"
-    )
-
-
-def test_ephemeral_acp_client_started_fresh_per_send(
-    k8s_manager: KubernetesSandboxManager,
-    k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
-) -> None:
-    """Two consecutive ``send_message`` calls spawn two distinct
-    ``opencode acp`` processes in the pod (regression for SHA ``96a38dcc06``
-    — multi-replica session corruption from a shared long-lived process).
-    """
-    sandbox_id, session_id, pod_name = live_pod
-
-    # Drain the first message stream fully before sampling PIDs.
-    for _ in k8s_manager.send_message(sandbox_id, session_id, "say hi"):
-        pass
-
-    # The finally block in send_message stops the ephemeral client; give the
-    # kernel a beat to reap the process so it does not appear in our second
-    # sample.
-    time.sleep(2)
-    pids_between = _opencode_pids(k8s_client, pod_name)
-
-    seen_pids: set[str] = set()
-    for _ in k8s_manager.send_message(sandbox_id, session_id, "say hi again"):
-        # Sample mid-stream so we observe the process while it is alive.
-        for pid in _opencode_pids(k8s_client, pod_name):
-            seen_pids.add(pid)
-
-    assert seen_pids, (
-        "expected to observe at least one opencode acp process during the "
-        "second send_message"
-    )
-    # The second send_message must have started a fresh process distinct
-    # from anything that lingered between the two calls.
-    new_pids = seen_pids - set(pids_between)
-    assert new_pids, (
-        "the second send_message must spawn a new opencode acp process — "
-        f"between-call PIDs: {pids_between}, sampled-during-call PIDs: "
-        f"{sorted(seen_pids)}"
-    )
-
-
-def test_acp_resumes_existing_session_when_present(
-    k8s_manager: KubernetesSandboxManager,
-    k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
-) -> None:
-    """After the first ``send_message``, the second call should resume
-    the existing opencode session rather than creating a new one.
-
-    We verify by checking that ``.opencode-data/`` exists after the first
-    send (opencode materialised its state) and that the second send
-    completes without error (the resume path worked).
-    """
-    sandbox_id, session_id, pod_name = live_pod
-    session_path = f"/workspace/sessions/{session_id}"
-
-    # First send populates opencode session data on disk.
-    for _ in k8s_manager.send_message(sandbox_id, session_id, "first message"):
-        pass
-
-    # Verify opencode wrote its data store.
-    data_dir_check = pod_exec(
-        k8s_client,
-        pod_name,
-        SANDBOX_NAMESPACE,
-        f"test -d {session_path}/.opencode-data && echo OK || echo MISSING",
-    )
-    assert "OK" in data_dir_check, (
-        f".opencode-data should exist after first send_message, got: {data_dir_check!r}"
-    )
-
-    # Snapshot opencode state files so we can prove the second send resumes
-    # rather than recreates the session.
-    files_before = set(
-        pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            f"find {session_path}/.opencode-data -type f | sort",
-        )
-        .strip()
-        .splitlines()
-    )
-    assert files_before, ".opencode-data should contain state files after first send"
-
-    # Second send should resume the existing session — not error out.
-    events: list[ACPEvent] = []
-    for event in k8s_manager.send_message(sandbox_id, session_id, "second message"):
-        events.append(event)
-
-    non_timeout_errors = [
-        e
-        for e in events
-        if isinstance(e, Error) and "timeout" not in (e.message or "").lower()
-    ]
-    assert not non_timeout_errors, (
-        f"second send_message should not produce non-timeout errors: {non_timeout_errors}"
-    )
-
-    # First-send state files must still exist — if the session was recreated
-    # from scratch, these would be wiped.
-    files_after = set(
-        pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            f"find {session_path}/.opencode-data -type f | sort",
-        )
-        .strip()
-        .splitlines()
-    )
-    assert files_before <= files_after, (
-        f"Session state lost after second send — session may have been recreated "
-        f"instead of resumed. Missing: {files_before - files_after}"
-    )
-
-
-def test_cancel_during_send_does_not_corrupt_sandbox(
-    k8s_manager: KubernetesSandboxManager,
-    live_pod: tuple[UUID, UUID, str],
-) -> None:
-    """Early consumer exit (partial iteration) must not corrupt the sandbox.
-
-    In production the cancel path is triggered when the HTTP client
-    disconnects, which the ASGI layer translates into a ``GeneratorExit``
-    on the *owning* thread. We model this by consuming a few events and
-    then breaking out of the loop on the same thread — CPython does not
-    allow ``generator.close()`` from a *different* thread while
-    ``__next__`` is executing.
-    """
-    sandbox_id, session_id, _ = live_pod
-
-    stream = k8s_manager.send_message(
-        sandbox_id,
-        session_id,
-        "Take a moment, then list the files here.",
-    )
-
-    received: list[ACPEvent] = []
-    for event in stream:
-        received.append(event)
-        if len(received) >= 2:
-            break  # triggers GeneratorExit via same-thread cleanup
-
-    assert received, "expected at least one event before early exit"
-
-    # After an early exit, the sandbox must still be healthy.
-    assert k8s_manager.health_check(sandbox_id, timeout=5.0), (
-        "sandbox should remain healthy after a mid-stream cancel"
     )

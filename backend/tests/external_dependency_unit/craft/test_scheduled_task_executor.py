@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import datetime
 import threading
-from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 from unittest.mock import PropertyMock
@@ -42,6 +41,8 @@ from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.models import ScheduledTask
 from onyx.db.models import ScheduledTaskRun
 from onyx.db.models import User
+from onyx.server.features.build.configs import SANDBOX_BACKEND
+from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
@@ -51,16 +52,6 @@ from tests.external_dependency_unit.craft._test_helpers import make_user
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _autouse_local_sandbox_paths(local_sandbox_paths: Path) -> None:  # noqa: ARG001
-    """``SessionManager.__init__`` instantiates the real ``LocalSandboxManager``
-    via ``get_sandbox_manager`` — see ``test_ensure_sandbox_running.py`` for
-    the same pattern. ``local_sandbox_paths`` (from conftest) redirects the
-    template + base paths so ``_validate_templates()`` passes in CI / dev.
-    """
-    return None
 
 
 @pytest.fixture(autouse=True)
@@ -106,6 +97,12 @@ def _seed_task_and_queued_run(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(
+    SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
+    reason="Exercises run_scheduled_task_logic → SessionManager → real "
+    "KubernetesSandboxManager init; requires SANDBOX_BACKEND=kubernetes "
+    "(runs in the dedicated K8s CI job).",
+)
 def test_run_fails_when_wake_fails(
     db_session: Session,
     test_user: User,  # noqa: ARG001

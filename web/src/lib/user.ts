@@ -1,4 +1,6 @@
+import { mutate } from "swr";
 import { User } from "@/lib/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const checkUserIsNoAuthUser = (userId: string) => {
   return userId === "__no_auth_user__";
@@ -20,6 +22,11 @@ export const logout = async (): Promise<Response> => {
     method: "POST",
     credentials: "include",
   });
+  if (response.ok) {
+    // Drop the cached /api/me so any subsequent useCurrentUser read does not
+    // hand callers the just-signed-out user from the SWR dedup window.
+    await mutate(SWR_KEYS.me, null, { revalidate: false });
+  }
   return response;
 };
 

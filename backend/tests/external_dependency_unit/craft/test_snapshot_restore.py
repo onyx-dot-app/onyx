@@ -467,7 +467,7 @@ def test_restore_uses_data_filter_to_block_traversal(
 
     Defence-in-depth here is provided by **GNU tar inside the pod**, not by
     Python's ``tarfile.extractall(filter="data")``. The K8s backend pipes
-    ``aws s3 cp - | tar -xzf - -C /workspace/sessions/<session_id>``; GNU
+    ``s5cmd cat | tar -xzf - -C /workspace/sessions/<session_id>``; GNU
     tar strips leading ``../`` components when extracting (refusing to
     write above the ``-C`` directory) and the ``-C`` flag pins the
     extraction root. The local sandbox backend uses Python's
