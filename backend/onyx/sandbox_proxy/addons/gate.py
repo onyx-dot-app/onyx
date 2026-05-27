@@ -102,6 +102,7 @@ class GateAddon:
         cache_factory: CacheFactory,
         proxy_instance_id: str,
         snapshot_policy: SnapshotEgressPolicy | None = None,
+        stream_responses: bool = True,
     ) -> None:
         self._identity = identity
         self._action_matcher = action_matcher
@@ -109,6 +110,7 @@ class GateAddon:
         self._cache_factory = cache_factory
         self._proxy_instance_id = proxy_instance_id
         self._snapshot_policy = snapshot_policy
+        self._stream_responses = stream_responses
         # Invariant: `_persist_approval_row` is the only writer;
         # `_await_decision`'s finally is the only remover.
         self._parked = ParkedApprovals()
@@ -145,6 +147,16 @@ class GateAddon:
         conn_id = getattr(client, "id", None)
         if conn_id is not None:
             self._conn_session_tags.pop(conn_id, None)
+
+    def responseheaders(self, flow: http.HTTPFlow) -> None:
+        """Stream the response body to the sandbox instead of buffering it whole.
+
+        Must run here, not in `response`: by then the body is already buffered.
+        """
+        if not self._stream_responses:
+            return
+        if flow.response is not None:
+            flow.response.stream = True
 
     async def requestheaders(self, flow: http.HTTPFlow) -> None:
         """Opt a tenant-scoped snapshot upload into unbuffered streaming.
