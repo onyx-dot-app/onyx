@@ -91,36 +91,6 @@ class ParkedApprovals:
         return [(tenant_id, ids.copy()) for tenant_id, ids in self._by_tenant.items()]
 
 
-class ParkedApprovals:
-    """Approvals the proxy is currently parked on, grouped by tenant.
-
-    Cross-tenant in-memory state — UUIDs and tenant slugs, no user
-    data. The SIGTERM drain walks this per-tenant so one cache backend
-    can be reused across each tenant's parked approvals.
-
-    Mutated only from the event loop; the drain reads via
-    `snapshot()` to iterate safely while the source mutates.
-    """
-
-    def __init__(self) -> None:
-        self._by_tenant: dict[str, set[UUID]] = {}
-
-    def add(self, tenant_id: str, approval_id: UUID) -> None:
-        self._by_tenant.setdefault(tenant_id, set()).add(approval_id)
-
-    def remove(self, tenant_id: str, approval_id: UUID) -> None:
-        parked = self._by_tenant.get(tenant_id)
-        if parked is None:
-            return
-        parked.discard(approval_id)
-        if not parked:
-            del self._by_tenant[tenant_id]
-
-    def snapshot(self) -> list[tuple[str, set[UUID]]]:
-        """One-shot copy safe to iterate while the source mutates."""
-        return [(tenant_id, ids.copy()) for tenant_id, ids in self._by_tenant.items()]
-
-
 class GateAddon:
     """mitmproxy addon that gates external-app requests on user approval."""
 

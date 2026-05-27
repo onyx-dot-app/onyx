@@ -425,38 +425,6 @@ async def test_request_strips_proxy_authorization_before_forward() -> None:
     assert "Proxy-Authorization" not in flow.request.headers
 
 
-def test_resolve_and_match_session_by_id_db_error_fails_closed() -> None:
-    """A DB blip while validating the in-band tag must fail closed
-    (no_active_session), not silently forward — same posture as the
-    heuristic lookup raising."""
-    resolver = _StubResolver(
-        sandbox=_sandbox(), session_by_id_exc=RuntimeError("db down")
-    )
-    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
-    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
-
-    result = addon._resolve_and_match(flow)
-
-    assert result is None
-    _assert_403(flow, gate_mod._CODE_NO_ACTIVE_SESSION)
-    assert len(resolver.resolve_session_by_id_calls) == 1
-
-
-@pytest.mark.asyncio
-async def test_request_strips_proxy_authorization_before_forward() -> None:
-    """The in-band tag must never reach the origin: a forwarded
-    (non-gated) plain-HTTP request has Proxy-Authorization removed."""
-    resolver = _StubResolver(sandbox=_sandbox())
-    addon = _build(resolver=resolver, matcher=_StubMatcher(result=None))
-    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
-    assert "Proxy-Authorization" in flow.request.headers
-
-    await addon.request(flow)
-
-    assert flow.response is None  # non-gated → forwarded
-    assert "Proxy-Authorization" not in flow.request.headers
-
-
 # ---------------------------------------------------------------------------
 # requestheaders — tenant-scoped snapshot egress streaming (option B)
 # ---------------------------------------------------------------------------
