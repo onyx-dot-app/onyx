@@ -753,6 +753,13 @@ def test_approval_requested_notification_is_created(
         f"notification.additional_data.approval_id should match "
         f"{pending.approval_id}, got: {notif.additional_data!r}"
     )
+    # The notification deep-links to the originating Craft session so the
+    # popover can route the user straight to it. Hardcode the spec
+    # (`/craft/v1?sessionId=<id>`) rather than importing the template.
+    assert notif.additional_data.get("link") == f"/craft/v1?sessionId={session_id}", (
+        f"notification.additional_data.link should deep-link to the session, "
+        f"got: {notif.additional_data!r}"
+    )
 
     # Unblock the parked curl before fixture teardown.
     submit_decision(

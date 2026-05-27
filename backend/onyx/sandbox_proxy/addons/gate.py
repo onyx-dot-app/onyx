@@ -78,6 +78,13 @@ _CODE_USER_REJECTED = "user_rejected"
 _CODE_NOT_AUTHORIZED = "not_authorized"
 _CODE_INTERNAL_ERROR = "internal_error"
 
+# Relative deep link to the Craft build session that initiated the gated
+# request. The notifications popover routes a relative `additional_data.link`
+# through the Next router (see web/src/sections/sidebar/NotificationsPopover.tsx),
+# so this lands the user on the originating session. Mirrors the frontend's
+# CRAFT_PATH (`/craft/v1`) + SESSION_ID search param (`sessionId`).
+_CRAFT_SESSION_LINK_TEMPLATE = "/craft/v1?sessionId={session_id}"
+
 
 class ParkedApprovals:
     """Approvals the proxy is currently parked on, grouped by tenant.
@@ -622,10 +629,10 @@ class GateAddon:
     ) -> None:
         """Best-effort APPROVAL_REQUESTED notification dispatch.
 
-        Body is `{approval_id, session_id, action_type}` — no PII.
-        The full payload lives on the action_approval row; the popover
-        fetches it when the chat loads. Failures are swallowed by the
-        caller.
+        Body is `{approval_id, session_id, action_type, link}` — no PII.
+        `link` deep-links the notification to the originating session; the
+        full payload lives on the action_approval row, which the popover
+        fetches when the chat loads. Failures are swallowed by the caller.
         """
         with self._db_session_factory(ctx.tenant_id) as db:
             create_notification(
@@ -637,6 +644,9 @@ class GateAddon:
                     "approval_id": str(approval_id),
                     "session_id": str(ctx.session_id),
                     "action_type": match.action_type,
+                    "link": _CRAFT_SESSION_LINK_TEMPLATE.format(
+                        session_id=ctx.session_id
+                    ),
                 },
                 autocommit=True,
             )
