@@ -608,16 +608,28 @@ def test_sandbox_egress_only_flows_via_proxy(
         db_session.commit()
         pod_name = k8s_manager._get_pod_name(sandbox_id)
 
-        # Proxied egress: exercises HTTPS_PROXY, /etc/hosts, CA bundle, and proxy.
-        proxied = pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            "curl -s -o /dev/null -w '%{http_code}' https://www.example.com",
-            container="sandbox",
-        )
-        assert proxied.strip() == "200", (
-            f"proxied egress should return 200, got {proxied!r}"
+        # Proxied egress: exercises HTTPS_PROXY, /etc/hosts, CA bundle, and the
+        # gate. The proxy's pod informer observes a freshly-provisioned pod
+        # asynchronously, so the gate can briefly fail-close (403
+        # unidentified_sandbox) in the window between "pod ready" and "pod IP
+        # cached by the proxy." Retry until the sandbox is identified (200) or
+        # the budget elapses — a genuinely unidentifiable pod still fails below.
+        proxied = ""
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
+            proxied = pod_exec(
+                k8s_client,
+                pod_name,
+                SANDBOX_NAMESPACE,
+                "curl -s -o /dev/null -w '%{http_code}' https://www.example.com",
+                container="sandbox",
+            ).strip()
+            if proxied == "200":
+                break
+            time.sleep(3)
+        assert proxied == "200", (
+            f"proxied egress should return 200 once the proxy sees the pod, "
+            f"got {proxied!r}"
         )
 
         # Direct egress: --noproxy bypasses HTTPS_PROXY; iptables must block it
