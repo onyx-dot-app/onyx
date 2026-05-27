@@ -10,6 +10,13 @@ configMap:
   # Placeholder; the K8s sandbox tests don't call back to it. Required to
   # satisfy the chart's fail() guard for ENABLE_CRAFT=true.
   SANDBOX_API_SERVER_URL: "http://api.invalid"
+  # The proxy's snapshot-egress allowlist must agree with the bucket and
+  # endpoint the sidecar actually uploads to (set in pr-craft-k8s-tests.yml);
+  # otherwise the upload misses the streaming exemption and falls into the
+  # gate's buffered cap/matcher path. Chart defaults (onyx-sandbox-files,
+  # onyx-minio) don't match the docker-compose MinIO bridged into kind.
+  SANDBOX_S3_BUCKET: "onyx-sandbox-snapshots-ci"
+  AWS_ENDPOINT_URL: "http://minio.onyx-sandboxes.svc.cluster.local:9000"
 
 # Placeholder secret values so auth-secrets.yaml renders without erroring.
 # Postgres/Redis/MinIO actually run in docker-compose alongside the kind
