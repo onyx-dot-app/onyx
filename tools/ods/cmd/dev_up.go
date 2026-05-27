@@ -171,12 +171,12 @@ func sshAgentMount() (string, bool) {
 	}
 
 	if sock == "" {
-		log.Warn("SSH_AUTH_SOCK not set -- SSH agent forwarding disabled (git over SSH won't work inside the container)")
+		log.Warn("SSH_AUTH_SOCK not set — SSH agent forwarding disabled (git over SSH won't work inside the container)")
 		return "", false
 	}
 
 	if _, err := os.Stat(sock); err != nil {
-		log.Warnf("SSH_AUTH_SOCK=%s not accessible -- SSH agent forwarding disabled: %v", sock, err)
+		log.Warnf("SSH_AUTH_SOCK=%s not accessible — SSH agent forwarding disabled: %v", sock, err)
 		return "", false
 	}
 	mount := fmt.Sprintf("type=bind,source=%s,target=/tmp/ssh-agent.sock", sock)
