@@ -436,19 +436,13 @@ class DockerSandboxManager(SandboxManager):
         self._cpu_limit = SANDBOX_DOCKER_CPU_LIMIT
         self._snapshot_manager = SnapshotManager(get_default_file_store())
 
-        # Per-sandbox event buses, prompt locks, and termination tombstones —
-        # shared with the K8s manager via base.py.
         self._init_serve_state()
 
         build_dir = Path(__file__).parent.parent.parent
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
 
-        # Auto-detect compose project so Docker Desktop groups sandbox
-        # containers under the same stack header as api_server. When
-        # api_server runs inside compose, its own container has the
-        # ``com.docker.compose.project`` label; we copy that value onto
-        # every sandbox we create. When api_server runs outside compose
-        # (e.g. unit tests) this resolves to None and no label is added.
+        # Match api_server's compose project so Docker Desktop groups sandboxes
+        # under the same stack header; None outside compose.
         self._compose_project = _detect_compose_project(self._docker)
 
         logger.info(
@@ -460,10 +454,6 @@ class DockerSandboxManager(SandboxManager):
             self._compose_project,
         )
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
     def _ensure_sandbox_network(self) -> None:
         try:
             self._docker.networks.get(self._network_name)
@@ -471,10 +461,8 @@ class DockerSandboxManager(SandboxManager):
         except NotFound:
             pass
         logger.info("Creating sandbox network: %s", self._network_name)
-        # ``onyx_craft_sandbox`` is intentionally a plain bridge with
-        # internal=False so the agent can reach the public internet.
-        # Host-level firewall rules (DOCKER-USER chain) block IMDS at the
-        # network layer; app-level blocking is best-effort only.
+        # Plain bridge (internal=False) — agent needs public internet; host
+        # DOCKER-USER chain handles IMDS blocking.
         self._docker.networks.create(
             self._network_name,
             driver="bridge",
@@ -531,10 +519,6 @@ class DockerSandboxManager(SandboxManager):
             time.sleep(CONTAINER_READY_POLL_INTERVAL_SECONDS)
         return False
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
     def provision(
         self,
         sandbox_id: UUID,
@@ -559,18 +543,14 @@ class DockerSandboxManager(SandboxManager):
             tenant_id,
         )
 
-        # Re-provision clears the tombstone so future subscribes can build a
-        # fresh bus against the new container.
+        # Re-provision: clear tombstone so subscribes can build a fresh bus.
         with self._event_buses_lock:
             self._terminated_sandboxes.discard(sandbox_id)
 
-        # 1. Idempotency: reuse an existing container if at all possible.
         container = self._reuse_existing_container(sandbox_id)
         if container is None:
-            # 2. Build per-sandbox HTTP Basic password + opencode-serve config
-            #    before creating the container. opencode-serve loads its
-            #    provider list at startup, so this content has to be present
-            #    in env from the very first ``opencode serve`` invocation.
+            # opencode-serve reads provider config from env at startup, so it
+            # must be in the create_kwargs before the container ever runs.
             opencode_password = secrets.token_urlsafe(32)
             opencode_config_json = json.dumps(
                 build_opencode_config(
@@ -598,8 +578,6 @@ class DockerSandboxManager(SandboxManager):
                 f"Timeout waiting for sandbox container {container.name} to be running"
             )
 
-        # opencode-serve binds :4096 a few hundred ms to a few seconds after
-        # the container is reported running. No-op under AGENT_TRANSPORT=acp.
         if not self._wait_for_opencode_serve_ready(sandbox_id):
             raise RuntimeError(
                 f"opencode-serve never became ready in sandbox container {container.name}"
@@ -659,21 +637,16 @@ class DockerSandboxManager(SandboxManager):
             compose_project=self._compose_project,
         )
         try:
-            # ty can't statically verify TypedDict-unpack against ``run``'s
-            # 50+ named-parameter overloads; types are pinned by
-            # ``ContainerCreateKwargs`` at construction time.
+            # Types pinned by ContainerCreateKwargs; ty can't match run's overloads.
             return self._docker.containers.run(**create_kwargs)  # ty: ignore[no-matching-overload]
         except APIError as e:
-            # 409 means a concurrent request created the same container.
             if "Conflict" in str(e) or getattr(e, "status_code", None) == 409:
                 logger.info("Sandbox container %s already exists, reusing", sandbox_id)
                 return self._require_container(sandbox_id)
             raise RuntimeError(f"Failed to create sandbox container: {e}") from e
 
     def terminate(self, sandbox_id: UUID) -> None:
-        # Tombstone + pop every per-directory bus under one lock so a
-        # concurrent subscribe can't race in and create a fresh bus
-        # against the dying container.
+        # Tombstone + pop under one lock so subscribe can't race a fresh bus in.
         with self._event_buses_lock:
             self._terminated_sandboxes.add(sandbox_id)
             doomed_keys = [k for k in self._event_buses if k[0] == sandbox_id]
@@ -694,8 +667,7 @@ class DockerSandboxManager(SandboxManager):
                     "Error removing sandbox container %s: %s", container.name, e
                 )
 
-        # Remove the per-sandbox named volume separately so terminate is safe
-        # to call when the container was already gone.
+        # Volume removal is separate so terminate works after manual container rm.
         volume_name = _sandbox_volume_name(sandbox_id)
         try:
             volume = self._docker.volumes.get(volume_name)
@@ -719,10 +691,6 @@ class DockerSandboxManager(SandboxManager):
         state = (container.attrs or {}).get("State") or {}
         return state.get("Status") == "running"
 
-    # ------------------------------------------------------------------
-    # Session workspace setup
-    # ------------------------------------------------------------------
-
     def _render_session_files(
         self,
         *,
@@ -732,16 +700,9 @@ class DockerSandboxManager(SandboxManager):
         user_name: str | None = None,
         user_role: str | None = None,
     ) -> _RenderedSessionFiles:
-        """Render shell-escaped session config files.
-
-        ``opencode_json`` is ``None`` under ``AGENT_TRANSPORT=serve`` —
-        opencode-serve loaded its provider config from
-        ``OPENCODE_CONFIG_CONTENT`` at startup and does not re-read
-        per-session ``opencode.json`` files; writing one would just
-        pollute snapshots. Under ``AGENT_TRANSPORT=acp`` we still emit
-        the per-session file because each exec'd ``opencode acp``
-        invocation loads it.
-        """
+        """Render shell-escaped session config files. ``opencode_json`` is None
+        under serve transport (config came from OPENCODE_CONFIG_CONTENT at
+        container startup); only acp transport needs the per-session file."""
         agent_instructions = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_section=skills_section,
@@ -808,12 +769,10 @@ class DockerSandboxManager(SandboxManager):
             if nextjs_port is not None
             else ""
         )
-        # AGENT_TRANSPORT=serve uses pod-level OPENCODE_CONFIG_CONTENT; skip
-        # per-session opencode.json so snapshots stay clean.
         opencode_json_write = (
             f"printf '%s' '{rendered.opencode_json}' > {session_path}/opencode.json"
             if rendered.opencode_json is not None
-            else "# AGENT_TRANSPORT=serve: opencode.json is container-level via OPENCODE_CONFIG_CONTENT"
+            else "# serve transport: opencode.json is container-level (OPENCODE_CONFIG_CONTENT)"
         )
         setup_script = f"""
 set -e
@@ -890,10 +849,6 @@ echo "Session cleanup complete"
                 e,
             )
 
-    # ------------------------------------------------------------------
-    # Workspace queries
-    # ------------------------------------------------------------------
-
     def session_workspace_exists(
         self,
         sandbox_id: UUID,
@@ -949,10 +904,6 @@ echo "Session cleanup complete"
             except ValueError:
                 continue
         return out
-
-    # ------------------------------------------------------------------
-    # Snapshots
-    # ------------------------------------------------------------------
 
     def create_snapshot(
         self,
@@ -1138,10 +1089,6 @@ printf '%s' '{rendered.agents_md}' > {session_path}/AGENTS.md
         except ExecError as e:
             raise RuntimeError(f"Failed to regenerate session config: {e}") from e
 
-    # ------------------------------------------------------------------
-    # opencode serve transport hooks (called by SandboxManager base class)
-    # ------------------------------------------------------------------
-
     def _serve_base_url(self, sandbox_id: UUID) -> str:
         """Container-name URL on the sandbox bridge network.
 
@@ -1169,10 +1116,6 @@ printf '%s' '{rendered.agents_md}' > {session_path}/AGENTS.md
             if entry.startswith(prefix):
                 return entry[len(prefix) :]
         return None
-
-    # ------------------------------------------------------------------
-    # Agent messaging
-    # ------------------------------------------------------------------
 
     def send_message(
         self,
@@ -1268,10 +1211,6 @@ printf '%s' '{rendered.agents_md}' > {session_path}/AGENTS.md
                 client.stop()
             except Exception as e:
                 logger.warning("Failed to stop DockerACPExecClient: %s", e)
-
-    # ------------------------------------------------------------------
-    # File operations
-    # ------------------------------------------------------------------
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
@@ -1612,10 +1551,6 @@ echo WRITE_OK"""
             stream_stdin_to_container(container, ["/bin/sh", "-c", script], tar_bytes)
         except ExecError as e:
             raise RuntimeError(f"write_files_to_sandbox failed: {e}") from e
-
-    # ------------------------------------------------------------------
-    # Webapp / preview
-    # ------------------------------------------------------------------
 
     def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:
         """Return an http URL the api_server can reach the sandbox on.

@@ -488,11 +488,7 @@ class SandboxManager(ABC):
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             return []
         self._init_serve_state()
-        # Don't create a bus just to list — that spins up a reader thread
-        # for a caller that didn't ask for events. Walk every existing
-        # per-directory bus belonging to this sandbox; the parent
-        # ``session.created`` event landed on whichever directory's bus
-        # was live when the spawn happened.
+        # Walk existing buses only — don't spin up a reader thread just to list.
         with self._event_buses_lock:
             buses = [
                 bus for (sid, _), bus in self._event_buses.items() if sid == sandbox_id
@@ -511,16 +507,9 @@ class SandboxManager(ABC):
         directory: str,
         keepalive_seconds: float = 15.0,
     ) -> Generator["ACPEvent", None, None]:
-        """Stream translated ACP events for an opencode session (parent
-        or child). Never terminates on its own; caller closes via
-        ``GeneratorExit``. Empty under ACP.
-
-        ``directory`` is the in-sandbox session path
-        (``/workspace/sessions/{build_session_id}``) — opencode-serve
-        scopes its session store per-directory, so the hydrate REST call
-        needs it. Without it, the delta-before-``message.updated`` race
-        falls back to the negative-cache path and drops in-flight
-        deltas for the current step on subagent streams.
+        """Stream translated ACP events for an opencode session. Caller closes
+        via ``GeneratorExit``. ``directory`` is required: opencode-serve scopes
+        its session store per-directory, so the hydrate REST call needs it.
         """
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             return
@@ -555,47 +544,21 @@ class SandboxManager(ABC):
             bus.unsubscribe(sub)
             client.close()
 
-    # =====================================================================
-    # opencode serve transport — shared plumbing
-    # =====================================================================
-    #
-    # Subclasses provide the two backend-specific endpoints (`_serve_base_url`
-    # and `_read_opencode_password`); the rest of the serve transport is
-    # backend-agnostic and lives here.
-
     @staticmethod
     def _session_directory(session_id: UUID) -> str:
-        """Absolute in-sandbox path for a session's workspace.
-
-        Single source of truth for the path layout — both managers mount
-        the same ``/workspace/sessions`` root inside the container/pod,
-        so the path is backend-agnostic.
-        """
         return f"/workspace/sessions/{session_id}"
 
     def _init_serve_state(self) -> None:
-        """Initialize per-instance serve-transport state. Idempotent —
-        guarded against double-init via attribute check.
-
-        Called eagerly from each subclass ``_initialize`` (so the first
-        prompt doesn't pay init cost) AND lazily from every serve-state
-        accessor on the base class, so a subclass that forgets the eager
-        call still bootstraps on first use.
-        """
+        """Idempotent init for serve-transport state. Called eagerly from each
+        subclass ``_initialize`` and lazily from accessors as a safety net."""
         if getattr(self, "_serve_state_initialized", False):
             return
-        # One PodEventBus per (sandbox, directory). Opencode-serve's
-        # ``Instance.provide`` middleware scopes /event per ``?directory=``
-        # query param, so each session directory needs its own SSE stream.
+        # Per-(sandbox, directory): opencode-serve scopes /event by ?directory=.
         self._event_buses: dict[tuple[UUID, str], PodEventBus] = {}
-        # Tombstone set: blocks late ``subscribe`` from re-creating a bus
-        # for a sandbox whose terminate is in flight (leaks a reconnect
-        # loop otherwise). Cleared on re-provision.
+        # Tombstone: blocks late subscribe from racing a terminate.
         self._terminated_sandboxes: set[UUID] = set()
         self._event_buses_lock = threading.Lock()
-        # Per-(sandbox_id, build_session_id) locks that serialize concurrent
-        # send_message calls on a single build session. See prompt_slot for
-        # why we key on build_session_id rather than opencode_session_id.
+        # Key on build_session_id, not opencode_session_id — see prompt_slot.
         self._prompt_locks: dict[tuple[UUID, UUID], threading.Lock] = {}
         self._prompt_locks_meta: threading.Lock = threading.Lock()
         self._serve_state_initialized = True
@@ -611,12 +574,8 @@ class SandboxManager(ABC):
 
     @abstractmethod
     def _read_opencode_password(self, sandbox_id: UUID) -> str | None:
-        """Backend-specific lookup of the per-sandbox HTTP Basic password.
-
-        Returns ``None`` if the sandbox doesn't have one (e.g. legacy
-        provisioned before this code landed). Callers should fall back
-        to no-auth in that case.
-        """
+        """Per-sandbox HTTP Basic password. ``None`` for legacy sandboxes
+        provisioned before this code landed; caller falls back to no-auth."""
         ...
 
     def _wait_for_opencode_serve_ready(
@@ -624,18 +583,10 @@ class SandboxManager(ABC):
         sandbox_id: UUID,
         timeout: float = OPENCODE_SERVE_READY_TIMEOUT_SECONDS,
     ) -> bool:
-        """Block until opencode-serve answers ``GET /doc`` with 200.
-
-        Backend readiness (k8s pod Ready / docker container running) only
-        proves the supervisor process is up. opencode-serve binds ``:4096``
-        a few hundred ms to a few seconds later, after it finishes config
-        parse and provider registry init. Returning RUNNING before that
-        means the first prompt's bus subscribe races a cold opencode —
-        connection refused or stale-auth 401 burns the bus's reconnect
-        budget and surfaces to the user as ``stream did not become ready``.
-
-        No-op under AGENT_TRANSPORT=acp.
-        """
+        """Block until opencode-serve answers ``GET /doc`` with 200. Backend
+        readiness only proves the supervisor is up; opencode binds :4096 a
+        few seconds later. Skipping this races the first prompt's bus
+        subscribe → "stream did not become ready"."""
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             return True
 
@@ -668,17 +619,9 @@ class SandboxManager(ABC):
         return False
 
     def _get_or_create_event_bus(self, sandbox_id: UUID, directory: str) -> PodEventBus:
-        """Lazily build the per-(sandbox, directory) :class:`PodEventBus`.
-        Refuses to create one for a terminated sandbox.
-
-        Opencode-serve's ``Instance.provide`` middleware scopes /event per
-        ``?directory=`` query param, so each unique session directory on
-        a sandbox needs its own SSE stream.
-
-        Replaces a cached bus that has self-closed (exhausted its reconnect
-        budget) with a fresh one — otherwise callers would keep getting
-        ``BUS_CLOSED_SENTINEL`` until the api server restarted.
-        """
+        """Lazy per-(sandbox, directory) bus. Refuses to create for a terminated
+        sandbox. Replaces self-closed buses so callers don't wedge on
+        BUS_CLOSED_SENTINEL until restart."""
         self._init_serve_state()
         key = (sandbox_id, directory)
         with self._event_buses_lock:
@@ -746,17 +689,9 @@ class SandboxManager(ABC):
         *,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
     ) -> Generator["ACPEvent", None, None]:
-        """Stream ACP events by driving the in-sandbox ``opencode serve`` via
-        :class:`OpencodeServeClient`. See
-        ``docs/craft/opencode-serve-migration.md``.
-
-        ``opencode_session_id`` is the caller-persisted id from
-        ``BuildSession.opencode_session_id``. If ``None``, fall back to
-        creating one inline — but the session manager *should* preflight
-        via :meth:`ensure_opencode_session` and persist before calling
-        here, to avoid creating a fresh opencode session per turn under
-        a race.
-        """
+        """Stream ACP events via the in-sandbox ``opencode serve``. Callers
+        should preflight ``opencode_session_id`` with
+        :meth:`ensure_opencode_session` to avoid one orphan session per turn."""
         packet_logger = get_packet_logger()
         session_path = self._session_directory(session_id)
         client = self._build_serve_client(sandbox_id, session_path)
@@ -773,12 +708,8 @@ class SandboxManager(ABC):
                 title=f"build-session-{str(session_id)[:8]}",
             )
             if resolved_session_id != opencode_session_id:
-                # Caller's persisted id was stale (404) or missing. Notify
-                # the caller so they can persist the new id; without this,
-                # _ensure_opencode_session_id would reload the same stale
-                # id from the DB on every turn, 404 again, and orphan a
-                # fresh opencode session per turn (one assistant message
-                # per orphan → conversation loses all prior context).
+                # Notify caller so they persist the new id — without this we
+                # orphan one opencode session per turn (lose conversation context).
                 if opencode_session_id is not None:
                     logger.warning(
                         "[SANDBOX-SERVE] persisted opencode_session_id %s was "

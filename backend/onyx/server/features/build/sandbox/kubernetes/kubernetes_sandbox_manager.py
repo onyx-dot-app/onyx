@@ -426,8 +426,6 @@ class KubernetesSandboxManager(SandboxManager):
         self._s3_bucket = SANDBOX_S3_BUCKET
         self._service_account = SANDBOX_SERVICE_ACCOUNT_NAME
 
-        # Per-sandbox event buses, prompt locks, and termination tombstones —
-        # shared with the Docker manager via base.py.
         self._init_serve_state()
 
         # Load AGENTS.md template path
@@ -2324,17 +2322,9 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
                     e,
                 )
 
-    # =====================================================================
-    # opencode serve transport (AGENT_TRANSPORT=serve)
-    # =====================================================================
-
     def _serve_base_url(self, sandbox_id: UUID) -> str:
-        """In-cluster URL for this sandbox's opencode-serve.
-
-        Routes via Service (not pod IP) because telepresence's
-        host→cluster VPN drops arbitrary pod-IP traffic on non-Service
-        ports.
-        """
+        """In-cluster URL for opencode-serve. Routes via Service (not pod IP)
+        because telepresence drops arbitrary pod-IP traffic."""
         service_name = self._get_service_name(str(sandbox_id))
         return (
             f"http://{service_name}.{self._namespace}.svc.cluster.local"

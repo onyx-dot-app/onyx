@@ -1130,9 +1130,7 @@ else
     echo ""
 fi
 
-# Pre-create the dedicated sandbox bridge whenever --include-craft is set.
-# docker-compose references it as external=true so it must exist before
-# `compose up`, on BOTH first-install and update/restart paths.
+# Pre-create the sandbox bridge — compose overlay references it as external.
 if [ "$INCLUDE_CRAFT" = true ]; then
     SANDBOX_NET="${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}"
     if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
