@@ -171,6 +171,7 @@ _REGISTRY: Final = BuiltInSkillRegistry(
         ExternalAppBuiltInProvider(
             skill_id="google-calendar", app_type=ExternalAppType.GOOGLE_CALENDAR
         ),
+        ExternalAppBuiltInProvider(skill_id="gmail", app_type=ExternalAppType.GMAIL),
     )
 )
 
