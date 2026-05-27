@@ -55,13 +55,17 @@ export default function CraftToolGroup({ toolCalls }: CraftToolGroupProps) {
   const hasFailure = aggregate === "failed";
   const [isOpen, setIsOpen] = useState(hasFailure);
   const failedCount = toolCalls.filter((t) => t.status === "failed").length;
-  // While the group is still working, surface the active tool's label so the
-  // user can see WHICH step is running without expanding the card.
-  const active = toolCalls.find(
-    (t) => t.status === "pending" || t.status === "in_progress"
-  );
-  const titleText = active ? active.title : "Working";
-  const descriptionText = active?.description ?? null;
+  // Surface the *currently relevant* tool's label so the user can see WHICH
+  // step the agent is on without expanding the card. Prefer the most recent
+  // in-progress tool; once everything is settled, fall back to the most
+  // recent tool overall (so the header shows the last action that happened
+  // rather than reverting to a generic "Working" label).
+  const lastInProgress = [...toolCalls]
+    .reverse()
+    .find((t) => t.status === "pending" || t.status === "in_progress");
+  const focused = lastInProgress ?? toolCalls[toolCalls.length - 1];
+  const titleText = focused?.title ?? "Working";
+  const descriptionText = focused?.description ?? null;
 
   return (
     <div

@@ -112,55 +112,42 @@ export default function BuildMessageList({
           ).todoList
         : null;
 
+    // Render order is enforced — tool calls always come first, then any
+    // surviving thinking/text/todo at the bottom. The model can emit tools
+    // anywhere in the stream, but the UI always presents work above answer.
+    const toolItems = items.filter(
+      (it): it is Extract<StreamItem, { type: "tool_call" }> =>
+        it.type === "tool_call"
+    );
+    const trailingItems = items.filter((it) => it.type !== "tool_call");
+
     let i = 0;
-    while (i < items.length) {
-      const item = items[i]!;
-      const prev = items[i - 1];
-
-      if (item.type === "tool_call") {
-        const runStart = i;
-        const groupTools: ToolCallState[] = [item.toolCall];
-        let j = i + 1;
-        while (j < items.length) {
-          const candidate = items[j]!;
-          if (candidate.type !== "tool_call") break;
-          groupTools.push(candidate.toolCall);
-          j++;
-        }
-        const runEnd = j - 1;
-
-        if (groupTools.length === 1) {
-          nodes.push(<CraftToolCard key={item.id} toolCall={item.toolCall} />);
-        } else {
-          nodes.push(
-            <CraftToolGroup
-              key={`group-${items[runStart]!.id}`}
-              toolCalls={groupTools}
-            />
-          );
-        }
-        i = runEnd + 1;
-        continue;
+    while (i < toolItems.length) {
+      const item = toolItems[i]!;
+      const groupTools: ToolCallState[] = [item.toolCall];
+      let j = i + 1;
+      while (j < toolItems.length) {
+        groupTools.push(toolItems[j]!.toolCall);
+        j++;
       }
+      if (groupTools.length === 1) {
+        nodes.push(<CraftToolCard key={item.id} toolCall={item.toolCall} />);
+      } else {
+        nodes.push(
+          <CraftToolGroup key={`group-${item.id}`} toolCalls={groupTools} />
+        );
+      }
+      i = j;
+    }
 
-      const next = items[i + 1];
-      const prevIsAgentAction =
-        !!prev && (prev.type === "thinking" || prev.type === "tool_call");
-      const nextIsAgentAction =
-        !!next && (next.type === "thinking" || next.type === "tool_call");
-
+    const hasToolsBefore = toolItems.length > 0;
+    trailingItems.forEach((item, idx) => {
+      const isFirstTrailing = idx === 0;
+      const topMargin = isFirstTrailing && hasToolsBefore ? "mt-3" : "";
       switch (item.type) {
-        case "text": {
-          // Visual recession: tool work above the final text should feel like
-          // the supporting cast. Add breathing room around the answer.
+        case "text":
           nodes.push(
-            <div
-              key={item.id}
-              className={cn(
-                prevIsAgentAction && "mt-3",
-                nextIsAgentAction && "mb-3"
-              )}
-            >
+            <div key={item.id} className={cn(topMargin)}>
               <TextChunk
                 content={item.content}
                 isStreaming={opts.isCurrentStream && item.isStreaming}
@@ -168,28 +155,29 @@ export default function BuildMessageList({
             </div>
           );
           break;
-        }
         case "thinking":
           nodes.push(
-            <ThinkingCard
-              key={item.id}
-              content={item.content}
-              isStreaming={item.isStreaming}
-            />
+            <div key={item.id} className={cn(topMargin)}>
+              <ThinkingCard
+                content={item.content}
+                isStreaming={item.isStreaming}
+              />
+            </div>
           );
           break;
         case "todo_list":
           nodes.push(
-            <TodoListCard
-              key={item.id}
-              todoList={item.todoList}
-              defaultOpen={item.todoList.isOpen}
-            />
+            <div key={item.id} className={cn(topMargin)}>
+              <TodoListCard
+                todoList={item.todoList}
+                defaultOpen={item.todoList.isOpen}
+              />
+            </div>
           );
           break;
       }
-      i++;
-    }
+    });
+
     return { nodes, pinnedTodo };
   };
 
@@ -214,7 +202,7 @@ export default function BuildMessageList({
           {savedRender ? (
             <>
               {savedRender.pinnedTodo && (
-                <div className="sticky top-2 z-10">
+                <div>
                   <TodoListCard
                     todoList={savedRender.pinnedTodo}
                     defaultOpen={savedRender.pinnedTodo.isOpen}
@@ -240,7 +228,7 @@ export default function BuildMessageList({
 
   return (
     <div className="flex flex-col items-center px-4 pb-4">
-      <div className="w-full max-w-2xl backdrop-blur-md rounded-16 p-4">
+      <div className="w-full max-w-2xl rounded-16 p-4">
         {messages.map((message) =>
           message.type === "user" ? (
             <UserMessage key={message.id} content={message.content} />
@@ -256,7 +244,7 @@ export default function BuildMessageList({
             </div>
             <div className="flex-1 flex flex-col gap-2 min-w-0">
               {streamRender?.pinnedTodo && (
-                <div className="sticky top-2 z-10">
+                <div>
                   <TodoListCard
                     todoList={streamRender.pinnedTodo}
                     defaultOpen={streamRender.pinnedTodo.isOpen}

@@ -282,9 +282,17 @@ function buildDescription(
   if (toolName === "task") {
     return rawDescription || "Running subagent";
   }
-  // Read/edit: show file path
+  // Read/edit: show file path. For new-file writes, append a line count
+  // so the row reads "Writing  src/app/page.tsx (42 lines)" — useful when
+  // the body is empty/collapsed.
   if (kind === "read" || kind === "edit") {
-    if (filePath) return filePath;
+    if (filePath) {
+      if (toolName === "write" && typeof ri?.content === "string") {
+        const lines = (ri.content as string).split("\n").length;
+        return `${filePath} (${lines} lines)`;
+      }
+      return filePath;
+    }
   }
   // Execute: use backend description
   if (kind === "execute") {
@@ -512,6 +520,18 @@ function parseToolCallProgress(
     kind === "edit"
       ? extractDiffData(p.content)
       : { oldText: "", newText: "", isNewFile: true };
+
+  // The write tool emits the new file body in rawInput.content (not in a
+  // content[].type==="diff" item) so the diff extractor misses it. Pull it
+  // directly so DiffBody can render the new file's contents.
+  if (
+    toolName === "write" &&
+    !diffData.newText &&
+    typeof ri?.content === "string"
+  ) {
+    diffData.newText = ri.content as string;
+    diffData.isNewFile = true;
+  }
 
   // ── Patch info (opencode agent uses patchText instead of file_path) ──
   const patchInfo =

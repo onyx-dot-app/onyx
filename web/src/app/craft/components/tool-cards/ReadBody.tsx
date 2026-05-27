@@ -22,7 +22,10 @@ const PREVIEW_LINE_COUNT = 8;
  */
 export default function ReadBody({ toolCall }: ToolCardBodyProps) {
   const [expanded, setExpanded] = useState(false);
-  const content = toolCall.rawOutput;
+  // The Read tool stores file content in rawOutput. The Write tool (when
+  // routed here for new files) stores it in newContent instead. Fall back
+  // so the same viewer renders both.
+  const content = toolCall.rawOutput || toolCall.newContent;
   const language = useMemo(
     () => getLanguageFromPath(toolCall.description),
     [toolCall.description]
@@ -57,7 +60,7 @@ export default function ReadBody({ toolCall }: ToolCardBodyProps) {
         "bg-background-neutral-01 border-border-01"
       )}
     >
-      <div className="overflow-auto max-h-[20rem] leading-tight hljs">
+      <div className="overflow-auto max-h-[24rem] leading-tight hljs">
         <table className="w-full">
           <tbody>
             {visibleLines.map((line, idx) => {

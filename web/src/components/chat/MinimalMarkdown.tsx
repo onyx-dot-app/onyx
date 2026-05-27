@@ -6,6 +6,7 @@ import {
 } from "@/app/app/message/MemoizedTextComponents";
 import { useMemo, CSSProperties } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
+import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import remarkMath from "remark-math";
@@ -36,8 +37,11 @@ export default function MinimalMarkdown({
   components,
   streaming = false,
 }: MinimalMarkdownProps) {
-  const rehypePlugins = useMemo(
-    () => (streaming ? [rehypeKatex] : [rehypeHighlight, rehypeKatex]),
+  const rehypePlugins = useMemo<PluggableList>(
+    () =>
+      streaming
+        ? [rehypeKatex]
+        : [[rehypeHighlight, { detect: true }], rehypeKatex],
     [streaming]
   );
   const markdownComponents = useMemo(() => {

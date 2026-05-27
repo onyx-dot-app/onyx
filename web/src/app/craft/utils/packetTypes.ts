@@ -42,6 +42,15 @@ export function getToolNameRaw(p: Record<string, unknown>): string {
   const explicit = (p.tool_name ?? p.toolName ?? "") as string;
   if (explicit) return explicit.toLowerCase();
 
+  // ACP _meta is the extensibility slot. The opencode-serve translator
+  // stuffs the raw opencode tool name in here (since ACP's strict pydantic
+  // schema drops unknown top-level fields).
+  const meta = p._meta as Record<string, unknown> | undefined;
+  if (meta && typeof meta === "object") {
+    const fromMeta = (meta.toolName ?? meta.tool_name ?? "") as string;
+    if (fromMeta) return fromMeta.toLowerCase();
+  }
+
   // Fall back to title only if it looks like a simple tool name
   // (no spaces or newlines — otherwise it's a human-readable description)
   const title = (p.title ?? "") as string;

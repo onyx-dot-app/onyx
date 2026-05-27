@@ -195,7 +195,7 @@ function UnifiedDiff({ lines }: { lines: DiffLine[] }) {
           <div
             key={idx}
             className={cn(
-              "px-3 py-0.5 flex gap-2 items-baseline",
+              "px-2 py-0.5 flex gap-2 items-baseline",
               lineRowClass(line.type)
             )}
           >
@@ -230,7 +230,7 @@ function SideBySideDiff({ lines }: { lines: DiffLine[] }) {
             <div
               key={`l-${idx}`}
               className={cn(
-                "px-3 py-0.5 whitespace-pre-wrap wrap-break-word",
+                "px-2 py-0.5 whitespace-pre-wrap wrap-break-word",
                 showRemoved && "bg-status-error-01",
                 isHeader && "bg-background-tint-02 italic text-center"
               )}
@@ -252,7 +252,7 @@ function SideBySideDiff({ lines }: { lines: DiffLine[] }) {
             <div
               key={`r-${idx}`}
               className={cn(
-                "px-3 py-0.5 whitespace-pre-wrap wrap-break-word",
+                "px-2 py-0.5 whitespace-pre-wrap wrap-break-word",
                 showAdded && "bg-status-success-01",
                 isHeader && "bg-background-tint-02 italic text-center"
               )}
@@ -309,8 +309,8 @@ export default function DiffBody({ toolCall }: ToolCardBodyProps) {
     >
       <div
         className={cn(
-          "px-3 py-2 border-b-[0.5px] border-border-01",
-          "bg-background-tint-01 flex items-center gap-3"
+          "px-2 py-0.5 border-b-[0.5px] border-border-01",
+          "bg-background-tint-01 flex items-center gap-2"
         )}
       >
         {toolCall.description && (
