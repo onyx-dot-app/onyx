@@ -1,17 +1,24 @@
 "use client";
 
+import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interfaces";
 
 /**
- * BashBody - stdout/stderr from the bash/execute tool, rendered under the
- * card-wide quote-bar pattern. Mirrors WebFetchBody for visual parity.
+ * BashBody - stdout/stderr from the bash/execute tool, rendered as a
+ * code-block surface (matches DiffBody / ReadBody, which also display code).
  */
 export default function BashBody({ toolCall }: ToolCardBodyProps) {
   const output = toolCall.rawOutput;
 
   return (
-    <div className="border-l border-border-02 pl-3 overflow-auto max-h-[18rem] whitespace-pre-wrap wrap-break-word">
+    <div
+      className={cn(
+        "rounded-08 border-[0.5px] overflow-hidden px-3 py-2 max-h-[18rem] overflow-y-auto",
+        "bg-background-neutral-01 border-border-01",
+        "whitespace-pre-wrap wrap-break-word"
+      )}
+    >
       <Text as="p" font="secondary-mono" color="text-03">
         {output || "No output"}
       </Text>
