@@ -7,6 +7,7 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.models import SecuritySettings
+from onyx.server.security.store import load_raw_security_settings
 from onyx.server.security.store import load_security_settings
 from onyx.server.security.store import store_security_settings
 from shared_configs.configs import MULTI_TENANT
@@ -41,8 +42,9 @@ def admin_put_security_settings(
     settings: SecuritySettings,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
+    incoming = settings.model_dump(exclude_unset=True)
+
     if MULTI_TENANT:
-        incoming = settings.model_dump(exclude_unset=True)
         locked = _OPERATOR_LOCKED_FIELDS.intersection(incoming.keys())
         if locked:
             raise OnyxError(
@@ -51,14 +53,19 @@ def admin_put_security_settings(
                 f"cannot be changed: {', '.join(sorted(locked))}",
             )
 
+    # Validate cross-field constraints against the effective post-write state,
+    # not the partial payload — otherwise a PUT that only updates min_length
+    # could land above the stored max_length without tripping the check.
+    effective = load_security_settings().model_copy(update=incoming)
     if (
-        settings.password_min_length is not None
-        and settings.password_max_length is not None
-        and settings.password_min_length > settings.password_max_length
+        effective.password_min_length is not None
+        and effective.password_max_length is not None
+        and effective.password_min_length > effective.password_max_length
     ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Password minimum length cannot exceed maximum length.",
         )
 
-    store_security_settings(settings)
+    merged = load_raw_security_settings().model_copy(update=incoming)
+    store_security_settings(merged)

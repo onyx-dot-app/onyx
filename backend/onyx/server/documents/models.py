@@ -148,11 +148,20 @@ class CredentialSnapshot(CredentialBase):
     time_updated: datetime
 
     @classmethod
-    def from_credential_db_model(cls, credential: Credential) -> "CredentialSnapshot":
-        # Get the credential_json value with appropriate masking
+    def from_credential_db_model(
+        cls,
+        credential: Credential,
+        mask_credential_prefix: bool | None = None,
+    ) -> "CredentialSnapshot":
+        # Get the credential_json value with appropriate masking. Callers that
+        # render a list should pass `mask_credential_prefix` to avoid an N+1
+        # KV lookup per row.
+        if mask_credential_prefix is None:
+            mask_credential_prefix = load_security_settings().mask_credential_prefix
+
         if credential.credential_json is None:
             credential_json_value: dict[str, Any] = {}
-        elif load_security_settings().mask_credential_prefix:
+        elif mask_credential_prefix:
             credential_json_value = credential.credential_json.get_value(
                 apply_mask=True
             )

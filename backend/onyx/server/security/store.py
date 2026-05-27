@@ -12,26 +12,17 @@ from onyx.configs.constants import KV_SECURITY_SETTINGS_KEY
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.security.models import SecuritySettings
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 
 def load_raw_security_settings() -> SecuritySettings:
     """Load the raw SecuritySettings from KV. Fields that the admin has not
     saved remain None — the caller decides whether to apply env fallbacks.
     """
-    kv_store = get_kv_store()
     try:
-        stored = kv_store.load(KV_SECURITY_SETTINGS_KEY)
-        return (
-            SecuritySettings.model_validate(stored) if stored else SecuritySettings()
-        )
+        stored = get_kv_store().load(KV_SECURITY_SETTINGS_KEY)
     except KvKeyNotFoundError:
         return SecuritySettings()
-    except Exception as e:
-        logger.error("Error loading security settings from KV store: %s", str(e))
-        return SecuritySettings()
+    return SecuritySettings.model_validate(stored) if stored else SecuritySettings()
 
 
 def load_security_settings() -> SecuritySettings:

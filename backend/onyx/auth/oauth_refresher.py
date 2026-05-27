@@ -252,8 +252,9 @@ async def refresh_oauth_token(
             if new_expires_at:
                 updated_data["expires_at"] = new_expires_at
 
+                security_settings = await asyncio.to_thread(load_security_settings)
                 # Update oidc_expiry in user model if we're tracking it
-                if load_security_settings().track_external_idp_expiry:
+                if security_settings.track_external_idp_expiry:
                     oidc_expiry = datetime.fromtimestamp(
                         new_expires_at, tz=timezone.utc
                     )
