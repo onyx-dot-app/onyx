@@ -90,16 +90,12 @@ def test_user_directory_admin_only_gates_list_users(
     assert response.ok, response.text
 
     # Flip on — basic users are now denied.
-    assert _put_settings(
-        admin_user, {"user_directory_admin_only": True}
-    ).ok
+    assert _put_settings(admin_user, {"user_directory_admin_only": True}).ok
     response = requests.get(f"{API_SERVER_URL}/users", headers=basic_user.headers)
     assert response.status_code in (401, 403), response.text
 
     # Flip off — restored.
-    assert _put_settings(
-        admin_user, {"user_directory_admin_only": False}
-    ).ok
+    assert _put_settings(admin_user, {"user_directory_admin_only": False}).ok
     response = requests.get(f"{API_SERVER_URL}/users", headers=basic_user.headers)
     assert response.ok, response.text
 
