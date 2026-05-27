@@ -1401,6 +1401,7 @@ class SessionManager:
                     logger.exception(
                         "approval.announce_poll_failed session_id=%s", session_id
                     )
+                    time.sleep(1)
                     continue
                 if approval_id is None:
                     continue
