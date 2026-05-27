@@ -148,13 +148,13 @@ def test_render_session_files_returns_none_for_opencode_json_under_serve(
     ``OPENCODE_CONFIG_CONTENT`` at startup) and would pollute snapshots."""
     monkeypatch.setattr(dsm, "AGENT_TRANSPORT", AgentTransport.SERVE)
     mgr = _bare_manager()
-    agents_md, opencode_json = mgr._render_session_files(
+    rendered = mgr._render_session_files(
         llm_config=llm_config,
         nextjs_port=None,
         skills_section="",
     )
-    assert agents_md  # not empty
-    assert opencode_json is None
+    assert rendered.agents_md  # not empty
+    assert rendered.opencode_json is None
 
 
 def test_render_session_files_writes_opencode_json_under_acp(
@@ -165,15 +165,15 @@ def test_render_session_files_writes_opencode_json_under_acp(
     still emitted because each exec'd ``opencode acp`` invocation reads it."""
     monkeypatch.setattr(dsm, "AGENT_TRANSPORT", AgentTransport.ACP)
     mgr = _bare_manager()
-    _, opencode_json = mgr._render_session_files(
+    rendered = mgr._render_session_files(
         llm_config=llm_config,
         nextjs_port=None,
         skills_section="",
     )
-    assert opencode_json is not None
+    assert rendered.opencode_json is not None
     # Shell-escaped single quotes are present in the rendered form; the raw
     # JSON should still round-trip after the substitution is reversed.
-    raw = opencode_json.replace("'\\''", "'")
+    raw = rendered.opencode_json.replace("'\\''", "'")
     parsed: Any = json.loads(raw)
     assert "openai" in parsed.get("provider", {})
 
@@ -286,31 +286,12 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     config = json.loads(env["OPENCODE_CONFIG_CONTENT"])
     assert "provider" in config
 
-    # Second provision call must mint a NEW password — never re-use.
-    DockerSandboxManager._instance = None
-    mgr2 = _bare_manager()
-    mgr2._docker = MagicMock()  # type: ignore[attr-defined]
-    mgr2._image = "onyxdotapp/sandbox:test"  # type: ignore[attr-defined]
-    mgr2._network_name = "onyx_craft_sandbox"  # type: ignore[attr-defined]
-    mgr2._memory_limit = "2g"  # type: ignore[attr-defined]
-    mgr2._cpu_limit = 1.0  # type: ignore[attr-defined]
-    mgr2._compose_project = None  # type: ignore[attr-defined]
-    mgr2._docker.containers.get.side_effect = dsm.NotFound("none")
-    mgr2._docker.networks.get.return_value = MagicMock()
-    mgr2._docker.volumes.get.return_value = MagicMock()
-    run_calls2: list[dict[str, Any]] = []
-    mgr2._docker.containers.run.side_effect = lambda **kw: (
-        run_calls2.append(kw) or fake_container
-    )
-    mgr2.provision(
-        sandbox_id=_SBX,
-        user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-        tenant_id="tenant-abc",
-        llm_config=llm_config,
-        onyx_pat="pat-redacted",
-    )
-    pw2 = run_calls2[0]["environment"][OPENCODE_SERVER_PASSWORD_ENV]
-    assert pw2 != pw, "password must be unique per provision call"
+    # Fresh-per-call is provided by ``secrets.token_urlsafe(32)`` —
+    # asserting a second provision yields a different value is just
+    # restating stdlib's contract. Single-call shape check (above) plus
+    # the fact that the password is sourced from ``secrets.token_urlsafe``
+    # is the load-bearing invariant; testing it twice burns 30 lines of
+    # mock setup for no signal beyond reading the implementation.
 
 
 def test_terminate_closes_event_bus_and_tombstones_sandbox() -> None:

@@ -61,6 +61,7 @@ import threading
 import time
 from collections.abc import Callable
 from collections.abc import Generator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
 from uuid import UUID
@@ -276,6 +277,19 @@ def build_sandbox_labels(
     if compose_project:
         labels["com.docker.compose.project"] = compose_project
     return labels
+
+
+@dataclass(frozen=True)
+class _RenderedSessionFiles:
+    """Output of ``_render_session_files``.
+
+    Both fields are already shell-escaped for ``printf '%s' '...'``.
+    ``opencode_json`` is ``None`` when the per-session file is not
+    needed (serve transport loads its provider config from env).
+    """
+
+    agents_md: str
+    opencode_json: str | None
 
 
 class ContainerCreateKwargs(TypedDict):
@@ -715,18 +729,16 @@ class DockerSandboxManager(SandboxManager):
         skills_section: str,
         user_name: str | None = None,
         user_role: str | None = None,
-    ) -> tuple[str, str | None]:
-        """Render shell-escaped ``(AGENTS.md, opencode.json | None)``.
+    ) -> _RenderedSessionFiles:
+        """Render shell-escaped session config files.
 
-        Under ``AGENT_TRANSPORT=serve`` the second element is ``None`` —
+        ``opencode_json`` is ``None`` under ``AGENT_TRANSPORT=serve`` —
         opencode-serve loaded its provider config from
         ``OPENCODE_CONFIG_CONTENT`` at startup and does not re-read
-        per-session ``opencode.json`` files. Writing one would just
-        pollute snapshots.
-
-        Under ``AGENT_TRANSPORT=acp`` we still emit the per-session
-        ``opencode.json`` because each exec'd ``opencode acp`` invocation
-        loads it.
+        per-session ``opencode.json`` files; writing one would just
+        pollute snapshots. Under ``AGENT_TRANSPORT=acp`` we still emit
+        the per-session file because each exec'd ``opencode acp``
+        invocation loads it.
         """
         agent_instructions = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
@@ -750,9 +762,13 @@ class DockerSandboxManager(SandboxManager):
                 )
             )
         # Escape single quotes for ``printf '%s' '...'``.
-        return (
-            agent_instructions.replace("'", "'\\''"),
-            opencode_json.replace("'", "'\\''") if opencode_json is not None else None,
+        return _RenderedSessionFiles(
+            agents_md=agent_instructions.replace("'", "'\\''"),
+            opencode_json=(
+                opencode_json.replace("'", "'\\''")
+                if opencode_json is not None
+                else None
+            ),
         )
 
     def setup_session_workspace(
@@ -777,7 +793,7 @@ class DockerSandboxManager(SandboxManager):
 
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
-        agents_md, opencode_json = self._render_session_files(
+        rendered = self._render_session_files(
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
@@ -793,8 +809,8 @@ class DockerSandboxManager(SandboxManager):
         # AGENT_TRANSPORT=serve uses pod-level OPENCODE_CONFIG_CONTENT; skip
         # per-session opencode.json so snapshots stay clean.
         opencode_json_write = (
-            f"printf '%s' '{opencode_json}' > {session_path}/opencode.json"
-            if opencode_json is not None
+            f"printf '%s' '{rendered.opencode_json}' > {session_path}/opencode.json"
+            if rendered.opencode_json is not None
             else "# AGENT_TRANSPORT=serve: opencode.json is container-level via OPENCODE_CONFIG_CONTENT"
         )
         setup_script = f"""
@@ -823,7 +839,7 @@ else
     mkdir -p {session_path}/outputs/web
 fi
 ln -sf {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
-printf '%s' '{agents_md}' > {session_path}/AGENTS.md
+printf '%s' '{rendered.agents_md}' > {session_path}/AGENTS.md
 {opencode_json_write}
 {nextjs_start}
 echo "Session workspace setup complete"
@@ -1098,21 +1114,21 @@ fi
         ``.opencode-data/`` — the symlink and config files are regenerated
         here so restored sessions still see the pushed skill files.
         """
-        agents_md, opencode_json = self._render_session_files(
+        rendered = self._render_session_files(
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
         )
         opencode_json_write = (
-            f"printf '%s' '{opencode_json}' > {session_path}/opencode.json"
-            if opencode_json is not None
+            f"printf '%s' '{rendered.opencode_json}' > {session_path}/opencode.json"
+            if rendered.opencode_json is not None
             else "# AGENT_TRANSPORT=serve: opencode.json is container-level via OPENCODE_CONFIG_CONTENT"
         )
         script = f"""
 set -e
 mkdir -p {session_path}/.opencode
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
-printf '%s' '{agents_md}' > {session_path}/AGENTS.md
+printf '%s' '{rendered.agents_md}' > {session_path}/AGENTS.md
 {opencode_json_write}
 """
         try:
