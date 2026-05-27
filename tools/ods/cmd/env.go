@@ -11,8 +11,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
 
 // NewEnvCommand creates the env command for writing infrastructure connection
@@ -98,6 +99,17 @@ func runEnv(dryRun bool) {
 	}
 
 	envPath := filepath.Join(gitRoot, ".vscode", ".env")
+
+	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		log.Warnf("%s does not exist. Creating it with port variables only.", envPath)
+		log.Warnf("This file normally contains additional settings (API keys, auth config, etc.).")
+		log.Warnf("You may want to copy the template from the repo wiki or another developer's setup.")
+		if !prompt.Confirm("Continue creating a minimal .vscode/.env? (yes/no): ") {
+			log.Info("Aborted.")
+			return
+		}
+	}
+
 	if err := setEnvValues(envPath, appEnv); err != nil {
 		log.Fatalf("Failed to update %s: %v", envPath, err)
 	}
