@@ -4,6 +4,62 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: fixed
+          description: Allow sandbox NetworkPolicy traffic to the configured
+            Next.js dev server port range.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+    apiVersion: v2
+    appVersion: latest
+    created: "2026-05-27T22:21:12.997581127Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.3.3
+    description: A Helm chart for Kubernetes
+    digest: 67c03760e08184be8c3531c97a1c20ef610c5636ace6e4825742bc12e624fdad
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://onyx-dot-app.github.io/onyx/onyx-0.5.10.tgz
+    version: 0.5.10
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: fixed
           description: Truncate child resource names to the 63-char Kubernetes
             DNS-1123 label limit. Releases with longer fullnames previously
             produced invalid Service/Deployment names for the celery-worker
@@ -3923,4 +3979,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-05-27T21:40:20.727604433Z"
+generated: "2026-05-27T22:21:12.970764368Z"
