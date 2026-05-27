@@ -27,7 +27,7 @@ ods dev up
 ods dev into
 
 # Run a command
-ods dev exec npm test
+ods dev exec bun run test
 
 # Stop the container
 ods dev stop
