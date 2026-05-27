@@ -162,13 +162,31 @@ class GateAddon:
 
         src_ip = self._extract_src_ip(flow)
         if src_ip is None:
+            logger.info(
+                "gate.snapshot_nostream reason=no_src_ip host=%s method=%s path=%s",
+                flow.request.host,
+                flow.request.method,
+                flow.request.path,
+            )
             return
         try:
             sandbox = self._identity.resolve_sandbox(src_ip)
         except Exception:
             # Let `request` re-resolve and fail closed on the DB error.
+            logger.info(
+                "gate.snapshot_nostream reason=resolve_raised src_ip=%s method=%s path=%s",
+                src_ip,
+                flow.request.method,
+                flow.request.path,
+            )
             return
         if sandbox is None:
+            logger.info(
+                "gate.snapshot_nostream reason=unresolved src_ip=%s method=%s path=%s",
+                src_ip,
+                flow.request.method,
+                flow.request.path,
+            )
             return
 
         if not policy.should_stream(
@@ -177,6 +195,15 @@ class GateAddon:
             path_components=tuple(flow.request.path_components),
             tenant_id=sandbox.tenant_id,
         ):
+            logger.info(
+                "gate.snapshot_nostream reason=should_stream_false src_ip=%s "
+                "method=%s path=%s components=%s tenant=%s",
+                src_ip,
+                flow.request.method,
+                flow.request.path,
+                tuple(flow.request.path_components),
+                sandbox.tenant_id,
+            )
             return
 
         flow.request.stream = True
