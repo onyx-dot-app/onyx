@@ -75,7 +75,7 @@ export default function WebSearchBody({ toolCall }: ToolCardBodyProps) {
 
   if (results.length === 0) {
     return (
-      <div className="border-l border-border-02 pl-3 overflow-auto max-h-[18rem] whitespace-pre-wrap wrap-break-word">
+      <div className="px-3 overflow-auto max-h-[18rem] whitespace-pre-wrap wrap-break-word">
         <Text as="p" font="secondary-mono" color="text-03">
           {toolCall.rawOutput || "No results"}
         </Text>
@@ -84,13 +84,13 @@ export default function WebSearchBody({ toolCall }: ToolCardBodyProps) {
   }
 
   return (
-    <div className="border-l border-border-02 pl-3 overflow-auto max-h-[28rem]">
+    <div className="overflow-auto max-h-[28rem]">
       <div className="divide-y divide-border-01">
         {results.map((result, idx) => (
           <div
             key={idx}
             className={cn(
-              "py-2 flex flex-col gap-1",
+              "py-2 px-3 flex flex-col gap-1",
               "hover:bg-background-tint-01 transition-colors"
             )}
           >

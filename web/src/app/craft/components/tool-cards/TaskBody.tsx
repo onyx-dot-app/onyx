@@ -16,7 +16,7 @@ export default function TaskBody({ toolCall }: ToolCardBodyProps) {
   const output = toolCall.taskOutput;
 
   return (
-    <div className="border-l border-border-02 pl-3 flex flex-col gap-3">
+    <div className="px-3 flex flex-col gap-3">
       {subagentType && (
         <div className="flex items-center gap-2">
           <Tag icon={SvgBubbleText} title={subagentType} color="purple" />

@@ -61,14 +61,33 @@ export default function BuildMessageList({
     rawItems: StreamItem[],
     isCurrentStream = false
   ) => {
-    // Hide pre-tool reasoning: settled thinking immediately followed by a
-    // tool_call is the model's narration for picking the tool — useful to the
-    // model, noisy to the user. Still-streaming thinking is kept so it
-    // doesn't flicker out mid-stream.
+    // Target structure per turn: [Working block, last thinking?, final text].
+    // - Hide every settled thinking that occurs before the last tool_call —
+    //   it's pre-tool narration, not useful to the user.
+    // - Keep ONLY the last settled thinking, and only if it sits after every
+    //   tool_call in the turn (i.e. it's post-tool reasoning, not a hidden
+    //   pre-tool one that happened to be the last).
+    // - Keep only the LAST text item.
+    // - All tool_calls survive here; the grouping walker below rolls
+    //   consecutive runs into a single "Working" card.
+    // Still-streaming items are kept so they don't flicker out mid-stream.
+    let lastThinkingIdx = -1;
+    let lastToolIdx = -1;
+    let lastTextIdx = -1;
+    rawItems.forEach((it, idx) => {
+      if (it.type === "thinking") lastThinkingIdx = idx;
+      if (it.type === "tool_call") lastToolIdx = idx;
+      if (it.type === "text") lastTextIdx = idx;
+    });
     const items = rawItems.filter((it, idx) => {
-      if (it.type !== "thinking" || it.isStreaming) return true;
-      const next = rawItems[idx + 1];
-      return next?.type !== "tool_call";
+      if (it.type === "thinking" && !it.isStreaming) {
+        if (idx !== lastThinkingIdx) return false;
+        if (lastToolIdx > idx) return false;
+      }
+      if (it.type === "text" && !it.isStreaming && idx !== lastTextIdx) {
+        return false;
+      }
+      return true;
     });
     const nodes: React.ReactNode[] = [];
     let i = 0;
@@ -77,17 +96,14 @@ export default function BuildMessageList({
       const prev = items[i - 1];
 
       if (item.type === "tool_call") {
-        // Consume a contiguous run of tool_calls with the same toolName.
-        const groupKey = item.toolCall.toolName ?? item.toolCall.kind;
+        // Consume a contiguous run of tool_calls — any tool, any order.
+        // Rendered as a single "Working" card when more than one.
         const runStart = i;
         const groupTools: ToolCallState[] = [item.toolCall];
         let j = i + 1;
         while (j < items.length) {
           const candidate = items[j]!;
           if (candidate.type !== "tool_call") break;
-          const candidateKey =
-            candidate.toolCall.toolName ?? candidate.toolCall.kind;
-          if (candidateKey !== groupKey) break;
           groupTools.push(candidate.toolCall);
           j++;
         }
@@ -206,7 +222,9 @@ export default function BuildMessageList({
             </div>
             <div className="flex-1 flex flex-col gap-3 min-w-0">
               {!hasStreamItems ? (
-                <BlinkingBar addMargin />
+                <div className="h-6 flex items-center">
+                  <BlinkingBar />
+                </div>
               ) : (
                 <TimelineRoot>
                   {renderStreamItems(streamItems, true)}

@@ -92,7 +92,7 @@ export default function CraftToolGroup({
             >
               <div className="flex items-center gap-2 min-w-0 w-full">
                 <Text font="main-ui-muted" color="text-04" nowrap>
-                  {first.title}
+                  Working
                 </Text>
                 <span className="ml-auto shrink-0">
                   <Tag
@@ -111,7 +111,7 @@ export default function CraftToolGroup({
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="ml-2 mb-2 mt-1 mr-3 pl-2 border-l border-border-02 flex flex-col">
+            <div className="mx-2 mb-2 mt-1 rounded-md bg-background-tint-00 flex flex-col py-1">
               {toolCalls.map((toolCall) => (
                 <CraftToolCard
                   key={toolCall.id}

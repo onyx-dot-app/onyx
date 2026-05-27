@@ -140,7 +140,7 @@ export default function ThinkingCard({
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="px-3 pb-2 pt-0">
-              <div className="border-l border-border-02 pl-3 py-1 max-h-48 overflow-y-auto">
+              <div className="py-1 max-h-48 overflow-y-auto">
                 <MinimalMarkdown
                   content={normalizeThinking(content)}
                   className="text-text-03 prose-sm"

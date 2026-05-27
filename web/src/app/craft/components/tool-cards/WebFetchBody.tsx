@@ -11,7 +11,7 @@ export default function WebFetchBody({ toolCall }: ToolCardBodyProps) {
   const body = toolCall.rawOutput;
 
   return (
-    <div className="border-l border-border-02 pl-3 overflow-auto max-h-[18rem] whitespace-pre-wrap wrap-break-word">
+    <div className="px-3 overflow-auto max-h-[18rem] whitespace-pre-wrap wrap-break-word">
       <Text as="p" font="secondary-mono" color="text-03">
         {body || "No response body"}
       </Text>

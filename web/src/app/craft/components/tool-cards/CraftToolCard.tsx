@@ -107,8 +107,6 @@ export default function CraftToolCard({
   dense = false,
 }: CraftToolCardProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen ?? false);
-  const secondaryLine =
-    toolCall.kind === "execute" && toolCall.command ? toolCall.command : null;
 
   return (
     <TimelineRow
@@ -151,13 +149,6 @@ export default function CraftToolCard({
                   )}
                 />
               </div>
-              {secondaryLine && (
-                <div className="pt-1 whitespace-pre-wrap wrap-break-word break-words">
-                  <Text font="secondary-mono" color="text-03">
-                    {secondaryLine}
-                  </Text>
-                </div>
-              )}
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>

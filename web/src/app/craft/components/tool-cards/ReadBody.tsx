@@ -1,22 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@opal/utils";
 import { Text, Button } from "@opal/components";
 import { SvgChevronDown } from "@opal/icons";
+import {
+  getLanguageFromPath,
+  highlightLineHtml,
+} from "@/app/craft/components/RawOutputBlock";
 import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interfaces";
 
-const PREVIEW_LINE_COUNT = 10;
+const PREVIEW_LINE_COUNT = 8;
 
 /**
  * ReadBody - File preview for the read tool.
  *
  * Renders the first N lines with line numbers in a code-editor-style
- * card. Expands to show the full file on demand.
+ * card. Expands to show the full file on demand. Applies per-line
+ * highlight.js syntax highlighting when the file extension matches a
+ * registered language.
  */
 export default function ReadBody({ toolCall }: ToolCardBodyProps) {
   const [expanded, setExpanded] = useState(false);
   const content = toolCall.rawOutput;
+  const language = useMemo(
+    () => getLanguageFromPath(toolCall.description),
+    [toolCall.description]
+  );
 
   if (!content) {
     return (
@@ -47,23 +57,36 @@ export default function ReadBody({ toolCall }: ToolCardBodyProps) {
         "bg-background-neutral-01 border-border-01"
       )}
     >
-      <div className="overflow-auto max-h-[24rem]">
+      <div className="overflow-auto max-h-[20rem] leading-tight hljs">
         <table className="w-full">
           <tbody>
-            {visibleLines.map((line, idx) => (
-              <tr key={idx} className="align-baseline">
-                <td className="select-none pl-1.5 pr-1.5 py-0 text-right align-baseline w-8 border-r-[0.5px] border-border-01 bg-background-tint-01">
-                  <Text font="secondary-mono" color="text-02">
-                    {String(idx + 1)}
-                  </Text>
-                </td>
-                <td className="pl-2 pr-2 py-0 whitespace-pre-wrap wrap-break-word">
-                  <Text font="secondary-mono" color="text-04">
-                    {line || " "}
-                  </Text>
-                </td>
-              </tr>
-            ))}
+            {visibleLines.map((line, idx) => {
+              const html = highlightLineHtml(line, language);
+              return (
+                <tr key={idx} className="align-baseline">
+                  <td className="select-none pl-1 pr-1 py-0 text-right align-baseline w-6 border-r-[0.5px] border-border-01 bg-background-tint-01">
+                    <Text font="secondary-mono" color="text-02">
+                      {String(idx + 1)}
+                    </Text>
+                  </td>
+                  <td
+                    className="pl-2 pr-2 py-0 whitespace-pre-wrap wrap-break-word"
+                    style={{
+                      fontFamily: "var(--font-dm-mono)",
+                      fontSize: "12px",
+                    }}
+                  >
+                    {html !== null ? (
+                      <span dangerouslySetInnerHTML={{ __html: html || " " }} />
+                    ) : (
+                      <Text font="secondary-mono" color="text-04">
+                        {line || " "}
+                      </Text>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -71,7 +94,7 @@ export default function ReadBody({ toolCall }: ToolCardBodyProps) {
       {hiddenCount > 0 && (
         <div
           className={cn(
-            "px-2 py-1 border-t-[0.5px] border-border-01",
+            "px-2 py-0.5 border-t-[0.5px] border-border-01",
             "bg-background-tint-01 flex items-center justify-between"
           )}
         >
