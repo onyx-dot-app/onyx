@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -7,30 +8,25 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.auth import users as users_module
+from onyx.server.security.models import SecuritySettings
 
 
-def _stub_security_settings(
-    monkeypatch: pytest.MonkeyPatch, *, track_external_idp_expiry: bool
-) -> None:
-    """Make get_security_settings() return a SecuritySettings with the
-    given track_external_idp_expiry value (other fields use env defaults)."""
-    from onyx.server.security.models import SecuritySettings
+@pytest.fixture
+def stub_security_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[..., SecuritySettings]:
+    """Patch ``users_module.get_security_settings`` to return a SecuritySettings
+    built from env defaults with the supplied field overrides applied."""
     from onyx.server.security.store import _build_env_defaults
 
-    base = _build_env_defaults()
-    stubbed = SecuritySettings(
-        user_directory_admin_only=base.user_directory_admin_only,
-        track_external_idp_expiry=track_external_idp_expiry,
-        mask_credential_prefix=base.mask_credential_prefix,
-        valid_email_domains=base.valid_email_domains,
-        password_min_length=base.password_min_length,
-        password_max_length=base.password_max_length,
-        password_require_uppercase=base.password_require_uppercase,
-        password_require_lowercase=base.password_require_lowercase,
-        password_require_digit=base.password_require_digit,
-        password_require_special_char=base.password_require_special_char,
-    )
-    monkeypatch.setattr(users_module, "get_security_settings", lambda: stubbed)
+    def _apply(**overrides: Any) -> SecuritySettings:
+        merged = _build_env_defaults().model_dump()
+        merged.update(overrides)
+        stubbed = SecuritySettings(**merged)
+        monkeypatch.setattr(users_module, "get_security_settings", lambda: stubbed)
+        return stubbed
+
+    return _apply
 
 
 def test_extract_email_requires_valid_format() -> None:
@@ -45,9 +41,10 @@ def test_extract_email_requires_valid_format() -> None:
 @pytest.mark.asyncio
 async def test_get_or_create_user_updates_expiry(
     monkeypatch: pytest.MonkeyPatch,
+    stub_security_settings: Callable[..., SecuritySettings],
 ) -> None:
     """Existing web-login users should be returned and their expiry synced."""
-    _stub_security_settings(monkeypatch, track_external_idp_expiry=True)
+    stub_security_settings(track_external_idp_expiry=True)
     invited_checked: dict[str, str] = {}
 
     def mark_invited(value: str) -> None:
@@ -106,9 +103,10 @@ async def test_get_or_create_user_updates_expiry(
 @pytest.mark.asyncio
 async def test_get_or_create_user_skips_inactive(
     monkeypatch: pytest.MonkeyPatch,
+    stub_security_settings: Callable[..., SecuritySettings],
 ) -> None:
     """Inactive users should not be re-authenticated via JWT."""
-    _stub_security_settings(monkeypatch, track_external_idp_expiry=True)
+    stub_security_settings(track_external_idp_expiry=True)
     monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
     monkeypatch.setattr(users_module, "verify_email_domain", lambda *_a, **_kw: None)
 
@@ -146,9 +144,10 @@ async def test_get_or_create_user_skips_inactive(
 @pytest.mark.asyncio
 async def test_get_or_create_user_handles_race_conditions(
     monkeypatch: pytest.MonkeyPatch,
+    stub_security_settings: Callable[..., SecuritySettings],
 ) -> None:
     """If provisioning races, newly inactive users should still be blocked."""
-    _stub_security_settings(monkeypatch, track_external_idp_expiry=True)
+    stub_security_settings(track_external_idp_expiry=True)
     monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
     monkeypatch.setattr(users_module, "verify_email_domain", lambda *_a, **_kw: None)
 
@@ -194,6 +193,7 @@ async def test_get_or_create_user_handles_race_conditions(
 @pytest.mark.asyncio
 async def test_get_or_create_user_provisions_new_user(
     monkeypatch: pytest.MonkeyPatch,
+    stub_security_settings: Callable[..., SecuritySettings],
 ) -> None:
     """A brand new JWT user should be provisioned automatically."""
     email = "new-user@example.com"
@@ -203,7 +203,7 @@ async def test_get_or_create_user_provisions_new_user(
     created_user.oidc_expiry = None
     created_user.role.is_web_login.return_value = True
 
-    _stub_security_settings(monkeypatch, track_external_idp_expiry=False)
+    stub_security_settings(track_external_idp_expiry=False)
     monkeypatch.setattr(users_module, "generate_password", lambda: "TempPass123!")
     monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
     monkeypatch.setattr(users_module, "verify_email_domain", lambda *_a, **_kw: None)
