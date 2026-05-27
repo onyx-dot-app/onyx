@@ -671,12 +671,14 @@ class DockerSandboxManager(SandboxManager):
             raise RuntimeError(f"Failed to create sandbox container: {e}") from e
 
     def terminate(self, sandbox_id: UUID) -> None:
-        # Tombstone + pop the bus under one lock so a concurrent subscribe
-        # can't race in and create a fresh bus against the dying container.
+        # Tombstone + pop every per-directory bus under one lock so a
+        # concurrent subscribe can't race in and create a fresh bus
+        # against the dying container.
         with self._event_buses_lock:
             self._terminated_sandboxes.add(sandbox_id)
-            bus = self._event_buses.pop(sandbox_id, None)
-        if bus is not None:
+            doomed_keys = [k for k in self._event_buses if k[0] == sandbox_id]
+            doomed_buses = [self._event_buses.pop(k) for k in doomed_keys]
+        for bus in doomed_buses:
             try:
                 bus.close()
             except Exception:  # noqa: BLE001 — never let cleanup break terminate

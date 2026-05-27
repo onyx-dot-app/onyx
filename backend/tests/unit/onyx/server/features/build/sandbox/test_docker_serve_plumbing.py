@@ -305,14 +305,19 @@ def test_terminate_closes_event_bus_and_tombstones_sandbox() -> None:
     mgr._docker.containers.get.return_value = None
     mgr._docker.volumes.get.side_effect = dsm.NotFound("none")
 
-    # Pre-seed an event bus so the terminate path takes the bus.close()
-    # branch (would silently no-op otherwise).
-    fake_bus = MagicMock()
-    fake_bus.closed = False
-    mgr._event_buses[_SBX] = fake_bus
+    # Pre-seed per-directory event buses so the terminate path takes the
+    # bus.close() branch. Two buses on the same sandbox to exercise the
+    # "close every per-directory bus" behavior.
+    fake_bus_a = MagicMock()
+    fake_bus_a.closed = False
+    fake_bus_b = MagicMock()
+    fake_bus_b.closed = False
+    mgr._event_buses[(_SBX, "/workspace/sessions/dir-a")] = fake_bus_a
+    mgr._event_buses[(_SBX, "/workspace/sessions/dir-b")] = fake_bus_b
 
     mgr.terminate(_SBX)
 
     assert _SBX in mgr._terminated_sandboxes
-    assert _SBX not in mgr._event_buses
-    fake_bus.close.assert_called_once()
+    assert all(k[0] != _SBX for k in mgr._event_buses)
+    fake_bus_a.close.assert_called_once()
+    fake_bus_b.close.assert_called_once()

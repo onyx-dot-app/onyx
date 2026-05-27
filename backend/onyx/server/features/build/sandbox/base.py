@@ -471,7 +471,7 @@ class SandboxManager(ABC):
             sandbox_id,
             session_path,
         )
-        with self._build_serve_client(sandbox_id) as client:
+        with self._build_serve_client(sandbox_id, session_path) as client:
             return client.ensure_session(
                 None,
                 directory=session_path,
@@ -489,12 +489,19 @@ class SandboxManager(ABC):
             return []
         self._init_serve_state()
         # Don't create a bus just to list — that spins up a reader thread
-        # for a caller that didn't ask for events.
+        # for a caller that didn't ask for events. Walk every existing
+        # per-directory bus belonging to this sandbox; the parent
+        # ``session.created`` event landed on whichever directory's bus
+        # was live when the spawn happened.
         with self._event_buses_lock:
-            bus = self._event_buses.get(sandbox_id)
-        if bus is None:
-            return []
-        return bus.list_children(parent_opencode_session_id)
+            buses = [
+                bus for (sid, _), bus in self._event_buses.items() if sid == sandbox_id
+            ]
+        for bus in buses:
+            children = bus.list_children(parent_opencode_session_id)
+            if children:
+                return children
+        return []
 
     def subscribe_to_opencode_session(
         self,
@@ -517,9 +524,9 @@ class SandboxManager(ABC):
         """
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             return
-        bus = self._get_or_create_event_bus(sandbox_id)
+        bus = self._get_or_create_event_bus(sandbox_id, directory)
         state = _TurnState(session_id=opencode_session_id)
-        client = self._build_serve_client(sandbox_id)
+        client = self._build_serve_client(sandbox_id, directory)
 
         def fetch_message(mid: str) -> dict[str, Any] | None:
             return client.get_message(opencode_session_id, mid, directory=directory)
@@ -577,8 +584,10 @@ class SandboxManager(ABC):
         """
         if getattr(self, "_serve_state_initialized", False):
             return
-        # One PodEventBus per sandbox, created lazily on first send_message.
-        self._event_buses: dict[UUID, PodEventBus] = {}
+        # One PodEventBus per (sandbox, directory). Opencode-serve's
+        # ``Instance.provide`` middleware scopes /event per ``?directory=``
+        # query param, so each session directory needs its own SSE stream.
+        self._event_buses: dict[tuple[UUID, str], PodEventBus] = {}
         # Tombstone set: blocks late ``subscribe`` from re-creating a bus
         # for a sandbox whose terminate is in flight (leaks a reconnect
         # loop otherwise). Cleared on re-provision.
@@ -658,26 +667,32 @@ class SandboxManager(ABC):
         )
         return False
 
-    def _get_or_create_event_bus(self, sandbox_id: UUID) -> PodEventBus:
-        """Lazily build the per-sandbox :class:`PodEventBus`. Refuses to
-        create one for a terminated sandbox (see ``_terminated_sandboxes``).
+    def _get_or_create_event_bus(self, sandbox_id: UUID, directory: str) -> PodEventBus:
+        """Lazily build the per-(sandbox, directory) :class:`PodEventBus`.
+        Refuses to create one for a terminated sandbox.
+
+        Opencode-serve's ``Instance.provide`` middleware scopes /event per
+        ``?directory=`` query param, so each unique session directory on
+        a sandbox needs its own SSE stream.
 
         Replaces a cached bus that has self-closed (exhausted its reconnect
         budget) with a fresh one — otherwise callers would keep getting
         ``BUS_CLOSED_SENTINEL`` until the api server restarted.
         """
         self._init_serve_state()
+        key = (sandbox_id, directory)
         with self._event_buses_lock:
-            bus = self._event_buses.get(sandbox_id)
+            bus = self._event_buses.get(key)
             if bus is not None and not bus.closed:
                 return bus
             if bus is not None and bus.closed:
                 logger.warning(
                     "[SANDBOX-SERVE] Replacing self-closed PodEventBus for "
-                    "sandbox %s (prior bus exhausted its reconnect budget)",
+                    "sandbox %s dir=%s (prior bus exhausted its reconnect budget)",
                     sandbox_id,
+                    directory,
                 )
-                self._event_buses.pop(sandbox_id, None)
+                self._event_buses.pop(key, None)
             if sandbox_id in self._terminated_sandboxes:
                 raise RuntimeError(
                     f"Sandbox {sandbox_id} has been terminated; refusing to "
@@ -698,17 +713,22 @@ class SandboxManager(ABC):
             bus = PodEventBus(
                 base_url=self._serve_base_url(sandbox_id),
                 auth=auth,
+                directory=directory,
                 event_read_timeout=OPENCODE_SERVE_EVENT_READ_TIMEOUT,
             )
-            self._event_buses[sandbox_id] = bus
+            self._event_buses[key] = bus
             logger.info(
-                "[SANDBOX-SERVE] Created PodEventBus for sandbox %s", sandbox_id
+                "[SANDBOX-SERVE] Created PodEventBus for sandbox %s dir=%s",
+                sandbox_id,
+                directory,
             )
             return bus
 
-    def _build_serve_client(self, sandbox_id: UUID) -> OpencodeServeClient:
+    def _build_serve_client(
+        self, sandbox_id: UUID, directory: str
+    ) -> OpencodeServeClient:
         password = self._read_opencode_password(sandbox_id)
-        bus = self._get_or_create_event_bus(sandbox_id)
+        bus = self._get_or_create_event_bus(sandbox_id, directory)
         return OpencodeServeClient(
             base_url=self._serve_base_url(sandbox_id),
             password=password,
@@ -739,7 +759,7 @@ class SandboxManager(ABC):
         """
         packet_logger = get_packet_logger()
         session_path = self._session_directory(session_id)
-        client = self._build_serve_client(sandbox_id)
+        client = self._build_serve_client(sandbox_id, session_path)
         try:
             logger.info(
                 "[SESSION-LIFECYCLE] _send_message_via_serve: build_session=%s "

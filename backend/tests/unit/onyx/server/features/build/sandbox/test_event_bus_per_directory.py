@@ -40,7 +40,7 @@ from uuid import uuid4
 
 import pytest
 
-import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
+import onyx.server.features.build.sandbox.base as sandbox_base
 from onyx.server.features.build.configs import AgentTransport
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
@@ -53,8 +53,12 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 
 @pytest.fixture(autouse=True)
 def _serve_transport(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``list_subagents`` and bus creation only kick in under SERVE."""
-    monkeypatch.setattr(ksm, "AGENT_TRANSPORT", AgentTransport.SERVE)
+    """``list_subagents`` and bus creation only kick in under SERVE.
+
+    The methods live on ``SandboxManager`` (base) post-refactor, so we
+    patch the transport flag where the read happens.
+    """
+    monkeypatch.setattr(sandbox_base, "AGENT_TRANSPORT", AgentTransport.SERVE)
 
 
 @pytest.fixture
