@@ -126,3 +126,6 @@ export {
   PopoverMenu,
   type PopoverMenuProps,
 } from "@opal/components/popover/components";
+
+/* Spacer */
+export { Spacer, type SpacerProps } from "@opal/components/spacer/components";

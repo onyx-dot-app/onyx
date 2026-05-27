@@ -40,7 +40,7 @@ import type { WithoutStyles } from "@opal/types";
 import { IconFunctionComponent } from "@opal/types";
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
 import { Content } from "@opal/layouts";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 
 const widthClasses = {
   sm: "w-[min(var(--app-container-sm),100%)]",
@@ -231,7 +231,7 @@ function SettingsHeader({
         </div>
       )}
 
-      <Spacer vertical rem={2.5} />
+      <Spacer rem={2.5} />
 
       <div className="flex flex-col gap-6 px-4">
         <div className="flex w-full justify-between">
@@ -252,11 +252,11 @@ function SettingsHeader({
 
       {divider ? (
         <>
-          <Spacer vertical rem={1.5} />
+          <Spacer rem={1.5} />
           <Divider paddingParallel="md" paddingPerpendicular="fit" />
         </>
       ) : (
-        <Spacer vertical rem={0.5} />
+        <Spacer rem={0.5} />
       )}
 
       {isSticky && (
