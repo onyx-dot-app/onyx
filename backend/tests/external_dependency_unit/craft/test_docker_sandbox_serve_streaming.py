@@ -116,10 +116,20 @@ def _force_serve_transport(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @dataclass(frozen=True)
 class _PoolContainer:
+    """Module-scoped state: provisioned container + the LLM config."""
+
+    sandbox_id: UUID
+    manager: DockerSandboxManager
+    llm_config: LLMProviderConfig
+
+
+@dataclass(frozen=True)
+class _Handle:
+    """Per-test state: pool container + a fresh session_id."""
+
     sandbox_id: UUID
     manager: DockerSandboxManager
     session_id: UUID
-    llm_config: LLMProviderConfig
 
 
 @pytest.fixture(scope="module")
@@ -152,25 +162,47 @@ def _pool_container() -> Generator[_PoolContainer, None, None]:
         f"unexpected directory_path shape: {info.directory_path!r}"
     )
 
-    session_id = uuid4()
-    manager.setup_session_workspace(
-        sandbox_id=sandbox_id,
-        session_id=session_id,
-        llm_config=llm_config,
-        nextjs_port=None,
-        skills_section="No skills available.",
-    )
-
     try:
         yield _PoolContainer(
             sandbox_id=sandbox_id,
             manager=manager,
-            session_id=session_id,
             llm_config=llm_config,
         )
     finally:
         try:
             manager.terminate(sandbox_id)
+        except Exception:
+            pass
+
+
+@pytest.fixture
+def handle(_pool_container: _PoolContainer) -> Generator[_Handle, None, None]:
+    """Fresh session per test on the shared pool container.
+
+    Reusing one session across tests would let prior turns' message
+    history bleed into later tests (e.g. ``test_yields_at_most_one_terminator``
+    pumping prompts into a session already populated by the simple-message
+    test). Each test mints its own session id; teardown removes it.
+    """
+    session_id = uuid4()
+    _pool_container.manager.setup_session_workspace(
+        sandbox_id=_pool_container.sandbox_id,
+        session_id=session_id,
+        llm_config=_pool_container.llm_config,
+        nextjs_port=None,
+        skills_section="No skills available.",
+    )
+    try:
+        yield _Handle(
+            sandbox_id=_pool_container.sandbox_id,
+            manager=_pool_container.manager,
+            session_id=session_id,
+        )
+    finally:
+        try:
+            _pool_container.manager.cleanup_session_workspace(
+                _pool_container.sandbox_id, session_id
+            )
         except Exception:
             pass
 
@@ -197,22 +229,22 @@ class _Collected:
 
 
 def _drive_turn(
-    pool: _PoolContainer,
+    h: _Handle,
     prompt: str,
     *,
     opencode_session_id: str | None = None,
 ) -> tuple[_Collected, str | None]:
     """One turn end-to-end via ``DockerSandboxManager.send_message``."""
     if opencode_session_id is None:
-        opencode_session_id = pool.manager.ensure_opencode_session(
-            pool.sandbox_id, pool.session_id
+        opencode_session_id = h.manager.ensure_opencode_session(
+            h.sandbox_id, h.session_id
         )
     assert opencode_session_id, "ensure_opencode_session must return an id under serve"
 
     out = _Collected()
-    for ev in pool.manager.send_message(
-        pool.sandbox_id,
-        pool.session_id,
+    for ev in h.manager.send_message(
+        h.sandbox_id,
+        h.session_id,
         prompt,
         opencode_session_id=opencode_session_id,
     ):
@@ -279,15 +311,13 @@ def test_read_opencode_password_roundtrips_via_docker_inspect(
     assert len(pw) >= 32
 
 
-def test_simple_message_streams_text_and_terminates(
-    _pool_container: _PoolContainer,
-) -> None:
+def test_simple_message_streams_text_and_terminates(handle: _Handle) -> None:
     """End-to-end smoke: drive one real turn against opencode-serve
     inside the Docker sandbox container, assert we get text deltas and a
     terminator. If this passes, the entire stack works: password injected
     correctly, bridge-network reachability, serve binds :4096, prompt
     POST + event SSE roundtrip, translator emits ACP events."""
-    out, _ = _drive_turn(_pool_container, "Say hi briefly.")
+    out, _ = _drive_turn(handle, "Say hi briefly.")
 
     assert out.term is not None, "send_message never terminated"
     assert out.term.stop_reason == "end_turn"
@@ -299,13 +329,11 @@ def test_simple_message_streams_text_and_terminates(
     )
 
 
-def test_bash_tool_call_lifecycle(
-    _pool_container: _PoolContainer,
-) -> None:
+def test_bash_tool_call_lifecycle(handle: _Handle) -> None:
     """Tool call lifecycle parity with K8s: exactly one ToolCallStart per
     call_id; ToolCallProgress sequence ends in status=completed."""
     out, _ = _drive_turn(
-        _pool_container,
+        handle,
         "Run the bash command `echo DOCKER_SERVE_OK` and then say DONE.",
     )
 
@@ -324,9 +352,7 @@ def test_bash_tool_call_lifecycle(
         )
 
 
-def test_multi_turn_session_terminates_each_turn(
-    _pool_container: _PoolContainer,
-) -> None:
+def test_multi_turn_session_terminates_each_turn(handle: _Handle) -> None:
     """Three back-to-back prompts on the same opencode session. Each
     must terminate cleanly. Catches event-bus cross-talk and stuck
     prompt-slot locks — both of which would block subsequent turns."""
@@ -339,31 +365,28 @@ def test_multi_turn_session_terminates_each_turn(
         ]
     ):
         out, opencode_session_id = _drive_turn(
-            _pool_container, prompt, opencode_session_id=opencode_session_id
+            handle, prompt, opencode_session_id=opencode_session_id
         )
         assert out.term is not None, f"turn {i + 1} did not terminate"
         assert out.errors == [], f"turn {i + 1} had errors: {out.errors}"
         assert len(out.text) > 0, f"turn {i + 1} produced no text"
 
 
-def test_yields_at_most_one_terminator(
-    _pool_container: _PoolContainer,
-) -> None:
+def test_yields_at_most_one_terminator(handle: _Handle) -> None:
     """opencode emits several end-of-turn signals (``message.updated``
     completed, ``session.idle``, ``session.status``→idle). Whichever
     fires first must terminate the turn; the rest must be suppressed.
     Catches a regression in the terminator-dedup logic on the shared
     base-class ``_send_message_via_serve`` path."""
-    pool = _pool_container
-    opencode_session_id: str | None = pool.manager.ensure_opencode_session(
-        pool.sandbox_id, pool.session_id
+    opencode_session_id: str | None = handle.manager.ensure_opencode_session(
+        handle.sandbox_id, handle.session_id
     )
     extra_terms = 0
     for i in range(3):
         term_count = 0
-        for ev in pool.manager.send_message(
-            pool.sandbox_id,
-            pool.session_id,
+        for ev in handle.manager.send_message(
+            handle.sandbox_id,
+            handle.session_id,
             f"Say '{i}'.",
             opencode_session_id=opencode_session_id,
         ):
@@ -376,18 +399,15 @@ def test_yields_at_most_one_terminator(
     )
 
 
-def test_prompt_slot_blocks_concurrent_turn(
-    _pool_container: _PoolContainer,
-) -> None:
+def test_prompt_slot_blocks_concurrent_turn(handle: _Handle) -> None:
     """``prompt_slot`` is the load-bearing lock that prevents the
     phantom-user_message bug. The Docker manager inherits the impl from
     base — this test confirms the lock state actually got initialized via
     ``_init_serve_state`` during ``_initialize``. A regression where
     Docker forgot to call it would surface as the lock dict missing."""
-    pool = _pool_container
-    with pool.manager.prompt_slot(pool.sandbox_id, pool.session_id) as outer:
+    with handle.manager.prompt_slot(handle.sandbox_id, handle.session_id) as outer:
         assert outer is True
-        with pool.manager.prompt_slot(pool.sandbox_id, pool.session_id) as inner:
+        with handle.manager.prompt_slot(handle.sandbox_id, handle.session_id) as inner:
             assert inner is False, (
                 "second concurrent prompt_slot acquire must return False"
             )
@@ -398,9 +418,8 @@ def test_terminate_then_subscribe_refuses(
 ) -> None:
     """After ``terminate``, late ``_get_or_create_event_bus`` calls MUST
     raise rather than spin a reader thread against the deleted container.
-    The K8s manager tombstones the sandbox_id; Docker inherits the same
-    machinery via base. This is in its own test (separate sandbox_id, not
-    the pool) so the teardown doesn't break other tests."""
+    Provision a fresh sandbox (so we don't blow away the pool container)
+    and wrap in try/finally so an assertion failure can't leak it."""
     pool = _pool_container
     sandbox_id = uuid4()
     pool.manager.provision(
@@ -410,7 +429,13 @@ def test_terminate_then_subscribe_refuses(
         llm_config=pool.llm_config,
         onyx_pat="ci-test-pat",
     )
-    pool.manager.terminate(sandbox_id)
-
-    with pytest.raises(RuntimeError, match="terminated"):
-        pool.manager._get_or_create_event_bus(sandbox_id)
+    try:
+        pool.manager.terminate(sandbox_id)
+        with pytest.raises(RuntimeError, match="terminated"):
+            pool.manager._get_or_create_event_bus(sandbox_id)
+    finally:
+        # Defensive cleanup in case ``terminate`` raised before completing.
+        try:
+            pool.manager.terminate(sandbox_id)
+        except Exception:
+            pass
