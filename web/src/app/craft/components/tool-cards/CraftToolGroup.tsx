@@ -111,12 +111,13 @@ export default function CraftToolGroup({
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="ml-2 mb-2 mt-1 mr-3 pl-2 border-l border-border-02 flex flex-col gap-1">
+            <div className="ml-2 mb-2 mt-1 mr-3 pl-2 border-l border-border-02 flex flex-col">
               {toolCalls.map((toolCall) => (
                 <CraftToolCard
                   key={toolCall.id}
                   toolCall={toolCall}
                   railVariant="none"
+                  dense
                 />
               ))}
             </div>

@@ -44,6 +44,8 @@ interface CraftToolCardProps {
    * rail), "none" omits the column entirely.
    */
   railVariant?: TimelineRowRailVariant;
+  /** Compact trigger padding for nested rendering inside a group. */
+  dense?: boolean;
 }
 
 function renderBody(toolCall: ToolCallState) {
@@ -102,6 +104,7 @@ export default function CraftToolCard({
   isFirstStep = true,
   isLastStep = true,
   railVariant = "rail",
+  dense = false,
 }: CraftToolCardProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen ?? false);
   const secondaryLine =
@@ -124,7 +127,8 @@ export default function CraftToolCard({
           <CollapsibleTrigger asChild>
             <button
               className={cn(
-                "w-full text-left px-3 py-2 rounded-md",
+                "w-full text-left rounded-md",
+                dense ? "px-3 py-1" : "px-3 py-2",
                 "transition-colors hover:bg-background-tint-02"
               )}
             >
