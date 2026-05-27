@@ -56,19 +56,14 @@ class _StubResolver:
         *,
         sandbox: Any = _SENTINEL,
         sandbox_exc: Exception | None = None,
-        session: Any = _SENTINEL,
-        session_exc: Exception | None = None,
         session_by_id: Any = _SENTINEL,
         session_by_id_exc: Exception | None = None,
     ) -> None:
         self._sandbox = sandbox
         self._sandbox_exc = sandbox_exc
-        self._session = session
-        self._session_exc = session_exc
         self._session_by_id = session_by_id
         self._session_by_id_exc = session_by_id_exc
         self.resolve_sandbox_calls = 0
-        self.resolve_active_session_calls = 0
         self.resolve_session_by_id_calls: list[tuple[UUID, UUID, str]] = []
 
     def resolve_sandbox(
@@ -79,16 +74,6 @@ class _StubResolver:
         if self._sandbox_exc is not None:
             raise self._sandbox_exc
         return None if self._sandbox is _SENTINEL else self._sandbox  # type: ignore[no-any-return]
-
-    def resolve_active_session(
-        self,
-        user_id: UUID,  # noqa: ARG002
-        tenant_id: str,  # noqa: ARG002
-    ) -> UUID | None:
-        self.resolve_active_session_calls += 1
-        if self._session_exc is not None:
-            raise self._session_exc
-        return None if self._session is _SENTINEL else self._session  # type: ignore[no-any-return]
 
     def resolve_session_by_id(
         self,
@@ -315,30 +300,20 @@ def test_parser_max_body_bytes_constant_matches_spec() -> None:
     assert PARSER_MAX_BODY_BYTES == 1_048_576
 
 
-@pytest.mark.parametrize(
-    "resolver_kwargs",
-    [
-        {"session": None},
-        {"session_exc": RuntimeError("db down")},
-    ],
-    ids=["lookup_returns_none", "lookup_raises"],
-)
-def test_resolve_and_match_active_session_failure_fails_closed(
-    resolver_kwargs: dict[str, Any],
-) -> None:
-    """Gated request from an identified pod, but no active session to
-    route the approval card to (either no row, or a DB blip during the
-    lookup) — fail closed with `no_active_session`."""
-    resolver = _StubResolver(sandbox=_sandbox(), **resolver_kwargs)
+def test_resolve_and_match_no_tag_fails_closed() -> None:
+    """Gated request from an identified pod but with NO in-band session
+    tag — fail closed. There is no most-recent-active fallback, so the
+    session lookup is never even attempted."""
+    resolver = _StubResolver(sandbox=_sandbox())
     matcher = _StubMatcher(result=_MATCH)
     addon = _build(resolver=resolver, matcher=matcher)
-    flow = _flow()
+    flow = _flow()  # no proxy_auth
 
     result = addon._resolve_and_match(flow)
 
     assert result is None
     _assert_403(flow, gate_mod._CODE_NO_ACTIVE_SESSION)
-    assert resolver.resolve_active_session_calls == 1
+    assert resolver.resolve_session_by_id_calls == []
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +333,7 @@ def test_resolve_and_match_matcher_returns_none_fails_open() -> None:
     assert result is None
     assert flow.response is None  # mitmproxy will forward.
     # Session lookup must NOT happen for non-gated traffic.
-    assert resolver.resolve_active_session_calls == 0
+    assert resolver.resolve_session_by_id_calls == []
 
 
 def test_resolve_and_match_matcher_raises_fails_open() -> None:
@@ -371,7 +346,7 @@ def test_resolve_and_match_matcher_raises_fails_open() -> None:
 
     assert result is None
     assert flow.response is None
-    assert resolver.resolve_active_session_calls == 0
+    assert resolver.resolve_session_by_id_calls == []
 
 
 # ---------------------------------------------------------------------------
@@ -381,12 +356,12 @@ def test_resolve_and_match_matcher_raises_fails_open() -> None:
 
 def test_resolve_and_match_happy_path_promotes_session() -> None:
     user_id = uuid4()
-    session_id = uuid4()
+    session_id = UUID(_TAG_UUID)
     sandbox = _sandbox(user_id=user_id)
-    resolver = _StubResolver(sandbox=sandbox, session=session_id)
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=session_id)
     matcher = _StubMatcher(result=_MATCH)
     addon = _build(resolver=resolver, matcher=matcher)
-    flow = _flow()
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
 
     result = addon._resolve_and_match(flow)
 
@@ -474,8 +449,6 @@ def test_resolve_and_match_exact_tag_on_http_request() -> None:
     assert resolver.resolve_session_by_id_calls == [
         (tagged_id, user_id, sandbox.tenant_id)
     ]
-    # Exact match wins — the heuristic must NOT run.
-    assert resolver.resolve_active_session_calls == 0
 
 
 def test_resolve_and_match_exact_tag_on_https_connect() -> None:
@@ -497,47 +470,41 @@ def test_resolve_and_match_exact_tag_on_https_connect() -> None:
     assert result is not None
     ctx, _match = result
     assert ctx.session_id == tagged_id
-    assert resolver.resolve_active_session_calls == 0
 
 
-def test_resolve_and_match_unverified_tag_falls_back_to_heuristic() -> None:
+def test_resolve_and_match_unverified_tag_fails_closed() -> None:
     """Tag present but it doesn't resolve to one of this user's sessions
-    (stale / foreign / tampered) — fall back to the heuristic, not a 403."""
-    heuristic_id = uuid4()
+    (stale / foreign / tampered) — fail closed. No most-recent-active
+    fallback: an unattributable gated action is blocked, not guessed."""
     sandbox = _sandbox()
-    resolver = _StubResolver(sandbox=sandbox, session_by_id=None, session=heuristic_id)
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=None)
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
     flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
 
     result = addon._resolve_and_match(flow)
 
-    assert result is not None
-    ctx, _match = result
-    assert ctx.session_id == heuristic_id
+    assert result is None
+    _assert_403(flow, gate_mod._CODE_NO_ACTIVE_SESSION)
     assert len(resolver.resolve_session_by_id_calls) == 1
-    assert resolver.resolve_active_session_calls == 1
 
 
-def test_resolve_and_match_malformed_tag_skips_lookup_and_falls_back() -> None:
-    """A non-UUID username never hits the DB; goes straight to heuristic."""
-    heuristic_id = uuid4()
-    resolver = _StubResolver(sandbox=_sandbox(), session=heuristic_id)
+def test_resolve_and_match_malformed_tag_fails_closed() -> None:
+    """A non-UUID username never hits the DB and fails closed (no
+    fallback)."""
+    resolver = _StubResolver(sandbox=_sandbox())
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
     flow = _flow(proxy_auth=_basic_auth("not-a-uuid"))
 
     result = addon._resolve_and_match(flow)
 
-    assert result is not None
-    ctx, _match = result
-    assert ctx.session_id == heuristic_id
+    assert result is None
+    _assert_403(flow, gate_mod._CODE_NO_ACTIVE_SESSION)
     assert resolver.resolve_session_by_id_calls == []
-    assert resolver.resolve_active_session_calls == 1
 
 
 def test_resolve_and_match_session_by_id_db_error_fails_closed() -> None:
     """A DB blip while validating the in-band tag must fail closed
-    (no_active_session), not silently forward — same posture as the
-    heuristic lookup raising."""
+    (no_active_session), not silently forward."""
     resolver = _StubResolver(
         sandbox=_sandbox(), session_by_id_exc=RuntimeError("db down")
     )

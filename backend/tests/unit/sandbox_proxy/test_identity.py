@@ -62,7 +62,7 @@ def test_resolve_sandbox_happy_path() -> None:
     # SqlAlchemy session is opened correctly.
     assert sandbox.tenant_id == "public"
     assert factory.last_tenant_id == "public"
-    # Session lookup is deferred to `resolve_active_session()` — only
+    # Session lookup is deferred to `resolve_session_by_id()` — only
     # the sandbox-user query runs here. Pinning this short-circuit so
     # non-gated traffic doesn't pay an extra round-trip per request.
     assert stub.scalar_calls == 1
@@ -92,12 +92,12 @@ def test_resolve_sandbox_missing_sandbox_row_returns_none() -> None:
 
 
 # ---------------------------------------------------------------------------
-# resolve_active_session — user → active BuildSession (called only on gated)
+# resolve_session_by_id — validate the in-band tag against its owner
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_active_session_propagates_scalar() -> None:
-    """Both the session-id and the None case in one test.
+def test_resolve_session_by_id_propagates_scalar() -> None:
+    """Both the verified (id returned) and unverified (None) cases.
 
     The production code is `return db.scalar(stmt)`; a unit test that
     only exercises one branch is testing the stub, not the resolver.
@@ -109,7 +109,7 @@ def test_resolve_active_session_propagates_scalar() -> None:
     factory = _factory(stub)
     resolver = IdentityResolver(ip_lookup=StaticLookup({}), db_session_factory=factory)
 
-    assert resolver.resolve_active_session(uuid4(), "public") == found_id
-    assert resolver.resolve_active_session(uuid4(), "public") is None
+    assert resolver.resolve_session_by_id(found_id, uuid4(), "public") == found_id
+    assert resolver.resolve_session_by_id(uuid4(), uuid4(), "public") is None
     assert factory.last_tenant_id == "public"
     assert stub.scalar_calls == 2

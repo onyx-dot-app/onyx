@@ -22,6 +22,7 @@ from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
 from onyx.sandbox_proxy.addons.gate import GateAddon
+from onyx.sandbox_proxy.identity import ResolvedSandbox
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -66,15 +67,16 @@ def _seed_action_approval(
 class _UnusedResolver:
     """Obvious-fail stub for the arbiter tests; none of these are called."""
 
-    def resolve_sandbox(self, src_ip: str) -> Any:  # noqa: ARG002
+    def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None:  # noqa: ARG002
         raise AssertionError("identity.resolve_sandbox unexpectedly used")
 
-    def resolve_active_session(
+    def resolve_session_by_id(
         self,
+        session_id: UUID,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
-    ) -> Any:
-        raise AssertionError("identity.resolve_active_session unexpectedly used")
+    ) -> UUID | None:
+        raise AssertionError("identity.resolve_session_by_id unexpectedly used")
 
 
 class _UnusedMatcher:

@@ -4,10 +4,12 @@ The file-level ``pytestmark`` gates the entire module to the K8s CI lane.
 Per project memory: never run these locally — they touch the real cluster.
 
 Each test provisions a sandbox pod via the ``live_pod`` fixture (from
-``craft/conftest.py``), seeds a ``User`` + ACTIVE ``BuildSession`` in
-Postgres so the gate's ``resolve_active_session`` can route the card,
-then drives a real sandbox-side ``curl`` against ``slack.com`` and
-asserts the resulting ApprovalDecision flow.
+``craft/conftest.py``), seeds a ``User`` + ``BuildSession`` in Postgres,
+then drives a real sandbox-side ``curl`` against ``slack.com`` — tagged
+with the session id as the proxy basic-auth username (as the
+``session-proxy-tag`` opencode plugin does) so the gate resolves the
+originating session via ``resolve_session_by_id`` — and asserts the
+resulting ApprovalDecision flow.
 
 The unique contract these tests pin (vs. ``test_approvals_api.py`` which
 is in-process):
@@ -106,12 +108,17 @@ def _post_slack_via_curl(
     *,
     text: str = "approval test",
     max_time_s: int = 240,
+    session_id: UUID | None = None,
 ) -> None:
     """Drive a sandbox-side curl against Slack's chat.postMessage.
 
     The bearer is intentionally fake — Slack will respond with
     ``invalid_auth`` if the request reaches Slack (used by the
     APPROVED test) but the matcher only cares about the URL prefix.
+
+    ``session_id`` tags the egress (via the proxy basic-auth username,
+    as the opencode plugin does in production) so the gate resolves the
+    originating session. Omit it to exercise the untagged fail-closed path.
     """
     pod_exec_async(
         k8s,
@@ -125,6 +132,7 @@ def _post_slack_via_curl(
         },
         body=json.dumps({"channel": "#general", "text": text}),
         max_time_s=max_time_s,
+        proxy_session_id=str(session_id) if session_id is not None else None,
     )
 
 
@@ -274,9 +282,9 @@ def gated_session(
         db_session.commit()
         db_session.refresh(user)
 
-    # Stale BuildSession rows (status=ACTIVE) from previous tests would steer
-    # ``resolve_active_session`` to a session id the in-pod workspace doesn't
-    # know about. Drop them all so the test sees a single deterministic row.
+    # Drop any BuildSession rows left by previous tests so the seeded row
+    # (id == the in-pod workspace session id, which the curl tags with) is
+    # the single deterministic row the gate resolves the tag against.
     db_session.query(BuildSession).filter(BuildSession.user_id == user.id).delete(
         synchronize_session=False
     )
@@ -331,7 +339,13 @@ def test_rejected_decision_returns_403_user_rejected(
     user, session_id, pod_name = gated_session
 
     output_path = f"/tmp/curl_reject_{uuid4().hex[:8]}"
-    _post_slack_via_curl(k8s_client, pod_name, output_path, text="hello from K8s CI")
+    _post_slack_via_curl(
+        k8s_client,
+        pod_name,
+        output_path,
+        text="hello from K8s CI",
+        session_id=session_id,
+    )
 
     pending = _wait_for_pending_approval(db_session, session_id)
 
@@ -370,7 +384,9 @@ def test_approved_decision_forwards_to_slack(
     user, session_id, pod_name = gated_session
 
     output_path = f"/tmp/curl_approve_{uuid4().hex[:8]}"
-    _post_slack_via_curl(k8s_client, pod_name, output_path, text="forwarded")
+    _post_slack_via_curl(
+        k8s_client, pod_name, output_path, text="forwarded", session_id=session_id
+    )
 
     pending = _wait_for_pending_approval(db_session, session_id)
 
@@ -418,6 +434,7 @@ def test_expired_on_wait_timeout(
         output_path,
         text="never decided",
         max_time_s=_WAIT_TIMEOUT_S_SPEC + 60,
+        session_id=session_id,
     )
 
     pending = _wait_for_pending_approval(db_session, session_id)
@@ -465,7 +482,9 @@ def test_sigterm_drain_unblocks_parked_request(
     _, session_id, pod_name = gated_session
 
     output_path = f"/tmp/curl_drain_{uuid4().hex[:8]}"
-    _post_slack_via_curl(k8s_client, pod_name, output_path, text="drain me")
+    _post_slack_via_curl(
+        k8s_client, pod_name, output_path, text="drain me", session_id=session_id
+    )
 
     _wait_for_pending_approval(db_session, session_id)
 
@@ -511,16 +530,18 @@ def test_non_gated_egress_works_without_active_session(
     gated_session: tuple[User, UUID, str],
     db_session: Session,
 ) -> None:
-    """No ACTIVE session → non-gated egress (npm registry) still succeeds.
+    """Non-gated egress (npm registry) succeeds with no session tag.
 
-    Pins the gate's fail-open behaviour for non-matching requests: the
-    session liveness check is only triggered after the matcher fires,
-    so npm install / apt / pip flow even when there's no active session.
+    Pins the gate's fail-open behaviour for non-matching requests: session
+    resolution only runs after the matcher fires, so npm install / apt /
+    pip flow without any in-band session tag. (The egress here is untagged,
+    matching how a real non-skill request would look.)
     """
     user, _, pod_name = gated_session
 
-    # Force the session into IDLE (and any other sessions for this user)
-    # so ``resolve_active_session`` returns None.
+    # Session state is irrelevant for non-gated egress (the matcher never
+    # fires, so resolution is never attempted); set IDLE just to assert
+    # liveness plays no part.
     db_session.execute(
         update(BuildSession)
         .where(BuildSession.user_id == user.id)
@@ -552,35 +573,31 @@ def test_non_gated_egress_works_without_active_session(
     )
 
 
-def test_gated_egress_without_active_session_returns_no_active_session(
+def test_gated_egress_without_session_tag_fails_closed(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
     gated_session: tuple[User, UUID, str],
     db_session: Session,
 ) -> None:
-    """No ACTIVE session + gated request → 403 ``no_active_session``.
+    """Gated request with NO in-band session tag → 403 ``no_active_session``.
 
-    The matcher fires (Slack chat.postMessage), so the gate now needs a
-    session to route the card to. With no ACTIVE session it fails
-    closed *without* committing a row.
+    The matcher fires (Slack chat.postMessage), so the gate needs the
+    originating session. Resolution is exclusively tag-based (no
+    most-recent-active fallback), so an untagged gated request fails closed
+    *without* committing a row — even though an ACTIVE session exists for
+    the user (proving the absent fallback).
     """
     user, _, pod_name = gated_session
 
-    db_session.execute(
-        update(BuildSession)
-        .where(BuildSession.user_id == user.id)
-        .values(status=BuildSessionStatus.IDLE)
-    )
-    db_session.commit()
-
     output_path = f"/tmp/curl_nosession_{uuid4().hex[:8]}"
+    # No session_id → untagged egress.
     _post_slack_via_curl(k8s_client, pod_name, output_path, text="no session")
 
     status_code, body = wait_for_pod_exec_output(
         k8s_client, pod_name, output_path, timeout_s=30
     )
     assert status_code == 403, (
-        f"gated request without an active session should return 403, "
+        f"gated request without a session tag should return 403, "
         f"got {status_code}: {body!r}"
     )
     _assert_403_error_code(body, "no_active_session")
@@ -608,7 +625,9 @@ def test_sse_merger_emits_approval_requested_packet(
     user, session_id, pod_name = gated_session
 
     output_path = f"/tmp/curl_announce_{uuid4().hex[:8]}"
-    _post_slack_via_curl(k8s_client, pod_name, output_path, text="announce me")
+    _post_slack_via_curl(
+        k8s_client, pod_name, output_path, text="announce me", session_id=session_id
+    )
 
     pending = _wait_for_pending_approval(db_session, session_id)
 
@@ -694,7 +713,9 @@ def test_approval_requested_notification_is_created(
     user, session_id, pod_name = gated_session
 
     output_path = f"/tmp/curl_notify_{uuid4().hex[:8]}"
-    _post_slack_via_curl(k8s_client, pod_name, output_path, text="notify me")
+    _post_slack_via_curl(
+        k8s_client, pod_name, output_path, text="notify me", session_id=session_id
+    )
 
     pending = _wait_for_pending_approval(db_session, session_id)
 
@@ -760,7 +781,9 @@ def test_list_live_excludes_aged_pending_rows(
     user, session_id, pod_name = gated_session
 
     output_path = f"/tmp/curl_aged_{uuid4().hex[:8]}"
-    _post_slack_via_curl(k8s_client, pod_name, output_path, text="aged out")
+    _post_slack_via_curl(
+        k8s_client, pod_name, output_path, text="aged out", session_id=session_id
+    )
 
     pending = _wait_for_pending_approval(db_session, session_id)
 
@@ -868,6 +891,7 @@ def test_row_missing_on_claim_returns_expired(
         output_path,
         text="drop me",
         max_time_s=_WAIT_TIMEOUT_S_SPEC + 60,
+        session_id=session_id,
     )
 
     pending = _wait_for_pending_approval(db_session, session_id)
@@ -937,6 +961,7 @@ def test_post_decision_after_proxy_claimed_expired_returns_conflict(
         output_path,
         text="conflict me",
         max_time_s=_WAIT_TIMEOUT_S_SPEC + 60,
+        session_id=session_id,
     )
 
     pending = _wait_for_pending_approval(db_session, session_id)

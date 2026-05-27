@@ -118,65 +118,6 @@ def test_resolve_sandbox_succeeds_without_any_active_session(
 
 
 # ---------------------------------------------------------------------------
-# resolve_active_session — user → most-recent ACTIVE BuildSession
-# ---------------------------------------------------------------------------
-
-
-def test_resolve_active_session_returns_active_id(
-    seeded_sandbox: tuple[UUID, UUID, UUID],
-) -> None:
-    _, user_id, active_session_id = seeded_sandbox
-    resolver = _resolver_with(None)
-    found = resolver.resolve_active_session(user_id, POSTGRES_DEFAULT_SCHEMA)
-    assert found == active_session_id
-
-
-def test_resolve_active_session_returns_none_when_only_idle(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-) -> None:
-    user = create_test_user(db_session, "no_active")
-    idle = BuildSession(
-        id=uuid4(),
-        user_id=user.id,
-        status=BuildSessionStatus.IDLE,
-        last_activity_at=dt.datetime.now(dt.timezone.utc),
-    )
-    db_session.add(idle)
-    db_session.commit()
-
-    resolver = _resolver_with(None)
-    assert resolver.resolve_active_session(user.id, POSTGRES_DEFAULT_SCHEMA) is None
-
-
-def test_resolve_active_session_picks_most_recent(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-) -> None:
-    user = create_test_user(db_session, "two_active")
-    now = dt.datetime.now(dt.timezone.utc)
-    older = BuildSession(
-        id=uuid4(),
-        user_id=user.id,
-        status=BuildSessionStatus.ACTIVE,
-        last_activity_at=now - dt.timedelta(minutes=10),
-    )
-    newer = BuildSession(
-        id=uuid4(),
-        user_id=user.id,
-        status=BuildSessionStatus.ACTIVE,
-        last_activity_at=now,
-    )
-    db_session.add(older)
-    db_session.add(newer)
-    db_session.commit()
-
-    resolver = _resolver_with(None)
-    found = resolver.resolve_active_session(user.id, POSTGRES_DEFAULT_SCHEMA)
-    assert found == newer.id
-
-
-# ---------------------------------------------------------------------------
 # resolve_session_by_id — exact in-band tag, validated against the owner
 # ---------------------------------------------------------------------------
 

@@ -60,8 +60,6 @@ _SNAPSHOT_STREAM_FLAG = "onyx_snapshot_stream"
 class _Resolver(Protocol):
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None: ...
 
-    def resolve_active_session(self, user_id: UUID, tenant_id: str) -> UUID | None: ...
-
     def resolve_session_by_id(
         self, session_id: UUID, user_id: UUID, tenant_id: str
     ) -> UUID | None: ...
@@ -275,21 +273,20 @@ class GateAddon:
     def _resolve_and_match(
         self, flow: http.HTTPFlow
     ) -> tuple[SessionContext, ActionMatch] | None:
-        """Identity → matcher → (only if gated) active-session lookup.
+        """Identity → matcher → (only if gated) in-band session resolution.
 
         Returns `(ctx, match)` to proceed. Two `None` shapes:
 
         * fail-closed — sets `flow.response` to a 403 before
-          returning (unidentified sandbox, oversize body, gated
-          request but no active session to route the card to).
+          returning (unidentified sandbox, oversize body, or a gated
+          request with no verifiable session tag to route the card to).
         * fail-open — returns `None` without touching the response
           (matcher crash, non-matching request); mitmproxy then
           forwards the request unchanged.
 
-        Session liveness is intentionally checked LAST. Non-gated
-        traffic (npm install, apt, pip, etc.) is identified at the
-        pod level but doesn't need an active session — startup-time
-        and inter-session egress shouldn't depend on session state.
+        Session resolution is intentionally LAST. Non-gated traffic (npm
+        install, apt, pip, etc.) is identified at the pod level and never
+        needs a session tag — only gated actions require one.
         """
         src_ip = self._extract_src_ip(flow)
         if src_ip is None:
@@ -332,9 +329,11 @@ class GateAddon:
         if match is None:
             return None
 
-        # Gated — now we need a session to route the card to. Prefer the
-        # exact in-band tag (Proxy-Authorization username); fall back to
-        # the most-recent-active heuristic when it's absent/unverifiable.
+        # Gated — resolve the originating session exclusively from the
+        # in-band Proxy-Authorization tag. No most-recent-active fallback:
+        # an unattributable gated action is blocked, not guessed. (The
+        # specific reason — missing / malformed / unverified tag — is logged
+        # inside `_resolve_gated_session`.)
         try:
             session_id = self._resolve_gated_session(flow, sandbox)
         except Exception:
@@ -348,7 +347,7 @@ class GateAddon:
             return None
         if session_id is None:
             logger.info(
-                "gate.no_active_session sandbox_id=%s user_id=%s "
+                "gate.unattributed_block sandbox_id=%s user_id=%s "
                 "tenant_id=%s action_type=%s host=%s",
                 sandbox.sandbox_id,
                 sandbox.user_id,
@@ -658,38 +657,53 @@ class GateAddon:
     def _resolve_gated_session(
         self, flow: http.HTTPFlow, sandbox: ResolvedSandbox
     ) -> UUID | None:
-        """Exact in-band tag if verifiable, else most-recent-active heuristic.
+        """Resolve the originating session **exclusively** from the in-band
+        Proxy-Authorization tag. Returns None (→ caller fails closed) if the
+        tag is absent, malformed, or doesn't resolve to one of this user's
+        sessions. There is no most-recent-active fallback: an unattributable
+        gated action is blocked rather than routed to a guessed session.
 
-        DB errors propagate to the caller, which fails the request closed.
+        DB errors propagate to the caller, which also fails the request closed.
         """
         tag = self._extract_session_tag(flow)
-        if tag is not None:
-            try:
-                tagged_id = UUID(tag)
-            except ValueError:
-                tagged_id = None
-            if tagged_id is not None:
-                exact = self._identity.resolve_session_by_id(
-                    tagged_id, sandbox.user_id, sandbox.tenant_id
-                )
-                if exact is not None:
-                    logger.info(
-                        "gate.session_exact session_id=%s sandbox_id=%s host=%s",
-                        exact,
-                        sandbox.sandbox_id,
-                        flow.request.host,
-                    )
-                    return exact
-            # Tag present but doesn't resolve to one of this user's
-            # sessions (stale, foreign, or tampered). Don't trust it —
-            # fall back to the heuristic rather than 403.
+        if tag is None:
+            logger.warning(
+                "gate.session_tag_missing sandbox_id=%s user_id=%s host=%s",
+                sandbox.sandbox_id,
+                sandbox.user_id,
+                flow.request.host,
+            )
+            return None
+        try:
+            tagged_id = UUID(tag)
+        except ValueError:
+            logger.warning(
+                "gate.session_tag_malformed sandbox_id=%s user_id=%s host=%s",
+                sandbox.sandbox_id,
+                sandbox.user_id,
+                flow.request.host,
+            )
+            return None
+        exact = self._identity.resolve_session_by_id(
+            tagged_id, sandbox.user_id, sandbox.tenant_id
+        )
+        if exact is None:
+            # Tag present but doesn't resolve to one of this user's sessions
+            # (stale, foreign, or tampered). Fail closed — do not guess.
             logger.warning(
                 "gate.session_tag_unverified sandbox_id=%s user_id=%s host=%s",
                 sandbox.sandbox_id,
                 sandbox.user_id,
                 flow.request.host,
             )
-        return self._identity.resolve_active_session(sandbox.user_id, sandbox.tenant_id)
+            return None
+        logger.info(
+            "gate.session_exact session_id=%s sandbox_id=%s host=%s",
+            exact,
+            sandbox.sandbox_id,
+            flow.request.host,
+        )
+        return exact
 
     def _extract_session_tag(self, flow: http.HTTPFlow) -> str | None:
         """The originating session tag, or None.

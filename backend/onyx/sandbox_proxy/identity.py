@@ -1,4 +1,4 @@
-"""Source-IP → sandbox identity (+ optional active session) resolution.
+"""Source-IP → sandbox identity + in-band session resolution.
 
 The IP-to-sandbox step is backend-specific (`SandboxIPLookup`
 Protocol). Downstream resolution lives on `IdentityResolver`, split
@@ -6,14 +6,16 @@ into two phases:
 
 * `resolve_sandbox()` — pod IP → sandbox + user + tenant. Used for
   every request to enforce "only known sandbox pods may egress".
-* `resolve_active_session()` — user → active `BuildSession`. Only
-  needed when a request is gated and we need somewhere to route the
-  approval card.
+* `resolve_session_by_id()` — validate the in-band session tag
+  (the `Proxy-Authorization` username, set by the `session-proxy-tag`
+  opencode plugin) against its owner. Used when a request is gated and
+  we need the exact session to route the approval card to.
 
 Splitting the two lets non-gated traffic (npm install, apt update,
-etc.) flow whenever the pod is identified, even if the user has no
-ACTIVE session at that moment — startup-time and inter-session
-egress shouldn't depend on session liveness.
+etc.) flow whenever the pod is identified — only gated traffic needs a
+resolvable session. There is deliberately no most-recent-active
+heuristic: a gated request that carries no verifiable session tag is
+failed closed by the gate rather than routed to a guessed session.
 """
 
 from collections.abc import Callable
@@ -26,7 +28,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.utils.logger import setup_logger
@@ -49,8 +50,8 @@ class ResolvedSandbox:
     """Sandbox identity + the user that owns it.
 
     Returned by `resolve_sandbox()`. Sufficient to authorize egress
-    and (when combined with `resolve_active_session()`) to mint an
-    approval row.
+    and (when combined with a verified `resolve_session_by_id()`) to
+    mint an approval row.
     """
 
     sandbox_id: UUID
@@ -149,16 +150,6 @@ class IdentityResolver:
             sandbox_ip=identity.sandbox_ip,
         )
 
-    def resolve_active_session(self, user_id: UUID, tenant_id: str) -> UUID | None:
-        """Most-recently-active `BuildSession` for the user, or None.
-
-        Called only on gated requests, where we need a session_id to
-        route the approval card. This is the fallback heuristic; prefer
-        `resolve_session_by_id` when the request carries an in-band tag.
-        """
-        with self._session_factory(tenant_id) as db:
-            return self._fetch_active_session(db, user_id)
-
     def resolve_session_by_id(
         self, session_id: UUID, user_id: UUID, tenant_id: str
     ) -> UUID | None:
@@ -170,7 +161,8 @@ class IdentityResolver:
         row exists AND its `user_id` matches the user resolved from the
         source IP — which the sandbox cannot forge. This bounds a tampered
         or stale tag to the same user (no cross-user routing); on any
-        mismatch the caller falls back to `resolve_active_session`.
+        mismatch the gate fails the request closed (there is no
+        most-recent-active fallback).
 
         Status is intentionally not filtered: this id came from the
         session that actually originated the egress, so it is the correct
@@ -186,14 +178,4 @@ class IdentityResolver:
 
     def _fetch_sandbox_user(self, db: Session, sandbox_id: UUID) -> UUID | None:
         stmt = select(Sandbox.user_id).where(Sandbox.id == sandbox_id)
-        return db.scalar(stmt)
-
-    def _fetch_active_session(self, db: Session, user_id: UUID) -> UUID | None:
-        stmt = (
-            select(BuildSession.id)
-            .where(BuildSession.user_id == user_id)
-            .where(BuildSession.status == BuildSessionStatus.ACTIVE)
-            .order_by(BuildSession.last_activity_at.desc())
-            .limit(1)
-        )
         return db.scalar(stmt)

@@ -1260,6 +1260,7 @@ def pod_exec_async(
     body: str | None = None,
     max_time_s: int = 240,
     container: str = "sandbox",
+    proxy_session_id: str | None = None,
 ) -> None:
     """Kick off a sandbox-side ``curl`` in the background, writing to a tempfile.
 
@@ -1269,14 +1270,27 @@ def pod_exec_async(
     callers poll the tempfile (via ``wait_for_pod_exec_output``) to observe
     completion. The tempfile is written atomically only after curl exits,
     so callers can rely on a valid leading integer meaning "the call is done".
+
+    ``proxy_session_id`` mimics the ``session-proxy-tag`` opencode plugin:
+    it overrides the ambient ``HTTPS_PROXY`` with one carrying the session
+    id as the ``Proxy-Authorization`` username (``-x``), so the egress
+    proxy resolves the originating session. Without it the request is
+    untagged — used to exercise the gate's fail-closed path.
     """
     header_args = ""
     for key, value in (headers or {}).items():
         header_args += f" -H {json.dumps(f'{key}: {value}')}"
     body_arg = f" --data {json.dumps(body)}" if body is not None else ""
+    # The sandbox's ambient proxy is http://sandbox-proxy:8080 (set by
+    # firewall-init); inject the session id as basic-auth userinfo on it.
+    proxy_arg = (
+        f" -x {json.dumps(f'http://{proxy_session_id}@sandbox-proxy:8080')}"
+        if proxy_session_id is not None
+        else ""
+    )
     script = (
         f"nohup sh -c '"
-        f"curl -s -X {method}{header_args}{body_arg} "
+        f"curl -s -X {method}{header_args}{body_arg}{proxy_arg} "
         f"--max-time {max_time_s} "
         f'-o {output_path}.body -w "%{{http_code}}" {json.dumps(url)} '
         f"> {output_path}.code 2>&1; "
