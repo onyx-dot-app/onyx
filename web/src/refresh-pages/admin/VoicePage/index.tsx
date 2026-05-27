@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import ProviderCard from "@/sections/admin/ProviderCard";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { useVoiceProviders } from "@/lib/voice/hooks";
 import {
   activateVoiceProvider,

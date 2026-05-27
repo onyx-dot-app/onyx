@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ThreeDotsLoader } from "@/components/Loading";
 import {
   Table,

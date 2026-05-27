@@ -5,7 +5,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";

@@ -1,6 +1,6 @@
 "use client";
 
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";

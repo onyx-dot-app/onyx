@@ -9,7 +9,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
 import {
