@@ -201,10 +201,11 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 
 	// Push the CI branch (force push in case it already exists)
 	log.Infof("Pushing CI branch: %s", ciBranch)
-	pushArgs := []string{"push", "--quiet", "-f", "-u", "origin", ciBranch}
+	pushArgs := []string{"push"}
 	if opts.NoVerify {
-		pushArgs = []string{"push", "--no-verify", "--quiet", "-f", "-u", "origin", ciBranch}
+		pushArgs = append(pushArgs, "--no-verify")
 	}
+	pushArgs = append(pushArgs, "--quiet", "-f", "-u", "origin", ciBranch)
 	if err := git.RunCommand(pushArgs...); err != nil {
 		// Switch back to original branch before exiting
 		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
