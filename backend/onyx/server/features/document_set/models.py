@@ -102,7 +102,12 @@ class DocumentSet(BaseModel):
     )
 
     @classmethod
-    def from_model(cls, document_set_model: DocumentSetDBModel) -> "DocumentSet":
+    def from_model(
+        cls,
+        document_set_model: DocumentSetDBModel,
+        *,
+        mask_credential_prefix: bool,
+    ) -> "DocumentSet":
         return cls(
             id=document_set_model.id,
             name=document_set_model.name,
@@ -116,7 +121,8 @@ class DocumentSet(BaseModel):
                         credential_ids=[cc_pair.credential_id],
                     ),
                     credential=CredentialSnapshot.from_credential_db_model(
-                        cc_pair.credential
+                        cc_pair.credential,
+                        mask_credential_prefix=mask_credential_prefix,
                     ),
                     access_type=cc_pair.access_type,
                 )
