@@ -2,7 +2,11 @@
 
 import "@opal/components/divider/styles.css";
 import { useState, useCallback } from "react";
-import type { PaddingVariants, RichStr } from "@opal/types";
+import type {
+  OrientationVariants,
+  PaddingVariants,
+  RichStr,
+} from "@opal/types";
 import { Button, Text } from "@opal/components";
 import { SvgChevronRight } from "@opal/icons";
 import { Interactive } from "@opal/core";
@@ -33,7 +37,7 @@ type DividerBareProps = Omit<
   "orientation" | "paddingParallel" | "paddingPerpendicular"
 > & {
   /** Orientation of the line. Default: `"horizontal"`. */
-  orientation?: "horizontal" | "vertical";
+  orientation?: OrientationVariants;
   /** Padding along the line direction. Default: `"sm"` (0.5rem). */
   paddingParallel?: PaddingVariants;
   /** Padding perpendicular to the line. Default: `"xs"` (0.25rem). */
