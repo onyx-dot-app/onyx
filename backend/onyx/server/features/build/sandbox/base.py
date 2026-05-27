@@ -56,9 +56,10 @@ from onyx.server.features.build.sandbox.opencode.serve_client import (
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
 
-# Re-export SSEKeepalive so existing ``from ...sandbox.base import
-# SSEKeepalive`` callers keep working after the move into sse.py.
-__all__ = ["SSEKeepalive"]
+# SSEKeepalive is imported at module level so ``from ...sandbox.base import
+# SSEKeepalive`` keeps working for callers (session/manager.py et al) after
+# the class moved into sse.py. No `__all__` — module-namespace imports
+# resolve by attribute lookup, not star-import filter.
 
 logger = setup_logger()
 
@@ -419,6 +420,7 @@ class SandboxManager(ABC):
             yield True
             return
 
+        self._init_serve_state()
         key = (sandbox_id, build_session_id)
         with self._prompt_locks_meta:
             lock = self._prompt_locks.get(key)
@@ -461,10 +463,10 @@ class SandboxManager(ABC):
         """
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             return None
-        session_path = f"/workspace/sessions/{session_id}"
+        session_path = self._session_directory(session_id)
         logger.info(
             "[SESSION-LIFECYCLE] sandbox.ensure_opencode_session: build_session=%s "
-            "sandbox=%s cwd=%s (passing id=None, so client will POST /session)",
+            "sandbox=%s directory=%s (passing id=None, so client will POST /session)",
             session_id,
             sandbox_id,
             session_path,
@@ -485,6 +487,7 @@ class SandboxManager(ABC):
         under ACP (no shared event bus to track subagents)."""
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             return []
+        self._init_serve_state()
         # Don't create a bus just to list — that spins up a reader thread
         # for a caller that didn't ask for events.
         with self._event_buses_lock:
@@ -553,10 +556,24 @@ class SandboxManager(ABC):
     # and `_read_opencode_password`); the rest of the serve transport is
     # backend-agnostic and lives here.
 
+    @staticmethod
+    def _session_directory(session_id: UUID) -> str:
+        """Absolute in-sandbox path for a session's workspace.
+
+        Single source of truth for the path layout — both managers mount
+        the same ``/workspace/sessions`` root inside the container/pod,
+        so the path is backend-agnostic.
+        """
+        return f"/workspace/sessions/{session_id}"
+
     def _init_serve_state(self) -> None:
-        """Initialize per-instance serve-transport state. Subclasses MUST
-        call this from their ``_initialize`` before any serve-path method
-        runs. Idempotent — guarded against double-init via attribute check.
+        """Initialize per-instance serve-transport state. Idempotent —
+        guarded against double-init via attribute check.
+
+        Called eagerly from each subclass ``_initialize`` (so the first
+        prompt doesn't pay init cost) AND lazily from every serve-state
+        accessor on the base class, so a subclass that forgets the eager
+        call still bootstraps on first use.
         """
         if getattr(self, "_serve_state_initialized", False):
             return
@@ -649,6 +666,7 @@ class SandboxManager(ABC):
         budget) with a fresh one — otherwise callers would keep getting
         ``BUS_CLOSED_SENTINEL`` until the api server restarted.
         """
+        self._init_serve_state()
         with self._event_buses_lock:
             bus = self._event_buses.get(sandbox_id)
             if bus is not None and not bus.closed:
@@ -720,7 +738,7 @@ class SandboxManager(ABC):
         a race.
         """
         packet_logger = get_packet_logger()
-        session_path = f"/workspace/sessions/{session_id}"
+        session_path = self._session_directory(session_id)
         client = self._build_serve_client(sandbox_id)
         try:
             logger.info(
