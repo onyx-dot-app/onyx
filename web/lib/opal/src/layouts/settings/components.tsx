@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { cn } from "@opal/utils";
-import { Divider, Button } from "@opal/components";
+import { Divider, Button, Spacer } from "@opal/components";
 import type {
   IconFunctionComponent,
   RichStr,
@@ -125,7 +125,7 @@ function SettingsHeader({
         </div>
       )}
 
-      <div style={{ height: "2.5rem" }} />
+      <Spacer rem={2.5} />
 
       <div className="flex flex-col gap-6 px-4">
         <div className="flex w-full justify-between">
@@ -146,11 +146,11 @@ function SettingsHeader({
 
       {divider ? (
         <>
-          <div style={{ height: "1.5rem" }} />
+          <Spacer rem={1.5} />
           <Divider paddingParallel="md" paddingPerpendicular="fit" />
         </>
       ) : (
-        <div style={{ height: "0.5rem" }} />
+        <Spacer rem={0.5} />
       )}
 
       {isSticky && (
