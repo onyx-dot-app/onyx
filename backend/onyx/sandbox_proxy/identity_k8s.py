@@ -116,7 +116,31 @@ class K8sInformerLookup(SandboxIPLookup):
 
     def lookup(self, src_ip: str) -> SandboxIdentity | None:
         with self._cache_lock:
-            return self._cache.get(src_ip)
+            cached = self._cache.get(src_ip)
+        if cached is not None:
+            return cached
+
+        # Cache miss: the watch may not have observed a freshly-provisioned
+        # pod yet, and a sandbox can egress within that lag (failing closed
+        # silently drops a snapshot upload). Fall back to a live lookup by IP.
+        try:
+            listing = self._core.list_namespaced_pod(
+                namespace=self._namespace,
+                label_selector=_SANDBOX_POD_SELECTOR,
+                field_selector=f"status.podIP={src_ip}",
+            )
+        except Exception:
+            logger.exception("informer live lookup failed for src_ip=%s", src_ip)
+            return None
+
+        for pod in listing.items:
+            identity = _identity_from_pod(pod)
+            if identity is None or identity.sandbox_ip != src_ip:
+                continue
+            with self._cache_lock:
+                self._cache[identity.sandbox_ip] = identity
+            return identity
+        return None
 
     def _run(self) -> None:
         backoff = _RECONNECT_INITIAL_SECONDS
