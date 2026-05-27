@@ -55,7 +55,19 @@ export default function BuildMessageList({
   const showStreamingArea =
     hasStreamItems || (isStreaming && lastMessageIsUser);
 
-  const renderStreamItems = (items: StreamItem[], isCurrentStream = false) => {
+  const renderStreamItems = (
+    rawItems: StreamItem[],
+    isCurrentStream = false
+  ) => {
+    // Hide pre-tool reasoning: settled thinking immediately followed by a
+    // tool_call is the model's narration for picking the tool — useful to the
+    // model, noisy to the user. Still-streaming thinking is kept so it
+    // doesn't flicker out mid-stream.
+    const items = rawItems.filter((it, idx) => {
+      if (it.type !== "thinking" || it.isStreaming) return true;
+      const next = rawItems[idx + 1];
+      return next?.type !== "tool_call";
+    });
     const nodes: React.ReactNode[] = [];
     let i = 0;
     while (i < items.length) {
