@@ -18,12 +18,12 @@ annotations:
   artifacthub.io/changes: |
     - kind: fixed
       description: Truncate child resource names to the 63-char Kubernetes
-        DNS-1123 label limit. Releases with longer names (e.g. 29+ chars)
-        previously produced invalid Service/Deployment names for the
-        celery-worker-docprocessing-metrics, celery-worker-scheduled-tasks-metrics,
-        celery-worker-docfetching-metrics, and celery-worker-user-file-processing
-        resources. Adds an `onyx.resourceName` helper used by the affected
-        templates.
+        DNS-1123 label limit. Releases with longer fullnames previously
+        produced invalid Service/Deployment names for the celery-worker
+        docprocessing-metrics, scheduled-tasks-metrics, docfetching-metrics,
+        monitoring-metrics, primary-metrics, user-file-processing, and
+        scheduled-tasks templates. Adds an `onyx.resourceName` helper used
+        by the affected templates.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0
