@@ -1,5 +1,6 @@
 from datetime import datetime
 from datetime import timezone
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
@@ -7,6 +8,14 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.auth import users as users_module
+
+
+def _patch_track_expiry(monkeypatch: pytest.MonkeyPatch, value: bool) -> None:
+    monkeypatch.setattr(
+        users_module,
+        "load_security_settings",
+        lambda: SimpleNamespace(track_external_idp_expiry=value),
+    )
 
 
 def test_extract_email_requires_valid_format() -> None:
@@ -23,7 +32,7 @@ async def test_get_or_create_user_updates_expiry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Existing web-login users should be returned and their expiry synced."""
-    monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", True)
+    _patch_track_expiry(monkeypatch, True)
     invited_checked: dict[str, str] = {}
 
     def mark_invited(value: str) -> None:
@@ -84,7 +93,7 @@ async def test_get_or_create_user_skips_inactive(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Inactive users should not be re-authenticated via JWT."""
-    monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", True)
+    _patch_track_expiry(monkeypatch, True)
     monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
     monkeypatch.setattr(users_module, "verify_email_domain", lambda *_a, **_kw: None)
 
@@ -124,7 +133,7 @@ async def test_get_or_create_user_handles_race_conditions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """If provisioning races, newly inactive users should still be blocked."""
-    monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", True)
+    _patch_track_expiry(monkeypatch, True)
     monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
     monkeypatch.setattr(users_module, "verify_email_domain", lambda *_a, **_kw: None)
 
@@ -179,7 +188,7 @@ async def test_get_or_create_user_provisions_new_user(
     created_user.oidc_expiry = None
     created_user.role.is_web_login.return_value = True
 
-    monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", False)
+    _patch_track_expiry(monkeypatch, False)
     monkeypatch.setattr(users_module, "generate_password", lambda: "TempPass123!")
     monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
     monkeypatch.setattr(users_module, "verify_email_domain", lambda *_a, **_kw: None)
