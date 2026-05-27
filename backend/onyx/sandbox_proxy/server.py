@@ -7,16 +7,19 @@ import sys
 import threading
 import uuid
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from http.server import BaseHTTPRequestHandler
 from http.server import HTTPServer
 
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
+from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.sandbox_proxy.action_matcher import SlackPostMessageMatcher
+from onyx.sandbox_proxy.action_matcher import ExternalAppActionMatcher
+from onyx.sandbox_proxy.addons.gate import DBSessionFactory
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.ca import CABootstrap
 from onyx.sandbox_proxy.ca import MaterializedCA
@@ -138,6 +141,19 @@ def _build_cache_factory() -> "Callable[[str], CacheBackend]":
     return _factory
 
 
+def _build_db_session_factory() -> DBSessionFactory:
+    """tenant_id → a tenant-scoped DB session context manager.
+
+    Shared by the gate (approval-row writes) and the action matcher (app +
+    policy reads) so both resolve the same tenant schema.
+    """
+
+    def _factory(tenant_id: str) -> "AbstractContextManager[Session]":
+        return get_session_with_tenant(tenant_id=tenant_id)
+
+    return _factory
+
+
 def _build_mitm_options() -> Options:
     return Options(
         listen_host="0.0.0.0",  # noqa: S104 — container scope; pod network only
@@ -217,12 +233,13 @@ def main() -> int:
                 snapshot_policy.bucket,
                 snapshot_policy.endpoint_host,
             )
+        db_session_factory = _build_db_session_factory()
         gate = GateAddon(
             identity=identity,
-            action_matcher=SlackPostMessageMatcher(),
-            db_session_factory=lambda tenant_id: get_session_with_tenant(
-                tenant_id=tenant_id
+            action_matcher=ExternalAppActionMatcher(
+                db_session_factory=db_session_factory
             ),
+            db_session_factory=db_session_factory,
             cache_factory=_build_cache_factory(),
             proxy_instance_id=proxy_instance_id,
             snapshot_policy=snapshot_policy,

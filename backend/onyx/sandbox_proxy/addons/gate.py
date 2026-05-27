@@ -20,6 +20,7 @@ from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.enums import ApprovalDecision
+from onyx.db.enums import EndpointPolicy
 from onyx.db.notification import create_notification
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.action_matcher import ActionMatch
@@ -63,6 +64,7 @@ _CODE_BODY_TOO_LARGE = "body_too_large"
 _CODE_USER_REJECTED = "user_rejected"
 _CODE_NOT_AUTHORIZED = "not_authorized"
 _CODE_INTERNAL_ERROR = "internal_error"
+_CODE_POLICY_DENIED = "policy_denied"
 
 # Relative deep link routed through the Next router by NotificationsPopover.tsx;
 # must mirror the frontend's CRAFT_PATH + sessionId search param.
@@ -291,7 +293,7 @@ class GateAddon:
             return None
 
         try:
-            match = self._action_matcher.match(flow.request)
+            match = self._action_matcher.match(flow.request, sandbox.tenant_id)
         except Exception as e:
             logger.exception(
                 "gate.matcher_error host=%s error=%s",
@@ -300,10 +302,33 @@ class GateAddon:
             )
             return None
 
+        # Audit every evaluated request with its resolved policy. session_id is
+        # the sandbox-claimed tag (unvalidated here — cheap, no DB; the ASK path
+        # validates it before routing an approval). `policy=off_catalog` means no
+        # connected app/action matched (the request is forwarded unchanged).
+        logger.info(
+            "gate.request tenant_id=%s sandbox_id=%s session_id=%s host=%s "
+            "action_type=%s policy=%s",
+            sandbox.tenant_id,
+            sandbox.sandbox_id,
+            self._extract_session_tag(flow),
+            flow.request.host,
+            match.action_type if match is not None else "-",
+            match.policy.value if match is not None else "off_catalog",
+        )
+
         if match is None:
             return None
 
-        # Gated — an unattributable action is blocked, not guessed.
+        # ALWAYS auto-approves: forward without a session. DENY blocks outright.
+        # Only ASK needs a validated session to route an approval card.
+        if match.policy is EndpointPolicy.ALWAYS:
+            return None
+        if match.policy is EndpointPolicy.DENY:
+            flow.response = _http_403(_CODE_POLICY_DENIED)
+            return None
+
+        # ASK — an unattributable action is blocked, not guessed.
         try:
             session_id = self._resolve_gated_session(flow, sandbox)
         except Exception:

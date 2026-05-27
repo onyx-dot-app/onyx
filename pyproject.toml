@@ -140,6 +140,9 @@ backend = [
     "opentelemetry-proto>=1.39.0",
     "python3-saml==1.15.0",
     "xmlsec==1.3.17",
+    # Parses GraphQL request bodies for external-app action matching
+    # (onyx.external_apps.matching), used by the sandbox egress proxy gate.
+    "graphql-core==3.2.8",
 ]
 
 # Dev tools

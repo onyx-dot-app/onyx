@@ -25,6 +25,7 @@ from mitmproxy import http
 from redis.exceptions import RedisError
 
 from onyx.db.enums import ApprovalDecision
+from onyx.db.enums import EndpointPolicy
 from onyx.sandbox_proxy.action_matcher import ActionMatch
 from onyx.sandbox_proxy.addons import gate as gate_mod
 from onyx.sandbox_proxy.addons.gate import GateAddon
@@ -55,6 +56,7 @@ class _StubMatcher:
     def match(
         self,
         request: http.Request,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
     ) -> ActionMatch | None:
         self.calls += 1
         if self._exc is not None:
@@ -118,7 +120,21 @@ def _assert_403(flow: http.HTTPFlow, expected_code: str) -> None:
     assert body == {"error": expected_code}
 
 
-_MATCH = ActionMatch(action_type="slack.post_message", payload={"text": "hi"})
+_MATCH = ActionMatch(
+    action_type="slack.messages.write",
+    payload={"text": "hi"},
+    policy=EndpointPolicy.ASK,
+)
+_MATCH_ALWAYS = ActionMatch(
+    action_type="slack.channels.read",
+    payload={},
+    policy=EndpointPolicy.ALWAYS,
+)
+_MATCH_DENY = ActionMatch(
+    action_type="slack.messages.write",
+    payload={"text": "hi"},
+    policy=EndpointPolicy.DENY,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +257,38 @@ def test_resolve_and_match_matcher_raises_fails_open() -> None:
 
     assert result is None
     assert flow.response is None
+    assert resolver.resolve_session_by_id_calls == []
+
+
+# ---------------------------------------------------------------------------
+# _resolve_and_match — verdict enforcement (ALWAYS / DENY)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_and_match_always_forwards_without_session() -> None:
+    """ALWAYS auto-approves: forward unchanged, no approval row, and (since
+    it's not gated) no session lookup — even when a tag is present."""
+    resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH_ALWAYS))
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    result = addon._resolve_and_match(flow)
+
+    assert result is None  # forwarded, not promoted to an approval
+    assert flow.response is None
+    assert resolver.resolve_session_by_id_calls == []
+
+
+def test_resolve_and_match_deny_blocks_with_403() -> None:
+    """DENY blocks outright with a policy_denied 403, no session needed."""
+    resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH_DENY))
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    result = addon._resolve_and_match(flow)
+
+    assert result is None
+    _assert_403(flow, gate_mod._CODE_POLICY_DENIED)
     assert resolver.resolve_session_by_id_calls == []
 
 
