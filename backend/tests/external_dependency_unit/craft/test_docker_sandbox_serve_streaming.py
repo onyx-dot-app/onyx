@@ -429,10 +429,13 @@ def test_terminate_then_subscribe_refuses(
         llm_config=pool.llm_config,
         onyx_pat="ci-test-pat",
     )
+    # Any directory works for the post-terminate check — the tombstone
+    # check fires before the per-(sandbox, directory) bus lookup.
+    directory = f"/workspace/sessions/{uuid4()}"
     try:
         pool.manager.terminate(sandbox_id)
         with pytest.raises(RuntimeError, match="terminated"):
-            pool.manager._get_or_create_event_bus(sandbox_id)
+            pool.manager._get_or_create_event_bus(sandbox_id, directory)
     finally:
         # Defensive cleanup in case ``terminate`` raised before completing.
         try:
