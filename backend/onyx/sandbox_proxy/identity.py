@@ -171,7 +171,8 @@ class IdentityResolver:
         row exists AND its `user_id` matches the user resolved from the
         source IP — which the sandbox cannot forge. This bounds a tampered
         or stale tag to the same user (no cross-user routing); on any
-        mismatch the caller falls back to `resolve_active_session`.
+        mismatch the gate fails the request closed (there is no
+        most-recent-active fallback).
 
         Status is intentionally not filtered: this id came from the
         session that actually originated the egress, so it is the correct
