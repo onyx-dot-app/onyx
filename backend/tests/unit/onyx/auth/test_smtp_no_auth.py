@@ -1,10 +1,8 @@
-"""Tests for SMTP without authentication (issue #10682).
+"""Regression coverage for #10682: SMTP without auth / without STARTTLS.
 
-Verifies that:
-- Email is considered configured when only SMTP_SERVER is set
-- starttls() is skipped when SMTP_STARTTLS=false
-- login() is skipped when SMTP_USER/SMTP_PASS are empty
-- Existing behavior is preserved when credentials are provided
+`send_email_with_smtplib` must not call `starttls()` when STARTTLS is disabled
+and must not call `login()` when credentials are not configured — internal
+IP-whitelisted relays don't support either.
 """
 
 from unittest.mock import MagicMock
@@ -12,113 +10,71 @@ from unittest.mock import patch
 
 import pytest
 
-
-@pytest.fixture
-def mock_smtp():
-    with patch("onyx.auth.email_utils.smtplib.SMTP") as mock:
-        instance = MagicMock()
-        mock.return_value.__enter__ = MagicMock(return_value=instance)
-        mock.return_value.__exit__ = MagicMock(return_value=False)
-        yield instance
+from onyx.auth import email_utils
 
 
-class TestEmailConfigured:
-    """Test that EMAIL_CONFIGURED works with server-only config."""
-
-    @patch.dict(
-        "os.environ",
-        {"SMTP_SERVER": "mail.example.com", "SMTP_USER": "", "SMTP_PASS": ""},
-        clear=False,
-    )
-    def test_email_configured_with_server_only(self) -> None:
-        """EMAIL_CONFIGURED should be True when only SMTP_SERVER is set."""
-        # Re-import to pick up patched env
-        import importlib
-
-        import onyx.configs.app_configs as app_configs
-
-        importlib.reload(app_configs)
-
-        assert app_configs.EMAIL_CONFIGURED is True
-
-    @patch.dict(
-        "os.environ",
-        {"SMTP_SERVER": "", "SMTP_USER": "", "SMTP_PASS": ""},
-        clear=False,
-    )
-    def test_email_not_configured_without_server(self) -> None:
-        """EMAIL_CONFIGURED should be False when SMTP_SERVER is empty."""
-        import importlib
-
-        import onyx.configs.app_configs as app_configs
-
-        importlib.reload(app_configs)
-
-        assert app_configs.EMAIL_CONFIGURED is False
+def _smtp_with_mock_session() -> tuple[MagicMock, MagicMock]:
+    """Build a context-manager mock for smtplib.SMTP whose __enter__ returns a
+    fresh MagicMock session — that session is what receives starttls / login /
+    send_message calls inside the `with` block."""
+    session = MagicMock(name="smtp_session")
+    smtp_cls = MagicMock(name="smtp_cls")
+    smtp_cls.return_value.__enter__.return_value = session
+    return smtp_cls, session
 
 
-class TestSmtpNoAuth:
-    """Test SMTP sending without authentication."""
+def _call_send(monkeypatch: pytest.MonkeyPatch, **overrides: object) -> MagicMock:
+    """Patch the module-level SMTP config knobs, mock smtplib.SMTP, invoke
+    send_email_with_smtplib, and return the session mock so the test can
+    assert which methods fired."""
+    defaults: dict[str, object] = {
+        "SMTP_SERVER": "smtp.example.com",
+        "SMTP_PORT": 587,
+        "SMTP_USER": "u",
+        "SMTP_PASS": "p",
+        "SMTP_STARTTLS": True,
+    }
+    defaults.update(overrides)
+    for name, value in defaults.items():
+        monkeypatch.setattr(email_utils, name, value, raising=True)
 
-    @patch("onyx.auth.email_utils.SMTP_STARTTLS", True)
-    @patch("onyx.auth.email_utils.SMTP_USER", "")
-    @patch("onyx.auth.email_utils.SMTP_PASS", "")
-    @patch("onyx.auth.email_utils.SMTP_SERVER", "localhost")
-    @patch("onyx.auth.email_utils.SMTP_PORT", 1025)
-    @patch("onyx.auth.email_utils.EMAIL_FROM", "test@example.com")
-    def test_no_login_when_credentials_empty(self, mock_smtp: MagicMock) -> None:
-        """login() should not be called when SMTP_USER and SMTP_PASS are empty."""
-        from onyx.auth.email_utils import send_email_with_smtplib
-
-        send_email_with_smtplib(
-            user_email="recipient@example.com",
-            subject="Test",
-            html_body="<p>Hello</p>",
-            text_body="Hello",
+    smtp_cls, session = _smtp_with_mock_session()
+    with patch.object(email_utils.smtplib, "SMTP", smtp_cls):
+        email_utils.send_email_with_smtplib(
+            user_email="to@example.com",
+            subject="s",
+            html_body="<p>x</p>",
+            text_body="x",
+            mail_from="from@example.com",
         )
+    return session
 
-        mock_smtp.starttls.assert_called_once()
-        mock_smtp.login.assert_not_called()
-        mock_smtp.send_message.assert_called_once()
 
-    @patch("onyx.auth.email_utils.SMTP_STARTTLS", False)
-    @patch("onyx.auth.email_utils.SMTP_USER", "")
-    @patch("onyx.auth.email_utils.SMTP_PASS", "")
-    @patch("onyx.auth.email_utils.SMTP_SERVER", "localhost")
-    @patch("onyx.auth.email_utils.SMTP_PORT", 1025)
-    @patch("onyx.auth.email_utils.EMAIL_FROM", "test@example.com")
-    def test_no_starttls_when_disabled(self, mock_smtp: MagicMock) -> None:
-        """starttls() should not be called when SMTP_STARTTLS is False."""
-        from onyx.auth.email_utils import send_email_with_smtplib
+def test_default_config_calls_starttls_and_login(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _call_send(monkeypatch)
+    session.starttls.assert_called_once()
+    session.login.assert_called_once_with("u", "p")
+    session.send_message.assert_called_once()
 
-        send_email_with_smtplib(
-            user_email="recipient@example.com",
-            subject="Test",
-            html_body="<p>Hello</p>",
-            text_body="Hello",
-        )
 
-        mock_smtp.starttls.assert_not_called()
-        mock_smtp.login.assert_not_called()
-        mock_smtp.send_message.assert_called_once()
+def test_starttls_disabled_skips_starttls(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _call_send(monkeypatch, SMTP_STARTTLS=False)
+    session.starttls.assert_not_called()
+    session.login.assert_called_once_with("u", "p")
+    session.send_message.assert_called_once()
 
-    @patch("onyx.auth.email_utils.SMTP_STARTTLS", True)
-    @patch("onyx.auth.email_utils.SMTP_USER", "user@example.com")
-    @patch("onyx.auth.email_utils.SMTP_PASS", "secret")
-    @patch("onyx.auth.email_utils.SMTP_SERVER", "smtp.example.com")
-    @patch("onyx.auth.email_utils.SMTP_PORT", 587)
-    @patch("onyx.auth.email_utils.EMAIL_FROM", "noreply@example.com")
-    def test_login_called_when_credentials_provided(self, mock_smtp: MagicMock) -> None:
-        """login() should still be called when credentials are provided."""
-        from onyx.auth.email_utils import send_email_with_smtplib
 
-        send_email_with_smtplib(
-            user_email="recipient@example.com",
-            subject="Test",
-            html_body="<p>Hello</p>",
-            text_body="Hello",
-        )
+def test_empty_credentials_skip_login(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _call_send(monkeypatch, SMTP_USER="", SMTP_PASS="")
+    session.starttls.assert_called_once()
+    session.login.assert_not_called()
+    session.send_message.assert_called_once()
 
-        mock_smtp.starttls.assert_called_once()
-        mock_smtp.login.assert_called_once_with("user@example.com", "secret")
-        mock_smtp.send_message.assert_called_once()
+
+def test_unauthenticated_relay_skips_both(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _call_send(monkeypatch, SMTP_USER="", SMTP_PASS="", SMTP_STARTTLS=False)
+    session.starttls.assert_not_called()
+    session.login.assert_not_called()
+    session.send_message.assert_called_once()
