@@ -17,6 +17,7 @@ import zipfile
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import PurePosixPath
@@ -41,6 +42,11 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import AccountType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
+from onyx.db.llm import fetch_default_llm_model
+from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import remove_llm_provider
+from onyx.db.llm import update_default_provider
+from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import BuildSession
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
@@ -52,15 +58,19 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.models import UserRole
 from onyx.file_store.file_store import get_default_file_store
+from onyx.llm.constants import LlmProviderNames
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
+from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
+from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import ACPEvent
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.manage.llm.models import LLMProviderUpsertRequest
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config
@@ -165,6 +175,66 @@ def _isolate_skill_tables(
     _restore_skill_tables(db_session, snapshot)
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _seed_default_llm_provider() -> Generator[None, None, None]:
+    """Ensure a default LLM model exists for the K8s provisioning lane.
+
+    Sandbox provisioning goes through the real ``ensure_sandbox_running`` ->
+    ``_get_llm_config`` -> ``fetch_default_llm_model`` path; rather than stub
+    that resolution, we seed a default provider the way an admin would
+    configure one, so nothing in the provisioning path is faked.
+
+    No-op (and no teardown) when the DB already has a default, so it never
+    clobbers a developer database's real config. Gated to the K8s lane: the
+    in-process unit tests stub the sandbox manager and don't need a provider.
+    """
+    from onyx.server.features.build.configs import SANDBOX_BACKEND
+    from onyx.server.features.build.configs import SandboxBackend
+
+    if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
+        yield
+        return
+
+    SqlEngine.init_engine(pool_size=10, max_overflow=5)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    seeded_name: str | None = None
+    try:
+        with get_session_with_current_tenant() as session:
+            if fetch_default_llm_model(session) is None:
+                seeded_name = f"craft-ci-default-{uuid4().hex[:8]}"
+                provider = upsert_llm_provider(
+                    LLMProviderUpsertRequest(
+                        name=seeded_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-craft-ci-not-used",
+                        api_key_changed=True,
+                        model_configurations=[
+                            ModelConfigurationUpsertRequest(
+                                name="gpt-4o-mini", is_visible=True
+                            )
+                        ],
+                    ),
+                    db_session=session,
+                )
+                update_default_provider(
+                    provider_id=provider.id,
+                    model_name="gpt-4o-mini",
+                    db_session=session,
+                )
+                session.commit()
+        yield
+    finally:
+        if seeded_name is not None:
+            with get_session_with_current_tenant() as session:
+                existing = fetch_existing_llm_provider(
+                    name=seeded_name, db_session=session
+                )
+                if existing is not None:
+                    remove_llm_provider(session, existing.id)
+                    session.commit()
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+
 @pytest.fixture(scope="function")
 def db_session() -> Generator[Session, None, None]:
     """Create a database session for testing using the actual PostgreSQL database."""
@@ -245,12 +315,12 @@ def sandbox(
         status: SandboxStatus = SandboxStatus.RUNNING,
     ) -> Sandbox:
         owner = user or test_user
-        row = Sandbox(
-            id=uuid4(),
-            user_id=owner.id,
-            status=status,
-        )
-        db_session.add(row)
+        # Create via the app's own row-creation (starts PROVISIONING), then
+        # transition to the requested status — mirrors how the app moves a
+        # sandbox to RUNNING after provisioning.
+        row = create_sandbox__no_commit(db_session=db_session, user_id=owner.id)
+        if status != SandboxStatus.PROVISIONING:
+            update_sandbox_status__no_commit(db_session, row.id, status)
         db_session.commit()
         db_session.refresh(row)
         return row
@@ -497,11 +567,9 @@ class SandboxHandle:
     manager: KubernetesSandboxManager
     sandbox_id: UUID
     session_id: UUID | None
-    info: SandboxInfo
     _k8s_client: "k8s_client_module.CoreV1Api"
     # Required to provision additional sandboxes for other users.
     _db_session: Session
-    _llm_config: LLMProviderConfig
     _register_extra: Callable[[UUID], None]
 
     @property
@@ -528,23 +596,16 @@ class SandboxHandle:
         If ``status`` is not RUNNING, the row is updated after provisioning
         (the manager always starts with RUNNING).
         """
-        sandbox_row = Sandbox(
-            id=uuid4(),
-            user_id=user.id,
-            status=SandboxStatus.RUNNING,
-        )
-        self._db_session.add(sandbox_row)
-        self._db_session.commit()
-        self._db_session.refresh(sandbox_row)
+        # Provision via the app's own entry point so the row is created and
+        # the pod provisioned exactly as in production (no hand-rolled row).
+        sandbox_id = _provision_sandbox_via_app(user.id)
+        self._register_extra(sandbox_id)
 
-        _provision_with_retry(
-            self.manager,
-            sandbox_id=sandbox_row.id,
-            user_id=user.id,
-            tenant_id=TEST_TENANT_ID,
-            llm_config=self._llm_config,
-        )
-        self._register_extra(sandbox_row.id)
+        # The row was committed by ensure_sandbox_running on its own session;
+        # refresh this session's view before reading it.
+        self._db_session.expire_all()
+        sandbox_row = self._db_session.get(Sandbox, sandbox_id)
+        assert sandbox_row is not None
 
         if status != SandboxStatus.RUNNING:
             sandbox_row.status = status
@@ -552,70 +613,102 @@ class SandboxHandle:
 
         workspace = WorkspaceProxy(
             _k8s_client=self._k8s_client,
-            _pod_name=self.manager._get_pod_name(sandbox_row.id),
-            _sandbox_id=sandbox_row.id,
+            _pod_name=self.manager._get_pod_name(sandbox_id),
+            _sandbox_id=sandbox_id,
         )
         return sandbox_row, workspace
 
 
-def _wait_until_healthy(
-    manager: KubernetesSandboxManager,
-    sandbox_id: UUID,
-    max_attempts: int = 15,
-    timeout: float = 5.0,
-) -> None:
-    for _ in range(max_attempts):
-        if manager.health_check(sandbox_id, timeout=timeout):
-            return
-        time.sleep(2)
-    raise RuntimeError(f"Sandbox {sandbox_id} never became healthy")
+def _create_committed_craft_user() -> UUID:
+    """Commit a standard craft user and return its id."""
+    password_helper = PasswordHelper()
+    user_id = uuid4()
+    with get_session_with_current_tenant() as session:
+        session.add(
+            User(
+                id=user_id,
+                email=f"craft_sandbox_{user_id.hex[:8]}@example.com",
+                hashed_password=password_helper.hash(password_helper.generate()),
+                is_active=True,
+                is_superuser=False,
+                is_verified=True,
+                role=UserRole.BASIC,
+                account_type=AccountType.STANDARD,
+            )
+        )
+        session.commit()
+    return user_id
 
 
-def _provision_with_retry(
-    manager: KubernetesSandboxManager,
-    *,
-    sandbox_id: UUID,
-    user_id: UUID,
-    tenant_id: str,
-    llm_config: LLMProviderConfig,
-    onyx_pat: str | None = "ci-test-pat",
-) -> SandboxInfo:
-    """Provision + wait-healthy with a one-shot retry on flake.
+def _provision_sandbox_via_app(user_id: UUID) -> UUID:
+    """Provision a sandbox for ``user_id`` the way the app does.
 
-    kind under load occasionally times out the manager's
-    ``_wait_for_pod_ready`` (cluster scheduling pressure, transient
-    image-pull retries). When that happens we terminate the half-baked
-    pod and try once more — fresh scheduling usually succeeds. Real
-    deterministic failures still raise on the second try.
+    Calls ``SessionManager.ensure_sandbox_running`` — the production entry
+    point that creates the ``Sandbox`` row (via ``create_sandbox__no_commit``),
+    resolves the LLM config, and provisions the pod together — so test setup
+    can't drift from prod. The default LLM provider is seeded by the autouse
+    ``_seed_default_llm_provider`` fixture, so no part of this path is stubbed.
+    One-shot retry absorbs kind scheduling flake.
     """
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            info = manager.provision(
-                sandbox_id=sandbox_id,
-                user_id=user_id,
-                tenant_id=tenant_id,
-                llm_config=llm_config,
-                onyx_pat=onyx_pat,
-            )
-            _wait_until_healthy(manager, sandbox_id)
-            return info
+            with get_session_with_current_tenant() as session:
+                sandbox = SessionManager(session).ensure_sandbox_running(user_id)
+                sandbox_id = sandbox.id
+                session.commit()
+                return sandbox_id
         except Exception as e:  # noqa: BLE001
             last_err = e
             if attempt == 0:
-                # Tear down the half-baked pod before retrying so the
-                # second attempt starts from a clean slate.
-                try:
-                    manager.terminate(sandbox_id)
-                except Exception:
-                    pass
                 continue
             raise
-    # Unreachable — the loop either returns or raises — but type-checkers
-    # complain without an explicit terminator.
     raise RuntimeError(
-        f"provision retry exhausted for {sandbox_id}: {last_err}"
+        f"ensure_sandbox_running exhausted retries for user {user_id}: {last_err}"
     ) from last_err
+
+
+@contextmanager
+def _provisioned_sandbox(
+    manager: KubernetesSandboxManager,
+    k8s_client: "k8s_client_module.CoreV1Api",
+) -> Generator[tuple[UUID, str], None, None]:
+    """Provision a sandbox backed by committed rows, via the production path.
+
+    The single supported way to get a real provisioned sandbox in a test. The
+    egress proxy resolves a pod's identity through the DB (pod IP ->
+    ``Sandbox.user_id`` -> owning user), so a pod provisioned without a
+    committed ``Sandbox`` row fails closed: gated egress is 403'd and, worse,
+    snapshot uploads are silently dropped while ``create_snapshot`` still
+    reports success. Going through ``SessionManager.ensure_sandbox_running``
+    (the app's own entry point) makes that inconsistent state unrepresentable
+    and keeps test setup honest about production.
+
+    Yields ``(sandbox_id, pod_name)``; tears the pod + rows down on exit.
+    """
+    user_id = _create_committed_craft_user()
+    try:
+        sandbox_id = _provision_sandbox_via_app(user_id)
+        pod_name = manager._get_pod_name(str(sandbox_id))
+        try:
+            yield sandbox_id, pod_name
+        finally:
+            try:
+                manager.terminate(sandbox_id)
+            except Exception:
+                pass
+            try:
+                wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
+            except Exception:
+                pass
+    finally:
+        with get_session_with_current_tenant() as session:
+            for row in session.query(Sandbox).filter(Sandbox.user_id == user_id).all():
+                session.delete(row)
+            user_row = session.get(User, user_id)
+            if user_row is not None:
+                session.delete(user_row)
+            session.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -640,7 +733,6 @@ class _PoolPod:
     pod_name: str
     manager: KubernetesSandboxManager
     k8s_client: "k8s_client_module.CoreV1Api"
-    info: SandboxInfo
 
 
 def _cleanup_pool_workspace(
@@ -705,70 +797,18 @@ def _pool_pod(
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
     manager = KubernetesSandboxManager()
 
-    password_helper = PasswordHelper()
-    pool_user_id = uuid4()
-    pool_sandbox_id = uuid4()
-    pool_user_email = f"pool_{pool_user_id.hex[:8]}@example.com"
-
-    # Create pool user + sandbox DB rows.
-    with get_session_with_current_tenant() as session:
-        pool_user = User(
-            id=pool_user_id,
-            email=pool_user_email,
-            hashed_password=password_helper.hash(password_helper.generate()),
-            is_active=True,
-            is_superuser=False,
-            is_verified=True,
-            role=UserRole.EXT_PERM_USER,
-            account_type=AccountType.EXT_PERM_USER,
-        )
-        session.add(pool_user)
-        session.add(
-            Sandbox(
-                id=pool_sandbox_id,
-                user_id=pool_user_id,
-                status=SandboxStatus.RUNNING,
-            )
-        )
-        session.commit()
-
-    # Provision the pod once, with a one-shot retry on flake.
-    pool_info = _provision_with_retry(
-        manager,
-        sandbox_id=pool_sandbox_id,
-        user_id=pool_user_id,
-        tenant_id=TEST_TENANT_ID,
-        llm_config=default_llm_config(
-            api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
-        ),
-    )
-    pod_name = manager._get_pod_name(pool_sandbox_id)
-
+    # Seed the (User, Sandbox) rows + provision the pod through the one
+    # canonical primitive, so the pool sandbox is identity-resolvable by the
+    # proxy without this fixture re-implementing row creation.
     try:
-        yield _PoolPod(
-            sandbox_id=pool_sandbox_id,
-            pod_name=pod_name,
-            manager=manager,
-            k8s_client=k8s_client,
-            info=pool_info,
-        )
+        with _provisioned_sandbox(manager, k8s_client) as (pool_sandbox_id, pod_name):
+            yield _PoolPod(
+                sandbox_id=pool_sandbox_id,
+                pod_name=pod_name,
+                manager=manager,
+                k8s_client=k8s_client,
+            )
     finally:
-        try:
-            manager.terminate(pool_sandbox_id)
-        except Exception:
-            pass
-        try:
-            wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
-        except Exception:
-            pass
-        with get_session_with_current_tenant() as session:
-            row = session.get(Sandbox, pool_sandbox_id)
-            if row is not None:
-                session.delete(row)
-            user_row = session.get(User, pool_user_id)
-            if user_row is not None:
-                session.delete(user_row)
-            session.commit()
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
@@ -872,10 +912,8 @@ def running_sandbox(
             manager=pool.manager,
             sandbox_id=pool.sandbox_id,
             session_id=session_id,
-            info=pool.info,
             _k8s_client=pool.k8s_client,
             _db_session=db_session,
-            _llm_config=config,
             _register_extra=_register_extra,
         )
 
@@ -944,12 +982,12 @@ def granted_users(
 
                 # One sandbox per user (status=RUNNING) — the docs say
                 # "creates N users + sandboxes + group memberships".
-                sandbox_row = Sandbox(
-                    id=uuid4(),
-                    user_id=user.id,
-                    status=SandboxStatus.RUNNING,
+                sandbox_row = create_sandbox__no_commit(
+                    db_session=db_session, user_id=user.id
                 )
-                db_session.add(sandbox_row)
+                update_sandbox_status__no_commit(
+                    db_session, sandbox_row.id, SandboxStatus.RUNNING
+                )
 
                 membership = User__UserGroup(
                     user_id=user.id,
@@ -1437,9 +1475,6 @@ def wait_for_proxy_redeploy(
 # ---------------------------------------------------------------------------
 
 
-K8S_TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
-
-
 @pytest.fixture(scope="function")
 def k8s_manager() -> Generator[KubernetesSandboxManager, None, None]:
     """Initialise DB engine + tenant context and return the K8s manager.
@@ -1508,36 +1543,31 @@ def live_pod(
     and don't mutate pod-level state; this fixture exists for tests that
     require their own pod (lifecycle assertions, terminate, etc.).
     """
-    sandbox_id = uuid4()
-    session_id = uuid4()
-    llm_config = default_llm_config(
-        api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
-    )
-
-    info = _provision_with_retry(
-        k8s_manager,
-        sandbox_id=sandbox_id,
-        user_id=K8S_TEST_USER_ID,
-        tenant_id=TEST_TENANT_ID,
-        llm_config=llm_config,
-    )
-    assert info.status == SandboxStatus.RUNNING
-
-    k8s_manager.setup_session_workspace(
-        sandbox_id=sandbox_id,
-        session_id=session_id,
-        llm_config=llm_config,
-        nextjs_port=None,
-        skills_section="No skills available.",
-    )
-
-    pod_name = k8s_manager._get_pod_name(sandbox_id)
-
-    try:
+    with _provisioned_sandbox(k8s_manager, k8s_client) as (sandbox_id, pod_name):
+        session_id = uuid4()
+        k8s_manager.setup_session_workspace(
+            sandbox_id=sandbox_id,
+            session_id=session_id,
+            llm_config=default_llm_config(
+                api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
+            ),
+            nextjs_port=None,
+            skills_section="No skills available.",
+        )
         yield sandbox_id, session_id, pod_name
-    finally:
-        try:
-            k8s_manager.terminate(sandbox_id)
-        except Exception:
-            pass
-        wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
+
+
+@pytest.fixture(scope="function")
+def provisioned_sandbox(
+    k8s_manager: KubernetesSandboxManager,
+    k8s_client: "k8s_client_module.CoreV1Api",
+) -> Generator[tuple[UUID, str], None, None]:
+    """A provisioned sandbox (committed rows + pod), without a session.
+
+    For tests that need a real egressing pod as a precondition but not a
+    session workspace (e.g. the egress proxy test). Backed by the same
+    ``_provisioned_sandbox`` primitive, so the sandbox is identity-resolvable
+    by the proxy. Yields ``(sandbox_id, pod_name)``.
+    """
+    with _provisioned_sandbox(k8s_manager, k8s_client) as (sandbox_id, pod_name):
+        yield sandbox_id, pod_name
