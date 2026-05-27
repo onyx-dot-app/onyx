@@ -1,10 +1,5 @@
-"""External-dependency-unit tests for `approval_cache`.
-
-Exercise the announce / wake rendezvous against a real `CacheBackend`
-(Redis in this env). We mock nothing: the goal is to pin the RPUSH /
-BLPOP / TTL contract the proxy + api-server + chat-stream merger all
-depend on.
-"""
+"""External-dependency-unit tests for `approval_cache` against a real
+`CacheBackend` (Redis). Pins the RPUSH / BLPOP / TTL contract; mocks nothing."""
 
 import threading
 import time
@@ -48,16 +43,12 @@ def test_announce_applies_ttl() -> None:
     announce_approval(uuid4(), session_id, cache)
     remaining = cache.ttl(announce_key(session_id))
 
-    # Hardcoded spec — the announce TTL must be at most 60s.
-    # `test_approval_decision_values_complete` separately pins the
-    # `ANNOUNCE_TTL_S` constant to 60, so shrinking the constant
-    # fails the completeness check while this bound still holds.
+    # Hardcoded spec; test_approval_decision_values_complete pins the constant.
     assert 0 < remaining <= 60
 
 
 def test_pop_announcement_timeout_returns_none() -> None:
     cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
-    # Fresh session with no announce — BLPOP times out.
     assert pop_announcement(uuid4(), timeout_s=1, cache=cache) is None
 
 
@@ -81,7 +72,7 @@ async def test_wait_for_wake_receives_send_wake() -> None:
     approval_id = uuid4()
 
     def _produce() -> None:
-        # Brief delay so the consumer is already parked on BLPOP.
+        # Delay so the consumer is already parked on BLPOP.
         time.sleep(0.1)
         send_wake(approval_id, ApprovalDecision.APPROVED, cache)
 
@@ -120,8 +111,7 @@ def test_send_wake_applies_ttl() -> None:
     send_wake(approval_id, ApprovalDecision.APPROVED, cache)
     remaining = cache.ttl(_wake_key(approval_id))
 
-    # Hardcoded spec — the wake TTL must be at most 30s. The
-    # completeness check below pins the `WAKE_TTL_S` constant itself.
+    # Hardcoded spec; the completeness check below pins the constant.
     assert 0 < remaining <= 30
 
 
@@ -132,10 +122,8 @@ def test_send_wake_applies_ttl() -> None:
 
 @pytest.mark.asyncio
 async def test_decision_value_round_trips() -> None:
-    """One canonical decision is enough: the round-trip pins the
-    encoding (enum → bytes → enum) and `test_approval_decision_values_complete`
-    independently pins the full enum value set. Adding a new variant
-    fails the completeness check; breaking the encoding fails here."""
+    """Pins the enum → bytes → enum encoding; the completeness check below
+    independently pins the full enum value set."""
     cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
     approval_id = uuid4()
 
@@ -146,17 +134,9 @@ async def test_decision_value_round_trips() -> None:
 
 
 def test_approval_decision_values_complete() -> None:
-    """Completeness check — the parametrize list above must cover all values.
-
-    If someone adds a new `ApprovalDecision`, this fails and forces them
-    to extend the round-trip parametrize list above.
-
-    Also pins the cache-layer TTL constants to their spec values. If
-    someone changes a constant, this fails — and the bound checks in
-    `test_announce_applies_ttl` / `test_send_wake_applies_ttl` still
-    hold against the hardcoded spec, so the failure points squarely
-    at the constants.
-    """
+    """Pins the full `ApprovalDecision` value set and the cache-layer TTL
+    constants to their spec values (the TTL bound checks elsewhere hardcode
+    the same specs)."""
     assert {d.value for d in ApprovalDecision} == {"APPROVED", "REJECTED", "EXPIRED"}
     assert approval_cache_module.ANNOUNCE_TTL_S == 60
     assert approval_cache_module.WAKE_TTL_S == 30

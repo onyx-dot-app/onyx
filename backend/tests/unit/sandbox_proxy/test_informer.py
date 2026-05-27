@@ -102,8 +102,7 @@ def test_identity_from_pod_rejects_missing_managed_by() -> None:
 
 
 def test_identity_from_pod_rejects_foreign_managed_by() -> None:
-    # An attacker who can create pods in the namespace can set every
-    # other label correctly; managed-by is the integrity check.
+    # managed-by is the integrity check: an attacker can forge every other label.
     assert _identity_from_pod(_make_pod(managed_by="someone-else")) is None
 
 

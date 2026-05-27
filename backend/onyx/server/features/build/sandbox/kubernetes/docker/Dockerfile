@@ -12,18 +12,9 @@ FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e16
 ARG ENABLE_SKILLS=true
 ARG OPENCODE_VERSION=1.15.7
 
-# Install system dependencies
-#
-# Networking tooling notes:
-# - `iptables` is required by /workspace/firewall-init.sh, which the
-#   K8s initContainer runs as root with CAP_NET_ADMIN to install the
-#   egress lockdown. Pre-installed here so we don't maintain a second
-#   image.
-# - `gosu` is consumed by firewall-init.sh's entrypoint mode (used in
-#   docker-compose deployments) to drop privileges after the lockdown
-#   is in place. Harmless in K8s mode.
-# - `ca-certificates` + `update-ca-certificates` are required for the
-#   CA trust-store population step.
+# Install system dependencies.
+# firewall-init.sh needs: iptables (egress lockdown), gosu (drop privileges
+# in compose entrypoint mode), ca-certificates (CA trust-store population).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -111,20 +102,14 @@ COPY --exclude=__pycache__ sandbox_daemon/ /workspace/sandbox_daemon/
 COPY entrypoint.sh /workspace/entrypoint.sh
 COPY sidecar-entrypoint.sh /workspace/sidecar-entrypoint.sh
 
-# Egress proxy bootstrap script. Lives in the sandbox image because
-# it's the sandbox that executes it (as the K8s initContainer command
-# or the docker-compose entrypoint wrapper).
+# Egress proxy bootstrap, run as the initContainer command / compose entrypoint.
 COPY firewall-init.sh /workspace/firewall-init.sh
 RUN chmod +x /workspace/firewall-init.sh
 
-# Per-session egress tagging plugin for opencode-serve. Registered
-# pod-wide via OPENCODE_CONFIG_CONTENT; tags each sandbox egress request
-# with the originating BuildSession id so the approval proxy can route
-# cards to the exact session. Path must match
+# Per-session egress tagging plugin. Path must match
 # kubernetes_sandbox_manager._OPENCODE_SESSION_TAG_PLUGIN_PATH.
 COPY opencode-plugins/ /workspace/opencode-plugins/
 
-# Set ownership
 RUN chown -R sandbox:sandbox /workspace
 
 USER sandbox

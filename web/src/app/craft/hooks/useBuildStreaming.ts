@@ -398,9 +398,7 @@ export function useBuildStreaming() {
               break;
             }
 
-            // Sandbox-proxy gated an egress request — invalidate the
-            // session's /live SWR cache so any subscribed approval
-            // card refetches and surfaces immediately.
+            // Invalidate the /live cache so the approval card refetches.
             case "approval_requested": {
               void globalMutate(SWR_KEYS.buildSessionLiveApprovals(sessionId));
               break;

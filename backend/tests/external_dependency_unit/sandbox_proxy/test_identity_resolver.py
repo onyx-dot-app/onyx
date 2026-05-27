@@ -94,11 +94,10 @@ def test_resolve_sandbox_succeeds_without_any_active_session(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    """Pod identity is independent of session liveness.
+    """Pod identity must resolve even when every session is IDLE.
 
-    This is the regression test for the "npm install gets 403 when
-    the user has no ACTIVE session" bug: sandbox identity must resolve
-    even when every session is IDLE, so non-gated egress can flow.
+    Regression for the "npm install gets 403 with no ACTIVE session" bug:
+    non-gated egress depends on identity being independent of session liveness.
     """
     user = create_test_user(db_session, "identity_no_session")
     sandbox = Sandbox(id=uuid4(), user_id=user.id)
@@ -138,8 +137,8 @@ def test_resolve_session_by_id_rejects_other_users_session(
     seeded_sandbox: tuple[UUID, UUID, UUID],
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    """Cross-user guard: a tag naming another user's real session must
-    NOT resolve — the user_id from the (unforgeable) source IP wins."""
+    """Cross-user guard: a tag naming another user's session must NOT resolve;
+    the user_id from the unforgeable source IP wins."""
     _, _owner_id, victim_session_id = seeded_sandbox
     attacker = create_test_user(db_session, "tag_attacker")
     db_session.commit()

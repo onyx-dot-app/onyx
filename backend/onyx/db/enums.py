@@ -287,11 +287,7 @@ class SharingScope(str, PyEnum):
 
 
 class ApprovalDecision(str, PyEnum):
-    """Terminal decision on a gated agent-initiated action.
-
-    `decision IS NULL` on the row represents the pending / in-flight state;
-    no enum value is reserved for it.
-    """
+    """Terminal decision on a gated action; `decision IS NULL` means pending."""
 
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"

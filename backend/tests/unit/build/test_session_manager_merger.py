@@ -2,9 +2,7 @@
 
 The merger is a generator that interleaves a synchronous ACP iterator with
 approval-announce events drained from a Redis-style BLPOP. Two daemon threads
-write onto a shared `queue.Queue`; the generator consumes that queue until the
-ACP iterator signals completion. These tests drive the merger with fake
-iterators and a stubbed `pop_announcement`, then collect what it yields.
+write onto a shared `queue.Queue` until the ACP iterator completes.
 """
 
 import json
@@ -59,8 +57,7 @@ def _stub_pop_announcement(monkeypatch: pytest.MonkeyPatch, fn: Any) -> None:
 
 
 def _always_none(_session_id: UUID, timeout_s: int, cache: Any) -> UUID | None:  # noqa: ARG001 — kwarg name must match production caller
-    # Honor the timeout so a tight loop doesn't burn CPU while the ACP side
-    # is still producing. Sleep is bounded so test stays fast.
+    # Honor the timeout so the poll loop doesn't spin while ACP produces.
     time.sleep(min(0.05, float(timeout_s)))
     return None
 
@@ -92,11 +89,9 @@ def test_announce_emitted_as_approval_requested_packet(
     announce_enqueued = threading.Event()
 
     def pop(_sid: UUID, timeout_s: int, cache: Any) -> UUID | None:  # noqa: ARG001 — kwarg name must match production caller
-        # Deliver the approval on the first call. Subsequent calls
-        # signal that the announce-pump has already enqueued the
-        # ApprovalRequestedPacket (which it does between the first
-        # and second pop call) — that lets ACP end deterministically
-        # after the packet is on the queue.
+        # Deliver the approval on the first call. By the second call the
+        # announce-pump has already enqueued the packet, so signalling here
+        # lets ACP end deterministically once the packet is on the queue.
         pop_call_count.append(1)
         if len(pop_call_count) == 1:
             return approval_id
@@ -108,8 +103,7 @@ def test_announce_emitted_as_approval_requested_packet(
     _stub_pop_announcement(monkeypatch, pop)
 
     def acp() -> Generator[str, None, None]:
-        # Block until we know the announce packet is on the queue,
-        # then yield our terminal event. No reliance on time.sleep.
+        # Wait until the announce packet is queued before ending (no sleeps).
         assert announce_enqueued.wait(timeout=2.0), "announce packet was never enqueued"
         yield "acp-end"
 
@@ -126,7 +120,7 @@ def test_announce_emitted_as_approval_requested_packet(
     assert packet.session_id == session_id
     assert packet.type == "approval_requested"
 
-    # Verify the SSE-frame shape the caller will produce from this packet.
+    # Verify the SSE-frame shape the caller produces from this packet.
     rendered = packet.model_dump_json(by_alias=True)
     parsed = json.loads(rendered)
     assert parsed["type"] == "approval_requested"
@@ -137,18 +131,11 @@ def test_announce_emitted_as_approval_requested_packet(
 def test_interleaving_acp_and_announce(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Pins ORDER: the announce packet is yielded BETWEEN "x" and "y".
+    """The announce packet is yielded BETWEEN "x" and "y".
 
-    The merger feeds two producer threads into a single FIFO queue and
-    drains the queue in order. We coordinate with two events:
-
-    * `x_yielded` — ACP sets this after yielding "x", so the announce
-      stub can't deliver until "x" is on the queue.
-    * `announce_enqueued` — the announce stub sets this on its second
-      call (which only happens after the announce-pump puts the packet
-      on the queue), so ACP can't yield "y" until the packet is queued.
-
-    This gives a deterministic output of `["x", <packet>, "y"]`.
+    Two events make the FIFO order deterministic: `x_yielded` blocks the
+    announce stub until "x" is queued; `announce_enqueued` blocks ACP from
+    yielding "y" until the packet is queued. Output: `["x", <packet>, "y"]`.
     """
     session_id = uuid4()
     approval_id = uuid4()
@@ -157,15 +144,13 @@ def test_interleaving_acp_and_announce(
     pop_call_count: list[int] = []
 
     def pop(_sid: UUID, timeout_s: int, cache: Any) -> UUID | None:  # noqa: ARG001 — kwarg name must match production caller
-        # Don't deliver until "x" is already on the merger's output queue.
+        # Don't deliver until "x" is already on the output queue.
         if not x_yielded.wait(timeout=2.0):
             return None
         pop_call_count.append(1)
         if len(pop_call_count) == 1:
             return approval_id
-        # By the second call, the announce-pump has already enqueued
-        # the ApprovalRequestedPacket (it does so before re-entering
-        # the pop loop). Signal ACP that it's safe to yield "y".
+        # By the second call the packet is enqueued; let ACP yield "y".
         announce_enqueued.set()
         time.sleep(min(0.02, float(timeout_s)))
         return None
@@ -201,8 +186,7 @@ def test_terminates_when_acp_iterator_ends(
     def acp() -> Generator[str, None, None]:
         yield "only"
 
-    # _collect_with_timeout asserts the generator finishes in <2s, even though
-    # the announce thread would otherwise BLPOP forever.
+    # Generator must finish even though the announce thread would BLPOP forever.
     out = _collect_with_timeout(
         SessionManager._merge_acp_with_announces(
             acp(), session_id=uuid4(), tenant_id="public"
@@ -232,8 +216,7 @@ def test_no_deadlock_when_announce_thread_sees_nothing(
     assert out == ["p", "q"]
 
     # The merger sets `stop` on exit; the announce daemon notices on its next
-    # tick. Give it a brief grace window then verify nothing leaked beyond
-    # the (daemon, ok-to-be-alive-briefly) bound.
+    # tick. Allow a brief grace window then verify no pump threads leaked.
     deadline = time.monotonic() + 1.0
     while time.monotonic() < deadline:
         leaked = [
@@ -259,12 +242,10 @@ def test_no_deadlock_when_announce_thread_sees_nothing(
 def test_pop_announcement_exception_is_swallowed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """If `pop_announcement` raises, the announce loop logs + continues, and
-    the merger still drains the ACP iterator to completion without crashing.
+    """A raising `pop_announcement` is logged and the loop keeps polling.
 
-    Asserting `>= 2` calls pins that the announce loop KEEPS POLLING
-    after a raise — a bug that crashes the thread after one yield would
-    pass a `>= 1` check.
+    Asserting `>= 2` calls (not `>= 1`) pins that the loop survives a raise
+    instead of crashing the thread after one iteration.
     """
     calls: list[int] = []
     second_call = threading.Event()
@@ -279,8 +260,7 @@ def test_pop_announcement_exception_is_swallowed(
     _stub_pop_announcement(monkeypatch, pop)
 
     def acp() -> Generator[str, None, None]:
-        # Wait until pop has raised at least twice — proves the loop
-        # didn't die on the first exception.
+        # Wait for the second raise to prove the loop survived the first.
         assert second_call.wait(timeout=2.0), "announce loop did not retry"
         yield "still-ok"
 
@@ -291,4 +271,4 @@ def test_pop_announcement_exception_is_swallowed(
     )
 
     assert out == ["still-ok"]
-    assert len(calls) >= 2  # the announce loop kept polling after the raise
+    assert len(calls) >= 2

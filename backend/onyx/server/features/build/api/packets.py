@@ -62,12 +62,10 @@ class ErrorPacket(BasePacket):
 
 
 class ApprovalRequestedPacket(BasePacket):
-    """Signal that a new approval row is awaiting the user's decision.
+    """A new approval awaits the user's decision.
 
-    Carries only the approval_id — the FE refetches the row via
-    `GET /approvals/sessions/{session_id}/live` to render the card.
-    Keeps the packet small and Postgres as the single source of truth
-    for card contents.
+    Carries only ids; the FE refetches card contents via the /live endpoint
+    so Postgres stays the single source of truth.
     """
 
     type: Literal["approval_requested"] = "approval_requested"

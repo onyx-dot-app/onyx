@@ -51,8 +51,8 @@ def _identity_from_pod(pod: client.V1Pod) -> SandboxIdentity | None:
         return None
 
     labels = metadata.labels or {}
-    # Watch selector already filters on managed-by, but re-check
-    # defensively so loosening the selector can't enable label spoofing.
+    # Re-check managed-by even though the selector filters it, so loosening
+    # the selector later can't enable label spoofing.
     if labels.get(LABEL_K8S_MANAGED_BY) != LABEL_K8S_MANAGED_BY_ONYX:
         return None
     sandbox_id_raw = labels.get(LABEL_SANDBOX_ID)
@@ -154,7 +154,7 @@ class K8sInformerLookup(SandboxIPLookup):
                     backoff,
                 )
 
-            # Sleep on the stop event so shutdown is prompt.
+            # Wait on the stop event so shutdown is prompt.
             if self._stop_event.wait(backoff):
                 return
             backoff = min(backoff * 2, _RECONNECT_MAX_SECONDS)
@@ -171,8 +171,8 @@ class K8sInformerLookup(SandboxIPLookup):
                 continue
             existing = new_cache.get(identity.sandbox_ip)
             if existing is not None and existing.sandbox_id != identity.sandbox_id:
-                # Duplicate IPs = deploy-time bug; fail loud rather
-                # than route traffic with ambiguous identity.
+                # Duplicate IPs = deploy-time bug; fail loud rather than
+                # route traffic with ambiguous identity.
                 raise RuntimeError(
                     f"duplicate sandbox IP {identity.sandbox_ip} mapped to "
                     f"{existing.sandbox_id} and {identity.sandbox_id}; "
@@ -185,8 +185,7 @@ class K8sInformerLookup(SandboxIPLookup):
 
         logger.info("informer initial sync: %d sandbox pods cached", len(new_cache))
 
-        # K8s always sets metadata.resourceVersion on successful list,
-        # but the python client types it as Optional. Defend explicitly.
+        # Typed Optional by the client though K8s always sets it on a list.
         list_metadata = listing.metadata
         if list_metadata is None or not list_metadata.resource_version:
             raise RuntimeError(
@@ -232,8 +231,7 @@ class K8sInformerLookup(SandboxIPLookup):
             return
 
         with self._cache_lock:
-            # Evict any prior IP for this pod — covers CNI-assigned IP
-            # changes on pod restart.
+            # Evict any prior IP for this pod (CNI reassigns on restart).
             stale_ips = [
                 cached_ip
                 for cached_ip, cached_identity in self._cache.items()

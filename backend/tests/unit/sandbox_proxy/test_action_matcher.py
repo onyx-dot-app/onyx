@@ -49,8 +49,8 @@ def test_happy_path_urlencoded() -> None:
     [
         ("https://foo.slack.com/api/chat.postMessage", None),
         ("https://slack.com./api/chat.postMessage", None),
-        # mitmproxy lowercases hosts on URL construction, so override
-        # the attribute directly to exercise the matcher's case folding.
+        # mitmproxy lowercases hosts on URL construction; override directly to
+        # exercise the matcher's case folding.
         ("https://slack.com/api/chat.postMessage", "SLACK.COM"),
         ("https://slack.com/API/chat.postMessage", None),
     ],

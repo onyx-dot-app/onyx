@@ -1,17 +1,11 @@
 """Unit tests for the GateAddon mitmproxy addon.
 
-Covers `_resolve_and_match` (fail-closed / fail-open / happy path),
-`_write_response_for_decision`, `ParkedApprovals`,
-`_persist_approval_row`, `_await_decision`, `drain_inflight`, and
-`_terminalize_after_unhandled_error`. All external dependencies
-(`_Resolver`, `ActionMatcher`, `CacheFactory`, `DBSessionFactory`) are
-stubbed via small Protocol implementations.
+External dependencies (`_Resolver`, `ActionMatcher`, `CacheFactory`,
+`DBSessionFactory`) are stubbed via small Protocol implementations.
 
-The race arbiter (`_claim_expired_or_read_winner`) has unit tests
-that would just restate the `try_record_decision` / `get_action_approval`
-contract — see `external_dependency_unit/sandbox_proxy/
-test_gate_claim_arbiter.py` for the version against a real
-Postgres row.
+The race arbiter (`_claim_expired_or_read_winner`) is covered against a
+real Postgres row in
+`external_dependency_unit/sandbox_proxy/test_gate_claim_arbiter.py`.
 """
 
 from __future__ import annotations
@@ -49,7 +43,7 @@ _SENTINEL = object()
 
 
 class _StubResolver:
-    """Implements the gate's `_Resolver` Protocol with canned returns."""
+    """`_Resolver` Protocol stub with canned returns."""
 
     def __init__(
         self,
@@ -88,8 +82,6 @@ class _StubResolver:
 
 
 class _StubMatcher:
-    """Implements `ActionMatcher` Protocol."""
-
     def __init__(
         self,
         *,
@@ -111,8 +103,7 @@ class _StubMatcher:
 
 
 def _noop_db_factory(tenant_id: str) -> Any:  # noqa: ARG001
-    """A `DBSessionFactory` that should never be called by the tests
-    that focus on `_resolve_and_match`."""
+    """`DBSessionFactory` that must never be called."""
 
     @contextmanager
     def cm() -> Iterator[Any]:
@@ -178,14 +169,12 @@ def _flow(
     flow.request.path_components = path_components
     flow.request.raw_content = raw_content
     flow.request.stream = False
-    # Real dict so header lookups behave like mitmproxy's str|None `.get`,
-    # instead of a MagicMock that returns truthy magic objects.
+    # Real dict (not MagicMock) so `.get(...)` returns None, not a truthy mock.
     flow.request.headers = (
         {"Proxy-Authorization": proxy_auth} if proxy_auth is not None else {}
     )
     flow.response = None
-    # Real dict, not a MagicMock: `request` reads the snapshot-stream
-    # flag off this, and a MagicMock `.get(...)` would be truthy.
+    # Real dict (not MagicMock) so the snapshot-stream flag lookup isn't truthy.
     flow.metadata = {}
     return flow
 
@@ -233,7 +222,7 @@ def test_resolve_and_match_no_source_ip_fails_closed() -> None:
 
     assert result is None
     _assert_403(flow, gate_mod._CODE_UNIDENTIFIED_SANDBOX)
-    # Short-circuit: resolver / matcher must not have been called.
+    # Short-circuited before resolver / matcher ran.
     assert resolver.resolve_sandbox_calls == 0
     assert matcher.calls == 0
 
@@ -249,10 +238,7 @@ def test_resolve_and_match_no_source_ip_fails_closed() -> None:
 def test_resolve_and_match_sandbox_resolution_fails_closed(
     resolver_kwargs: dict[str, Any],
 ) -> None:
-    """Both an absent pod and a DB blip during identity resolution must
-    fail closed with `unidentified_sandbox`. A leaked exception would
-    crash the test; absence of a crash + returning normally is the proof
-    that the failure was caught."""
+    """Absent pod and DB blip during resolution both fail closed."""
     resolver = _StubResolver(**resolver_kwargs)
     matcher = _StubMatcher(result=_MATCH)
     addon = _build(resolver=resolver, matcher=matcher)
@@ -265,9 +251,8 @@ def test_resolve_and_match_sandbox_resolution_fails_closed(
     assert matcher.calls == 0
 
 
-# Hardcode the byte count from the spec rather than re-deriving it from
-# the constant under test. A separate completeness check
-# (`test_parser_max_body_bytes_constant_matches_spec`) pins the constant.
+# Spec value hardcoded, not derived from the constant under test (which
+# is pinned separately by test_parser_max_body_bytes_constant_matches_spec).
 _OVERSIZE_BODY = b"\x00" * 1_048_577
 
 
@@ -279,8 +264,7 @@ _OVERSIZE_BODY = b"\x00" * 1_048_577
 def test_resolve_and_match_body_too_large_fails_closed(
     raw_content: bytes | None,
 ) -> None:
-    """`raw_content is None` (streamed) and bodies above the parser
-    threshold both fail closed with `body_too_large` per the docstring."""
+    """Streamed (None) and oversize bodies both fail closed."""
     resolver = _StubResolver(sandbox=_sandbox())
     matcher = _StubMatcher(result=_MATCH)
     addon = _build(resolver=resolver, matcher=matcher)
@@ -294,16 +278,13 @@ def test_resolve_and_match_body_too_large_fails_closed(
 
 
 def test_parser_max_body_bytes_constant_matches_spec() -> None:
-    """Completeness check: pin the parser body cap to the documented
-    1 MiB. Bumping the constant requires updating this test, which
-    forces a deliberate decision rather than silent drift."""
+    """Pin the parser body cap to the documented 1 MiB."""
     assert PARSER_MAX_BODY_BYTES == 1_048_576
 
 
 def test_resolve_and_match_no_tag_fails_closed() -> None:
-    """Gated request from an identified pod but with NO in-band session
-    tag — fail closed. There is no most-recent-active fallback, so the
-    session lookup is never even attempted."""
+    """Identified pod, no session tag: fail closed with no fallback, so
+    the session lookup is never attempted."""
     resolver = _StubResolver(sandbox=_sandbox())
     matcher = _StubMatcher(result=_MATCH)
     addon = _build(resolver=resolver, matcher=matcher)
@@ -331,8 +312,8 @@ def test_resolve_and_match_matcher_returns_none_fails_open() -> None:
     result = addon._resolve_and_match(flow)
 
     assert result is None
-    assert flow.response is None  # mitmproxy will forward.
-    # Session lookup must NOT happen for non-gated traffic.
+    assert flow.response is None  # forwarded
+    # Non-gated traffic must not trigger a session lookup.
     assert resolver.resolve_session_by_id_calls == []
 
 
@@ -432,8 +413,8 @@ def test_http_connect_ignores_missing_or_garbled_header() -> None:
 
 
 def test_resolve_and_match_exact_tag_on_http_request() -> None:
-    """Plain-HTTP request carries Proxy-Authorization directly; a verified
-    tag routes to that exact session and skips the heuristic."""
+    """Plain-HTTP: Proxy-Authorization rides on the request; a verified
+    tag routes to that exact session."""
     user_id = uuid4()
     tagged_id = UUID(_TAG_UUID)
     sandbox = _sandbox(user_id=user_id)
@@ -452,8 +433,8 @@ def test_resolve_and_match_exact_tag_on_http_request() -> None:
 
 
 def test_resolve_and_match_exact_tag_on_https_connect() -> None:
-    """HTTPS: the tag rode on the CONNECT (captured via http_connect),
-    not the MITM'd request. It's read back off the connection."""
+    """HTTPS: the tag rode on the CONNECT (captured via http_connect)
+    and is read back off the connection, not the MITM'd request."""
     user_id = uuid4()
     tagged_id = UUID(_TAG_UUID)
     sandbox = _sandbox(user_id=user_id)
@@ -462,7 +443,7 @@ def test_resolve_and_match_exact_tag_on_https_connect() -> None:
 
     connect_flow = _flow(conn_id="conn-1", proxy_auth=_basic_auth(_TAG_UUID))
     addon.http_connect(connect_flow)
-    # The decrypted request has NO Proxy-Authorization header of its own.
+    # Decrypted request has no Proxy-Authorization of its own.
     request_flow = _flow(conn_id="conn-1")
 
     result = addon._resolve_and_match(request_flow)
@@ -473,9 +454,8 @@ def test_resolve_and_match_exact_tag_on_https_connect() -> None:
 
 
 def test_resolve_and_match_unverified_tag_fails_closed() -> None:
-    """Tag present but it doesn't resolve to one of this user's sessions
-    (stale / foreign / tampered) — fail closed. No most-recent-active
-    fallback: an unattributable gated action is blocked, not guessed."""
+    """Tag doesn't resolve to one of this user's sessions (stale /
+    foreign / tampered): fail closed, no fallback."""
     sandbox = _sandbox()
     resolver = _StubResolver(sandbox=sandbox, session_by_id=None)
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
@@ -489,8 +469,7 @@ def test_resolve_and_match_unverified_tag_fails_closed() -> None:
 
 
 def test_resolve_and_match_malformed_tag_fails_closed() -> None:
-    """A non-UUID username never hits the DB and fails closed (no
-    fallback)."""
+    """A non-UUID username fails closed without hitting the DB."""
     resolver = _StubResolver(sandbox=_sandbox())
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
     flow = _flow(proxy_auth=_basic_auth("not-a-uuid"))
@@ -503,8 +482,7 @@ def test_resolve_and_match_malformed_tag_fails_closed() -> None:
 
 
 def test_resolve_and_match_session_by_id_db_error_fails_closed() -> None:
-    """A DB blip while validating the in-band tag must fail closed
-    (no_active_session), not silently forward."""
+    """A DB blip validating the tag fails closed, not silently forward."""
     resolver = _StubResolver(
         sandbox=_sandbox(), session_by_id_exc=RuntimeError("db down")
     )
@@ -520,8 +498,8 @@ def test_resolve_and_match_session_by_id_db_error_fails_closed() -> None:
 
 @pytest.mark.asyncio
 async def test_request_strips_proxy_authorization_before_forward() -> None:
-    """The in-band tag must never reach the origin: a forwarded
-    (non-gated) plain-HTTP request has Proxy-Authorization removed."""
+    """The in-band tag must never reach the origin: a forwarded request
+    has Proxy-Authorization stripped."""
     resolver = _StubResolver(sandbox=_sandbox())
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=None))
     flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
@@ -529,7 +507,7 @@ async def test_request_strips_proxy_authorization_before_forward() -> None:
 
     await addon.request(flow)
 
-    assert flow.response is None  # non-gated → forwarded
+    assert flow.response is None  # forwarded
     assert "Proxy-Authorization" not in flow.request.headers
 
 
@@ -542,8 +520,7 @@ _SNAPSHOT_BUCKET = "onyx-sandbox-snapshots"
 
 
 def _snapshot_policy() -> SnapshotEgressPolicy:
-    # Path-style (MinIO-shaped) endpoint; keeps the tenant-prefix check
-    # as the load-bearing control.
+    # Path-style (MinIO-shaped) endpoint so the tenant-prefix check is load-bearing.
     return SnapshotEgressPolicy(
         bucket=_SNAPSHOT_BUCKET, endpoint_host="release-minio", endpoint_port=9000
     )
@@ -552,9 +529,8 @@ def _snapshot_policy() -> SnapshotEgressPolicy:
 def _snapshot_flow(
     *, tenant_segment: str, host: str = "release-minio"
 ) -> http.HTTPFlow:
-    # Multipart UploadPart shape: query (?partNumber=...) is excluded
-    # from path_components. Body is oversize so a missed opt-in would
-    # otherwise fail closed on the cap.
+    # UploadPart shape; oversize body so a missed streaming opt-in fails
+    # closed on the cap.
     return _flow(
         host=host,
         port=9000,
@@ -601,9 +577,8 @@ async def test_requestheaders_ignores_non_s3_host() -> None:
 
 @pytest.mark.asyncio
 async def test_requestheaders_rejects_cross_tenant_prefix() -> None:
-    """Pod resolves to tenant_acme but the key targets tenant_evil's
-    prefix on the shared MinIO — must NOT stream, so `request` then
-    fail-closes on the body cap."""
+    """Pod is tenant_acme but the key targets tenant_evil's prefix: must
+    not stream, so `request` then fail-closes on the cap."""
     resolver = _StubResolver(sandbox=_sandbox(tenant_id="tenant_acme"))
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=None))
     addon._snapshot_policy = _snapshot_policy()
@@ -613,7 +588,7 @@ async def test_requestheaders_rejects_cross_tenant_prefix() -> None:
     assert flow.request.stream is False
     assert gate_mod._SNAPSHOT_STREAM_FLAG not in flow.metadata
 
-    # The unmarked oversize flow now hits the fail-closed cap.
+    # Unmarked oversize flow now hits the fail-closed cap.
     result = addon._resolve_and_match(flow)
     assert result is None
     _assert_403(flow, gate_mod._CODE_BODY_TOO_LARGE)
@@ -621,8 +596,8 @@ async def test_requestheaders_rejects_cross_tenant_prefix() -> None:
 
 @pytest.mark.asyncio
 async def test_request_forwards_flagged_snapshot_flow() -> None:
-    """A flow flagged in requestheaders forwards from `request` without
-    touching the matcher, the cap, or the session lookup."""
+    """A flagged flow forwards from `request` without touching the
+    matcher, the cap, or the session lookup."""
     resolver = _StubResolver(sandbox=_sandbox())
     matcher = _StubMatcher(result=_MATCH)
     addon = _build(resolver=resolver, matcher=matcher)
@@ -631,7 +606,7 @@ async def test_request_forwards_flagged_snapshot_flow() -> None:
 
     await addon.request(flow)
 
-    assert flow.response is None  # forwarded
+    assert flow.response is None
     assert matcher.calls == 0
     assert resolver.resolve_sandbox_calls == 0
 
@@ -687,10 +662,8 @@ def test_write_response_expired_sets_not_authorized_403() -> None:
 
 
 def test_parked_approvals_snapshot_is_independent_of_source() -> None:
-    """The drain reads `snapshot()` and must be able to iterate while
-    the event loop is mutating `_by_tenant` (add/remove). Pin the
-    `dict[set].copy()` semantic so a refactor to e.g. a shallow tuple
-    fails here."""
+    """snapshot() must be iterable while the loop mutates `_by_tenant`;
+    pin the deep-copy semantic so a shallow refactor fails here."""
     parked = ParkedApprovals()
     id_a = uuid4()
     id_b = uuid4()
@@ -701,26 +674,24 @@ def test_parked_approvals_snapshot_is_independent_of_source() -> None:
 
     snap_before = parked.snapshot()
 
-    # Mutate the source after taking the snapshot.
     new_id = uuid4()
     parked.add("tenant-1", new_id)
     parked.remove("tenant-2", id_c)
 
-    # Snapshot must reflect the state at the time it was taken.
+    # snap_before reflects the state at the time it was taken.
     snap_dict_before = dict(snap_before)
     assert snap_dict_before["tenant-1"] == {id_a, id_b}
     assert snap_dict_before["tenant-2"] == {id_c}
 
     snap_after = dict(parked.snapshot())
     assert snap_after["tenant-1"] == {id_a, id_b, new_id}
-    # tenant-2 went empty so the entry was cleaned up entirely (see
-    # next test for the invariant).
+    # tenant-2 went empty so its entry was cleaned up (see next test).
     assert "tenant-2" not in snap_after
 
 
 def test_parked_approvals_remove_last_cleans_tenant_entry() -> None:
-    """Internal invariant: an empty per-tenant set is deleted so the
-    top-level snapshot doesn't grow unbounded over the proxy's lifetime."""
+    """Empty per-tenant sets are deleted so the snapshot can't grow
+    unbounded over the proxy's lifetime."""
     parked = ParkedApprovals()
     approval_id = uuid4()
     parked.add("tenant-1", approval_id)
@@ -730,7 +701,7 @@ def test_parked_approvals_remove_last_cleans_tenant_entry() -> None:
 
     assert parked.snapshot() == []
 
-    # Removing again is a no-op (must not raise / re-create the entry).
+    # Removing again is a no-op (must not raise or re-create the entry).
     parked.remove("tenant-1", approval_id)
     assert parked.snapshot() == []
 
@@ -741,8 +712,7 @@ def test_parked_approvals_remove_last_cleans_tenant_entry() -> None:
 
 
 class _RecorderSession:
-    """Captures the ordered sequence of operations applied to a DB
-    session so a test can pin "commit happened before announce"."""
+    """Records the ordered DB ops so a test can pin commit-before-announce."""
 
     def __init__(self, ops: list[str]) -> None:
         self._ops = ops
@@ -756,9 +726,8 @@ class _RecorderSession:
     def commit(self) -> None:
         self._ops.append("commit")
 
-    # `db_session.query(...).filter_by(...).filter(...).first()` for the
-    # idempotency check inside `create_notification`. Returning None
-    # forces the "create a new row" path.
+    # Chained query for create_notification's idempotency check; first()
+    # returns None to force the create-new-row path.
     def query(self, *_args: Any, **_kwargs: Any) -> "_RecorderSession":
         return self
 
@@ -781,11 +750,7 @@ def _recorder_db_factory(ops: list[str]) -> Any:
 
 
 class _RecorderCache:
-    """Stub `CacheBackend` that records announce/wake calls.
-
-    `announce_approval` calls `cache.rpush` + `cache.expire`; that's
-    all the gate touches.
-    """
+    """Stub `CacheBackend` recording the rpush/expire that announce uses."""
 
     def __init__(self, ops: list[str], rpush_raises: Exception | None = None) -> None:
         self._ops = ops
@@ -807,24 +772,13 @@ class _RecorderCache:
 def test_persist_approval_row_commits_announces_notifies(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Pin three load-bearing properties of the commit path:
-
-    1. The row is inserted + committed before the announce fires
-       (FE must never get an approval_id that doesn't yet exist in PG).
-    2. The announce is RPUSHed onto `approval:announce:{session_id}`
-       (the chat-stream merger reads from this exact key).
-    3. The approval_id is registered with the parked-approvals drain
-       (otherwise SIGTERM would orphan the row).
-
-    A notification is also dispatched, but that's best-effort —
-    pinned by the "no exception thrown" assertion only.
-    """
+    """Pin the commit path: row committed before announce, announce
+    RPUSHed onto `approval:announce:{session_id}`, and the id registered
+    with the parked-approvals drain."""
     ops: list[str] = []
     approval_id = UUID("22222222-2222-2222-2222-222222222222")
 
-    # `insert_action_approval` is the only thing about the DB call we
-    # actually care about; stub it to return a row with a fixed id so
-    # the rest of the assertions can pin the side effects.
+    # Stub insert to return a fixed id so the side effects can be pinned.
     inserted_payload: dict[str, Any] = {}
 
     def _fake_insert(
@@ -838,9 +792,6 @@ def test_persist_approval_row_commits_announces_notifies(
     monkeypatch.setattr(
         gate_mod.action_approval, "insert_action_approval", _fake_insert
     )
-    # Notification go through the regular `create_notification` code
-    # path, which calls `query(...).filter_by(...).filter(...).first()`
-    # — handled by `_RecorderSession` above.
 
     cache = _RecorderCache(ops)
     addon = _build(
@@ -860,8 +811,8 @@ def test_persist_approval_row_commits_announces_notifies(
         "payload": _MATCH.payload,
     }
 
-    # Ordering: insert -> commit -> rpush. A commit-after-announce
-    # would let the FE read the row before it's persisted.
+    # insert -> commit -> rpush: announce must not precede the commit,
+    # or the FE could read the row before it's persisted.
     insert_at = ops.index("insert")
     commit_at = ops.index("commit")
     rpush_at = next(i for i, op in enumerate(ops) if op.startswith("rpush:"))
@@ -871,25 +822,15 @@ def test_persist_approval_row_commits_announces_notifies(
     assert cache.rpush_calls == [
         (f"approval:announce:{ctx.session_id}", str(approval_id))
     ]
-    # Parked set picked up the new id so the SIGTERM drain can claim
-    # it if the proxy dies before the wait completes.
+    # Registered for the SIGTERM drain.
     assert dict(addon._parked.snapshot()) == {"tenant-1": {approval_id}}
 
 
 def test_persist_approval_row_announce_failure_is_swallowed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A Redis blip on the announce path must not roll back the row.
-
-    The row is already in Postgres; the FE picks up the card on the
-    next `/live` refetch. Failing the request would convert a transient
-    cache hiccup into a sandbox-visible 500.
-
-    Crucially, the three best-effort sub-steps (commit, announce,
-    notify) run independently — a failed announce must NOT skip the
-    notification dispatch. Pin that by asserting `_notify_approval_requested`
-    still fires after the rpush blows up.
-    """
+    """A Redis blip on announce must not roll back the row or skip the
+    notify dispatch; the sub-steps run independently."""
     approval_id = UUID("33333333-3333-3333-3333-333333333333")
     ops: list[str] = []
 
@@ -922,20 +863,15 @@ def test_persist_approval_row_announce_failure_is_swallowed(
     monkeypatch.setattr(GateAddon, "_notify_approval_requested", _fake_notify)
 
     ctx = _ctx(tenant_id="tenant-1")
-    # Must NOT propagate the RedisError.
+    # Must not propagate the RedisError.
     returned = addon._persist_approval_row(ctx, _MATCH)
     assert returned == approval_id
-    # And the row is still registered for the drain.
     assert dict(addon._parked.snapshot()) == {"tenant-1": {approval_id}}
 
-    # The "best-effort" contract is per sub-step: a failed announce
-    # must NOT short-circuit the notification dispatch.
+    # Failed announce must not short-circuit the notify dispatch.
     assert notify_calls == [(approval_id, ctx, _MATCH)]
-    # And insert+commit ran before the failed announce, so the row is
-    # durable in PG even though the cache push blew up.
     assert ops.index("insert") < ops.index("commit")
-    # No rpush op was appended because the recorder appends only on
-    # success — the raise short-circuits the record.
+    # rpush raised before recording, so no rpush op is present.
     assert not any(op.startswith("rpush:") for op in ops)
 
 
@@ -948,8 +884,7 @@ def test_persist_approval_row_announce_failure_is_swallowed(
 async def test_await_decision_wake_received_returns_decision(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Wake arrived before timeout → return the wake's decision. The
-    parked entry is cleared either way (finally block)."""
+    """Wake before timeout returns its decision; parked entry cleared."""
     approval_id = uuid4()
     ctx = _ctx(tenant_id="tenant-1")
 
@@ -972,8 +907,6 @@ async def test_await_decision_wake_received_returns_decision(
     decision = await addon._await_decision(approval_id, ctx, _MATCH)
 
     assert decision == ApprovalDecision.APPROVED
-    # `finally` removed the parked entry; the empty per-tenant set is
-    # cleaned up entirely.
     assert addon._parked.snapshot() == []
 
 
@@ -1020,9 +953,8 @@ async def test_await_decision_timeout_claims_expired(
 async def test_await_decision_cancelled_claims_expired_and_reraises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Sandbox-side socket closed mid-wait. We must (1) claim EXPIRED
-    so the audit row is terminal and (2) re-raise so mitmproxy releases
-    the flow. The parked-set entry is removed by the `finally`."""
+    """Socket closed mid-wait: claim EXPIRED (terminal audit row) and
+    re-raise so mitmproxy releases the flow."""
     approval_id = uuid4()
     ctx = _ctx(tenant_id="tenant-1")
 
@@ -1066,19 +998,9 @@ async def test_await_decision_cancelled_claims_expired_and_reraises(
 async def test_drain_inflight_walks_parked_per_tenant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The drain must:
-
-    1. Walk per-tenant so each tenant's cache backend is fetched once
-       (not once per parked approval).
-    2. Wake every parked approval (so the BLPOP in `_await_decision`
-       returns immediately rather than waiting out `WAIT_TIMEOUT_S`).
-    3. Never cross-contaminate tenants — `send_wake` on tenant-1's
-       cache must use tenant-1's approval ids only.
-    4. Leave `_parked` unchanged — removal is owned by
-       `_await_decision.finally`. Drain just sends wakes; if the drain
-       starts removing entries we'd risk double-frees and miss wakes
-       for tasks that haven't yet returned from their BLPOP.
-    """
+    """Drain wakes every parked approval on its own tenant's cache, never
+    cross-tenant, and leaves `_parked` untouched (removal is owned by
+    `_await_decision.finally`)."""
     cache_t1 = _RecorderCache([])
     cache_t2 = _RecorderCache([])
     per_tenant_caches: dict[str, _RecorderCache] = {
@@ -1117,29 +1039,23 @@ async def test_drain_inflight_walks_parked_per_tenant(
 
     await addon.drain_inflight()
 
-    # Every parked approval got a wake.
     waked_ids = {aid for aid, _decision, _cache in send_wake_calls}
     assert waked_ids == {t1_a, t1_b, t2_a}
 
-    # No cross-tenant contamination: each id was waked on its own
-    # tenant's cache backend.
+    # Each id waked on its own tenant's cache, no cross-contamination.
     for aid, _decision, cache in send_wake_calls:
         if aid in (t1_a, t1_b):
             assert cache is cache_t1, "tenant-1 approval waked on wrong cache"
         else:
             assert cache is cache_t2, "tenant-2 approval waked on wrong cache"
 
-    # Invariant: drain does NOT remove from `_parked`. A refactor that
-    # eagerly removes here would break the contract with
-    # `_await_decision.finally` and cause double-removes.
+    # Drain must not remove from `_parked` (owned by _await_decision.finally).
     assert dict(addon._parked.snapshot()) == parked_before
 
 
 @pytest.mark.asyncio
 async def test_drain_inflight_completes_when_inflight_set_empty() -> None:
-    """No parked approvals + no inflight tasks → drain returns
-    immediately. This is the happy SIGTERM path (proxy shut down with
-    nothing in flight)."""
+    """Nothing parked or inflight: drain returns immediately."""
     cache_factory_calls: list[str] = []
 
     def _tracking_cache_factory(tenant_id: str) -> _RecorderCache:
@@ -1156,12 +1072,10 @@ async def test_drain_inflight_completes_when_inflight_set_empty() -> None:
     assert addon._parked.snapshot() == []
     assert addon._inflight_tasks == set()
 
-    # Bound by a low timeout so a regression that introduces an
-    # unbounded wait would fail fast.
+    # Low timeout so a regression to an unbounded wait fails fast.
     await asyncio.wait_for(addon.drain_inflight(), timeout=1.0)
 
-    # Postconditions: nothing changed, and the cache factory was never
-    # consulted because there were no parked approvals to walk.
+    # Cache factory not consulted: nothing parked to walk.
     assert addon._parked.snapshot() == []
     assert addon._inflight_tasks == set()
     assert cache_factory_calls == []
@@ -1175,13 +1089,9 @@ async def test_drain_inflight_completes_when_inflight_set_empty() -> None:
 def test_terminalize_happy_path_writes_wake(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Cleanup after an unhandled exception: claim a terminal decision
-    (so the audit row isn't left pending) and forward it via send_wake
-    (so any parked BLPOP returns immediately).
-
-    Note: the wake carries whatever decision the arbiter returned —
-    APPROVED here, not unconditionally EXPIRED. The arbiter reads the
-    winner if the API beat us to the record."""
+    """Cleanup claims a terminal decision and forwards it via send_wake.
+    The wake carries the arbiter's decision (APPROVED here if the API
+    won the race), not unconditionally EXPIRED."""
     approval_id = uuid4()
     cache = _RecorderCache([])
     addon = _build(
@@ -1212,10 +1122,8 @@ def test_terminalize_happy_path_writes_wake(
 def test_terminalize_db_failure_skips_wake(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """If claiming the terminal decision raises, there's nothing to
-    forward — send_wake must NOT be called (a wake without a known
-    decision would be a bug). The exception is swallowed; the caller's
-    original exception is what matters."""
+    """If the claim raises, there's no decision to forward, so send_wake
+    must not be called; the exception is swallowed."""
     approval_id = uuid4()
     cache = _RecorderCache([])
     addon = _build(
@@ -1247,9 +1155,8 @@ def test_terminalize_db_failure_skips_wake(
 def test_terminalize_wake_failure_swallowed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Claim succeeds but send_wake raises — no exception propagates.
-    The parked BLPOP will time out on its own and re-read the row from
-    Postgres; the audit row is already terminal."""
+    """send_wake raising must not propagate; the parked BLPOP times out
+    and re-reads the already-terminal row from Postgres."""
     approval_id = uuid4()
     cache = _RecorderCache([])
     addon = _build(

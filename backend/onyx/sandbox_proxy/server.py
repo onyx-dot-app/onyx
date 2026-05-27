@@ -34,13 +34,11 @@ _DB_POOL_SIZE = 4
 _DB_MAX_OVERFLOW = 4
 _DB_APP_NAME = "sandbox_proxy"
 
-# Outer cap on the SIGTERM drain. Only fires if something hangs; the
-# K8s ``terminationGracePeriodSeconds`` is the outer envelope. See
-# ``GateAddon.drain_inflight`` for what the drain actually does.
+# Cap on the SIGTERM drain; only fires if `GateAddon.drain_inflight` hangs.
 _DRAIN_TIMEOUT_S = 10.0
 
-# If the watch isn't reachable in this window on startup, the proxy
-# exits non-zero rather than serve traffic with unbacked identity.
+# Startup sync deadline; past it the proxy exits rather than serve traffic
+# with unbacked identity.
 _LOOKUP_INITIAL_SYNC_TIMEOUT_S = 60.0
 
 # Must be the parent of ca._DEFAULT_CA_PEM_PATH.
@@ -70,9 +68,8 @@ def _build_healthz_handler(
 
         def do_GET(self) -> None:
             if self.path == "/healthz":
-                # is_synced() flips on watch reconnects, so we report
-                # not-ready if the informer has lost its watch even
-                # after initial sync.
+                # is_synced() flips false on watch loss, so a reconnecting
+                # informer reports not-ready even after initial sync.
                 healthy = (
                     readiness.ca_ready
                     and lookup.is_synced()
@@ -132,11 +129,7 @@ def _build_lookup() -> K8sInformerLookup:
 
 
 def _build_cache_factory() -> "Callable[[str], CacheBackend]":
-    """Return a tenant_id → CacheBackend factory for the gate addon.
-
-    The API side uses `get_cache_backend(tenant_id=...)` so the gate
-    must do the same to share the same tenant-prefixed key namespace.
-    """
+    """tenant_id → CacheBackend; must match the API side's namespace to share keys."""
     from onyx.cache.factory import get_cache_backend
 
     def _factory(tenant_id: str) -> CacheBackend:
@@ -235,7 +228,7 @@ def main() -> int:
             snapshot_policy=snapshot_policy,
         )
 
-        # DumpMaster's constructor binds to the running event loop.
+        # DumpMaster binds to the running event loop in its constructor.
         async def _async_main() -> None:
             options = _build_mitm_options()
             master = DumpMaster(options=options, with_termlog=True, with_dumper=False)

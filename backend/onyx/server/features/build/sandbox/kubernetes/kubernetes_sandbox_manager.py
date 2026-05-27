@@ -184,9 +184,7 @@ _PROXY_CA_SOURCE_VOLUME = "sandbox-ca-source"
 _PROXY_ALIAS = "sandbox-proxy"
 
 # Per-session egress tagging plugin, baked into the sandbox image (see
-# docker/Dockerfile). Registered pod-wide via OPENCODE_CONFIG_CONTENT only
-# when the proxy is enabled; tags each sandbox egress request with the
-# originating BuildSession id so the proxy routes approval cards exactly.
+# docker/Dockerfile). Path must match the COPY destination there.
 _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
 
 
@@ -720,9 +718,8 @@ class KubernetesSandboxManager(SandboxManager):
         # local-dev / CI where IRSA isn't available and an S3-compatible
         # service (e.g. minio) is reachable in-cluster.
         #
-        # Proxy env + CA bundle: firewall-init's iptables lockdown is
-        # pod-wide, so the sidecar's `aws s3 cp` must also route through
-        # the proxy. Unmatched routes fail open.
+        # The iptables lockdown is pod-wide, so the sidecar's `aws s3 cp`
+        # must also route through the proxy.
         _, push_public_key_b64 = _get_push_key_pair()
         sidecar_env = [
             client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
@@ -1335,9 +1332,8 @@ class KubernetesSandboxManager(SandboxManager):
             # cross-provider per-prompt model overrides work without a
             # pod restart.
             providers = all_llm_configs or [llm_config]
-            # Register the per-session egress-tagging plugin only when the
-            # proxy is deployed; without it the plugin would no-op (no
-            # HTTP(S)_PROXY env to re-tag) but there's no reason to load it.
+            # Only register the egress-tagging plugin when the proxy is
+            # deployed; otherwise it would no-op (no HTTP(S)_PROXY to re-tag).
             session_tag_plugins = (
                 [_OPENCODE_SESSION_TAG_PLUGIN_PATH] if SANDBOX_PROXY_HOST else None
             )

@@ -18,26 +18,22 @@ _CA_KEY_SIZE_BITS = 4096
 _CA_VALIDITY_DAYS = 1825
 _CA_COMMON_NAME = "Onyx Sandbox Proxy CA"
 _CA_ORG_NAME = "Onyx"
-# mitmproxy auto-loads `$confdir/mitmproxy-ca.pem` as its CA. The subdir
-# under the mount is ours to chmod 0o700 (the mount root is root-owned).
+# mitmproxy auto-loads `$confdir/mitmproxy-ca.pem`. The subdir is ours to
+# chmod 0o700 (the mount root is root-owned).
 _DEFAULT_CA_PEM_PATH = "/var/run/sandbox-proxy/mitmproxy-confdir/mitmproxy-ca.pem"
 
 logger = setup_logger()
 
 
 class CAStoreConflictError(Exception):
-    """Raised by `CAStore.persist` when another writer has already
-    persisted a CA. The bootstrap layer responds by re-`load()`ing and
-    returning the winner's CA."""
+    """`persist` lost a race; bootstrap re-`load()`s the winner's CA."""
 
 
 class CAStore(Protocol):
     """Persistence backend for the proxy CA.
 
-    `persist` must be idempotent under concurrent callers: if two
-    proxy replicas race on a cold cluster, exactly one write wins.
-    The loser raises `CAStoreConflictError`; the bootstrap layer
-    responds by re-`load()`ing.
+    Under a cold-cluster race exactly one `persist` wins; losers raise
+    `CAStoreConflictError`.
     """
 
     def load(self) -> tuple[bytes, bytes] | None: ...
@@ -86,8 +82,7 @@ class CABootstrap:
             logger.info("lost CA persist race; reloading winner's CA")
             winner = self._store.load()
             if winner is None:
-                # Conflict means something exists; a follow-up None is
-                # a real fault, not a cold store. Don't paper over it.
+                # Conflict implies a CA exists; a None here is a real fault.
                 raise RuntimeError(
                     "CAStore raised conflict but subsequent load returned None"
                 )
@@ -103,9 +98,8 @@ class CABootstrap:
         except ValueError as e:
             raise RuntimeError(f"proxy CA cert is not valid PEM: {e}") from e
         now = dt.datetime.now(dt.timezone.utc)
-        # 5-minute skew tolerance matches the not_before backdating in
-        # `_generate_ca` so we accept a freshly-generated cert under
-        # clock drift.
+        # Matches the not_before backdating in `_generate_ca` so a freshly
+        # generated cert is accepted under clock drift.
         skew = dt.timedelta(minutes=5)
         if cert.not_valid_before_utc > now + skew:
             raise RuntimeError(
@@ -187,15 +181,14 @@ class CABootstrap:
         return cert_pem, key_pem
 
     def _materialize(self, cert_pem: bytes, key_pem: bytes) -> MaterializedCA:
-        # mitmproxy reads key+cert from one PEM. Atomic via rename so a
+        # mitmproxy reads key+cert from one PEM; write atomically so a
         # partial write can't leave it reading a half-file.
         self._pem_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        # `mkdir(mode=, exist_ok=True)` only sets the mode on creation;
-        # if the dir already exists (e.g. created by the container
-        # entrypoint), enforce 0o700 explicitly.
+        # mkdir mode only applies on creation; enforce 0o700 if the dir
+        # already exists (e.g. created by the container entrypoint).
         os.chmod(self._pem_path.parent, 0o700)
         tmp_path = self._pem_path.with_suffix(self._pem_path.suffix + ".tmp")
-        # Remove a stale .tmp from a prior crash so O_EXCL can succeed.
+        # Clear a stale .tmp from a prior crash so O_EXCL can succeed.
         try:
             os.unlink(tmp_path)
         except (FileNotFoundError, PermissionError):

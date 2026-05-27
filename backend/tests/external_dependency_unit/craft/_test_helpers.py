@@ -54,15 +54,7 @@ def _set_created_at(
     pk: UUID,
     when: datetime,
 ) -> None:
-    """Force a row's ``created_at`` to ``when`` (bypasses ``server_default``).
-
-    Importable from ``tests.external_dependency_unit.craft._test_helpers`` so
-    DB-layer test files (``test_action_approval_db.py``, ``test_approvals_api.py``)
-    share a single primitive instead of inlining the ``update(...).values(...)``
-    pattern. Generic over the model + PK column so the same helper can be
-    reused for non-approval rows in the future. For ``ActionApproval`` the PK
-    column is ``approval_id``.
-    """
+    """Force a row's ``created_at`` to ``when``, bypassing ``server_default``."""
     db_session.execute(
         update(model).where(model.approval_id == pk).values(created_at=when)
     )

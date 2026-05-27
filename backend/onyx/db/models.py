@@ -5430,10 +5430,8 @@ class BuildMessage(Base):
 class ActionApproval(Base):
     """One agent-initiated gated action and its decision.
 
-    `decision IS NULL` represents the pending / in-flight state (or an
-    orphan attempt left behind by a hard proxy crash). Liveness vs.
-    orphan is distinguished by the `approval:live:{id}` Redis key
-    (see `sandbox_proxy/approval_cache.py`), not by the DB.
+    `decision IS NULL` is pending (or an orphan left by a proxy crash).
+    Liveness vs. orphan is tracked by the `approval:live:{id}` Redis key, not the DB.
     """
 
     __tablename__ = "action_approval"

@@ -1,12 +1,10 @@
 """Unit tests for `SnapshotEgressPolicy`.
 
-Pins the wire-level spec the proxy must match against — the snapshot
-key layout (`{tenant_id}/snapshots/{session_id}/{snapshot_id}.tar.gz`
-in `SANDBOX_S3_BUCKET`, per `sandbox_daemon/snapshot.py`) and the two
-S3 addressing modes — rather than re-deriving it from the policy's own
-constants. The security-relevant cases are the rejections: a flow that
-targets another tenant's prefix, an attacker-controlled bucket/host,
-or a non-snapshot key must NOT be opted into uncapped streaming.
+Pins the wire-level snapshot key layout
+(`{tenant_id}/snapshots/{session_id}/{snapshot_id}.tar.gz`) and both S3
+addressing modes. The security-relevant cases are the rejections: another
+tenant's prefix, an attacker bucket/host, or a non-snapshot key must NOT be
+opted into uncapped streaming.
 """
 
 from __future__ import annotations
@@ -21,8 +19,7 @@ from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 _BUCKET = "onyx-sandbox-snapshots"
 _TENANT = "tenant_acme"
 
-# Spec, hardcoded (not imported from the module under test): path-style
-# puts the bucket in the path; virtual-hosted puts it in the host.
+# Hardcoded spec: path-style puts the bucket in the path; vhost in the host.
 _PATH_STYLE_KEY = (_BUCKET, _TENANT, "snapshots", "sess-1", "snap-1.tar.gz")
 _VHOST_KEY = (_TENANT, "snapshots", "sess-1", "snap-1.tar.gz")
 
@@ -52,8 +49,8 @@ def test_path_style_streams_tenant_snapshot_upload() -> None:
 
 
 def test_path_style_rejects_other_tenant_prefix() -> None:
-    """Shared path-style MinIO: every bucket shares one host, so the
-    tenant-prefix check is the load-bearing control."""
+    """Path-style MinIO shares one host across buckets, so the tenant-prefix
+    check is the load-bearing control."""
     assert not _path_style().should_stream(
         host="release-minio",
         port=9000,

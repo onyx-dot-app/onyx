@@ -49,7 +49,7 @@ def test_cold_store_generates_and_persists(tmp_path: Path) -> None:
     assert b"BEGIN CERTIFICATE" in contents
     assert b"BEGIN PRIVATE KEY" in contents
     assert materialized.pem_path.stat().st_mode & 0o777 == 0o600
-    # Parent dir must be 0o700 — the CA private key sits inside it.
+    # Parent dir holds the CA private key, so must be 0o700.
     assert materialized.pem_path.parent.stat().st_mode & 0o777 == 0o700
 
     parsed = x509.load_pem_x509_certificate(materialized.cert_pem)
@@ -62,8 +62,7 @@ def _build_cert(
     not_valid_before: dt.datetime,
     not_valid_after: dt.datetime,
 ) -> tuple[bytes, bytes]:
-    """Helper that builds a (cert_pem, key_pem) with explicit validity
-    so we can exercise the expiry / not-yet-valid checks."""
+    """Build a (cert_pem, key_pem) with explicit validity bounds."""
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Test CA")])
     cert = (
@@ -101,7 +100,7 @@ def test_load_rejects_expired_cert(tmp_path: Path) -> None:
 
 def test_load_rejects_not_yet_valid_cert(tmp_path: Path) -> None:
     now = dt.datetime.now(dt.timezone.utc)
-    # 1 hour in the future is well outside the 5-minute skew tolerance.
+    # 1 hour ahead is well outside the 5-minute skew tolerance.
     cert_pem, key_pem = _build_cert(
         not_valid_before=now + dt.timedelta(hours=1),
         not_valid_after=now + dt.timedelta(days=365),
@@ -122,9 +121,7 @@ def test_load_rejects_malformed_pem(tmp_path: Path) -> None:
 
 
 def test_load_accepts_cert_within_skew_tolerance(tmp_path: Path) -> None:
-    # Cert generated 2 minutes in the future is inside the 5-minute
-    # skew window and should be accepted (matches the production
-    # generator which backdates by 5 minutes).
+    # 2 minutes ahead is inside the 5-minute skew window, so accepted.
     now = dt.datetime.now(dt.timezone.utc)
     cert_pem, key_pem = _build_cert(
         not_valid_before=now + dt.timedelta(minutes=2),

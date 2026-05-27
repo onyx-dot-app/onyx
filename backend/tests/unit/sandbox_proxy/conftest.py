@@ -1,17 +1,7 @@
-"""Shared helpers for sandbox_proxy unit tests.
+"""Shared `StaticLookup` stub for sandbox_proxy tests.
 
-The `StaticLookup` stub lives here so both `test_identity.py` (unit
-tests with stubbed sessions) and `test_identity_resolver.py`
-(external-dependency tests against real Postgres) can import a single
-`SandboxIPLookup` Protocol implementation.
-
-Two construction shapes:
-
-* `StaticLookup({"10.0.0.1": identity, ...})` — dict-keyed by source
-  IP. Used by tests that distinguish between several pods.
-* `StaticLookup.single(identity_or_none)` — returns the same
-  identity (or `None`) regardless of source IP. Used by tests that
-  exercise only one pod.
+Two shapes: `StaticLookup({ip: identity, ...})` keys by source IP;
+`StaticLookup.single(identity_or_none)` returns the same identity for any IP.
 """
 
 from __future__ import annotations

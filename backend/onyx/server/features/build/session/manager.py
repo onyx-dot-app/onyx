@@ -1371,16 +1371,11 @@ class SessionManager:
         session_id: UUID,
         tenant_id: str,
     ) -> Generator[Any, None, None]:
-        """Iterate ACP events and approval announces as a single stream.
+        """Merge ACP events and approval announces into one stream.
 
-        Two producer threads write onto a shared queue:
-
-        * the ACP iterator (forwarded as-is, including SSEKeepalive),
-        * a poller that `BLPOP`s the session's approval announce list
-          and pushes `ApprovalRequestedPacket` instances onto the
-          queue when the sandbox-proxy signals a new approval.
-
-        Announce latency is bounded by the BLPOP timeout (1s).
+        Two producer threads feed a shared queue: the ACP iterator, and a
+        BLPOP poller that emits `ApprovalRequestedPacket` when the proxy
+        signals a new approval. Announce latency is bounded by the 1s BLPOP.
         """
         output: queue_lib.Queue[Any] = queue_lib.Queue()
         stop = threading.Event()
@@ -1901,12 +1896,9 @@ class SessionManager:
                 },
             )
 
-            # Drive the agent. ACP events are merged with approval
-            # announces from the sandbox-proxy so newly-created approval
-            # cards surface on the same SSE stream without a separate
-            # poll. `_persist_acp_event` applies persistence side
-            # effects; SSE formatting + packet-logger book-keeping
-            # happen here.
+            # Drive the agent. ACP events are merged with proxy approval
+            # announces onto one SSE stream. `_persist_acp_event` applies
+            # persistence; SSE formatting + packet-logger book-keeping happen here.
             merged_events = self._merge_acp_with_announces(
                 self._yield_acp_events(sandbox_id, session_id, user_message_content),
                 session_id=session_id,

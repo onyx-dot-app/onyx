@@ -139,7 +139,6 @@ def test_ensure_configmap_replaces_on_409(monkeypatch: pytest.MonkeyPatch) -> No
     core_api = MagicMock(spec=client.CoreV1Api)
     core_api.create_namespaced_config_map.side_effect = _api_exception(409)
     core_api.replace_namespaced_config_map.return_value = None
-    # Don't actually sleep — keep the test fast.
     monkeypatch.setattr("onyx.sandbox_proxy.ca_k8s.time.sleep", lambda _: None)
 
     _make_store(core_api)._ensure_configmap(
@@ -150,9 +149,7 @@ def test_ensure_configmap_replaces_on_409(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_ensure_configmap_rejects_non_ascii_cert() -> None:
-    # A real cert is always ASCII-encodable PEM. If the Secret somehow
-    # holds binary garbage, we'd rather fail loud than smuggle it into
-    # the ConfigMap.
+    # A real cert is ASCII PEM; binary garbage should fail loud, not reach the CM.
     core_api = MagicMock(spec=client.CoreV1Api)
 
     with pytest.raises(RuntimeError, match="not ASCII-encodable PEM"):

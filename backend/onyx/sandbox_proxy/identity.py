@@ -1,21 +1,17 @@
 """Source-IP → sandbox identity + in-band session resolution.
 
-The IP-to-sandbox step is backend-specific (`SandboxIPLookup`
-Protocol). Downstream resolution lives on `IdentityResolver`, split
-into two phases:
+`IdentityResolver` splits resolution in two so non-gated traffic (npm
+install, apt update) can flow once the pod is identified, while only
+gated traffic needs a resolvable session:
 
-* `resolve_sandbox()` — pod IP → sandbox + user + tenant. Used for
-  every request to enforce "only known sandbox pods may egress".
-* `resolve_session_by_id()` — validate the in-band session tag
-  (the `Proxy-Authorization` username, set by the `session-proxy-tag`
-  opencode plugin) against its owner. Used when a request is gated and
-  we need the exact session to route the approval card to.
+* `resolve_sandbox()` — pod IP → sandbox + user + tenant; enforces
+  "only known sandbox pods may egress".
+* `resolve_session_by_id()` — validate the in-band session tag against
+  its owner to route the approval card.
 
-Splitting the two lets non-gated traffic (npm install, apt update,
-etc.) flow whenever the pod is identified — only gated traffic needs a
-resolvable session. There is deliberately no most-recent-active
-heuristic: a gated request that carries no verifiable session tag is
-failed closed by the gate rather than routed to a guessed session.
+There is deliberately no most-recent-active fallback: a gated request
+with no verifiable session tag fails closed rather than routing to a
+guessed session.
 """
 
 from collections.abc import Callable
@@ -37,8 +33,6 @@ logger = setup_logger()
 
 @dataclass(frozen=True)
 class SandboxIdentity:
-    """Pod-level identity. Available for any identified sandbox pod."""
-
     sandbox_id: UUID
     tenant_id: str
     sandbox_name: str
@@ -47,12 +41,7 @@ class SandboxIdentity:
 
 @dataclass(frozen=True)
 class ResolvedSandbox:
-    """Sandbox identity + the user that owns it.
-
-    Returned by `resolve_sandbox()`. Sufficient to authorize egress
-    and (when combined with a verified `resolve_session_by_id()`) to
-    mint an approval row.
-    """
+    """Sandbox identity + owning user. Authorizes egress."""
 
     sandbox_id: UUID
     user_id: UUID
@@ -73,12 +62,7 @@ class ResolvedSandbox:
 
 @dataclass(frozen=True)
 class SessionContext:
-    """Sandbox identity + active session id.
-
-    Built from `ResolvedSandbox.with_session(session_id)` once the gate
-    has confirmed both that the request is gated and that there's an
-    active session to route the approval card to.
-    """
+    """Sandbox identity + the verified session to route the card to."""
 
     session_id: UUID
     user_id: UUID
@@ -91,8 +75,8 @@ class SessionContext:
 class SandboxIPLookup(Protocol):
     """Backend-specific IP → SandboxIdentity resolver.
 
-    Implementations must return `None` for unknown IPs and block
-    callers on `wait_for_initial_sync` until the cache is populated.
+    Implementations must return `None` for unknown IPs and have
+    `wait_for_initial_sync` block until the cache is populated.
     """
 
     def start(self) -> None: ...
@@ -127,11 +111,9 @@ class IdentityResolver:
         )
 
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None:
-        """Pod IP → owning user + tenant. No session lookup.
+        """Pod IP → owning user + tenant; `None` if IP unknown or sandbox has no owner.
 
-        Returns `None` for an unknown source IP or a sandbox row with
-        no owning user. Active-session liveness is deliberately not
-        checked here — gate the call site instead.
+        Session liveness is deliberately not checked here — gate the call site instead.
         """
         identity = self._ip_lookup.lookup(src_ip)
         if identity is None:
@@ -155,18 +137,14 @@ class IdentityResolver:
     ) -> UUID | None:
         """Validate a sandbox-supplied `BuildSession` id against its owner.
 
-        The session id arrives in-band as the `Proxy-Authorization`
-        username (set by the `session-proxy-tag` opencode plugin from the
-        session's workspace path). It is trusted only after confirming the
-        row exists AND its `user_id` matches the user resolved from the
-        source IP — which the sandbox cannot forge. This bounds a tampered
-        or stale tag to the same user (no cross-user routing); on any
-        mismatch the gate fails the request closed (there is no
-        most-recent-active fallback).
+        The id arrives in-band (the `Proxy-Authorization` username, set by
+        the `session-proxy-tag` opencode plugin) and is forgeable, so it is
+        trusted only if its `user_id` matches the user resolved from the
+        source IP. This bounds a tampered tag to the same user; mismatches
+        fail closed.
 
-        Status is intentionally not filtered: this id came from the
-        session that actually originated the egress, so it is the correct
-        routing target regardless of its current status.
+        Status is intentionally not filtered: this is the session that
+        originated the egress regardless of its current status.
         """
         with self._session_factory(tenant_id) as db:
             stmt = (

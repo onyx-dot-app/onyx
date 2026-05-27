@@ -1,21 +1,7 @@
 """Gate addon: enforces approval policy on identified sandbox egress.
 
-A gated request flows through the addon as:
-
-1. `_resolve_and_match` looks up the sandbox identity and classifies
-   the action.
-2. `_persist_approval_row` commits the `action_approval` row and
-   pushes onto the session's announce list so the api-server's
-   chat-stream merger surfaces the card on the open SSE.
-3. `_await_decision` parks on `approval:wake:{id}` until the
-   decision API signals, the wait window elapses, or the sandbox
-   socket closes. On timeout / cancel it claims EXPIRED.
-4. `_write_response_for_decision` either forwards (APPROVED) or
-   rejects with a 403 (REJECTED / EXPIRED).
-
-Fail-open vs fail-closed: identity, body-size cap, and unidentified
-sandbox checks are fail-closed. `ActionMatcher` exceptions and
-"not my action type" fall open.
+Fail-closed: identity, body-size cap, and unidentified-sandbox checks.
+Fail-open: `ActionMatcher` exceptions and non-matching action types.
 """
 
 import asyncio
@@ -46,14 +32,11 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Hard cap on the body the matcher will look at. Oversize bodies are
-# fail-closed: a real DoS attempt against the matcher or exfiltration
-# wouldn't show up in summary/payload anyway.
+# Bodies over this cap are fail-closed (rejected), not parsed by the matcher.
 PARSER_MAX_BODY_BYTES = 1_048_576
 
-# flow.metadata flag set in `requestheaders` once a flow is confirmed to
-# be tenant-scoped snapshot egress, so `request` skips the body cap +
-# matcher and lets the streamed upload through.
+# flow.metadata flag set in `requestheaders` for confirmed snapshot egress, so
+# `request` skips the body cap + matcher and lets the streamed upload through.
 _SNAPSHOT_STREAM_FLAG = "onyx_snapshot_stream"
 
 
@@ -69,8 +52,7 @@ DBSessionFactory = Callable[[str], AbstractContextManager[Session]]
 CacheFactory = Callable[[str], CacheBackend]
 
 
-# 403 codes exposed to the sandbox-side caller. This is a separate
-# protocol from `OnyxError` — the sandbox sees only this enum.
+# 403 codes exposed to the sandbox-side caller (distinct from `OnyxError`).
 _CODE_UNIDENTIFIED_SANDBOX = "unidentified_sandbox"
 _CODE_NO_ACTIVE_SESSION = "no_active_session"
 _CODE_BODY_TOO_LARGE = "body_too_large"
@@ -78,23 +60,16 @@ _CODE_USER_REJECTED = "user_rejected"
 _CODE_NOT_AUTHORIZED = "not_authorized"
 _CODE_INTERNAL_ERROR = "internal_error"
 
-# Relative deep link to the Craft build session that initiated the gated
-# request. The notifications popover routes a relative `additional_data.link`
-# through the Next router (see web/src/sections/sidebar/NotificationsPopover.tsx),
-# so this lands the user on the originating session. Mirrors the frontend's
-# CRAFT_PATH (`/craft/v1`) + SESSION_ID search param (`sessionId`).
+# Relative deep link routed through the Next router by NotificationsPopover.tsx;
+# must mirror the frontend's CRAFT_PATH + sessionId search param.
 _CRAFT_SESSION_LINK_TEMPLATE = "/craft/v1?sessionId={session_id}"
 
 
 class ParkedApprovals:
     """Approvals the proxy is currently parked on, grouped by tenant.
 
-    Cross-tenant in-memory state — UUIDs and tenant slugs, no user
-    data. The SIGTERM drain walks this per-tenant so one cache backend
-    can be reused across each tenant's parked approvals.
-
-    Mutated only from the event loop; the drain reads via
-    `snapshot()` to iterate safely while the source mutates.
+    Mutated only from the event loop; the drain reads via `snapshot()`
+    to iterate safely while the source mutates.
     """
 
     def __init__(self) -> None:
@@ -137,14 +112,11 @@ class GateAddon:
         # Invariant: `_persist_approval_row` is the only writer;
         # `_await_decision`'s finally is the only remover.
         self._parked = ParkedApprovals()
-        # client connection id -> in-band session tag (BuildSession id as a
-        # string) parsed from the CONNECT's Proxy-Authorization. Populated
-        # in `http_connect` (the only place the header is visible for
-        # MITM'd HTTPS), read in `request`, evicted on disconnect.
+        # client connection id -> session tag, captured from the CONNECT's
+        # Proxy-Authorization (only place it's visible for MITM'd HTTPS).
         self._conn_session_tags: dict[str, str] = {}
-        # Each running `request()` coroutine registers itself here so
-        # the drain can `asyncio.wait` on real completion instead of
-        # sleeping. Self-cleaning via `add_done_callback`.
+        # Tracks running `request()` coroutines so the drain can `asyncio.wait`
+        # on real completion instead of sleeping. Self-cleaning.
         self._inflight_tasks: set[asyncio.Task[None]] = set()
 
     # ------------------------------------------------------------------
@@ -154,16 +126,10 @@ class GateAddon:
     def http_connect(self, flow: http.HTTPFlow) -> None:
         """Capture the per-session tag from the CONNECT's Proxy-Authorization.
 
-        For MITM'd HTTPS the `Proxy-Authorization` header rides on the
-        CONNECT, not the decrypted inner request, so this is the only
-        place it's visible. The opencode `session-proxy-tag` plugin puts
-        the originating BuildSession id in the basic-auth username. We key
-        it by client connection id; every curl/python subprocess opens its
-        own tunnel, so a connection maps to exactly one session. Evicted in
-        `client_disconnected`.
-
-        Best-effort: a missing/garbled header just means `request` falls
-        back to the most-recent-active heuristic.
+        For MITM'd HTTPS the header rides on the CONNECT, not the decrypted
+        inner request, so this is the only place it's visible. Keyed by client
+        connection id (one tunnel per subprocess = one session); evicted in
+        `client_disconnected`. Best-effort.
         """
         conn_id = getattr(flow.client_conn, "id", None)
         if conn_id is None:
@@ -184,15 +150,9 @@ class GateAddon:
         """Opt a tenant-scoped snapshot upload into unbuffered streaming.
 
         Must run here, not in `request`: mitmproxy only honors
-        `flow.request.stream = True` while headers are in hand and the
-        body hasn't been read yet. Host/path/tenant are all available
-        at this point, so the flow stays inspectable — only the opaque
-        `tar.gz` body is left unbuffered.
-
-        Anything not confirmed as the resolving tenant's own snapshot
-        egress is left untouched and falls through to `request`'s
-        normal cap + matcher path (so a mismatched tenant / host still
-        hits the fail-closed body cap).
+        `flow.request.stream = True` before the body is read. Anything not
+        confirmed as the resolving tenant's snapshot egress falls through to
+        `request`'s normal cap + matcher path.
         """
         policy = self._snapshot_policy
         if policy is None:
@@ -236,25 +196,21 @@ class GateAddon:
             task.add_done_callback(self._inflight_tasks.discard)
 
         if flow.metadata.get(_SNAPSHOT_STREAM_FLAG):
-            # Identity + tenant-scoped prefix already validated in
-            # `requestheaders`; the body is streaming, so there's
-            # nothing to cap, match, or gate. Forward unchanged.
+            # Already validated in `requestheaders`; body is streaming.
             return
 
         gate_target = self._resolve_and_match(flow)
-        # Strip the in-band session tag so it never reaches the origin on a
-        # forwarded request. mitmproxy does NOT strip `Proxy-Authorization`
-        # from plain-HTTP requests in regular mode; HTTPS carries it on the
-        # CONNECT only (consumed before this point), so this is a no-op there.
-        # Safe here: `_resolve_and_match` has already read it.
+        # Strip the session tag so it never reaches the origin. mitmproxy does
+        # NOT strip `Proxy-Authorization` from plain-HTTP requests in regular
+        # mode (no-op for HTTPS, which carries it on the already-consumed
+        # CONNECT). Safe here: `_resolve_and_match` has already read it.
         flow.request.headers.pop("Proxy-Authorization", None)
         if gate_target is None:
             return
         ctx, match = gate_target
 
         # mitmproxy forwards the original request on unhandled addon
-        # exceptions, which would silently bypass the gate. Fail closed
-        # here and terminalize any row we already committed.
+        # exceptions, silently bypassing the gate. Fail closed instead.
         approval_id: UUID | None = None
         try:
             approval_id = self._persist_approval_row(ctx, match)
@@ -282,18 +238,14 @@ class GateAddon:
     ) -> tuple[SessionContext, ActionMatch] | None:
         """Identity → matcher → (only if gated) in-band session resolution.
 
-        Returns `(ctx, match)` to proceed. Two `None` shapes:
+        Returns `(ctx, match)` to proceed, or `None` two ways:
+        * fail-closed — sets a 403 `flow.response` first (unidentified
+          sandbox, oversize body, unattributable gated request).
+        * fail-open — leaves the response untouched so mitmproxy forwards
+          unchanged (matcher crash, non-matching request).
 
-        * fail-closed — sets `flow.response` to a 403 before
-          returning (unidentified sandbox, oversize body, or a gated
-          request with no verifiable session tag to route the card to).
-        * fail-open — returns `None` without touching the response
-          (matcher crash, non-matching request); mitmproxy then
-          forwards the request unchanged.
-
-        Session resolution is intentionally LAST. Non-gated traffic (npm
-        install, apt, pip, etc.) is identified at the pod level and never
-        needs a session tag — only gated actions require one.
+        Session resolution is LAST: only gated actions need a session tag;
+        non-gated traffic (npm, apt, pip) is identified at the pod level.
         """
         src_ip = self._extract_src_ip(flow)
         if src_ip is None:
@@ -315,9 +267,8 @@ class GateAddon:
             flow.response = _http_403(_CODE_UNIDENTIFIED_SANDBOX)
             return None
 
-        # raw_content is None for streamed bodies. We don't enable
-        # streaming today; treat None as oversize so a future stream
-        # opt-in can't silently bypass the cap.
+        # raw_content is None for streamed bodies; treat None as oversize so a
+        # future stream opt-in can't silently bypass the cap.
         raw = flow.request.raw_content
         if raw is None or len(raw) > PARSER_MAX_BODY_BYTES:
             flow.response = _http_403(_CODE_BODY_TOO_LARGE)
@@ -336,11 +287,7 @@ class GateAddon:
         if match is None:
             return None
 
-        # Gated — resolve the originating session exclusively from the
-        # in-band Proxy-Authorization tag. No most-recent-active fallback:
-        # an unattributable gated action is blocked, not guessed. (The
-        # specific reason — missing / malformed / unverified tag — is logged
-        # inside `_resolve_gated_session`.)
+        # Gated — an unattributable action is blocked, not guessed.
         try:
             session_id = self._resolve_gated_session(flow, sandbox)
         except Exception:
@@ -380,10 +327,8 @@ class GateAddon:
     def _persist_approval_row(self, ctx: SessionContext, match: ActionMatch) -> UUID:
         """Commit the row, register it for the drain, announce to the chat.
 
-        The announce is best-effort and runs after `db.commit()`. A
-        missed announce degrades to "FE surfaces the card on the next
-        `/live` refetch (reconnect / remount)" — the row is already
-        in Postgres, so we don't fail the request over it.
+        Announce is best-effort: a miss degrades to the FE surfacing the
+        card on the next `/live` refetch, so we don't fail the request.
         """
         with self._db_session_factory(ctx.tenant_id) as db:
             row = action_approval.insert_action_approval(
@@ -439,9 +384,7 @@ class GateAddon:
     ) -> ApprovalDecision:
         """Park on the wake channel; claim EXPIRED on timeout / cancel.
 
-        Returns the recorded `ApprovalDecision`. The parked-approvals
-        entry is set in `_persist_approval_row`; this method owns its
-        removal in the `finally` block.
+        Owns removal of the parked-approvals entry in the `finally` block.
         """
         cache = self._cache_factory(ctx.tenant_id)
         try:
@@ -476,9 +419,8 @@ class GateAddon:
                 )
             return resolved
         except asyncio.CancelledError:
-            # Sandbox-side socket closed mid-wait. Claim EXPIRED so the
-            # audit row is terminal, then re-raise so mitmproxy releases
-            # the flow.
+            # Sandbox socket closed mid-wait. Terminalize the audit row,
+            # then re-raise so mitmproxy releases the flow.
             self._claim_expired_or_read_winner(approval_id, ctx.tenant_id)
             raise
         finally:
@@ -487,13 +429,8 @@ class GateAddon:
     def _claim_expired_or_read_winner(
         self, approval_id: UUID, tenant_id: str
     ) -> ApprovalDecision:
-        """Race-safe terminal write — or read of the existing winner.
-
-        Tries the conditional UPDATE to claim EXPIRED. If we lose
-        (the API already wrote APPROVED / REJECTED), reads the row
-        and returns the winning decision so the caller forwards or
-        rejects accordingly. Used by both the wait-timeout path and
-        the SIGTERM drain.
+        """Conditionally claim EXPIRED; if the API already wrote a decision,
+        return that winner instead so the caller forwards/rejects correctly.
         """
         with self._db_session_factory(tenant_id) as db:
             claimed = action_approval.try_record_decision(
@@ -506,9 +443,8 @@ class GateAddon:
                 return ApprovalDecision.EXPIRED
             existing = action_approval.get_action_approval(db, approval_id)
             if existing is None or existing.decision is None:
-                # FK cascade dropped the row mid-flight (build_session
-                # deleted). Treat as expired so the upstream call is
-                # rejected; the row no longer exists to update.
+                # FK cascade dropped the row (build_session deleted).
+                # Treat as expired so the upstream call is rejected.
                 logger.error(
                     "gate.row_missing_on_claim approval_id=%s tenant_id=%s",
                     approval_id,
@@ -534,10 +470,9 @@ class GateAddon:
     ) -> None:
         """Claim EXPIRED + wake the parked BLPOP after an exception.
 
-        Called when the request hook fails after the row is committed
-        but before a decision is recorded. Each sub-step swallows its
-        own errors so a failing cleanup doesn't mask the original
-        exception.
+        For when the request hook fails after the row is committed but
+        before a decision is recorded. Each step swallows its own errors
+        so cleanup can't mask the original exception.
         """
         try:
             decision = self._claim_expired_or_read_winner(approval_id, tenant_id)
@@ -566,18 +501,11 @@ class GateAddon:
     async def drain_inflight(self) -> None:
         """Drain parked approvals on SIGTERM, bounded by caller.
 
-        Two phases, each best-effort:
-
-        1. For every parked approval (iterated per-tenant so each
-           tenant uses one cache backend), claim EXPIRED (or read the
-           winner if the API just decided) and push the decision onto
-           the wake channel so the parked BLPOP returns immediately.
-           Runs synchronously in the event loop; at the documented
-           scale (few hundred approvals max) this completes well
-           inside `_DRAIN_TIMEOUT_S`.
-        2. `asyncio.wait` on every tracked `request()` task so the
-           hook coroutines pick up their wakes and return to mitmproxy
-           before the outer caller tears down connections.
+        Two best-effort phases:
+        1. Terminalize each parked approval (claim EXPIRED or read the
+           winner) and wake its parked BLPOP.
+        2. `asyncio.wait` on tracked `request()` tasks so they return to
+           mitmproxy before the caller tears down connections.
         """
         for tenant_id, approval_ids in self._parked.snapshot():
             cache = self._cache_factory(tenant_id)
@@ -629,10 +557,8 @@ class GateAddon:
     ) -> None:
         """Best-effort APPROVAL_REQUESTED notification dispatch.
 
-        Body is `{approval_id, session_id, action_type, link}` — no PII.
-        `link` deep-links the notification to the originating session; the
-        full payload lives on the action_approval row, which the popover
-        fetches when the chat loads. Failures are swallowed by the caller.
+        Body carries no PII; the full payload lives on the action_approval
+        row, which the popover fetches when the chat loads.
         """
         with self._db_session_factory(ctx.tenant_id) as db:
             create_notification(
@@ -667,13 +593,11 @@ class GateAddon:
     def _resolve_gated_session(
         self, flow: http.HTTPFlow, sandbox: ResolvedSandbox
     ) -> UUID | None:
-        """Resolve the originating session **exclusively** from the in-band
-        Proxy-Authorization tag. Returns None (→ caller fails closed) if the
-        tag is absent, malformed, or doesn't resolve to one of this user's
-        sessions. There is no most-recent-active fallback: an unattributable
-        gated action is blocked rather than routed to a guessed session.
+        """Resolve the originating session from the Proxy-Authorization tag.
 
-        DB errors propagate to the caller, which also fails the request closed.
+        Returns None (caller fails closed) if the tag is absent, malformed,
+        or doesn't resolve to one of this user's sessions. DB errors
+        propagate to the caller, which also fails closed.
         """
         tag = self._extract_session_tag(flow)
         if tag is None:
@@ -698,8 +622,7 @@ class GateAddon:
             tagged_id, sandbox.user_id, sandbox.tenant_id
         )
         if exact is None:
-            # Tag present but doesn't resolve to one of this user's sessions
-            # (stale, foreign, or tampered). Fail closed — do not guess.
+            # Stale, foreign, or tampered tag. Fail closed — do not guess.
             logger.warning(
                 "gate.session_tag_unverified sandbox_id=%s user_id=%s host=%s",
                 sandbox.sandbox_id,
@@ -718,9 +641,8 @@ class GateAddon:
     def _extract_session_tag(self, flow: http.HTTPFlow) -> str | None:
         """The originating session tag, or None.
 
-        HTTPS: captured from the CONNECT in `http_connect`, keyed by
-        client connection. HTTP: read directly off the request, since
-        there's no CONNECT and the header rides on the request itself.
+        HTTPS: cached from the CONNECT in `http_connect`. HTTP: read off the
+        request directly, since there's no CONNECT to carry the header.
         """
         conn_id = getattr(flow.client_conn, "id", None)
         if conn_id is not None:
@@ -740,10 +662,8 @@ class GateAddon:
 def _parse_proxy_auth_username(header_value: str | None) -> str | None:
     """Extract the basic-auth username from a `Proxy-Authorization` header.
 
-    The session-proxy-tag plugin encodes the BuildSession id as the
-    username with an empty password: `Basic base64("<session_id>:")`.
-    Returns the username, or None for a missing/malformed/non-basic
-    header. Never raises.
+    The proxy-tag plugin encodes the BuildSession id as the username with an
+    empty password: `Basic base64("<session_id>:")`. Never raises.
     """
     if not header_value:
         return None
@@ -766,11 +686,7 @@ def _parse_proxy_auth_username(header_value: str | None) -> str | None:
 def _http_403(code: str) -> http.Response:
     """Build a 403 response visible to the sandbox.
 
-    The body is intentionally minimal — `code` is a stable string
-    the SDK / curl wrapper can match on. Locked enum:
-
-      unidentified_sandbox | body_too_large | user_rejected
-      | not_authorized | internal_error
+    `code` is a stable string the SDK / curl wrapper matches on.
     """
     body = json.dumps({"error": code}).encode()
     return http.Response.make(

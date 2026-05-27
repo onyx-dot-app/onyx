@@ -113,8 +113,7 @@ def test_returns_404_for_unknown_path(
 def test_loses_readiness_on_watch_disconnect_even_after_initial_sync(
     healthz: tuple[_Readiness, _FakeLookup, int],
 ) -> None:
-    # Models the watch-reconnect scenario: lookup was synced, then
-    # informer drops the watch and is_synced() flips back to False.
+    # Watch-reconnect scenario: is_synced() flips back to False after a sync.
     readiness, lookup, port = healthz
     readiness.ca_ready = True
     lookup._synced = True

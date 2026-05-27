@@ -1,10 +1,8 @@
 """External-dependency-unit tests for `_claim_expired_or_read_winner`.
 
-The race arbiter is a unit-test trap: stubbing both
-`try_record_decision` and `get_action_approval` only restates the
-contract those functions advertise — the test would still pass even
-if the conditional UPDATE accidentally became an unconditional one.
-Pin the behaviour against real Postgres rows here.
+Run against real Postgres rows: stubbing `try_record_decision` /
+`get_action_approval` would pass even if the conditional UPDATE became
+unconditional, so the race behaviour is pinned against the real DB.
 """
 
 from __future__ import annotations
@@ -28,10 +26,8 @@ from tests.external_dependency_unit.conftest import create_test_user
 
 
 def _seed_build_session(db_session: Session) -> UUID:
-    """Insert a fresh user + BuildSession; return the session id.
-
-    The action_approval row uses session_id as a FK to build_session.
-    """
+    """Insert a fresh user + BuildSession (FK target for action_approval);
+    return the session id."""
     user = create_test_user(db_session, "gate_claim_arbiter")
     bs = BuildSession(
         id=uuid4(),
@@ -85,11 +81,8 @@ class _UnusedMatcher:
 
 
 def _build_addon() -> GateAddon:
-    """Build a `GateAddon` with only `db_session_factory` wired up.
-
-    The race arbiter doesn't touch `identity`, `action_matcher`, or
-    `cache_factory`, so they can be obvious-fail stubs.
-    """
+    """`GateAddon` with only `db_session_factory` wired; the arbiter doesn't
+    touch the others, so they're obvious-fail stubs."""
 
     def _factory_raises(tenant_id: str) -> Any:  # noqa: ARG001
         raise AssertionError("cache_factory unexpectedly used")
@@ -109,14 +102,11 @@ def test_claim_succeeds_when_pending(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    """`decision IS NULL` row → conditional UPDATE wins → EXPIRED.
-
-    Pins the terminal-write side effect: after the call, Postgres must
-    show `decision=EXPIRED` AND `decided_at` populated.
-    """
+    """`decision IS NULL` row → conditional UPDATE wins → EXPIRED, with
+    `decided_at` populated in Postgres."""
     bs_id = _seed_build_session(db_session)
     row = _seed_action_approval(db_session, session_id=bs_id)
-    assert row.decision is None  # baseline
+    assert row.decision is None
 
     addon = _build_addon()
     decision = addon._claim_expired_or_read_winner(
@@ -125,8 +115,7 @@ def test_claim_succeeds_when_pending(
 
     assert decision == ApprovalDecision.EXPIRED
 
-    # Refresh through a new session — the arbiter's `db.commit()`
-    # should be visible to any subsequent read.
+    # Re-read to confirm the arbiter's commit is visible to other readers.
     db_session.expire(row)
     db_session.refresh(row)
     assert row.decision == ApprovalDecision.EXPIRED
@@ -137,9 +126,8 @@ def test_claim_reads_winning_decision(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    """Row already APPROVED by the API → conditional UPDATE no-ops →
-    we read the existing decision and return it. The decided_at
-    timestamp must be preserved (no spurious overwrite)."""
+    """Row already APPROVED → conditional UPDATE no-ops → existing decision is
+    read back with `decided_at` preserved."""
     bs_id = _seed_build_session(db_session)
     row = _seed_action_approval(
         db_session, session_id=bs_id, decision=ApprovalDecision.APPROVED
@@ -163,10 +151,8 @@ def test_claim_returns_expired_when_row_missing(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    """Unknown approval_id (e.g. FK cascade fired mid-flight) → treat
-    as EXPIRED so the upstream call is rejected. Critically, this must
-    NOT insert a new row.
-    """
+    """Unknown approval_id → treat as EXPIRED (reject upstream) without
+    inserting a row."""
     unknown_id = uuid4()
 
     before_count = db_session.query(ActionApproval).count()
@@ -179,7 +165,6 @@ def test_claim_returns_expired_when_row_missing(
     after_count = db_session.query(ActionApproval).count()
     assert after_count == before_count, "claim must not insert a row"
 
-    # And there really is no row with that id.
     assert db_session.get(ActionApproval, unknown_id) is None
 
 
@@ -187,13 +172,8 @@ def test_claim_arbiter_does_not_overwrite_decided_at(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    """Losing the race must not touch ``decided_at`` on the winning row.
-
-    Pins the "lost-race-doesn't-touch-the-winner" invariant: the conditional
-    UPDATE's ``WHERE decision IS NULL`` clause guarantees zero rows are
-    affected when the row is already decided, so ``decided_at`` must remain
-    exactly what the original winner wrote.
-    """
+    """Losing the race must not touch ``decided_at`` on the winning row: the
+    ``WHERE decision IS NULL`` clause affects zero rows when already decided."""
     bs_id = _seed_build_session(db_session)
     row = _seed_action_approval(
         db_session, session_id=bs_id, decision=ApprovalDecision.REJECTED
@@ -206,10 +186,8 @@ def test_claim_arbiter_does_not_overwrite_decided_at(
         row.approval_id, POSTGRES_DEFAULT_SCHEMA
     )
 
-    # Caller sees the existing decision, not EXPIRED.
     assert decision == ApprovalDecision.REJECTED
 
-    # decided_at on the winning row is bit-for-bit unchanged.
     db_session.expire(row)
     db_session.refresh(row)
     assert row.decision == ApprovalDecision.REJECTED

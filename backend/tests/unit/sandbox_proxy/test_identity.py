@@ -10,8 +10,7 @@ from tests.unit.sandbox_proxy.conftest import StaticLookup
 
 
 class _StubSession:
-    """Stand-in for SQLAlchemy `Session`; returns canned scalar()
-    results in queue order."""
+    """Stand-in for SQLAlchemy `Session`; returns canned scalar() results in order."""
 
     def __init__(self, scalar_results: list[Any]) -> None:
         self._results = list(scalar_results)
@@ -58,13 +57,11 @@ def test_resolve_sandbox_happy_path() -> None:
     assert sandbox is not None
     assert sandbox.user_id == sandbox_user_id
     assert sandbox.sandbox_id == UUID("11111111-1111-1111-1111-111111111111")
-    # Tenant must be threaded into the DB factory so the per-tenant
-    # SqlAlchemy session is opened correctly.
+    # Tenant must be threaded into the DB factory for the per-tenant session.
     assert sandbox.tenant_id == "public"
     assert factory.last_tenant_id == "public"
-    # Session lookup is deferred to `resolve_session_by_id()` — only
-    # the sandbox-user query runs here. Pinning this short-circuit so
-    # non-gated traffic doesn't pay an extra round-trip per request.
+    # Only the sandbox-user query runs here; session lookup is deferred to
+    # resolve_session_by_id() so non-gated traffic avoids an extra round-trip.
     assert stub.scalar_calls == 1
 
 
@@ -97,13 +94,8 @@ def test_resolve_sandbox_missing_sandbox_row_returns_none() -> None:
 
 
 def test_resolve_session_by_id_propagates_scalar() -> None:
-    """Both the verified (id returned) and unverified (None) cases.
-
-    The production code is `return db.scalar(stmt)`; a unit test that
-    only exercises one branch is testing the stub, not the resolver.
-    Pin both so a future change (e.g. wrapping the scalar in a default)
-    fails here.
-    """
+    """Pin both the verified (id returned) and unverified (None) cases so a
+    change like wrapping the scalar in a default would fail here."""
     found_id = uuid4()
     stub = _StubSession([found_id, None])
     factory = _factory(stub)

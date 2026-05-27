@@ -1262,27 +1262,20 @@ def pod_exec_async(
     container: str = "sandbox",
     proxy_session_id: str | None = None,
 ) -> None:
-    """Kick off a sandbox-side ``curl`` in the background, writing to a tempfile.
+    """Kick off a background sandbox-side ``curl``, writing ``{status}\\n{body}``
+    to a tempfile only after curl exits. Returns immediately; poll via
+    ``wait_for_pod_exec_output`` (a valid leading integer means done).
 
-    The pod's ``sh`` runs ``curl`` with ``-o body`` + ``-w '%{http_code}'``
-    so the resulting tempfile starts with the HTTP status code followed
-    by the response body, separated by a newline. Returns immediately;
-    callers poll the tempfile (via ``wait_for_pod_exec_output``) to observe
-    completion. The tempfile is written atomically only after curl exits,
-    so callers can rely on a valid leading integer meaning "the call is done".
-
-    ``proxy_session_id`` mimics the ``session-proxy-tag`` opencode plugin:
-    it overrides the ambient ``HTTPS_PROXY`` with one carrying the session
-    id as the ``Proxy-Authorization`` username (``-x``), so the egress
-    proxy resolves the originating session. Without it the request is
-    untagged — used to exercise the gate's fail-closed path.
+    ``proxy_session_id`` mimics the ``session-proxy-tag`` opencode plugin,
+    tagging the request with the session id as ``Proxy-Authorization`` userinfo
+    so the proxy can resolve the session. Omit it to exercise the untagged,
+    fail-closed gate path.
     """
     header_args = ""
     for key, value in (headers or {}).items():
         header_args += f" -H {json.dumps(f'{key}: {value}')}"
     body_arg = f" --data {json.dumps(body)}" if body is not None else ""
-    # The sandbox's ambient proxy is http://sandbox-proxy:8080 (set by
-    # firewall-init); inject the session id as basic-auth userinfo on it.
+    # Override the ambient proxy with the session id as basic-auth userinfo.
     proxy_arg = (
         f" -x {json.dumps(f'http://{proxy_session_id}@sandbox-proxy:8080')}"
         if proxy_session_id is not None
@@ -1361,11 +1354,9 @@ def wait_for_pod_exec_output(
     namespace: str = SANDBOX_NAMESPACE,
     container: str = "sandbox",
 ) -> tuple[int, str]:
-    """Poll an in-pod tempfile (written by ``pod_exec_async``) until it appears.
-
-    The tempfile's first line is the HTTP status code, followed by a newline
-    and the response body. Returns ``(status_code, body)``; raises on timeout.
-    """
+    """Poll the ``pod_exec_async`` tempfile until it appears, returning
+    ``(status_code, body)`` parsed from its ``{status}\\n{body}`` layout.
+    Raises on timeout."""
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         raw = pod_exec(
@@ -1393,9 +1384,8 @@ def wait_for_proxy_redeploy(
 ) -> None:
     """Wait until the sandbox-proxy Deployment reports a ready replica.
 
-    Used after a SIGTERM-driven respawn (e.g. test deletes the proxy pod) so
-    the next test doesn't run against a half-baked Deployment. Polls both the
-    Deployment status and the pod-level readiness as belt-and-suspenders.
+    Used after a proxy-pod respawn so the next test doesn't hit a half-baked
+    Deployment. Polls both Deployment status and pod-level readiness.
     """
     from kubernetes import client as k8s_client_module
 

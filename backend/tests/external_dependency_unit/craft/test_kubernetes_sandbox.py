@@ -610,10 +610,8 @@ def test_managed_directory_is_read_only_from_sandbox_container(
 
 # ---------------------------------------------------------------------------
 # Egress proxy: the sandbox must reach the outside world ONLY via the proxy.
-# These tests exercise the live container; pod-spec unit tests can verify
-# the YAML but can't observe runtime resolution / iptables behavior, which
-# is where the /etc/hosts-doesn't-propagate-across-containers class of
-# bugs hides.
+# Run against the live container to catch runtime resolution / iptables bugs
+# that pod-spec unit tests can't observe.
 # ---------------------------------------------------------------------------
 
 
@@ -628,10 +626,10 @@ def test_sandbox_etc_hosts_resolves_proxy_alias(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
 ) -> None:
-    """The main container's /etc/hosts must contain the `sandbox-proxy`
-    alias. kubelet manages /etc/hosts per-container, so initContainer
-    writes don't propagate — host_aliases on the PodSpec is the only path
-    that works. Regression guard for that bug.
+    """The main container's /etc/hosts must contain the `sandbox-proxy` alias.
+
+    kubelet manages /etc/hosts per-container so initContainer writes don't
+    propagate; host_aliases on the PodSpec is the only path that works.
     """
     sandbox_id = uuid4()
     try:
@@ -659,9 +657,8 @@ def test_sandbox_egress_only_flows_via_proxy(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
 ) -> None:
-    """End-to-end egress: TLS through the proxy reaches the public internet,
-    direct egress (bypassing the proxy) is blocked by iptables, and DNS for
-    arbitrary names is denied. Catches: missing host_aliases, broken CA
+    """End-to-end: TLS through the proxy reaches the internet while direct
+    egress is blocked by iptables. Catches missing host_aliases, broken CA
     trust, iptables misconfiguration, or proxy-listen-port drift.
     """
     sandbox_id = uuid4()
@@ -669,8 +666,7 @@ def test_sandbox_egress_only_flows_via_proxy(
         _provisioned_sandbox(k8s_manager, sandbox_id)
         pod_name = k8s_manager._get_pod_name(sandbox_id)
 
-        # Proxied egress: relies on HTTPS_PROXY env, /etc/hosts resolution,
-        # CA bundle install, and the proxy actually running.
+        # Proxied egress: exercises HTTPS_PROXY, /etc/hosts, CA bundle, and proxy.
         proxied = pod_exec(
             k8s_client,
             pod_name,
@@ -682,8 +678,8 @@ def test_sandbox_egress_only_flows_via_proxy(
             f"proxied egress should return 200, got {proxied!r}"
         )
 
-        # Direct egress: curl with --noproxy bypasses HTTPS_PROXY. iptables
-        # must block this. curl exits non-zero and writes 000 on failure.
+        # Direct egress: --noproxy bypasses HTTPS_PROXY; iptables must block it
+        # (curl exits non-zero and writes 000 on failure).
         direct = pod_exec(
             k8s_client,
             pod_name,

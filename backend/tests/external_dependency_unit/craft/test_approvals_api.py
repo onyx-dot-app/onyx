@@ -1,16 +1,5 @@
-"""Tests for the approvals router (``backend/onyx/server/features/build/approvals/api.py``).
-
-Covers the three endpoints (``list_live_approvals``, ``list_session_approvals``,
-``submit_decision``) by invoking the route functions directly with a constructed
-``User`` and the test ``db_session`` — same pattern as the sibling
-``permission_sync`` tests, no ``TestClient``.
-
-The submit-decision tests pin the wake push semantics (Redis side-effect +
-swallow of transient errors), and one test specifically guards against a
-regression where the post-UPDATE row served back to the caller would carry
-the stale identity-mapped ``decision=None`` if the ORM session were not
-refreshed.
-"""
+"""Tests for the approvals router. Route functions are invoked directly with a
+constructed ``User`` and the test ``db_session`` (no ``TestClient``)."""
 
 from __future__ import annotations
 
@@ -46,29 +35,14 @@ from tests.external_dependency_unit.craft._test_helpers import make_user
 
 
 def _stub_send_wake_noop(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Monkeypatch send_wake to a no-op for tests that don't care about the wake side."""
     monkeypatch.setattr(approval_cache, "send_wake", lambda *_args, **_kwargs: None)
 
 
-# --------------------------------------------------------------------------- #
-# Constants — separate completeness check guards the source value.
-# --------------------------------------------------------------------------- #
-
-
-# Spec value pinned by tests in this file. The constant in source must match —
-# enforced by ``test_wait_timeout_spec`` below.
+# Hardcoded spec; the completeness check below pins the source constant to it.
 WAIT_TIMEOUT_S_SPEC = 180
 
 
 def test_wait_timeout_spec() -> None:
-    """Pins the wait-timeout spec value.
-
-    Tests that depend on the wait window hardcode 180 (the spec) rather than
-    importing ``approval_cache.WAIT_TIMEOUT_S``. This separate completeness
-    check guards the constant: if someone changes the source value without
-    updating the spec, both this test and the dependent tests will fail —
-    surfacing the spec change explicitly instead of silently moving with it.
-    """
     assert approval_cache.WAIT_TIMEOUT_S == WAIT_TIMEOUT_S_SPEC
 
 
@@ -82,13 +56,7 @@ def test_list_live_approvals_filter_logic(
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
-    """Only `decision IS NULL` rows within the wait window come back.
-
-    Seeds three rows that pin BOTH filter rules at once:
-    - one fresh pending row (should be returned),
-    - one decided row (filtered out by the ``decision IS NULL`` rule),
-    - one stale pending row (filtered out by the wait-window rule).
-    """
+    """Only `decision IS NULL` rows within the wait window come back."""
     user = make_user(db_session, email_prefix="live_filter")
     session = build_session_with_user(user=user)
 
@@ -110,7 +78,6 @@ def test_list_live_approvals_filter_logic(
         action_type="shell",
         payload={"cmd": "old"},
     )
-    # Mark the decided row so the ``decision IS NULL`` rule excludes it.
     result = action_approval.try_record_decision(
         db_session,
         approval_id=decided.approval_id,
@@ -119,9 +86,7 @@ def test_list_live_approvals_filter_logic(
     assert result is not None
     db_session.commit()
 
-    # Push the stale row just past the spec cutoff. We hardcode 190
-    # (= spec 180 + 10) rather than derive from the source constant — see
-    # ``test_wait_timeout_spec``.
+    # Push the stale row just past the 180s spec cutoff (hardcoded, not derived).
     stale_when = datetime.now(timezone.utc) - timedelta(seconds=190)
     _set_created_at(db_session, ActionApproval, stale.approval_id, stale_when)
 
@@ -296,11 +261,7 @@ def test_list_session_approvals_time_filter(
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
-    """Time-window cuts off rows on the wrong side of the boundary.
-
-    - ``since`` cuts off rows whose ``created_at`` is before the boundary.
-    - ``until`` cuts off rows whose ``created_at`` is after the boundary.
-    """
+    """``since`` cuts off rows before the boundary, ``until`` cuts off rows after it."""
     user = make_user(db_session, email_prefix=f"audit_{direction}")
     session = build_session_with_user(user=user)
 
@@ -357,16 +318,12 @@ def test_submit_decision_happy_path_returns_refreshed_row(
 ) -> None:
     """The response carries the post-UPDATE decision, not the stale identity-map state.
 
-    Regression guard: the conditional UPDATE in ``try_record_decision`` uses
-    ``synchronize_session=False`` against an ``expire_on_commit=False`` session.
-    Without the ``db_session.refresh(row)`` inside ``try_record_decision``,
-    the row handed to the caller would still report ``decision=None`` even
-    though Postgres holds the new value. To pin this explicitly we capture the
-    SAME ORM object that the API will internally fetch + refresh, assert its
-    pre-submit state is ``decision is None``, then assert the same object's
-    ``decision`` after the call reflects the new state.
+    Regression guard: ``try_record_decision`` does a conditional UPDATE with
+    ``synchronize_session=False`` on an ``expire_on_commit=False`` session, so
+    without its ``db_session.refresh(row)`` the caller would still see
+    ``decision=None``. We capture the same ORM object the API refreshes and
+    assert it flips from None to the new decision.
     """
-    # Stub the wake push — this test doesn't care about Redis side-effects.
     _stub_send_wake_noop(monkeypatch)
 
     user = make_user(db_session, email_prefix="decide_happy")
@@ -379,9 +336,8 @@ def test_submit_decision_happy_path_returns_refreshed_row(
     )
     db_session.commit()
 
-    # Pre-read the row through the same accessor the API uses; this populates
-    # the identity map with ``decision=None`` so we can observe the refresh
-    # propagating to that exact object.
+    # Pre-read through the same accessor the API uses, populating the identity
+    # map so we can observe the refresh propagate to this exact object.
     current = action_approval.get_action_approval_for_user(
         db_session, approval.approval_id, user.id
     )
@@ -401,9 +357,8 @@ def test_submit_decision_happy_path_returns_refreshed_row(
     assert view.decided_at is not None
     assert view.is_live is False
 
-    # The same in-memory ORM object now reflects the post-UPDATE state because
-    # ``try_record_decision`` refreshed it. If that refresh() were removed,
-    # ``current.decision`` would still be ``None`` here.
+    # Same in-memory object now reflects post-UPDATE state (would be None
+    # if the refresh() in try_record_decision were removed).
     assert current.decision == ApprovalDecision.REJECTED
     assert current.decided_at is not None
 
@@ -490,12 +445,7 @@ def test_submit_decision_not_found(
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
-    """Both missing-row and non-owner shapes return ``NOT_FOUND``.
-
-    The ``non_owner`` case proves existence isn't leaked — a non-owning user
-    must get exactly the same ``NOT_FOUND`` response shape as a totally
-    random UUID, so the API can't be used as an existence oracle.
-    """
+    """Both missing-row and non-owner shapes return ``NOT_FOUND`` (no existence leak)."""
     if case == "missing":
         user = make_user(db_session, email_prefix="decide_missing")
         target_id = uuid4()
@@ -540,7 +490,7 @@ def test_submit_decision_pushes_wake_on_redis(
     db_session.commit()
 
     cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
-    # Pre-clean the key — a leftover from a prior failed run would mask the bug.
+    # Pre-clean so a leftover from a prior failed run can't mask the bug.
     cache.delete(approval_cache._wake_key(approval.approval_id))
 
     view = submit_decision(
@@ -564,16 +514,7 @@ def test_submit_decision_swallows_transient_wake_failure(
     monkeypatch: pytest.MonkeyPatch,
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
-    """A failing wake push must NOT bubble out — the decision is committed regardless.
-
-    We pin three things:
-
-    1. The wake-push attempt actually happens (counter increments to 1).
-    2. The ``redis.RedisError`` (a member of ``CACHE_TRANSIENT_ERRORS``) is
-       swallowed and does not abort the response.
-    3. Because the push failed, the cache key has no entry — the proxy will
-       fall back to the wait timeout.
-    """
+    """A failing wake push must NOT bubble out — the decision is committed regardless."""
     user = make_user(db_session, email_prefix="decide_wake_fail")
     session = build_session_with_user(user=user)
     approval = action_approval.insert_action_approval(
@@ -585,15 +526,14 @@ def test_submit_decision_swallows_transient_wake_failure(
     db_session.commit()
 
     cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
-    # Pre-clean so the post-call assertion below isn't poisoned by a leftover.
+    # Pre-clean so the post-call assertion isn't poisoned by a leftover.
     cache.delete(approval_cache._wake_key(approval.approval_id))
 
     call_count = 0
 
     def _boom(*_args: object, **_kwargs: object) -> None:
-        # ``redis.RedisError`` is in ``CACHE_TRANSIENT_ERRORS`` — the API
-        # catches that tuple specifically. Any other exception type would
-        # (correctly) bubble out and fail the test.
+        # redis.RedisError is in CACHE_TRANSIENT_ERRORS, which the API catches;
+        # any other type would bubble out and fail the test.
         nonlocal call_count
         call_count += 1
         raise redis.RedisError("simulated transient cache outage")
@@ -610,16 +550,14 @@ def test_submit_decision_swallows_transient_wake_failure(
     assert view.decision == ApprovalDecision.APPROVED
     assert view.decided_at is not None
 
-    # The wake push was attempted exactly once. Pinning the counter guards
-    # against a future refactor that silently drops the call site (in which
-    # case the swallow assertion above would still pass for the wrong reason).
+    # Guards against a refactor that drops the call site (the swallow assertion
+    # would still pass for the wrong reason).
     assert call_count == 1
 
-    # And because that single attempt raised, nothing landed on the wake key.
     popped = cache.blpop([approval_cache._wake_key(approval.approval_id)], timeout=1)
     assert popped is None, "expected no wake entry after the push failed"
 
-    # Verify the row is committed in Postgres (not just hanging in-memory).
+    # Verify the row is committed in Postgres, not just in-memory.
     db_session.expire_all()
     persisted = action_approval.get_action_approval(db_session, approval.approval_id)
     assert persisted is not None

@@ -1,9 +1,6 @@
 """Database operations for the action_approval table.
 
-A row records one agent-initiated gated action and its eventual
-terminal decision (APPROVED / REJECTED / EXPIRED). `decision IS NULL`
-is the pending / in-flight state. The conditional UPDATE in
-`try_record_decision` is the only race arbiter.
+`try_record_decision`'s conditional UPDATE is the only race arbiter.
 """
 
 from datetime import datetime
@@ -30,7 +27,6 @@ def insert_action_approval(
     action_type: str,
     payload: dict[str, Any],
 ) -> ActionApproval:
-    """Insert a new pending row and return it."""
     row = ActionApproval(
         session_id=session_id,
         action_type=action_type,
@@ -47,10 +43,9 @@ def try_record_decision(
     approval_id: UUID,
     decision: ApprovalDecision,
 ) -> ActionApproval | None:
-    """Conditional UPDATE: succeeds only while `decision IS NULL`.
+    """Conditional UPDATE that succeeds only while `decision IS NULL`.
 
-    Returns the updated row, or `None` if a decision was already
-    recorded (caller decides between idempotent retry and CONFLICT).
+    Returns the updated row, or `None` if a decision was already recorded.
     """
     stmt = (
         update(ActionApproval)
@@ -63,10 +58,8 @@ def try_record_decision(
     row = db_session.execute(stmt).scalar_one_or_none()
     db_session.flush()
     if row is not None:
-        # The session is `expire_on_commit=False`, and our UPDATE uses
-        # `synchronize_session=False`. Without this refresh the caller
-        # would see the pre-UPDATE in-memory state of the identity-mapped
-        # row (decision=None) even though Postgres has the new value.
+        # synchronize_session=False + expire_on_commit=False: without this
+        # refresh the caller sees the stale identity-mapped row (decision=None).
         db_session.refresh(row)
     return row
 
@@ -80,10 +73,9 @@ def get_action_approval(
 def get_action_approval_for_user(
     db_session: Session, approval_id: UUID, user_id: UUID
 ) -> ActionApproval | None:
-    """Return the row only if the caller owns the parent build_session.
+    """Row only if the caller owns the parent build_session.
 
-    Returns `None` for both missing-row and wrong-owner — callers map
-    to NOT_FOUND so existence isn't leaked to non-owners.
+    `None` for both missing-row and wrong-owner so existence isn't leaked.
     """
     stmt = (
         select(ActionApproval)
@@ -120,11 +112,10 @@ def list_session_pending_action_approvals(
     *,
     created_after: datetime | None = None,
 ) -> list[ActionApproval]:
-    """Return undecided rows for the session, optionally cutting off by age.
+    """Undecided rows for the session.
 
-    `created_after` lets callers exclude rows older than the proxy's
-    wait window (likely orphaned by a crashed proxy that can't write
-    EXPIRED itself).
+    `created_after` excludes rows older than the proxy's wait window
+    (likely orphaned by a crashed proxy that couldn't write EXPIRED).
     """
     stmt = (
         select(ActionApproval)

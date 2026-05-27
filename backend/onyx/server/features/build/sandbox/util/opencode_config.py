@@ -150,10 +150,7 @@ def build_multi_provider_opencode_config(
     ``body["model"]`` overrides can target any of them.
 
     ``plugins`` is an optional list of opencode plugin specs (npm names or
-    absolute file paths). On the serve transport this config is loaded
-    pod-wide via ``OPENCODE_CONFIG_CONTENT``, so a plugin listed here is
-    loaded once per session Instance — used to register the per-session
-    egress-tagging plugin when the sandbox proxy is enabled.
+    absolute file paths) loaded once per session Instance.
 
     Raises:
         ValueError: If ``providers`` is empty or ``default_provider`` is

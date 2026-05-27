@@ -78,8 +78,8 @@ class K8sSecretCAStore(CAStore):
 
         data = secret.data or {}
         if _CA_CERT_SECRET_KEY not in data or _CA_KEY_SECRET_KEY not in data:
-            # Regenerating would invalidate any sandbox that's already
-            # mounted the old ConfigMap. Fail loud instead.
+            # Fail loud: regenerating would invalidate sandboxes already
+            # mounting the old ConfigMap.
             raise RuntimeError(
                 f"Secret {self._proxy_ns}/{self._secret_name} exists but "
                 f"is missing {_CA_CERT_SECRET_KEY} or {_CA_KEY_SECRET_KEY}"
@@ -94,8 +94,7 @@ class K8sSecretCAStore(CAStore):
                 f"base64 data: {e}"
             ) from e
 
-        # Re-project on every load so a deleted ConfigMap self-heals
-        # on the next proxy restart.
+        # Re-project on every load so a deleted ConfigMap self-heals on restart.
         self._ensure_configmap(cert_pem)
 
         return cert_pem, key_pem
@@ -157,10 +156,8 @@ class K8sSecretCAStore(CAStore):
             if e.status != 409:
                 raise
 
-        # Replace path — another proxy replica may be updating
-        # concurrently. Retry on 409 with exponential backoff. Both
-        # replicas hold the same cert, so whichever write lands last
-        # converges the ConfigMap to the same value.
+        # Retry 409s from concurrent replica updates; all replicas hold the
+        # same cert so the last write converges to the same value.
         backoff = 0.1
         for attempt in range(_CONFIGMAP_REPLACE_MAX_ATTEMPTS):
             try:
