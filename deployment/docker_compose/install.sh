@@ -1,6 +1,11 @@
 #!/bin/bash
 
-set -euo pipefail
+# This script must remain compatible with bash 3.2 — macOS still ships
+# 3.2.57 by default and the curl-pipe installer is invoked with /bin/bash.
+# Avoid bash 4+ features (associative arrays, ${var,,}, etc.). Notably,
+# do not re-enable `set -u`: on bash 3.2, `"${arr[@]}"` errors as
+# "unbound variable" when arr is an explicitly-declared empty array.
+set -eo pipefail
 
 # Expected resource requirements (overridden below if --lite)
 EXPECTED_DOCKER_RAM_GB=10
@@ -368,7 +373,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
             # Stop containers (without removing them)
             build_compose_file_args true
             # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
-            if (cd "${INSTALL_ROOT}/deployment" && "${DOCKER_SUDO[@]}" HOST_PORT="${HOST_PORT:-3000}" IMAGE_TAG="${IMAGE_TAG:-edge}" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" stop); then
+            if (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="${HOST_PORT:-3000}" IMAGE_TAG="${IMAGE_TAG:-edge}" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" stop); then
                 print_success "Onyx containers stopped (paused)"
             else
                 print_error "Failed to stop containers"
@@ -422,7 +427,7 @@ if [ "$DELETE_DATA_MODE" = true ]; then
             # Stop and remove containers with volumes
             build_compose_file_args true
             # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
-            if (cd "${INSTALL_ROOT}/deployment" && "${DOCKER_SUDO[@]}" HOST_PORT="${HOST_PORT:-3000}" IMAGE_TAG="${IMAGE_TAG:-edge}" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" down -v); then
+            if (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="${HOST_PORT:-3000}" IMAGE_TAG="${IMAGE_TAG:-edge}" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" down -v); then
                 print_success "Onyx containers and volumes removed"
             else
                 print_error "Failed to remove containers and volumes"
@@ -685,7 +690,7 @@ version_compare() {
 }
 
 # Check Docker daemon
-if ! "${DOCKER_SUDO[@]}" docker info &> /dev/null; then
+if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker info &> /dev/null; then
     if [[ "$OSTYPE" == "darwin"* ]]; then
         print_info "Docker daemon is not running. Starting Docker Desktop..."
         open -a Docker
@@ -927,7 +932,7 @@ ENV_TEMPLATE="${INSTALL_ROOT}/deployment/env.template"
 if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
     build_compose_file_args true
     # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
-    RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && "${DOCKER_SUDO[@]}" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps -q 2>/dev/null | wc -l)
+    RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps -q 2>/dev/null | wc -l)
     if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
         print_error "Onyx services are currently running!"
         echo ""
@@ -1100,8 +1105,8 @@ else
         # Pre-create the dedicated sandbox bridge. docker-compose references
         # it as external=true so it must exist before `compose up`.
         SANDBOX_NET="${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}"
-        if ! "${DOCKER_SUDO[@]}" docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
-            if "${DOCKER_SUDO[@]}" docker network create "$SANDBOX_NET" >/dev/null 2>&1; then
+        if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
+            if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network create "$SANDBOX_NET" >/dev/null 2>&1; then
                 print_success "Created sandbox bridge network: $SANDBOX_NET"
             else
                 print_warning "Could not create sandbox network $SANDBOX_NET — create it manually:"
@@ -1263,7 +1268,7 @@ print_info "Downloading Docker images (this may take a while)..."
 # IMAGE_TAG in the user's shellrc would silently swap the images being pulled.
 build_compose_file_args
 # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
-if (cd "${INSTALL_ROOT}/deployment" && "${DOCKER_SUDO[@]}" HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" pull --quiet); then
+if (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" pull --quiet); then
     print_success "Docker images downloaded successfully"
 else
     print_error "Failed to download Docker images"
@@ -1289,17 +1294,17 @@ UP_EXIT=0
 if [ "$USE_LATEST" = true ]; then
     print_info "Force pulling latest images and recreating containers..."
     # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
-    (cd "${INSTALL_ROOT}/deployment" && "${DOCKER_SUDO[@]}" HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
+    (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 else
     # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
-    (cd "${INSTALL_ROOT}/deployment" && "${DOCKER_SUDO[@]}" HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
+    (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 fi
 if [ $UP_EXIT -ne 0 ]; then
     print_error "Failed to start Onyx services"
     echo ""
     print_info "Current container status:"
     # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
-    (cd "${INSTALL_ROOT}/deployment" && "${DOCKER_SUDO[@]}" HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps)
+    (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps)
     echo ""
     print_info "Check the logs of any unhealthy service:"
     echo "  (cd \"${INSTALL_ROOT}/deployment\" && ${DOCKER_SUDO[*]:+sudo }$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
