@@ -15,9 +15,10 @@ import (
 
 // RunCIOptions holds options for the run-ci command
 type RunCIOptions struct {
-	DryRun bool
-	Yes    bool
-	Rerun  bool
+	DryRun   bool
+	Yes      bool
+	Rerun    bool
+	NoVerify bool
 }
 
 // NewRunCICommand creates a new run-ci command
@@ -51,6 +52,7 @@ Example usage:
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Perform all local operations but skip pushing to remote and creating PRs")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip confirmation prompts and automatically proceed")
 	cmd.Flags().BoolVar(&opts.Rerun, "rerun", false, "Update an existing CI PR with the latest fork changes to re-trigger CI")
+	cmd.Flags().BoolVar(&opts.NoVerify, "no-verify", false, "Skip pre-push hooks when pushing the CI branch")
 
 	return cmd
 }
@@ -199,7 +201,12 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 
 	// Push the CI branch (force push in case it already exists)
 	log.Infof("Pushing CI branch: %s", ciBranch)
-	if err := git.RunCommand("push", "--quiet", "-f", "-u", "origin", ciBranch); err != nil {
+	pushArgs := []string{"push"}
+	if opts.NoVerify {
+		pushArgs = append(pushArgs, "--no-verify")
+	}
+	pushArgs = append(pushArgs, "--quiet", "-f", "-u", "origin", ciBranch)
+	if err := git.RunCommand(pushArgs...); err != nil {
 		// Switch back to original branch before exiting
 		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
 			log.Warnf("Failed to switch back to original branch: %v", switchErr)

@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import Text from "@/refresh-components/texts/Text";

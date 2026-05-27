@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { SvgExternalLink, SvgUsers } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";

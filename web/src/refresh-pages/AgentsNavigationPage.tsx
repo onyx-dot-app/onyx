@@ -8,7 +8,7 @@ import { useAgents } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import Tabs from "@/refresh-components/Tabs";
 import { Button } from "@opal/components";

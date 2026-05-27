@@ -1,11 +1,13 @@
 from collections.abc import Iterator
 from typing import Any
+from typing import Callable
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
+from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.models import MultiModelMessageResponseIDInfo
@@ -96,6 +98,37 @@ class ChatFullResponse(BaseModel):
 class ChatLoadedFile(InMemoryChatFile):
     content_text: str | None
     token_count: int
+
+    # Named distinctly from the base ``lazy_from_descriptor`` so the subclass
+    # can require ``content_text`` / ``token_count`` without violating LSP on
+    # the override (ty/mypy correctly flag the broader subclass signature).
+    @classmethod
+    def lazy_loaded(
+        cls,
+        *,
+        file_id: str,
+        file_type: ChatFileType,
+        filename: str | None,
+        content_text: str | None,
+        token_count: int,
+        loader: Callable[[], bytes],
+    ) -> "ChatLoadedFile":
+        """Construct a ``ChatLoadedFile`` whose ``content`` bytes are loaded
+        only on first access. ``content_text`` and ``token_count`` are passed
+        eagerly because they're cheap (DB lookup + cached plaintext store hit).
+        """
+        from onyx.file_store.models import install_lazy_content_loader
+
+        inst = cls(
+            file_id=file_id,
+            content=b"",
+            file_type=file_type,
+            filename=filename,
+            content_text=content_text,
+            token_count=token_count,
+        )
+        install_lazy_content_loader(inst, loader)
+        return inst
 
 
 class ToolCallSimple(BaseModel):

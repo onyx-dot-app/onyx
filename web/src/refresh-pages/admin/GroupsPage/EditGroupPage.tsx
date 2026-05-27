@@ -11,7 +11,7 @@ import { markdown } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Card from "@/refresh-components/cards/Card";
 import SvgNoResult from "@opal/illustrations/no-result";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";

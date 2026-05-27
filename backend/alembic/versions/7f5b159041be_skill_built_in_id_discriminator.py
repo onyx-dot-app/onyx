@@ -145,12 +145,55 @@ def _seed_built_in_skills() -> None:
 
 
 def upgrade() -> None:
-    # Older tenants ran an earlier version of b6d184cfdaf3_skills that created
-    # `manifest_metadata` NOT NULL; that migration was later edited to drop
-    # the column, but already-migrated tenants still carry it. The ORM no
-    # longer references it, so remove it before seeding to avoid NOT NULL
-    # violations on the upsert below.
+    # --- Reconcile schema drift from the in-place rewrite of b6d184cfdaf3 ---
+    # b6d184cfdaf3_skills was edited after it had already run on long-lived
+    # deployments, so tenants disagree on the `skill` table shape depending on
+    # which version they ran. Normalize every lineage to the current (fresh-DB)
+    # shape before seeding so the ON CONFLICT (slug) upsert below has a valid
+    # arbiter and no stale NOT NULL columns block it.
+
+    # 1) `manifest_metadata` NOT NULL existed in the original revision and was
+    #    later removed. The ORM no longer references it; drop it so it can't
+    #    trigger a NOT NULL violation on the upsert.
     op.execute("ALTER TABLE skill DROP COLUMN IF EXISTS manifest_metadata")
+
+    # 2) Slug uniqueness. The original revision enforced it with a *partial*
+    #    unique index `ux_skill_slug (slug) WHERE deleted_at IS NULL` plus a
+    #    `deleted_at` soft-delete column. #11082 rewrote that to a plain *total*
+    #    UNIQUE constraint `uq_skill_slug` and dropped `deleted_at`. ON CONFLICT
+    #    (slug) requires a *total* unique constraint/index as its arbiter — a
+    #    partial index does not match and Postgres raises "no unique or
+    #    exclusion constraint matching the ON CONFLICT specification". Old
+    #    tenants still carry the partial index and lack the total constraint, so
+    #    converge them to the fresh-DB shape:
+    #
+    #    a. Drop the legacy partial index (fresh DBs never had it).
+    op.execute("DROP INDEX IF EXISTS ux_skill_slug")
+
+    #    b. Drop the legacy soft-delete column the rewritten model no longer
+    #       references (fresh DBs never had it). Skills V1 only just shipped, so
+    #       affected tenants hold no skill rows yet (the table is empty wherever
+    #       this migration hasn't committed) — hence no duplicate-slug cleanup
+    #       is needed before adding the total constraint below.
+    op.execute("ALTER TABLE skill DROP COLUMN IF EXISTS deleted_at")
+
+    #    c. Add the total UNIQUE constraint unless it already exists (fresh DBs
+    #       have it from the rewritten b6d184cfdaf3). Postgres has no
+    #       ADD CONSTRAINT IF NOT EXISTS, so guard explicitly.
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conname = 'uq_skill_slug'
+                  AND conrelid = 'skill'::regclass
+            ) THEN
+                ALTER TABLE skill ADD CONSTRAINT uq_skill_slug UNIQUE (slug);
+            END IF;
+        END$$;
+        """
+    )
 
     op.add_column(
         "skill",

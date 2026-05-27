@@ -57,7 +57,7 @@ import { Popover } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { Section } from "@/layouts/general-layouts";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import MicrophoneButton from "@/sections/input/MicrophoneButton";
 import Waveform from "@/components/voice/Waveform";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
@@ -1030,7 +1030,7 @@ const AppInputBar = React.memo(
                     }}
                     prominence="tertiary"
                   />
-                  <Spacer horizontal rem={0.25} />
+                  <Spacer orientation="horizontal" rem={0.25} />
                 </Section>
               )}
             </div>

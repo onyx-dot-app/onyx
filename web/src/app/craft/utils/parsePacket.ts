@@ -48,12 +48,38 @@ export function parsePacket(raw: unknown): ParsedPacket {
     case "artifact_created":
       return parseArtifact(p);
 
+    case "approval_requested":
+      return {
+        type: "approval_requested",
+        approvalId: (p.approval_id ?? "") as string,
+        sessionId: (p.session_id ?? "") as string,
+      };
+
     case "error":
       return { type: "error", message: (p.message ?? "") as string };
 
     default:
       return { type: "unknown" };
   }
+}
+
+// ─── Skill Detection ──────────────────────────────────────────────
+
+/**
+ * Detect skill-namespaced tool invocations. Opencode emits skill calls with
+ * raw names like "skills.brainstorming" or "superpowers:test-driven-development".
+ * Returns the skill's leaf name (everything after the last separator) or null.
+ */
+function detectSkillName(
+  p: Record<string, unknown>,
+  toolName: ToolName
+): string | null {
+  if (toolName !== "unknown") return null;
+  const rawName = getToolNameRaw(p);
+  if (!rawName) return null;
+  // Match "namespace:skill" or "namespace.skill" patterns
+  const match = rawName.match(/^(skills?|superpowers)[.:]([\w-]+)$/);
+  return match?.[2] ?? null;
 }
 
 // ─── Tool Name Resolution ─────────────────────────────────────────
@@ -70,6 +96,15 @@ const NAME_MAP: Record<string, ToolName> = {
   todo_write: "todowrite",
   webfetch: "webfetch",
   websearch: "websearch",
+  // opencode 1.15.x additions:
+  lsp: "lsp",
+  apply_patch: "apply_patch",
+  applypatch: "apply_patch",
+  skill: "skill",
+  list: "list",
+  ls: "list",
+  question: "question",
+  invalid: "invalid",
 };
 
 function resolveToolName(p: Record<string, unknown>): ToolName {
@@ -109,6 +144,13 @@ const TOOL_KIND_MAP: Record<ToolName, ToolKind> = {
   todowrite: "other",
   webfetch: "other",
   websearch: "search",
+  // opencode 1.15.x additions:
+  lsp: "other",
+  apply_patch: "edit",
+  skill: "other",
+  list: "read",
+  question: "other",
+  invalid: "other",
   unknown: "other",
 };
 
@@ -240,9 +282,17 @@ function buildDescription(
   if (toolName === "task") {
     return rawDescription || "Running subagent";
   }
-  // Read/edit: show file path
+  // Read/edit: show file path. For new-file writes, append a line count
+  // so the row reads "Writing  src/app/page.tsx (42 lines)" — useful when
+  // the body is empty/collapsed.
   if (kind === "read" || kind === "edit") {
-    if (filePath) return filePath;
+    if (filePath) {
+      if (toolName === "write" && typeof ri?.content === "string") {
+        const lines = (ri.content as string).split("\n").length;
+        return `${filePath} (${lines} lines)`;
+      }
+      return filePath;
+    }
   }
   // Execute: use backend description
   if (kind === "execute") {
@@ -256,7 +306,15 @@ function buildDescription(
   ) {
     return ri.pattern as string;
   }
-  return buildTitle(toolName, kind, true);
+  // Webfetch: show URL
+  if (toolName === "webfetch" && ri?.url && typeof ri.url === "string") {
+    return ri.url as string;
+  }
+  // Websearch: show query
+  if (toolName === "websearch" && ri?.query && typeof ri.query === "string") {
+    return ri.query as string;
+  }
+  return "";
 }
 
 // ─── Title Builder ───────────────────────────────────────────────
@@ -280,6 +338,13 @@ function buildTitle(
     todowrite: "Updating todos",
     webfetch: "Fetching web content",
     websearch: "Searching web",
+    // opencode 1.15.x additions:
+    lsp: "Checking code",
+    apply_patch: "Applying patch",
+    skill: "Running skill",
+    list: "Listing files",
+    question: "Asking",
+    invalid: "Validating",
     unknown: "Running tool",
   };
 
@@ -429,12 +494,14 @@ function parseArtifact(p: Record<string, unknown>): ParsedArtifact {
 function parseToolCallStart(p: Record<string, unknown>): ParsedToolCallStart {
   const toolName = resolveToolName(p);
   const rawKind = p.kind as string | null;
+  const kind = resolveKind(toolName, rawKind);
   return {
     type: "tool_call_start",
     toolCallId: getToolCallId(p),
     toolName,
-    kind: resolveKind(toolName, rawKind),
+    kind,
     isTodo: toolName === "todowrite",
+    title: buildTitle(toolName, kind, true),
   };
 }
 
@@ -453,6 +520,18 @@ function parseToolCallProgress(
     kind === "edit"
       ? extractDiffData(p.content)
       : { oldText: "", newText: "", isNewFile: true };
+
+  // The write tool emits the new file body in rawInput.content (not in a
+  // content[].type==="diff" item) so the diff extractor misses it. Pull it
+  // directly so DiffBody can render the new file's contents.
+  if (
+    toolName === "write" &&
+    !diffData.newText &&
+    typeof ri?.content === "string"
+  ) {
+    diffData.newText = ri.content as string;
+    diffData.isNewFile = true;
+  }
 
   // ── Patch info (opencode agent uses patchText instead of file_path) ──
   const patchInfo =
@@ -505,6 +584,11 @@ function parseToolCallProgress(
   const subagentType = (ri?.subagent_type ?? ri?.subagentType ?? null) as
     | string
     | null;
+
+  // ── Skill detection ───────────────────────────────────────────
+  // Skill-namespaced tool calls arrive with raw names like
+  // "skills.brainstorming" or "superpowers:test-driven-development".
+  const skillName = detectSkillName(p, toolName);
   const taskOutput =
     toolName === "task" && status === "completed"
       ? extractTaskOutput(ro)
@@ -523,6 +607,7 @@ function parseToolCallProgress(
     rawOutput,
     filePath,
     subagentType,
+    skillName,
     isNewFile:
       diffData.oldText || diffData.newText
         ? diffData.isNewFile

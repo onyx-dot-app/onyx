@@ -1,7 +1,7 @@
 "use client";
 
 import SimpleTabs from "@/refresh-components/SimpleTabs";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { Button, Text } from "@opal/components";
 import { useState } from "react";
 import {

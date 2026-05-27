@@ -18,11 +18,11 @@ from typing import Any
 from typing import ClassVar
 
 from kubernetes import client
-from kubernetes import config
 from kubernetes.stream import stream as k8s_stream
 from kubernetes.stream.ws_client import WSClient
 
 from onyx.server.features.build.sandbox.acp.base import ACPExecClientBase
+from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -60,10 +60,7 @@ class ACPExecClient(ACPExecClientBase):
 
     def _get_k8s_client(self) -> client.CoreV1Api:
         if self._k8s_client is None:
-            try:
-                config.load_incluster_config()
-            except config.ConfigException:
-                config.load_kube_config()
+            load_kube_config()
             self._k8s_client = client.CoreV1Api()
         return self._k8s_client
 
