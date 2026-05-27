@@ -333,9 +333,11 @@ class _ServeMixin:
             )
 
     def _close_all_sandbox_buses(self, sandbox_id: UUID) -> None:
-        """Tombstone + pop + close every bus for ``sandbox_id``. Call from
-        ``terminate`` before destroying the container/pod so late subscribes
-        can't race a fresh bus in."""
+        """Tombstone + pop + close every bus for ``sandbox_id``, and drop
+        the per-build-session prompt-slot locks. Call from ``terminate``
+        before destroying the container/pod so late subscribes can't race
+        a fresh bus in, and so we don't leak one ``threading.Lock`` per
+        ``(sandbox_id, build_session_id)`` for the api_server's lifetime."""
         with self._event_buses_lock:
             self._terminated_sandboxes.add(sandbox_id)
             doomed_keys = [k for k in self._event_buses if k[0] == sandbox_id]
@@ -348,6 +350,10 @@ class _ServeMixin:
                     "[SANDBOX-SERVE] PodEventBus close failed during terminate for %s",
                     sandbox_id,
                 )
+        with self._prompt_locks_meta:
+            stale = [k for k in self._prompt_locks if k[0] == sandbox_id]
+            for k in stale:
+                self._prompt_locks.pop(k, None)
         self._invalidate_serve_connection_info(sandbox_id)
 
     def _send_message_via_serve(
