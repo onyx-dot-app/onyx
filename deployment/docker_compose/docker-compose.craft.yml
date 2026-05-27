@@ -27,6 +27,8 @@ services:
       - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
       - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
       - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
+      - AGENT_TRANSPORT=${AGENT_TRANSPORT:-serve}
+      - ENABLE_OPENCODE_DEBUGGING=${ENABLE_OPENCODE_DEBUGGING:-false}
     volumes:
       # api_server drives sandbox container lifecycle (provision / exec /
       # terminate) directly via the Docker Engine API.
@@ -47,6 +49,8 @@ services:
       - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
       - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
       - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
+      - AGENT_TRANSPORT=${AGENT_TRANSPORT:-serve}
+      - ENABLE_OPENCODE_DEBUGGING=${ENABLE_OPENCODE_DEBUGGING:-false}
     volumes:
       - ${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
     networks:

@@ -960,8 +960,8 @@ if [ -f "$ENV_FILE" ]; then
             # --include-craft requires the craft-tagged backend image (Node.js
             # + opencode CLI are only built into that image), so the tag is
             # forced rather than prompted for.
-            VERSION="craft-latest"
-            print_info "Update selected. Using craft-latest (required by --include-craft)."
+            VERSION="craft-edge"
+            print_info "Update selected. Using craft-edge (required by --include-craft)."
         else
             print_info "Update selected. Which tag would you like to deploy?"
             echo ""
@@ -1008,8 +1008,8 @@ else
     # Ask for version (skipped when --include-craft forces the craft-tagged
     # backend image, which is the only image that ships Node.js + opencode CLI).
     if [ "$INCLUDE_CRAFT" = true ]; then
-        VERSION="craft-latest"
-        print_info "Using craft-latest (required by --include-craft)."
+        VERSION="craft-edge"
+        print_info "Using craft-edge (required by --include-craft)."
     else
         print_info "Which tag would you like to deploy?"
         echo ""
@@ -1102,18 +1102,6 @@ else
         fi
         print_success "Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=docker)"
 
-        # Pre-create the dedicated sandbox bridge. docker-compose references
-        # it as external=true so it must exist before `compose up`.
-        SANDBOX_NET="${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}"
-        if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
-            if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network create "$SANDBOX_NET" >/dev/null 2>&1; then
-                print_success "Created sandbox bridge network: $SANDBOX_NET"
-            else
-                print_warning "Could not create sandbox network $SANDBOX_NET — create it manually:"
-                echo "    docker network create $SANDBOX_NET"
-            fi
-        fi
-
         # Trust boundary warning. api_server + background mount the host
         # Docker socket so they can drive sandbox containers. Anything that
         # can talk to that socket is effectively root on the host.
@@ -1137,6 +1125,21 @@ else
     echo "  • Domain settings (for production)"
     echo "  • Onyx Craft (set ENABLE_CRAFT=true)"
     echo ""
+fi
+
+# Pre-create the dedicated sandbox bridge whenever --include-craft is set.
+# docker-compose references it as external=true so it must exist before
+# `compose up`, on BOTH first-install and update/restart paths.
+if [ "$INCLUDE_CRAFT" = true ]; then
+    SANDBOX_NET="${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}"
+    if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
+        if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network create "$SANDBOX_NET" >/dev/null 2>&1; then
+            print_success "Created sandbox bridge network: $SANDBOX_NET"
+        else
+            print_warning "Could not create sandbox network $SANDBOX_NET — create it manually:"
+            echo "    docker network create $SANDBOX_NET"
+        fi
+    fi
 fi
 
 # Function to check if a port is available
