@@ -175,18 +175,29 @@ func ensureRemoteUser() {
 		return
 	}
 
-	if runtime.GOOS == "linux" {
+	setRemoteUserRoot := func(reason string) {
+		log.Debugf("%s — setting DEVCONTAINER_REMOTE_USER=root", reason)
+		if err := os.Setenv("DEVCONTAINER_REMOTE_USER", "root"); err != nil {
+			log.Warnf("Failed to set DEVCONTAINER_REMOTE_USER: %v", err)
+		}
+	}
+
+	switch runtime.GOOS {
+	case "linux":
 		sock := os.Getenv("DOCKER_SOCK")
 		xdg := os.Getenv("XDG_RUNTIME_DIR")
 		// Heuristic: rootless Docker on Linux typically places its socket
 		// under $XDG_RUNTIME_DIR. If DOCKER_SOCK was set to a custom path
 		// outside XDG_RUNTIME_DIR, set DEVCONTAINER_REMOTE_USER=root manually.
 		if xdg != "" && strings.HasPrefix(sock, xdg) {
-			log.Debug("Rootless Docker detected — setting DEVCONTAINER_REMOTE_USER=root")
-			if err := os.Setenv("DEVCONTAINER_REMOTE_USER", "root"); err != nil {
-				log.Warnf("Failed to set DEVCONTAINER_REMOTE_USER: %v", err)
-			}
+			setRemoteUserRoot("Rootless Docker detected")
 		}
+	case "darwin":
+		// Docker Desktop on macOS bind-mounts host paths through the Linux VM
+		// as root-owned (no host-UID mapping like native Linux Docker), so
+		// init-dev-user.sh's WS_UID=0 branch always fires and rejects the
+		// non-root `dev` user.
+		setRemoteUserRoot("Docker Desktop on macOS")
 	}
 }
 
