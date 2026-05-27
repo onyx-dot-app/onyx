@@ -23,6 +23,7 @@ from uuid import UUID
 
 import boto3
 import pytest
+from botocore.config import Config
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
@@ -110,6 +111,8 @@ def _s3_client() -> Any:
     and must use the host-accessible endpoint exposed by docker-compose
     (``S3_ENDPOINT_URL``). Construct the client explicitly so it doesn't
     inherit the in-cluster endpoint from ``AWS_ENDPOINT_URL``.
+
+    Path-style addressing is required for MinIO (mirrors ``file_store.py``).
     """
     endpoint_url = os.environ.get("S3_ENDPOINT_URL")
     access_key = os.environ.get("S3_AWS_ACCESS_KEY_ID")
@@ -121,6 +124,7 @@ def _s3_client() -> Any:
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         region_name=region,
+        config=Config(s3={"addressing_style": "path"}),
     )
 
 

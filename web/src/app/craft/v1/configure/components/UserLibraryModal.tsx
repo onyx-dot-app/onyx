@@ -259,7 +259,6 @@ export default function UserLibraryModal({
                     style={{ display: "none" }}
                     onChange={handleFileUpload}
                     disabled={isUploading}
-                    accept=".xlsx,.xls,.docx,.doc,.pptx,.ppt,.csv,.json,.txt,.pdf,.zip"
                   />
                   <Button
                     disabled={isUploading}

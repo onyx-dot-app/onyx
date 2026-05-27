@@ -348,6 +348,51 @@ jobs:
                   protocol: TCP
           EOF
 
+      - name: Expose Postgres inside the kind cluster
+        run: |
+          set -eo pipefail
+          PG_ID=$(cd deployment/docker_compose && \
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q relational_db)
+          # Attach the postgres container to kind's docker network so the
+          # in-cluster sandbox-proxy can route to it.
+          docker network connect kind "$PG_ID" --alias relational_db
+          PG_IP=$(docker inspect "$PG_ID" \
+            --format '{{ (index .NetworkSettings.Networks "kind").IPAddress }}')
+          echo "postgres on kind network at $PG_IP"
+
+          # The sandbox-proxy is the only in-cluster component that reads the
+          # DB; the chart renders its POSTGRES_HOST as `onyx-pg-rw` (the
+          # release-name + "-pg-rw"). CloudNativePG isn't deployed in this
+          # lane (only the proxy/configmap templates are rendered), so expose
+          # the docker-compose Postgres under that name via a selector-less
+          # Service + manual Endpoints pointing at the container's IP on
+          # kind's docker network. Without this the proxy's identity lookups
+          # raise (DNS for `onyx-pg-rw` fails) and every egress fail-closes 403.
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: onyx-pg-rw
+            namespace: onyx
+          spec:
+            ports:
+              - port: 5432
+                targetPort: 5432
+                protocol: TCP
+          ---
+          apiVersion: v1
+          kind: Endpoints
+          metadata:
+            name: onyx-pg-rw
+            namespace: onyx
+          subsets:
+            - addresses:
+                - ip: ${PG_IP}
+              ports:
+                - port: 5432
+                  protocol: TCP
+          EOF
+
       - name: Run migrations
         run: |
           cd backend
@@ -382,6 +427,35 @@ jobs:
           echo "=== docker system df ==="; docker system df || true
           echo "=== docker images ==="; docker images || true
           echo "=== /tmp contents ==="; ls -lah /tmp || true
+
+      - name: MinIO snapshot diagnostics on failure
+        if: failure()
+        run: |
+          MINIO_ID=$(cd deployment/docker_compose && \
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q minio)
+          docker exec "$MINIO_ID" \
+            mc alias set local http://localhost:9000 minioadmin minioadmin || true
+          echo "=== buckets in docker-compose minio (container view) ==="
+          docker exec "$MINIO_ID" mc ls local/ || true
+          echo "=== recursive listing of every bucket (container view) ==="
+          docker exec "$MINIO_ID" mc ls --recursive local/ || true
+          echo "=== host boto3 view via S3_ENDPOINT_URL ==="
+          python - <<'PY' || true
+          import os, boto3
+          from botocore.config import Config
+          s3 = boto3.client(
+              "s3",
+              endpoint_url=os.environ.get("S3_ENDPOINT_URL"),
+              aws_access_key_id=os.environ.get("S3_AWS_ACCESS_KEY_ID"),
+              aws_secret_access_key=os.environ.get("S3_AWS_SECRET_ACCESS_KEY"),
+              region_name=os.environ.get("AWS_REGION") or "us-east-1",
+              config=Config(s3={"addressing_style": "path"}),
+          )
+          print("buckets:", [b["Name"] for b in s3.list_buckets().get("Buckets", [])])
+          for b in s3.list_buckets().get("Buckets", []):
+              objs = s3.list_objects_v2(Bucket=b["Name"]).get("Contents", [])
+              print(b["Name"], "->", [o["Key"] for o in objs][:20])
+          PY
 
       - name: Collect kind logs on failure
         if: failure()

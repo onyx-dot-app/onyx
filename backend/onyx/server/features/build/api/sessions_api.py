@@ -874,8 +874,8 @@ def upload_file_endpoint(
     # Read file content (use sync file interface)
     content = file.file.read()
 
-    # Validate file (extension, mime type, size)
-    is_valid, error = validate_file(file.filename, file.content_type, len(content))
+    # Validate file size (extension/type are intentionally unrestricted)
+    is_valid, error = validate_file(len(content))
     if not is_valid:
         raise HTTPException(status_code=400, detail=error)
 

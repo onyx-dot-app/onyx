@@ -382,7 +382,7 @@ set -e
 cd {session_path}/outputs/web
 {install_check}
 echo "Starting Next.js dev server on port {nextjs_port}..."
-nohup bun run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
+nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid

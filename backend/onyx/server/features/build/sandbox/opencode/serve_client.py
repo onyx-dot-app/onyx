@@ -138,6 +138,8 @@ _TOOL_KIND: dict[str, str] = {
     "write": "edit",
     "edit": "edit",
     "patch": "edit",
+    "apply_patch": "edit",
+    "applypatch": "edit",
     "glob": "search",
     "grep": "search",
     "list": "search",
@@ -146,6 +148,11 @@ _TOOL_KIND: dict[str, str] = {
     "todo_write": "other",
     "webfetch": "fetch",
     "websearch": "search",
+    # opencode 1.15.x additions:
+    "lsp": "other",
+    "skill": "other",
+    "question": "other",
+    "invalid": "other",
 }
 
 _TOOL_TITLE: dict[str, str] = {
@@ -154,6 +161,8 @@ _TOOL_TITLE: dict[str, str] = {
     "write": "Writing",
     "edit": "Editing",
     "patch": "Editing",
+    "apply_patch": "Applying patch",
+    "applypatch": "Applying patch",
     "glob": "Searching files",
     "grep": "Searching content",
     "list": "Listing",
@@ -162,6 +171,11 @@ _TOOL_TITLE: dict[str, str] = {
     "todo_write": "Updating todos",
     "webfetch": "Fetching web content",
     "websearch": "Searching web",
+    # opencode 1.15.x additions:
+    "lsp": "Checking code",
+    "skill": "Running skill",
+    "question": "Asking",
+    "invalid": "Validating",
 }
 
 
@@ -585,6 +599,11 @@ def _emit_tool_events(part: dict[str, Any], state: _TurnState) -> Iterable[ACPEv
         "title": _tool_title(tool),
         "kind": _tool_kind(tool),
         "status": status,
+        # _meta is an ACP-reserved extensibility field. We use it to carry
+        # the raw opencode tool name so the frontend can resolve a precise
+        # title (otherwise tools with kind="other" — todowrite, task, lsp,
+        # skill, … — all fall through to "Running tool").
+        "_meta": {"toolName": tool},
     }
     if raw_input is not None:
         common["rawInput"] = raw_input

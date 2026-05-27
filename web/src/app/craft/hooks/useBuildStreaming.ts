@@ -236,7 +236,8 @@ export function useBuildStreaming() {
                 toolCall: {
                   id: parsed.toolCallId,
                   kind: parsed.kind,
-                  title: "",
+                  toolName: parsed.toolName,
+                  title: parsed.title,
                   status: "pending",
                   description: "",
                   command: "",
@@ -268,7 +269,10 @@ export function useBuildStreaming() {
                 description: parsed.description,
                 command: parsed.command,
                 rawOutput: parsed.rawOutput,
+                toolName: parsed.toolName,
                 subagentType: parsed.subagentType ?? undefined,
+                skillName: parsed.skillName ?? undefined,
+                taskOutput: parsed.taskOutput ?? undefined,
                 ...(parsed.kind === "edit" && {
                   isNewFile: parsed.isNewFile,
                   oldContent: parsed.oldContent,
@@ -286,17 +290,8 @@ export function useBuildStreaming() {
                 }
               }
 
-              // Task completion → emit text StreamItem
-              if (parsed.taskOutput) {
-                appendStreamItem(sessionId, {
-                  type: "text",
-                  id: genId("task-output"),
-                  content: parsed.taskOutput,
-                  isStreaming: false,
-                });
-                lastItemType = "text";
-                accumulatedText = "";
-              }
+              // Task completion: taskOutput is now stored on the tool call
+              // itself (rendered by TaskBody) — no separate text item.
               break;
             }
 
