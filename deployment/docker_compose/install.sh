@@ -219,11 +219,14 @@ detect_compose_cmd || true
 # in the "docker" group. Group membership doesn't apply to the current shell,
 # so when we add the user to the group mid-script we instead prefix subsequent
 # docker commands with sudo to finish this run. Future runs (after the user
-# logs out and back in) won't need it. DOCKER_SUDO is an array so that it
-# expands to no argument at all (rather than an empty string) when unset.
-DOCKER_SUDO=()
+# logs out and back in) won't need it.
+#
+# Trailing ``env`` anchors the splat with a literal command so bash 3.2's
+# single-pass parser doesn't misclassify the inline ``VAR=val`` prefixes, and
+# so sudo's ``env_reset`` can't strip them (they're positional args to ``env``).
+DOCKER_SUDO=(env)
 refresh_docker_sudo() {
-    DOCKER_SUDO=()
+    DOCKER_SUDO=(env)
     if ! command -v docker &> /dev/null; then
         return
     fi
@@ -234,7 +237,7 @@ refresh_docker_sudo() {
         return
     fi
     if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
-        DOCKER_SUDO=(sudo)
+        DOCKER_SUDO=(sudo env)
     fi
 }
 refresh_docker_sudo
@@ -573,7 +576,7 @@ fi
 # group membership in that case. The downstream daemon check will exit with
 # a clearer message if the daemon really is down.
 refresh_docker_sudo
-if (( ${#DOCKER_SUDO[@]} > 0 )); then
+if [[ "${DOCKER_SUDO[0]}" == "sudo" ]]; then
     if ! id -nG "$USER" | grep -qw docker; then
         if ! getent group docker &> /dev/null; then
             sudo groupadd docker
@@ -1310,7 +1313,7 @@ if [ $UP_EXIT -ne 0 ]; then
     (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps)
     echo ""
     print_info "Check the logs of any unhealthy service:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && ${DOCKER_SUDO[*]:+sudo }$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $([[ "${DOCKER_SUDO[0]}" == "sudo" ]] && echo "sudo ")$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
     exit 1
@@ -1328,7 +1331,7 @@ else
     echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers started  ⚠️${NC}"
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     print_info "Services may still be initializing. Check status with:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && ${DOCKER_SUDO[*]:+sudo }$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} ps)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $([[ "${DOCKER_SUDO[0]}" == "sudo" ]] && echo "sudo ")$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} ps)"
 fi
 echo ""
 print_info "Access Onyx at:"
