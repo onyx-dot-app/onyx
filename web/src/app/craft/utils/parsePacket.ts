@@ -463,12 +463,14 @@ function parseArtifact(p: Record<string, unknown>): ParsedArtifact {
 function parseToolCallStart(p: Record<string, unknown>): ParsedToolCallStart {
   const toolName = resolveToolName(p);
   const rawKind = p.kind as string | null;
+  const kind = resolveKind(toolName, rawKind);
   return {
     type: "tool_call_start",
     toolCallId: getToolCallId(p),
     toolName,
-    kind: resolveKind(toolName, rawKind),
+    kind,
     isTodo: toolName === "todowrite",
+    title: buildTitle(toolName, kind, true),
   };
 }
 

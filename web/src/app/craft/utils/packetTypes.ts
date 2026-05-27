@@ -83,6 +83,8 @@ export interface ParsedToolCallStart {
   toolName: ToolName;
   kind: import("../types/displayTypes").ToolCallKind;
   isTodo: boolean;
+  /** Best-effort title resolved from toolName/kind, shown until progress arrives. */
+  title: string;
 }
 
 export interface ParsedToolCallProgress {

@@ -237,7 +237,7 @@ export function useBuildStreaming() {
                   id: parsed.toolCallId,
                   kind: parsed.kind,
                   toolName: parsed.toolName,
-                  title: "",
+                  title: parsed.title,
                   status: "pending",
                   description: "",
                   command: "",
