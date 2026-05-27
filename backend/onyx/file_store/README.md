@@ -1,6 +1,6 @@
 # Onyx File Store
 
-The Onyx file store provides a unified interface for storing files and large binary objects. It supports three storage backends: S3-compatible storage (AWS S3, MinIO, Digital Ocean Spaces, etc.), Google Cloud Storage (GCS), and PostgreSQL Large Objects.
+The Onyx file store provides a unified interface for storing files and large binary objects. It supports three storage backends: S3-compatible storage (AWS S3, MinIO, Cloudflare R2, Digital Ocean Spaces, etc.), Google Cloud Storage (GCS), and PostgreSQL Large Objects.
 
 ## Architecture
 
@@ -26,7 +26,7 @@ The backend is selected via the `FILE_STORE_BACKEND` environment variable:
 
 | Value | Backend | Description |
 |---|---|---|
-| `s3` (default) | S3-compatible | AWS S3, MinIO, Digital Ocean Spaces, etc. |
+| `s3` (default) | S3-compatible | AWS S3, MinIO, Cloudflare R2, Digital Ocean Spaces, etc. |
 | `gcs` | Google Cloud Storage | Native GCS with ADC/Workload Identity support |
 | `postgres` | PostgreSQL Large Objects | No external storage service required |
 
@@ -72,6 +72,17 @@ S3_AWS_SECRET_ACCESS_KEY=your-spaces-secret
 AWS_REGION_NAME=nyc3
 ```
 
+### Cloudflare R2
+
+```bash
+FILE_STORE_BACKEND=s3
+S3_FILE_STORE_BUCKET_NAME=your-bucket-name
+S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
+S3_AWS_ACCESS_KEY_ID=your-r2-access-key
+S3_AWS_SECRET_ACCESS_KEY=your-r2-secret-key
+AWS_REGION_NAME=auto
+```
+
 ### Google Cloud Storage (GCS)
 
 ```bash
@@ -111,7 +122,7 @@ The file store works with any S3-compatible service. Simply configure:
 - `S3_FILE_STORE_BUCKET_NAME`: Your bucket/container name
 - `S3_ENDPOINT_URL`: The service endpoint URL
 - `S3_AWS_ACCESS_KEY_ID` and `S3_AWS_SECRET_ACCESS_KEY`: Your credentials
-- `AWS_REGION_NAME`: The region (any valid region name)
+- `AWS_REGION_NAME`: The provider-required signing region. Region or endpoint mismatches can surface as opaque `HeadBucket` failures such as HTTP 400 or 403. For Cloudflare R2, use `auto`.
 
 ### PostgreSQL Large Objects
 

@@ -1392,6 +1392,9 @@ configMap:
   EMAIL_FROM: ""
   # MinIO/S3 Configuration override
   S3_ENDPOINT_URL: ""  # only used if minio is not enabled
+  # Set this for AWS S3 and S3-compatible providers that require a signing region.
+  # For example, Cloudflare R2 uses "auto".
+  AWS_REGION_NAME: ""
   S3_FILE_STORE_BUCKET_NAME: ""
   # Gen AI Settings
   GEN_AI_MAX_TOKENS: ""

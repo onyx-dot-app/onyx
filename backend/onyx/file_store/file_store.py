@@ -306,8 +306,21 @@ class S3BackedFileStore(FileStore):
                 )
             else:
                 # Some other error occurred
-                logger.error("Failed to check S3 bucket '%s': %s", bucket_name, e)
-                raise RuntimeError(f"Failed to check S3 bucket '{bucket_name}': {e}")
+                config_hint = (
+                    "Verify S3_ENDPOINT_URL and AWS_REGION_NAME for the bucket. "
+                    "For S3-compatible providers such as Cloudflare R2, a region "
+                    "mismatch can surface as a generic HeadBucket failure; "
+                    "Cloudflare R2 commonly uses AWS_REGION_NAME=auto."
+                )
+                logger.error(
+                    "Failed to check S3 bucket '%s': %s. %s",
+                    bucket_name,
+                    e,
+                    config_hint,
+                )
+                raise RuntimeError(
+                    f"Failed to check S3 bucket '{bucket_name}': {e}. {config_hint}"
+                )
 
     def has_file(
         self,
