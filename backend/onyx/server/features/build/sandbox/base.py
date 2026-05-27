@@ -433,6 +433,7 @@ class SandboxManager(ABC):
         sandbox_id: UUID,  # noqa: ARG002
         opencode_session_id: str,  # noqa: ARG002
         *,
+        directory: str,  # noqa: ARG002
         keepalive_seconds: float = 15.0,  # noqa: ARG002
     ) -> Generator["ACPEvent", None, None]:
         """Stream events for an arbitrary opencode session without
