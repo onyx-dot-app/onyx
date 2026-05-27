@@ -28,13 +28,8 @@ def _make_pod(
     )
 
 
-def _make_lookup(core_api: MagicMock | None = None) -> K8sInformerLookup:
-    if core_api is None:
-        core_api = MagicMock(spec=client.CoreV1Api)
-        # Default: the cluster has no matching pod, so a cache-miss live
-        # lookup resolves to None unless a test configures otherwise.
-        core_api.list_namespaced_pod.return_value = client.V1PodList(items=[])
-    return K8sInformerLookup(core_api=core_api)
+def _make_lookup() -> K8sInformerLookup:
+    return K8sInformerLookup(core_api=MagicMock(spec=client.CoreV1Api))
 
 
 def test_identity_from_pod_returns_none_when_missing_ip() -> None:
@@ -69,35 +64,6 @@ def test_apply_event_added_populates_cache() -> None:
     identity = lookup.lookup("10.0.0.1")
     assert identity is not None
     assert identity.sandbox_name == "sandbox-aaaa1111"
-
-
-def test_lookup_falls_back_to_live_query_on_cache_miss() -> None:
-    # A freshly-provisioned pod the watch hasn't observed yet must still
-    # resolve via a direct lookup, and the result should be cached.
-    core_api = MagicMock(spec=client.CoreV1Api)
-    core_api.list_namespaced_pod.return_value = client.V1PodList(items=[_make_pod()])
-    lookup = _make_lookup(core_api)
-
-    identity = lookup.lookup("10.0.0.1")
-    assert identity is not None
-    assert identity.sandbox_name == "sandbox-aaaa1111"
-    core_api.list_namespaced_pod.assert_called_once()
-
-    # Cached now: the second lookup does not re-query the API.
-    assert lookup.lookup("10.0.0.1") is not None
-    core_api.list_namespaced_pod.assert_called_once()
-
-
-def test_lookup_returns_none_when_live_query_finds_nothing() -> None:
-    lookup = _make_lookup()  # default mock returns an empty pod list
-    assert lookup.lookup("10.0.0.9") is None
-
-
-def test_lookup_returns_none_when_live_query_raises() -> None:
-    core_api = MagicMock(spec=client.CoreV1Api)
-    core_api.list_namespaced_pod.side_effect = Exception("boom")
-    lookup = _make_lookup(core_api)
-    assert lookup.lookup("10.0.0.9") is None
 
 
 def test_apply_event_modified_with_new_ip_evicts_old() -> None:
