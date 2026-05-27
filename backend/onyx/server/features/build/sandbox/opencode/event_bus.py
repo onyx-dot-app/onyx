@@ -88,9 +88,10 @@ class PodEventBus:
     def closed(self) -> bool:
         """True once the bus has either been explicitly closed or self-closed
         after exhausting its reconnect budget. Callers that cache buses
-        (e.g. ``KubernetesSandboxManager._event_buses``) should check this
-        before reusing a bus — a closed bus will only deliver
-        ``BUS_CLOSED_SENTINEL`` to subscribers."""
+        (e.g. ``KubernetesSandboxManager._event_buses``, keyed by
+        ``(sandbox_id, directory)``) should check this before reusing a bus —
+        a closed bus will only deliver ``BUS_CLOSED_SENTINEL`` to
+        subscribers."""
         return self._closed
 
     def subscribe(self, session_id: str) -> _Subscription:
@@ -234,8 +235,9 @@ class PodEventBus:
             response.raise_for_status()
             self.stream_ready.set()
             logger.info(
-                "PodEventBus connected to %s/event (status=%s)",
+                "PodEventBus connected to %s/event?directory=%s (status=%s)",
                 self._base_url,
+                self._directory,
                 response.status_code,
             )
             buf = ""
