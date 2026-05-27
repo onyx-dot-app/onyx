@@ -1,4 +1,4 @@
-package project
+package docker
 
 import (
 	"net"
@@ -30,18 +30,11 @@ func TestFindAvailablePort_returnsBaseWhenFree(t *testing.T) {
 
 func TestFindAvailablePort_skipsOccupiedPort(t *testing.T) {
 	base := freePort(t)
-	ln4, err := net.Listen("tcp4", ":"+strconv.Itoa(base))
+	ln, err := net.Listen("tcp", ":"+strconv.Itoa(base))
 	if err != nil {
-		t.Fatalf("failed to occupy port (ipv4): %v", err)
+		t.Fatalf("failed to occupy port: %v", err)
 	}
-	defer func() { _ = ln4.Close() }()
-	if hasIPv6() {
-		ln6, err := net.Listen("tcp6", ":"+strconv.Itoa(base))
-		if err != nil {
-			t.Fatalf("failed to occupy port (ipv6): %v", err)
-		}
-		defer func() { _ = ln6.Close() }()
-	}
+	defer func() { _ = ln.Close() }()
 
 	port, err := findAvailablePort(base, nil)
 	if err != nil {
@@ -74,21 +67,12 @@ func TestFindAvailablePort_errorWhenAllOccupied(t *testing.T) {
 		}
 	}()
 
-	v6 := hasIPv6()
 	for i := 0; i < maxPortScanRange; i++ {
-		addr := ":" + strconv.Itoa(base+i)
-		ln4, err := net.Listen("tcp4", addr)
+		ln, err := net.Listen("tcp", ":"+strconv.Itoa(base+i))
 		if err != nil {
-			t.Fatalf("failed to occupy port %d (ipv4): %v", base+i, err)
+			t.Fatalf("failed to occupy port %d: %v", base+i, err)
 		}
-		listeners = append(listeners, ln4)
-		if v6 {
-			ln6, err := net.Listen("tcp6", addr)
-			if err != nil {
-				t.Fatalf("failed to occupy port %d (ipv6): %v", base+i, err)
-			}
-			listeners = append(listeners, ln6)
-		}
+		listeners = append(listeners, ln)
 	}
 
 	_, err := findAvailablePort(base, nil)
@@ -98,17 +82,17 @@ func TestFindAvailablePort_errorWhenAllOccupied(t *testing.T) {
 }
 
 func TestName_usesFlag(t *testing.T) {
-	SetFlags("custom-project")
-	defer SetFlags("")
+	SetProjectFlags("custom-project")
+	defer SetProjectFlags("")
 
-	if got := Name(); got != "custom-project" {
+	if got := ProjectName(); got != "custom-project" {
 		t.Fatalf("expected \"custom-project\", got %q", got)
 	}
 }
 
 func TestName_defaultsWhenNoFlag(t *testing.T) {
-	SetFlags("")
-	name := Name()
+	SetProjectFlags("")
+	name := ProjectName()
 	if name == "" {
 		t.Fatal("expected non-empty project name")
 	}

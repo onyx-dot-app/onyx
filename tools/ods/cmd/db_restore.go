@@ -12,7 +12,6 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/project"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/s3"
 )
@@ -135,7 +134,7 @@ func runDBRestore(input string, opts *DBRestoreOptions) {
 	}
 
 	// Find PostgreSQL container.
-	container, err := docker.FindPostgresContainer(project.Name())
+	container, err := docker.FindPostgresContainer(docker.ProjectName())
 	if err != nil {
 		log.Fatalf("Failed to find PostgreSQL container: %v", err)
 	}

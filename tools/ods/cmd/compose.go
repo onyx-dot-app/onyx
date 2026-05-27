@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/project"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 )
 
 var validProfiles = []string{"dev", "multitenant"}
@@ -113,7 +113,7 @@ func composeFiles(profile string) []string {
 // baseArgs builds the common "docker compose -p <project> -f ... -f ..."
 // argument prefix.
 func baseArgs(profile string) []string {
-	args := []string{"compose", "-p", project.Name()}
+	args := []string{"compose", "-p", docker.ProjectName()}
 	for _, f := range composeFiles(profile) {
 		args = append(args, "-f", f)
 	}
@@ -156,7 +156,7 @@ func runningServiceNames() []string {
 		return nil
 	}
 
-	args := []string{"compose", "-p", project.Name(), "ps", "--services"}
+	args := []string{"compose", "-p", docker.ProjectName(), "ps", "--services"}
 
 	cmd := exec.Command("docker", args...)
 	cmd.Dir = filepath.Join(gitRoot, "deployment", "docker_compose")
@@ -238,7 +238,7 @@ func setEnvValue(key, value string) {
 	}
 }
 
-// runCompose starts or stops Docker Compose containers for the current project.
+// runCompose starts or stops Docker Compose containers for the current docker.
 // For profiles that expose host ports ("dev", "multitenant"), it scans for
 // available ports and writes them to the compose .env file before starting
 // containers. EE licensing env vars are also written on startup.
@@ -256,7 +256,7 @@ func runCompose(profile string, opts *ComposeOptions) {
 		}
 
 		if profile == "dev" || profile == "multitenant" {
-			ports, err := project.FindAvailablePorts()
+			ports, err := docker.FindAvailablePorts()
 			if err != nil {
 				log.Fatalf("Failed to find available ports: %v", err)
 			}
@@ -271,7 +271,7 @@ func runCompose(profile string, opts *ComposeOptions) {
 	if opts.Down {
 		args = append(args, "down")
 		if opts.Infra {
-			args = append(args, project.InfraServiceNames()...)
+			args = append(args, docker.InfraServiceNames()...)
 		}
 	} else {
 		args = append(args, "up", "-d")
@@ -282,11 +282,11 @@ func runCompose(profile string, opts *ComposeOptions) {
 			args = append(args, "--force-recreate")
 		}
 		if opts.Infra {
-			args = append(args, project.InfraServiceNames()...)
+			args = append(args, docker.InfraServiceNames()...)
 		}
 	}
 
-	projName := project.Name()
+	projName := docker.ProjectName()
 	action := "Starting"
 	if opts.Down {
 		action = "Stopping"

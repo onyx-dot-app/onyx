@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/project"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 )
 
 // NewEnvCommand creates the env command for writing infrastructure connection
@@ -74,7 +74,7 @@ func getHostPort(container string, containerPort int) (int, error) {
 }
 
 func runEnv(dryRun bool) {
-	projName := project.Name()
+	projName := docker.ProjectName()
 
 	resolved, err := queryContainerPorts(projName)
 	if err != nil {
@@ -111,10 +111,10 @@ func runEnv(dryRun bool) {
 // queryContainerPorts discovers the actual host ports of running containers by
 // calling "docker port" for each port spec in InfraServices. Container names
 // follow the Docker Compose convention "<project>-<service>-1".
-func queryContainerPorts(projName string) (*project.ResolvedPorts, error) {
-	resolved := project.NewResolvedPorts()
+func queryContainerPorts(projName string) (*docker.ResolvedPorts, error) {
+	resolved := docker.NewResolvedPorts()
 
-	for _, svc := range project.InfraServices {
+	for _, svc := range docker.InfraServices {
 		container := fmt.Sprintf("%s-%s-1", projName, svc.Name)
 		for _, spec := range svc.Ports {
 			port, err := getHostPort(container, spec.ContainerPort)

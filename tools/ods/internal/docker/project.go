@@ -1,36 +1,18 @@
-package project
+package docker
 
 import (
 	"fmt"
-	"net"
 	"path/filepath"
 	"strconv"
-	"sync"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/portutil"
 )
 
 const (
 	defaultProjectName = "onyx"
 	maxPortScanRange   = 100
 )
-
-var (
-	ipv6Once      sync.Once
-	ipv6Available bool
-)
-
-func hasIPv6() bool {
-	ipv6Once.Do(func() {
-		ln, err := net.Listen("tcp6", ":0")
-		if err != nil {
-			return
-		}
-		_ = ln.Close()
-		ipv6Available = true
-	})
-	return ipv6Available
-}
 
 // PortSpec describes a single port exposed by an infrastructure service.
 type PortSpec struct {
@@ -130,14 +112,14 @@ var flagProject string
 
 // SetFlags stores CLI flag values for project resolution. Called once from the
 // root command's PersistentPreRun.
-func SetFlags(project string) {
+func SetProjectFlags(project string) {
 	flagProject = project
 }
 
 // Name returns the Docker Compose project name. Uses --project if set,
 // otherwise the basename of the git working tree root (e.g. "onyx" for the main
 // checkout, "feature-x" for a worktree at .../feature-x).
-func Name() string {
+func ProjectName() string {
 	if flagProject != "" {
 		return flagProject
 	}
@@ -149,33 +131,18 @@ func Name() string {
 }
 
 // findAvailablePort probes TCP ports starting from base, incrementing by 1, and
-// returns the first port that is bindable and not in the claimed set. IPv6 is
-// checked when available because Docker Desktop on macOS binds on IPv6 via its
-// VM; on hosts where IPv6 is disabled the check is skipped.
+// returns the first port that is bindable and not in the claimed set.
 func findAvailablePort(base int, claimed map[int]bool) (int, error) {
-	checkV6 := hasIPv6()
 	for port := base; port < base+maxPortScanRange; port++ {
 		if claimed[port] {
 			continue
 		}
-		if !canBind("tcp4", port) {
-			continue
-		}
-		if checkV6 && !canBind("tcp6", port) {
+		if !portutil.IsAvailable(port) {
 			continue
 		}
 		return port, nil
 	}
 	return 0, fmt.Errorf("no available port found in range %d-%d", base, base+maxPortScanRange-1)
-}
-
-func canBind(network string, port int) bool {
-	ln, err := net.Listen(network, fmt.Sprintf(":%d", port))
-	if err != nil {
-		return false
-	}
-	_ = ln.Close()
-	return true
 }
 
 // FindAvailablePorts scans for a free host port for each port spec in

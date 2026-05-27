@@ -6,7 +6,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/project"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 )
 
 var (
@@ -37,7 +37,7 @@ func NewRootCommand() *cobra.Command {
 			log.SetFormatter(&log.TextFormatter{
 				DisableTimestamp: true,
 			})
-			project.SetFlags(opts.Project)
+			docker.SetProjectFlags(opts.Project)
 		},
 		Version: fmt.Sprintf("%s\ncommit %s", Version, Commit),
 	}
