@@ -259,7 +259,6 @@ export default function UserLibraryModal({
                     style={{ display: "none" }}
                     onChange={handleFileUpload}
                     disabled={isUploading}
-                    accept="*/*"
                   />
                   <Button
                     disabled={isUploading}
