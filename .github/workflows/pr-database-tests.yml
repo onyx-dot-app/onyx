@@ -90,4 +90,4 @@ jobs:
 
       - name: Run Database Tests
         working-directory: ./backend
-        run: pytest -m alembic tests/integration/tests/migrations/
+        run: pytest tests/integration/tests/migrations/

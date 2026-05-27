@@ -21,11 +21,12 @@ from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
+import httpx
 import pytest
-import requests
 
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -58,12 +59,27 @@ def _set_scope(user: DATestUser, session_id: UUID, scope: SharingScope) -> None:
 def _unauth_get(
     session_id: UUID,
     path: str = "",
-    allow_redirects: bool = False,
-) -> requests.Response:
+    follow_redirects: bool = False,
+) -> httpx.Response:
     """GET the proxy URL with no auth headers/cookies."""
-    return requests.get(
+    return client.get(
         _webapp_url(session_id, path),
-        allow_redirects=allow_redirects,
+        follow_redirects=follow_redirects,
+    )
+
+
+def _auth_get(
+    user: DATestUser,
+    session_id: UUID,
+    path: str = "",
+    follow_redirects: bool = False,
+) -> httpx.Response:
+    """GET the proxy URL with ``user``'s auth headers/cookies."""
+    return client.get(
+        _webapp_url(session_id, path),
+        headers=user.headers,
+        cookies=user.cookies,
+        follow_redirects=follow_redirects,
     )
 
 
@@ -85,7 +101,7 @@ def test_proxy_requires_auth_when_private(admin_user: DATestUser) -> None:
     # Default scope is PRIVATE; assert + be explicit anyway.
     _set_scope(admin_user, session_id, SharingScope.PRIVATE)
 
-    response = _unauth_get(session_id, allow_redirects=False)
+    response = _unauth_get(session_id, follow_redirects=False)
 
     if response.status_code == 302:
         assert "/auth/login" in response.headers.get("location", "")
@@ -109,11 +125,11 @@ def test_proxy_allows_org_user_when_public_org(
     session_id = UUID(session["id"])
     _set_scope(admin_user, session_id, SharingScope.PUBLIC_ORG)
 
-    response = requests.get(
+    response = client.get(
         _webapp_url(session_id),
         headers=basic_user.headers,
         cookies=basic_user.cookies,
-        allow_redirects=False,
+        follow_redirects=False,
     )
 
     assert response.status_code != 401
@@ -140,10 +156,10 @@ def test_proxy_blocks_other_tenant_when_public_org(
     _set_scope(admin_user, session_id, SharingScope.PUBLIC_ORG)
 
     # Forged cookie: present but not a valid session for any user.
-    response = requests.get(
+    response = client.get(
         _webapp_url(session_id),
         cookies={"fastapiusersauth": "not-a-real-token"},
-        allow_redirects=False,
+        follow_redirects=False,
     )
 
     # Either 401, or a redirect to login — both mean "not allowed."
@@ -151,20 +167,6 @@ def test_proxy_blocks_other_tenant_when_public_org(
         assert "/auth/login" in response.headers.get("location", "")
     else:
         assert response.status_code == 401
-
-
-def test_proxy_allows_unauth_when_public_global(
-    admin_user: DATestUser,
-) -> None:
-    """``public_global`` → unauthenticated request passes the access check."""
-    session = _create_session(admin_user)
-    session_id = UUID(session["id"])
-    _set_scope(admin_user, session_id, SharingScope.PUBLIC_GLOBAL)
-
-    response = _unauth_get(session_id, allow_redirects=False)
-
-    assert response.status_code != 401
-    assert "/auth/login" not in response.headers.get("location", "")
 
 
 # ---------------------------------------------------------------------------
@@ -183,9 +185,8 @@ def test_proxy_strips_set_cookie_header(admin_user: DATestUser) -> None:
     """
     session = _create_session(admin_user)
     session_id = UUID(session["id"])
-    _set_scope(admin_user, session_id, SharingScope.PUBLIC_GLOBAL)
 
-    response = _unauth_get(session_id, allow_redirects=False)
+    response = _auth_get(admin_user, session_id, follow_redirects=False)
 
     # Lowercased header name lookup (requests does case-insensitive matching).
     assert "set-cookie" not in {k.lower() for k in response.headers}
@@ -208,9 +209,8 @@ def test_proxy_rewrites_nextjs_asset_paths_in_html(
     """
     session = _create_session(admin_user)
     session_id = UUID(session["id"])
-    _set_scope(admin_user, session_id, SharingScope.PUBLIC_GLOBAL)
 
-    response = _unauth_get(session_id, allow_redirects=False)
+    response = _auth_get(admin_user, session_id, follow_redirects=False)
     assert "text/html" in response.headers.get("content-type", "").lower()
     # If a real upstream were live, any rewritten URL would carry the
     # session-scoped proxy prefix. The offline page contains no
@@ -237,14 +237,13 @@ def test_proxy_injects_hmr_shim_in_html_response(
     """
     session = _create_session(admin_user)
     session_id = UUID(session["id"])
-    _set_scope(admin_user, session_id, SharingScope.PUBLIC_GLOBAL)
 
-    response = _unauth_get(session_id, allow_redirects=False)
+    response = _auth_get(admin_user, session_id, follow_redirects=False)
     # The injection logic only runs when the upstream returns text/html
     # and a 2xx — the offline page does not include the shim script tag
     # in any of its content. Verifies the shim is not accidentally
     # injected on the offline fallback (would expose the proxy base
-    # path to anonymous clients).
+    # path to authenticated clients).
     body = response.text
     assert "__WEBAPP_BASE__" not in body
 
@@ -264,9 +263,8 @@ def test_proxy_502_renders_branded_offline_page(
     """
     session = _create_session(admin_user)
     session_id = UUID(session["id"])
-    _set_scope(admin_user, session_id, SharingScope.PUBLIC_GLOBAL)
 
-    response = _unauth_get(session_id, allow_redirects=False)
+    response = _auth_get(admin_user, session_id, follow_redirects=False)
 
     assert response.status_code in (502, 503, 504)
     assert "text/html" in response.headers.get("content-type", "").lower()
@@ -302,11 +300,11 @@ def test_webapp_download_route_not_shadowed_by_catchall(
     session = _create_session(admin_user)
     session_id = UUID(session["id"])
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/build/sessions/{session_id}/webapp-download",
         headers=admin_user.headers,
         cookies=admin_user.cookies,
-        allow_redirects=False,
+        follow_redirects=False,
     )
 
     content_type = response.headers.get("content-type", "").lower()
@@ -342,13 +340,10 @@ def test_webapp_assets_isolated_across_sessions(
     session_a_id = UUID(session_a["id"])
     session_b_id = UUID(session_b["id"])
 
-    _set_scope(admin_user, session_a_id, SharingScope.PUBLIC_GLOBAL)
-    _set_scope(basic_user, session_b_id, SharingScope.PUBLIC_GLOBAL)
-
     asset_path = f"_next/static/{uuid4().hex}/leak.js"
 
-    response_a = _unauth_get(session_a_id, asset_path)
-    response_b = _unauth_get(session_b_id, asset_path)
+    response_a = _auth_get(admin_user, session_a_id, asset_path)
+    response_b = _auth_get(basic_user, session_b_id, asset_path)
 
     # Each session's proxy must respond from its own sandbox; the two
     # responses share a *structure* (both offline pages, no upstream)

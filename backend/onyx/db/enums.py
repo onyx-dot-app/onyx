@@ -284,7 +284,14 @@ class SessionOrigin(str, PyEnum):
 class SharingScope(str, PyEnum):
     PRIVATE = "private"
     PUBLIC_ORG = "public_org"
-    PUBLIC_GLOBAL = "public_global"
+
+
+class ApprovalDecision(str, PyEnum):
+    """Terminal decision on a gated action; `decision IS NULL` means pending."""
+
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
 
 
 class ScheduledTaskStatus(str, PyEnum):
@@ -314,6 +321,31 @@ class ScheduledTaskTriggerSource(str, PyEnum):
     MANUAL_RUN_NOW = "MANUAL_RUN_NOW"
 
 
+class ScheduledTaskErrorClass(str, PyEnum):
+    """Closed set of values for ``ScheduledTaskRun.error_class``.
+
+    Every code path that writes ``error_class`` must use a member of
+    this enum — the column is intentionally a closed set so dashboards
+    and triage queries can pivot on a known vocabulary. For unexpected
+    runtime failures inside the agent drive, use ``AGENT_EXCEPTION``
+    and put the actual exception class name + message in
+    ``error_detail``.
+    """
+
+    TASK_MISSING = "task_missing"
+    SANDBOX_WAKE_FAILED = "sandbox_wake_failed"
+    EXECUTOR_ERROR = "executor_error"
+    TIMEOUT = "timeout"
+    STUCK = "stuck"
+    AGENT_EXCEPTION = "agent_exception"
+
+
+class ScheduledTaskSkipReason(str, PyEnum):
+    """Well-known values for ``ScheduledTaskRun.skip_reason``."""
+
+    PRIOR_IN_FLIGHT = "prior_in_flight"
+
+
 class SandboxStatus(str, PyEnum):
     PROVISIONING = "provisioning"
     RUNNING = "running"
@@ -332,6 +364,22 @@ class SandboxStatus(str, PyEnum):
     def is_sleeping(self) -> bool:
         """Check if sandbox is sleeping (pod terminated but can be restored)."""
         return self == SandboxStatus.SLEEPING
+
+
+class ExternalAppType(str, PyEnum):
+    """Discriminator for the External Apps OAuth dispatch layer.
+
+    Each built-in value names a provider with its own configured
+    authorize URL, token URL, scope, and response parser in
+    `external_apps.providers`. `CUSTOM` is for admin-defined apps
+    that don't go through any built-in OAuth flow (static-token
+    integrations, internal services, etc.).
+    """
+
+    GOOGLE_CALENDAR = "GOOGLE_CALENDAR"
+    SLACK = "SLACK"
+    LINEAR = "LINEAR"
+    CUSTOM = "CUSTOM"
 
 
 class PatType(str, PyEnum):

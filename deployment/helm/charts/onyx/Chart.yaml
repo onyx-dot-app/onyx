@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.4
+version: 0.5.8
 appVersion: latest
 annotations:
   category: Productivity
@@ -17,13 +17,12 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Optional External Secrets Operator support. Set
-        externalSecret.enabled=true to render an ExternalSecret CR that
-        materializes one shared Secret from an upstream secret manager (AWS
-        Secrets Manager, GCP Secret Manager, Vault, ...). Point each
-        auth.*.existingSecret at externalSecret.secretName, and use
-        extraEnvFromSecret to project loose env-var secrets via envFrom. Off
-        by default; rendered output is unchanged when disabled.
+      description: Sandbox egress proxy for Craft action approvals. Adds the
+        `sandbox-proxy` Deployment, Service, NetworkPolicy, PDB, and RBAC
+        (gated on `configMap.ENABLE_CRAFT=true`) plus `SANDBOX_PROXY_HOST`/
+        `SANDBOX_PROXY_PORT` configmap wiring. Sandbox egress routes through
+        the proxy, which gates external actions on user approval; the sandbox
+        NetworkPolicy also allows opencode-serve ingress on `:4096`.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0

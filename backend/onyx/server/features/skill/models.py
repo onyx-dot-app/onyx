@@ -11,10 +11,18 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill
 from onyx.db.skill import SkillPatch
-from onyx.skills.registry import BuiltinSkill
+from onyx.skills.built_in import BuiltInSkillDefinition
 
 
 class BuiltinSkillResponse(BaseModel):
+    """A built-in skill — backed by a ``skill`` row whose
+    ``built_in_skill_id`` references a definition in
+    ``onyx.skills.built_in.BUILT_IN_SKILLS``. Display fields come from
+    the row; ``is_available`` / ``unavailable_reason`` come from the
+    codified definition. Built-ins are not admin-mutable, so lifecycle
+    fields (``enabled``, ``is_public``, group grants) are not part of
+    this response — they're row-level implementation detail."""
+
     source: Literal["builtin"] = "builtin"
     slug: str
     name: str
@@ -23,15 +31,18 @@ class BuiltinSkillResponse(BaseModel):
     unavailable_reason: str | None = None
 
     @classmethod
-    def from_builtin(
-        cls, skill: BuiltinSkill, db_session: Session
+    def from_row(
+        cls,
+        skill: Skill,
+        definition: BuiltInSkillDefinition,
+        db_session: Session,
     ) -> "BuiltinSkillResponse":
         return cls(
             slug=skill.slug,
             name=skill.name,
             description=skill.description,
-            is_available=skill.is_available(db_session),
-            unavailable_reason=skill.unavailable_reason,
+            is_available=definition.is_available(db_session),
+            unavailable_reason=definition.unavailable_reason,
         )
 
 

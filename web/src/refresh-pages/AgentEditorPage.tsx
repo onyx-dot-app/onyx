@@ -45,7 +45,7 @@ import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
-import UserFilesModal from "@/components/modals/UserFilesModal";
+import UserFilesModal from "@/sections/modals/UserFilesModal";
 import {
   ProjectFile,
   UserFileStatus,

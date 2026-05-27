@@ -15,6 +15,7 @@ Per project memory: never run these locally — they touch the real cluster.
 from __future__ import annotations
 
 import io
+import os
 import tarfile
 from pathlib import Path
 from typing import Any
@@ -103,8 +104,24 @@ def _s3_client() -> Any:
 
     The K8s manager bypasses the FileStore for snapshots and uses AWS CLI
     in-pod, so the test verifies via boto3 directly against the same bucket.
+
+    In CI the in-pod sidecar talks to MinIO via the cluster-internal DNS
+    name (``AWS_ENDPOINT_URL`` env), but the test process runs on the host
+    and must use the host-accessible endpoint exposed by docker-compose
+    (``S3_ENDPOINT_URL``). Construct the client explicitly so it doesn't
+    inherit the in-cluster endpoint from ``AWS_ENDPOINT_URL``.
     """
-    return boto3.client("s3")
+    endpoint_url = os.environ.get("S3_ENDPOINT_URL")
+    access_key = os.environ.get("S3_AWS_ACCESS_KEY_ID")
+    secret_key = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
+    region = os.environ.get("AWS_REGION") or "us-east-1"
+    return boto3.client(
+        "s3",
+        endpoint_url=endpoint_url,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        region_name=region,
+    )
 
 
 def _download_snapshot(storage_path: str, dest: Path) -> None:
@@ -202,11 +219,15 @@ def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
 
     members = _list_archive_members(archive)
     # AGENTS.md, opencode.json live at the session root — they must not be
-    # captured. Likewise the .opencode/skills symlink (which targets
+    # captured. Match the session-root path only (the snapshot tars from the
+    # session dir, so the root would show up as ``AGENTS.md`` or
+    # ``./AGENTS.md``). The scaffolded Next.js project under outputs/web/
+    # ships its own AGENTS.md which is legitimate user code and must remain.
+    # Likewise the .opencode/skills symlink (which targets
     # /workspace/managed/skills) must not leak the managed tree.
     for forbidden in ("AGENTS.md", "opencode.json"):
-        assert not any(m.endswith(forbidden) for m in members), (
-            f"{forbidden} must not appear in snapshot. Members: {members}"
+        assert not any(m in (forbidden, f"./{forbidden}") for m in members), (
+            f"{forbidden} must not appear at snapshot root. Members: {members}"
         )
     assert not any("managed/skills" in m for m in members), (
         f"managed/skills/* must not appear in snapshot. Members: {members}"
@@ -446,7 +467,7 @@ def test_restore_uses_data_filter_to_block_traversal(
 
     Defence-in-depth here is provided by **GNU tar inside the pod**, not by
     Python's ``tarfile.extractall(filter="data")``. The K8s backend pipes
-    ``aws s3 cp - | tar -xzf - -C /workspace/sessions/<session_id>``; GNU
+    ``s5cmd cat | tar -xzf - -C /workspace/sessions/<session_id>``; GNU
     tar strips leading ``../`` components when extracting (refusing to
     write above the ``-C`` directory) and the ``-C`` flag pins the
     extraction root. The local sandbox backend uses Python's

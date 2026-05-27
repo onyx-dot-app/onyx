@@ -1,4 +1,10 @@
 export { default as SvgActions } from "@opal/icons/actions";
+export { default as SvgAudioFile } from "@opal/icons/audio-file";
+export { default as SvgDocFile } from "@opal/icons/doc-file";
+export { default as SvgMusicFile } from "@opal/icons/music-file";
+export { default as SvgSlidesFile } from "@opal/icons/slides-file";
+export { default as SvgSpreadsheetFile } from "@opal/icons/spreadsheet-file";
+export { default as SvgVideoFile } from "@opal/icons/video-file";
 export { default as SvgActivity } from "@opal/icons/activity";
 export { default as SvgActivitySmall } from "@opal/icons/activity-small";
 export { default as SvgAddLines } from "@opal/icons/add-lines";

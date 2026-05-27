@@ -112,7 +112,7 @@
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceRoot}/web",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "bun",
       "envFile": "${workspaceFolder}/.vscode/.env.web",
       "runtimeArgs": [
         "run",

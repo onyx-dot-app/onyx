@@ -402,7 +402,6 @@ def test_search_returns_results(
 
 
 def test_search_raw(
-    reset: None,  # noqa: ARG001
     cli_binary: Path,
     pat_token: str,
     admin_user: DATestUser,
@@ -420,9 +419,6 @@ def test_search_raw(
 
     assert result.returncode == 0, f"stderr: {result.stderr}"
 
-    # ``reset`` only wipes Postgres; OpenSearch is shared across tests, so docs
-    # seeded by prior tests may still match. Find the seeded doc by content
-    # rather than asserting on result count.
     data = json.loads(result.stdout)
     matches = [r for r in data["results"] if phrase in r["content"]]
     assert len(matches) == 1

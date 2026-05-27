@@ -23,6 +23,7 @@ from onyx.configs.app_configs import INDEXING_TRACER_INTERVAL
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE
 from onyx.configs.app_configs import MAX_FILE_SIZE_BYTES
+from onyx.configs.app_configs import PERSISTENT_INDEXING
 from onyx.configs.app_configs import POLL_CONNECTOR_OFFSET
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
@@ -279,6 +280,10 @@ def _check_failure_threshold(
     1. We have more than 3 failures AND
     2. Failures account for more than 10% of processed documents
     """
+    # Persistent indexing: never abort on failure volume.
+    if PERSISTENT_INDEXING:
+        return
+
     failure_ratio = total_failures / (document_count or 1)
 
     FAILURE_THRESHOLD = 3
@@ -601,12 +606,12 @@ def connector_document_extraction(
             checkpoint=checkpoint,
         )
 
-    try:
-        batch_num = last_batch_num  # starts at 0 if no last batch
-        total_doc_batches_queued = 0
-        total_failures = 0
-        document_count = 0
+    batch_num = last_batch_num  # starts at 0 if no last batch
+    total_doc_batches_queued = 0
+    total_failures = 0
+    document_count = 0
 
+    try:
         # Ensure the SOURCE-type root hierarchy node exists before processing.
         # This is the root of the hierarchy tree for this source - all other
         # hierarchy nodes should ultimately have this as an ancestor.
@@ -789,6 +794,7 @@ def connector_document_extraction(
 
                 batch_num += 1
                 total_doc_batches_queued += 1
+                document_count += len(doc_batch_cleaned)
 
                 logger.info(
                     "Queued document processing batch: batch_num=%s docs=%s attempt=%s",
@@ -917,6 +923,13 @@ def connector_document_extraction(
                     )
                     raise e
 
+                # PERSISTENT_INDEXING deliberately does NOT catch unhandled
+                # connector-generator exceptions: we can't isolate the failing
+                # entity from a black-box raise, and silently landing the
+                # attempt as COMPLETED_WITH_ERRORS would let the system advance
+                # past potentially-missed source data. Operators need a FAILED
+                # signal here to triage. Threshold disable + docprocessing
+                # per-batch recovery still apply.
                 mark_attempt_failed(
                     index_attempt_id,
                     db_session_temp,

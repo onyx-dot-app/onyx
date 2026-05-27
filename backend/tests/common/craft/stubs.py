@@ -49,6 +49,7 @@ Usage
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
 from typing import Any
@@ -210,6 +211,8 @@ class StubSandboxManager(SandboxManager):
         tenant_id: str,
         llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
+        *,
+        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         self.provision_count += 1
         self.last_provision_payload = {
@@ -218,6 +221,7 @@ class StubSandboxManager(SandboxManager):
             "tenant_id": tenant_id,
             "llm_config": llm_config,
             "onyx_pat": onyx_pat,
+            "all_llm_configs": all_llm_configs,
         }
         if self.provision_returns is None:
             raise _not_configured("provision")
@@ -239,8 +243,6 @@ class StubSandboxManager(SandboxManager):
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
-        user_work_area: str | None = None,
-        user_level: str | None = None,
     ) -> None:
         self.setup_session_workspace_count += 1
         self.last_setup_session_workspace_payload = {
@@ -252,8 +254,6 @@ class StubSandboxManager(SandboxManager):
             "snapshot_path": snapshot_path,
             "user_name": user_name,
             "user_role": user_role,
-            "user_work_area": user_work_area,
-            "user_level": user_level,
         }
         if not self.setup_session_workspace_silent:
             raise _not_configured("setup_session_workspace")
@@ -348,12 +348,21 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
         message: str,
+        *,
+        opencode_session_id: str | None = None,
+        agent_provider: str | None = None,
+        agent_model: str | None = None,
+        on_opencode_session_resolved: Callable[[str], None] | None = None,
     ) -> Generator[ACPEvent, None, None]:
         self.send_message_count += 1
         self.last_send_message_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
             "message": message,
+            "opencode_session_id": opencode_session_id,
+            "agent_provider": agent_provider,
+            "agent_model": agent_model,
+            "on_opencode_session_resolved": on_opencode_session_resolved,
         }
         if self._send_message_events is None:
             raise _not_configured("send_message")

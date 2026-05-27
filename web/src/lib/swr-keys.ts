@@ -133,6 +133,11 @@ export const SWR_KEYS = {
     `/api/build/sessions/${sessionId}/artifacts/${filePath}`,
   buildSessionPptxPreview: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
+  buildExternalApps: "/api/build/apps",
+  buildExternalAppsAdmin: "/api/build/admin/apps",
+  buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
+  buildSessionLiveApprovals: (sessionId: string) =>
+    `/api/build/approvals/sessions/${sessionId}/live`,
 
   // ── Token Rate Limits ─────────────────────────────────────────────────────
   globalTokenRateLimits: "/api/admin/token-rate-limits/global",

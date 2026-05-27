@@ -2,15 +2,15 @@
 
 Verifies that endpoints protected by ``require_permission(Permission.BASIC_ACCESS)``
 allow admin and basic users but reject limited service accounts, bot users,
-external-permission users, and anonymous (unauthenticated) requests.
+external-permission users, and anonymous (unauthenticated) client.
 
 Each endpoint is tested with all six user types via parameterization.
 """
 
 import pytest
-import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -42,7 +42,7 @@ def test_admin_user_allowed(
     permission_admin_user: DATestUser,
 ) -> None:
     """Admin users should be able to access BASIC_ACCESS endpoints."""
-    resp = requests.request(
+    resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
         headers=permission_admin_user.headers,
@@ -61,7 +61,7 @@ def test_basic_user_allowed(
     permission_basic_user: DATestUser,
 ) -> None:
     """Basic users should be able to access BASIC_ACCESS endpoints."""
-    resp = requests.request(
+    resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
         headers=permission_basic_user.headers,
@@ -85,7 +85,7 @@ def test_limited_service_account_denied(
     limited_service_account: DATestAPIKey,
 ) -> None:
     """Limited service accounts (no BASIC_ACCESS) should be denied."""
-    resp = requests.request(
+    resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
         headers=limited_service_account.headers,
@@ -104,7 +104,7 @@ def test_bot_user_denied(
     bot_user_headers: dict[str, str],
 ) -> None:
     """Bot (SLACK_USER) accounts should be denied from BASIC_ACCESS endpoints."""
-    resp = requests.request(
+    resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
         headers=bot_user_headers,
@@ -122,7 +122,7 @@ def test_ext_perm_user_denied(
     ext_perm_user_headers: dict[str, str],
 ) -> None:
     """External permission users should be denied from BASIC_ACCESS endpoints."""
-    resp = requests.request(
+    resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
         headers=ext_perm_user_headers,
@@ -140,7 +140,7 @@ def test_anonymous_denied(
     permission_admin_user: DATestUser,  # noqa: ARG001 -- ensures reset ran
 ) -> None:
     """Unauthenticated (anonymous) requests should be denied."""
-    resp = requests.request(
+    resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
         headers={},

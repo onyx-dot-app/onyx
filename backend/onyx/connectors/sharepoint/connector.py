@@ -283,7 +283,14 @@ TRANSIENT_TRANSPORT_EXCEPTIONS: tuple[type[BaseException], ...] = (
 # HTTP statuses we treat as transient and worth retrying.
 RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429, 503})
 
-PER_SITE_GRAPH_FAILURE_STATUSES: frozenset[int] = frozenset({403, 404, 410})
+# `GET /sites/getAllSites` returns the tenant-wide directory of every site
+# collection, not just sites the app principal can read. Per-site content
+# access is gated separately, so some listed sites will always reject reads.
+# 403/404/410 cover "no permission / removed / gone"; 423 ("notAllowed")
+# covers admin-locked or M365-archived sites (e.g. `Set-SPOSiteArchiveState
+# -ArchiveState Archived`). All four are per-site conditions — skip the
+# site and continue the run rather than aborting the whole tenant index.
+PER_SITE_GRAPH_FAILURE_STATUSES: frozenset[int] = frozenset({403, 404, 410, 423})
 
 
 def _is_per_site_graph_failure(e: ClientRequestException | HTTPError) -> bool:
@@ -2271,21 +2278,28 @@ class SharepointConnector(
                         if len(doc_batch) >= SLIM_BATCH_SIZE:
                             yield doc_batch
                             doc_batch = []
-                except (ClientRequestException, HTTPError) as e:
-                    if not _is_per_site_graph_failure(e):
-                        raise
-                    # Slim sync can't yield ConnectorFailure; log-and-skip.
-                    logger.warning(
-                        "Skipping slim site pages for %s: Graph returned %s (%s)",
-                        site_descriptor.url,
-                        (
-                            e.response.status_code
-                            if e.response is not None
-                            else "no response"
-                        ),
-                        _graph_error_code(e.response),
-                        exc_info=True,
-                    )
+                except Exception as e:
+                    # Broadened from per-site Graph 4xx to any Exception.
+                    # Slim retrieval can't yield ConnectorFailure, so
+                    # log-and-skip to keep perm sync alive for other sites.
+                    if (
+                        isinstance(e, (ClientRequestException, HTTPError))
+                        and e.response is not None
+                    ):
+                        logger.warning(
+                            "Skipping slim site pages for %s: Graph returned %s (%s)",
+                            site_descriptor.url,
+                            e.response.status_code,
+                            _graph_error_code(e.response),
+                            exc_info=True,
+                        )
+                    else:
+                        logger.warning(
+                            "Skipping slim site pages for %s: %s",
+                            site_descriptor.url,
+                            e,
+                            exc_info=True,
+                        )
         yield doc_batch
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -2786,98 +2800,123 @@ class SharepointConnector(
                 )
 
             item_count = 0
-            for driveitem in driveitems:
-                item_count += 1
+            # Outer try catches BFS-generator failures mid-iteration;
+            # per-item errors are still caught by the inner try below.
+            try:
+                for driveitem in driveitems:
+                    item_count += 1
 
-                if self._is_driveitem_excluded(driveitem):
-                    logger.debug("Excluding by path denylist: %s", driveitem.web_url)
-                    continue
+                    if self._is_driveitem_excluded(driveitem):
+                        logger.debug(
+                            "Excluding by path denylist: %s", driveitem.web_url
+                        )
+                        continue
 
-                if driveitem.id and driveitem.id in checkpoint.seen_document_ids:
-                    logger.debug(
-                        "Skipping duplicate document %s (%s)",
-                        driveitem.id,
-                        driveitem.name,
-                    )
-                    continue
+                    if driveitem.id and driveitem.id in checkpoint.seen_document_ids:
+                        logger.debug(
+                            "Skipping duplicate document %s (%s)",
+                            driveitem.id,
+                            driveitem.name,
+                        )
+                        continue
 
-                driveitem_extension = get_file_ext(driveitem.name)
-                if driveitem_extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
-                    logger.warning(
-                        "Skipping %s as it is not a supported file type",
-                        driveitem.web_url,
-                    )
-                    continue
+                    driveitem_extension = get_file_ext(driveitem.name)
+                    if (
+                        driveitem_extension
+                        not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS
+                    ):
+                        logger.warning(
+                            "Skipping %s as it is not a supported file type",
+                            driveitem.web_url,
+                        )
+                        continue
 
-                should_yield_if_empty = (
-                    driveitem_extension in OnyxFileExtensions.IMAGE_EXTENSIONS
-                    or driveitem_extension == ".pdf"
-                )
-
-                folder_path = self._extract_folder_path_from_parent_reference(
-                    driveitem.parent_reference_path
-                )
-                if folder_path and drive_web_url:
-                    yield from self._yield_folder_hierarchy_nodes(
-                        site_descriptor.url,
-                        drive_web_url,
-                        current_drive_name,
-                        folder_path,
-                        checkpoint,
+                    should_yield_if_empty = (
+                        driveitem_extension in OnyxFileExtensions.IMAGE_EXTENSIONS
+                        or driveitem_extension == ".pdf"
                     )
 
-                parent_hierarchy_url: str | None = None
-                if drive_web_url:
-                    parent_hierarchy_url = self._get_parent_hierarchy_url(
-                        site_descriptor.url,
-                        drive_web_url,
-                        current_drive_name,
-                        driveitem,
+                    folder_path = self._extract_folder_path_from_parent_reference(
+                        driveitem.parent_reference_path
                     )
+                    if folder_path and drive_web_url:
+                        yield from self._yield_folder_hierarchy_nodes(
+                            site_descriptor.url,
+                            drive_web_url,
+                            current_drive_name,
+                            folder_path,
+                            checkpoint,
+                        )
 
-                try:
-                    ctx: ClientContext | None = None
-                    if include_permissions:
-                        ctx = self._create_rest_client_context(site_descriptor.url)
+                    parent_hierarchy_url: str | None = None
+                    if drive_web_url:
+                        parent_hierarchy_url = self._get_parent_hierarchy_url(
+                            site_descriptor.url,
+                            drive_web_url,
+                            current_drive_name,
+                            driveitem,
+                        )
 
-                    access_token = self._get_graph_access_token()
-                    doc_or_failure = _convert_driveitem_to_document_with_permissions(
-                        driveitem,
-                        current_drive_name,
-                        ctx,
-                        self.graph_client,
-                        include_permissions=include_permissions,
-                        parent_hierarchy_raw_node_id=parent_hierarchy_url,
-                        graph_api_base=self.graph_api_base,
-                        access_token=access_token,
-                        treat_sharing_link_as_public=self.treat_sharing_link_as_public,
-                        raw_file_callback=self.raw_file_callback,
-                    )
+                    try:
+                        ctx: ClientContext | None = None
+                        if include_permissions:
+                            ctx = self._create_rest_client_context(site_descriptor.url)
 
-                    if isinstance(doc_or_failure, Document):
-                        if doc_or_failure.sections:
-                            checkpoint.seen_document_ids.add(doc_or_failure.id)
+                        access_token = self._get_graph_access_token()
+                        doc_or_failure = _convert_driveitem_to_document_with_permissions(
+                            driveitem,
+                            current_drive_name,
+                            ctx,
+                            self.graph_client,
+                            include_permissions=include_permissions,
+                            parent_hierarchy_raw_node_id=parent_hierarchy_url,
+                            graph_api_base=self.graph_api_base,
+                            access_token=access_token,
+                            treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                            raw_file_callback=self.raw_file_callback,
+                        )
+
+                        if isinstance(doc_or_failure, Document):
+                            if doc_or_failure.sections:
+                                checkpoint.seen_document_ids.add(doc_or_failure.id)
+                                yield doc_or_failure
+                            elif should_yield_if_empty:
+                                doc_or_failure.sections = [
+                                    TextSection(link=driveitem.web_url, text="")
+                                ]
+                                checkpoint.seen_document_ids.add(doc_or_failure.id)
+                                yield doc_or_failure
+                            else:
+                                logger.warning(
+                                    "Skipping %s as it is empty and not a PDF or image",
+                                    driveitem.web_url,
+                                )
+                        elif isinstance(doc_or_failure, ConnectorFailure):
                             yield doc_or_failure
-                        elif should_yield_if_empty:
-                            doc_or_failure.sections = [
-                                TextSection(link=driveitem.web_url, text="")
-                            ]
-                            checkpoint.seen_document_ids.add(doc_or_failure.id)
-                            yield doc_or_failure
-                        else:
-                            logger.warning(
-                                "Skipping %s as it is empty and not a PDF or image",
-                                driveitem.web_url,
-                            )
-                    elif isinstance(doc_or_failure, ConnectorFailure):
-                        yield doc_or_failure
-                except Exception as e:
-                    logger.warning(
-                        "Failed to process driveitem %s: %s", driveitem.web_url, e
-                    )
-                    yield _create_document_failure(
-                        driveitem, f"Failed to process: {str(e)}", e
-                    )
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to process driveitem %s: %s",
+                            driveitem.web_url,
+                            e,
+                        )
+                        yield _create_document_failure(
+                            driveitem, f"Failed to process: {str(e)}", e
+                        )
+            except Exception as e:
+                logger.exception(
+                    "Failed mid-iteration for drive '%s' in site '%s'",
+                    current_drive_name,
+                    site_descriptor.url,
+                )
+                yield _create_entity_failure(
+                    f"{site_descriptor.url}|{current_drive_name}|bfs_iter",
+                    f"Failed to iterate drive items after {item_count}: {e}",
+                    (start_dt, end_dt),
+                    e,
+                )
+                # Clear drive state to avoid resuming on the same broken drive.
+                self._clear_drive_checkpoint_state(checkpoint)
+                return checkpoint
 
             logger.info(
                 "Processed %s items in drive '%s'", item_count, current_drive_name
@@ -2923,45 +2962,88 @@ class SharepointConnector(
                     site_descriptor, start=start_dt, end=end_dt
                 )
                 for site_page in site_pages:
-                    logger.debug(
-                        "Processing site page: %s",
-                        site_page.get("webUrl", site_page.get("name", "Unknown")),
+                    page_id = site_page.get("id")
+                    page_label = site_page.get(
+                        "webUrl", site_page.get("name", "Unknown")
                     )
-                    client_ctx: ClientContext | None = None
-                    if include_permissions:
-                        client_ctx = self._create_rest_client_context(
-                            site_descriptor.url
+                    # Skip a single broken page instead of aborting the
+                    # rest of the site (perm-sync error, malformed field,
+                    # token refresh blip, etc.).
+                    try:
+                        logger.debug("Processing site page: %s", page_label)
+                        client_ctx: ClientContext | None = None
+                        if include_permissions:
+                            client_ctx = self._create_rest_client_context(
+                                site_descriptor.url
+                            )
+                        yield (
+                            _convert_sitepage_to_document(
+                                site_page,
+                                site_descriptor.drive_name,
+                                client_ctx,
+                                self.graph_client,
+                                include_permissions=include_permissions,
+                                # Site pages have the site as their parent
+                                parent_hierarchy_raw_node_id=site_descriptor.url,
+                                treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                            )
                         )
-                    yield (
-                        _convert_sitepage_to_document(
-                            site_page,
-                            site_descriptor.drive_name,
-                            client_ctx,
-                            self.graph_client,
-                            include_permissions=include_permissions,
-                            # Site pages have the site as their parent
-                            parent_hierarchy_raw_node_id=site_descriptor.url,
-                            treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to process site page '%s' in site %s: %s",
+                            page_label,
+                            site_descriptor.url,
+                            e,
+                            exc_info=True,
                         )
-                    )
+                        if page_id:
+                            page_link = (
+                                page_label if isinstance(page_label, str) else None
+                            )
+                            yield ConnectorFailure(
+                                failed_document=DocumentFailure(
+                                    document_id=page_id,
+                                    document_link=page_link,
+                                ),
+                                failure_message=(
+                                    f"SharePoint site page '{page_label}': {e}"
+                                ),
+                                exception=e,
+                            )
+                        else:
+                            yield _create_entity_failure(
+                                f"{site_descriptor.url}|site_page|{page_label}",
+                                f"Failed to process site page '{page_label}': {e}",
+                                (start_dt, end_dt),
+                                e,
+                            )
                 logger.info(
                     "Finished processing site pages for site: %s",
                     site_descriptor.url,
                 )
-            except (ClientRequestException, HTTPError) as e:
-                if not _is_per_site_graph_failure(e):
-                    raise
-                logger.warning(
-                    "Skipping site pages for %s: Graph returned %s (%s)",
-                    site_descriptor.url,
-                    (
-                        e.response.status_code
-                        if e.response is not None
-                        else "no response"
-                    ),
-                    _graph_error_code(e.response),
-                    exc_info=True,
-                )
+            except Exception as e:
+                # Broadened from per-site Graph 4xx to any Exception:
+                # _fetch_site_pages failures skip the site-pages stage
+                # instead of failing the attempt. Per-page errors are
+                # caught above.
+                if (
+                    isinstance(e, (ClientRequestException, HTTPError))
+                    and e.response is not None
+                ):
+                    logger.warning(
+                        "Skipping site pages for %s: Graph returned %s (%s)",
+                        site_descriptor.url,
+                        e.response.status_code,
+                        _graph_error_code(e.response),
+                        exc_info=True,
+                    )
+                else:
+                    logger.warning(
+                        "Skipping site pages for %s: %s",
+                        site_descriptor.url,
+                        e,
+                        exc_info=True,
+                    )
                 yield _create_entity_failure(
                     site_descriptor.url,
                     f"Failed to fetch site pages: {e}",

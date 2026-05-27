@@ -12,8 +12,8 @@ dependencies = [
     "cohere==5.6.1",
     "fastapi==0.133.1",
     "google-genai==1.52.0",
-    "litellm[google]==1.83.14",
-    "openai==2.14.0",
+    "litellm[google]==1.85.1",
+    "openai==2.38.0",
     "pydantic==2.11.7",
     "prometheus_client>=0.21.1",
     "prometheus_fastapi_instrumentator==7.1.0",
@@ -25,7 +25,7 @@ dependencies = [
     "claude-agent-sdk>=0.1.19",
     "agent-client-protocol>=0.7.1",
     "discord-py==2.4.0",
-    "kubernetes>=31.0.0",
+    "kubernetes==31.0.0",
 ]
 
 [dependency-groups]
@@ -114,7 +114,7 @@ backend = [
     "starlette==0.49.3",
     "supervisor==4.3.0",
     "RapidFuzz==3.14.5",
-    "tiktoken==0.7.0",
+    "tiktoken==0.13.0",
     "timeago==1.0.16",
     "types-docker==7.1.0.20260518",
     "types-openpyxl==3.0.4.7",
@@ -128,6 +128,8 @@ backend = [
     "stripe==10.12.0",
     "urllib3==2.7.0",
     "mistune==3.2.1",
+    # Pinned: 11.1+ requires Python 3.12.
+    "mitmproxy==11.0.2",
     "sendgrid==6.12.5",
     "exa_py==1.15.4",
     "braintrust==0.3.9",
@@ -148,7 +150,7 @@ dev = [
     "manygo==0.2.0",
     "matplotlib==3.10.8",
     "ty==0.0.31",
-    "onyx-devtools==0.7.7",
+    "onyx-devtools==0.7.8",
     "openapi-generator-cli==7.17.0",
     "pandas-stubs~=2.3.3",
     "pre-commit==3.2.2",
@@ -174,8 +176,12 @@ dev = [
     "types-requests==2.32.0.20250328",
     "types-retry==0.9.9.3",
     "types-setuptools==68.0.0.3",
-    "zizmor==1.18.0",
+    { include-group = "zizmor" },
 ]
+
+# Isolated group so CI can `uv sync --only-group zizmor` without pulling
+# the rest of the dev toolchain.
+zizmor = ["zizmor==1.25.2"]
 
 # Enterprise Edition features
 ee = ["posthog==3.7.4"]
@@ -195,26 +201,14 @@ model_server = [
 [tool.uv]
 default-groups = ["backend", "dev", "ee", "model_server"]
 
-# litellm >=1.83.x switched from loose ranges to exact `==` pins on its
-# transitive dependencies (see https://github.com/BerriAI/litellm/issues/25280),
-# which forces downgrades of packages we already pin to newer versions and
-# regressions on transitively resolved packages. Replace those exact pins with
-# the loose ranges litellm declared prior to 1.83.1 so that uv's resolver is
-# free to pick versions consistent with our top-level pins (or newer).
+# Loosen mitmproxy's over-tight upper caps so the resolver keeps the
+# backend's newer versions.
 override-dependencies = [
-    "aiohttp>=3.10",
-    "click",
-    "fastuuid>=0.13.0",
-    "httpx[http2]>=0.23.0",
-    "importlib-metadata>=6.8.0",
-    "jinja2>=3.1.2,<4.0.0",
-    "jsonschema>=4.23.0,<5.0.0",
-    "openai",
-    "pydantic",
-    "python-dotenv",
-    "tiktoken",
-    "tokenizers",
-    "google-cloud-aiplatform>=1.38.0",
+    "brotli>=1.2.0,<2.0",
+    "h11>=0.11,<1.0",
+    "cryptography>=42.0,<50.0",
+    "h2>=4.3.0,<5.0",
+    "hyperframe>=6.1.0,<7.0",
 ]
 
 [tool.ty.environment]

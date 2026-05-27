@@ -15,19 +15,28 @@ Conventions:
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Any
+from uuid import UUID
 from uuid import uuid4
 
 from fastapi_users.password import PasswordHelper
+from sqlalchemy import delete
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from onyx.db.enums import AccountType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
+from onyx.db.models import ActionApproval
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
+from onyx.db.models import ExternalApp
+from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import Sandbox
 from onyx.db.models import Skill
 from onyx.db.models import Skill__UserGroup
@@ -37,6 +46,19 @@ from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+
+
+def _set_created_at(
+    db_session: Session,
+    model: type[ActionApproval],
+    pk: UUID,
+    when: datetime,
+) -> None:
+    """Force a row's ``created_at`` to ``when``, bypassing ``server_default``."""
+    db_session.execute(
+        update(model).where(model.approval_id == pk).values(created_at=when)
+    )
+    db_session.commit()
 
 
 def make_user(
@@ -104,7 +126,7 @@ def make_skill(
     is_public: bool = False,
     enabled: bool = True,
 ) -> Skill:
-    """Create a single ``Skill`` row.
+    """Create a single custom ``Skill`` row.
 
     Bundle metadata (``bundle_file_id``, ``bundle_sha256``) is filled with
     placeholder values; tests that need a real bundle should use the
@@ -123,6 +145,107 @@ def make_skill(
     db_session.add(skill)
     db_session.flush()
     return skill
+
+
+def make_built_in_skill_row(
+    db_session: Session,
+    *,
+    built_in_skill_id: str,
+    slug: str | None = None,
+    name: str | None = None,
+    description: str = "test built-in",
+    is_public: bool = True,
+    enabled: bool = True,
+) -> Skill:
+    """Insert a built-in-style ``Skill`` row pointing at a
+    ``built_in_skill_id``. Slug defaults to ``built_in_skill_id`` (the
+    default seeder convention), but can be overridden to test the
+    multi-row case where several skills share the same built-in id.
+    Bundle fields stay NULL (required by the XOR check constraint)."""
+    skill = Skill(
+        id=uuid4(),
+        slug=slug or built_in_skill_id,
+        name=name or built_in_skill_id,
+        description=description,
+        built_in_skill_id=built_in_skill_id,
+        bundle_file_id=None,
+        bundle_sha256=None,
+        is_public=is_public,
+        enabled=enabled,
+    )
+    db_session.add(skill)
+    db_session.flush()
+    return skill
+
+
+def reset_built_in_skill_row(
+    db_session: Session,
+    *,
+    built_in_skill_id: str,
+    slug: str | None = None,
+    name: str | None = None,
+    description: str = "test built-in",
+    is_public: bool = True,
+    enabled: bool = True,
+) -> Skill:
+    """Idempotently (re)create a built-in row for ``built_in_skill_id``.
+
+    Deletes any existing row with the same slug first, so tests stay
+    robust whether or not the migration-seeded canonical row is present
+    (it always is on a migrated DB, but another test's teardown may have
+    removed it). Returns the freshly inserted row.
+    """
+    target_slug = slug or built_in_skill_id
+    db_session.execute(delete(Skill).where(Skill.slug == target_slug))
+    return make_built_in_skill_row(
+        db_session,
+        built_in_skill_id=built_in_skill_id,
+        slug=slug,
+        name=name,
+        description=description,
+        is_public=is_public,
+        enabled=enabled,
+    )
+
+
+def make_external_app(
+    db_session: Session,
+    *,
+    skill: Skill,
+    auth_template: dict[str, Any],
+    organization_credentials: dict[str, Any] | None = None,
+    app_type: ExternalAppType = ExternalAppType.CUSTOM,
+    upstream_url_patterns: list[str] | None = None,
+) -> ExternalApp:
+    """Insert an ``ExternalApp`` row backing ``skill``."""
+    app = ExternalApp(
+        skill_id=skill.id,
+        app_type=app_type,
+        upstream_url_patterns=upstream_url_patterns or [],
+        auth_template=auth_template,
+        organization_credentials=organization_credentials or {},
+    )
+    db_session.add(app)
+    db_session.flush()
+    return app
+
+
+def make_user_credential(
+    db_session: Session,
+    *,
+    app: ExternalApp,
+    user: User,
+    user_credentials: dict[str, Any],
+) -> ExternalAppUserCredential:
+    """Insert an ``ExternalAppUserCredential`` row for ``user`` + ``app``."""
+    cred = ExternalAppUserCredential(
+        external_app_id=app.id,
+        user_id=user.id,
+        user_credentials=user_credentials,
+    )
+    db_session.add(cred)
+    db_session.flush()
+    return cred
 
 
 def grant_skill_to_group(

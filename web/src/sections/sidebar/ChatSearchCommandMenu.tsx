@@ -8,7 +8,7 @@ import CommandMenu, {
 } from "@/refresh-components/commandmenu/CommandMenu";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import CreateProjectModal from "@/components/modals/CreateProjectModal";
+import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import {
   formatDisplayTime,
   highlightMatch,

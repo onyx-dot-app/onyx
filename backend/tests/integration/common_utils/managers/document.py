@@ -1,6 +1,5 @@
 from uuid import uuid4
 
-import requests
 from sqlalchemy import and_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,6 +10,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import DocumentByConnectorCredentialPair
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import NUM_DOCS
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.api_key import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestUser
@@ -111,7 +111,7 @@ class DocumentManager:
         for document_id in document_ids:
             document = _generate_dummy_document(document_id, cc_pair.id)
             documents.append(document)
-            response = requests.post(
+            response = client.post(
                 f"{API_SERVER_URL}/onyx-api/ingestion",
                 json=document,
                 headers=api_key.headers,
@@ -147,7 +147,7 @@ class DocumentManager:
             content,
             extra_metadata=metadata,
         )
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/onyx-api/ingestion",
             json=document,
             headers=api_key.headers,
@@ -268,7 +268,7 @@ class IngestionManager(DocumentManager):
     def list_all_ingestion_docs(
         api_key: DATestAPIKey,
     ) -> list[dict]:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/onyx-api/ingestion",
             headers=api_key.headers,
         )
@@ -280,7 +280,7 @@ class IngestionManager(DocumentManager):
         document_id: str,
         api_key: DATestAPIKey,
     ) -> None:
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/onyx-api/ingestion/{document_id}",
             headers=api_key.headers,
         )

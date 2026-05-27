@@ -59,6 +59,7 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.async_sql_engine import get_sqlalchemy_async_engine
+from onyx.db.engine.async_sql_engine import reset_sqlalchemy_async_engine
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
@@ -152,7 +153,6 @@ from onyx.server.token_rate_limits.api import router as token_rate_limit_setting
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx
-from onyx.skills.builtins import register_builtin_skills
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.client_ip import ClientIPMiddleware
 from onyx.utils.logger import setup_logger
@@ -360,9 +360,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     # fill up Postgres connection pools
     await warm_up_connections()
 
-    # Tenant-agnostic; sits outside the multi-tenant fork below.
-    register_builtin_skills()
-
     if not MULTI_TENANT:
         # We cache this at the beginning so there is no delay in the first telemetry
         CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
@@ -400,7 +397,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
         stop_periodic_poller()
 
-    SqlEngine.reset_engine()
+    # Dispose every Postgres connection pool we opened in startup. Order:
+    # async first (its disposal is awaitable and can block), then the two
+    # sync engines. Each dispose() is wrapped so one failure cannot leak the
+    # remaining pools — this path runs on every uvicorn ``--reload`` worker
+    # shutdown, and any leaked pool accumulates until PG hits max_connections.
+    try:
+        await reset_sqlalchemy_async_engine()
+    except Exception:
+        logger.exception("Failed to dispose async SQLAlchemy engine on shutdown")
+    try:
+        SqlEngine.reset_engine()
+    except Exception:
+        logger.exception("Failed to dispose sync SQLAlchemy engine on shutdown")
+    try:
+        SqlEngine.reset_readonly_engine()
+    except Exception:
+        logger.exception("Failed to dispose readonly SQLAlchemy engine on shutdown")
 
     if AUTH_RATE_LIMITING_ENABLED:
         await close_auth_limiter()

@@ -86,6 +86,7 @@ services:
       # Onyx Craft configuration (disabled by default, set ENABLE_CRAFT=true in .env to enable)
       # Use --include-craft with install script, or manually set in .env file
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
+      - SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}
       - OUTPUTS_TEMPLATE_PATH=${OUTPUTS_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs}
       - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
       - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
@@ -111,7 +112,11 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
-      start_period: 25s
+      # Generous start_period so that `docker compose up --wait` does not flag
+      # the container unhealthy while alembic migrations run on a fresh DB.
+      # Healthy is reported as soon as /health responds, so this does not slow
+      # down fast boots.
+      start_period: 600s
     # Optional, only for debugging purposes
     volumes:
       - api_server_logs:/var/log/onyx
@@ -167,6 +172,7 @@ services:
       - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
       # Onyx Craft configuration (set up automatically on container startup)
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
+      - SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}
       - OUTPUTS_TEMPLATE_PATH=${OUTPUTS_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs}
       - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
       - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
@@ -217,6 +223,18 @@ services:
     restart: unless-stopped
     environment:
       - INTERNAL_URL=${INTERNAL_URL:-http://api_server:8080}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3000/', (r) => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # Uncomment the block below to enable the MCP server for Onyx.
   # mcp_server:
@@ -304,6 +322,9 @@ services:
       interval: 20s
       timeout: 5s
       retries: 3
+      # Generous start_period to absorb HuggingFace model downloads on first
+      # boot. Healthy is reported as soon as /api/health responds.
+      start_period: 600s
 
   indexing_model_server:
     image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
@@ -353,6 +374,9 @@ services:
       interval: 20s
       timeout: 5s
       retries: 3
+      # Generous start_period to absorb HuggingFace model downloads on first
+      # boot. Healthy is reported as soon as /api/health responds.
+      start_period: 600s
 
   relational_db:
     image: postgres:15.2-alpine
@@ -424,8 +448,10 @@ services:
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
     depends_on:
-      - api_server
-      - web_server
+      api_server:
+        condition: service_healthy
+      web_server:
+        condition: service_healthy
     env_file:
       - path: .env
         required: false
@@ -461,6 +487,20 @@ services:
       && sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh
       && chmod +x /tmp/run-nginx.sh
       && /tmp/run-nginx.sh app.conf.template"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1/nginx-health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   cache:
     image: redis:7.4-alpine

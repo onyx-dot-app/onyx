@@ -20,13 +20,21 @@ from onyx.db.enums import Permission
 from onyx.db.enums import SharingScope
 from onyx.db.models import BuildSession
 from onyx.db.models import User
+from onyx.server.features.build.api.debug_api import router as debug_router
+from onyx.server.features.build.api.external_apps_api import (
+    router as external_apps_router,
+)
+from onyx.server.features.build.api.external_apps_oauth_api import (
+    router as external_apps_oauth_router,
+)
 from onyx.server.features.build.api.messages_api import router as messages_router
 from onyx.server.features.build.api.models import RateLimitResponse
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
 from onyx.server.features.build.api.user_library import router as user_library_router
+from onyx.server.features.build.approvals.api import router as approvals_router
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.sandbox import get_sandbox_manager
+from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.scheduled_tasks.api import (
     router as scheduled_tasks_router,
 )
@@ -62,6 +70,10 @@ router.include_router(sessions_router, tags=["build"])
 router.include_router(messages_router, tags=["build"])
 router.include_router(user_library_router, tags=["build"])
 router.include_router(scheduled_tasks_router, tags=["build"])
+router.include_router(external_apps_router, tags=["build"])
+router.include_router(external_apps_oauth_router, tags=["build"])
+router.include_router(debug_router, tags=["build-debug"])
+router.include_router(approvals_router, tags=["build"])
 
 
 # -----------------------------------------------------------------------------
@@ -78,7 +90,7 @@ def get_rate_limit(
     return get_user_rate_limit_status(user, db_session)
 
 
-# Headers to skip when proxying.
+# Response headers to skip when proxying back from the sandbox.
 # Hop-by-hop headers must not be forwarded, and set-cookie is stripped to
 # prevent LLM-generated apps from setting cookies on the parent Onyx domain.
 EXCLUDED_HEADERS = {
@@ -88,6 +100,62 @@ EXCLUDED_HEADERS = {
     "connection",
     "set-cookie",
 }
+
+# Request headers stripped before forwarding to the sandbox. The sandbox runs
+# LLM-generated webapp code and must never receive the viewer's Onyx
+# credentials, CSRF tokens, or client-identity headers — otherwise a malicious
+# webapp can exfiltrate them (GHSA-v2mx-c9m8-5jrv / GHSA-j6q4-7ghr-53cv).
+#
+# The sandbox webapp is a frontend-only Next.js shell with no callbacks into
+# Onyx, so it does not depend on any of these for correct behavior. The proxy
+# is GET-only; if WebSocket upgrade is ever added, also strip
+# `sec-websocket-protocol`/`sec-websocket-extensions` (can carry bearer tokens).
+#
+# Entries must be lowercase — the filter compares against `key.lower()`.
+# Any header starting with `x-onyx-` is also stripped (see _is_header_excluded)
+# so future Onyx-internal headers don't silently leak.
+EXCLUDED_REQUEST_HEADERS = {
+    # End-to-end but unsafe to forward verbatim.
+    "host",
+    "content-length",
+    # Hop-by-hop (RFC 7230 §6.1).
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    # Credentials.
+    "cookie",
+    "authorization",
+    "x-api-key",
+    "x-auth-token",
+    # CSRF.
+    "x-csrf-token",
+    "x-xsrf-token",
+    # Client identity (RFC 7239 + common ingress/IDP conventions).
+    "forwarded",
+    "x-forwarded-for",
+    "x-forwarded-host",
+    "x-forwarded-port",
+    "x-forwarded-proto",
+    "x-forwarded-server",
+    "x-real-ip",
+    "x-client-ip",
+    "cf-connecting-ip",
+    "true-client-ip",
+    # IDP-injected identity (oauth2-proxy / similar).
+    "x-forwarded-user",
+    "x-forwarded-email",
+    "x-forwarded-preferred-username",
+}
+
+
+def _is_header_excluded(key: str) -> bool:
+    lowered = key.lower()
+    return lowered in EXCLUDED_REQUEST_HEADERS or lowered.startswith("x-onyx-")
 
 
 def _stream_response(response: httpx.Response) -> Iterator[bytes]:
@@ -243,17 +311,16 @@ def _proxy_request(
 
     logger.debug("Proxying request to: %s", target_url)
 
+    forwarded_headers = {
+        key: value
+        for key, value in request.headers.items()
+        if not _is_header_excluded(key)
+    }
+
     try:
         # Make the request to the target URL
         with httpx.Client(timeout=30.0, follow_redirects=True) as client:
-            response = client.get(
-                target_url,
-                headers={
-                    key: value
-                    for key, value in request.headers.items()
-                    if key.lower() not in ("host", "content-length")
-                },
-            )
+            response = client.get(target_url, headers=forwarded_headers)
 
             # Build response headers, excluding hop-by-hop headers
             response_headers = {
@@ -299,15 +366,12 @@ def _check_webapp_access(
 ) -> BuildSession:
     """Check if user can access a session's webapp.
 
-    - public_global: accessible by anyone (no auth required)
-    - public_org: accessible by any authenticated user
     - private: only accessible by the session owner
+    - public_org: accessible by any authenticated user
     """
     session = db_session.get(BuildSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    if session.sharing_scope == SharingScope.PUBLIC_GLOBAL:
-        return session
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     if session.sharing_scope == SharingScope.PRIVATE and session.user_id != user.id:
@@ -329,8 +393,11 @@ def _offline_html_response() -> Response:
     return Response(content=html, status_code=503, media_type="text/html")
 
 
-# Public router for webapp proxy — no authentication required
-# (access controlled per-session via sharing_scope)
+# Router for the webapp proxy. The route is exempted from the global auth
+# middleware (see PUBLIC_ENDPOINT_SPECS in auth_check.py) so the handler can
+# return a friendly redirect to /auth/login for unauthenticated browsers
+# instead of a bare 401. Auth is enforced inside the handler via
+# _check_webapp_access; never wire a handler here that doesn't enforce it.
 public_build_router = APIRouter(prefix="/build")
 
 
@@ -347,7 +414,8 @@ def get_webapp(
 ) -> StreamingResponse | Response:
     """Proxy the webapp for a specific session (root and subpaths).
 
-    Accessible without authentication when sharing_scope is public_global.
+    Requires authentication; access is further gated by the session's
+    sharing_scope (private = owner only, public_org = any org member).
     Returns a friendly offline page when the sandbox is not running.
     """
     try:

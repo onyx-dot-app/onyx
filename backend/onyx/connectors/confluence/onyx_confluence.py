@@ -292,7 +292,13 @@ class OnyxConfluence:
         limit: int,
         space_keys: list[str] | None,
     ) -> Iterator[dict[str, Any]]:
-        """Internal helper to paginate through spaces for a specific API endpoint."""
+        """Paginate spaces. Server stops on missing ``_links.next``
+        (and empty ``results``, defensively). Don't stop on
+        ``len(results) < limit``: ``/rest/api/space`` on DC caps at
+        ``DefaultRestSpaceManager.MAX_SIZE`` (#4129). ``start`` is
+        re-derived locally; Confluence under-counts it on capped pages
+        and CONFSERVER-95272/-95312 returns records past the true end.
+        """
         start = 0
         url = self._build_spaces_url(
             is_v2, base_url, limit, space_keys, start if not is_v2 else None
@@ -309,11 +315,13 @@ class OnyxConfluence:
 
             yield from results
 
+            next_link = data.get("_links", {}).get("next", "")
+            if not next_link:
+                return
+
             if is_v2:
-                url = data.get("_links", {}).get("next", "")
+                url = next_link
             else:
-                if len(results) < limit:
-                    return
                 start += len(results)
                 url = self._build_spaces_url(is_v2, base_url, limit, space_keys, start)
 
@@ -744,53 +752,29 @@ class OnyxConfluence:
             # Yield the results individually.
             results = cast(list[dict[str, Any]], next_response.get("results", []))
 
-            # Note 1:
-            # Make sure we don't update the start by more than the amount
-            # of results we were able to retrieve. The Confluence API has a
-            # weird behavior where if you pass in a limit that is too large for
-            # the configured server, it will artificially limit the amount of
-            # results returned BUT will not apply this to the start parameter.
-            # This will cause us to miss results.
-            #
-            # Note 2:
-            # We specifically perform manual yielding (i.e., `for x in xs: yield x`) as opposed to using a `yield from xs`
-            # because we *have to call the `next_page_callback`* prior to yielding the last element!
-            #
-            # If we did:
-            #
-            # ```py
-            # yield from results
-            # if next_page_callback:
-            #   next_page_callback(url_suffix)
-            # ```
-            #
-            # then the logic would fail since the iterator would finish (and the calling scope would exit out of its driving
-            # loop) prior to the callback being called.
-
+            # #4129: DC silently caps page size and under-counts the
+            # ``start`` it embeds in ``_links.next``; re-derive it
+            # ourselves. Manual yielding (not ``yield from``) so we can
+            # fire ``next_page_callback`` before the last yield --
+            # otherwise the iterator may never resume.
             old_url_suffix = url_suffix
-            updated_start = get_start_param_from_url(old_url_suffix)
+            next_start = get_start_param_from_url(old_url_suffix) + len(results)
             url_suffix = cast(str, next_response.get("_links", {}).get("next", ""))
             if url_suffix and current_limit != limit:
                 url_suffix = update_param_in_path(
                     url_suffix, "limit", str(current_limit)
                 )
-            for i, result in enumerate(results):
-                updated_start += 1
-                if url_suffix and next_page_callback and i == len(results) - 1:
-                    # update the url if we're on the last result in the page
-                    if not self._is_cloud:
-                        # If confluence claims there are more results, we update the start param
-                        # based on how many results were returned and try again.
-                        url_suffix = update_param_in_path(
-                            url_suffix, "start", str(updated_start)
-                        )
-                    # notify the caller of the new url
-                    next_page_callback(url_suffix)
+            if url_suffix and not self._is_cloud and results:
+                url_suffix = update_param_in_path(url_suffix, "start", str(next_start))
 
-                elif force_offset_pagination and i == len(results) - 1:
-                    url_suffix = update_param_in_path(
-                        old_url_suffix, "start", str(updated_start)
-                    )
+            for i, result in enumerate(results):
+                if i == len(results) - 1:
+                    if url_suffix and next_page_callback:
+                        next_page_callback(url_suffix)
+                    elif force_offset_pagination:
+                        url_suffix = update_param_in_path(
+                            old_url_suffix, "start", str(next_start)
+                        )
 
                 yield result
 

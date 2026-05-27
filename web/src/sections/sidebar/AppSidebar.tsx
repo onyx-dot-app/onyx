@@ -38,8 +38,8 @@ import {
   usePinnedAgents,
 } from "@/lib/agents/hooks";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
-import CreateProjectModal from "@/components/modals/CreateProjectModal";
-import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
+import CreateProjectModal from "@/sections/modals/CreateProjectModal";
+import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
 import type { Project } from "@/app/app/projects/projectsService";

@@ -58,6 +58,7 @@ import shlex
 import tarfile
 import threading
 import time
+from collections.abc import Callable
 from collections.abc import Generator
 from pathlib import Path
 from typing import TypedDict
@@ -81,6 +82,8 @@ from onyx.server.features.build.configs import SANDBOX_DOCKER_NETWORK
 from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
 from onyx.server.features.build.configs import SANDBOX_DOCKER_VOLUME_PREFIX
 from onyx.server.features.build.sandbox.acp.base import ACPEvent
+from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
+from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.docker.internal.acp_exec_client import (
     DockerACPExecClient,
@@ -95,6 +98,10 @@ from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdout_from_container,
 )
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
+from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
+from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
@@ -110,25 +117,13 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_config,
 )
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    generate_user_identity_content,
-)
-from onyx.server.features.build.sandbox.util.persona_mapping import get_persona_info
-from onyx.server.features.build.sandbox.util.persona_mapping import ORG_INFO_AGENTS_MD
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    ORGANIZATION_STRUCTURE,
-)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-# Labels used to find sandbox containers/volumes/networks. Match the K8s
-# label keys where reasonable so dashboards/queries don't drift.
 LABEL_COMPONENT = "onyx.app/component"
 LABEL_COMPONENT_VALUE = "craft-sandbox"
-LABEL_SANDBOX_ID = "onyx.app/sandbox-id"
-LABEL_TENANT_ID = "onyx.app/tenant-id"
 LABEL_USER_ID = "onyx.app/user-id"
 
 # Path conventions inside the sandbox container — must match the K8s image.
@@ -143,47 +138,28 @@ CONTAINER_READY_TIMEOUT_SECONDS = 120
 CONTAINER_READY_POLL_INTERVAL_SECONDS = 1.0
 
 
-def _build_org_info_script(
-    session_path: str, user_work_area: str | None, user_level: str | None
-) -> str:
-    """Shell snippet that writes org_info/ files when a persona is configured."""
-    if not user_work_area:
-        return ""
-    persona = get_persona_info(user_work_area, user_level)
-    if persona is None:
-        return ""
-    agents_md = ORG_INFO_AGENTS_MD.replace("'", "'\\''")
-    identity = generate_user_identity_content(persona).replace("'", "'\\''")
-    org_structure = json.dumps(ORGANIZATION_STRUCTURE, indent=2).replace("'", "'\\''")
-    return f"""
-mkdir -p {session_path}/org_info
-printf '%s' '{agents_md}' > {session_path}/org_info/AGENTS.md
-printf '%s' '{identity}' > {session_path}/org_info/user_identity_profile.txt
-printf '%s' '{org_structure}' > {session_path}/org_info/organization_structure.json
-"""
-
-
 def _build_nextjs_start_script(
     session_path: str,
     nextjs_port: int,
     check_node_modules: bool = False,
 ) -> str:
     """Shell script to spawn Next.js in the background and record its PID."""
-    npm_install_check = ""
+    install_check = ""
     if check_node_modules:
-        npm_install_check = """
+        install_check = f"""
 if [ ! -d "node_modules" ]; then
-    echo "Installing npm dependencies..."
-    npm install
+    echo "Installing dependencies with bun..."
+    BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \
+        bun install --frozen-lockfile --backend=hardlink
 fi
 """
 
     return f"""
 set -e
 cd {session_path}/outputs/web
-{npm_install_check}
+{install_check}
 echo "Starting Next.js dev server on port {nextjs_port}..."
-nohup npm run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
+nohup bun run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
@@ -288,7 +264,7 @@ def build_sandbox_labels(
         LABEL_COMPONENT: LABEL_COMPONENT_VALUE,
         LABEL_SANDBOX_ID: str(sandbox_id),
         LABEL_TENANT_ID: tenant_id,
-        "app.kubernetes.io/managed-by": "onyx",
+        LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
     }
     if user_id is not None:
         labels[LABEL_USER_ID] = str(user_id)
@@ -465,7 +441,7 @@ class DockerSandboxManager(SandboxManager):
             driver="bridge",
             labels={
                 LABEL_COMPONENT: LABEL_COMPONENT_VALUE,
-                "app.kubernetes.io/managed-by": "onyx",
+                LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
             },
         )
 
@@ -527,6 +503,8 @@ class DockerSandboxManager(SandboxManager):
         tenant_id: str,
         llm_config: LLMProviderConfig,  # noqa: ARG002
         onyx_pat: str | None = None,
+        *,
+        all_llm_configs: list[LLMProviderConfig] | None = None,  # noqa: ARG002 — serve-only
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning")
@@ -670,7 +648,6 @@ class DockerSandboxManager(SandboxManager):
         skills_section: str,
         user_name: str | None = None,
         user_role: str | None = None,
-        include_org_info: bool = False,
     ) -> tuple[str, str]:
         """Render shell-escaped (AGENTS.md, opencode.json) for a session.
 
@@ -686,7 +663,6 @@ class DockerSandboxManager(SandboxManager):
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
             user_role=user_role,
-            include_org_info=include_org_info,
         )
         opencode_json = json.dumps(
             build_opencode_config(
@@ -713,8 +689,6 @@ class DockerSandboxManager(SandboxManager):
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
-        user_work_area: str | None = None,
-        user_level: str | None = None,
     ) -> None:
         if snapshot_path:
             logger.warning(
@@ -733,12 +707,8 @@ class DockerSandboxManager(SandboxManager):
             skills_section=skills_section,
             user_name=user_name,
             user_role=user_role,
-            include_org_info=bool(user_work_area),
         )
 
-        org_info_setup = _build_org_info_script(
-            session_path, user_work_area, user_level
-        )
         nextjs_start = (
             _build_nextjs_start_script(session_path, nextjs_port)
             if nextjs_port is not None
@@ -750,7 +720,21 @@ echo "Creating session directory: {session_path}"
 mkdir -p {session_path}/outputs {session_path}/attachments {session_path}/.opencode
 if [ -d {TEMPLATES_OUTPUTS_PATH} ]; then
     cp -r {TEMPLATES_OUTPUTS_PATH}/* {session_path}/outputs/
-    cd {session_path}/outputs/web && npm install
+    # flock+sentinel: serialize concurrent session setups; .ready guards
+    # against a partial cp from a previous interrupted run.
+    (
+        flock -x 9
+        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
+            echo "Bootstrapping bun cache on workspace volume..."
+            rm -rf {BUN_CACHE_DIR}
+            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \
+                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
+            touch {BUN_CACHE_DIR}/.ready
+        fi
+    ) 9>{BUN_CACHE_DIR}.lock
+    cd {session_path}/outputs/web && \
+        BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \
+        bun install --frozen-lockfile --backend=hardlink
 else
     echo "Warning: outputs template not found at {TEMPLATES_OUTPUTS_PATH}"
     mkdir -p {session_path}/outputs/web
@@ -758,7 +742,6 @@ fi
 ln -sf {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
 printf '%s' '{opencode_json}' > {session_path}/opencode.json
-{org_info_setup}
 {nextjs_start}
 echo "Session workspace setup complete"
 """
@@ -976,6 +959,30 @@ echo "Session cleanup complete"
         except ExecError as e:
             raise RuntimeError(f"Failed to extract snapshot: {e}") from e
 
+        # Keep in sync with the K8s sandbox_daemon's restore_snapshot.
+        install_script = f"""
+set -e
+web_dir={session_path}/outputs/web
+if [ -f "$web_dir/bun.lock" ]; then
+    (
+        flock -x 9
+        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
+            rm -rf {BUN_CACHE_DIR}
+            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
+                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
+            touch {BUN_CACHE_DIR}/.ready
+        fi
+    ) 9>{BUN_CACHE_DIR}.lock
+    cd "$web_dir"
+    BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
+        bun install --frozen-lockfile --backend=hardlink
+fi
+"""
+        try:
+            run_in_container(container, ["/bin/sh", "-c", install_script])
+        except ExecError as e:
+            raise RuntimeError(f"Failed to reinstall deps after restore: {e}") from e
+
         self._regenerate_session_config(
             container=container,
             session_path=session_path,
@@ -1034,6 +1041,13 @@ printf '%s' '{opencode_json}' > {session_path}/opencode.json
         sandbox_id: UUID,
         session_id: UUID,
         message: str,
+        *,
+        opencode_session_id: str | None = None,  # noqa: ARG002 — serve-only
+        agent_provider: str | None = None,  # noqa: ARG002 — serve-only
+        agent_model: str | None = None,  # noqa: ARG002 — serve-only
+        on_opencode_session_resolved: (  # noqa: ARG002 — serve-only
+            Callable[[str], None] | None
+        ) = None,
     ) -> Generator[ACPEvent, None, None]:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"

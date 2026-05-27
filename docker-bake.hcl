@@ -14,10 +14,6 @@ variable "MODEL_SERVER_REPOSITORY" {
   default = "onyxdotapp/onyx-model-server"
 }
 
-variable "INTEGRATION_REPOSITORY" {
-  default = "onyxdotapp/onyx-integration"
-}
-
 variable "CLI_REPOSITORY" {
   default = "onyxdotapp/onyx-cli"
 }
@@ -68,18 +64,6 @@ target "model-server" {
   cache-to   = ["type=inline"]
 
   tags      = ["${MODEL_SERVER_REPOSITORY}:${TAG}"]
-}
-
-target "integration" {
-  context    = "backend"
-  dockerfile = "tests/integration/Dockerfile"
-
-  // Provide the base image via build context from the backend target
-  contexts = {
-    base = "target:backend"
-  }
-
-  tags      = ["${INTEGRATION_REPOSITORY}:${TAG}"]
 }
 
 target "cli" {

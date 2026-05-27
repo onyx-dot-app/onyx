@@ -1189,6 +1189,17 @@ externalSecret:
 # Typically set to the same value as externalSecret.secretName.
 extraEnvFromSecret: ""
 
+# -- Safeguards against destructive upgrades from chart 0.4.x. Chart 0.5.0
+# removed the bundled Vespa subchart; the check below fails `helm upgrade`
+# if the legacy `da-vespa` StatefulSet is still in the namespace, so
+# the StatefulSet and its Vespa data volume are not silently deleted.
+# Set `acknowledged: true` once you've migrated to external Vespa, or
+# `enabled: false` to disable the check entirely.
+# See deployment/helm/MIGRATION.md.
+legacyVespaCheck:
+  enabled: true
+  acknowledged: false
+
 # -- Governs all Secrets created or used by this chart. Values set by this chart will be base64 encoded in the k8s cluster.
 auth:
   postgresql:
@@ -1337,6 +1348,14 @@ auth:
     values:
       private_key: ""
 
+# NetworkPolicy for the per-sandbox push daemon (port 8731).
+# In prod the strict default is correct: only api_server pods can push.
+# Local-dev enables `allowTelepresenceAmbassador` via values-localdev.yaml so
+# that traffic intercepted from a developer's laptop (which enters the cluster
+# as the telepresence traffic-manager pod) is also permitted.
+sandboxPushPolicy:
+  allowTelepresenceAmbassador: false
+
 configMap:
   # WARNING: do NOT copy hostname keys from a docker-compose .env into this
   # block. The compose stack uses underscored service names (e.g. `api_server`,
@@ -1438,6 +1457,37 @@ configMap:
   # Sandbox config — always "kubernetes" for Helm deployments
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
+  SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
+  SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
+
+# -- Sandbox egress proxy. Only deployed when ENABLE_CRAFT=true.
+sandboxProxy:
+  enabled: true
+  replicaCount: 2
+  containerPorts:
+    proxy: 8080
+    healthz: 8081
+  service:
+    proxyPort: 8080
+  terminationGracePeriodSeconds: 200
+  progressDeadlineSeconds: 300
+  confdirSizeLimit: 100Mi
+  caSecretName: "sandbox-proxy-ca"
+  caConfigMapName: "sandbox-proxy-ca-bundle"
+  podAnnotations: {}
+  # Matches the `onyx` user (uid 1001) baked into the backend image.
+  runAsUser: 1001
+  fsGroup: 1001
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 # -- Additional arbitrary manifests to render as part of the release. Each entry
 # may be either a YAML mapping (a single Kubernetes object) or a multi-line

@@ -316,6 +316,23 @@ def _make_ctx() -> MagicMock:
     return ctx
 
 
+def test_document_push_skipped_when_from_beginning() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+    ):
+        _maybe_push_documents(
+            _make_adapter(),
+            [doc],
+            _make_insertion_records(["doc1"]),
+            from_beginning=True,
+        )
+    mock_hook.assert_not_called()
+
+
 def test_document_push_skipped_in_multi_tenant_mode() -> None:
     from onyx.indexing.indexing_pipeline import _maybe_push_documents
 

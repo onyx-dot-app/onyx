@@ -191,6 +191,8 @@ export async function upsertMCPServer(serverData: {
   oauth_authorization_url_params?: Record<string, string>;
   auth_template?: any;
   admin_credentials?: Record<string, string>;
+  // Per-key analogue of `oauth_client_*_changed` for `admin_credentials`.
+  admin_credentials_changed?: Record<string, boolean>;
   existing_server_id?: number;
 }): Promise<ApiResponse<UpsertMCPServerResponse>> {
   try {

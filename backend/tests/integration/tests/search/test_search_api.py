@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import os
 
+import httpx
 import pytest
-import requests
 
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
@@ -26,8 +27,8 @@ def _search(
     query: str,
     user: DATestUser,
     **kwargs: object,
-) -> requests.Response:
-    return requests.post(
+) -> httpx.Response:
+    return client.post(
         SEARCH_URL,
         json={"query": query, **kwargs},
         headers=user.headers,
@@ -35,7 +36,6 @@ def _search(
 
 
 def test_basic_search_returns_results(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -58,7 +58,6 @@ def test_basic_search_returns_results(
 
 
 def test_document_set_filtering(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -97,7 +96,6 @@ def test_document_set_filtering(
     reason="User group permissions are Enterprise-only",
 )
 def test_acl_enforcement(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -138,7 +136,6 @@ def test_acl_enforcement(
 
 
 def test_persona_scoped_search(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -178,7 +175,6 @@ def test_persona_scoped_search(
 
 
 def test_invalid_persona_returns_404(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
@@ -186,10 +182,8 @@ def test_invalid_persona_returns_404(
     assert resp.status_code == 404
 
 
-def test_unauthenticated_returns_401(
-    reset: None,  # noqa: ARG001
-) -> None:
-    resp = requests.post(
+def test_unauthenticated_returns_401() -> None:
+    resp = client.post(
         SEARCH_URL,
         json={"query": "test"},
     )

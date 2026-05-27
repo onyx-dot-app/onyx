@@ -58,7 +58,7 @@ func devcontainerImage() string {
 // checkDevcontainerCLI ensures the devcontainer CLI is installed.
 func checkDevcontainerCLI() {
 	if _, err := exec.LookPath("devcontainer"); err != nil {
-		log.Fatal("devcontainer CLI is not installed. Install it with: npm install -g @devcontainers/cli")
+		log.Fatal("devcontainer CLI is not installed. Install it with: bun install -g @devcontainers/cli")
 	}
 }
 

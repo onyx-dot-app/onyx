@@ -20,11 +20,11 @@ type webPackageJSON struct {
 	Scripts map[string]string `json:"scripts"`
 }
 
-// NewWebCommand creates a command that runs npm scripts from the web directory.
+// NewWebCommand creates a command that runs bun scripts from the web directory.
 func NewWebCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "web <script> [args...]",
-		Short: "Run web/package.json npm scripts",
+		Short: "Run web/package.json bun scripts",
 		Long:  webHelpDescription(),
 		Args: cobra.MinimumNArgs(1),
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -50,14 +50,14 @@ func runWebScript(args []string) {
 
 	nodeModules := filepath.Join(webDir, "node_modules")
 	if _, err := os.Stat(nodeModules); os.IsNotExist(err) {
-		log.Info("node_modules not found, running npm install --no-save...")
-		installCmd := exec.Command("npm", "install", "--no-save")
+		log.Info("node_modules not found, running bun install --frozen-lockfile...")
+		installCmd := exec.Command("bun", "install", "--frozen-lockfile")
 		installCmd.Dir = webDir
 		installCmd.Stdout = os.Stdout
 		installCmd.Stderr = os.Stderr
 		installCmd.Stdin = os.Stdin
 		if err := installCmd.Run(); err != nil {
-			log.Fatalf("Failed to run npm install: %v", err)
+			log.Fatalf("Failed to run bun install: %v", err)
 		}
 	}
 
@@ -67,15 +67,15 @@ func runWebScript(args []string) {
 		scriptArgs = scriptArgs[1:]
 	}
 
-	npmArgs := []string{"run", scriptName}
+	bunArgs := []string{"run", scriptName}
 	if len(scriptArgs) > 0 {
-		// npm requires "--" to forward flags to the underlying script.
-		npmArgs = append(npmArgs, "--")
-		npmArgs = append(npmArgs, scriptArgs...)
+		// bun requires "--" to forward flags to the underlying script.
+		bunArgs = append(bunArgs, "--")
+		bunArgs = append(bunArgs, scriptArgs...)
 	}
-	log.Debugf("Running in %s: npm %v", webDir, npmArgs)
+	log.Debugf("Running in %s: bun %v", webDir, bunArgs)
 
-	webCmd := exec.Command("npm", npmArgs...)
+	webCmd := exec.Command("bun", bunArgs...)
 	webCmd.Dir = webDir
 	webCmd.Stdout = os.Stdout
 	webCmd.Stderr = os.Stderr
@@ -90,7 +90,7 @@ func runWebScript(args []string) {
 				os.Exit(code)
 			}
 		}
-		log.Fatalf("Failed to run npm: %v", err)
+		log.Fatalf("Failed to run bun: %v", err)
 	}
 }
 
@@ -109,7 +109,7 @@ func webScriptNames() []string {
 }
 
 func webHelpDescription() string {
-	description := `Run npm scripts from web/package.json.
+	description := `Run bun scripts from web/package.json.
 
 Examples:
   ods web dev

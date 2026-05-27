@@ -891,6 +891,20 @@ ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS = os.environ.get(
 CONTINUE_ON_CONNECTOR_FAILURE = os.environ.get(
     "CONTINUE_ON_CONNECTOR_FAILURE", ""
 ).lower() not in ["false", ""]
+# When true, indexing makes a best effort to keep going past errors that it
+# can bound:
+#   1. The >3-failures-AND->10%-ratio threshold abort is disabled, so a
+#      connector that yields many per-doc/entity `ConnectorFailure`s no longer
+#      aborts the attempt.
+#   2. Unhandled exceptions inside docprocessing (per-batch) are converted into
+#      `DocumentFailure`s for the docs in the batch (or an `EntityFailure` if
+#      the batch couldn't be loaded). The batch is marked complete so the
+#      attempt can resolve as COMPLETED_WITH_ERRORS.
+# Does NOT swallow unhandled exceptions raised from the connector generator
+# itself: those still mark the attempt FAILED, because we have no entity
+# context to isolate the failing item and silently advancing would risk
+# skipping source data. Operators must triage those by fixing the connector.
+PERSISTENT_INDEXING = os.environ.get("PERSISTENT_INDEXING", "").lower() == "true"
 # When swapping to a new embedding model, a secondary index is created in the background, to conserve
 # resources, we pause updates on the primary index by default while the secondary index is created
 DISABLE_INDEX_UPDATE_ON_SWAP = (
@@ -1026,6 +1040,13 @@ LOG_ONYX_MODEL_INTERACTIONS = (
 PROMPT_CACHE_CHAT_HISTORY = (
     os.environ.get("PROMPT_CACHE_CHAT_HISTORY", "").lower() == "true"
 )
+
+# Opt-in cap on outgoing image-count for Azure providers (any model_provider
+# starting with "azure"). When enabled, requests are capped at 50 images each
+# (matching the documented Azure OpenAI ceiling) to avoid raw 400s from the
+# gateway. Off by default.
+ENABLE_AZURE_IMAGE_CAP = os.environ.get("ENABLE_AZURE_IMAGE_CAP", "").lower() == "true"
+
 # If set to `true` will enable additional logs about Vespa query performance
 # (time spent on finding the right docs + time spent fetching summaries from disk)
 LOG_VESPA_TIMING_INFORMATION = (

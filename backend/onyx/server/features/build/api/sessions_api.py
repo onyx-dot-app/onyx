@@ -42,8 +42,6 @@ from onyx.server.features.build.api.models import SuggestionBubble
 from onyx.server.features.build.api.models import SuggestionTheme
 from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import set_build_session_sharing_scope
@@ -52,7 +50,8 @@ from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_sessio
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
-from onyx.server.features.build.sandbox import get_sandbox_manager
+from onyx.server.features.build.sandbox.base import get_sandbox_manager
+from onyx.server.features.build.session.manager import get_all_build_mode_llm_configs
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.manager import UploadLimitExceededError
 from onyx.server.features.build.utils import sanitize_filename
@@ -135,8 +134,6 @@ def create_session(
         session_manager = SessionManager(db_session)
         build_session = session_manager.get_or_create_empty_session(
             user.id,
-            user_work_area=request.user_work_area,
-            user_level=request.user_level,
             llm_provider_type=request.llm_provider_type,
             llm_model_name=request.llm_model_name,
             headless=request.headless,
@@ -454,12 +451,18 @@ def restore_session(
             )
             db_session.commit()
 
+            # Pre-register every build-mode provider so per-prompt model
+            # overrides can cross providers without re-provisioning the pod.
+            all_llm_configs = get_all_build_mode_llm_configs(
+                db_session, default=llm_config
+            )
             sandbox_manager.provision(
                 sandbox_id=sandbox.id,
                 user_id=user.id,
                 tenant_id=tenant_id,
                 llm_config=llm_config,
                 onyx_pat=onyx_pat,
+                all_llm_configs=all_llm_configs,
             )
 
             # Mark as RUNNING after successful provision
@@ -481,11 +484,9 @@ def restore_session(
                     # Commit port allocation before long-running operations
                     db_session.commit()
 
-                # All non-local backends support snapshot restoration.
-                # Local sandboxes persist on disk so they don't snapshot.
-                snapshot = None
-                if SANDBOX_BACKEND != SandboxBackend.LOCAL:
-                    snapshot = get_latest_snapshot_for_session(db_session, session_id)
+                # All supported backends snapshot session state to durable
+                # storage (S3 for kubernetes, host disk for docker).
+                snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
                 skills_section, skills_files = build_user_skills_payload(
                     user, db_session

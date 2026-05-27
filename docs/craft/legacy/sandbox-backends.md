@@ -1,5 +1,7 @@
 # Docker-Compose Sandbox Backend
 
+**Note: the local backend has been removed. See [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md) for the canonical Craft dev setup.**
+
 ## Objective
 
 Give self-hosted Onyx a sandbox backend that's actually isolated. Today there are two backends: `local` (a directory on the host with no container boundary) and `kubernetes` (real pod isolation, but requires a K8s cluster). The middle ground is missing — a self-hosted admin who runs the standard `docker compose up` deployment has no way to run Craft sessions safely. They get `local`, which means the agent's bash tool runs as the api_server user, on the host. That's fine for a dev laptop and unacceptable for a real team.
