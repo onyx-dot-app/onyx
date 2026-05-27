@@ -1857,7 +1857,6 @@ mistune==3.2.1 \
     --hash=sha256:7c8e5501d38bac1582e067e46c8343f17d57ea1aaa735823f3aba1fd59c88a28
 mitmproxy==11.0.2 \
     --hash=sha256:95db7b57b21320a0c76e59e1d6644daaa431291cdf89419608301424651199b4
-    # via onyx
 mitmproxy-macos==0.10.7 ; sys_platform == 'darwin' \
     --hash=sha256:e01664e1a31479818596641148ab80b5b531b03c8c9f292af8ded7103291db82
     # via mitmproxy-rs
