@@ -626,6 +626,10 @@ def test_sandbox_egress_only_flows_via_proxy(
             ).strip()
             if proxied == "200":
                 break
+            # Only retry on the transient race (403) or a curl network error
+            # (000); any other status code won't improve with time.
+            if proxied not in ("000", "403"):
+                break
             time.sleep(3)
         assert proxied == "200", (
             f"proxied egress should return 200 once the proxy sees the pod, "
