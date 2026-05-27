@@ -12,6 +12,8 @@ on:
     paths:
       - "desktop/**"
       - ".github/workflows/pr-desktop-build.yml"
+      - "package.json"
+      - "bun.lock"
   push:
     tags:
       - "v*.*.*"
