@@ -15,6 +15,7 @@ import base64
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID
@@ -124,16 +125,19 @@ _MATCH = ActionMatch(
     action_type="slack.messages.write",
     payload={"text": "hi"},
     policy=EndpointPolicy.ASK,
+    external_app_id=42,
 )
 _MATCH_ALWAYS = ActionMatch(
     action_type="slack.channels.read",
     payload={},
     policy=EndpointPolicy.ALWAYS,
+    external_app_id=42,
 )
 _MATCH_DENY = ActionMatch(
     action_type="slack.messages.write",
     payload={"text": "hi"},
     policy=EndpointPolicy.DENY,
+    external_app_id=42,
 )
 
 
@@ -290,6 +294,172 @@ def test_resolve_and_match_deny_blocks_with_403() -> None:
     assert result is None
     _assert_403(flow, gate_mod._CODE_POLICY_DENIED)
     assert resolver.resolve_session_by_id_calls == []
+
+
+# ---------------------------------------------------------------------------
+# request() — the gate's contract, one test per verdict path
+#
+#   ALWAYS      -> straight through (forward) + inject; NO approval pipeline
+#   off-catalog -> straight through (forward); NO inject; NO approval pipeline
+#   DENY        -> blocked (403); NO inject; NO approval pipeline
+#   ASK         -> approval pipeline runs, THEN:
+#                    APPROVED          -> forward + inject
+#                    REJECTED/EXPIRED  -> blocked (403); NO inject
+#
+# Each test drives the real `request()` entry point and asserts all three
+# observable dimensions: forwarded vs blocked, approval pipeline ran, injected.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _PipelineSpy:
+    """Records the approval pipeline + injection so a test can read the path."""
+
+    persisted: list[tuple[SessionContext, ActionMatch]]
+    awaited: list[ActionMatch]
+    injected: list[tuple[ActionMatch, UUID, str]]
+
+    @property
+    def approval_ran(self) -> bool:
+        return bool(self.persisted)
+
+
+def _spy_pipeline(
+    addon: GateAddon,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    decision: ApprovalDecision | None = None,
+) -> _PipelineSpy:
+    """Stub the approval pipeline (persist + await) and the injection seam.
+
+    `decision` is what the (stubbed) approval wait resolves to — only the ASK
+    path reaches it.
+    """
+    spy = _PipelineSpy(persisted=[], awaited=[], injected=[])
+
+    def _persist(ctx: SessionContext, match: ActionMatch) -> UUID:
+        spy.persisted.append((ctx, match))
+        return uuid4()
+
+    async def _await(
+        _aid: UUID, _ctx: SessionContext, match: ActionMatch
+    ) -> ApprovalDecision | None:
+        spy.awaited.append(match)
+        return decision
+
+    def _inject(
+        flow: http.HTTPFlow,  # noqa: ARG001
+        match: ActionMatch,
+        *,
+        user_id: UUID,
+        tenant_id: str,
+    ) -> None:
+        spy.injected.append((match, user_id, tenant_id))
+
+    monkeypatch.setattr(addon, "_persist_approval_row", _persist)
+    monkeypatch.setattr(addon, "_await_decision", _await)
+    monkeypatch.setattr(addon, "_inject_credentials", _inject)
+    return spy
+
+
+@pytest.mark.asyncio
+async def test_always_goes_straight_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ALWAYS: forwarded immediately with credentials, no approval prompt."""
+    sandbox = _sandbox()
+    addon = _build(
+        resolver=_StubResolver(sandbox=sandbox),
+        matcher=_StubMatcher(result=_MATCH_ALWAYS),
+    )
+    spy = _spy_pipeline(addon, monkeypatch)
+    flow = _flow()
+
+    await addon.request(flow)
+
+    assert flow.response is None  # forwarded
+    assert not spy.approval_ran  # straight through — no prompt
+    assert spy.injected == [(_MATCH_ALWAYS, sandbox.user_id, sandbox.tenant_id)]
+
+
+@pytest.mark.asyncio
+async def test_off_catalog_goes_straight_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No matching rule: forwarded as-is, no approval prompt, NO injection."""
+    addon = _build(
+        resolver=_StubResolver(sandbox=_sandbox()),
+        matcher=_StubMatcher(result=None),
+    )
+    spy = _spy_pipeline(addon, monkeypatch)
+    flow = _flow()
+
+    await addon.request(flow)
+
+    assert flow.response is None  # forwarded
+    assert not spy.approval_ran
+    assert spy.injected == []
+
+
+@pytest.mark.asyncio
+async def test_deny_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DENY: blocked with a 403, no approval prompt, NO injection."""
+    addon = _build(
+        resolver=_StubResolver(sandbox=_sandbox()),
+        matcher=_StubMatcher(result=_MATCH_DENY),
+    )
+    spy = _spy_pipeline(addon, monkeypatch)
+    flow = _flow()
+
+    await addon.request(flow)
+
+    _assert_403(flow, gate_mod._CODE_POLICY_DENIED)
+    assert not spy.approval_ran
+    assert spy.injected == []
+
+
+@pytest.mark.asyncio
+async def test_ask_approved_forwards_after_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ASK: runs the approval pipeline; on APPROVED forwards + injects."""
+    user_id = uuid4()
+    sandbox = _sandbox(user_id=user_id)
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    assert spy.approval_ran  # required approval
+    assert spy.awaited == [_MATCH]
+    assert flow.response is None  # forwarded after approval
+    assert spy.injected == [(_MATCH, user_id, sandbox.tenant_id)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "decision, expected_code",
+    [
+        (ApprovalDecision.REJECTED, gate_mod._CODE_USER_REJECTED),
+        (ApprovalDecision.EXPIRED, gate_mod._CODE_NOT_AUTHORIZED),
+    ],
+)
+async def test_ask_denied_blocks(
+    monkeypatch: pytest.MonkeyPatch,
+    decision: ApprovalDecision,
+    expected_code: str,
+) -> None:
+    """ASK: runs the approval pipeline; on REJECTED/EXPIRED blocks, no inject."""
+    resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    spy = _spy_pipeline(addon, monkeypatch, decision=decision)
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    assert spy.approval_ran  # required approval before blocking
+    _assert_403(flow, expected_code)
+    assert spy.injected == []
 
 
 # ---------------------------------------------------------------------------

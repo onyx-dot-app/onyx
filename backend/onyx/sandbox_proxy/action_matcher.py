@@ -33,6 +33,8 @@ class ActionMatch:
     action_type: str
     payload: dict[str, Any]
     policy: EndpointPolicy
+    # The connected app the request resolved to — for the gate's credential seam.
+    external_app_id: int
 
 
 class ActionMatcher(Protocol):
@@ -98,9 +100,10 @@ class ExternalAppActionMatcher:
                 return None
 
             # `match_action` returns only the verdict, so the recorded action is
-            # the owning app (its app_type). Reading the loaded column inside the
-            # session keeps this safe after the session closes.
+            # the owning app (its app_type). Read the loaded columns inside the
+            # session so they're safe to use after it closes.
             action_type = app.app_type.value
+            external_app_id = app.id
 
         payload = _decode_body(
             request.raw_content or b"",
@@ -108,6 +111,7 @@ class ExternalAppActionMatcher:
         )
         return ActionMatch(
             action_type=action_type,
+            external_app_id=external_app_id,
             payload=payload or {},
             policy=policy,
         )

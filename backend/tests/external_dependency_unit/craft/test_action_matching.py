@@ -203,6 +203,8 @@ def test_external_app_matcher_resolves_app_and_verdict(
     assert match.action_type == ExternalAppType.SLACK.value
     assert match.policy == EndpointPolicy.DENY
     assert match.payload == {"channel": "C1", "text": "hi"}
+    # The app id is threaded through for the gate's credential-injection seam.
+    assert match.external_app_id == app.id
 
 
 def test_external_app_matcher_unconnected_host_returns_none(

@@ -229,7 +229,13 @@ class GateAddon:
         try:
             approval_id = self._persist_approval_row(ctx, match)
             decision = await self._await_decision(approval_id, ctx, match)
+            # APPROVED → forward (no 403) WITH credential injection; REJECTED /
+            # EXPIRED → `_write_response_for_decision` sets a 403 (stop here).
             self._write_response_for_decision(flow, decision)
+            if decision == ApprovalDecision.APPROVED:
+                self._inject_credentials(
+                    flow, match, user_id=ctx.user_id, tenant_id=ctx.tenant_id
+                )
         except Exception:
             logger.exception(
                 "gate.unhandled_error session_id=%s tenant_id=%s "
@@ -298,10 +304,8 @@ class GateAddon:
             )
             return None
 
-        # Audit every evaluated request with its resolved policy. session_id is
-        # the sandbox-claimed tag (unvalidated here — cheap, no DB; the ASK path
-        # validates it before routing an approval). `policy=off_catalog` means no
-        # connected app/action matched (the request is forwarded unchanged).
+        # Audit every evaluated request. session_id is the unvalidated claimed
+        # tag (the ASK path validates it below); off_catalog = nothing matched.
         logger.info(
             "gate.request tenant_id=%s sandbox_id=%s session_id=%s host=%s "
             "action_type=%s policy=%s",
@@ -313,18 +317,26 @@ class GateAddon:
             match.policy.value if match is not None else "off_catalog",
         )
 
+        # Path per verdict (see _inject_credentials for the injection contract):
+        #   off-catalog -> forward, no credentials
+        #   DENY        -> block
+        #   ALWAYS      -> forward + inject credentials (auto-approved)
+        #   ASK         -> approval pipeline (forward+inject or block, in request())
         if match is None:
             return None
 
-        # ALWAYS auto-approves: forward without a session. DENY blocks outright.
-        # Only ASK needs a validated session to route an approval card.
-        if match.policy is EndpointPolicy.ALWAYS:
-            return None
         if match.policy is EndpointPolicy.DENY:
             flow.response = _http_403(_CODE_POLICY_DENIED)
             return None
 
-        # ASK — an unattributable action is blocked, not guessed.
+        if match.policy is EndpointPolicy.ALWAYS:
+            self._inject_credentials(
+                flow, match, user_id=sandbox.user_id, tenant_id=sandbox.tenant_id
+            )
+            return None
+
+        # ASK: resolve the originating session before prompting. An
+        # unattributable action is blocked, not guessed.
         try:
             session_id = self._resolve_gated_session(flow, sandbox)
         except Exception:
@@ -501,6 +513,25 @@ class GateAddon:
             else _CODE_NOT_AUTHORIZED
         )
         flow.response = _http_403(code)
+
+    def _inject_credentials(
+        self,
+        flow: http.HTTPFlow,  # noqa: ARG002 — used once injection is implemented
+        match: ActionMatch,  # noqa: ARG002
+        *,
+        user_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+    ) -> None:
+        """Attach the connected app's credentials to a verified forward.
+
+        The sole credential-injection seam: called only on ALWAYS (auto-approved)
+        and ASK-approved requests, never on off-catalog or blocked ones.
+
+        No-op for now. To implement: load ExternalApp(match.external_app_id) and
+        its auth_template, fill the {placeholder} headers from the org + per-user
+        (user_id) credentials, and set them on flow.request.headers.
+        """
+        return
 
     def _terminalize_after_unhandled_error(
         self, approval_id: UUID, tenant_id: str
