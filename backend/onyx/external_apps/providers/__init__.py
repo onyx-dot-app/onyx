@@ -4,10 +4,14 @@ from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import EndpointSpec
+from onyx.external_apps.providers.actions import ExternalAppAction
 from onyx.external_apps.providers.base import ExternalAppProvider
 from onyx.external_apps.providers.base import OrgCredentialField
+from onyx.external_apps.providers.google_calendar import GoogleCalendarAction
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
+from onyx.external_apps.providers.linear import LinearAction
 from onyx.external_apps.providers.linear import LinearProvider
+from onyx.external_apps.providers.slack import SlackAction
 from onyx.external_apps.providers.slack import SlackProvider
 from onyx.server.features.build.api.models import ActionPolicyView
 from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
@@ -158,9 +162,13 @@ def fetch_built_in_app(app_type: ExternalAppType) -> BuiltInExternalAppDescripto
 
 __all__ = [
     "ExternalAppProvider",
+    "ExternalAppAction",
     "SlackProvider",
+    "SlackAction",
     "GoogleCalendarProvider",
+    "GoogleCalendarAction",
     "LinearProvider",
+    "LinearAction",
     "PROVIDERS",
     "get_provider_for_app",
     "get_provider_or_raise",

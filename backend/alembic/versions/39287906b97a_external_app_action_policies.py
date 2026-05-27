@@ -1,7 +1,7 @@
 """external app action policies
 
 Revision ID: 39287906b97a
-Revises: f1a2b3c4d5e6
+Revises: c7bc8cc2921d
 Create Date: 2026-05-26 12:01:05.260678
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "39287906b97a"
-down_revision = "f1a2b3c4d5e6"
+down_revision = "c7bc8cc2921d"
 branch_labels = None
 depends_on = None
 

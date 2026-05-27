@@ -1,9 +1,22 @@
+from enum import Enum
 from typing import Annotated
 from typing import Literal
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import InstanceOf
+
+
+class ExternalAppAction(str, Enum):
+    """Marker base for every built-in provider's action-id enum.
+
+    Deliberately member-less so each provider can subclass it with its own
+    catalog ids (Python forbids subclassing an Enum that already has members).
+    Being ``str``-based, members compare equal to and hash like their stored id
+    string, so they drop into the ``dict[str, ...]`` policy maps and DB
+    string columns transparently while staying a strongly-typed handle that
+    other code (e.g. SKILL.md composition) can import and reference by name."""
 
 
 class RestRoute(BaseModel):
@@ -44,9 +57,14 @@ class EndpointSpec(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    id: str  # stable, namespaced: e.g. "slack.messages.read"
+    # Stable, namespaced id as a provider-specific enum member (e.g.
+    # ``SlackAction.MESSAGES_READ`` → "slack.messages.read"). ``InstanceOf``
+    # accepts any ``ExternalAppAction`` subclass member while rejecting bare
+    # strings, so catalogs can't drift onto untyped ids.
+    id: InstanceOf[ExternalAppAction]
     normalised_name: str
     description: str
     matches: tuple[MatchRule, ...]
     # Prior ids this action has had, so renames don't break stored admin rows.
+    # Plain strings: a retired id need not exist as a current enum member.
     aliases: tuple[str, ...] = ()
