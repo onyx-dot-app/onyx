@@ -88,18 +88,10 @@ from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
-from onyx.configs.app_configs import PASSWORD_MAX_LENGTH
-from onyx.configs.app_configs import PASSWORD_MIN_LENGTH
-from onyx.configs.app_configs import PASSWORD_REQUIRE_DIGIT
-from onyx.configs.app_configs import PASSWORD_REQUIRE_LOWERCASE
-from onyx.configs.app_configs import PASSWORD_REQUIRE_SPECIAL_CHAR
-from onyx.configs.app_configs import PASSWORD_REQUIRE_UPPERCASE
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
-from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
@@ -137,6 +129,7 @@ from onyx.error_handling.exceptions import onyx_error_to_json_response
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import retrieve_ws_token_data
+from onyx.server.security.store import load_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
@@ -329,9 +322,14 @@ def verify_email_domain(email: str, *, is_registration: bool = False) -> None:
             "Disposable email addresses are not allowed. Please use a permanent email address.",
         )
 
-    # Check domain whitelist if configured
-    if VALID_EMAIL_DOMAINS:
-        if domain not in VALID_EMAIL_DOMAINS:
+    # Check domain whitelist if configured. In single-tenant mode this honors
+    # the per-tenant override. In multi-tenant mode the pre-tenant signup call
+    # at line ~449 hits POSTGRES_DEFAULT_SCHEMA's (empty) KV row and falls
+    # through to the env constant; per-tenant overrides only apply to the
+    # post-tenant OAuth/post-verify call sites.
+    valid_domains = load_security_settings().valid_email_domains
+    if valid_domains:
+        if domain not in valid_domains:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email domain is not valid")
 
 
@@ -768,28 +766,39 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def validate_password(  # ty: ignore[invalid-method-override]
         self, password: str, _: schemas.UC | models.UP
     ) -> None:
-        # Validate password according to configurable security policy (defined via environment variables)
-        if len(password) < PASSWORD_MIN_LENGTH:
+        # Single-tenant deployments may override via the admin UI; multi-tenant
+        # signups hit POSTGRES_DEFAULT_SCHEMA (empty KV) and fall through to
+        # the env-configured operator floor.
+        policy = load_security_settings()
+        min_len = policy.password_min_length or 0
+        max_len = policy.password_max_length or 0
+        if len(password) < min_len:
             raise exceptions.InvalidPasswordException(
-                reason=f"Password must be at least {PASSWORD_MIN_LENGTH} characters long."
+                reason=f"Password must be at least {min_len} characters long."
             )
-        if len(password) > PASSWORD_MAX_LENGTH:
+        if len(password) > max_len:
             raise exceptions.InvalidPasswordException(
-                reason=f"Password must not exceed {PASSWORD_MAX_LENGTH} characters."
+                reason=f"Password must not exceed {max_len} characters."
             )
-        if PASSWORD_REQUIRE_UPPERCASE and not any(char.isupper() for char in password):
+        if policy.password_require_uppercase and not any(
+            char.isupper() for char in password
+        ):
             raise exceptions.InvalidPasswordException(
                 reason="Password must contain at least one uppercase letter."
             )
-        if PASSWORD_REQUIRE_LOWERCASE and not any(char.islower() for char in password):
+        if policy.password_require_lowercase and not any(
+            char.islower() for char in password
+        ):
             raise exceptions.InvalidPasswordException(
                 reason="Password must contain at least one lowercase letter."
             )
-        if PASSWORD_REQUIRE_DIGIT and not any(char.isdigit() for char in password):
+        if policy.password_require_digit and not any(
+            char.isdigit() for char in password
+        ):
             raise exceptions.InvalidPasswordException(
                 reason="Password must contain at least one number."
             )
-        if PASSWORD_REQUIRE_SPECIAL_CHAR and not any(
+        if policy.password_require_special_char and not any(
             char in PASSWORD_SPECIAL_CHARS for char in password
         ):
             raise exceptions.InvalidPasswordException(
@@ -915,7 +924,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
-            if expires_at and TRACK_EXTERNAL_IDP_EXPIRY:
+            if expires_at and load_security_settings().track_external_idp_expiry:
                 oidc_expiry = datetime.fromtimestamp(expires_at, tz=timezone.utc)
                 await self.user_db.update(
                     user, update_dict={"oidc_expiry": oidc_expiry}
@@ -968,7 +977,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
             # otherwise, the oidc expiry will always be old, and the user will never be able to login
-            if user.oidc_expiry is not None and not TRACK_EXTERNAL_IDP_EXPIRY:
+            if (
+                user.oidc_expiry is not None
+                and not load_security_settings().track_external_idp_expiry
+            ):
                 await self.user_db.update(user, {"oidc_expiry": None})
                 user.oidc_expiry = None  # ty: ignore[invalid-assignment]
             remove_user_from_invited_users(user.email)
@@ -1653,7 +1665,7 @@ def _extract_email_from_jwt(payload: dict[str, Any]) -> str | None:
 async def _sync_jwt_oidc_expiry(
     user_manager: UserManager, user: User, payload: dict[str, Any]
 ) -> None:
-    if TRACK_EXTERNAL_IDP_EXPIRY:
+    if load_security_settings().track_external_idp_expiry:
         expires_at = payload.get("exp")
         if expires_at is None:
             return

@@ -11,7 +11,6 @@ from pydantic import field_validator
 from pydantic import model_validator
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import DefaultAppMode
@@ -29,6 +28,7 @@ from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
+from onyx.server.security.store import load_security_settings
 
 if TYPE_CHECKING:
     pass
@@ -180,11 +180,15 @@ class UserInfo(BaseModel):
                 )
             ),
             team_name=team_name,
-            # set to None if TRACK_EXTERNAL_IDP_EXPIRY is False so that we avoid cases
+            # set to None if track_external_idp_expiry is False so that we avoid cases
             # where they previously had this set + used OIDC, and now they switched to
             # basic auth are now constantly getting redirected back to the login page
             # since their "oidc_expiry is old"
-            oidc_expiry=user.oidc_expiry if TRACK_EXTERNAL_IDP_EXPIRY else None,
+            oidc_expiry=(
+                user.oidc_expiry
+                if load_security_settings().track_external_idp_expiry
+                else None
+            ),
             current_token_created_at=current_token_created_at,
             current_token_expiry_length=expiry_length,
             is_cloud_superuser=is_cloud_superuser,

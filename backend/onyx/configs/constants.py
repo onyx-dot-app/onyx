@@ -121,6 +121,7 @@ KV_SETTINGS_KEY = "onyx_settings"
 KV_CUSTOMER_UUID_KEY = "customer_uuid"
 KV_INSTANCE_DOMAIN_KEY = "instance_domain"
 KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
+KV_SECURITY_SETTINGS_KEY = "onyx_security_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_KG_CONFIG_KEY = "kg_config"
 
