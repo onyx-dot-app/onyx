@@ -326,8 +326,10 @@ class KubernetesSandboxManager(SandboxManager):
         self._s3_bucket = SANDBOX_S3_BUCKET
         self._service_account = SANDBOX_SERVICE_ACCOUNT_NAME
 
-        # One PodEventBus per pod, created lazily on first send_message.
-        self._event_buses: dict[UUID, PodEventBus] = {}
+        # One PodEventBus per (pod, directory). Opencode-serve's
+        # Instance.provide middleware scopes /event per ?directory= query,
+        # so each session directory needs its own SSE stream.
+        self._event_buses: dict[tuple[UUID, str], PodEventBus] = {}
         # Tombstone set: blocks late ``subscribe`` from re-creating a bus
         # for a sandbox whose terminate is in flight (leaks a reconnect
         # loop otherwise). Cleared on re-provision.
@@ -1386,12 +1388,14 @@ class KubernetesSandboxManager(SandboxManager):
 
     def terminate(self, sandbox_id: UUID) -> None:
         """Tear down the per-pod event bus, then delete Service + Pod."""
-        # Tombstone + pop under one lock so a concurrent subscribe can't
-        # race in and create a fresh bus against the dying pod.
+        # Tombstone + pop all buses for this sandbox (one per directory)
+        # under one lock so a concurrent subscribe can't race in and create
+        # a fresh bus against the dying pod.
         with self._event_buses_lock:
             self._terminated_sandboxes.add(sandbox_id)
-            bus = self._event_buses.pop(sandbox_id, None)
-        if bus is not None:
+            doomed_keys = [k for k in self._event_buses if k[0] == sandbox_id]
+            doomed_buses = [self._event_buses.pop(k) for k in doomed_keys]
+        for bus in doomed_buses:
             try:
                 bus.close()
             except Exception:  # noqa: BLE001 — never let cleanup break terminate
@@ -2241,25 +2245,33 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         )
         return False
 
-    def _get_or_create_event_bus(self, sandbox_id: UUID) -> "PodEventBus":
-        """Lazily build the per-pod :class:`PodEventBus`. Refuses to
-        create one for a terminated sandbox (see ``_terminated_sandboxes``).
+    def _get_or_create_event_bus(
+        self, sandbox_id: UUID, directory: str
+    ) -> "PodEventBus":
+        """Lazily build the per-(pod, directory) :class:`PodEventBus`.
+        Refuses to create one for a terminated sandbox.
+
+        Opencode-serve's ``Instance.provide`` middleware scopes /event
+        per ``?directory=`` query param, so we need one SSE stream per
+        unique session directory on the pod.
 
         Replaces a cached bus that has self-closed (exhausted its reconnect
         budget) with a fresh one — otherwise callers would keep getting
         ``BUS_CLOSED_SENTINEL`` until the api server restarted.
         """
+        key = (sandbox_id, directory)
         with self._event_buses_lock:
-            bus = self._event_buses.get(sandbox_id)
+            bus = self._event_buses.get(key)
             if bus is not None and not bus.closed:
                 return bus
             if bus is not None and bus.closed:
                 logger.warning(
                     "[SANDBOX-SERVE] Replacing self-closed PodEventBus for "
-                    "sandbox %s (prior bus exhausted its reconnect budget)",
+                    "sandbox %s dir=%s (prior bus exhausted its reconnect budget)",
                     sandbox_id,
+                    directory,
                 )
-                self._event_buses.pop(sandbox_id, None)
+                self._event_buses.pop(key, None)
             if sandbox_id in self._terminated_sandboxes:
                 raise RuntimeError(
                     f"Sandbox {sandbox_id} has been terminated; refusing to "
@@ -2280,17 +2292,22 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             bus = PodEventBus(
                 base_url=self._serve_base_url(sandbox_id),
                 auth=auth,
+                directory=directory,
                 event_read_timeout=OPENCODE_SERVE_EVENT_READ_TIMEOUT,
             )
-            self._event_buses[sandbox_id] = bus
+            self._event_buses[key] = bus
             logger.info(
-                "[SANDBOX-SERVE] Created PodEventBus for sandbox %s", sandbox_id
+                "[SANDBOX-SERVE] Created PodEventBus for sandbox %s dir=%s",
+                sandbox_id,
+                directory,
             )
             return bus
 
-    def _build_serve_client(self, sandbox_id: UUID) -> OpencodeServeClient:
+    def _build_serve_client(
+        self, sandbox_id: UUID, directory: str
+    ) -> OpencodeServeClient:
         password = self._read_opencode_password(sandbox_id)
-        bus = self._get_or_create_event_bus(sandbox_id)
+        bus = self._get_or_create_event_bus(sandbox_id, directory)
         return OpencodeServeClient(
             base_url=self._serve_base_url(sandbox_id),
             password=password,
@@ -2353,7 +2370,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             sandbox_id,
             session_path,
         )
-        with self._build_serve_client(sandbox_id) as client:
+        with self._build_serve_client(sandbox_id, session_path) as client:
             return client.ensure_session(
                 None,
                 directory=session_path,
@@ -2368,18 +2385,24 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             return []
         # Don't create a bus just to list — that spins up a reader thread
-        # for a caller that didn't ask for events.
+        # for a caller that didn't ask for events. Walk all per-directory
+        # buses for this sandbox; the parent session lives in exactly one.
         with self._event_buses_lock:
-            bus = self._event_buses.get(sandbox_id)
-        if bus is None:
-            return []
-        return bus.list_children(parent_opencode_session_id)
+            buses = [
+                b for (sid, _), b in self._event_buses.items() if sid == sandbox_id
+            ]
+        for bus in buses:
+            children = bus.list_children(parent_opencode_session_id)
+            if children:
+                return children
+        return []
 
     def subscribe_to_opencode_session(
         self,
         sandbox_id: UUID,
         opencode_session_id: str,
         *,
+        directory: str,
         keepalive_seconds: float = 15.0,
     ) -> Generator[ACPEvent, None, None]:
         """Stream translated ACP events for an opencode session (parent
@@ -2395,7 +2418,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             translate_opencode_event,
         )
 
-        bus = self._get_or_create_event_bus(sandbox_id)
+        bus = self._get_or_create_event_bus(sandbox_id, directory)
         state = _TurnState(session_id=opencode_session_id)
         sub = bus.subscribe(opencode_session_id)
         try:
@@ -2442,7 +2465,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         """
         packet_logger = get_packet_logger()
         session_path = f"/workspace/sessions/{session_id}"
-        client = self._build_serve_client(sandbox_id)
+        client = self._build_serve_client(sandbox_id, session_path)
         try:
             logger.info(
                 "[SESSION-LIFECYCLE] _send_message_via_serve: build_session=%s "

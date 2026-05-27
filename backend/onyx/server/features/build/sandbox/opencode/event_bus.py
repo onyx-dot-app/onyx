@@ -53,11 +53,17 @@ class PodEventBus:
         base_url: str,
         auth: httpx.Auth | None,
         *,
+        directory: str | None = None,
         connect_timeout: float = 10.0,
         event_read_timeout: float | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._auth = auth
+        # Opencode-serve's Instance.provide middleware scopes /event per
+        # ?directory= query param. Without it, the SSE stream only sees the
+        # default Instance (server.connected, server.heartbeat) — session
+        # events are routed to the per-directory Instance.
+        self._directory = directory
         self._connect_timeout = connect_timeout
         # Per-read inactivity timeout for the SSE /event stream. ``None`` means
         # block indefinitely between server frames (legacy behavior); a float
@@ -217,10 +223,12 @@ class PodEventBus:
             write=10.0,
             pool=10.0,
         )
+        params = {"directory": self._directory} if self._directory else None
         with httpx.stream(
             "GET",
             f"{self._base_url}/event",
             auth=self._auth,
+            params=params,
             timeout=timeout,
         ) as response:
             response.raise_for_status()
