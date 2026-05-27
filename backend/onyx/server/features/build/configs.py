@@ -241,14 +241,11 @@ AGENT_TRANSPORT = AgentTransport(
 # Match against the EXPOSE directive in the sandbox Dockerfile.
 OPENCODE_SERVE_PORT = int(os.environ.get("OPENCODE_SERVE_PORT", "4096"))
 
-# Name of the env var inside the sandbox container that holds the
-# per-pod HTTP Basic Auth password for opencode serve. The sandbox manager
-# is responsible for generating + provisioning the per-pod K8s Secret
-# (see docs/craft/opencode-serve-migration.md §Pod / image changes) and
-# mounting it under this name in the sandbox container's env.
-OPENCODE_SERVER_PASSWORD_ENV = os.environ.get(
-    "OPENCODE_SERVER_PASSWORD_ENV", "OPENCODE_SERVER_PASSWORD"
-)
+# Env var inside the sandbox container that holds the per-pod HTTP Basic
+# password for opencode serve. Internal contract — the api_server writes
+# this name and opencode-serve reads it, so both ends must agree. Not
+# operator-tunable.
+OPENCODE_SERVER_PASSWORD = "OPENCODE_SERVER_PASSWORD"
 
 # Username for HTTP Basic Auth against opencode serve. Opencode's serve
 # implementation hard-codes the username to "opencode" when only

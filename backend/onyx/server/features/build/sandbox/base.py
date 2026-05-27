@@ -14,7 +14,6 @@ Architecture Note (User-Shared Sandbox Model):
 - terminate() destroys the entire sandbox (all sessions)
 """
 
-import contextlib
 import threading
 import time
 from abc import ABC
@@ -22,10 +21,11 @@ from abc import abstractmethod
 from collections.abc import Callable
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
+from onyx.server.features.build.configs import AGENT_TRANSPORT
+from onyx.server.features.build.configs import AgentTransport
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.models import FatalWriteError
@@ -37,6 +37,7 @@ from onyx.server.features.build.sandbox.models import PushResult
 from onyx.server.features.build.sandbox.models import RetriableWriteError
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -57,21 +58,7 @@ BUN_IMAGE_CACHE_DIR = "/home/sandbox/.bun/install/cache"
 ACPEvent = Any
 
 
-@dataclass
-class SSEKeepalive:
-    """Marker event yielded by sandbox-manager ACP clients when no real ACP
-    events have arrived for ``SSE_KEEPALIVE_INTERVAL`` seconds.
-
-    Defined here (rather than in any one backend's exec client) so every
-    backend yields the same class and ``isinstance`` checks in the
-    session-manager SSE pipeline work uniformly. Otherwise a Docker-emitted
-    keepalive would be a different class than a K8s-emitted keepalive and
-    one would fall through the manager's isinstance chain as "unrecognized"
-    and be silently dropped.
-    """
-
-
-class SandboxManager(ABC):
+class SandboxManager(_ServeMixin, ABC):
     """Abstract interface for sandbox operations.
 
     Defines the contract for sandbox lifecycle management including:
@@ -96,6 +83,10 @@ class SandboxManager(ABC):
             │   └── attachments/
             └── $session_id_2/
                 └── ...
+
+    Serve-transport plumbing lives in :class:`_ServeMixin` (composed via
+    MRO); subclasses implement :meth:`_load_serve_connection_info` plus
+    the abstract methods below.
 
     IMPORTANT: Implementations must NOT interface with the database directly.
     All database operations should be handled by the caller.
@@ -145,13 +136,12 @@ class SandboxManager(ABC):
 
     @abstractmethod
     def terminate(self, sandbox_id: UUID) -> None:
-        """Terminate a sandbox and clean up all resources.
+        """Terminate a sandbox and clean up all resources. Destroys every
+        session workspace; for one session use ``cleanup_session_workspace``.
 
-        Destroys the entire sandbox including all session workspaces.
-        Use cleanup_session_workspace() to remove individual sessions.
-
-        Args:
-            sandbox_id: The sandbox ID to terminate
+        Implementations MUST call ``self._close_all_sandbox_buses(sandbox_id)``
+        before destroying the backend so late subscribes can't race a fresh
+        bus in.
         """
         ...
 
@@ -199,17 +189,13 @@ class SandboxManager(ABC):
         session_id: UUID,
         nextjs_port: int | None = None,
     ) -> None:
-        """Clean up a session workspace (on session delete).
+        """Clean up a session workspace on session delete: stop the
+        Next.js dev server and remove ``sessions/$session_id/``. Does NOT
+        terminate the sandbox.
 
-        1. Stop the Next.js dev server if running on nextjs_port
-        2. Remove the session directory: sessions/$session_id/
-
-        Does NOT terminate the sandbox - other sessions may still be using it.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID to clean up
-            nextjs_port: Optional port where Next.js server is running
+        Implementations MUST call ``self._close_session_buses(sandbox_id,
+        session_id)`` — otherwise the per-session ``PodEventBus`` (reader
+        thread + httpx connection) leaks until api_server restarts.
         """
         ...
 
@@ -324,7 +310,6 @@ class SandboxManager(ABC):
         """
         ...
 
-    @abstractmethod
     def send_message(
         self,
         sandbox_id: UUID,
@@ -336,111 +321,44 @@ class SandboxManager(ABC):
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
     ) -> Generator[ACPEvent, None, None]:
-        """Stream typed ACP events for one user message.
+        """Stream typed ACP events for one user message. Dispatches on
+        ``AGENT_TRANSPORT`` — ``serve`` to ``_send_message_via_serve``,
+        ``acp`` (rollback) to ``_send_message_via_acp``.
 
-        Serve-only kwargs (ignored by ACP transport):
+        Serve-only kwargs (ignored by ACP):
 
-        - ``opencode_session_id``: persistent opencode-serve session id.
-          Callers should pass ``BuildSession.opencode_session_id``; if
-          ``None`` the transport calls :meth:`ensure_opencode_session`.
-        - ``agent_provider`` / ``agent_model``: per-prompt model
-          override (``body["model"]``). Both must be set; either
-          ``None`` falls back to opencode's loaded default.
-        - ``on_opencode_session_resolved``: invoked synchronously, before
-          the first event is yielded, with the resolved opencode session
-          id whenever it differs from the caller-supplied
-          ``opencode_session_id`` (i.e. the persisted id 404'd and the
-          transport had to mint a new one, or the caller passed ``None``).
-          Callers persist the new id so subsequent turns don't 404 the
-          same stale id and orphan a fresh opencode session per turn.
+        - ``opencode_session_id``: persistent serve session id; pass
+          ``BuildSession.opencode_session_id`` or ``None`` to mint.
+        - ``agent_provider`` / ``agent_model``: per-prompt model override;
+          either ``None`` falls back to the loaded default.
+        - ``on_opencode_session_resolved``: invoked with the resolved id
+          when it differs from the caller's. Caller persists it so later
+          turns don't orphan a fresh session each time.
         """
+        if AGENT_TRANSPORT == AgentTransport.SERVE:
+            yield from self._send_message_via_serve(
+                sandbox_id,
+                session_id,
+                message,
+                opencode_session_id,
+                agent_provider,
+                agent_model,
+                on_opencode_session_resolved=on_opencode_session_resolved,
+            )
+            return
+        yield from self._send_message_via_acp(sandbox_id, session_id, message)
+
+    @abstractmethod
+    def _send_message_via_acp(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        message: str,
+    ) -> Generator[ACPEvent, None, None]:
+        """Rollback transport: exec ``opencode acp`` per message. Only
+        reached under ``AGENT_TRANSPORT=acp``; dropped once the rollback
+        window closes."""
         ...
-
-    @contextlib.contextmanager
-    def prompt_slot(
-        self,
-        sandbox_id: UUID,  # noqa: ARG002 — used by serve-transport subclasses
-        build_session_id: UUID,  # noqa: ARG002
-    ) -> Generator[bool, None, None]:
-        """Non-blocking try-acquire of a per-(sandbox, build_session) lock
-        that serializes concurrent ``send_message`` calls on a build session.
-
-        Yields ``True`` if the slot was acquired and the caller may proceed
-        with the turn (lock is released on context exit), or ``False`` if a
-        turn is already in flight on this build session and the caller
-        should abort without side effects (no user_message persistence, no
-        prompt POST).
-
-        Why this exists: opencode-serve's ``prompt_async`` is fire-and-
-        forget and not concurrent-safe — empirically, a second POST while
-        a turn is in flight is silently dropped (no 409, no queue), and
-        the second subscriber catches the *first* turn's terminator. Without
-        serialization at this layer the user sees an empty response and a
-        phantom user_message is persisted with no assistant reply.
-
-        Keying on ``build_session_id`` (rather than ``opencode_session_id``)
-        is deliberate:
-          1. It's stable across opencode session id rotations triggered by
-             the ``on_opencode_session_resolved`` callback — concurrent
-             requests landing in the middle of a 404-then-mint sequence
-             still contend on the same lock.
-          2. It blocks first-turn races: two simultaneous prompts on a
-             fresh build session (where ``opencode_session_id`` is NULL
-             for both) both contend before each calls POST /session, so
-             only one opencode session is ever created.
-          3. It bounds the lock dict size to one entry per build session
-             instead of one per (build_session × pod_restart_count).
-
-        Default implementation is a no-op (yields ``True``) for transports
-        that don't multiplex a long-lived process (e.g. ACP, which exec's a
-        fresh opencode per turn).
-        """
-        yield True
-
-    def ensure_opencode_session(
-        self,
-        sandbox_id: UUID,  # noqa: ARG002 — used by serve-transport subclasses
-        session_id: UUID,  # noqa: ARG002
-    ) -> str | None:
-        """Return a stable opencode-serve session id for this build session.
-
-        Used only when ``AGENT_TRANSPORT=serve``. The caller (session
-        manager) persists the returned id on the ``BuildSession`` row so
-        subsequent ``send_message`` calls can hit the same opencode
-        session by id, eliminating the on-disk session/list heuristic
-        the ACP path uses.
-
-        Default implementation returns ``None`` — applies to the ACP
-        transport, which has no notion of a persistent session id and
-        doesn't need this preflight.
-
-        Implementations on the serve path MUST be idempotent: calling
-        twice for the same (sandbox, session) returns the same id.
-        """
-        return None
-
-    def list_subagents(
-        self,
-        sandbox_id: UUID,  # noqa: ARG002 — used by serve-transport subclasses
-        parent_opencode_session_id: str,  # noqa: ARG002
-    ) -> list[str]:
-        """Child opencode session ids spawned under the parent. Empty
-        on transports that don't track subagents (e.g. docker/ACP)."""
-        return []
-
-    def subscribe_to_opencode_session(
-        self,
-        sandbox_id: UUID,  # noqa: ARG002
-        opencode_session_id: str,  # noqa: ARG002
-        *,
-        directory: str,  # noqa: ARG002
-        keepalive_seconds: float = 15.0,  # noqa: ARG002
-    ) -> Generator["ACPEvent", None, None]:
-        """Stream events for an arbitrary opencode session without
-        sending a prompt. Yields keepalives while idle. Empty on
-        transports without a shared event bus."""
-        return
-        yield  # pragma: no cover — make this a generator
 
     @abstractmethod
     def list_directory(

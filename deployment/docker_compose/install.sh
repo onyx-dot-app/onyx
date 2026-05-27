@@ -219,11 +219,14 @@ detect_compose_cmd || true
 # in the "docker" group. Group membership doesn't apply to the current shell,
 # so when we add the user to the group mid-script we instead prefix subsequent
 # docker commands with sudo to finish this run. Future runs (after the user
-# logs out and back in) won't need it. DOCKER_SUDO is an array so that it
-# expands to no argument at all (rather than an empty string) when unset.
-DOCKER_SUDO=()
+# logs out and back in) won't need it.
+#
+# Trailing ``env`` anchors the splat with a literal command so bash 3.2's
+# single-pass parser doesn't misclassify the inline ``VAR=val`` prefixes, and
+# so sudo's ``env_reset`` can't strip them (they're positional args to ``env``).
+DOCKER_SUDO=(env)
 refresh_docker_sudo() {
-    DOCKER_SUDO=()
+    DOCKER_SUDO=(env)
     if ! command -v docker &> /dev/null; then
         return
     fi
@@ -234,10 +237,17 @@ refresh_docker_sudo() {
         return
     fi
     if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
-        DOCKER_SUDO=(sudo)
+        DOCKER_SUDO=(sudo env)
     fi
 }
 refresh_docker_sudo
+
+# 0 iff DOCKER_SUDO runs commands under sudo. Wrapped so callers don't
+# open-code the [0]-element check (the ``env``-anchor workaround above
+# precludes the cleaner `${#DOCKER_SUDO[@]} > 0` form).
+is_using_sudo() {
+    [[ "${DOCKER_SUDO[0]}" == "sudo" ]]
+}
 
 # Ensures a required file is present. With --local, verifies the file exists on
 # disk. Otherwise, downloads it from the given URL. Returns 0 on success, 1 on
@@ -573,7 +583,7 @@ fi
 # group membership in that case. The downstream daemon check will exit with
 # a clearer message if the daemon really is down.
 refresh_docker_sudo
-if (( ${#DOCKER_SUDO[@]} > 0 )); then
+if is_using_sudo; then
     if ! id -nG "$USER" | grep -qw docker; then
         if ! getent group docker &> /dev/null; then
             sudo groupadd docker
@@ -960,8 +970,8 @@ if [ -f "$ENV_FILE" ]; then
             # --include-craft requires the craft-tagged backend image (Node.js
             # + opencode CLI are only built into that image), so the tag is
             # forced rather than prompted for.
-            VERSION="craft-latest"
-            print_info "Update selected. Using craft-latest (required by --include-craft)."
+            VERSION="craft-edge"
+            print_info "Update selected. Using craft-edge (required by --include-craft)."
         else
             print_info "Update selected. Which tag would you like to deploy?"
             echo ""
@@ -1008,8 +1018,8 @@ else
     # Ask for version (skipped when --include-craft forces the craft-tagged
     # backend image, which is the only image that ships Node.js + opencode CLI).
     if [ "$INCLUDE_CRAFT" = true ]; then
-        VERSION="craft-latest"
-        print_info "Using craft-latest (required by --include-craft)."
+        VERSION="craft-edge"
+        print_info "Using craft-edge (required by --include-craft)."
     else
         print_info "Which tag would you like to deploy?"
         echo ""
@@ -1102,18 +1112,6 @@ else
         fi
         print_success "Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=docker)"
 
-        # Pre-create the dedicated sandbox bridge. docker-compose references
-        # it as external=true so it must exist before `compose up`.
-        SANDBOX_NET="${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}"
-        if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
-            if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network create "$SANDBOX_NET" >/dev/null 2>&1; then
-                print_success "Created sandbox bridge network: $SANDBOX_NET"
-            else
-                print_warning "Could not create sandbox network $SANDBOX_NET — create it manually:"
-                echo "    docker network create $SANDBOX_NET"
-            fi
-        fi
-
         # Trust boundary warning. api_server + background mount the host
         # Docker socket so they can drive sandbox containers. Anything that
         # can talk to that socket is effectively root on the host.
@@ -1137,6 +1135,19 @@ else
     echo "  • Domain settings (for production)"
     echo "  • Onyx Craft (set ENABLE_CRAFT=true)"
     echo ""
+fi
+
+# Pre-create the sandbox bridge — compose overlay references it as external.
+if [ "$INCLUDE_CRAFT" = true ]; then
+    SANDBOX_NET="${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}"
+    if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
+        if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network create "$SANDBOX_NET" >/dev/null 2>&1; then
+            print_success "Created sandbox bridge network: $SANDBOX_NET"
+        else
+            print_warning "Could not create sandbox network $SANDBOX_NET — create it manually:"
+            echo "    docker network create $SANDBOX_NET"
+        fi
+    fi
 fi
 
 # Function to check if a port is available
@@ -1307,7 +1318,7 @@ if [ $UP_EXIT -ne 0 ]; then
     (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps)
     echo ""
     print_info "Check the logs of any unhealthy service:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && ${DOCKER_SUDO[*]:+sudo }$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $(is_using_sudo && echo "sudo ")$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
     exit 1
@@ -1325,7 +1336,7 @@ else
     echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers started  ⚠️${NC}"
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     print_info "Services may still be initializing. Check status with:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && ${DOCKER_SUDO[*]:+sudo }$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} ps)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $(is_using_sudo && echo "sudo ")$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} ps)"
 fi
 echo ""
 print_info "Access Onyx at:"

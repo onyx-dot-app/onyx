@@ -1,39 +1,25 @@
-# Onyx Craft Docker-sandbox overlay.
-#
-# Layer this on top of ``docker-compose.yml`` to enable Craft's Docker
-# sandbox backend. ``install.sh --include-craft`` adds this overlay to
-# the compose CLI args automatically; non-Craft deployments never include
-# it and never inherit the host Docker socket mount.
-#
-# Usage::
-#
-#   docker compose \
-#     -f docker-compose.yml \
-#     -f docker-compose.craft.yml \
-#     up -d --wait
+# Onyx Craft Docker-sandbox overlay. Layer on top of docker-compose.yml.
+# install.sh --include-craft wires this in automatically.
 #
 # Trust boundary: api_server and background bind-mount /var/run/docker.sock
-# (root-equivalent on the host). Only run this overlay on hosts you fully
-# control.
+# (root-equivalent on host). Only run on hosts you fully control.
 services:
   api_server:
     environment:
-      # Backend selection (must be ``docker`` for the Docker sandbox path).
       - SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}
-      # Public Onyx URL the sandbox reaches over HTTPS via onyx-cli.
-      # Internal compose hostnames don't resolve from the sandbox bridge.
+      # Public Onyx URL — internal compose hostnames don't resolve from
+      # the sandbox bridge.
       - SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-}
       - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:v0.1.44}
       - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
       - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
       - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
+      - AGENT_TRANSPORT=${AGENT_TRANSPORT:-serve}
+      - ENABLE_OPENCODE_DEBUGGING=${ENABLE_OPENCODE_DEBUGGING:-false}
     volumes:
-      # api_server drives sandbox container lifecycle (provision / exec /
-      # terminate) directly via the Docker Engine API.
       - ${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
     networks:
-      # Join the sandbox bridge so api_server can proxy the Next.js preview
-      # iframe. Sandboxes themselves never join compose's default network.
+      # Bridge join lets api_server proxy the Next.js preview iframe.
       - default
       - onyx_craft_sandbox
 
@@ -47,6 +33,8 @@ services:
       - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
       - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
       - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
+      - AGENT_TRANSPORT=${AGENT_TRANSPORT:-serve}
+      - ENABLE_OPENCODE_DEBUGGING=${ENABLE_OPENCODE_DEBUGGING:-false}
     volumes:
       - ${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
     networks:
@@ -54,9 +42,7 @@ services:
       - onyx_craft_sandbox
 
 networks:
-  # Pre-created by install.sh --include-craft (or manually via
-  # ``docker network create onyx_craft_sandbox``) so this overlay can
-  # attach to it without the main compose file having to declare it.
+  # Pre-created by install.sh --include-craft.
   onyx_craft_sandbox:
     name: onyx_craft_sandbox
     external: true
