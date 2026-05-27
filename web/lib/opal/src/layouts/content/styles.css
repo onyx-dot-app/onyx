@@ -245,11 +245,11 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md {
-  @apply flex flex-col items-start;
+  @apply flex min-w-0 flex-col items-start;
 }
 
 .opal-content-md-header {
-  @apply flex flex-row items-center w-full;
+  @apply flex min-w-0 flex-row items-center w-full;
   gap: 0.125rem;
 }
 
@@ -275,7 +275,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md-title-row {
-  @apply flex items-center w-full;
+  @apply flex min-w-0 items-center w-full;
   gap: 0.25rem;
 }
 
@@ -327,7 +327,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md-description {
-  @apply text-left w-full;
+  @apply min-w-0 text-left w-full;
 }
 
 /* ===========================================================================

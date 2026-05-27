@@ -24,7 +24,10 @@ export default function TableCell({
       {...props}
     >
       <div
-        className={cn("tbl-cell-inner", "flex items-center overflow-hidden")}
+        className={cn(
+          "tbl-cell-inner",
+          "flex min-w-0 w-full items-center overflow-hidden"
+        )}
         data-size={resolvedSize}
       >
         {children}

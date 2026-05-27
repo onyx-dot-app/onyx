@@ -87,7 +87,7 @@ export default function TableHead({
       data-size={resolvedSize}
       data-bottom-border={bottomBorder || undefined}
     >
-      <div className="flex items-center gap-1">
+      <div className="flex min-w-0 items-center gap-1">
         <div className="table-head-label">
           <Text
             font={isSmall ? "secondary-action" : "main-ui-action"}

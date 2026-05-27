@@ -5,7 +5,7 @@ import { Table, createTableColumns } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import Text from "@/refresh-components/texts/Text";
+import Truncated from "@/refresh-components/texts/Truncated";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -72,18 +72,18 @@ function buildColumns(onMutate: () => void) {
       header: "Name",
       weight: 25,
       cell: (value) => (
-        <Text as="span" mainUiBody text05>
+        <Truncated mainUiBody text05>
           {value}
-        </Text>
+        </Truncated>
       ),
     }),
     tc.column("description", {
       header: "Description",
       weight: 35,
       cell: (value) => (
-        <Text as="span" mainUiBody text03>
+        <Truncated mainUiBody text03>
           {value || "—"}
-        </Text>
+        </Truncated>
       ),
     }),
     tc.column("owner", {

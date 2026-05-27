@@ -24,6 +24,18 @@
   @apply h-6 px-0.5;
 }
 
+.tbl-cell-inner > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.tbl-cell-inner > :where(p, span) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- TableHead ---- */
 
 .table-head {
@@ -45,6 +57,10 @@
 }
 .table-head[data-size="md"] .table-head-label {
   @apply py-1;
+}
+
+.table-head-label {
+  @apply min-w-0 flex-1 overflow-hidden;
 }
 
 /* Sort button wrapper */
