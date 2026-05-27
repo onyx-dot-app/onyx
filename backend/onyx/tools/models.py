@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from enum import Enum
 from typing import Any
+from typing import Callable
 from typing import Literal
 from uuid import UUID
 
@@ -22,6 +23,11 @@ from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
+
+# Sidecar attribute names for the lazy-content materialization shim on
+# ``ChatFile``. Mirrors the same pattern used by ``InMemoryChatFile``.
+_CHATFILE_LAZY_LOADER_ATTR = "_lazy_content_loader"
+_CHATFILE_LAZY_DONE_ATTR = "_lazy_content_materialized"
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
 TOOL_CALL_MSG_ARGUMENTS = "arguments"
@@ -196,6 +202,35 @@ class ChatFile(BaseModel):
     content: bytes
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @classmethod
+    def lazy_from_filename(
+        cls,
+        *,
+        filename: str,
+        loader: Callable[[], bytes],
+    ) -> "ChatFile":
+        """Construct a ChatFile whose ``content`` is loaded on first access.
+
+        Existing eager construction (``ChatFile(filename=..., content=...)``)
+        is unchanged. PythonTool's ``.content`` access transparently triggers
+        the loader and memoizes the result.
+        """
+        inst = cls(filename=filename, content=b"")
+        object.__setattr__(inst, _CHATFILE_LAZY_LOADER_ATTR, loader)
+        object.__setattr__(inst, _CHATFILE_LAZY_DONE_ATTR, False)
+        return inst
+
+    def __getattribute__(self, name: str):  # type: ignore[no-untyped-def]
+        if name == "content":
+            d = object.__getattribute__(self, "__dict__")
+            if d.get(_CHATFILE_LAZY_LOADER_ATTR) is not None and not d.get(
+                _CHATFILE_LAZY_DONE_ATTR, False
+            ):
+                data = d[_CHATFILE_LAZY_LOADER_ATTR]()
+                BaseModel.__setattr__(self, "content", data)
+                object.__setattr__(self, _CHATFILE_LAZY_DONE_ATTR, True)
+        return object.__getattribute__(self, name)
 
 
 class PythonToolRichResponse(BaseModel):

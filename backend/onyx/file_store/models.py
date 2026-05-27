@@ -1,9 +1,16 @@
 import base64
 from enum import Enum
+from typing import Callable
 from typing import NotRequired
 
 from pydantic import BaseModel
 from typing_extensions import TypedDict  # noreorder
+
+# Sidecar attribute names used by the lazy-content materialization shim. They
+# live on the instance via object.__setattr__ rather than as Pydantic fields,
+# so they don't affect serialization, validation, or model_dump output.
+_LAZY_LOADER_ATTR = "_lazy_content_loader"
+_LAZY_DONE_ATTR = "_lazy_content_materialized"
 
 
 class ChatFileType(str, Enum):
@@ -44,6 +51,46 @@ class InMemoryChatFile(BaseModel):
     content: bytes
     file_type: ChatFileType
     filename: str | None = None
+
+    @classmethod
+    def lazy_from_descriptor(
+        cls,
+        *,
+        file_id: str,
+        file_type: "ChatFileType",
+        filename: str | None,
+        loader: Callable[[], bytes],
+    ) -> "InMemoryChatFile":
+        """Construct an instance whose ``content`` bytes are loaded only on
+        first access.
+
+        Eager construction (``InMemoryChatFile(file_id=..., content=...)``) is
+        unchanged. Lazy instances start with ``content=b""`` and a stashed
+        loader; the first read of ``.content`` invokes the loader and memoizes
+        the result.
+        """
+        inst = cls(
+            file_id=file_id,
+            content=b"",
+            file_type=file_type,
+            filename=filename,
+        )
+        object.__setattr__(inst, _LAZY_LOADER_ATTR, loader)
+        object.__setattr__(inst, _LAZY_DONE_ATTR, False)
+        return inst
+
+    def __getattribute__(self, name: str):  # type: ignore[no-untyped-def]
+        if name == "content":
+            d = object.__getattribute__(self, "__dict__")
+            if d.get(_LAZY_LOADER_ATTR) is not None and not d.get(
+                _LAZY_DONE_ATTR, False
+            ):
+                # Materialize, write back through Pydantic so further reads
+                # are zero-overhead, then mark done.
+                data = d[_LAZY_LOADER_ATTR]()
+                BaseModel.__setattr__(self, "content", data)
+                object.__setattr__(self, _LAZY_DONE_ATTR, True)
+        return object.__getattribute__(self, name)
 
     def to_base64(self) -> str:
         if self.file_type == ChatFileType.IMAGE:
