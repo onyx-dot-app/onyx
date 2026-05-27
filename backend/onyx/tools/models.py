@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import threading
 from enum import Enum
 from typing import Any
 from typing import Callable
@@ -19,17 +18,13 @@ from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.memory import UserMemoryContext
+from onyx.file_store.models import install_lazy_content_loader
+from onyx.file_store.models import maybe_materialize_lazy_content
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
-
-# Sidecar attribute names for the lazy-content materialization shim on
-# ``ChatFile``. Mirrors the same pattern used by ``InMemoryChatFile``.
-_CHATFILE_LAZY_LOADER_ATTR = "_lazy_content_loader"
-_CHATFILE_LAZY_DONE_ATTR = "_lazy_content_materialized"
-_CHATFILE_LAZY_LOCK_ATTR = "_lazy_content_lock"
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
 TOOL_CALL_MSG_ARGUMENTS = "arguments"
@@ -219,30 +214,12 @@ class ChatFile(BaseModel):
         the loader and memoizes the result.
         """
         inst = cls(filename=filename, content=b"")
-        object.__setattr__(inst, _CHATFILE_LAZY_LOADER_ATTR, loader)
-        object.__setattr__(inst, _CHATFILE_LAZY_DONE_ATTR, False)
-        object.__setattr__(inst, _CHATFILE_LAZY_LOCK_ATTR, threading.Lock())
+        install_lazy_content_loader(inst, loader)
         return inst
 
     def __getattribute__(self, name: str):  # type: ignore[no-untyped-def]
         if name == "content":
-            d = object.__getattribute__(self, "__dict__")
-            if d.get(_CHATFILE_LAZY_LOADER_ATTR) is not None and not d.get(
-                _CHATFILE_LAZY_DONE_ATTR, False
-            ):
-                # Lock the check-and-set so concurrent .content reads from
-                # tool worker threads don't both invoke the loader.
-                lock = d.get(_CHATFILE_LAZY_LOCK_ATTR)
-                if lock is not None:
-                    with lock:
-                        if not d.get(_CHATFILE_LAZY_DONE_ATTR, False):
-                            data = d[_CHATFILE_LAZY_LOADER_ATTR]()
-                            BaseModel.__setattr__(self, "content", data)
-                            object.__setattr__(self, _CHATFILE_LAZY_DONE_ATTR, True)
-                else:
-                    data = d[_CHATFILE_LAZY_LOADER_ATTR]()
-                    BaseModel.__setattr__(self, "content", data)
-                    object.__setattr__(self, _CHATFILE_LAZY_DONE_ATTR, True)
+            maybe_materialize_lazy_content(self)
         return object.__getattribute__(self, name)
 
 

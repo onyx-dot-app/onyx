@@ -15,6 +15,54 @@ _LAZY_DONE_ATTR = "_lazy_content_materialized"
 _LAZY_LOCK_ATTR = "_lazy_content_lock"
 
 
+def install_lazy_content_loader(
+    instance: BaseModel, loader: Callable[[], bytes]
+) -> None:
+    """Stash a lazy ``content`` loader + per-instance lock on a Pydantic model.
+
+    Used by ``lazy_from_*`` classmethod factories on models whose
+    ``content: bytes`` field should be populated on first read instead of at
+    construction. Pair with ``maybe_materialize_lazy_content``, which the
+    model's ``__getattribute__`` calls when ``content`` is accessed.
+
+    Sidecar attrs are written via ``object.__setattr__`` so they live on the
+    instance ``__dict__`` without becoming Pydantic fields — serialization
+    (``model_dump``) and equality are unaffected.
+    """
+    object.__setattr__(instance, _LAZY_LOADER_ATTR, loader)
+    object.__setattr__(instance, _LAZY_DONE_ATTR, False)
+    object.__setattr__(instance, _LAZY_LOCK_ATTR, threading.Lock())
+
+
+def maybe_materialize_lazy_content(instance: BaseModel) -> None:
+    """If a lazy loader is stashed and bytes haven't been read yet, invoke
+    the loader under a per-instance lock and write the bytes back through
+    Pydantic so subsequent reads of ``.content`` are zero-overhead field
+    accesses.
+
+    Two threads racing on first access must not both call the loader (that
+    would double-GET from S3), hence the per-instance ``threading.Lock``
+    with a double-checked guard inside the critical section.
+    """
+    d = object.__getattribute__(instance, "__dict__")
+    if d.get(_LAZY_LOADER_ATTR) is None or d.get(_LAZY_DONE_ATTR, False):
+        return
+    lock = d.get(_LAZY_LOCK_ATTR)
+    if lock is not None:
+        with lock:
+            if not d.get(_LAZY_DONE_ATTR, False):
+                data = d[_LAZY_LOADER_ATTR]()
+                BaseModel.__setattr__(instance, "content", data)
+                object.__setattr__(instance, _LAZY_DONE_ATTR, True)
+    else:
+        # Defensive: install_lazy_content_loader always provides a lock,
+        # but if a future caller wires up a loader without one, still
+        # memoize correctly.
+        data = d[_LAZY_LOADER_ATTR]()
+        BaseModel.__setattr__(instance, "content", data)
+        object.__setattr__(instance, _LAZY_DONE_ATTR, True)
+
+
 class ChatFileType(str, Enum):
     # Image types only contain the binary data
     IMAGE = "image"
@@ -77,34 +125,12 @@ class InMemoryChatFile(BaseModel):
             file_type=file_type,
             filename=filename,
         )
-        object.__setattr__(inst, _LAZY_LOADER_ATTR, loader)
-        object.__setattr__(inst, _LAZY_DONE_ATTR, False)
-        object.__setattr__(inst, _LAZY_LOCK_ATTR, threading.Lock())
+        install_lazy_content_loader(inst, loader)
         return inst
 
     def __getattribute__(self, name: str):  # type: ignore[no-untyped-def]
         if name == "content":
-            d = object.__getattribute__(self, "__dict__")
-            if d.get(_LAZY_LOADER_ATTR) is not None and not d.get(
-                _LAZY_DONE_ATTR, False
-            ):
-                # Lock the check-and-set so two threads racing on the first
-                # access don't both call the loader and double-GET from S3.
-                # ChatFile lives on PythonToolOverrideKwargs which can be
-                # accessed by worker threads, so this matters in practice.
-                lock = d.get(_LAZY_LOCK_ATTR)
-                if lock is not None:
-                    with lock:
-                        if not d.get(_LAZY_DONE_ATTR, False):
-                            data = d[_LAZY_LOADER_ATTR]()
-                            BaseModel.__setattr__(self, "content", data)
-                            object.__setattr__(self, _LAZY_DONE_ATTR, True)
-                else:
-                    # No lock present (shouldn't happen via lazy_from_*),
-                    # fall back to the un-locked path.
-                    data = d[_LAZY_LOADER_ATTR]()
-                    BaseModel.__setattr__(self, "content", data)
-                    object.__setattr__(self, _LAZY_DONE_ATTR, True)
+            maybe_materialize_lazy_content(self)
         return object.__getattribute__(self, name)
 
     def to_base64(self) -> str:

@@ -117,11 +117,7 @@ class ChatLoadedFile(InMemoryChatFile):
         only on first access. ``content_text`` and ``token_count`` are passed
         eagerly because they're cheap (DB lookup + cached plaintext store hit).
         """
-        import threading
-
-        from onyx.file_store.models import _LAZY_DONE_ATTR
-        from onyx.file_store.models import _LAZY_LOADER_ATTR
-        from onyx.file_store.models import _LAZY_LOCK_ATTR
+        from onyx.file_store.models import install_lazy_content_loader
 
         inst = cls(
             file_id=file_id,
@@ -131,9 +127,7 @@ class ChatLoadedFile(InMemoryChatFile):
             content_text=content_text,
             token_count=token_count,
         )
-        object.__setattr__(inst, _LAZY_LOADER_ATTR, loader)
-        object.__setattr__(inst, _LAZY_DONE_ATTR, False)
-        object.__setattr__(inst, _LAZY_LOCK_ATTR, threading.Lock())
+        install_lazy_content_loader(inst, loader)
         return inst
 
 
