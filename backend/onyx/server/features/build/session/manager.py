@@ -9,8 +9,10 @@ import hashlib
 import io
 import json
 import mimetypes
+import queue as queue_lib
 import re
 import tempfile
+import threading
 import time
 import uuid
 import zipfile
@@ -33,6 +35,7 @@ from acp.schema import ToolCallProgress
 from acp.schema import ToolCallStart
 from sqlalchemy.orm import Session as DBSession
 
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
@@ -50,10 +53,12 @@ from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import SystemMessage
 from onyx.llm.models import UserMessage
 from onyx.llm.utils import llm_response_to_string
+from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.api.models import DirectoryListing
 from onyx.server.features.build.api.models import FileSystemEntry
 from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.api.packet_logger import log_separator
+from onyx.server.features.build.api.packets import ApprovalRequestedPacket
 from onyx.server.features.build.api.packets import BuildPacket
 from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
@@ -1360,6 +1365,73 @@ class SessionManager:
         """Format a BuildPacket as SSE."""
         return f"event: message\ndata: {packet.model_dump_json(by_alias=True)}\n\n"
 
+    @staticmethod
+    def _merge_acp_with_announces(
+        acp_iter: Generator[Any, None, None],
+        session_id: UUID,
+        tenant_id: str,
+    ) -> Generator[Any, None, None]:
+        """Merge ACP events and approval announces into one stream.
+
+        Two producer threads feed a shared queue: the ACP iterator, and a
+        BLPOP poller that emits `ApprovalRequestedPacket` when the proxy
+        signals a new approval. Announce latency is bounded by the 1s BLPOP.
+        """
+        output: queue_lib.Queue[Any] = queue_lib.Queue()
+        stop = threading.Event()
+        done_sentinel = object()
+
+        def drive_acp() -> None:
+            try:
+                for evt in acp_iter:
+                    output.put(evt)
+            except Exception as e:
+                output.put(e)
+            finally:
+                output.put(done_sentinel)
+
+        def drive_announces() -> None:
+            cache = get_cache_backend(tenant_id=tenant_id)
+            while not stop.is_set():
+                try:
+                    approval_id = approval_cache.pop_announcement(
+                        session_id, timeout_s=1, cache=cache
+                    )
+                except Exception:
+                    logger.exception(
+                        "approval.announce_poll_failed session_id=%s", session_id
+                    )
+                    time.sleep(1)
+                    continue
+                if approval_id is None:
+                    continue
+                output.put(
+                    ApprovalRequestedPacket(
+                        approval_id=approval_id, session_id=session_id
+                    )
+                )
+
+        acp_thread = threading.Thread(
+            target=drive_acp, name=f"acp-pump-{session_id}", daemon=True
+        )
+        announce_thread = threading.Thread(
+            target=drive_announces,
+            name=f"announce-pump-{session_id}",
+            daemon=True,
+        )
+        acp_thread.start()
+        announce_thread.start()
+        try:
+            while True:
+                item = output.get()
+                if item is done_sentinel:
+                    return
+                if isinstance(item, Exception):
+                    raise item
+                yield item
+        finally:
+            stop.set()
+
     def _save_pending_chunks(
         self,
         session_id: UUID,
@@ -1825,12 +1897,24 @@ class SessionManager:
                 },
             )
 
-            # Drive the agent. `_yield_acp_events` is a pure ACP generator;
-            # `_persist_acp_event` applies the persistence side effects. The
-            # SSE formatting + packet-logger book-keeping happen here.
-            for acp_event in self._yield_acp_events(
-                sandbox_id, session_id, user_message_content
-            ):
+            # Drive the agent. ACP events are merged with proxy approval
+            # announces onto one SSE stream. `_persist_acp_event` applies
+            # persistence; SSE formatting + packet-logger book-keeping happen here.
+            merged_events = self._merge_acp_with_announces(
+                self._yield_acp_events(sandbox_id, session_id, user_message_content),
+                session_id=session_id,
+                tenant_id=get_current_tenant_id(),
+            )
+            for acp_event in merged_events:
+                if isinstance(acp_event, ApprovalRequestedPacket):
+                    packet_logger.log(
+                        "approval_requested",
+                        acp_event.model_dump(mode="json"),
+                    )
+                    packet_logger.log_sse_emit("approval_requested", session_id)
+                    yield self._format_packet_event(acp_event)
+                    continue
+
                 # Handle SSE keepalive - send comment to keep connection alive.
                 if isinstance(acp_event, SSEKeepalive):
                     # SSE comments start with : and are ignored by EventSource

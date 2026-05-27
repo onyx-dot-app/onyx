@@ -25,7 +25,7 @@ dependencies = [
     "claude-agent-sdk>=0.1.19",
     "agent-client-protocol>=0.7.1",
     "discord-py==2.4.0",
-    "kubernetes>=31.0.0",
+    "kubernetes==31.0.0",
 ]
 
 [dependency-groups]

@@ -144,9 +144,13 @@ def build_multi_provider_opencode_config(
     default_model: str,
     disabled_tools: list[str] | None = None,
     dev_mode: bool = False,
+    plugins: list[str] | None = None,
 ) -> dict[str, Any]:
     """opencode.json with every provider pre-registered so per-prompt
     ``body["model"]`` overrides can target any of them.
+
+    ``plugins`` is an optional list of opencode plugin specs (npm names or
+    absolute file paths) loaded once per session Instance.
 
     Raises:
         ValueError: If ``providers`` is empty or ``default_provider`` is
@@ -179,4 +183,6 @@ def build_multi_provider_opencode_config(
         "enabled_providers": sorted(provider_names),
         "permission": _build_permissions(disabled_tools, dev_mode),
     }
+    if plugins:
+        config["plugin"] = list(plugins)
     return config

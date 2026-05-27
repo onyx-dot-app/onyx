@@ -32,6 +32,7 @@ from onyx.server.features.build.api.models import RateLimitResponse
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
 from onyx.server.features.build.api.user_library import router as user_library_router
+from onyx.server.features.build.approvals.api import router as approvals_router
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.scheduled_tasks.api import (
@@ -72,6 +73,7 @@ router.include_router(scheduled_tasks_router, tags=["build"])
 router.include_router(external_apps_router, tags=["build"])
 router.include_router(external_apps_oauth_router, tags=["build"])
 router.include_router(debug_router, tags=["build-debug"])
+router.include_router(approvals_router, tags=["build"])
 
 
 # -----------------------------------------------------------------------------

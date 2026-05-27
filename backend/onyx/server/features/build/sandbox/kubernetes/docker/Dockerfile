@@ -12,6 +12,9 @@ FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e16
 ARG ENABLE_SKILLS=true
 ARG OPENCODE_VERSION=1.15.7
 
+# Install system dependencies.
+# firewall-init.sh needs: iptables (egress lockdown), gosu (drop privileges
+# in compose entrypoint mode), ca-certificates (CA trust-store population).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -22,6 +25,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     gcc \
     libc6-dev \
+    iptables \
+    gosu \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
@@ -95,6 +101,14 @@ ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
 COPY --exclude=__pycache__ sandbox_daemon/ /workspace/sandbox_daemon/
 COPY entrypoint.sh /workspace/entrypoint.sh
 COPY sidecar-entrypoint.sh /workspace/sidecar-entrypoint.sh
+
+# Egress proxy bootstrap, run as the initContainer command / compose entrypoint.
+COPY firewall-init.sh /workspace/firewall-init.sh
+RUN chmod +x /workspace/firewall-init.sh
+
+# Per-session egress tagging plugin. Path must match
+# kubernetes_sandbox_manager._OPENCODE_SESSION_TAG_PLUGIN_PATH.
+COPY opencode-plugins/ /workspace/opencode-plugins/
 
 RUN chown -R sandbox:sandbox /workspace
 

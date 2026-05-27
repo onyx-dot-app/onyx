@@ -45,6 +45,7 @@ import queue
 import re
 import secrets
 import shlex
+import socket
 import tarfile
 import threading
 import time
@@ -52,6 +53,7 @@ from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterator
 from pathlib import Path
+from urllib.parse import urlparse
 from uuid import UUID
 from uuid import uuid4
 
@@ -61,7 +63,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import PublicFormat
 from kubernetes import client
-from kubernetes import config
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
 
@@ -83,6 +84,9 @@ from onyx.server.features.build.configs import SANDBOX_POD_CPU_LIMIT
 from onyx.server.features.build.configs import SANDBOX_POD_CPU_REQUEST
 from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_LIMIT
 from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_REQUEST
+from onyx.server.features.build.configs import SANDBOX_PROXY_CA_CONFIGMAP
+from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
+from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.acp.base import ACPEvent
@@ -102,6 +106,13 @@ from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models 
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     ACPExecClient,
 )
+from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT_SANDBOX
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
+from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
+from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
 from onyx.server.features.build.sandbox.models import FatalWriteError
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
@@ -162,6 +173,119 @@ RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
 
 _PUSH_PRIVATE_KEY_ENV = "ONYX_SANDBOX_PUSH_PRIVATE_KEY"
 _PUSH_PUBLIC_KEY_ENV = "ONYX_SANDBOX_PUSH_PUBLIC_KEY"
+
+_PROXY_CA_BUNDLE_DIR = "/etc/ssl/sandbox"
+_PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
+_PROXY_CA_SOURCE_DIR = "/sandbox-ca"
+_PROXY_CA_BUNDLE_VOLUME = "sandbox-ca-bundle"
+_PROXY_CA_SOURCE_VOLUME = "sandbox-ca-source"
+# Pinned to the proxy IP via pod hostAliases — the iptables lockdown
+# blocks DNS, so the sandbox can't resolve it on its own.
+_PROXY_ALIAS = "sandbox-proxy"
+
+# Per-session egress tagging plugin, baked into the sandbox image (see
+# docker/Dockerfile). Path must match the COPY destination there.
+_OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
+
+
+_PROXY_DNS_RETRY_ATTEMPTS = 5
+_PROXY_DNS_RETRY_BACKOFF_S = 0.5
+
+
+def _resolve_proxy_ip() -> str:
+    if not SANDBOX_PROXY_HOST:
+        raise RuntimeError("_resolve_proxy_ip called without SANDBOX_PROXY_HOST")
+    last_err: OSError | None = None
+    for attempt in range(_PROXY_DNS_RETRY_ATTEMPTS):
+        try:
+            return socket.gethostbyname(SANDBOX_PROXY_HOST)
+        except OSError as e:
+            last_err = e
+            if attempt < _PROXY_DNS_RETRY_ATTEMPTS - 1:
+                time.sleep(_PROXY_DNS_RETRY_BACKOFF_S * (2**attempt))
+    raise RuntimeError(
+        f"failed to resolve SANDBOX_PROXY_HOST={SANDBOX_PROXY_HOST!r} "
+        f"after {_PROXY_DNS_RETRY_ATTEMPTS} attempts: {last_err}"
+    )
+
+
+def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
+    if not SANDBOX_PROXY_HOST:
+        return []
+    proxy_url = f"http://{_PROXY_ALIAS}:{SANDBOX_PROXY_PORT}"
+    no_proxy = _compute_no_proxy_list()
+    return [
+        client.V1EnvVar(name="HTTPS_PROXY", value=proxy_url),
+        client.V1EnvVar(name="HTTP_PROXY", value=proxy_url),
+        client.V1EnvVar(name="https_proxy", value=proxy_url),
+        client.V1EnvVar(name="http_proxy", value=proxy_url),
+        client.V1EnvVar(name="NO_PROXY", value=no_proxy),
+        client.V1EnvVar(name="no_proxy", value=no_proxy),
+        # SDK-specific CA env vars for libs that bypass /etc/ssl/certs.
+        client.V1EnvVar(name="NODE_EXTRA_CA_CERTS", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="REQUESTS_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="SSL_CERT_FILE", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="AWS_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="CURL_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="GIT_SSL_CAINFO", value=_PROXY_CA_BUNDLE_FILE),
+    ]
+
+
+def _compute_no_proxy_list() -> str:
+    entries = ["127.0.0.1", "localhost"]
+    if SANDBOX_API_SERVER_URL:
+        parsed = urlparse(SANDBOX_API_SERVER_URL)
+        if parsed.hostname:
+            entries.append(parsed.hostname)
+    return ",".join(entries)
+
+
+def _proxy_init_container() -> client.V1Container:
+    return client.V1Container(
+        name="sandbox-init",
+        image=SANDBOX_CONTAINER_IMAGE,
+        image_pull_policy="IfNotPresent",
+        command=["/workspace/firewall-init.sh"],
+        env=[
+            client.V1EnvVar(name="SANDBOX_PROXY_HOST", value=SANDBOX_PROXY_HOST),
+            client.V1EnvVar(name="SANDBOX_PROXY_PORT", value=str(SANDBOX_PROXY_PORT)),
+            client.V1EnvVar(name="SANDBOX_PROXY_BOOTSTRAP_MODE", value="initcontainer"),
+            client.V1EnvVar(
+                name="SANDBOX_PROXY_CA_BUNDLE_SRC",
+                value=f"{_PROXY_CA_SOURCE_DIR}/ca.crt",
+            ),
+            client.V1EnvVar(
+                name="SANDBOX_PROXY_CA_BUNDLE_DST",
+                value=_PROXY_CA_BUNDLE_FILE,
+            ),
+        ],
+        volume_mounts=[
+            client.V1VolumeMount(
+                name=_PROXY_CA_SOURCE_VOLUME,
+                mount_path=_PROXY_CA_SOURCE_DIR,
+                read_only=True,
+            ),
+            client.V1VolumeMount(
+                name=_PROXY_CA_BUNDLE_VOLUME,
+                mount_path=_PROXY_CA_BUNDLE_DIR,
+            ),
+        ],
+        resources=client.V1ResourceRequirements(
+            requests={"cpu": "50m", "memory": "32Mi"},
+            limits={"cpu": "500m", "memory": "128Mi"},
+        ),
+        security_context=client.V1SecurityContext(
+            # Overrides pod-level runAsNonRoot so this container can
+            # run iptables.
+            run_as_non_root=False,
+            run_as_user=0,
+            allow_privilege_escalation=False,
+            read_only_root_filesystem=False,
+            privileged=False,
+            capabilities=client.V1Capabilities(drop=["ALL"], add=["NET_ADMIN"]),
+        ),
+    )
+
 
 _push_private_key: Ed25519PrivateKey | None = None
 _push_public_key_b64: str | None = None
@@ -292,18 +416,7 @@ class KubernetesSandboxManager(SandboxManager):
 
     def _initialize(self) -> None:
         """Initialize Kubernetes client and configuration."""
-        # Load Kubernetes config (in-cluster or kubeconfig)
-        try:
-            config.load_incluster_config()
-            logger.info("Loaded in-cluster Kubernetes configuration")
-        except config.ConfigException:
-            try:
-                config.load_kube_config()
-                logger.info("Loaded kubeconfig from default location")
-            except config.ConfigException as e:
-                raise RuntimeError(
-                    f"Failed to load Kubernetes configuration: {e}"
-                ) from e
+        load_kube_config()
 
         # IMPORTANT: We use separate ApiClient instances for REST vs streaming operations.
         # The kubernetes.stream.stream function monkey-patches the ApiClient's request
@@ -560,6 +673,7 @@ class KubernetesSandboxManager(SandboxManager):
                     name="OPENCODE_SERVE_PORT", value=str(OPENCODE_SERVE_PORT)
                 ),
                 client.V1EnvVar(name="AGENT_TRANSPORT", value=AGENT_TRANSPORT.value),
+                *_proxy_main_container_env_vars(),
             ],
             volume_mounts=[
                 client.V1VolumeMount(
@@ -567,6 +681,17 @@ class KubernetesSandboxManager(SandboxManager):
                 ),
                 client.V1VolumeMount(
                     name="managed", mount_path="/workspace/managed", read_only=True
+                ),
+                *(
+                    [
+                        client.V1VolumeMount(
+                            name=_PROXY_CA_BUNDLE_VOLUME,
+                            mount_path=_PROXY_CA_BUNDLE_DIR,
+                            read_only=True,
+                        )
+                    ]
+                    if SANDBOX_PROXY_HOST
+                    else []
                 ),
             ],
             resources=client.V1ResourceRequirements(
@@ -592,9 +717,13 @@ class KubernetesSandboxManager(SandboxManager):
         # forwarded AWS_* / AWS_ENDPOINT_URL from the api_server env in
         # local-dev / CI where IRSA isn't available and an S3-compatible
         # service (e.g. minio) is reachable in-cluster.
+        #
+        # The iptables lockdown is pod-wide, so the sidecar's `aws s3 cp`
+        # must also route through the proxy.
         _, push_public_key_b64 = _get_push_key_pair()
         sidecar_env = [
             client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
+            *_proxy_main_container_env_vars(),
         ]
         for var in (
             "AWS_ACCESS_KEY_ID",
@@ -638,6 +767,17 @@ class KubernetesSandboxManager(SandboxManager):
                     name="workspace", mount_path="/workspace/sessions"
                 ),
                 client.V1VolumeMount(name="managed", mount_path="/workspace/managed"),
+                *(
+                    [
+                        client.V1VolumeMount(
+                            name=_PROXY_CA_BUNDLE_VOLUME,
+                            mount_path=_PROXY_CA_BUNDLE_DIR,
+                            read_only=True,
+                        )
+                    ]
+                    if SANDBOX_PROXY_HOST
+                    else []
+                ),
             ],
             resources=client.V1ResourceRequirements(
                 requests={"cpu": "100m", "memory": "256Mi"},
@@ -672,9 +812,36 @@ class KubernetesSandboxManager(SandboxManager):
             ),
         ]
 
+        init_containers: list[client.V1Container] = []
+        host_aliases: list[client.V1HostAlias] | None = None
+        if SANDBOX_PROXY_HOST:
+            init_containers.append(_proxy_init_container())
+            volumes.extend(
+                [
+                    client.V1Volume(
+                        name=_PROXY_CA_SOURCE_VOLUME,
+                        config_map=client.V1ConfigMapVolumeSource(
+                            name=SANDBOX_PROXY_CA_CONFIGMAP,
+                            optional=False,
+                        ),
+                    ),
+                    client.V1Volume(
+                        name=_PROXY_CA_BUNDLE_VOLUME,
+                        empty_dir=client.V1EmptyDirVolumeSource(),
+                    ),
+                ]
+            )
+            # kubelet injects hostAliases into every container's /etc/hosts;
+            # initContainer mutations don't propagate, so we set it here.
+            host_aliases = [
+                client.V1HostAlias(ip=_resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
+            ]
+
         pod_spec = client.V1PodSpec(
             service_account_name=self._service_account,
+            init_containers=init_containers or None,
             containers=[sandbox_container, sidecar_container],
+            host_aliases=host_aliases,
             share_process_namespace=False,
             volumes=volumes,
             restart_policy="Never",
@@ -715,10 +882,10 @@ class KubernetesSandboxManager(SandboxManager):
                 name=pod_name,
                 namespace=self._namespace,
                 labels={
-                    "app.kubernetes.io/component": "sandbox",
-                    "app.kubernetes.io/managed-by": "onyx",
-                    "onyx.app/sandbox-id": sandbox_id,
-                    "onyx.app/tenant-id": tenant_id,
+                    LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
+                    LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
+                    LABEL_SANDBOX_ID: sandbox_id,
+                    LABEL_TENANT_ID: tenant_id,
                     "admission.datadoghq.com/enabled": "false",
                 },
             ),
@@ -768,15 +935,15 @@ class KubernetesSandboxManager(SandboxManager):
                 name=service_name,
                 namespace=self._namespace,
                 labels={
-                    "app.kubernetes.io/component": "sandbox",
-                    "app.kubernetes.io/managed-by": "onyx",
-                    "onyx.app/sandbox-id": sandbox_id_str,
-                    "onyx.app/tenant-id": tenant_id_str,
+                    LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
+                    LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
+                    LABEL_SANDBOX_ID: sandbox_id_str,
+                    LABEL_TENANT_ID: tenant_id_str,
                 },
             ),
             spec=client.V1ServiceSpec(
                 type="ClusterIP",
-                selector={"onyx.app/sandbox-id": sandbox_id_str},
+                selector={LABEL_SANDBOX_ID: sandbox_id_str},
                 ports=ports,
             ),
         )
@@ -1165,12 +1332,18 @@ class KubernetesSandboxManager(SandboxManager):
             # cross-provider per-prompt model overrides work without a
             # pod restart.
             providers = all_llm_configs or [llm_config]
+            # Only register the egress-tagging plugin when the proxy is
+            # deployed; otherwise it would no-op (no HTTP(S)_PROXY to re-tag).
+            session_tag_plugins = (
+                [_OPENCODE_SESSION_TAG_PLUGIN_PATH] if SANDBOX_PROXY_HOST else None
+            )
             opencode_config_json = json.dumps(
                 build_multi_provider_opencode_config(
                     providers=providers,
                     default_provider=llm_config.provider,
                     default_model=llm_config.model_name,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    plugins=session_tag_plugins,
                 )
             )
             self._provision_opencode_secret(str(sandbox_id), opencode_config_json)

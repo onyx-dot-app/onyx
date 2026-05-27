@@ -183,3 +183,26 @@ def test_disabled_tools_become_deny_entries() -> None:
     )
     assert config["permission"]["question"] == "deny"
     assert config["permission"]["webfetch"] == "deny"
+
+
+def test_plugins_omitted_by_default() -> None:
+    """No `plugin` key unless plugins are explicitly requested, so the
+    default config stays byte-identical to pre-plugin behavior."""
+    config = build_multi_provider_opencode_config(
+        providers=[_cfg("anthropic", "claude-opus-4-7")],
+        default_provider="anthropic",
+        default_model="claude-opus-4-7",
+    )
+    assert "plugin" not in config
+
+
+def test_plugins_are_emitted_when_provided() -> None:
+    """The session-tagging plugin path flows into the `plugin` array so
+    opencode-serve loads it pod-wide via OPENCODE_CONFIG_CONTENT."""
+    config = build_multi_provider_opencode_config(
+        providers=[_cfg("anthropic", "claude-opus-4-7")],
+        default_provider="anthropic",
+        default_model="claude-opus-4-7",
+        plugins=["/workspace/opencode-plugins/session-proxy-tag.ts"],
+    )
+    assert config["plugin"] == ["/workspace/opencode-plugins/session-proxy-tag.ts"]
