@@ -15,7 +15,7 @@ import {
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgChevronDownSmall } from "@opal/icons";
 import { Divider } from "@opal/components";
-import type { WithoutStyles } from "@opal/types";
+import type { PaddingVariants, WithoutStyles } from "@opal/types";
 
 // ============================================================================
 // Context
@@ -447,6 +447,23 @@ function InputSelectLabel({
   );
 }
 
+interface InputSelectSeparatorProps {
+  paddingParallel?: PaddingVariants;
+  paddingPerpendicular?: PaddingVariants;
+}
+
+function InputSelectSeparator({
+  paddingParallel,
+  paddingPerpendicular,
+}: InputSelectSeparatorProps) {
+  return (
+    <Divider
+      paddingParallel={paddingParallel}
+      paddingPerpendicular={paddingPerpendicular}
+    />
+  );
+}
+
 // ============================================================================
 // Exports
 // ============================================================================
@@ -490,7 +507,7 @@ export default Object.assign(InputSelectRoot, {
   Item: InputSelectItem,
   Group: InputSelectGroup,
   Label: InputSelectLabel,
-  Separator: Divider,
+  Separator: InputSelectSeparator,
 });
 
 export {
