@@ -30,17 +30,12 @@ import httpx
 import pytest
 from kubernetes import client
 from kubernetes.client.rest import ApiException
-from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import Sandbox
-from onyx.db.models import User
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
 from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
@@ -578,73 +573,50 @@ def test_sandbox_etc_hosts_resolves_proxy_alias(
 
 @_proxy_required
 def test_sandbox_egress_only_flows_via_proxy(
-    k8s_manager: KubernetesSandboxManager,
+    provisioned_sandbox: tuple[UUID, str],
     k8s_client: client.CoreV1Api,
-    db_session: Session,
-    test_user: User,
-    tenant_context: None,  # noqa: ARG001
 ) -> None:
     """End-to-end: TLS through the proxy reaches the internet while direct
     egress is blocked by iptables. Catches missing host_aliases, broken CA
     trust, iptables misconfiguration, or proxy-listen-port drift.
 
-    The proxy gates egress on identity (pod IP -> Sandbox row -> owning user),
-    so a Sandbox row matching this pod's id must exist; otherwise the gate
-    fail-closes with 403 ``unidentified_sandbox`` even for non-gated hosts.
+    Uses the ``provisioned_sandbox`` fixture, which provisions through the
+    app's own path (committed Sandbox + User rows), so the proxy can resolve
+    the pod's identity; without a backing row the gate fail-closes with 403
+    ``unidentified_sandbox`` even for non-gated hosts.
     """
-    # Create the Sandbox DB row the way the app does (create_sandbox__no_commit,
-    # as SessionManager._provision_sandbox uses), then provision the pod for that
-    # id with an explicit test llm_config. The proxy gates egress on identity
-    # (pod -> Sandbox row -> owner), so the row must exist or the gate fail-closes
-    # (403 unidentified_sandbox) even for non-gated hosts. We avoid
-    # SessionManager.ensure_sandbox_running because it resolves a DB-configured
-    # default LLM provider, which the K8s CI database doesn't have.
-    sandbox = create_sandbox__no_commit(db_session, test_user.id)
-    sandbox_id = sandbox.id
-    db_session.commit()
-    try:
-        _provisioned_sandbox(k8s_manager, sandbox_id)
-        update_sandbox_status__no_commit(db_session, sandbox_id, SandboxStatus.RUNNING)
-        db_session.commit()
-        pod_name = k8s_manager._get_pod_name(sandbox_id)
+    _sandbox_id, pod_name = provisioned_sandbox
 
-        # Proxied egress: exercises HTTPS_PROXY, /etc/hosts, CA bundle, and proxy.
-        proxied = pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            "curl -s -o /dev/null -w '%{http_code}' https://www.example.com",
-            container="sandbox",
-        )
-        assert proxied.strip() == "200", (
-            f"proxied egress should return 200, got {proxied!r}"
-        )
+    # Proxied egress: exercises HTTPS_PROXY, /etc/hosts, CA bundle, and proxy.
+    proxied = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        "curl -s -o /dev/null -w '%{http_code}' https://www.example.com",
+        container="sandbox",
+    )
+    assert proxied.strip() == "200", (
+        f"proxied egress should return 200, got {proxied!r}"
+    )
 
-        # Direct egress: --noproxy bypasses HTTPS_PROXY; iptables must block it
-        # (curl exits non-zero and writes 000 on failure).
-        direct = pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            (
-                "curl --noproxy '*' -s -o /dev/null --max-time 5 "
-                "-w '%{http_code}' https://1.1.1.1 || echo BLOCKED:$?"
-            ),
-            container="sandbox",
-        )
-        assert "200" not in direct, (
-            f"direct egress should be blocked, but got HTTP 200: {direct!r}"
-        )
-        assert "BLOCKED:" in direct or direct.strip().startswith("000"), (
-            f"direct egress should fail closed, got {direct!r}"
-        )
-    finally:
-        db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).delete()
-        db_session.commit()
-        k8s_manager.terminate(sandbox_id)
-        wait_for_pod_deletion(
-            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
-        )
+    # Direct egress: --noproxy bypasses HTTPS_PROXY; iptables must block it
+    # (curl exits non-zero and writes 000 on failure).
+    direct = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        (
+            "curl --noproxy '*' -s -o /dev/null --max-time 5 "
+            "-w '%{http_code}' https://1.1.1.1 || echo BLOCKED:$?"
+        ),
+        container="sandbox",
+    )
+    assert "200" not in direct, (
+        f"direct egress should be blocked, but got HTTP 200: {direct!r}"
+    )
+    assert "BLOCKED:" in direct or direct.strip().startswith("000"), (
+        f"direct egress should fail closed, got {direct!r}"
+    )
 
 
 def test_terminate_removes_pod_and_marks_db(
