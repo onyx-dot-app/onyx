@@ -2,12 +2,12 @@
 
 import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useToastFromQuery } from "@/hooks/useToast";
 import { Button } from "@opal/components";

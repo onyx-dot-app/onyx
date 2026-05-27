@@ -17,6 +17,7 @@ import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
 import useGroups from "@/hooks/useGroups";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { addUserToGroup, removeUserFromGroup, setUserRole } from "./svc";
 import type { UserRow } from "./interfaces";
 import { cn } from "@opal/utils";
@@ -51,6 +52,7 @@ export default function EditUserModal({
   onMutate,
 }: EditUserModalProps) {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const { user: currentUser, mutateUser } = useCurrentUser();
   const { data: allGroups, isLoading: groupsLoading } = useGroups();
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -143,6 +145,13 @@ export default function EditUserModal({
         selectedRole !== user.role
       ) {
         await setUserRole(user.email, selectedRole);
+        // If an admin demoted themselves (or flipped their own curator
+        // flag), the cached /api/me would otherwise hold the old role for
+        // the full useCurrentUser dedup window. Force a refetch so the
+        // sidebar and gating checks see the new role immediately.
+        if (currentUser && currentUser.id === user.id) {
+          await mutateUser();
+        }
       }
 
       onMutate();

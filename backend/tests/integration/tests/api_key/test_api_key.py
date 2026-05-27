@@ -218,3 +218,55 @@ def test_admin_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
     assert resp.status_code == 200, (
         f"Admin key should access /query/valid-tags, got {resp.status_code}: {resp.text}"
     )
+
+
+def test_delete_admin_api_key_with_group_membership(reset: None) -> None:  # noqa: ARG001
+    """Deleting an ADMIN API key must clean up its default-group membership.
+
+    Regression test for #11118: the synthetic SERVICE_ACCOUNT user backing an
+    ADMIN/BASIC API key is auto-assigned to a default group at creation, so
+    deleting the key must remove that user__user_group row before the user is
+    deleted — otherwise the FK constraint fires.
+    """
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    admin_key: DATestAPIKey = APIKeyManager.create(
+        api_key_role=UserRole.ADMIN,
+        user_performing_action=admin_user,
+    )
+
+    admin_ids_before, _ = _get_default_group_user_ids(admin_user)
+    assert str(admin_key.user_id) in admin_ids_before
+
+    APIKeyManager.delete(api_key=admin_key, user_performing_action=admin_user)
+    APIKeyManager.verify(
+        api_key=admin_key,
+        user_performing_action=admin_user,
+        verify_deleted=True,
+    )
+
+    admin_ids_after, _ = _get_default_group_user_ids(admin_user)
+    assert str(admin_key.user_id) not in admin_ids_after
+
+
+def test_delete_basic_api_key_with_group_membership(reset: None) -> None:  # noqa: ARG001
+    """Same regression as the ADMIN case, but for BASIC role / Basic group."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    basic_key: DATestAPIKey = APIKeyManager.create(
+        api_key_role=UserRole.BASIC,
+        user_performing_action=admin_user,
+    )
+
+    _, basic_ids_before = _get_default_group_user_ids(admin_user)
+    assert str(basic_key.user_id) in basic_ids_before
+
+    APIKeyManager.delete(api_key=basic_key, user_performing_action=admin_user)
+    APIKeyManager.verify(
+        api_key=basic_key,
+        user_performing_action=admin_user,
+        verify_deleted=True,
+    )
+
+    _, basic_ids_after = _get_default_group_user_ids(admin_user)
+    assert str(basic_key.user_id) not in basic_ids_after

@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Text } from "@opal/components";
 import Title from "@/components/ui/title";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import useSWR from "swr";

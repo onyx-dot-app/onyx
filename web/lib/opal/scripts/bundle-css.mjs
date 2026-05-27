@@ -64,13 +64,17 @@ function clean(source, filePath) {
   return ast.toString();
 }
 
+// dbg.css contains dev-only debugging utilities and is excluded from the bundle.
+// It is imported by _reference.css for @apply resolution during authoring only.
+const dbgCss = join(srcDir, "styles", "dbg.css");
+
 // colors.css is a standalone artifact (dist/colors.css) — exclude from the main
 // bundle. _reference.css and root.css have fixed positions (first and second).
 // The remaining files are concatenated alphabetically; they are independent
 // (no shared selectors), so order between them is not load-bearing.
 const allCss = findCss(srcDir).sort();
 const leafCss = allCss.filter(
-  (p) => p !== referenceCss && p !== rootCss && p !== colorsCss
+  (p) => p !== referenceCss && p !== rootCss && p !== dbgCss
 );
 const order = [referenceCss, rootCss, ...leafCss];
 

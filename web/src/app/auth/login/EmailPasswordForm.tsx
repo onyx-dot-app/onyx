@@ -18,7 +18,7 @@ import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import { SvgArrowRightCircle } from "@opal/icons";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 
 interface EmailPasswordFormProps {
   isSignup?: boolean;

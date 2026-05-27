@@ -1,7 +1,7 @@
 "use client";
 
 import MCPPageContent from "@/sections/actions/MCPPageContent";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 const route = ADMIN_ROUTES.MCP_ACTIONS;

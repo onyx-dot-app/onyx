@@ -11,9 +11,7 @@ import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
 import { CombinedSettings, Tier } from "@/interfaces/settings";
 import { tierAtLeast } from "@/lib/tiers";
-import { Divider, SidebarTab } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
-import Spacer from "@/refresh-components/Spacer";
+import { Divider, InputTypeIn, Spacer, SidebarTab } from "@opal/components";
 import { SvgArrowUpCircle, SvgSearch, SvgX } from "@opal/icons";
 import {
   useBillingInformation,

@@ -51,6 +51,7 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
+from onyx.server.features.build.session.manager import get_all_build_mode_llm_configs
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.manager import UploadLimitExceededError
 from onyx.server.features.build.utils import sanitize_filename
@@ -450,12 +451,18 @@ def restore_session(
             )
             db_session.commit()
 
+            # Pre-register every build-mode provider so per-prompt model
+            # overrides can cross providers without re-provisioning the pod.
+            all_llm_configs = get_all_build_mode_llm_configs(
+                db_session, default=llm_config
+            )
             sandbox_manager.provision(
                 sandbox_id=sandbox.id,
                 user_id=user.id,
                 tenant_id=tenant_id,
                 llm_config=llm_config,
                 onyx_pat=onyx_pat,
+                all_llm_configs=all_llm_configs,
             )
 
             # Mark as RUNNING after successful provision

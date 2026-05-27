@@ -236,7 +236,9 @@ export default function BuildOnboardingModal({
 
     const testResult = await testApiKeyHelper(
       currentProviderConfig.providerName,
-      payload
+      payload,
+      apiKey,
+      selectedModel
     );
 
     if (!testResult.ok) {

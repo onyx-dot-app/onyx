@@ -1,4 +1,8 @@
+import io
+import json
+import zipfile
 from typing import Any
+from uuid import uuid4
 
 from onyx.db.enums import ExternalAppType
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
@@ -10,6 +14,19 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 _BUILD_PREFIX = f"{API_SERVER_URL}/build"
+
+
+def _minimal_bundle_zip() -> bytes:
+    """A valid skill bundle (SKILL.md + helper file) for creating bundle-backed
+    custom apps through the admin endpoint."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(
+            "SKILL.md",
+            "---\nname: Bundle Name\ndescription: Bundle description\n---\n\nDo things.\n",
+        )
+        zf.writestr("helper.py", "print('hello')\n")
+    return buf.getvalue()
 
 
 class ExternalAppManager:
@@ -78,24 +95,85 @@ class ExternalAppManager:
         organization_credentials: dict[str, Any],
         enabled: bool,
     ) -> ExternalAppAdminResponse:
-        body = UpsertExternalAppRequest(
-            id=app_id,
-            name=name,
-            description=description,
-            app_type=app_type,
-            upstream_url_patterns=upstream_url_patterns,
-            auth_template=auth_template,
-            organization_credentials=organization_credentials,
-            enabled=enabled,
-        )
-        response = client.post(
-            f"{_BUILD_PREFIX}/admin/apps",
-            json=body.model_dump(mode="json"),
-            headers=user_performing_action.headers,
-            cookies=user_performing_action.cookies,
-        )
+        # Custom (bundle-backed) apps go through the multipart endpoint so a
+        # bundle can be uploaded; built-in providers use the JSON endpoint.
+        if app_type == ExternalAppType.CUSTOM:
+            response = ExternalAppManager._upsert_custom(
+                user_performing_action,
+                app_id,
+                name,
+                description,
+                upstream_url_patterns,
+                auth_template,
+                organization_credentials,
+                enabled,
+            )
+        else:
+            body = UpsertExternalAppRequest(
+                id=app_id,
+                name=name,
+                description=description,
+                app_type=app_type,
+                upstream_url_patterns=upstream_url_patterns,
+                auth_template=auth_template,
+                organization_credentials=organization_credentials,
+                enabled=enabled,
+            )
+            response = client.post(
+                f"{_BUILD_PREFIX}/admin/apps",
+                json=body.model_dump(mode="json"),
+                headers=user_performing_action.headers,
+                cookies=user_performing_action.cookies,
+            )
         response.raise_for_status()
         return ExternalAppAdminResponse.model_validate(response.json())
+
+    @staticmethod
+    def _upsert_custom(
+        user_performing_action: DATestUser,
+        app_id: int | None,
+        name: str,
+        description: str,
+        upstream_url_patterns: list[str],
+        auth_template: dict[str, Any],
+        organization_credentials: dict[str, Any],
+        enabled: bool,
+    ) -> Any:
+        """POST the multipart custom-app endpoint. A bundle is required on create
+        (``app_id`` omitted) and omitted on edit."""
+        data: dict[str, str] = {
+            "name": name,
+            "description": description,
+            "upstream_url_patterns": json.dumps(upstream_url_patterns),
+            "auth_template": json.dumps(auth_template),
+            "organization_credentials": json.dumps(organization_credentials),
+            "enabled": str(enabled).lower(),
+        }
+        files: dict[str, tuple[str, bytes, str]] | None = None
+        if app_id is not None:
+            data["app_id"] = str(app_id)
+        else:
+            # Unique filename → unique slug, so repeated creates within one test
+            # don't collide on the bundle-derived skill slug.
+            files = {
+                "bundle": (
+                    f"custom-{uuid4().hex[:8]}.zip",
+                    _minimal_bundle_zip(),
+                    "application/zip",
+                )
+            }
+        # Drop the default JSON Content-Type so httpx can set the multipart
+        # boundary itself; leaving "application/json" in place makes the server
+        # try to JSON-parse the form body and report every field as missing.
+        headers = user_performing_action.headers.copy()
+        headers.pop("Content-Type", None)
+        return client.post(
+            f"{_BUILD_PREFIX}/admin/apps/custom",
+            data=data,
+            files=files,
+            headers=headers,
+            cookies=user_performing_action.cookies,
+        )
 
     @staticmethod
     def list_admin(

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Button, Card, Divider, MessageCard } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";

@@ -15,6 +15,7 @@ on:
     branches: [main]
     paths:
       - "backend/onyx/server/features/build/sandbox/**"
+      - "backend/onyx/sandbox_proxy/**"
       - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py"
       - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox_file_ops.py"
       - "backend/tests/external_dependency_unit/craft/test_bun_node_modules_dedup.py"
@@ -68,6 +69,15 @@ env:
   # Placeholder — only injected as ONYX_SERVER_URL into the pod; the
   # tests never call back to it, so the URL doesn't need to resolve.
   SANDBOX_API_SERVER_URL: "http://api-server.onyx-ci.invalid"
+
+  # Proxy lives in release namespace `onyx`. SANDBOX_PROXY_HOST is set
+  # later to the proxy Service ClusterIP — the runner has no cluster DNS,
+  # so a Service FQDN here would fail _resolve_proxy_ip in the manager.
+  HELM_RELEASE_NAMESPACE: "onyx"
+  SANDBOX_PROXY_PORT: "8080"
+  SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
+  SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
+  BACKEND_IMAGE: "localhost:5001/onyx-backend:ci"
   # Fail fast on opencode hangs (default is 900s). Without this, CI
   # waits 15 min for ACP timeout while the 20-min workflow timeout
   # kills the job first — losing failure logs and giving zero signal.
@@ -143,6 +153,18 @@ jobs:
           cache-from: type=gha,scope=craft-sandbox
           cache-to: type=gha,scope=craft-sandbox,mode=max
 
+      # Backend image runs the sandbox-proxy via `python -m onyx.sandbox_proxy.server`.
+      - name: Build and push backend image
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/amd64
+          tags: ${{ env.BACKEND_IMAGE }}
+          push: true
+          cache-from: type=gha,scope=craft-backend
+          cache-to: type=gha,scope=craft-backend,mode=max
+
       - name: Write kind config
         run: |
           cat > "${RUNNER_TEMP}/kind-config.yaml" <<'EOF'
@@ -198,27 +220,43 @@ jobs:
           helm repo update
           helm dependency build deployment/helm/charts/onyx
 
-      # Render the sandbox namespace from the helm chart rather than
-      # inlining it here, so future chart edits (labels, annotations, new
-      # sandbox-scoped resources) flow into CI automatically. When you add
-      # a new chart component that the K8s sandbox tests depend on, add
-      # its template path to --show-only and apply it here.
-      - name: Render sandbox manifests from chart
+      # Render the sandbox namespace + proxy manifests from the helm chart
+      # rather than maintaining a parallel copy here. Future chart edits
+      # (proxy spec, RBAC, NetworkPolicy, env-configmap) flow into CI
+      # automatically. When you add a new chart component the K8s sandbox
+      # tests depend on, add its template path to --show-only here.
+      - name: Render sandbox + proxy manifests from chart
         run: |
           mkdir -p /tmp/manifests
           helm template onyx deployment/helm/charts/onyx \
-            -n onyx \
+            -n "${HELM_RELEASE_NAMESPACE}" \
             -f deployment/helm/charts/onyx/values-ci.yaml \
+            --set "celery_shared.image.repository=localhost:5001/onyx-backend" \
+            --set "celery_shared.image.tag=ci" \
             --show-only templates/sandbox-namespace.yaml \
+            --show-only templates/sandbox-proxy/deployment.yaml \
+            --show-only templates/sandbox-proxy/service.yaml \
+            --show-only templates/sandbox-proxy/rbac.yaml \
+            --show-only templates/sandbox-proxy/networkpolicy.yaml \
+            --show-only templates/auth-secrets.yaml \
+            --show-only templates/configmap.yaml \
             > /tmp/manifests/sandbox.yaml
           echo "--- rendered resources ---"
           grep -E '^(kind|  name):' /tmp/manifests/sandbox.yaml || true
 
       # sandbox-file-sync SA isn't in the chart — it's normally created
-      # out-of-band by the dev k8s-up.sh / cluster admin. Apply after the
-      # rendered manifests so the namespace exists first.
+      # out-of-band by the dev k8s-up.sh / cluster admin. Apply alongside
+      # the rendered manifests so the namespace exists first. The release
+      # namespace `onyx` isn't in the rendered output (only `onyx-sandboxes`
+      # is), so create it explicitly before applying.
       - name: Apply manifests + sandbox-file-sync SA
         run: |
+          kubectl create namespace "${HELM_RELEASE_NAMESPACE}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          # Pin context ns so objects without metadata.namespace fall back
+          # here; objects with explicit ns (proxy RBAC in onyx-sandboxes)
+          # land where they declare. Passing -n would conflict with those.
+          kubectl config set-context --current --namespace="${HELM_RELEASE_NAMESPACE}"
           kubectl apply -f /tmp/manifests/sandbox.yaml
           kubectl -n onyx-sandboxes apply -f - <<'EOF'
           apiVersion: v1
@@ -226,6 +264,23 @@ jobs:
           metadata:
             name: sandbox-file-sync
           EOF
+
+      - name: Wait for proxy ready
+        run: |
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
+            deployment/onyx-sandbox-proxy --timeout=180s
+
+      # The test process runs on the CI runner, which has no cluster DNS.
+      # `socket.gethostbyname(IP)` returns the IP unchanged, so resolving
+      # the Service ClusterIP here lets _resolve_proxy_ip in the manager
+      # succeed without any DNS resolution. host_aliases on sandbox pods
+      # then pins `sandbox-proxy` to this same IP.
+      - name: Resolve proxy Service IP and export to env
+        run: |
+          PROXY_IP=$(kubectl -n "${HELM_RELEASE_NAMESPACE}" get svc \
+            onyx-sandbox-proxy -o jsonpath='{.spec.clusterIP}')
+          echo "SANDBOX_PROXY_HOST=${PROXY_IP}" >> "$GITHUB_ENV"
+          echo "resolved proxy ClusterIP: ${PROXY_IP}"
 
       - name: Create .env for Docker Compose
         run: |
@@ -335,6 +390,8 @@ jobs:
           kind export logs ./kind-logs --name onyx-craft-ci || true
           kubectl get pods -A -o wide > kind-logs/pods.txt 2>&1 || true
           kubectl describe pods -n onyx-sandboxes > kind-logs/sandbox-pods-describe.txt 2>&1 || true
+          kubectl describe pods -n "${HELM_RELEASE_NAMESPACE}" > kind-logs/release-ns-pods-describe.txt 2>&1 || true
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs -l app.kubernetes.io/component=sandbox-proxy --tail=500 > kind-logs/sandbox-proxy.log 2>&1 || true
 
       - name: Collect Docker logs on failure
         if: failure()

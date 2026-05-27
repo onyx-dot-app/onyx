@@ -550,7 +550,8 @@ class TestSkillPush:
         # Build a synthetic built-in skill source tree with a mix of files
         # the exclusion rule should keep IN and files it must keep OUT.
         slug = f"excl-builtin-{uuid4().hex[:6]}"
-        source_dir = tmp_path / "builtin_src" / slug
+        skills_root = tmp_path / "builtin_src"
+        source_dir = skills_root / slug
         source_dir.mkdir(parents=True)
 
         # In: SKILL.md + a vanilla script.
@@ -566,13 +567,13 @@ class TestSkillPush:
         pycache.mkdir()
         (pycache / "foo.pyc").write_bytes(b"\x00\x01")
 
+        # source_dir is computed as SKILLS_TEMPLATE_PATH/<id>; redirect the root
+        # at our synthetic tree so the definition resolves to source_dir.
+        monkeypatch.setattr(built_in_module, "SKILLS_TEMPLATE_PATH", str(skills_root))
         monkeypatch.setitem(
             built_in_module.BUILT_IN_SKILLS,
             slug,
-            BuiltInSkillDefinition(
-                built_in_skill_id=slug,
-                source_dir=source_dir,
-            ),
+            BuiltInSkillDefinition(built_in_skill_id=slug),
         )
         make_built_in_skill_row(db_session, built_in_skill_id=slug)
 
