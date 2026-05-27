@@ -258,8 +258,22 @@ def _load_context_user_files_for_tools(
             str(user_file.id),
         )
 
-        def _load(file_id: str = user_file.file_id) -> bytes:
-            return get_default_file_store().read_file(file_id, mode="b").read()
+        def _load(
+            file_id: str = user_file.file_id, user_file_id: UUID = user_file.id
+        ) -> bytes:
+            # Preserve the pre-lazy degraded-but-functional behavior: if the
+            # underlying file is gone or temporarily unreachable, log it and
+            # hand PythonTool an empty payload instead of letting the
+            # exception propagate out of ChatFile.__getattribute__.
+            try:
+                return get_default_file_store().read_file(file_id, mode="b").read()
+            except Exception as e:
+                logger.warning(
+                    "Failed to load context file %s for Python execution: %s",
+                    user_file_id,
+                    e,
+                )
+                return b""
 
         chat_files.append(ChatFile.lazy_from_filename(filename=filename, loader=_load))
 

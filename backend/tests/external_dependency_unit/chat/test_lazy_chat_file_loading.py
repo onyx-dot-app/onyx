@@ -204,6 +204,51 @@ class TestLazyShimContract:
         _ = f.to_base64()
         assert calls["n"] == 1
 
+    def test_concurrent_first_access_calls_loader_exactly_once(self) -> None:
+        """Two threads racing on the first ``.content`` read must not both
+        invoke the loader (would be a double S3 GET). The lazy shim takes a
+        per-instance ``threading.Lock`` to make check-and-set atomic."""
+        import threading
+
+        from onyx.chat.models import ChatLoadedFile
+
+        call_count = {"n": 0}
+        gate = threading.Event()
+
+        def slow_loader() -> bytes:
+            # Gate guarantees both threads observe _lazy_content_materialized
+            # is False before the first writer completes — without the lock,
+            # both would enter the load path.
+            gate.wait()
+            call_count["n"] += 1
+            return b"once"
+
+        f = ChatLoadedFile.lazy_loaded(
+            file_id="x",
+            file_type=ChatFileType.PLAIN_TEXT,
+            filename="x.txt",
+            content_text=None,
+            token_count=0,
+            loader=slow_loader,
+        )
+
+        results: list[bytes] = []
+
+        def reader() -> None:
+            results.append(f.content)
+
+        t1 = threading.Thread(target=reader)
+        t2 = threading.Thread(target=reader)
+        t1.start()
+        t2.start()
+        # Let both threads enter __getattribute__ and contend on the lock.
+        gate.set()
+        t1.join()
+        t2.join()
+
+        assert results == [b"once", b"once"]
+        assert call_count["n"] == 1
+
     def test_chat_file_lazy_content(self) -> None:
         calls = {"n": 0}
         cf = ChatFile.lazy_from_filename(
