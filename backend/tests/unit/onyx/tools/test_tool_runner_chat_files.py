@@ -5,8 +5,11 @@ These tests verify that chat files are properly passed to PythonTool
 through the PythonToolOverrideKwargs mechanism.
 """
 
+from unittest.mock import patch
+
 import pytest
 
+from onyx.db.models import UserFile
 from onyx.tools.models import ChatFile
 from onyx.tools.models import PythonToolOverrideKwargs
 
@@ -98,8 +101,15 @@ class TestChatFileConversion:
         assert chat_files[1].filename == "data.csv"
         assert chat_files[1].content == b"csv,data\n1,2"
 
-    def test_convert_files_with_none_content_skipped(self) -> None:
-        """Test that files with None content are skipped."""
+    def test_convert_files_with_empty_content_passes_through(self) -> None:
+        """Empty-content files now pass through with content=b"".
+
+        The previous ``len(loaded_file.content) > 0`` guard was removed when
+        chat-file loading went lazy — evaluating len() would force every lazy
+        file to materialize and defeat the OOM fix. PythonTool handles an
+        empty body fine (sha256 of b"" + empty upload; the LLM sees the empty
+        result and reacts), so passing zero-byte files through is intentional.
+        """
         from onyx.chat.models import ChatLoadedFile
         from onyx.chat.process_message import _convert_loaded_files_to_chat_files
         from onyx.file_store.models import ChatFileType
@@ -125,9 +135,12 @@ class TestChatFileConversion:
 
         chat_files = _convert_loaded_files_to_chat_files(loaded_files)
 
-        # Only the file with valid content should be included
-        assert len(chat_files) == 1
+        # Both files reach PythonTool; the empty one carries content=b"".
+        assert len(chat_files) == 2
         assert chat_files[0].filename == "valid.pdf"
+        assert chat_files[0].content == b"valid content"
+        assert chat_files[1].filename == "invalid.pdf"
+        assert chat_files[1].content == b""
 
     def test_convert_files_with_missing_filename_uses_fallback(self) -> None:
         """Test that files without filename use file_id as fallback."""
@@ -157,6 +170,133 @@ class TestChatFileConversion:
 
         chat_files = _convert_loaded_files_to_chat_files([])
         assert chat_files == []
+
+    def test_context_tabular_user_files_loaded_for_tools(self) -> None:
+        from uuid import uuid4
+
+        from onyx.chat.process_message import _load_context_user_files_for_tools
+
+        user_file_id = uuid4()
+        user_file = UserFile(
+            id=user_file_id,
+            user_id=uuid4(),
+            file_id="stored-xlsx-file",
+            name="review_results.xlsx",
+            file_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+            token_count=1000,
+        )
+        with patch(
+            "onyx.chat.process_message.get_default_file_store"
+        ) as mock_file_store_factory:
+            mock_file_store = mock_file_store_factory.return_value
+            mock_file_store.read_file.return_value.read.return_value = b"raw xlsx bytes"
+
+            chat_files = _load_context_user_files_for_tools(
+                [user_file],
+                existing_filenames=set(),
+            )
+
+            # ChatFile is lazy: filename is set, but bytes are not read until
+            # PythonTool touches .content.
+            assert len(chat_files) == 1
+            assert chat_files[0].filename == "review_results.xlsx"
+            mock_file_store.read_file.assert_not_called()
+
+            # First .content access triggers the loader.
+            assert chat_files[0].content == b"raw xlsx bytes"
+            mock_file_store.read_file.assert_called_once_with(
+                "stored-xlsx-file", mode="b"
+            )
+
+    def test_context_user_file_loader_failure_returns_empty_bytes(self) -> None:
+        """If a project/persona file is deleted or temporarily unreachable
+        when PythonTool touches ``.content``, the lazy loader must catch and
+        return ``b""`` rather than raising out of ``__getattribute__``. This
+        preserves the degraded-but-functional behavior of the original eager
+        try/except + continue."""
+        from uuid import uuid4
+
+        from onyx.chat.process_message import _load_context_user_files_for_tools
+
+        user_file = UserFile(
+            id=uuid4(),
+            user_id=uuid4(),
+            file_id="missing-file",
+            name="ghost.csv",
+            file_type="text/csv",
+            token_count=10,
+        )
+
+        with patch(
+            "onyx.chat.process_message.get_default_file_store"
+        ) as mock_file_store_factory:
+            mock_file_store = mock_file_store_factory.return_value
+            mock_file_store.read_file.side_effect = FileNotFoundError("gone")
+
+            chat_files = _load_context_user_files_for_tools(
+                [user_file], existing_filenames=set()
+            )
+
+            assert len(chat_files) == 1
+            # Accessing .content does NOT raise; the loader swallows + logs.
+            assert chat_files[0].content == b""
+
+    def test_context_non_tabular_user_files_not_loaded_for_tools(self) -> None:
+        from uuid import uuid4
+
+        from onyx.chat.process_message import _load_context_user_files_for_tools
+
+        user_file = UserFile(
+            id=uuid4(),
+            user_id=uuid4(),
+            file_id="stored-pdf-file",
+            name="framework.pdf",
+            file_type="application/pdf",
+            token_count=1000,
+        )
+
+        with patch(
+            "onyx.chat.process_message.get_default_file_store"
+        ) as mock_file_store_factory:
+            chat_files = _load_context_user_files_for_tools(
+                [user_file],
+                existing_filenames=set(),
+            )
+
+        assert chat_files == []
+        mock_file_store_factory.assert_not_called()
+
+    def test_context_user_file_filename_collision_gets_suffix(self) -> None:
+        # Avoid overwriting an existing staged chat attachment with the same name.
+        from uuid import uuid4
+
+        from onyx.chat.process_message import _load_context_user_files_for_tools
+
+        user_file_id = uuid4()
+        user_file = UserFile(
+            id=user_file_id,
+            user_id=uuid4(),
+            file_id="stored-csv-file",
+            name="data.csv",
+            file_type="text/csv",
+            token_count=100,
+        )
+        with patch(
+            "onyx.chat.process_message.get_default_file_store"
+        ) as mock_file_store_factory:
+            mock_file_store = mock_file_store_factory.return_value
+            mock_file_store.read_file.return_value.read.return_value = b"a,b\n1,2"
+
+            chat_files = _load_context_user_files_for_tools(
+                [user_file],
+                existing_filenames={"data.csv"},
+            )
+
+            assert len(chat_files) == 1
+            assert chat_files[0].filename == f"data_{user_file_id}.csv"
+            assert chat_files[0].content == b"a,b\n1,2"
 
 
 class TestChatFileModel:
