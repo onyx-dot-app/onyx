@@ -4,22 +4,23 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Request
+from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
 from onyx.auth.permissions import require_permission
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.security.models import SecuritySettings
 from onyx.server.security.models import SecuritySettingsOverrides
-from onyx.server.security.store import _is_multi_tenant
-from onyx.server.security.store import _OPERATOR_LOCKED_FIELDS
 from onyx.server.security.store import get_security_settings
+from onyx.server.security.store import is_multi_tenant
 from onyx.server.security.store import load_raw_overrides
 from onyx.server.security.store import merge_with_env
+from onyx.server.security.store import OPERATOR_LOCKED_FIELDS
 from onyx.server.security.store import store_overrides
 from onyx.utils.logger import setup_logger
 
@@ -107,8 +108,8 @@ async def put_security_settings_endpoint(
 
     # Operator-locked field rejection — primary boundary. The storage layer
     # also strips these, but failing fast here gives the admin a clear 403.
-    if _is_multi_tenant():
-        locked_in_payload = present_keys & _OPERATOR_LOCKED_FIELDS
+    if is_multi_tenant():
+        locked_in_payload = present_keys & OPERATOR_LOCKED_FIELDS
         if locked_in_payload:
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -116,13 +117,24 @@ async def put_security_settings_endpoint(
                 + ", ".join(sorted(locked_in_payload)),
             )
 
-    redis_client = get_redis_client()
-    lock = redis_client.lock(
-        OnyxRedisLocks.SECURITY_SETTINGS,
-        timeout=_LOCK_LEASE_SECONDS,
-        blocking_timeout=_LOCK_WAIT_SECONDS,
+    # The merge + KV write is sync I/O (KV store + cache lock). Offload to a
+    # threadpool so the event loop is never blocked on Postgres/Redis.
+    return await run_in_threadpool(
+        _persist_overrides, overrides, raw_dict, present_keys
     )
-    if not lock.acquire(blocking=True):
+
+
+def _persist_overrides(
+    overrides: SecuritySettingsOverrides,
+    raw_dict: dict[str, Any],
+    present_keys: set[str],
+) -> SecuritySettings:
+    """Synchronous lock-acquire + merge + KV write. Uses ``get_cache_backend()``
+    so it works in deployments without Redis (e.g. Onyx Lite, which runs only
+    frontend, backend, Postgres, and nginx)."""
+    cache = get_cache_backend()
+    lock = cache.lock(OnyxRedisLocks.SECURITY_SETTINGS, timeout=_LOCK_LEASE_SECONDS)
+    if not lock.acquire(blocking=True, blocking_timeout=_LOCK_WAIT_SECONDS):
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             "Another security settings save is in progress, please retry.",

@@ -163,7 +163,7 @@ def test_pre_tenant_returns_env_defaults_without_raising(
     # Reset the contextvar to "unset" (None) for this test.
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(None)
     try:
-        # Make _is_multi_tenant() return True by patching the local binding.
+        # Make is_multi_tenant() return True by patching the local binding.
         import shared_configs.contextvars as ctx
 
         monkeypatch.setattr(ctx, "MULTI_TENANT", True, raising=False)

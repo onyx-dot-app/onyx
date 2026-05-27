@@ -20,7 +20,7 @@ logger = setup_logger()
 
 # Fields that, in multi-tenant deployments, can only be set by the operator
 # via environment variables. Tenant admins cannot override them at runtime.
-_OPERATOR_LOCKED_FIELDS: frozenset[str] = frozenset(
+OPERATOR_LOCKED_FIELDS: frozenset[str] = frozenset(
     {
         "password_min_length",
         "password_max_length",
@@ -60,7 +60,7 @@ def _install_cache_for_test(
         _CACHE = TTLCache(maxsize=maxsize, ttl=ttl, timer=timer)
 
 
-def _is_multi_tenant() -> bool:
+def is_multi_tenant() -> bool:
     # Read lazily so tests can monkeypatch the import-time binding inside
     # shared_configs.contextvars (which is what get_current_tenant_id uses).
     from shared_configs import contextvars as _ctx
@@ -93,7 +93,7 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
     is belt-and-braces enforcement in addition to the API-layer rejection.
     """
     env = _build_env_defaults()
-    locked = _OPERATOR_LOCKED_FIELDS if _is_multi_tenant() else frozenset()
+    locked = OPERATOR_LOCKED_FIELDS if is_multi_tenant() else frozenset()
 
     def pick(field: str, override_value: Any, env_value: Any) -> Any:
         if field in locked:
@@ -181,8 +181,8 @@ def store_overrides(overrides: SecuritySettingsOverrides) -> None:
     persistence — defense in depth against bypasses of the API check.
     """
     payload = overrides.model_dump(exclude_none=True)
-    if _is_multi_tenant():
-        for field in _OPERATOR_LOCKED_FIELDS:
+    if is_multi_tenant():
+        for field in OPERATOR_LOCKED_FIELDS:
             payload.pop(field, None)
     get_kv_store().store(KV_SECURITY_SETTINGS_KEY, payload)
     invalidate_security_cache(_current_tenant_id_or_default())

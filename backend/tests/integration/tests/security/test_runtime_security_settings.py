@@ -34,15 +34,34 @@ def _put_security(payload: dict, user: DATestUser) -> dict:
     return response.json()
 
 
+# Every override key on SecuritySettingsOverrides. Sending all of them as
+# null in the teardown PUT clears the entire blob so the tenant is left in
+# pure env-defaults state regardless of which fields the test mutated.
+_ALL_OVERRIDE_KEYS_NULL: dict[str, None] = {
+    "user_directory_admin_only": None,
+    "track_external_idp_expiry": None,
+    "mask_credential_prefix": None,
+    "valid_email_domains": None,
+    "password_min_length": None,
+    "password_max_length": None,
+    "password_require_uppercase": None,
+    "password_require_lowercase": None,
+    "password_require_digit": None,
+    "password_require_special_char": None,
+}
+
+
 @pytest.fixture
 def reset_security_settings(
     admin_user: DATestUser,
 ) -> Generator[None, None, None]:
     """Always restore an empty override blob after the test so other suites
-    aren't affected by tenant-persistent state."""
+    aren't affected by tenant-persistent state. Clears every override key,
+    not just the one the test touched, so adding new fields to a test won't
+    require updating this fixture."""
     yield
     try:
-        _put_security({"user_directory_admin_only": None}, admin_user)
+        _put_security(dict(_ALL_OVERRIDE_KEYS_NULL), admin_user)
     except Exception:
         # Best-effort cleanup; do not mask the underlying test failure.
         pass

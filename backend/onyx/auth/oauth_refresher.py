@@ -252,25 +252,10 @@ async def refresh_oauth_token(
             if new_expires_at:
                 updated_data["expires_at"] = new_expires_at
 
-                # Update oidc_expiry in user model if we're tracking it. A KV
-                # outage here must not break the refresh — fall back to the env
-                # default so refresh keeps working in degraded states.
-                try:
-                    track_external_idp_expiry = (
-                        get_security_settings().track_external_idp_expiry
-                    )
-                except Exception as e:
-                    from onyx.configs.app_configs import (
-                        TRACK_EXTERNAL_IDP_EXPIRY as _ENV_TRACK_EXTERNAL_IDP_EXPIRY,
-                    )
-
-                    logger.warning(
-                        "Failed to load security settings during OAuth refresh, "
-                        "falling back to env default: %s",
-                        e,
-                    )
-                    track_external_idp_expiry = _ENV_TRACK_EXTERNAL_IDP_EXPIRY
-                if track_external_idp_expiry:
+                # Update oidc_expiry in user model if we're tracking it. The
+                # loader already falls back to env defaults internally on any
+                # KV failure, so we don't need a second safety net here.
+                if get_security_settings().track_external_idp_expiry:
                     oidc_expiry = datetime.fromtimestamp(
                         new_expires_at, tz=timezone.utc
                     )
