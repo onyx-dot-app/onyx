@@ -48,3 +48,7 @@ export {
   type AlignItems,
   type Length,
 } from "@opal/layouts/general/components";
+
+/* SettingsLayouts */
+export * as SettingsLayouts from "@opal/layouts/settings/components";
+export type { SettingsHeaderProps } from "@opal/layouts/settings/components";

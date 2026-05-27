@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import {
   SvgArrowExchange,
   SvgCheckCircle,

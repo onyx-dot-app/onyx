@@ -1,6 +1,6 @@
 "use client";
 
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import OpenApiPageContent from "@/sections/actions/OpenApiPageContent";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
