@@ -10,9 +10,7 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
-from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
-from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
@@ -42,19 +40,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     4. Terminates the pod (but keeps the sandbox record)
     5. Marks the sandbox as SLEEPING (can be restored later)
 
-    NOTE: This task is a no-op for local backend - sandboxes persist until
-    manually terminated or server restart.
-
     Args:
         tenant_id: The tenant ID for multi-tenant isolation
     """
-    # Skip cleanup for local backend - sandboxes persist until manual termination
-    if SANDBOX_BACKEND == SandboxBackend.LOCAL:
-        task_logger.debug(
-            "cleanup_idle_sandboxes_task skipped (local backend - cleanup disabled)"
-        )
-        return
-
     task_logger.info(f"cleanup_idle_sandboxes_task starting for tenant {tenant_id}")
 
     redis_client = get_redis_client(tenant_id=tenant_id)
@@ -176,67 +164,3 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
             lock.release()
 
     task_logger.info("cleanup_idle_sandboxes_task completed")
-
-
-# NOTE: in the future, may need to add this. For now, will do manual cleanup.
-# @shared_task(
-#     name=OnyxCeleryTask.CLEANUP_OLD_SNAPSHOTS,
-#     soft_time_limit=300,
-#     bind=True,
-#     ignore_result=True,
-# )
-# def cleanup_old_snapshots_task(self: Task, *, tenant_id: str) -> None:
-#     """Delete snapshots older than the retention period.
-
-#     This task cleans up old snapshots to manage storage usage.
-#     Snapshots older than SNAPSHOT_RETENTION_DAYS are deleted.
-
-#     NOTE: This task is a no-op for local backend since snapshots are disabled.
-
-#     Args:
-#         tenant_id: The tenant ID for multi-tenant isolation
-#     """
-#     # Skip for local backend - no snapshots to clean up
-#     if SANDBOX_BACKEND == SandboxBackend.LOCAL:
-#         task_logger.debug(
-#             "cleanup_old_snapshots_task skipped (local backend - snapshots disabled)"
-#         )
-#         return
-
-#     task_logger.info(f"cleanup_old_snapshots_task starting for tenant {tenant_id}")
-
-#     redis_client = get_redis_client(tenant_id=tenant_id)
-#     lock: RedisLock = redis_client.lock(
-#         OnyxRedisLocks.CLEANUP_OLD_SNAPSHOTS_BEAT_LOCK,
-#         timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
-#     )
-
-#     # Prevent overlapping runs of this task
-#     if not lock.acquire(blocking=False):
-#         task_logger.debug("cleanup_old_snapshots_task - lock not acquired, skipping")
-#         return
-
-#     try:
-#         from onyx.server.features.build.db.sandbox import delete_old_snapshots
-
-#         with get_session_with_current_tenant() as db_session:
-#             deleted_count = delete_old_snapshots(
-#                 db_session, tenant_id, SNAPSHOT_RETENTION_DAYS
-#             )
-
-#             if deleted_count > 0:
-#                 task_logger.info(
-#                     f"Deleted {deleted_count} old snapshots for tenant {tenant_id}"
-#                 )
-#             else:
-#                 task_logger.debug("No old snapshots to delete")
-
-#     except Exception:
-#         task_logger.exception("Error in cleanup_old_snapshots_task")
-#         raise
-
-#     finally:
-#         if lock.owned():
-#             lock.release()
-
-#     task_logger.info("cleanup_old_snapshots_task completed")

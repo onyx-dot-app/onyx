@@ -28,6 +28,7 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -60,8 +61,20 @@ class ErrorPacket(BasePacket):
     details: dict[str, Any] | None = None
 
 
+class ApprovalRequestedPacket(BasePacket):
+    """A new approval awaits the user's decision.
+
+    Carries only ids; the FE refetches card contents via the /live endpoint
+    so Postgres stays the single source of truth.
+    """
+
+    type: Literal["approval_requested"] = "approval_requested"
+    approval_id: UUID
+    session_id: UUID
+
+
 # =============================================================================
 # Union Type for Custom Onyx Packets
 # =============================================================================
 
-BuildPacket = ErrorPacket
+BuildPacket = ErrorPacket | ApprovalRequestedPacket

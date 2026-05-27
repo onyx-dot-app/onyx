@@ -15,11 +15,14 @@ Conventions:
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
+from uuid import UUID
 from uuid import uuid4
 
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import delete
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -28,6 +31,7 @@ from onyx.db.enums import AccountType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
+from onyx.db.models import ActionApproval
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
@@ -42,6 +46,19 @@ from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+
+
+def _set_created_at(
+    db_session: Session,
+    model: type[ActionApproval],
+    pk: UUID,
+    when: datetime,
+) -> None:
+    """Force a row's ``created_at`` to ``when``, bypassing ``server_default``."""
+    db_session.execute(
+        update(model).where(model.approval_id == pk).values(created_at=when)
+    )
+    db_session.commit()
 
 
 def make_user(

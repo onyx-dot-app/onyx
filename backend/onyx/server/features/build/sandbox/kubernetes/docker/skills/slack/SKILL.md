@@ -1,0 +1,73 @@
+---
+name: slack
+description: Read, search, and post Slack messages on the connected user's behalf via the Slack Web API.
+---
+
+# Slack
+
+Call the Slack Web API as the connected user via the bundled helper.
+
+## Usage
+
+    python .opencode/skills/slack/slack_api.py <command> [args]
+
+Read commands auto-paginate and prune empty fields. `post` is the only write.
+Use `--raw` to skip empty-field pruning; `python slack_api.py <command> -h`
+shows its flags.
+
+### List channels
+
+```
+python slack_api.py channels [--limit N]
+```
+
+### Read channel messages
+
+```
+python slack_api.py history C0123456789 [--limit N]
+```
+
+### Read thread replies
+
+```
+python slack_api.py replies C0123456789 1700000000.000100
+```
+
+### List workspace users
+
+```
+python slack_api.py users [--limit N]
+```
+
+### Look up one user
+
+```
+python slack_api.py user U0123456789
+```
+
+### Search messages
+
+```
+python slack_api.py search "deploy failed" [--count N]
+```
+
+### Post a message (write)
+
+```
+python slack_api.py post C0123456789 "Hello from Onyx"
+```
+
+## Output
+
+JSON on stdout. Read commands return `{"ok": true, "<key>": [...], "count": N,
+"truncated": bool}` (`truncated` means more results existed past `--limit`).
+Failures pass Slack's response through verbatim: `{"ok": false, "error":
+"<code>"}` (e.g. `not_in_channel`, `missing_scope`) and exit non-zero — surface
+`error` rather than retrying blindly.
+
+## Notes
+
+- Channels/users are referenced by ID (e.g. `C…`, `U…`); resolve names via
+  `channels` / `users` first.
+- Scopes were chosen by the admin. You cannot widen them; on `missing_scope`,
+  tell the user which scope is needed.

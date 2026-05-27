@@ -49,6 +49,8 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     LABEL_USER_ID,
 )
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
 
 SANDBOX_ID = UUID("12345678-1234-1234-1234-1234567890ab")
 USER_ID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
@@ -75,7 +77,7 @@ def test_labels_include_required_fields() -> None:
     assert labels[LABEL_SANDBOX_ID] == str(SANDBOX_ID)
     assert labels[LABEL_TENANT_ID] == TENANT_ID
     assert labels[LABEL_USER_ID] == str(USER_ID)
-    assert labels["app.kubernetes.io/managed-by"] == "onyx"
+    assert labels[LABEL_K8S_MANAGED_BY] == LABEL_K8S_MANAGED_BY_ONYX
 
 
 def test_labels_omit_user_id_when_none() -> None:

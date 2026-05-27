@@ -58,6 +58,7 @@ import shlex
 import tarfile
 import threading
 import time
+from collections.abc import Callable
 from collections.abc import Generator
 from pathlib import Path
 from typing import TypedDict
@@ -97,6 +98,10 @@ from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdout_from_container,
 )
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
+from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
+from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
@@ -117,12 +122,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-# Labels used to find sandbox containers/volumes/networks. Match the K8s
-# label keys where reasonable so dashboards/queries don't drift.
 LABEL_COMPONENT = "onyx.app/component"
 LABEL_COMPONENT_VALUE = "craft-sandbox"
-LABEL_SANDBOX_ID = "onyx.app/sandbox-id"
-LABEL_TENANT_ID = "onyx.app/tenant-id"
 LABEL_USER_ID = "onyx.app/user-id"
 
 # Path conventions inside the sandbox container — must match the K8s image.
@@ -263,7 +264,7 @@ def build_sandbox_labels(
         LABEL_COMPONENT: LABEL_COMPONENT_VALUE,
         LABEL_SANDBOX_ID: str(sandbox_id),
         LABEL_TENANT_ID: tenant_id,
-        "app.kubernetes.io/managed-by": "onyx",
+        LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
     }
     if user_id is not None:
         labels[LABEL_USER_ID] = str(user_id)
@@ -440,7 +441,7 @@ class DockerSandboxManager(SandboxManager):
             driver="bridge",
             labels={
                 LABEL_COMPONENT: LABEL_COMPONENT_VALUE,
-                "app.kubernetes.io/managed-by": "onyx",
+                LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
             },
         )
 
@@ -502,6 +503,8 @@ class DockerSandboxManager(SandboxManager):
         tenant_id: str,
         llm_config: LLMProviderConfig,  # noqa: ARG002
         onyx_pat: str | None = None,
+        *,
+        all_llm_configs: list[LLMProviderConfig] | None = None,  # noqa: ARG002 — serve-only
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning")
@@ -1038,6 +1041,13 @@ printf '%s' '{opencode_json}' > {session_path}/opencode.json
         sandbox_id: UUID,
         session_id: UUID,
         message: str,
+        *,
+        opencode_session_id: str | None = None,  # noqa: ARG002 — serve-only
+        agent_provider: str | None = None,  # noqa: ARG002 — serve-only
+        agent_model: str | None = None,  # noqa: ARG002 — serve-only
+        on_opencode_session_resolved: (  # noqa: ARG002 — serve-only
+            Callable[[str], None] | None
+        ) = None,
     ) -> Generator[ACPEvent, None, None]:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"

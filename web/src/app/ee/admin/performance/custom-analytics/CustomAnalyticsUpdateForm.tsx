@@ -8,7 +8,7 @@ import { markdown } from "@opal/utils";
 import { Callout } from "@/components/ui/callout";
 import { useContext, useState } from "react";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 
 export function CustomAnalyticsUpdateForm() {
   const settings = useContext(SettingsContext);

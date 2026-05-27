@@ -9,8 +9,6 @@ and on-disk lookups."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 from pydantic import ValidationError
 
@@ -18,10 +16,7 @@ from onyx.skills.built_in import BuiltInSkillDefinition
 
 
 def _definition(slug: str) -> BuiltInSkillDefinition:
-    return BuiltInSkillDefinition(
-        built_in_skill_id=slug,
-        source_dir=Path("/tmp/does-not-matter"),
-    )
+    return BuiltInSkillDefinition(built_in_skill_id=slug)
 
 
 def test_valid_built_in_skill_id_constructs_cleanly() -> None:

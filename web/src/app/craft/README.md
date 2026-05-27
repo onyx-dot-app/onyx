@@ -82,14 +82,7 @@ Re-run the installer with `--include-craft` on top of an existing deployment —
 
 Craft supports two sandbox backends controlled by `SANDBOX_BACKEND`:
 
-**Self-Hosted**
-
-- Filesystem-based sandboxes under `SANDBOX_BASE_PATH` (default: `/tmp/onyx-sandboxes`)
-- No container isolation (process-level only)
-- No automatic cleanup or snapshots
-- Direct file access via symlinks to user's knowledge files
-
-**Cloud** (Production)
+**Kubernetes** (default — dev via kind, prod via EKS)
 
 - Pod-based isolation with ClusterIP services
 - S3-based snapshots for session persistence
@@ -97,6 +90,13 @@ Craft supports two sandbox backends controlled by `SANDBOX_BACKEND`:
 - Two containers per pod:
   - `sandbox` — Runs OpenCode agent and Next.js preview server
   - `file-sync` — Sidecar for S3 file synchronization
+
+For local development, see [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md) — one-shot setup via `make craft-up`.
+
+**Docker** (self-hosted docker-compose)
+
+- Container-per-sandbox driven by `api_server` via the Docker Engine API
+- Bridge network isolation; per-sandbox named volumes for `/workspace/sessions`
 
 ### Session Lifecycle
 
