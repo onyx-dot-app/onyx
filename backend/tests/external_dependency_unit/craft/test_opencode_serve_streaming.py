@@ -5,7 +5,7 @@ Each test drives a real opencode-serve turn against the
 module-scoped pool sandbox pod (``running_sandbox`` fixture, which
 shares ONE pod across every test in this module — fresh
 opencode session per test, no pod churn). The tests assert
-end-to-end on the ACPEvents that ``KubernetesSandboxManager.send_message``
+end-to-end on the SandboxEvents that ``KubernetesSandboxManager.send_message``
 yields — same events the Onyx session manager persists and the
 frontend renders.
 
@@ -38,17 +38,16 @@ from typing import Any
 from typing import cast
 
 import pytest
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentThoughtChunk
-from acp.schema import Error
-from acp.schema import PromptResponse
-from acp.schema import ToolCallProgress
-from acp.schema import ToolCallStart
 
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
+from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config
-
 
 # Skip the entire module unless we have a real OpenAI key — these tests
 # need to make real LLM calls.

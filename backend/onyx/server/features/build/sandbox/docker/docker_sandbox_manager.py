@@ -3,7 +3,7 @@
 This is the docker-compose analogue of
 :class:`KubernetesSandboxManager`. The api_server mounts the Docker socket
 and drives container lifecycle (provision/terminate, exec into the sandbox
-for setup, file ops, and ACP messaging) the same way the K8s manager drives
+for setup, file ops, and agent messaging) the same way the K8s manager drives
 the Kubernetes API.
 
 User-shared sandbox model
@@ -91,7 +91,6 @@ from onyx.server.features.build.configs import SANDBOX_DOCKER_MEMORY_LIMIT
 from onyx.server.features.build.configs import SANDBOX_DOCKER_NETWORK
 from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
 from onyx.server.features.build.configs import SANDBOX_DOCKER_VOLUME_PREFIX
-from onyx.server.features.build.sandbox.base import ACPEvent
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager

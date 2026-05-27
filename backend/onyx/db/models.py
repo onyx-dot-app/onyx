@@ -5385,7 +5385,7 @@ class Snapshot(Base):
 class BuildMessage(Base):
     """Stores messages exchanged in build sessions.
 
-    All message data is stored in message_metadata as JSON (the raw ACP packet).
+    All message data is stored in message_metadata as JSON (the raw sandbox event packet).
     The turn_index groups all assistant responses under the user prompt they respond to.
 
     Packet types stored in message_metadata:
@@ -5579,7 +5579,7 @@ class ScheduledTaskRun(Base):
     # run was still in flight, or by the stuck-run sweeper for stuck rows.
     skip_reason: Mapped[str | None] = mapped_column(String, nullable=True)
     # On `failed`: short classifier (e.g. "executor_crash", "budget",
-    # "acp_error", "stuck"). Full traceback / message lives in error_detail.
+    # "stuck"). Full traceback / message lives in error_detail.
     error_class: Mapped[str | None] = mapped_column(String, nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 

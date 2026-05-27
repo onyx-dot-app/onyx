@@ -4,13 +4,10 @@ These tests drive the ``/build/sessions/{id}/send-message`` SSE endpoint and
 inspect the packet sequence the consumer actually sees. They run against a
 real Onyx deployment using :class:`BuildSessionManager`.
 
-The DB-bound (ext-dep) half lives in
-``backend/tests/external_dependency_unit/craft/test_streaming_persistence.py``
-where stub backends can inject arbitrary ACP events. Some behaviors — most
-notably the ACP timeout path and SSE keepalive emission — live inside the
-Kubernetes ACP client and are hard to reach through the local-backend HTTP
-boundary; those tests are skipped here with precise pointers to where the
-behavior is exercised instead.
+Behaviors that require failure injection (mid-stream exceptions, turn
+timeout, SSEKeepalive emission) are exercised in the ext-dep suite at
+``tests/external_dependency_unit/craft/test_streaming_persistence.py``
+where the sandbox manager can be stubbed.
 """
 
 from __future__ import annotations
@@ -18,7 +15,6 @@ from __future__ import annotations
 import uuid
 
 import httpx
-import pytest
 
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -100,56 +96,3 @@ def test_session_not_found_emits_error_packet(
     error_packet = next((p for p in packets if p.get("type") == "error"), None)
     assert error_packet is not None
     assert error_packet["message"] == "Session not found"
-
-
-@pytest.mark.skip(
-    reason=(
-        "Mid-stream agent exceptions are emitted as ErrorPackets by the "
-        "``except`` branches in ``SessionManager.send_message`` "
-        "(manager.py ~lines 1600-1630), but the *trigger* for those branches "
-        "comes from inside ``_yield_acp_events`` — which only exists with a "
-        "live ACP backend. The HTTP boundary in this file runs against the "
-        "real local sandbox; we'd need a stub backend that raises mid-stream "
-        "to deterministically hit the path. The ext-dep half "
-        "covers this at "
-        "``tests/external_dependency_unit/craft/test_streaming_persistence.py``"
-        " where the sandbox manager can be stubbed to raise."
-    )
-)
-def test_agent_exception_during_stream_emits_error_packet() -> None:
-    """Stub backend raises mid-stream → ErrorPacket emitted with the message."""
-    pass
-
-
-@pytest.mark.skip(
-    reason=(
-        "ACP_MESSAGE_TIMEOUT is the wall-clock budget enforced inside "
-        "``OpencodeServeClient.send_message`` and drives the timeout around "
-        "the per-pod event bus. Reaching the timeout branch needs either a "
-        "kubernetes backend with a slow LLM (not available locally; see "
-        "``feedback_no_local_craft_k8s_tests``) or a stub sandbox manager "
-        "whose send_message respects an env-override — both are out of "
-        "scope for the HTTP-only boundary half."
-    )
-)
-def test_acp_timeout_emits_error_packet() -> None:
-    """Stub backend takes longer than ACP_MESSAGE_TIMEOUT → ErrorPacket('timeout')."""
-    pass
-
-
-@pytest.mark.skip(
-    reason=(
-        "SSE_KEEPALIVE_INTERVAL is consumed by ``OpencodeServeClient`` "
-        "which yields ``SSEKeepalive`` marker "
-        "events that the manager's stream loop translates into ``: keepalive"
-        "\\n\\n`` SSE comments (manager.py:1479-1484). The local sandbox "
-        "backend never produces ``SSEKeepalive`` markers — it returns the "
-        "agent's events as fast as the in-process generator can emit them. "
-        "Asserting the comment sequence requires either a stub ACP client "
-        "or a kubernetes backend; both belong in "
-        "``test_streaming_persistence.py``."
-    )
-)
-def test_keepalive_emitted_on_idle_intervals() -> None:
-    """Stub backend idles for SSE_KEEPALIVE_INTERVAL → ``: keepalive`` comment."""
-    pass

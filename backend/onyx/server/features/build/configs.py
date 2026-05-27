@@ -210,7 +210,9 @@ SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
 # ============================================================================
 
 # Wall-clock budget for one user-message turn against opencode-serve.
-ACP_MESSAGE_TIMEOUT = float(os.environ.get("ACP_MESSAGE_TIMEOUT", "900.0"))
+SANDBOX_TURN_TIMEOUT_SECONDS = float(
+    os.environ.get("SANDBOX_TURN_TIMEOUT_SECONDS", "900.0")
+)
 
 # Port `opencode serve` listens on inside the sandbox container.
 # Match against the EXPOSE directive in the sandbox Dockerfile.

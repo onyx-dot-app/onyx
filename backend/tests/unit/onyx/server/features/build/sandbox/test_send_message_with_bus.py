@@ -9,7 +9,7 @@ so we never need a real opencode-serve to exercise the flow.
 Coverage targets:
 - Happy path: assistant text + reasoning + terminator
 - Per-prompt model override threads ``providerID``/``modelID`` into the POST
-- ``prompt_async`` HTTP error surfaces as ACP ``Error``
+- ``prompt_async`` HTTP error surfaces as the ``Error`` event
 - Bus close sentinel ends the stream with an Error if no terminator seen
 - Wall-clock timeout posts abort + yields Error
 - ``GeneratorExit`` (browser disconnect) posts abort and re-raises
@@ -26,11 +26,11 @@ from typing import Any
 
 import httpx
 import pytest
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentThoughtChunk
-from acp.schema import Error
-from acp.schema import PromptResponse
 
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
 from onyx.server.features.build.sandbox.opencode.serve_client import ClientTimeouts
 from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
@@ -423,7 +423,7 @@ def test_send_message_omits_model_when_only_one_arg_supplied(
 def test_send_message_yields_error_on_prompt_async_http_error(
     bus: PodEventBus,
 ) -> None:
-    """A 5xx from opencode on prompt_async must produce a single ACP Error
+    """A 5xx from opencode on prompt_async must produce a single sandbox-event Error
     and clean shutdown — not a hang waiting for events that won't come."""
 
     def handler(request: httpx.Request) -> httpx.Response:

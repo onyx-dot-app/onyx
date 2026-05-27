@@ -23,17 +23,16 @@ from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentPlanUpdate
-from acp.schema import AgentThoughtChunk
-from acp.schema import CurrentModeUpdate
-from acp.schema import Error
-from acp.schema import PromptResponse
-from acp.schema import ToolCallProgress
-from acp.schema import ToolCallStart
-
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentPlanUpdate
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
+from onyx.server.features.build.sandbox.event_schema import CurrentModeUpdate
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
+from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.models import FatalWriteError
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
@@ -59,11 +58,10 @@ logger = setup_logger()
 BUN_CACHE_DIR = "/workspace/sessions/.bun-cache"
 BUN_IMAGE_CACHE_DIR = "/home/sandbox/.bun/install/cache"
 
-# Onyx's internal sandbox-event protocol. Named "ACP" for historical
-# reasons (the original Agent Client Protocol); Onyx no longer speaks
-# that protocol on any wire — this is the type contract between the
-# agent harness and everything downstream.
-ACPEvent = (
+# Internal sandbox-event protocol — the type contract between the agent
+# harness and everything downstream (session manager, SSE encoder,
+# persistence, frontend). Schema lives in :mod:`event_schema`.
+SandboxEvent = (
     AgentMessageChunk
     | AgentThoughtChunk
     | ToolCallStart
@@ -97,7 +95,6 @@ class SandboxManager(_ServeMixin, ABC):
             │   ├── venv/              # Python virtual environment
             │   ├── .opencode/skills   # Symlink → managed/skills
             │   ├── AGENTS.md          # Agent instructions
-            │   ├── opencode.json      # LLM config
             │   └── attachments/
             └── $session_id_2/
                 └── ...
@@ -125,11 +122,10 @@ class SandboxManager(_ServeMixin, ABC):
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
-        ``all_llm_configs`` (serve transport only): the full set of LLM
-        providers the user has configured. K8s pre-loads each into
-        opencode-serve's startup config so per-prompt model overrides
-        can cross providers without restarting the pod. Defaults to
-        ``[llm_config]`` (single-provider, back-compat).
+        ``all_llm_configs``: the full set of LLM providers the user has
+        configured. K8s pre-loads each into opencode-serve's startup config
+        so per-prompt model overrides can cross providers without restarting
+        the pod. Defaults to ``[llm_config]`` (single-provider, back-compat).
 
         Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces
@@ -182,13 +178,12 @@ class SandboxManager(_ServeMixin, ABC):
         - sessions/$session_id/venv/
         - sessions/$session_id/.opencode/skills (symlink → managed skills dir)
         - sessions/$session_id/AGENTS.md
-        - sessions/$session_id/opencode.json
         - sessions/$session_id/attachments/
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
-            llm_config: LLM provider configuration for opencode.json
+            llm_config: LLM provider configuration (passed to AGENTS.md rendering)
             nextjs_port: Port for the Next.js dev server, or None for headless.
             skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for AGENTS.md.
             snapshot_path: Optional storage path to restore outputs from
@@ -230,7 +225,7 @@ class SandboxManager(_ServeMixin, ABC):
         - sessions/$session_id/outputs/ (generated artifacts, web apps)
         - sessions/$session_id/attachments/ (user uploaded files)
 
-        Does NOT include: venv, skills, AGENTS.md, opencode.json, files symlink
+        Does NOT include: venv, skills, AGENTS.md, files symlink
         (these are regenerated during restore)
 
         Args:
@@ -271,7 +266,7 @@ class SandboxManager(_ServeMixin, ABC):
             tenant_id: Tenant identifier for storage access
             nextjs_port: Port number for the NextJS dev server, or None to
                 skip starting it (e.g. headless scheduled-task fires).
-            llm_config: LLM provider configuration for opencode.json
+            llm_config: LLM provider configuration (used to regenerate AGENTS.md)
 
         Raises:
             RuntimeError: If snapshot restoration fails
@@ -338,7 +333,7 @@ class SandboxManager(_ServeMixin, ABC):
         agent_provider: str | None = None,
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
-    ) -> Generator[ACPEvent, None, None]:
+    ) -> Generator[SandboxEvent, None, None]:
         """Stream typed sandbox events for one user message via
         opencode-serve.
 

@@ -44,7 +44,7 @@ The Docker backend is intentionally the closest single-VM analogue of the Kubern
 | ------------------------------------- | ----------------------------------------------------------- |
 | Sandbox pod (`sandbox-<id>`)          | Sandbox container (`sandbox-<id8>`)                         |
 | Pod `emptyDir` workspace volume       | Named volume mounted at `/workspace/sessions`               |
-| `kubectl exec` for setup/file ops/ACP | `docker exec` over the Docker Engine API                    |
+| `kubectl exec` for setup + file ops   | `docker exec` over the Docker Engine API                    |
 | Sidecar container for snapshots/IRSA  | api_server tar-streams via `docker exec` → `FileStore`      |
 | `Service` + DNS for Next.js preview   | Container IP on `onyx_craft_sandbox` bridge, proxied        |
 | `NetworkPolicy` for egress isolation  | Dedicated bridge network + host `DOCKER-USER` iptables rule |

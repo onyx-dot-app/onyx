@@ -21,11 +21,11 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-from acp.schema import PromptResponse
 
 from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
 from onyx.server.features.build.sandbox.opencode.serve_client import _TurnState
@@ -38,7 +38,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-ACPEvent = Any
+SandboxEvent = Any
 
 # Tags serve-transport logs with the api_server replica handling the prompt.
 _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
@@ -353,8 +353,8 @@ class _ServeMixin:
         agent_model: str | None,
         *,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
-    ) -> Generator[ACPEvent, None, None]:
-        """Stream ACP events via the in-sandbox ``opencode serve``. Preflight
+    ) -> Generator[SandboxEvent, None, None]:
+        """Stream sandbox events via the in-sandbox ``opencode serve``. Preflight
         ``opencode_session_id`` via :meth:`ensure_opencode_session` to avoid
         one orphan session per turn."""
         packet_logger = get_packet_logger()
@@ -486,8 +486,8 @@ class _ServeMixin:
         *,
         directory: str,
         keepalive_seconds: float = 15.0,
-    ) -> Generator[ACPEvent, None, None]:
-        """Stream translated ACP events for an opencode session. Caller closes
+    ) -> Generator[SandboxEvent, None, None]:
+        """Stream translated sandbox events for an opencode session. Caller closes
         via ``GeneratorExit``. ``directory`` is required: opencode-serve scopes
         its session store per-directory, so the hydrate REST call needs it.
         """
@@ -514,10 +514,10 @@ class _ServeMixin:
                 last_event = time.monotonic()
                 if raw.get("type") == "server.connected":
                     continue
-                for acp_event in translate_opencode_event(
+                for sandbox_event in translate_opencode_event(
                     raw, state, fetch_message=fetch_message
                 ):
-                    yield acp_event
+                    yield sandbox_event
         finally:
             # Close client first so a flaky unsubscribe doesn't leak the pool.
             try:

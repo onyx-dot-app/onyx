@@ -1,6 +1,6 @@
 # Docker sandbox → opencode-serve
 
-Port `DockerSandboxManager` from the per-message `opencode acp` exec to the long-lived `opencode serve` HTTP transport that the Kubernetes backend already uses. Prerequisite for [`brutalize-acp.md`](./brutalize-acp.md), which deletes the ACP transport entirely.
+Port `DockerSandboxManager` from the per-message `opencode acp` exec to the long-lived `opencode serve` HTTP transport that the Kubernetes backend already uses. Prerequisite for [`drop-acp-layer.md`](./drop-acp-layer.md), which deletes the ACP transport entirely.
 
 ## Issues to Address
 
@@ -16,12 +16,12 @@ The blockers, all docker-specific:
 
 ## Important Notes
 
-### Why this is a separable PR from `brutalize-acp.md`
+### Why this is a separable PR from `drop-acp-layer.md`
 
 Two distinct kinds of risk:
 
 - This PR adds a new code path to a previously single-path manager and verifies it works against a real `opencode serve` running in a Docker container. The blast radius is self-hosted users.
-- `brutalize-acp.md` deletes code that has already soaked. The blast radius is "did we miss a branch."
+- `drop-acp-layer.md` deletes code that has already soaked. The blast radius is "did we miss a branch."
 
 Bundling them turns the deletion PR into a feature PR with a deletion riding along. Reviewer can't tell whether a failing test is "Docker serve has a bug" or "we missed an ACP branch." Keep them separate even if they land back-to-back.
 
@@ -119,7 +119,7 @@ Doing this *before* writing the Docker serve path means the new path is ~50 line
 
 No image change required — the existing image already runs `opencode serve` when `AGENT_TRANSPORT=serve`. Once this PR lands and Docker injects `AGENT_TRANSPORT=serve` at container create, the entrypoint takes the serve branch.
 
-The `AGENT_TRANSPORT=serve` env var is transitional. It goes away in [`brutalize-acp.md`](./brutalize-acp.md), at which point the entrypoint becomes unconditional.
+The `AGENT_TRANSPORT=serve` env var is transitional. It goes away in [`drop-acp-layer.md`](./drop-acp-layer.md), at which point the entrypoint becomes unconditional.
 
 ### Documentation
 
@@ -139,11 +139,11 @@ Update `docs/craft/opencode-serve-migration.md` §"Migration phases" to note Doc
 - `test_messages_api.py` already covers the serve path generically; verify it runs against the Docker backend (`SANDBOX_BACKEND=docker`) in CI. If not, parametrize.
 
 **Existing tests that must not regress:**
-- `test_docker_acp_exec_client.py` — this test exercises the path being deleted by `brutalize-acp.md`, not this PR. It must still pass here (the ACP code is still in the tree).
+- `test_docker_acp_exec_client.py` — this test exercises the path being deleted by `drop-acp-layer.md`, not this PR. It must still pass here (the ACP code is still in the tree).
 
 ## Out of scope
 
 - Multi-provider `OPENCODE_CONFIG_CONTENT` for Docker. Single-provider is sufficient and matches today's behavior; follow-up when needed.
-- Deleting the Docker ACP exec client (`DockerACPExecClient`). That happens in [`brutalize-acp.md`](./brutalize-acp.md).
+- Deleting the Docker ACP exec client (`DockerACPExecClient`). That happens in [`drop-acp-layer.md`](./drop-acp-layer.md).
 - Changing the network policy / compose file to expose port 4096 to the host. Sandbox-to-host port mapping is an explicit isolation violation; the bridge-network path is the only path.
 - Cross-provider per-prompt switching on Docker. Comes for free once the multi-provider config is wired (separate PR).

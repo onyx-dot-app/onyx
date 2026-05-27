@@ -1,20 +1,13 @@
-"""HTTP client for ``opencode serve``.
-
-Replaces the per-message ``opencode acp`` subprocess clients in
-``sandbox/kubernetes/internal/acp_exec_client.py`` and
-``sandbox/docker/internal/acp_exec_client.py``. The plan is documented in
-``docs/craft/opencode-serve-migration.md`` and the design in
+"""HTTP client for ``opencode serve`` — the only transport Onyx Craft
+uses to drive in-sandbox agent turns. Design lives in
 ``docs/craft/features/opencode-serve-client.md``.
 
-Public surface (mirrors the existing ACP clients enough that the sandbox
-managers swap in one method call):
+Public surface:
 
 - :class:`OpencodeServeClient`
 - :class:`ClientTimeouts`
 
-The sole transport for driving in-sandbox opencode. ACP-the-transport
-was removed in the brutalize-acp PR; the ACP schema types this module
-imports are now Onyx's internal sandbox-event protocol.
+Sandbox-event types come from :mod:`onyx.server.features.build.sandbox.event_schema`.
 """
 
 from __future__ import annotations
@@ -30,19 +23,19 @@ from typing import Any
 from typing import cast
 
 import httpx
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentThoughtChunk
-from acp.schema import Error
-from acp.schema import PromptResponse
-from acp.schema import ToolCallProgress
-from acp.schema import ToolCallStart
 
-from onyx.server.features.build.configs import ACP_MESSAGE_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_CONNECT_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_REQUEST_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
+from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
+from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.opencode.event_bus import _Subscription
 from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
@@ -53,7 +46,7 @@ logger = setup_logger()
 
 
 # Acp event union (kept narrow — only the types we actually translate to).
-ACPEvent = (
+SandboxEvent = (
     AgentMessageChunk
     | AgentThoughtChunk
     | ToolCallStart
@@ -129,7 +122,7 @@ class _TurnState:
 # ---------------------------------------------------------------------------
 # Tool-name mapping. Mirrors the frontend's NAME_MAP / TOOL_KIND_MAP in
 # ``web/src/app/craft/utils/parsePacket.ts`` so the translator emits the
-# same {kind, title} the existing ACP code path emits today.
+# same {kind, title} the existing translator emits today.
 # ---------------------------------------------------------------------------
 
 
@@ -188,8 +181,8 @@ def _tool_title(tool: str) -> str:
     return _TOOL_TITLE.get(tool, "Running tool")
 
 
-# opencode's tool status values → ACP's ToolCallStatus literal.
-# ACP: "pending" | "in_progress" | "completed" | "failed"
+# opencode's tool status values → ToolCallStatus literal.
+# Onyx schema: "pending" | "in_progress" | "completed" | "failed"
 # opencode emits: "pending", "running", "completed". "running" → "in_progress".
 _TOOL_STATUS_MAP: dict[str, str] = {
     "pending": "pending",
@@ -353,15 +346,15 @@ def translate_opencode_event(
     raw: dict[str, Any],
     state: _TurnState,
     fetch_message: Callable[[str], dict[str, Any] | None] | None = None,
-) -> Iterable[ACPEvent]:
-    """Convert one opencode ``/event`` payload into zero-or-more ACPEvents.
+) -> Iterable[SandboxEvent]:
+    """Convert one opencode ``/event`` payload into zero-or-more SandboxEvents.
 
     Pure function: read-only over ``raw`` (but mutates ``state``). Called from
     the reader thread; all field access defensive against unexpected shapes.
 
-    Returns an iterable so single opencode events that imply multiple ACP
-    events (e.g. final ``message.updated`` → flush + ``PromptResponse``) can
-    yield more than one.
+    Returns an iterable so single opencode events that imply multiple
+    sandbox events (e.g. final ``message.updated`` → flush +
+    ``PromptResponse``) can yield more than one.
     """
     etype = raw.get("type")
     if not isinstance(etype, str):
@@ -396,7 +389,7 @@ def translate_opencode_event(
             return
         if field_name != "text":
             # Non-text fields (e.g. tool input streaming, future extensions)
-            # have no ACP-event mapping yet. Drop silently.
+            # have no sandbox-event mapping yet. Drop silently.
             return
         # Route by the PART'S TYPE (not the delta's ``field``, which is
         # always "text" because that's the part attribute being updated).
@@ -436,7 +429,7 @@ def translate_opencode_event(
         part_type = part.get("type")
 
         # Record the part's type so later ``message.part.delta`` events
-        # can route to the right ACP event class (text → message chunk,
+        # can route to the right sandbox event class (text → message chunk,
         # reasoning → thought chunk). Deltas alone don't carry the part
         # type, only the part id.
         part_id_for_state = part.get("id")
@@ -511,7 +504,9 @@ def translate_opencode_event(
     return
 
 
-def _reconcile_text_part(part: dict[str, Any], state: _TurnState) -> Iterable[ACPEvent]:
+def _reconcile_text_part(
+    part: dict[str, Any], state: _TurnState
+) -> Iterable[SandboxEvent]:
     """Gap-fill reconciliation for visible-text parts. See module
     docstring + the ``message.part.delta`` handler for the full
     invariants. Emits a synthesized AgentMessageChunk for any text in
@@ -526,7 +521,7 @@ def _reconcile_text_part(part: dict[str, Any], state: _TurnState) -> Iterable[AC
 
 def _reconcile_reasoning_part(
     part: dict[str, Any], state: _TurnState
-) -> Iterable[ACPEvent]:
+) -> Iterable[SandboxEvent]:
     """Same gap-fill as :func:`_reconcile_text_part` but for ``type=reasoning``
     parts — yields AgentThoughtChunk instead of AgentMessageChunk."""
     yield from _reconcile_part_text(
@@ -543,7 +538,7 @@ def _reconcile_part_text(
     *,
     emit_class: type[AgentMessageChunk] | type[AgentThoughtChunk],
     session_update: str,
-) -> Iterable[ACPEvent]:
+) -> Iterable[SandboxEvent]:
     """Shared gap-fill logic for any part type whose ``text`` field
     accumulates over deltas. ``state.local_text`` is keyed by partID so
     text-part and reasoning-part accumulators don't collide."""
@@ -577,7 +572,9 @@ def _reconcile_part_text(
         )
 
 
-def _emit_tool_events(part: dict[str, Any], state: _TurnState) -> Iterable[ACPEvent]:
+def _emit_tool_events(
+    part: dict[str, Any], state: _TurnState
+) -> Iterable[SandboxEvent]:
     """Emit ToolCallStart (first sighting) and/or ToolCallProgress for a
     tool part update."""
     call_id = part.get("callID")
@@ -634,7 +631,7 @@ def _emit_terminator(
     *,
     error: dict[str, Any] | None = None,
     finish: Any = None,
-) -> Iterable[ACPEvent]:
+) -> Iterable[SandboxEvent]:
     """Yield ``PromptResponse`` (or ``Error``) exactly once per turn.
 
     Subsequent calls within the same turn are no-ops — opencode emits
@@ -665,7 +662,7 @@ def _emit_terminator(
     ):
         stop_reason = finish
     elif finish == "stop":
-        # opencode uses "stop" where ACP uses "end_turn".
+        # opencode uses "stop" where the schema uses "end_turn".
         stop_reason = "end_turn"
 
     yield PromptResponse.model_validate({"stopReason": stop_reason})
@@ -967,9 +964,9 @@ class OpencodeServeClient:
         directory: str,
         model_provider: str | None = None,
         model_id: str | None = None,
-        timeout: float = ACP_MESSAGE_TIMEOUT,
-    ) -> Generator[ACPEvent, None, None]:
-        """Stream one turn of ACPEvents via the shared per-pod bus.
+        timeout: float = SANDBOX_TURN_TIMEOUT_SECONDS,
+    ) -> Generator[SandboxEvent, None, None]:
+        """Stream one turn of SandboxEvents via the shared per-pod bus.
 
         ``directory`` must match the one passed to :meth:`ensure_session`
         — opencode-serve scopes its Instance (and therefore the session
@@ -1051,7 +1048,7 @@ class OpencodeServeClient:
         fetch_message: Callable[[str], dict[str, Any] | None],
         *,
         directory: str,
-    ) -> Generator[ACPEvent, None, None]:
+    ) -> Generator[SandboxEvent, None, None]:
         """Drain the bus queue, translate, yield until a
         :class:`PromptResponse` is emitted. permission.asked → auto-allow."""
         terminated_locally = False
@@ -1091,10 +1088,10 @@ class OpencodeServeClient:
             if raw.get("type") == "server.connected":
                 continue
 
-            for acp_event in translate_opencode_event(raw, state, fetch_message):
-                if isinstance(acp_event, PromptResponse):
+            for sandbox_event in translate_opencode_event(raw, state, fetch_message):
+                if isinstance(sandbox_event, PromptResponse):
                     terminated_locally = True
-                yield acp_event
+                yield sandbox_event
 
             if raw.get("type") == "permission.asked":
                 self._handle_permission_ask(raw, state.session_id, directory=directory)

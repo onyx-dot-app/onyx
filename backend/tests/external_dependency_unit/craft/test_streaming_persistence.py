@@ -1,6 +1,6 @@
 """Streaming persistence and stream error semantics tests (ext-dep).
 
-The first half covers what ``_persist_acp_event`` actually writes to the DB
+The first half covers what ``_persist_sandbox_event`` actually writes to the DB
 (assistant/thought rows, tool-call gating, plan upsert, turn indexing, finalize
 semantics).
 
@@ -21,11 +21,6 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentThoughtChunk
-from acp.schema import PromptResponse
-from acp.schema import ToolCallProgress
-from acp.schema import ToolCallStart
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
@@ -36,6 +31,11 @@ from onyx.db.models import User
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import upsert_agent_plan
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
+from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.session.manager import BuildStreamingState
 from onyx.server.features.build.session.manager import SessionManager
@@ -106,7 +106,7 @@ def _drain(gen: Generator[str, None, None]) -> list[str]:
 
 
 class TestStreamingPersistence:
-    """DB-bound tests for `_persist_acp_event` behavior."""
+    """DB-bound tests for `_persist_sandbox_event` behavior."""
 
     def test_agent_message_chunks_persist_as_single_assistant_row(
         self,
@@ -747,7 +747,7 @@ class TestStreamErrorSemantics:
         # The final frame is the ErrorPacket.
         assert "upstream model crashed" in frames[-1]
 
-    def test_acp_timeout_emits_error_packet(
+    def test_turn_timeout_emits_error_packet(
         self,
         db_session: Session,  # noqa: ARG002
         test_user: User,
@@ -760,8 +760,8 @@ class TestStreamErrorSemantics:
     ) -> None:
         """Stub raises a TimeoutError-shaped exception → ErrorPacket carries the message.
 
-        The K8s ACP client surfaces ``ACP_MESSAGE_TIMEOUT`` overruns as
-        ``TimeoutError`` raised from inside the send_message generator. The
+        The serve transport surfaces ``SANDBOX_TURN_TIMEOUT_SECONDS`` overruns
+        as ``TimeoutError`` raised from inside the send_message generator. The
         stream loop's broad ``except Exception`` catches it and emits an
         ErrorPacket containing the message — observable contract for the
         front-end.
@@ -774,16 +774,12 @@ class TestStreamErrorSemantics:
             message: str,  # noqa: ARG001
             **_kwargs: Any,  # absorb serve-transport kwargs (opencode_session_id, etc.)
         ) -> Generator[Any, None, None]:
-            # Generator-with-raise is how the K8s client surfaces timeouts.
             if False:
                 yield  # pragma: no cover - generator marker
-            raise TimeoutError("ACP request timed out after 1.0s")
+            raise TimeoutError("sandbox turn timed out after 1.0s")
 
         stub_sandbox_manager.send_message = _timeout  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-        # Override env var purely for documentation / parity with the
-        # production timeout path — the stub doesn't read it but tests assert
-        # the override is applied without crashing.
-        monkeypatch.setenv("ACP_MESSAGE_TIMEOUT", "1.0")
+        monkeypatch.setenv("SANDBOX_TURN_TIMEOUT_SECONDS", "1.0")
         mgr = session_manager_with_stub
 
         frames = _drain(mgr.send_message(build_session.id, test_user.id, "slow op"))
@@ -803,7 +799,7 @@ class TestStreamErrorSemantics:
     ) -> None:
         """``SSEKeepalive`` markers from the sandbox client → ``: keepalive`` SSE frames.
 
-        The K8s ACP client emits ``SSEKeepalive`` after
+        The serve transport emits ``SSEKeepalive`` after
         ``SSE_KEEPALIVE_INTERVAL`` seconds of idle. The stream loop
         converts each one into a ``: keepalive\\n\\n`` SSE comment.
         """

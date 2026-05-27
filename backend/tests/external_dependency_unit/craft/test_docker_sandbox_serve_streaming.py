@@ -3,7 +3,7 @@
 Mirrors :mod:`test_opencode_serve_streaming` (which runs against a real
 ``KubernetesSandboxManager`` pod) but provisions a real Docker sandbox
 container via :class:`DockerSandboxManager`. The tests assert on the
-``ACPEvent`` stream that ``send_message`` yields — the same events the
+``SandboxEvent`` stream that ``send_message`` yields — the same events the
 session manager persists and the frontend renders — so any divergence
 between the Docker and K8s serve paths surfaces here.
 
@@ -42,12 +42,6 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentThoughtChunk
-from acp.schema import Error
-from acp.schema import PromptResponse
-from acp.schema import ToolCallProgress
-from acp.schema import ToolCallStart
 
 from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.configs import SANDBOX_BACKEND
@@ -59,6 +53,12 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     DockerSandboxManager,
 )
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
+from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config
@@ -287,7 +287,7 @@ def test_simple_message_streams_text_and_terminates(handle: _Handle) -> None:
     inside the Docker sandbox container, assert we get text deltas and a
     terminator. If this passes, the entire stack works: password injected
     correctly, bridge-network reachability, serve binds :4096, prompt
-    POST + event SSE roundtrip, translator emits ACP events."""
+    POST + event SSE roundtrip, translator emits sandbox events."""
     out, _ = _drive_turn(handle, "Say hi briefly.")
 
     assert out.term is not None, "send_message never terminated"

@@ -47,7 +47,6 @@ import socket
 import tarfile
 import threading
 import time
-from collections.abc import Generator
 from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import urlparse
@@ -63,7 +62,6 @@ from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
 
 from onyx.db.enums import SandboxStatus
-from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
 from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
@@ -81,7 +79,6 @@ from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
 from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
-from onyx.server.features.build.sandbox.base import ACPEvent
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -129,7 +126,6 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 # Constants for pod configuration
 # Note: Next.js ports are dynamically allocated from SANDBOX_NEXTJS_PORT_START to
 # SANDBOX_NEXTJS_PORT_END range, with one port per session.
-AGENT_PORT = 8081
 PUSH_DAEMON_PORT = 8731
 POD_READY_TIMEOUT_SECONDS = 60
 # Progressive poll cadence: short intervals up front (pods usually become
@@ -594,7 +590,6 @@ class KubernetesSandboxManager(SandboxManager):
         # Sandbox container — runs the agent. No IRSA (skip-containers annotation
         # on the SA strips AWS env vars and the projected token from this container).
         sandbox_ports = [
-            client.V1ContainerPort(name="agent", container_port=AGENT_PORT),
             client.V1ContainerPort(name="opencode", container_port=OPENCODE_SERVE_PORT),
         ]
         for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
@@ -864,9 +859,8 @@ class KubernetesSandboxManager(SandboxManager):
 
         service_name = self._get_service_name(sandbox_id_str)
 
-        # Build port list: agent port + opencode-serve + all session Next.js ports
+        # Build port list: opencode-serve + all session Next.js ports
         ports = [
-            client.V1ServicePort(name="agent", port=AGENT_PORT, target_port=AGENT_PORT),
             client.V1ServicePort(
                 name="opencode",
                 port=OPENCODE_SERVE_PORT,
@@ -1351,7 +1345,7 @@ class KubernetesSandboxManager(SandboxManager):
                     f"Timeout waiting for sandbox pod {pod_name} to become ready"
                 )
 
-            # 4. Wait for opencode-serve to bind :4096 (no-op under ACP).
+            # 4. Wait for opencode-serve to bind :4096 .
             if not self._wait_for_opencode_serve_ready(sandbox_id):
                 raise RuntimeError(
                     f"opencode-serve never became ready in sandbox pod {pod_name}"
@@ -1688,10 +1682,8 @@ echo "Session workspace setup complete"
         session_id: UUID,
         nextjs_port: int | None = None,  # noqa: ARG002
     ) -> None:
-        """Clean up a session workspace (on session delete).
-
-        Removes the ACP session mapping and executes kubectl exec to remove
-        the session directory. The shared ACP client persists for other sessions.
+        """Clean up a session workspace (on session delete). Executes
+        kubectl exec to remove the session directory.
 
         Args:
             sandbox_id: The sandbox ID
