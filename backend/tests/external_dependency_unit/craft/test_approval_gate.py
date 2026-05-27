@@ -479,7 +479,6 @@ def test_gated_egress_without_session_tag_fails_closed(
     user, _, pod_name = gated_session
 
     output_path = f"/tmp/curl_nosession_{uuid4().hex[:8]}"
-    # No session_id → untagged egress.
     _post_slack_via_curl(k8s_client, pod_name, output_path, text="no session")
 
     status_code, body = wait_for_pod_exec_output(
