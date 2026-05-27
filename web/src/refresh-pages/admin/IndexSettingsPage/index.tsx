@@ -83,7 +83,7 @@ import {
   useSecondarySearchSettings,
 } from "@/hooks/useSearchSettings";
 import { useLlmDefaults } from "@/hooks/useLanguageModels";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import { Popover } from "@opal/components";
 import ModelListContent from "@/refresh-components/popovers/ModelListContent";
@@ -461,7 +461,7 @@ function ProviderGroup({
       <GeneralLayouts.Section gap={0.25}>
         <div className="px-1 pt-1 w-full h-(--opal-line-height-lg)">
           <GeneralLayouts.Section flexDirection="row" gap={0}>
-            <Spacer horizontal rem={0.675} />
+            <Spacer orientation="horizontal" rem={0.675} />
             <div className="flex flex-row justify-between items-center w-full py-1">
               <Content
                 icon={provider.icon}
@@ -502,7 +502,7 @@ function ProviderGroup({
                     tooltip="Edit credentials"
                     onClick={() => editCredentialsModal.toggle(true)}
                   />
-                  <Spacer horizontal rem={0.25} />
+                  <Spacer orientation="horizontal" rem={0.25} />
                 </GeneralLayouts.Section>
               ) : undefined}
             </div>
@@ -1253,7 +1253,10 @@ export default function IndexSettingsPage() {
                                               flexDirection="row"
                                               gap={0}
                                             >
-                                              <Spacer horizontal rem={0.675} />
+                                              <Spacer
+                                                orientation="horizontal"
+                                                rem={0.675}
+                                              />
                                               <div className="flex flex-row justify-between items-center w-full py-1">
                                                 <Content
                                                   icon={CUSTOM_PROVIDER.icon}

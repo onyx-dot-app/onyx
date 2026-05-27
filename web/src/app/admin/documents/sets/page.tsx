@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Button, Divider, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import Title from "@/components/ui/title";
 import { DocumentSetSummary } from "@/lib/types";
 import { useState } from "react";

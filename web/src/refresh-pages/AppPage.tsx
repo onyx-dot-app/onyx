@@ -70,7 +70,7 @@ import { Button } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNotFound from "@opal/illustrations/not-found";
 import SvgNoAccess from "@opal/illustrations/no-access";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
