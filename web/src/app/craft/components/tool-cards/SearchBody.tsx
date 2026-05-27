@@ -68,33 +68,31 @@ export default function SearchBody({ toolCall }: ToolCardBodyProps) {
   }
 
   return (
-    <div className="border-l border-border-02 pl-3 overflow-auto max-h-[24rem]">
+    <div className="border-l border-border-02 pl-3 overflow-y-auto max-h-[24rem]">
       <div className="divide-y divide-border-01">
         {hits.map((hit, idx) => (
           <div
             key={idx}
             className={cn(
-              "py-2 flex flex-col gap-1",
+              "py-2 px-3 flex flex-col gap-1 min-w-0",
               "hover:bg-background-tint-01 transition-colors"
             )}
           >
             <div className="flex items-start gap-2 min-w-0">
               <SvgFileText className="size-3.5 stroke-text-03 shrink-0 mt-0.5" />
-              <span className="min-w-0 wrap-break-word break-words">
+              <span className="flex-1 min-w-0 break-all">
                 <Text font="secondary-mono" color="text-04">
                   {hit.path}
                 </Text>
-              </span>
-              {hit.line && (
-                <span className="shrink-0">
+                {hit.line && (
                   <Text font="secondary-mono-label" color="text-02">
                     {`:${hit.line}`}
                   </Text>
-                </span>
-              )}
+                )}
+              </span>
             </div>
             {hit.snippet && (
-              <div className="pl-5 wrap-break-word break-words">
+              <div className="pl-5 min-w-0 break-all">
                 <Text font="secondary-mono" color="text-03">
                   {hit.snippet}
                 </Text>
