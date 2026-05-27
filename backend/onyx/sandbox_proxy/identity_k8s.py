@@ -139,15 +139,7 @@ class K8sInformerLookup(SandboxIPLookup):
                 continue
             with self._cache_lock:
                 self._cache[identity.sandbox_ip] = identity
-            logger.info(
-                "informer live lookup hit src_ip=%s pod=%s",
-                src_ip,
-                identity.sandbox_name,
-            )
             return identity
-        logger.info(
-            "informer live lookup miss src_ip=%s items=%d", src_ip, len(listing.items)
-        )
         return None
 
     def _run(self) -> None:
