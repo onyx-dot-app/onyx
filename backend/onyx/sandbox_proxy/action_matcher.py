@@ -14,6 +14,7 @@ from typing import Protocol
 from urllib.parse import parse_qs
 
 from mitmproxy import http
+from sqlalchemy.orm import Session
 
 from onyx.db.enums import EndpointPolicy
 from onyx.db.external_app import get_external_apps
