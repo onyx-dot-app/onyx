@@ -36,19 +36,12 @@ Sandbox containers run with:
 
 Threat model — Docker vs Kubernetes parity gap
 ----------------------------------------------
-The LLM provider ``api_key`` is passed into the sandbox container via
-``OPENCODE_CONFIG_CONTENT`` (a Docker env var). Docker stores env vars in
-plaintext on the host's container metadata; anyone with access to the
-Docker daemon (e.g. operators running ``docker inspect``) can read it.
-This differs from the K8s backend, which loads the same config from a
-namespaced ``Secret`` (RBAC-scoped, mounted into env at boot).
-
-Self-hosted docker-compose deployers should treat host access to the
-Docker daemon as access to the LLM provider key. The single-process
-nature of docker-compose makes this practically equivalent to
-``cat .env`` — but the failure mode is more subtle (the key shows up
-in any ``docker inspect`` paste), so it's worth calling out. See the
-docker-opencode-serve.md doc for the operator-facing note.
+The LLM provider ``api_key`` is passed into the container via
+``OPENCODE_CONFIG_CONTENT`` (a plaintext Docker env var visible to
+``docker inspect``). K8s loads the same config from an RBAC-scoped
+``Secret``. Treat host access to the Docker daemon as access to the
+key; see ``docs/craft/docker-opencode-serve.md`` for the operator-facing
+note.
 
 Outbound communication is intentionally limited to:
 
@@ -564,11 +557,9 @@ class DockerSandboxManager(SandboxManager):
             )
 
         if all_llm_configs is not None and len(all_llm_configs) > 1:
-            # Docker is single-provider today — opencode-serve loads only
-            # one provider's config at container startup. Per-prompt
-            # ``agent_provider`` overrides will fail at runtime with a
-            # generic "provider not registered" from opencode. Warn at
-            # provision so operators see this before the first request.
+            # Docker is single-provider today: per-prompt agent_provider
+            # overrides will fail at opencode-serve with "provider not
+            # registered". Warn now so operators see it before the first turn.
             logger.warning(
                 "DockerSandboxManager.provision received %d LLM configs but only "
                 "the primary provider %r is bootstrapped; per-prompt provider "
@@ -584,16 +575,16 @@ class DockerSandboxManager(SandboxManager):
             tenant_id,
         )
 
-        # Re-provision: clear tombstone + cached connection info so
-        # subscribes can build a fresh bus against the new container.
+        # Re-provision: clear tombstone + cached info so subscribes can
+        # build a fresh bus against the new container.
         with self._event_buses_lock:
             self._terminated_sandboxes.discard(sandbox_id)
         self._invalidate_serve_connection_info(sandbox_id)
 
         container = self._reuse_existing_container(sandbox_id)
         if container is None:
-            # opencode-serve reads provider config from env at startup, so it
-            # must be in the create_kwargs before the container ever runs.
+            # opencode-serve reads provider config from env at startup;
+            # must be in create_kwargs before the container ever runs.
             opencode_password = secrets.token_urlsafe(32)
             opencode_config_json = json.dumps(
                 build_opencode_config(
@@ -689,8 +680,6 @@ class DockerSandboxManager(SandboxManager):
             raise RuntimeError(f"Failed to create sandbox container: {e}") from e
 
     def terminate(self, sandbox_id: UUID) -> None:
-        # Tombstone, pop every per-directory bus, and drop cached connection
-        # info — all in the mixin so the contract is shared with K8s.
         self._close_all_sandbox_buses(sandbox_id)
 
         container = self._get_container(sandbox_id)
@@ -856,8 +845,6 @@ echo "Session workspace setup complete"
         session_id: UUID,
         nextjs_port: int | None = None,  # noqa: ARG002
     ) -> None:
-        # Release the per-session event bus first so its SSE reader thread
-        # + httpx connection don't leak when the session goes away.
         self._close_session_buses(sandbox_id, session_id)
 
         container = self._get_container(sandbox_id)
@@ -1128,14 +1115,8 @@ printf '%s' '{rendered.agents_md}' > {session_path}/AGENTS.md
     def _load_serve_connection_info(
         self, sandbox_id: UUID
     ) -> ServeConnectionInfo | None:
-        """Build the serve connection info from the Docker container.
-
-        Single read of ``docker inspect``: the base URL is derived from
-        the deterministic container name; the password lives in the
-        container's env (set at create time by
-        ``build_container_create_kwargs``). Cached by the mixin so the
-        hot path doesn't hit dockerd on every prompt.
-        """
+        """One ``docker inspect`` to extract URL (container name) +
+        password (env, set at create time). Cached by the mixin."""
         container = self._get_container(sandbox_id)
         if container is None:
             return None

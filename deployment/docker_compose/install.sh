@@ -242,11 +242,9 @@ refresh_docker_sudo() {
 }
 refresh_docker_sudo
 
-# is_using_sudo: returns 0 iff DOCKER_SUDO currently runs commands under sudo.
-# Wraps the convention so callers don't open-code ``[[ "${DOCKER_SUDO[0]}" ==
-# "sudo" ]]`` everywhere — that pattern is forced by the ``env``-anchor
-# workaround (see comment above DOCKER_SUDO=). A future contributor reading
-# ``is_using_sudo`` doesn't need to know about bash 3.2 parsing quirks.
+# 0 iff DOCKER_SUDO runs commands under sudo. Wrapped so callers don't
+# open-code the [0]-element check (the ``env``-anchor workaround above
+# precludes the cleaner `${#DOCKER_SUDO[@]} > 0` form).
 is_using_sudo() {
     [[ "${DOCKER_SUDO[0]}" == "sudo" ]]
 }

@@ -36,21 +36,14 @@ _SBX = UUID("12345678-1234-1234-1234-1234567890ab")
 
 
 def _bare_manager() -> DockerSandboxManager:
-    """Build a DockerSandboxManager without touching the Docker socket.
-
-    Skips ``_initialize`` (which constructs ``DockerClient`` and opens
-    the socket). For tests that don't need ``_docker``, this avoids the
-    flaky "Docker not running" failure mode on contributors' boxes.
-    """
-    # Reset the singleton so each test gets a fresh stub manager.
+    """DockerSandboxManager without touching the Docker socket: skips
+    ``_initialize`` so contributors without docker running can still run
+    these tests."""
     DockerSandboxManager._instance = None
     mgr: DockerSandboxManager = object.__new__(DockerSandboxManager)
-    # Path-dependent attributes used by methods under test.
     mgr._agent_instructions_template_path = (  # type: ignore[attr-defined]
         dsm.Path(dsm.__file__).parent.parent.parent / "AGENTS.template.md"
     )
-    # State the base class would set up via _init_serve_state — we use the
-    # same method here so tests stay in sync with real state shape.
     mgr._init_serve_state()
     return mgr
 
@@ -204,11 +197,8 @@ def test_init_serve_state_is_idempotent() -> None:
 def test_prompt_slot_serializes_on_docker_under_serve(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The K8s prompt_slot test asserts the lock contract for K8s; the
-    Docker manager inherits the same mixin impl, so the same invariant
-    must hold for Docker too. This catches a regression where Docker
-    forgot to call ``_init_serve_state`` and the lock dict would be
-    missing."""
+    """Pins the prompt-slot lock contract on Docker — same as the K8s
+    test, catches a regression if Docker skips ``_init_serve_state``."""
     from onyx.server.features.build.sandbox import serve_transport
 
     monkeypatch.setattr(serve_transport, "AGENT_TRANSPORT", AgentTransport.SERVE)
@@ -225,12 +215,9 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     monkeypatch: pytest.MonkeyPatch,
     llm_config: LLMProviderConfig,
 ) -> None:
-    """End-to-end verification that ``provision()`` mints a per-call
-    HTTP Basic password and threads it through ``build_container_create_kwargs``
-    into the Docker container's env. This is the load-bearing path the
-    Docker port adds: opencode-serve in the sandbox container reads the
-    password from env at startup; the api_server reads it back via
-    ``_read_opencode_password``. If they diverge, every request 401s."""
+    """``provision()`` must mint a per-call HTTP Basic password and
+    thread it through ``build_container_create_kwargs`` into the
+    container env — otherwise every later request 401s."""
     monkeypatch.setattr(dsm, "AGENT_TRANSPORT", AgentTransport.SERVE)
     monkeypatch.setattr(dsm, "SANDBOX_API_SERVER_URL", "https://onyx.example.com")
     # Skip the actual readiness HTTP probe — that needs a real container.
@@ -298,28 +285,19 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     config = json.loads(env["OPENCODE_CONFIG_CONTENT"])
     assert "provider" in config
 
-    # Fresh-per-call is provided by ``secrets.token_urlsafe(32)`` —
-    # asserting a second provision yields a different value is just
-    # restating stdlib's contract. Single-call shape check (above) plus
-    # the fact that the password is sourced from ``secrets.token_urlsafe``
-    # is the load-bearing invariant; testing it twice burns 30 lines of
-    # mock setup for no signal beyond reading the implementation.
+    # Fresh-per-call is stdlib's contract for ``secrets.token_urlsafe``;
+    # asserting it across two provisions is just re-stating that.
 
 
 def test_terminate_closes_event_bus_and_tombstones_sandbox() -> None:
-    """The Docker manager must mirror K8s's cleanup contract: on
-    terminate the per-sandbox event bus is closed and the sandbox id
-    is added to ``_terminated_sandboxes`` so a late ``subscribe`` won't
-    spin up a fresh reader thread against a deleted container."""
+    """terminate must close every per-directory bus and add the sandbox
+    to ``_terminated_sandboxes`` so a late subscribe can't race in."""
     mgr = _bare_manager()
     mgr._docker = MagicMock()  # type: ignore[attr-defined]
-    # No real container — terminate should still cleanly run.
     mgr._docker.containers.get.return_value = None
     mgr._docker.volumes.get.side_effect = dsm.NotFound("none")
 
-    # Pre-seed per-directory event buses so the terminate path takes the
-    # bus.close() branch. Two buses on the same sandbox to exercise the
-    # "close every per-directory bus" behavior.
+    # Two buses on the same sandbox exercise the per-directory close path.
     fake_bus_a = MagicMock()
     fake_bus_a.closed = False
     fake_bus_b = MagicMock()

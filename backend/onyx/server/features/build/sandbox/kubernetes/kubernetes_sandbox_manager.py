@@ -1291,9 +1291,8 @@ class KubernetesSandboxManager(SandboxManager):
             )
 
         try:
-            # Re-provision: clear the tombstone + cached connection info so
-            # future subscribes build a fresh bus against the new pod with
-            # the new Secret's password.
+            # Re-provision: clear tombstone + cached info so subscribes
+            # build a fresh bus with the new Secret's password.
             with self._event_buses_lock:
                 self._terminated_sandboxes.discard(sandbox_id)
             self._invalidate_serve_connection_info(sandbox_id)
@@ -1531,9 +1530,7 @@ class KubernetesSandboxManager(SandboxManager):
                 self._wait_for_resource_deletion("pod", pod_name)
 
     def terminate(self, sandbox_id: UUID) -> None:
-        """Tear down the per-pod event bus, then delete Service + Pod."""
-        # Tombstone, pop every per-directory bus, and drop cached connection
-        # info — same contract as Docker, lives on the shared mixin.
+        """Tear down event buses, then delete Service + Pod."""
         self._close_all_sandbox_buses(sandbox_id)
         self._cleanup_kubernetes_resources(str(sandbox_id))
         logger.info("Terminated Kubernetes sandbox %s", sandbox_id)
@@ -1737,8 +1734,6 @@ echo "Session workspace setup complete"
             nextjs_port: Optional port where Next.js server is running (unused in K8s,
                         we use PID file instead)
         """
-        # Drop the per-session event bus first so its reader thread + httpx
-        # connection don't leak past the session's lifetime.
         self._close_session_buses(sandbox_id, session_id)
 
         pod_name = self._get_pod_name(str(sandbox_id))
@@ -2289,12 +2284,8 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
     def _load_serve_connection_info(
         self, sandbox_id: UUID
     ) -> ServeConnectionInfo | None:
-        """Build the serve connection info from the per-pod Secret.
-
-        URL is the in-cluster Service DNS, not the pod IP — telepresence
-        drops arbitrary pod-IP traffic, so the Service form is the one
-        that survives dev/local environments.
-        """
+        """Build serve connection info from the per-pod Secret. URL uses
+        the Service DNS (not pod IP) so telepresence dev paths work."""
         service_name = self._get_service_name(str(sandbox_id))
         return ServeConnectionInfo(
             base_url=(

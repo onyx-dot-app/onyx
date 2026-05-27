@@ -34,19 +34,14 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 
 @pytest.fixture(autouse=True)
 def _serve_transport(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The lock is a no-op outside SERVE mode — force it on for these tests.
-
-    ``prompt_slot`` lives on the ``_ServeMixin`` (composed into
-    ``SandboxManager``) post-refactor; the transport flag is read at the
-    mixin module.
-    """
+    """Force SERVE — the lock is a no-op under ACP."""
     monkeypatch.setattr(serve_transport, "AGENT_TRANSPORT", AgentTransport.SERVE)
 
 
 @pytest.fixture
 def mgr() -> KubernetesSandboxManager:
-    """KubernetesSandboxManager with just the serve-transport state populated —
-    skips _initialize so no kube config is required."""
+    """Manager with just serve-transport state populated; skips
+    ``_initialize`` so no kube config is required."""
     m: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     m._init_serve_state()
     return m

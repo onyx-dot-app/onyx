@@ -52,11 +52,7 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 
 @pytest.fixture(autouse=True)
 def _serve_transport(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``list_subagents`` and bus creation only kick in under SERVE.
-
-    The methods live on ``_ServeMixin`` (composed into ``SandboxManager``)
-    post-refactor; the transport flag is read at the mixin module.
-    """
+    """Force SERVE mode; lookup happens in the mixin module."""
     from onyx.server.features.build.sandbox import serve_transport
 
     monkeypatch.setattr(sandbox_base, "AGENT_TRANSPORT", AgentTransport.SERVE)
@@ -65,16 +61,13 @@ def _serve_transport(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def mgr() -> Generator[KubernetesSandboxManager, None, None]:
-    """Manager with just the serve-transport state initialized — skips
-    ``_initialize`` so no kube config is required. Stubs
-    ``_load_serve_connection_info`` so the mixin's caching layer doesn't
-    need a real Secret read."""
+    """Manager with just serve-transport state initialized; stubs the
+    connection-info loader so the test doesn't touch K8s."""
     from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 
     m: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
-    m._init_serve_state()  # initializes _event_buses, _terminated_sandboxes, etc.
+    m._init_serve_state()
 
-    # Stub the cached connection-info loader so we don't touch K8s.
     m._load_serve_connection_info = (  # type: ignore[assignment]
         lambda sandbox_id: ServeConnectionInfo(
             base_url=f"http://{sandbox_id}.invalid:4096",

@@ -1,18 +1,8 @@
 """Shared opencode-serve transport plumbing.
 
-Lives outside ``base.py`` so the abstract supertype doesn't have to pull in
-concrete ``opencode.*`` modules — that would invert the dependency arrow
-(abstract → concrete). Both ``SandboxManager`` and any future serve-using
-class compose this mixin in.
-
-What lives here:
-
-- :class:`ServeConnectionInfo` — per-sandbox URL + password, cached at first
-  use so hot paths (every prompt, every event-bus rebuild) don't re-hit
-  ``docker inspect`` / ``kube get secret`` on every call.
-- :class:`_ServeMixin` — the prompt slot, event-bus cache, readiness probe,
-  serve send-message loop, and subscribe/list helpers. Subclasses provide
-  the backend-specific ``_load_serve_connection_info``.
+Lives outside ``base.py`` so the abstract supertype doesn't import concrete
+``opencode.*`` modules (would invert the dependency arrow). ``SandboxManager``
+composes ``_ServeMixin`` in.
 """
 
 from __future__ import annotations
@@ -50,34 +40,23 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# ACPEvent is a union type defined in both backend modules. Using Any here
-# avoids a circular import; the real typing happens at the implementation.
 ACPEvent = Any
 
-# Hostname of the api_server process — surfaces in serve-transport logs so
-# operators can tell which replica is driving a given prompt.
+# Tags serve-transport logs with the api_server replica handling the prompt.
 _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 
-# After the sandbox backend (pod/container) reports Ready, opencode-serve
-# still has to finish its own boot (config parse, provider registry init,
-# HTTP server bind on :4096). Empirically 1–3s warm, up to ~15s cold.
+# opencode-serve boot lags backend Ready by ~1–3s warm, up to ~15s cold.
 OPENCODE_SERVE_READY_TIMEOUT_SECONDS = 30
 OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
 class ServeConnectionInfo:
-    """Per-sandbox opencode-serve connection details.
-
-    Constant for the life of the container/pod (password is bound into env
-    at startup; URL is derived from a stable container name / Service DNS).
-    Cached by :class:`_ServeMixin` so we don't re-hit the backend control
-    plane (docker inspect / k8s Secret read) on every prompt.
-    """
+    """Per-sandbox opencode-serve URL + Basic-auth password. Constant for
+    the life of the container/pod; cached by ``_ServeMixin``."""
 
     base_url: str
-    # ``None`` for legacy sandboxes provisioned before HTTP Basic landed.
-    # Bus then runs without auth — the warning is emitted at load time.
+    # ``None`` for legacy sandboxes — bus then runs without auth.
     password: str | None
 
     def auth(self) -> httpx.BasicAuth | None:
@@ -89,38 +68,23 @@ class ServeConnectionInfo:
 class _ServeMixin:
     """Shared opencode-serve plumbing for ``SandboxManager`` subclasses.
 
-    Owns:
-
-    - per-(sandbox, directory) :class:`PodEventBus` cache + tombstone
-    - per-(sandbox, build_session) prompt-slot lock
-    - per-sandbox :class:`ServeConnectionInfo` cache
-    - the wait-for-ready probe, send-message loop, subscribe loop
-
-    Subclasses implement :meth:`_load_serve_connection_info` (one call,
-    cached forever) and supply their backend-specific abort/cleanup.
+    Subclasses implement :meth:`_load_serve_connection_info`; the mixin
+    handles caching, the prompt slot, the event-bus map + tombstone, the
+    readiness probe, the send-message loop, and the subscribe stream.
     """
 
-    # State is initialized exactly once via ``_init_serve_state`` — called
-    # from each subclass's ``_initialize`` under the singleton lock. The
-    # body is also thread-safe so a contributor who forgets to call it
-    # eagerly can't race two callers into creating two different lock
-    # objects.
+    # Class-level so racing first-callers across instances can't both
+    # initialize and end up with different ``_event_buses_lock`` objects.
     _serve_state_init_lock = threading.Lock()
 
     def _init_serve_state(self) -> None:
-        """Idempotent, thread-safe init for serve-transport state.
-
-        Safe to call multiple times; second and subsequent calls are
-        no-ops. The class-level lock guarantees two threads racing the
-        first call cannot both initialize and end up with different
-        ``_event_buses_lock`` objects.
-        """
+        """Idempotent, thread-safe init for serve-transport state."""
         if getattr(self, "_serve_state_initialized", False):
             return
         with _ServeMixin._serve_state_init_lock:
             if getattr(self, "_serve_state_initialized", False):
                 return
-            # Per-(sandbox, directory): opencode-serve scopes /event by ?directory=.
+            # opencode-serve scopes /event by ``?directory=``, so one bus per session dir.
             self._event_buses: dict[tuple[UUID, str], PodEventBus] = {}
             # Tombstone: blocks late subscribe from racing a terminate.
             self._terminated_sandboxes: set[UUID] = set()
@@ -128,36 +92,21 @@ class _ServeMixin:
             # Key on build_session_id, not opencode_session_id — see prompt_slot.
             self._prompt_locks: dict[tuple[UUID, UUID], threading.Lock] = {}
             self._prompt_locks_meta = threading.Lock()
-            # Per-sandbox connection info cache; loaded on first use,
-            # invalidated by terminate(). Keeps the hot path off docker
-            # inspect / kube secret reads.
             self._serve_conn_info: dict[UUID, ServeConnectionInfo] = {}
             self._serve_conn_info_lock = threading.Lock()
             self._serve_state_initialized = True
-
-    # ------------------------------------------------------------------
-    # Backend hooks
-    # ------------------------------------------------------------------
 
     @abstractmethod
     def _load_serve_connection_info(
         self, sandbox_id: UUID
     ) -> ServeConnectionInfo | None:
-        """Build the connection info for ``sandbox_id`` from the backend.
-
-        Called at most once per sandbox per process; the result is cached
-        until :meth:`_invalidate_serve_connection_info` (typically by
-        ``terminate``). Return ``None`` if the sandbox doesn't exist.
-        """
+        """Build connection info from the backend. Called once per sandbox;
+        cached until ``_invalidate_serve_connection_info``. Return ``None``
+        if the sandbox doesn't exist."""
         ...
 
-    # ------------------------------------------------------------------
-    # ServeConnectionInfo cache
-    # ------------------------------------------------------------------
-
     def _serve_connection_info(self, sandbox_id: UUID) -> ServeConnectionInfo:
-        """Return cached info, loading on first use. Raises if the
-        backend reports the sandbox is gone."""
+        """Cached getter; loads on first use, raises if backend reports gone."""
         info = self._serve_conn_info.get(sandbox_id)
         if info is not None:
             return info
@@ -181,14 +130,9 @@ class _ServeMixin:
             return loaded
 
     def _invalidate_serve_connection_info(self, sandbox_id: UUID) -> None:
-        """Drop cached info — call on terminate or when the backend
-        reprovisions the sandbox under the same id."""
+        """Drop cached info; call on terminate / re-provision."""
         with self._serve_conn_info_lock:
             self._serve_conn_info.pop(sandbox_id, None)
-
-    # ------------------------------------------------------------------
-    # Prompt slot
-    # ------------------------------------------------------------------
 
     @contextlib.contextmanager
     def prompt_slot(
@@ -196,38 +140,18 @@ class _ServeMixin:
         sandbox_id: UUID,
         build_session_id: UUID,
     ) -> Generator[bool, None, None]:
-        """Non-blocking try-acquire of a per-(sandbox, build_session) lock
-        that serializes concurrent ``send_message`` calls on a build session.
+        """Non-blocking try-acquire of a per-build-session lock; yields True
+        if acquired, False if a turn is already in flight (caller must
+        abort without side effects).
 
-        Yields ``True`` if the slot was acquired and the caller may proceed
-        with the turn (lock is released on context exit), or ``False`` if a
-        turn is already in flight on this build session and the caller
-        should abort without side effects (no user_message persistence, no
-        prompt POST).
-
-        Why this exists: opencode-serve's ``prompt_async`` is fire-and-
-        forget and not concurrent-safe — empirically, a second POST while
-        a turn is in flight is silently dropped (no 409, no queue), and
-        the second subscriber catches the *first* turn's terminator. Without
-        serialization at this layer the user sees an empty response and a
-        phantom user_message is persisted with no assistant reply.
-
-        Keying on ``build_session_id`` (rather than ``opencode_session_id``)
-        is deliberate:
-          1. It's stable across opencode session id rotations triggered by
-             the ``on_opencode_session_resolved`` callback — concurrent
-             requests landing in the middle of a 404-then-mint sequence
-             still contend on the same lock.
-          2. It blocks first-turn races: two simultaneous prompts on a
-             fresh build session (where ``opencode_session_id`` is NULL
-             for both) both contend before each calls POST /session, so
-             only one opencode session is ever created.
-          3. It bounds the lock dict size to one entry per build session
-             instead of one per (build_session × pod_restart_count).
-
-        Under ``AGENT_TRANSPORT=acp`` (rollback path) this is a no-op
-        (yields ``True``) — the per-message exec'd ``opencode acp``
-        subprocess model has no shared state to serialize.
+        opencode-serve's ``prompt_async`` is fire-and-forget and not
+        concurrent-safe: a second POST while a turn is in flight is
+        silently dropped, the second subscriber catches the *first* turn's
+        terminator, and a phantom user_message gets persisted with no
+        assistant reply. Key on ``build_session_id`` (not
+        ``opencode_session_id``) so the lock survives id rotation from
+        ``on_opencode_session_resolved`` and bounds the dict to one entry
+        per build session. No-op under ACP.
         """
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             yield True
@@ -254,10 +178,6 @@ class _ServeMixin:
             if acquired:
                 lock.release()
 
-    # ------------------------------------------------------------------
-    # Session helpers
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _session_directory(session_id: UUID) -> str:
         return f"/workspace/sessions/{session_id}"
@@ -267,20 +187,9 @@ class _ServeMixin:
         sandbox_id: UUID,
         session_id: UUID,
     ) -> str | None:
-        """Return a stable opencode-serve session id for this build session.
-
-        Used only when ``AGENT_TRANSPORT=serve``. The caller (session
-        manager) persists the returned id on the ``BuildSession`` row so
-        subsequent ``send_message`` calls can hit the same opencode
-        session by id, eliminating the on-disk session/list heuristic
-        the ACP path uses.
-
-        Returns ``None`` under ACP — that transport has no notion of a
-        persistent session id and doesn't need this preflight.
-
-        Idempotent: calling twice for the same (sandbox, session) on serve
-        returns the same id (delegated to ``OpencodeServeClient.ensure_session``).
-        """
+        """Idempotent preflight to mint (or look up) the opencode-serve
+        session id for this build session. Caller persists it so later
+        turns hit the same session by id. Returns ``None`` under ACP."""
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             return None
         session_path = self._session_directory(session_id)
@@ -303,8 +212,7 @@ class _ServeMixin:
         sandbox_id: UUID,
         parent_opencode_session_id: str,
     ) -> list[str]:
-        """Child opencode session ids spawned under the parent. Empty
-        under ACP (no shared event bus to track subagents)."""
+        """Child opencode session ids spawned under the parent. Empty under ACP."""
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             return []
         # Walk existing buses only — don't spin up a reader thread just to list.
@@ -318,28 +226,20 @@ class _ServeMixin:
                 return children
         return []
 
-    # ------------------------------------------------------------------
-    # Readiness probe
-    # ------------------------------------------------------------------
-
     def _wait_for_opencode_serve_ready(
         self,
         sandbox_id: UUID,
         timeout: float = OPENCODE_SERVE_READY_TIMEOUT_SECONDS,
     ) -> bool:
-        """Block until opencode-serve answers a health probe with 200.
-
-        Backend readiness only proves the supervisor is up; opencode binds
-        :4096 a few seconds later. Skipping this races the first prompt's
-        bus subscribe → "stream did not become ready".
-        """
+        """Block until opencode-serve answers ``GET /doc`` with 200. Backend
+        Ready only proves the supervisor is up; opencode binds :4096 a few
+        seconds later."""
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             return True
 
         info = self._serve_connection_info(sandbox_id)
-        # One client across all polls — cheap (no real connection until first
-        # request) and saves the connection-setup churn during the worst
-        # phase of the probe (server actively refusing connections).
+        # One client across all polls — saves connect-setup churn while the
+        # server is actively refusing connections.
         with OpencodeServeClient(
             base_url=info.base_url, password=info.password, event_bus=None
         ) as client:
@@ -366,14 +266,10 @@ class _ServeMixin:
         )
         return False
 
-    # ------------------------------------------------------------------
-    # Event bus / serve client
-    # ------------------------------------------------------------------
-
     def _get_or_create_event_bus(self, sandbox_id: UUID, directory: str) -> PodEventBus:
-        """Lazy per-(sandbox, directory) bus. Refuses to create for a terminated
-        sandbox. Replaces self-closed buses so callers don't wedge on
-        BUS_CLOSED_SENTINEL until restart."""
+        """Lazy per-(sandbox, directory) bus. Refuses to create for a
+        terminated sandbox; replaces self-closed buses so callers don't
+        wedge on BUS_CLOSED_SENTINEL until restart."""
         key = (sandbox_id, directory)
         with self._event_buses_lock:
             bus = self._event_buses.get(key)
@@ -418,17 +314,10 @@ class _ServeMixin:
             event_bus=bus,
         )
 
-    # ------------------------------------------------------------------
-    # Bus cleanup (called from terminate / cleanup_session_workspace)
-    # ------------------------------------------------------------------
-
     def _close_session_buses(self, sandbox_id: UUID, session_id: UUID) -> None:
-        """Pop and close the per-(sandbox, session) event bus.
-
-        Call from each backend's ``cleanup_session_workspace`` — otherwise
-        the bus (and its reader thread + httpx connection) survives
-        session deletion and leaks until the api_server restarts.
-        """
+        """Release the per-(sandbox, session) bus. Call from
+        ``cleanup_session_workspace`` — without this the reader thread +
+        httpx connection survive session deletion."""
         directory = self._session_directory(session_id)
         with self._event_buses_lock:
             bus = self._event_buses.pop((sandbox_id, directory), None)
@@ -444,9 +333,9 @@ class _ServeMixin:
             )
 
     def _close_all_sandbox_buses(self, sandbox_id: UUID) -> None:
-        """Pop every bus for ``sandbox_id``, set the tombstone, and close
-        them. Call from each backend's ``terminate`` before destroying the
-        container/pod so late subscribes can't race a fresh bus in."""
+        """Tombstone + pop + close every bus for ``sandbox_id``. Call from
+        ``terminate`` before destroying the container/pod so late subscribes
+        can't race a fresh bus in."""
         with self._event_buses_lock:
             self._terminated_sandboxes.add(sandbox_id)
             doomed_keys = [k for k in self._event_buses if k[0] == sandbox_id]
@@ -461,10 +350,6 @@ class _ServeMixin:
                 )
         self._invalidate_serve_connection_info(sandbox_id)
 
-    # ------------------------------------------------------------------
-    # Send message via serve
-    # ------------------------------------------------------------------
-
     def _send_message_via_serve(
         self,
         sandbox_id: UUID,
@@ -476,10 +361,9 @@ class _ServeMixin:
         *,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
     ) -> Generator[ACPEvent, None, None]:
-        """Stream ACP events via the in-sandbox ``opencode serve``. Callers
-        should preflight ``opencode_session_id`` with
-        :meth:`ensure_opencode_session` to avoid one orphan session per turn.
-        """
+        """Stream ACP events via the in-sandbox ``opencode serve``. Preflight
+        ``opencode_session_id`` via :meth:`ensure_opencode_session` to avoid
+        one orphan session per turn."""
         packet_logger = get_packet_logger()
         session_path = self._session_directory(session_id)
         client = self._build_serve_client(sandbox_id, session_path)
@@ -496,8 +380,8 @@ class _ServeMixin:
                 title=f"build-session-{str(session_id)[:8]}",
             )
             if resolved_session_id != opencode_session_id:
-                # Notify caller so they persist the new id — without this we
-                # orphan one opencode session per turn (lose conversation context).
+                # Caller must persist the new id or we orphan one opencode
+                # session per turn and lose conversation context.
                 if opencode_session_id is not None:
                     logger.warning(
                         "[SANDBOX-SERVE] persisted opencode_session_id %s was "
@@ -580,10 +464,8 @@ class _ServeMixin:
         error: str,
         log_level: int,
     ) -> None:
-        """Best-effort abort + structured log on a failed turn. Used by
-        both GeneratorExit and Exception legs of the send-message loop.
-        Swallowing the abort failure is intentional — we're already in an
-        error path."""
+        """Best-effort abort + structured log on a failed turn. Abort
+        failures are swallowed — we're already in an error path."""
         logger.log(
             log_level,
             "[SANDBOX-SERVE] turn failed: session=%s events=%s error=%s — sending abort",
@@ -603,10 +485,6 @@ class _ServeMixin:
             error=error,
             events_count=events_count,
         )
-
-    # ------------------------------------------------------------------
-    # Subscribe stream (used by session manager for reattach/resume)
-    # ------------------------------------------------------------------
 
     def subscribe_to_opencode_session(
         self,
@@ -650,8 +528,7 @@ class _ServeMixin:
                 ):
                     yield acp_event
         finally:
-            # Close client first so a flaky bus.unsubscribe doesn't leak the
-            # connection pool. Both calls are best-effort here.
+            # Close client first so a flaky unsubscribe doesn't leak the pool.
             try:
                 client.close()
             except Exception:

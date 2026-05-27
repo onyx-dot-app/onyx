@@ -121,9 +121,7 @@ class StubSandboxManager(SandboxManager):
     """
 
     def __init__(self) -> None:
-        # Initialize serve-transport state from _ServeMixin so any test
-        # that ends up reaching prompt_slot/list_subagents on the stub
-        # gets the dicts/locks it expects.
+        # Tests hitting prompt_slot / list_subagents need the mixin state.
         self._init_serve_state()
 
         # Return-value hooks.

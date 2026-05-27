@@ -85,10 +85,8 @@ class SandboxManager(_ServeMixin, ABC):
                 └── ...
 
     Serve-transport plumbing lives in :class:`_ServeMixin` (composed via
-    MRO). Subclasses get the event-bus cache, prompt slot, readiness probe,
-    and serve send-message loop for free; they only have to implement
-    :meth:`_load_serve_connection_info` (one read, cached forever) plus
-    the abstract methods declared below.
+    MRO); subclasses implement :meth:`_load_serve_connection_info` plus
+    the abstract methods below.
 
     IMPORTANT: Implementations must NOT interface with the database directly.
     All database operations should be handled by the caller.
@@ -138,17 +136,12 @@ class SandboxManager(_ServeMixin, ABC):
 
     @abstractmethod
     def terminate(self, sandbox_id: UUID) -> None:
-        """Terminate a sandbox and clean up all resources.
-
-        Destroys the entire sandbox including all session workspaces.
-        Use cleanup_session_workspace() to remove individual sessions.
+        """Terminate a sandbox and clean up all resources. Destroys every
+        session workspace; for one session use ``cleanup_session_workspace``.
 
         Implementations MUST call ``self._close_all_sandbox_buses(sandbox_id)``
-        before destroying the container/pod so late subscribes can't race
-        a fresh bus against a deleted backend.
-
-        Args:
-            sandbox_id: The sandbox ID to terminate
+        before destroying the backend so late subscribes can't race a fresh
+        bus in.
         """
         ...
 
@@ -196,22 +189,13 @@ class SandboxManager(_ServeMixin, ABC):
         session_id: UUID,
         nextjs_port: int | None = None,
     ) -> None:
-        """Clean up a session workspace (on session delete).
-
-        1. Stop the Next.js dev server if running on nextjs_port
-        2. Remove the session directory: sessions/$session_id/
+        """Clean up a session workspace on session delete: stop the
+        Next.js dev server and remove ``sessions/$session_id/``. Does NOT
+        terminate the sandbox.
 
         Implementations MUST call ``self._close_session_buses(sandbox_id,
-        session_id)`` so the per-session :class:`PodEventBus` and its
-        reader thread / httpx connection are released. Forgetting this
-        leaks one bus per deleted session until the api_server restarts.
-
-        Does NOT terminate the sandbox - other sessions may still be using it.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID to clean up
-            nextjs_port: Optional port where Next.js server is running
+        session_id)`` — otherwise the per-session ``PodEventBus`` (reader
+        thread + httpx connection) leaks until api_server restarts.
         """
         ...
 
@@ -337,28 +321,19 @@ class SandboxManager(_ServeMixin, ABC):
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
     ) -> Generator[ACPEvent, None, None]:
-        """Stream typed ACP events for one user message.
+        """Stream typed ACP events for one user message. Dispatches on
+        ``AGENT_TRANSPORT`` — ``serve`` to ``_send_message_via_serve``,
+        ``acp`` (rollback) to ``_send_message_via_acp``.
 
-        Dispatches on ``AGENT_TRANSPORT``: under ``serve`` (default
-        post-migration) calls into :meth:`_send_message_via_serve` (shared
-        across backends, lives on :class:`_ServeMixin`); under ``acp``
-        (rollback) delegates to the backend-specific
-        :meth:`_send_message_via_acp`.
+        Serve-only kwargs (ignored by ACP):
 
-        Serve-only kwargs (ignored by ACP transport):
-
-        - ``opencode_session_id``: persistent opencode-serve session id.
-          Callers should pass ``BuildSession.opencode_session_id``; if
-          ``None`` the transport calls :meth:`ensure_opencode_session`.
-        - ``agent_provider`` / ``agent_model``: per-prompt model
-          override (``body["model"]``). Both must be set; either
-          ``None`` falls back to opencode's loaded default.
-        - ``on_opencode_session_resolved``: invoked synchronously, before
-          the first event is yielded, with the resolved opencode session
-          id whenever it differs from the caller-supplied
-          ``opencode_session_id``. Callers persist the new id so
-          subsequent turns don't 404 the same stale id and orphan a fresh
-          opencode session per turn.
+        - ``opencode_session_id``: persistent serve session id; pass
+          ``BuildSession.opencode_session_id`` or ``None`` to mint.
+        - ``agent_provider`` / ``agent_model``: per-prompt model override;
+          either ``None`` falls back to the loaded default.
+        - ``on_opencode_session_resolved``: invoked with the resolved id
+          when it differs from the caller's. Caller persists it so later
+          turns don't orphan a fresh session each time.
         """
         if AGENT_TRANSPORT == AgentTransport.SERVE:
             yield from self._send_message_via_serve(
@@ -380,12 +355,9 @@ class SandboxManager(_ServeMixin, ABC):
         session_id: UUID,
         message: str,
     ) -> Generator[ACPEvent, None, None]:
-        """Rollback transport: exec ``opencode acp`` once per message.
-
-        Only reached when ``AGENT_TRANSPORT=acp``. Kept as the deprecated
-        leg of the serve migration; backends will drop their
-        implementations once the rollback window closes.
-        """
+        """Rollback transport: exec ``opencode acp`` per message. Only
+        reached under ``AGENT_TRANSPORT=acp``; dropped once the rollback
+        window closes."""
         ...
 
     @abstractmethod
