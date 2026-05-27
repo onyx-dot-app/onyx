@@ -26,7 +26,7 @@ import pytest
 import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
 from onyx.server.features.build.configs import AgentTransport
 from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
-from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD_ENV
+from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     DockerSandboxManager,
 )
@@ -73,7 +73,7 @@ def test_load_serve_connection_info_parses_password_from_container_env() -> None
             "Env": [
                 "ONYX_PAT=pat-redacted",
                 "ONYX_SERVER_URL=http://api_server:8080",
-                f"{OPENCODE_SERVER_PASSWORD_ENV}=correct-horse-battery-staple",
+                f"{OPENCODE_SERVER_PASSWORD}=correct-horse-battery-staple",
                 "AGENT_TRANSPORT=serve",
             ]
         }
@@ -122,7 +122,7 @@ def test_load_serve_connection_info_handles_password_with_equals_sign() -> None:
     fake_container.attrs = {
         "Config": {
             "Env": [
-                f"{OPENCODE_SERVER_PASSWORD_ENV}={weird_password}",
+                f"{OPENCODE_SERVER_PASSWORD}={weird_password}",
             ]
         }
     }
@@ -272,13 +272,13 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
         "ONYX_SERVER_URL",
         "AGENT_TRANSPORT",
         "OPENCODE_SERVE_PORT",
-        OPENCODE_SERVER_PASSWORD_ENV,
+        OPENCODE_SERVER_PASSWORD,
         "OPENCODE_CONFIG_CONTENT",
     }
     # AGENT_TRANSPORT mirrors the patched serve value.
     assert env["AGENT_TRANSPORT"] == "serve"
     # The password is a fresh token_urlsafe(32) — long-ish, no spaces.
-    pw = env[OPENCODE_SERVER_PASSWORD_ENV]
+    pw = env[OPENCODE_SERVER_PASSWORD]
     assert len(pw) >= 32
     assert " " not in pw
     # OPENCODE_CONFIG_CONTENT is valid JSON the agent can parse.

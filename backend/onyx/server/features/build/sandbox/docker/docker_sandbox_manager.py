@@ -87,7 +87,7 @@ from onyx.server.features.build.configs import AgentTransport
 from onyx.server.features.build.configs import ATTACHMENTS_DIRECTORY
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
-from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD_ENV
+from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
 from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
 from onyx.server.features.build.configs import SANDBOX_DOCKER_CPU_LIMIT
@@ -361,7 +361,7 @@ def build_container_create_kwargs(
     - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL, plus the
       four serve-transport vars (``AGENT_TRANSPORT``,
       ``OPENCODE_SERVE_PORT``, the password env named by
-      ``OPENCODE_SERVER_PASSWORD_ENV``, and ``OPENCODE_CONFIG_CONTENT``).
+      ``OPENCODE_SERVER_PASSWORD``, and ``OPENCODE_CONFIG_CONTENT``).
       No caller can inject anything else. No S3/MinIO/Postgres/Redis
       credentials. No compose service hostnames.
     - **No host mounts**: only the per-sandbox named volume mounted at
@@ -379,7 +379,7 @@ def build_container_create_kwargs(
     would require the sandbox to be on the compose default network.
 
     ``opencode_password`` is generated per-provision by the manager and
-    injected as the env var named by ``OPENCODE_SERVER_PASSWORD_ENV``.
+    injected as the env var named by ``OPENCODE_SERVER_PASSWORD``.
     The api_server reads it back via ``docker inspect`` rather than
     persisting it on disk. ``opencode_config_json`` is the full
     ``opencode.json`` content (single-provider for Docker today), surfaced
@@ -400,7 +400,7 @@ def build_container_create_kwargs(
         "ONYX_SERVER_URL": api_server_url,
         "AGENT_TRANSPORT": AGENT_TRANSPORT.value,
         "OPENCODE_SERVE_PORT": str(OPENCODE_SERVE_PORT),
-        OPENCODE_SERVER_PASSWORD_ENV: opencode_password,
+        OPENCODE_SERVER_PASSWORD: opencode_password,
         "OPENCODE_CONFIG_CONTENT": opencode_config_json,
     }
 
@@ -1125,7 +1125,7 @@ printf '%s' '{rendered.agents_md}' > {session_path}/AGENTS.md
         except (APIError, NotFound):
             return None
         password: str | None = None
-        prefix = f"{OPENCODE_SERVER_PASSWORD_ENV}="
+        prefix = f"{OPENCODE_SERVER_PASSWORD}="
         for entry in env_list:
             if entry.startswith(prefix):
                 password = entry[len(prefix) :]

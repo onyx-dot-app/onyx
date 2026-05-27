@@ -69,7 +69,7 @@ from onyx.server.features.build.configs import AGENT_TRANSPORT
 from onyx.server.features.build.configs import AgentTransport
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
-from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD_ENV
+from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
 from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
@@ -621,7 +621,7 @@ class KubernetesSandboxManager(SandboxManager):
                 client.V1EnvVar(name="ONYX_PAT", value=onyx_pat),
                 client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
                 client.V1EnvVar(
-                    name=OPENCODE_SERVER_PASSWORD_ENV,
+                    name=OPENCODE_SERVER_PASSWORD,
                     value_from=client.V1EnvVarSource(
                         secret_key_ref=client.V1SecretKeySelector(
                             name=self._get_opencode_secret_name(sandbox_id),

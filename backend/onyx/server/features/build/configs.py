@@ -245,7 +245,7 @@ OPENCODE_SERVE_PORT = int(os.environ.get("OPENCODE_SERVE_PORT", "4096"))
 # password for opencode serve. Internal contract — the api_server writes
 # this name and opencode-serve reads it, so both ends must agree. Not
 # operator-tunable.
-OPENCODE_SERVER_PASSWORD_ENV = "OPENCODE_SERVER_PASSWORD"
+OPENCODE_SERVER_PASSWORD = "OPENCODE_SERVER_PASSWORD"
 
 # Username for HTTP Basic Auth against opencode serve. Opencode's serve
 # implementation hard-codes the username to "opencode" when only
