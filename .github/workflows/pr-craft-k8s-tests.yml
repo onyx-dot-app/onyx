@@ -428,6 +428,35 @@ jobs:
           echo "=== docker images ==="; docker images || true
           echo "=== /tmp contents ==="; ls -lah /tmp || true
 
+      - name: MinIO snapshot diagnostics on failure
+        if: failure()
+        run: |
+          MINIO_ID=$(cd deployment/docker_compose && \
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q minio)
+          docker exec "$MINIO_ID" \
+            mc alias set local http://localhost:9000 minioadmin minioadmin || true
+          echo "=== buckets in docker-compose minio (container view) ==="
+          docker exec "$MINIO_ID" mc ls local/ || true
+          echo "=== recursive listing of every bucket (container view) ==="
+          docker exec "$MINIO_ID" mc ls --recursive local/ || true
+          echo "=== host boto3 view via S3_ENDPOINT_URL ==="
+          python - <<'PY' || true
+          import os, boto3
+          from botocore.config import Config
+          s3 = boto3.client(
+              "s3",
+              endpoint_url=os.environ.get("S3_ENDPOINT_URL"),
+              aws_access_key_id=os.environ.get("S3_AWS_ACCESS_KEY_ID"),
+              aws_secret_access_key=os.environ.get("S3_AWS_SECRET_ACCESS_KEY"),
+              region_name=os.environ.get("AWS_REGION") or "us-east-1",
+              config=Config(s3={"addressing_style": "path"}),
+          )
+          print("buckets:", [b["Name"] for b in s3.list_buckets().get("Buckets", [])])
+          for b in s3.list_buckets().get("Buckets", []):
+              objs = s3.list_objects_v2(Bucket=b["Name"]).get("Contents", [])
+              print(b["Name"], "->", [o["Key"] for o in objs][:20])
+          PY
+
       - name: Collect kind logs on failure
         if: failure()
         run: |
