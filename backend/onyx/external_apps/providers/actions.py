@@ -67,9 +67,7 @@ class GraphQLOp(BaseModel):
     resource_type: str | None = None
 
 
-# A request matches an action when any of the action's rules fires. The
-# discriminated union serialises cleanly so the same shape can later back
-# admin-authored custom-app rules and the proxy's bulk ruleset.
+# A request matches an action when any of the action's rules fires.
 MatchRule = Annotated[RestRoute | GraphQLOp, Field(discriminator="kind")]
 
 
