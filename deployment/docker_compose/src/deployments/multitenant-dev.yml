@@ -1,45 +1,37 @@
-# =============================================================================
-# GENERATED FILE — DO NOT EDIT BY HAND.
-# Source: deployment/docker_compose/src/deployments/multitenant-dev.yml
-# Regenerate with: python deployment/docker_compose/render.py
-# =============================================================================
-
 name: onyx
+
+include:
+  - api_server
+  - background
+  - web_server
+  - inference_model_server
+  - indexing_model_server
+  - relational_db
+  - opensearch
+  - nginx
+  - minio
+  - cache
+  - code-interpreter
+
 services:
   api_server:
-    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
-    build:
-      context: ../../backend
-      dockerfile: Dockerfile
-    command: |
-      /bin/sh -c " alembic -n schema_private upgrade head && echo \"Starting Onyx Api Server\" && uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
-    env_file:
-    - path: .env
-      required: false
-    depends_on:
-    - relational_db
-    - opensearch
-    - cache
-    - inference_model_server
-    - minio
-    restart: unless-stopped
+    command: >
+      /bin/sh -c "
+      alembic -n schema_private upgrade head &&
+      echo \"Starting Onyx Api Server\" &&
+      uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
+    ports:
+      - "8080:8080"
     environment:
-      POSTGRES_HOST: ${POSTGRES_HOST:-relational_db}
-      OPENSEARCH_HOST: ${OPENSEARCH_HOST:-opensearch}
-      OPENSEARCH_ADMIN_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
-      REDIS_HOST: ${REDIS_HOST:-cache}
-      MODEL_SERVER_HOST: ${MODEL_SERVER_HOST:-inference_model_server}
-      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
-      S3_AWS_ACCESS_KEY_ID: ${S3_AWS_ACCESS_KEY_ID:-minioadmin}
-      S3_AWS_SECRET_ACCESS_KEY: ${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
-      ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: 'true'
-      MULTI_TENANT: 'true'
+      ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
+      MULTI_TENANT: "true"
       LOG_LEVEL: DEBUG
       AUTH_TYPE: cloud
-      REQUIRE_EMAIL_VERIFICATION: 'false'
-      DISABLE_TELEMETRY: 'true'
+      REQUIRE_EMAIL_VERIFICATION: "false"
+      DISABLE_TELEMETRY: "true"
       IMAGE_TAG: test
-      DEV_MODE: 'true'
+      DEV_MODE: "true"
+      # Auth Settings
       SESSION_EXPIRE_TIME_SECONDS: ${SESSION_EXPIRE_TIME_SECONDS:-}
       ENCRYPTION_KEY_SECRET: ${ENCRYPTION_KEY_SECRET:-}
       VALID_EMAIL_DOMAINS: ${VALID_EMAIL_DOMAINS:-}
@@ -57,18 +49,23 @@ services:
       OPENID_CONFIG_URL: ${OPENID_CONFIG_URL:-}
       TRACK_EXTERNAL_IDP_EXPIRY: ${TRACK_EXTERNAL_IDP_EXPIRY:-}
       CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-}
+      # Gen AI Settings
       GEN_AI_MAX_TOKENS: ${GEN_AI_MAX_TOKENS:-}
       LLM_SOCKET_READ_TIMEOUT: ${LLM_SOCKET_READ_TIMEOUT:-}
       MAX_CHUNKS_FED_TO_CHAT: ${MAX_CHUNKS_FED_TO_CHAT:-}
       DISABLE_LITELLM_STREAMING: ${DISABLE_LITELLM_STREAMING:-}
       LITELLM_EXTRA_HEADERS: ${LITELLM_EXTRA_HEADERS:-}
       GEN_AI_API_KEY: ${GEN_AI_API_KEY:-}
+      # Query Options
       DOC_TIME_DECAY: ${DOC_TIME_DECAY:-}
       HYBRID_ALPHA: ${HYBRID_ALPHA:-}
       EDIT_KEYWORD_QUERY: ${EDIT_KEYWORD_QUERY:-}
+      # Other services
       POSTGRES_DEFAULT_SCHEMA: ${POSTGRES_DEFAULT_SCHEMA:-}
       WEB_DOMAIN: ${WEB_DOMAIN:-}
+      # MinIO configuration
       S3_FILE_STORE_BUCKET_NAME: ${S3_FILE_STORE_BUCKET_NAME:-}
+      # Don't change the NLP model configs unless you know what you're doing
       EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-}
       DOCUMENT_ENCODER_MODEL: ${DOCUMENT_ENCODER_MODEL:-}
       DOC_EMBEDDING_DIM: ${DOC_EMBEDDING_DIM:-}
@@ -84,82 +81,57 @@ services:
       LOG_POSTGRES_CONN_COUNTS: ${LOG_POSTGRES_CONN_COUNTS:-}
       CELERY_BROKER_POOL_LIMIT: ${CELERY_BROKER_POOL_LIMIT:-}
       LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS: ${LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS:-}
+      # Egnyte OAuth Configs
       EGNYTE_CLIENT_ID: ${EGNYTE_CLIENT_ID:-}
       EGNYTE_CLIENT_SECRET: ${EGNYTE_CLIENT_SECRET:-}
       EGNYTE_LOCALHOST_OVERRIDE: ${EGNYTE_LOCALHOST_OVERRIDE:-}
+      # Linear OAuth Configs
       LINEAR_CLIENT_ID: ${LINEAR_CLIENT_ID:-}
       LINEAR_CLIENT_SECRET: ${LINEAR_CLIENT_SECRET:-}
+      # Analytics Configs
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # Chat Configs
       HARD_DELETE_CHATS: ${HARD_DELETE_CHATS:-}
+      # Show extra/uncommon connectors
       SHOW_EXTRA_CONNECTORS: ${SHOW_EXTRA_CONNECTORS:-true}
+      # Enables the use of bedrock models or IAM Auth
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION_NAME: ${AWS_REGION_NAME:-}
       API_KEY_HASH_ROUNDS: ${API_KEY_HASH_ROUNDS:-}
+      # Seeding configuration
       USE_IAM_AUTH: ${USE_IAM_AUTH:-}
       OPENAI_DEFAULT_API_KEY: ${OPENAI_DEFAULT_API_KEY:-}
+      # Vespa Language Forcing
+      # See: https://docs.vespa.ai/en/linguistics.html
       VESPA_LANGUAGE_OVERRIDE: ${VESPA_LANGUAGE_OVERRIDE:-}
-    extra_hosts:
-    - host.docker.internal:host-gateway
-    logging:
-      driver: json-file
-      options:
-        max-size: 50m
-        max-file: '6'
-    ports:
-    - 8080:8080
     healthcheck:
       test:
-      - CMD
-      - python
-      - -c
-      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')",
+        ]
       interval: 30s
       timeout: 20s
       retries: 3
+      # Generous start_period so that `docker compose up --wait` does not flag
+      # the container unhealthy while alembic migrations run on a fresh DB.
       start_period: 600s
+
   background:
-    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
-    build:
-      context: ../../backend
-      dockerfile: Dockerfile
-    command: |
-      /bin/sh -c " if [ -f /etc/ssl/certs/custom-ca.crt ]; then
-        update-ca-certificates;
-      fi && /app/scripts/supervisord_entrypoint.sh"
-    env_file:
-    - path: .env
-      required: false
-    depends_on:
-    - relational_db
-    - opensearch
-    - cache
-    - inference_model_server
-    - indexing_model_server
-    restart: unless-stopped
     environment:
-      POSTGRES_HOST: ${POSTGRES_HOST:-relational_db}
-      OPENSEARCH_HOST: ${OPENSEARCH_HOST:-opensearch}
-      OPENSEARCH_ADMIN_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
-      REDIS_HOST: ${REDIS_HOST:-cache}
-      MODEL_SERVER_HOST: ${MODEL_SERVER_HOST:-inference_model_server}
-      INDEXING_MODEL_SERVER_HOST: ${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
-      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
-      S3_AWS_ACCESS_KEY_ID: ${S3_AWS_ACCESS_KEY_ID:-minioadmin}
-      S3_AWS_SECRET_ACCESS_KEY: ${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
-      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
-      DISCORD_BOT_INVOKE_CHAR: ${DISCORD_BOT_INVOKE_CHAR:-!}
-      API_SERVER_PROTOCOL: ${API_SERVER_PROTOCOL:-http}
-      API_SERVER_HOST: ${API_SERVER_HOST:-api_server}
       ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: ${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
-      MULTI_TENANT: 'true'
+      MULTI_TENANT: "true"
       LOG_LEVEL: ${LOG_LEVEL:-info}
       AUTH_TYPE: cloud
-      REQUIRE_EMAIL_VERIFICATION: 'false'
+      REQUIRE_EMAIL_VERIFICATION: "false"
       DISABLE_TELEMETRY: ${DISABLE_TELEMETRY:-}
       IMAGE_TAG: test
       ENCRYPTION_KEY_SECRET: ${ENCRYPTION_KEY_SECRET:-}
       JWT_PUBLIC_KEY_URL: ${JWT_PUBLIC_KEY_URL:-}
+      # Gen AI Settings (Needed by OnyxBot)
       GEN_AI_MAX_TOKENS: ${GEN_AI_MAX_TOKENS:-}
       LLM_SOCKET_READ_TIMEOUT: ${LLM_SOCKET_READ_TIMEOUT:-}
       MAX_CHUNKS_FED_TO_CHAT: ${MAX_CHUNKS_FED_TO_CHAT:-}
@@ -167,9 +139,11 @@ services:
       DISABLE_LITELLM_STREAMING: ${DISABLE_LITELLM_STREAMING:-}
       LITELLM_EXTRA_HEADERS: ${LITELLM_EXTRA_HEADERS:-}
       GEN_AI_API_KEY: ${GEN_AI_API_KEY:-}
+      # Query Options
       DOC_TIME_DECAY: ${DOC_TIME_DECAY:-}
       HYBRID_ALPHA: ${HYBRID_ALPHA:-}
       EDIT_KEYWORD_QUERY: ${EDIT_KEYWORD_QUERY:-}
+      # Other Services
       POSTGRES_USER: ${POSTGRES_USER:-}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
       DB_READONLY_USER: ${DB_READONLY_USER:-}
@@ -178,12 +152,14 @@ services:
       POSTGRES_DEFAULT_SCHEMA: ${POSTGRES_DEFAULT_SCHEMA:-}
       WEB_DOMAIN: ${WEB_DOMAIN:-}
       S3_FILE_STORE_BUCKET_NAME: ${S3_FILE_STORE_BUCKET_NAME:-}
+      # Don't change the NLP model configs unless you know what you're doing
       DOCUMENT_ENCODER_MODEL: ${DOCUMENT_ENCODER_MODEL:-}
       DOC_EMBEDDING_DIM: ${DOC_EMBEDDING_DIM:-}
       NORMALIZE_EMBEDDINGS: ${NORMALIZE_EMBEDDINGS:-}
       ASYM_QUERY_PREFIX: ${ASYM_QUERY_PREFIX:-}
       ASYM_PASSAGE_PREFIX: ${ASYM_PASSAGE_PREFIX:-}
       MODEL_SERVER_PORT: ${MODEL_SERVER_PORT:-}
+      # Indexing Configs
       VESPA_SEARCHER_THREADS: ${VESPA_SEARCHER_THREADS:-}
       ENABLED_CONNECTOR_TYPES: ${ENABLED_CONNECTOR_TYPES:-}
       DISABLE_INDEX_UPDATE_ON_SWAP: ${DISABLE_INDEX_UPDATE_ON_SWAP:-}
@@ -198,231 +174,108 @@ services:
       GITHUB_CONNECTOR_BASE_URL: ${GITHUB_CONNECTOR_BASE_URL:-}
       MAX_DOCUMENT_CHARS: ${MAX_DOCUMENT_CHARS:-}
       MAX_FILE_SIZE_BYTES: ${MAX_FILE_SIZE_BYTES:-}
+      # Egnyte OAuth Configs
       EGNYTE_CLIENT_ID: ${EGNYTE_CLIENT_ID:-}
       EGNYTE_CLIENT_SECRET: ${EGNYTE_CLIENT_SECRET:-}
       EGNYTE_LOCALHOST_OVERRIDE: ${EGNYTE_LOCALHOST_OVERRIDE:-}
+      # Linear OAuth Configs
       LINEAR_CLIENT_ID: ${LINEAR_CLIENT_ID:-}
       LINEAR_CLIENT_SECRET: ${LINEAR_CLIENT_SECRET:-}
+      # Celery Configs (defaults are set in the supervisord.conf file.
+      # prefer doing that to have one source of defaults)
       CELERY_WORKER_DOCFETCHING_CONCURRENCY: ${CELERY_WORKER_DOCFETCHING_CONCURRENCY:-}
       CELERY_WORKER_DOCPROCESSING_CONCURRENCY: ${CELERY_WORKER_DOCPROCESSING_CONCURRENCY:-}
       CELERY_WORKER_LIGHT_CONCURRENCY: ${CELERY_WORKER_LIGHT_CONCURRENCY:-}
       CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ${CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER:-}
+      # Onyx SlackBot Configs
       ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ${ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER:-}
       ONYX_BOT_FEEDBACK_VISIBILITY: ${ONYX_BOT_FEEDBACK_VISIBILITY:-}
       ONYX_BOT_DISPLAY_ERROR_MSGS: ${ONYX_BOT_DISPLAY_ERROR_MSGS:-}
       NOTIFY_SLACKBOT_NO_ANSWER: ${NOTIFY_SLACKBOT_NO_ANSWER:-}
       ONYX_BOT_MAX_QPM: ${ONYX_BOT_MAX_QPM:-}
       ONYX_BOT_MAX_WAIT_TIME: ${ONYX_BOT_MAX_WAIT_TIME:-}
+      # Log all of Onyx prompts and interactions with the LLM
       LOG_ONYX_MODEL_INTERACTIONS: ${LOG_ONYX_MODEL_INTERACTIONS:-}
       LOG_VESPA_TIMING_INFORMATION: ${LOG_VESPA_TIMING_INFORMATION:-}
+      # Analytics Configs
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # Enterprise Edition stuff
       USE_IAM_AUTH: ${USE_IAM_AUTH:-}
       AWS_REGION_NAME: ${AWS_REGION_NAME:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY-}
+      # Seeding configuration
       OPENAI_DEFAULT_API_KEY: ${OPENAI_DEFAULT_API_KEY:-}
-    extra_hosts:
-    - host.docker.internal:host-gateway
-    logging:
-      driver: json-file
-      options:
-        max-size: 50m
-        max-file: '6'
+
   web_server:
-    image: ${ONYX_WEB_SERVER_IMAGE:-onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}}
     build:
-      context: ../../web
-      dockerfile: Dockerfile
       args:
-      - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
-      - NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=${NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED:-}
-      - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
-      - NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED=${NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED:-false}
-    env_file:
-    - path: .env
-      required: false
-    depends_on:
-    - api_server
-    restart: unless-stopped
+        - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
+        - NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=${NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED:-}
+        # Enterprise Edition only
+        - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
+        # DO NOT TURN ON unless you have EXPLICIT PERMISSION from Onyx.
+        - NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED=${NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED:-false}
     environment:
-      INTERNAL_URL: ${INTERNAL_URL:-http://api_server:8080}
       WEB_DOMAIN: ${WEB_DOMAIN:-}
       THEME_IS_DARK: ${THEME_IS_DARK:-}
+      # Enterprise Edition only
       ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: ${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
       NEXT_PUBLIC_CUSTOM_REFRESH_URL: ${NEXT_PUBLIC_CUSTOM_REFRESH_URL:-}
-    logging:
-      driver: json-file
-      options:
-        max-size: 50m
-        max-file: '6'
+
   inference_model_server:
-    image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
-    build:
-      context: ../../backend
-      dockerfile: Dockerfile.model_server
-    command: |
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
-        echo 'Skipping service...';
-        exit 0;
-      else
-        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
-      fi"
-    env_file:
-    - path: .env
-      required: false
     restart: on-failure
-    volumes:
-    - model_cache_huggingface:/app/.cache/huggingface/
-    logging:
-      driver: json-file
-      options:
-        max-size: 50m
-        max-file: '6'
     environment:
       MIN_THREADS_ML_MODELS: ${MIN_THREADS_ML_MODELS:-}
+      # Set to debug to get more fine-grained logs
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Analytics Configs
       SENTRY_DSN: ${SENTRY_DSN:-}
+
   indexing_model_server:
-    image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
-    build:
-      context: ../../backend
-      dockerfile: Dockerfile.model_server
-    command: |
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
-        echo 'Skipping service...';
-        exit 0;
-      else
-        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
-      fi"
-    env_file:
-    - path: .env
-      required: false
     restart: on-failure
     environment:
-      INDEXING_ONLY: 'True'
       INDEX_BATCH_SIZE: ${INDEX_BATCH_SIZE:-}
       MIN_THREADS_ML_MODELS: ${MIN_THREADS_ML_MODELS:-}
+      # Set to debug to get more fine-grained logs
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CLIENT_EMBEDDING_TIMEOUT: ${CLIENT_EMBEDDING_TIMEOUT:-}
+      # Analytics Configs
       SENTRY_DSN: ${SENTRY_DSN:-}
-    volumes:
-    - indexing_huggingface_model_cache:/app/.cache/huggingface/
-    logging:
-      driver: json-file
-      options:
-        max-size: 50m
-        max-file: '6'
+
   relational_db:
-    image: postgres:15.2-alpine
-    shm_size: 1g
-    command: -c 'max_connections=250'
-    restart: unless-stopped
-    env_file:
-    - path: .env
-      required: false
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       DB_READONLY_USER: ${DB_READONLY_USER:-}
       DB_READONLY_PASSWORD: ${DB_READONLY_PASSWORD:-}
-    volumes:
-    - db_volume:/var/lib/postgresql/data
     ports:
-    - 5432:5432
-  opensearch:
-    image: opensearchproject/opensearch:3.6.0
-    restart: unless-stopped
-    environment:
-      discovery.type: single-node
-      OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
-      bootstrap.memory_lock: 'true'
-      OPENSEARCH_JAVA_OPTS: -Xms2g -Xmx2g
-    volumes:
-    - opensearch-data:/usr/share/opensearch/data
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
-    logging:
-      driver: json-file
-      options:
-        max-size: 50m
-        max-file: '6'
+      - "5432:5432"
+
   nginx:
-    image: nginx:1.25.5-alpine
-    restart: unless-stopped
-    depends_on:
-    - api_server
-    - web_server
-    volumes:
-    - ../data/nginx:/nginx-templates:ro
-    logging:
-      driver: json-file
-      options:
-        max-size: 50m
-        max-file: '6'
     environment:
       DOMAIN: localhost
     ports:
-    - ${HOST_PORT_80:-80}:80
-    - ${HOST_PORT:-3000}:80
-    command: |
-      /bin/sh -c "rm -f /etc/nginx/conf.d/default.conf && cp -a /nginx-templates/. /etc/nginx/conf.d/ && sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh && chmod +x /tmp/run-nginx.sh && /tmp/run-nginx.sh app.conf.template"
+      - "${HOST_PORT_80:-80}:80"
+      - "${HOST_PORT:-3000}:80" # allow for localhost:3000 usage, since that is the norm
+    command: >
+      /bin/sh -c "rm -f /etc/nginx/conf.d/default.conf
+      && cp -a /nginx-templates/. /etc/nginx/conf.d/
+      && sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh
+      && chmod +x /tmp/run-nginx.sh
+      && /tmp/run-nginx.sh app.conf.template"
+
   minio:
-    image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
-    restart: unless-stopped
-    env_file:
-    - path: .env
-      required: false
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      MINIO_DEFAULT_BUCKETS: ${S3_FILE_STORE_BUCKET_NAME:-onyx-file-store-bucket}
-    volumes:
-    - minio_data:/data
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test:
-      - CMD
-      - mc
-      - ready
-      - local
-      interval: 30s
-      timeout: 20s
-      retries: 3
     ports:
-    - 9004:9000
-    - 9005:9001
+      - "9004:9000"
+      - "9005:9001"
+
   cache:
-    image: redis:7.4-alpine
-    restart: unless-stopped
-    command: redis-server --save "" --appendonly no
-    env_file:
-    - path: .env
-      required: false
-    tmpfs:
-    - /data
     ports:
-    - 6379:6379
-  code-interpreter:
-    image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-latest}
-    command:
-    - bash
-    - ./entrypoint.sh
-    - code-interpreter-api
-    restart: unless-stopped
-    env_file:
-    - path: .env
-      required: false
-    user: root
-    volumes:
-    - ${DOCKER_SOCK_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+      - "6379:6379"
+
 volumes:
   db_volume:
   minio_data:
   model_cache_huggingface:
   indexing_huggingface_model_cache:
+  # Persistent data for OpenSearch.
   opensearch-data:

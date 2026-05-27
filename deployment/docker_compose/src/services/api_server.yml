@@ -1,0 +1,40 @@
+services:
+  api_server:
+    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    command: >
+      /bin/sh -c "alembic upgrade head &&
+      echo \"Starting Onyx Api Server\" &&
+      uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      - relational_db
+      - opensearch
+      - cache
+      - inference_model_server
+      - minio
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST:-relational_db}
+      OPENSEARCH_HOST: ${OPENSEARCH_HOST:-opensearch}
+      OPENSEARCH_ADMIN_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
+      REDIS_HOST: ${REDIS_HOST:-cache}
+      MODEL_SERVER_HOST: ${MODEL_SERVER_HOST:-inference_model_server}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      S3_AWS_ACCESS_KEY_ID: ${S3_AWS_ACCESS_KEY_ID:-minioadmin}
+      S3_AWS_SECRET_ACCESS_KEY: ${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+    # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you
+    # are using iam auth for postgres
+    # volumes:
+    #   - ./bundle.pem:/app/bundle.pem:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"

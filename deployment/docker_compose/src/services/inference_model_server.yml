@@ -1,0 +1,34 @@
+services:
+  inference_model_server:
+    image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.model_server
+    # GPU Support: Uncomment the following lines to enable GPU support
+    # Requires nvidia-container-toolkit to be installed on the host
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    command: >
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
+        echo 'Skipping service...';
+        exit 0;
+      else
+        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
+      fi"
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
+    volumes:
+      # Not necessary, this is just to reduce download time during startup
+      - model_cache_huggingface:/app/.cache/huggingface/
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"

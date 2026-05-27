@@ -1,0 +1,107 @@
+name: onyx
+
+include:
+  - api_server
+  - background
+  - web_server
+  - inference_model_server
+  - indexing_model_server
+  - relational_db
+  - opensearch
+  - nginx
+  - certbot
+  - minio
+  - cache
+
+services:
+  api_server:
+    build:
+      dockerfile: Dockerfile.cloud
+    command: >
+      /bin/sh -c "alembic -n schema_private upgrade head &&
+      echo \"Starting Onyx Api Server\" &&
+      uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
+    depends_on:
+      - relational_db
+      - opensearch
+      - cache
+      - inference_model_server
+      - minio
+    environment:
+      AUTH_TYPE: ${AUTH_TYPE:-oidc}
+      POSTGRES_HOST: relational_db
+      REDIS_HOST: cache
+
+  background:
+    command: /app/scripts/supervisord_entrypoint.sh
+    depends_on:
+      - relational_db
+      - opensearch
+      - cache
+      - inference_model_server
+      - indexing_model_server
+    environment:
+      AUTH_TYPE: ${AUTH_TYPE:-oidc}
+      POSTGRES_HOST: relational_db
+      REDIS_HOST: cache
+
+  web_server:
+    build:
+      args:
+        - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
+        - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
+        - NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=${NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED:-}
+    environment:
+      INTERNAL_URL: http://api_server:8080
+
+  inference_model_server:
+    restart: on-failure
+    environment:
+      MIN_THREADS_ML_MODELS: ${MIN_THREADS_ML_MODELS:-}
+      # Set to debug to get more fine-grained logs
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+  indexing_model_server:
+    restart: on-failure
+    environment:
+      MIN_THREADS_ML_MODELS: ${MIN_THREADS_ML_MODELS:-}
+      # Set to debug to get more fine-grained logs
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      VESPA_SEARCHER_THREADS: ${VESPA_SEARCHER_THREADS:-1}
+
+  relational_db:
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../data/nginx:/nginx-templates:ro
+      - ../data/certbot/conf:/etc/letsencrypt
+      - ../data/certbot/www:/var/www/certbot
+    command: >
+      /bin/sh -c "rm -f /etc/nginx/conf.d/default.conf
+      && cp -a /nginx-templates/. /etc/nginx/conf.d/
+      && sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh
+      && chmod +x /tmp/run-nginx.sh
+      && /tmp/run-nginx.sh app.conf.template.prod"
+    env_file:
+      - .env.nginx
+    environment:
+      # Nginx proxy timeout settings (in seconds)
+      NGINX_PROXY_CONNECT_TIMEOUT: ${NGINX_PROXY_CONNECT_TIMEOUT:-300}
+      NGINX_PROXY_SEND_TIMEOUT: ${NGINX_PROXY_SEND_TIMEOUT:-300}
+      NGINX_PROXY_READ_TIMEOUT: ${NGINX_PROXY_READ_TIMEOUT:-300}
+
+volumes:
+  db_volume:
+  minio_data:
+  model_cache_huggingface:
+  indexing_huggingface_model_cache:
+  # Persistent data for OpenSearch.
+  opensearch-data:

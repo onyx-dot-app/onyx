@@ -1,0 +1,15 @@
+services:
+  code-interpreter:
+    image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-latest}
+    command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    # Below is needed for the `docker-out-of-docker` execution mode
+    # For Linux rootless Docker, set DOCKER_SOCK_PATH=${XDG_RUNTIME_DIR}/docker.sock
+    user: root
+    volumes:
+      - ${DOCKER_SOCK_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+    # uncomment below + comment out the above to use the `docker-in-docker` execution mode
+    # privileged: true

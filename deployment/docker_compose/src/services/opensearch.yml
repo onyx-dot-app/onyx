@@ -1,0 +1,37 @@
+services:
+  opensearch:
+    image: opensearchproject/opensearch:3.6.0
+    restart: unless-stopped
+    # OpenSearch is the search backend and is enabled by default. To run against
+    # an external OpenSearch instance, set OPENSEARCH_HOST in your env and
+    # remove this service from the compose file (or skip it via the service list
+    # when running `docker compose up`).
+    environment:
+      # We need discovery.type=single-node so that OpenSearch doesn't try
+      # forming a cluster and waiting for other nodes to become live.
+      discovery.type: single-node
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
+      # This and the JVM config below come from the example in https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/
+      # We do this to avoid unstable performance from page swaps.
+      bootstrap.memory_lock: "true"
+      # Java heap should be ~50% of memory limit. For now we assume a limit of
+      # 4g although in practice the container can request more than this.
+      # See https://opster.com/guides/opensearch/opensearch-basics/opensearch-heap-size-usage-and-jvm-garbage-collection/
+      OPENSEARCH_JAVA_OPTS: -Xms2g -Xmx2g
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    # These come from the example in https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/
+    ulimits:
+      # Similarly to bootstrap.memory_lock, we don't want to impose limits on
+      # how much memory a process can lock from being swapped.
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"

@@ -1,0 +1,23 @@
+services:
+  web_server:
+    image: ${ONYX_WEB_SERVER_IMAGE:-onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}}
+    build:
+      context: ../../web
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
+        # Enterprise Edition only
+        - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      - api_server
+    restart: unless-stopped
+    environment:
+      INTERNAL_URL: ${INTERNAL_URL:-http://api_server:8080}
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"

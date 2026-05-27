@@ -169,3 +169,11 @@ repos:
         language: system
         pass_filenames: false
         files: ^web/.*\.(ts|tsx)$
+
+      - id: render-docker-compose
+        name: render docker-compose files
+        description: "Regenerate top-level docker-compose.*.yml files from deployment/docker_compose/src/"
+        entry: python deployment/docker_compose/render.py --check
+        language: system
+        pass_filenames: false
+        files: ^deployment/docker_compose/(src/.*\.ya?ml|render\.py)$

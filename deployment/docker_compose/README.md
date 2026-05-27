@@ -45,3 +45,20 @@ downloaded during the initial setup. Feel free to edit the .env file to customiz
 located near the top of the file.
 
 IMAGE_TAG is the version of Onyx to run. It is recommended to leave it as latest to get all updates with each redeployment.
+
+## Editing the compose files
+
+The top-level `docker-compose.yml`, `docker-compose.prod.yml`, `docker-compose.prod-cloud.yml`, `docker-compose.prod-no-letsencrypt.yml`, and `docker-compose.multitenant-dev.yml` files are **generated** — do not edit them by hand. The source of truth lives under `src/`:
+
+- `src/services/<name>.yml` — canonical per-service fragments shared across deployments
+- `src/deployments/<name>.yml` — per-deployment composition (which services to include, plus overrides)
+
+To regenerate the top-level files after editing anything under `src/`:
+
+```
+python deployment/docker_compose/render.py
+```
+
+A `render-docker-compose` pre-commit hook runs `render.py --check` and fails the commit if any rendered file is out of sync with `src/`. Re-run `render.py` and commit the regenerated files together with the `src/` change.
+
+The other compose files (`docker-compose.dev.yml`, `docker-compose.onyx-lite.yml`, `docker-compose.craft.yml`, `docker-compose.resources.yml`, and the `docker-compose.mcp-*.yml` test files) are thin overlays or standalone test stacks and are still edited directly.

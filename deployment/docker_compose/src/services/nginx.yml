@@ -1,0 +1,19 @@
+services:
+  nginx:
+    image: nginx:1.25.5-alpine
+    restart: unless-stopped
+    # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
+    # if api_server / web_server are not up
+    depends_on:
+      - api_server
+      - web_server
+    volumes:
+      # Mount templates read-only; the startup command copies them into
+      # the writable /etc/nginx/conf.d/ inside the container.  This avoids
+      # "Permission denied" errors on Windows Docker bind mounts.
+      - ../data/nginx:/nginx-templates:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
