@@ -123,16 +123,13 @@ def test_agent_exception_during_stream_emits_error_packet() -> None:
 
 @pytest.mark.skip(
     reason=(
-        "ACP_MESSAGE_TIMEOUT is read by ``acp_exec_client.send_acp_message``"
-        " in the Kubernetes backend (acp_exec_client.py:539, 574-602) and "
-        "drives the asyncio.wait_for around the JSON-RPC response stream. "
-        "The local sandbox backend used by integration tests does not use "
-        "that client and so cannot reach the timeout branch. To exercise "
-        "this path the test would need to (1) run against SANDBOX_BACKEND="
-        "kubernetes (not available locally; see ``feedback_no_local_craft_"
-        "k8s_tests``) or (2) inject a stub manager whose acp client respects "
-        "an env-override for the timeout — both are out of scope for the "
-        "HTTP-only boundary half."
+        "ACP_MESSAGE_TIMEOUT is the wall-clock budget enforced inside "
+        "``OpencodeServeClient.send_message`` and drives the timeout around "
+        "the per-pod event bus. Reaching the timeout branch needs either a "
+        "kubernetes backend with a slow LLM (not available locally; see "
+        "``feedback_no_local_craft_k8s_tests``) or a stub sandbox manager "
+        "whose send_message respects an env-override — both are out of "
+        "scope for the HTTP-only boundary half."
     )
 )
 def test_acp_timeout_emits_error_packet() -> None:
@@ -142,8 +139,8 @@ def test_acp_timeout_emits_error_packet() -> None:
 
 @pytest.mark.skip(
     reason=(
-        "SSE_KEEPALIVE_INTERVAL is consumed by ``acp_exec_client`` "
-        "(acp_exec_client.py:601-602), which yields ``SSEKeepalive`` marker "
+        "SSE_KEEPALIVE_INTERVAL is consumed by ``OpencodeServeClient`` "
+        "which yields ``SSEKeepalive`` marker "
         "events that the manager's stream loop translates into ``: keepalive"
         "\\n\\n`` SSE comments (manager.py:1479-1484). The local sandbox "
         "backend never produces ``SSEKeepalive`` markers — it returns the "
