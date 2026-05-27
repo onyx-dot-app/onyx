@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-// Mid-stream reveal rate stays fixed — any ceil(delta/N) formula
-// produces visible chunks on burst packet arrivals. 1 = 60 cps, 2 = 120 cps,
-// 3 = 180 cps. ~180 cps tracks a fast reader without feeling jumpy on bursts.
+// Mid-stream reveal rate, in chars per 60fps frame. 3 ≈ 180 cps.
 const CHARS_PER_FRAME = 3;
 // Once the stream is finished, the rate becomes adaptive so a long
 // backlog drains within ~CATCHUP_FRAMES frames. Bursty rendering after
