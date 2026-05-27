@@ -239,6 +239,7 @@ def test_project_role_dc_flat_user_actor_resolves_via_type_discriminator() -> No
     assert external_access is not None
     assert external_access.external_user_emails == {"dc-flat-user@example.com"}
     assert external_access.external_user_group_ids == set()
+    assert external_access.is_public is False
     jira_client.user.assert_called_once_with(id="dc-flat-user")
 
 
@@ -283,6 +284,7 @@ def test_project_role_dc_flat_mixed_actors_resolve_groups_and_users() -> None:
         "jira-developers",
         "release-team",
     }
+    assert external_access.is_public is False
     jira_client.user.assert_called_once_with(id="dc-user-1")
 
 
