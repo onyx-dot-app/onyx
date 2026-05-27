@@ -18,6 +18,7 @@ import http.client
 import socket
 import threading
 import time
+from collections.abc import Callable
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler
 from http.server import ThreadingHTTPServer
@@ -44,8 +45,9 @@ _FIXED_BODY = b"a fixed-length body delivered intact\n"
 
 
 class _UpstreamHandler(BaseHTTPRequestHandler):
-    # Stamped (monotonic clock) only after the final chunk is flushed, so the
-    # client reading a byte while this is still None proves incremental relay.
+    # Stamped right before the terminator: a client byte read while this is
+    # still None proves incremental relay. Stamping after the terminator would
+    # race the buffered-mode client, which unblocks the instant it arrives.
     upstream_done_at: float | None = None
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002, ARG002
@@ -72,9 +74,9 @@ class _UpstreamHandler(BaseHTTPRequestHandler):
             self.wfile.flush()
             if i < _CHUNK_COUNT - 1:
                 time.sleep(_CHUNK_DELAY_S)
+        type(self).upstream_done_at = time.monotonic()
         self.wfile.write(b"0\r\n\r\n")
         self.wfile.flush()
-        type(self).upstream_done_at = time.monotonic()
 
     def _serve_fixed(self) -> None:
         self.wfile.write(
@@ -152,7 +154,7 @@ def upstream() -> Iterator[int]:
 
 def _start_proxy(
     *, stream_responses: bool, confdir: Path, attempts: int = 5
-) -> tuple[int, Any]:
+) -> tuple[int, Callable[[], None]]:
     """Start a real DumpMaster with the GateAddon; return (port, stop).
 
     Retries on a lost port race (`_free_port` releases the port before
@@ -227,8 +229,7 @@ def test_chunked_response_relayed_incrementally(
         resp = conn.getresponse()
 
         first_byte = resp.read(1)
-        # Snapshot the upstream's done-marker at the instant the client has a
-        # byte. Threshold-free: None means the upstream was still streaming.
+        # None here means the upstream was still streaming when the byte landed.
         done_at_first_byte = _UpstreamHandler.upstream_done_at
         body = first_byte + resp.read()
         conn.close()
