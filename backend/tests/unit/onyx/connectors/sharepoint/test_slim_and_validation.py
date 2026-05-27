@@ -125,6 +125,60 @@ def test_all_site_pages_fail_does_not_crash(
 
 
 # ---------------------------------------------------------------------------
+# _fetch_slim_documents_from_sharepoint — `_fetch_site_pages` raising
+# ---------------------------------------------------------------------------
+
+
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector._fetch_site_pages")
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector._fetch_driveitems")
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector.fetch_sites")
+def test_fetch_site_pages_runtime_error_does_not_crash_slim_run(
+    mock_fetch_sites: MagicMock,
+    mock_fetch_driveitems: MagicMock,
+    mock_fetch_site_pages: MagicMock,
+) -> None:
+    """When `_fetch_site_pages` itself raises a non-Graph-4xx (e.g. a
+    RuntimeError, 500, JSON decode error), the broadened outer except still
+    log-and-skips so other sites can finish."""
+    from onyx.connectors.models import SlimDocument
+
+    connector = _make_connector()
+    connector.include_site_documents = False
+    connector.include_site_pages = True
+
+    bad_site = MagicMock()
+    bad_site.url = SITE_URL + "/Bad"
+    good_site = MagicMock()
+    good_site.url = SITE_URL + "/Good"
+    mock_fetch_sites.return_value = [bad_site, good_site]
+    mock_fetch_driveitems.return_value = iter([])
+
+    good_page = {"id": "g1", "webUrl": good_site.url + "/SitePages/Home.aspx"}
+
+    def _fetch_side_effect(
+        site_descriptor: object, *_args: object, **_kwargs: object
+    ) -> list[dict[str, str]]:
+        if getattr(site_descriptor, "url", None) == bad_site.url:
+            raise RuntimeError("pages endpoint blew up")
+        return [good_page]
+
+    mock_fetch_site_pages.side_effect = _fetch_side_effect
+
+    slim_results = [
+        doc
+        for batch in connector._fetch_slim_documents_from_sharepoint(
+            include_permissions=False
+        )
+        for doc in batch
+        if isinstance(doc, SlimDocument)
+    ]
+
+    # Good site's page survives; bad site is silently skipped (slim retrieval
+    # can't yield ConnectorFailure).
+    assert [d.id for d in slim_results] == ["g1"]
+
+
+# ---------------------------------------------------------------------------
 # retrieve_all_slim_docs — pruning path skips permission fetching
 # ---------------------------------------------------------------------------
 

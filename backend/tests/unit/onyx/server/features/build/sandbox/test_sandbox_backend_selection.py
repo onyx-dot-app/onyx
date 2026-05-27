@@ -27,22 +27,6 @@ def test_unknown_backend_raises(monkeypatch: pytest.MonkeyPatch) -> None:
         base_module.get_sandbox_manager()
 
 
-def test_local_backend_returns_local_manager(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Local is the only backend that doesn't need a real cluster/daemon."""
-    monkeypatch.setattr(base_module, "SANDBOX_BACKEND", SandboxBackend.LOCAL)
-    # Local manager does on-init work (templates dir etc) — skip those probes.
-    from onyx.server.features.build.sandbox.local import local_sandbox_manager
-
-    monkeypatch.setattr(
-        local_sandbox_manager.LocalSandboxManager,
-        "_validate_templates",
-        lambda _self: None,
-    )
-    monkeypatch.setattr(local_sandbox_manager.LocalSandboxManager, "_instance", None)
-    mgr = base_module.get_sandbox_manager()
-    assert mgr.__class__.__name__ == "LocalSandboxManager"
-
-
 def test_docker_backend_returns_docker_manager(monkeypatch: pytest.MonkeyPatch) -> None:
     """Backend=docker must dispatch to ``DockerSandboxManager``, not raise NotImplementedError."""
     monkeypatch.setattr(base_module, "SANDBOX_BACKEND", SandboxBackend.DOCKER)
@@ -69,7 +53,18 @@ def test_docker_backend_returns_docker_manager(monkeypatch: pytest.MonkeyPatch) 
     assert mgr.__class__.__name__ == "DockerSandboxManager"
 
 
-def test_sandbox_backend_enum_includes_docker() -> None:
-    """Sanity: the enum still exposes a DOCKER value for callers."""
+def test_sandbox_backend_enum_includes_docker_and_kubernetes() -> None:
+    """Sanity: the enum still exposes DOCKER and KUBERNETES values."""
     assert SandboxBackend.DOCKER.value == "docker"
+    assert SandboxBackend.KUBERNETES.value == "kubernetes"
     assert configs.SandboxBackend("docker") is SandboxBackend.DOCKER
+    assert configs.SandboxBackend("kubernetes") is SandboxBackend.KUBERNETES
+
+
+def test_local_backend_string_raises_helpful_error() -> None:
+    """``SANDBOX_BACKEND=local`` is no longer supported; the parser raises a
+    pointed startup error with a doc pointer rather than the bare
+    ``ValueError`` from the enum constructor.
+    """
+    with pytest.raises(RuntimeError, match="local-kubernetes.md"):
+        configs._parse_sandbox_backend("local")

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { toast } from "@/hooks/useToast";
 import { Button, MessageCard, Text } from "@opal/components";

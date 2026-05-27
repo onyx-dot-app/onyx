@@ -11,7 +11,8 @@ import { SWR_KEYS } from "@/lib/swr-keys";
  * Retrieves all connector-credential pairs configured in the system. CC Pairs
  * represent connections between data sources (connectors) and their authentication
  * credentials, used for indexing content from various sources like Confluence,
- * Slack, Google Drive, etc. Uses SWR for caching and automatic revalidation.
+ * Slack, Google Drive, etc. Fetched once on mount and held for the session;
+ * call `refetch()` after a mutation to refresh.
  *
  * @returns Object containing:
  *   - ccPairs: Array of CCPairBasicInfo objects
@@ -70,7 +71,13 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 export default function useCCPairs(enabled: boolean = true) {
   const { data, error, isLoading, mutate } = useSWR<CCPairBasicInfo[]>(
     enabled ? SWR_KEYS.connectorStatus : null,
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: 30_000,
+    }
   );
 
   return {

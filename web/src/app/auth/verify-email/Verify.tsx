@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Text } from "@opal/components";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import { RequestNewVerificationEmail } from "../waiting-on-verification/RequestNewVerificationEmail";
 import { User } from "@/lib/types";
 import Logo from "@/refresh-components/Logo";

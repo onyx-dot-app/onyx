@@ -80,6 +80,18 @@ configMap:
   ENABLE_CRAFT: "true"
   SANDBOX_API_SERVER_URL: "http://onyx-api-service.onyx.svc.cluster.local:8080"
 
+# Can't be disabled when ENABLE_CRAFT=true: sandbox pods won't start
+# without the CA ConfigMap the proxy projects.
+sandboxProxy:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi
+
 # ---- Secrets ----
 
 auth:

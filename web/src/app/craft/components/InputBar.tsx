@@ -403,7 +403,6 @@ const InputBar = memo(
               className="hidden"
               multiple
               onChange={handleFileSelect}
-              accept="*/*"
             />
 
             {/* Attached Files */}

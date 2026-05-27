@@ -5,7 +5,7 @@ import { MessageCard } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SvgBlocks } from "@opal/icons";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";

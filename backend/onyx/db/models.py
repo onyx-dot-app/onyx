@@ -59,6 +59,7 @@ from onyx.configs.constants import TokenRateLimitScope
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import AccountType
+from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import ChatSessionSharedStatus
@@ -1196,9 +1197,7 @@ class KGEntityType(Base):
     __tablename__ = "kg_entity_type"
 
     # Primary identifier
-    id_name: Mapped[str] = mapped_column(
-        String, primary_key=True, nullable=False, index=True
-    )
+    id_name: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
 
     description: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
 
@@ -1267,23 +1266,20 @@ class KGRelationshipType(Base):
         NullFilteredString,
         primary_key=True,
         nullable=False,
-        index=True,
     )
 
-    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     source_entity_type_id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     target_entity_type_id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     definition: Mapped[bool] = mapped_column(
@@ -1301,7 +1297,7 @@ class KGRelationshipType(Base):
         comment="Clustering information for this relationship type",
     )
 
-    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
@@ -1338,23 +1334,20 @@ class KGRelationshipTypeExtractionStaging(Base):
         NullFilteredString,
         primary_key=True,
         nullable=False,
-        index=True,
     )
 
-    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     source_entity_type_id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     target_entity_type_id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     definition: Mapped[bool] = mapped_column(
@@ -1372,7 +1365,7 @@ class KGRelationshipTypeExtractionStaging(Base):
         comment="Clustering information for this relationship type",
     )
 
-    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
@@ -1406,18 +1399,12 @@ class KGEntity(Base):
     __tablename__ = "kg_entity"
 
     # Primary identifier
-    id_name: Mapped[str] = mapped_column(
-        NullFilteredString, primary_key=True, index=True
-    )
+    id_name: Mapped[str] = mapped_column(NullFilteredString, primary_key=True)
 
     # Basic entity information
-    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
-    entity_key: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
-    parent_key: Mapped[str | None] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
+    entity_key: Mapped[str] = mapped_column(NullFilteredString, nullable=True)
+    parent_key: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
 
     name_trigrams: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String(3)),
@@ -1432,9 +1419,7 @@ class KGEntity(Base):
         comment="Attributes for this entity",
     )
 
-    document_id: Mapped[str | None] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
+    document_id: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
 
     alternative_names: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list
@@ -1445,7 +1430,6 @@ class KGEntity(Base):
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     # Relationship to KGEntityType
@@ -1483,12 +1467,6 @@ class KGEntity(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    __table_args__ = (
-        # Fixed column names in indexes
-        Index("ix_entity_type_acl", entity_type_id_name, acl),
-        Index("ix_entity_name_search", name, entity_type_id_name),
-    )
-
 
 class KGEntityExtractionStaging(Base):
     __tablename__ = "kg_entity_extraction_staging"
@@ -1498,11 +1476,10 @@ class KGEntityExtractionStaging(Base):
         NullFilteredString,
         primary_key=True,
         nullable=False,
-        index=True,
     )
 
     # Basic entity information
-    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     attributes: Mapped[dict] = mapped_column(
         postgresql.JSONB,
@@ -1512,9 +1489,7 @@ class KGEntityExtractionStaging(Base):
         comment="Attributes for this entity",
     )
 
-    document_id: Mapped[str | None] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
+    document_id: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
 
     alternative_names: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list
@@ -1525,7 +1500,6 @@ class KGEntityExtractionStaging(Base):
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     # Relationship to KGEntityType
@@ -1555,12 +1529,8 @@ class KGEntityExtractionStaging(Base):
     )
 
     # Parent Child Information
-    entity_key: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
-    parent_key: Mapped[str | None] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
+    entity_key: Mapped[str] = mapped_column(NullFilteredString, nullable=True)
+    parent_key: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
 
     event_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -1573,12 +1543,6 @@ class KGEntityExtractionStaging(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    __table_args__ = (
-        # Fixed column names in indexes
-        Index("ix_entity_type_acl", entity_type_id_name, acl),
-        Index("ix_entity_name_search", name, entity_type_id_name),
-    )
-
 
 class KGRelationship(Base):
     __tablename__ = "kg_relationship"
@@ -1587,45 +1551,41 @@ class KGRelationship(Base):
     id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         nullable=False,
-        index=True,
     )
 
     source_document: Mapped[str | None] = mapped_column(
-        NullFilteredString, ForeignKey("document.id"), nullable=True, index=True
+        NullFilteredString, ForeignKey("document.id"), nullable=True
     )
 
     # Source and target nodes (foreign keys to Entity table)
     source_node: Mapped[str] = mapped_column(
-        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False, index=True
+        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False
     )
 
     target_node: Mapped[str] = mapped_column(
-        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False, index=True
+        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False
     )
 
     source_node_type: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     target_node_type: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     # Relationship type
-    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     # Add new relationship type reference
     relationship_type_id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_relationship_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     # Add the SQLAlchemy relationship property
@@ -1655,10 +1615,6 @@ class KGRelationship(Base):
     __table_args__ = (
         # Composite primary key
         PrimaryKeyConstraint("id_name", "source_document"),
-        # Index for querying relationships by type
-        Index("ix_kg_relationship_type", type),
-        # Composite index for source/target queries
-        Index("ix_kg_relationship_nodes", source_node, target_node),
         # Ensure unique relationships between nodes of a specific type
         UniqueConstraint(
             "source_node",
@@ -1676,11 +1632,10 @@ class KGRelationshipExtractionStaging(Base):
     id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         nullable=False,
-        index=True,
     )
 
     source_document: Mapped[str | None] = mapped_column(
-        NullFilteredString, ForeignKey("document.id"), nullable=True, index=True
+        NullFilteredString, ForeignKey("document.id"), nullable=True
     )
 
     # Source and target nodes (foreign keys to Entity table)
@@ -1688,39 +1643,34 @@ class KGRelationshipExtractionStaging(Base):
         NullFilteredString,
         ForeignKey("kg_entity_extraction_staging.id_name"),
         nullable=False,
-        index=True,
     )
 
     target_node: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_extraction_staging.id_name"),
         nullable=False,
-        index=True,
     )
 
     source_node_type: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     target_node_type: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     # Relationship type
-    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     # Add new relationship type reference
     relationship_type_id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_relationship_type_extraction_staging.id_name"),
         nullable=False,
-        index=True,
     )
 
     # Add the SQLAlchemy relationship property
@@ -1755,10 +1705,6 @@ class KGRelationshipExtractionStaging(Base):
     __table_args__ = (
         # Composite primary key
         PrimaryKeyConstraint("id_name", "source_document"),
-        # Index for querying relationships by type
-        Index("ix_kg_relationship_type", type),
-        # Composite index for source/target queries
-        Index("ix_kg_relationship_nodes", source_node, target_node),
         # Ensure unique relationships between nodes of a specific type
         UniqueConstraint(
             "source_node",
@@ -1774,7 +1720,7 @@ class KGTerm(Base):
 
     # Make id_term the primary key
     id_term: Mapped[str] = mapped_column(
-        NullFilteredString, primary_key=True, nullable=False, index=True
+        NullFilteredString, primary_key=True, nullable=False
     )
 
     # List of entity types this term applies to
@@ -1792,13 +1738,6 @@ class KGTerm(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    __table_args__ = (
-        # Index for searching terms with specific entity types
-        Index("ix_search_term_entities", entity_types),
-        # Index for term lookups
-        Index("ix_search_term_term", id_term),
-    )
-
 
 class ChunkStats(Base):
     __tablename__ = "chunk_stats"
@@ -1812,7 +1751,6 @@ class ChunkStats(Base):
         default=lambda context: (
             f"{context.get_current_parameters()['document_id']}__{context.get_current_parameters()['chunk_in_doc_id']}"
         ),
-        index=True,
     )
 
     # Reference to parent document
@@ -5302,6 +5240,12 @@ class BuildSession(Base):
         default=SessionOrigin.INTERACTIVE,
         server_default="INTERACTIVE",
     )
+    # opencode-serve session id (populated lazily on first message
+    # under AGENT_TRANSPORT=serve) + user's LLM choice (sent as the
+    # per-prompt model override on opencode's prompt_async).
+    opencode_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_provider: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_model: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
@@ -5480,6 +5424,37 @@ class BuildMessage(Base):
         Index(
             "ix_build_message_session_turn", "session_id", "turn_index", "created_at"
         ),
+    )
+
+
+class ActionApproval(Base):
+    """One agent-initiated gated action and its decision.
+
+    `decision IS NULL` is pending (or an orphan left by a proxy crash).
+    Liveness vs. orphan is tracked by the `approval:live:{id}` Redis key, not the DB.
+    """
+
+    __tablename__ = "action_approval"
+
+    approval_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("build_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    action_type: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    decision: Mapped[ApprovalDecision | None] = mapped_column(
+        Enum(ApprovalDecision, native_enum=False, name="approvaldecision"),
+        nullable=True,
+    )
+    decided_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
 

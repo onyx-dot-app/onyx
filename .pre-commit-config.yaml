@@ -60,7 +60,7 @@ repos:
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
         name: Check lazy imports
-        args: ["--with=onyx-devtools", "ods", "check-lazy-imports"]
+        args: ["--no-project", "--with=onyx-devtools", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
@@ -149,6 +149,7 @@ repos:
         name: oxfmt
         entry: bash -c 'cd web && bunx oxfmt "${@#web/}"' _
         language: system
+        files: ^web/
         types_or: [html, css, javascript, ts, tsx]
 
       - id: oxlint

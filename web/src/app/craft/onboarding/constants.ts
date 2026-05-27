@@ -11,7 +11,7 @@ export interface BuildLlmSelection {
 // Priority order for smart default LLM selection
 const LLM_SELECTION_PRIORITY = [
   { provider: "anthropic", modelName: "claude-opus-4-7" },
-  { provider: "openai", modelName: "gpt-5.2" },
+  { provider: "openai", modelName: "gpt-5.5" },
   { provider: "openrouter", modelName: "minimax/minimax-m2.1" },
 ] as const;
 
@@ -69,8 +69,9 @@ export const RECOMMENDED_BUILD_MODELS = {
   alternatives: [
     { provider: "anthropic", modelName: "claude-opus-4-6" },
     { provider: "anthropic", modelName: "claude-sonnet-4-6" },
-    { provider: "openai", modelName: "gpt-5.2" },
-    { provider: "openai", modelName: "gpt-5.1-codex" },
+    { provider: "openai", modelName: "gpt-5.5" },
+    { provider: "openai", modelName: "gpt-5.4" },
+    { provider: "openai", modelName: "gpt-5.3" },
     { provider: "openrouter", modelName: "minimax/minimax-m2.1" },
   ],
 } as const;
@@ -162,8 +163,9 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
     label: "OpenAI",
     providerName: "openai",
     models: [
-      { name: "gpt-5.2", label: "GPT-5.2", recommended: true },
-      { name: "gpt-5.1-codex", label: "GPT-5.1 Codex" },
+      { name: "gpt-5.5", label: "GPT-5.5", recommended: true },
+      { name: "gpt-5.4", label: "GPT-5.4" },
+      { name: "gpt-5.3", label: "GPT-5.3" },
     ],
     apiKeyPlaceholder: "sk-...",
     apiKeyUrl: "https://platform.openai.com/api-keys",

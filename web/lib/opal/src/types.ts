@@ -82,6 +82,13 @@ export type ExtremaSizeVariants = Extract<SizeVariants, "fit" | "full">;
 export type OverridableExtremaSizeVariants = ExtremaSizeVariants | number;
 
 // ---------------------------------------------------------------------------
+// Orientation Variants
+// ---------------------------------------------------------------------------
+
+/** Axis orientation — `"horizontal"` or `"vertical"`. */
+export type OrientationVariants = "horizontal" | "vertical";
+
+// ---------------------------------------------------------------------------
 // Border Variants
 // ---------------------------------------------------------------------------
 

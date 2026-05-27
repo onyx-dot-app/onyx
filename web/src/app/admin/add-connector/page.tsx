@@ -1,5 +1,5 @@
 "use client";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { listSourceMetadata } from "@/lib/sources";
 import { Button } from "@opal/components";
