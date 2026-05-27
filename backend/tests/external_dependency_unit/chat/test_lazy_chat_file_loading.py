@@ -162,13 +162,18 @@ class TestLazyShimContract:
 
     def test_non_content_attrs_do_not_trigger(self) -> None:
         calls = {"n": 0}
+
+        def loader() -> bytes:
+            calls["n"] += 1
+            return b"img"
+
         f = ChatLoadedFile.lazy_loaded(
             file_id="x",
             file_type=ChatFileType.IMAGE,
             filename="x.png",
             content_text=None,
             token_count=0,
-            loader=lambda: (calls.__setitem__("n", calls["n"] + 1), b"img")[1],
+            loader=loader,
         )
         _ = f.file_id
         _ = f.filename
@@ -179,13 +184,18 @@ class TestLazyShimContract:
 
     def test_to_file_descriptor_does_not_materialize(self) -> None:
         calls = {"n": 0}
+
+        def loader() -> bytes:
+            calls["n"] += 1
+            return b"data"
+
         f = ChatLoadedFile.lazy_loaded(
             file_id="abc",
             file_type=ChatFileType.PLAIN_TEXT,
             filename="x.txt",
             content_text=None,
             token_count=0,
-            loader=lambda: (calls.__setitem__("n", calls["n"] + 1), b"data")[1],
+            loader=loader,
         )
         fd = f.to_file_descriptor()
         assert fd["id"] == "abc"
@@ -193,13 +203,18 @@ class TestLazyShimContract:
 
     def test_to_base64_materializes_image(self) -> None:
         calls = {"n": 0}
+
+        def loader() -> bytes:
+            calls["n"] += 1
+            return b"PNG-bytes"
+
         f = ChatLoadedFile.lazy_loaded(
             file_id="img",
             file_type=ChatFileType.IMAGE,
             filename="x.png",
             content_text=None,
             token_count=0,
-            loader=lambda: (calls.__setitem__("n", calls["n"] + 1), b"PNG-bytes")[1],
+            loader=loader,
         )
         _ = f.to_base64()
         assert calls["n"] == 1
@@ -251,9 +266,14 @@ class TestLazyShimContract:
 
     def test_chat_file_lazy_content(self) -> None:
         calls = {"n": 0}
+
+        def loader() -> bytes:
+            calls["n"] += 1
+            return b"csv-bytes"
+
         cf = ChatFile.lazy_from_filename(
             filename="x.csv",
-            loader=lambda: (calls.__setitem__("n", calls["n"] + 1), b"csv-bytes")[1],
+            loader=loader,
         )
         assert calls["n"] == 0
         _ = cf.filename

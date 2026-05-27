@@ -207,15 +207,20 @@ def _convert_loaded_files_to_chat_files(
     (sha256 of empty bytes + upload of an empty body — the LLM will see the
     empty result and react).
     """
+
+    def _make_loader(lf: ChatLoadedFile) -> Callable[[], bytes]:
+        # Factory captures `lf` by value so each loop iteration gets its own
+        # closure (the default-arg lambda trick triggered mypy's
+        # "cannot infer type of lambda").
+        return lambda: lf.content
+
     chat_files: list[ChatFile] = []
     for loaded_file in loaded_files:
         filename = loaded_file.filename or f"file_{loaded_file.file_id}"
-        # Pull content via a closure so the bytes only flow through one
-        # materialization (the ChatLoadedFile's loader), then ride along.
         chat_files.append(
             ChatFile.lazy_from_filename(
                 filename=filename,
-                loader=lambda lf=loaded_file: lf.content,
+                loader=_make_loader(loaded_file),
             )
         )
     return chat_files
