@@ -1252,7 +1252,16 @@ def _run_models(
                     user_identity=setup.user_identity,
                     chat_session_id=str(setup.chat_session.id),
                     chat_files=setup.chat_files_for_tools,
-                    include_citations=setup.new_msg_req.include_citations,
+                    # Citations are emitted only when both the request allows them
+                    # and the agent (persona) is configured to include them.
+                    include_citations=(
+                        setup.new_msg_req.include_citations
+                        and (
+                            setup.persona.include_citations
+                            if setup.persona
+                            else True
+                        )
+                    ),
                     all_injected_file_metadata=setup.all_injected_file_metadata,
                     inject_memories_in_prompt=user.use_memories,
                 )
