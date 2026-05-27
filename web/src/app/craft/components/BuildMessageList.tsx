@@ -1,11 +1,13 @@
 "use client";
 
 import { useRef, useEffect } from "react";
+import { cn } from "@opal/utils";
 import Logo from "@/refresh-components/Logo";
 import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { TimelineRoot } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRoot";
+import TimelineRow from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import CraftToolGroup from "@/app/craft/components/tool-cards/CraftToolGroup";
 import TodoListCard from "@/app/craft/components/TodoListCard";
@@ -124,13 +126,17 @@ export default function BuildMessageList({
       switch (item.type) {
         case "text": {
           const prevIsRail = !!prev && RAIL_TYPES.has(prev.type);
+          const nextIsRail = !!next && RAIL_TYPES.has(next.type);
+          const spacingClass = cn(prevIsRail && "mt-3", nextIsRail && "mb-3");
           nodes.push(
-            <div key={item.id} className={prevIsRail ? "my-5" : undefined}>
-              <TextChunk
-                content={item.content}
-                isStreaming={isCurrentStream && item.isStreaming}
-              />
-            </div>
+            <TimelineRow key={item.id} railVariant="spacer">
+              <div className={spacingClass || undefined}>
+                <TextChunk
+                  content={item.content}
+                  isStreaming={isCurrentStream && item.isStreaming}
+                />
+              </div>
+            </TimelineRow>
           );
           break;
         }
@@ -147,11 +153,12 @@ export default function BuildMessageList({
           break;
         case "todo_list":
           nodes.push(
-            <TodoListCard
-              key={item.id}
-              todoList={item.todoList}
-              defaultOpen={item.todoList.isOpen}
-            />
+            <TimelineRow key={item.id} railVariant="spacer">
+              <TodoListCard
+                todoList={item.todoList}
+                defaultOpen={item.todoList.isOpen}
+              />
+            </TimelineRow>
           );
           break;
       }
