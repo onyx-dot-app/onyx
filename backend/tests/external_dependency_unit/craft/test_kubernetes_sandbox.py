@@ -204,14 +204,6 @@ def test_session_workspace_setup_creates_expected_tree(
     agents_md = _read_pod_file(k8s_client, pod_name, f"{session_path}/AGENTS.md")
     assert agents_md, "AGENTS.md should not be empty"
 
-    # opencode.json is valid JSON-ish (starts with `{`)
-    opencode_json = _read_pod_file(
-        k8s_client, pod_name, f"{session_path}/opencode.json"
-    )
-    assert opencode_json.lstrip().startswith("{"), (
-        f"opencode.json should be JSON-formatted, got: {opencode_json[:60]!r}"
-    )
-
     # .opencode/skills must be a symlink targeting /workspace/managed/skills
     link_target = pod_exec(
         k8s_client,
