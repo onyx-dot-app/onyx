@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import copy from "copy-to-clipboard";
 import {
   Button,
   type ButtonProps,
 } from "@opal/components/buttons/button/components";
+import { copyText } from "@opal/utils";
 import { SvgAlertTriangle, SvgCheck, SvgCopy } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
@@ -70,10 +70,8 @@ export function CopyButton({
           "text/plain": new Blob([text], { type: "text/plain" }),
         });
         await navigator.clipboard.write([clipboardItem]);
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(text);
-      } else if (!copy(text)) {
-        throw new Error("copy-to-clipboard returned false");
+      } else {
+        await copyText(text);
       }
       setCopyState("copied");
     } catch (err) {
