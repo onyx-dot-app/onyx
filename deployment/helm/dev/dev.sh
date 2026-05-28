@@ -475,7 +475,7 @@ drop_minio_bucket() {
 }
 
 write_worktree_values() {
-  local slug="$1" db="$2" bucket="$3" redis_base="$4"
+  local slug="$1" db="$2" bucket="$3" redis_base="$4" next_port="$5"
   local app_ns="onyx-${slug}"
   local app_release="onyx-${slug}"
   local sandbox_ns="onyx-${slug}-sandboxes"
@@ -542,6 +542,9 @@ configMap:
   REDIS_DB_NUMBER_CELERY: "$((redis_base + 2))"
   SANDBOX_NAMESPACE: "${sandbox_ns}"
   SANDBOX_API_SERVER_URL: "http://${app_release}-api-service.${app_ns}.svc.cluster.local:8080"
+  # next-dev is on the host at this per-slug port; backend uses WEB_DOMAIN
+  # to build the sandbox webapp URL it returns to the browser.
+  WEB_DOMAIN: "http://localhost:${next_port}"
 ${env_k3d_yaml}
 
 # Mirror the actually-deployed OpenSearch admin password so worktree
@@ -662,7 +665,7 @@ cmd_up() {
 
   provision_pg_database "${db_name}"
   provision_minio_bucket "${bucket_name}"
-  write_worktree_values "${slug}" "${db_name}" "${bucket_name}" "${redis_base}"
+  write_worktree_values "${slug}" "${db_name}" "${bucket_name}" "${redis_base}" "${next_port}"
 
   if [[ "${run_tilt}" -eq 0 ]]; then
     log "skipping 'tilt up' (--no-tilt). Run with:"
