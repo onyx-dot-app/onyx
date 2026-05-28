@@ -350,9 +350,10 @@ class UpsertExternalAppRequest(BaseModel):
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
     organization_credentials: dict[str, Any]
-    # Per-action overrides keyed by catalog action id (built-in apps). Keys are
-    # validated against the provider catalog on upsert; full map, not a delta.
-    action_policies: dict[str, EndpointPolicy] = {}
+    # Per-action overrides by catalog action id (built-in apps); validated on
+    # upsert. A map full-replaces stored overrides (empty clears); None leaves
+    # them untouched, so a partial update can't wipe the admin's choices.
+    action_policies: dict[str, EndpointPolicy] | None = None
 
 
 class ActionPolicyView(BaseModel):

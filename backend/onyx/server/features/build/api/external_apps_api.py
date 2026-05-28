@@ -115,8 +115,12 @@ def upsert_external_app(
             "Custom apps must be managed via POST /admin/apps/custom.",
         )
     # Reject unknown action ids before mutating anything; canonicalise aliases.
-    action_policies = validate_action_policies(
-        request.app_type, request.action_policies
+    # ``None`` means "leave stored policies untouched" (partial update); only a
+    # supplied map is validated and later full-replaces the stored set.
+    action_policies = (
+        validate_action_policies(request.app_type, request.action_policies)
+        if request.action_policies is not None
+        else None
     )
 
     if request.id is not None:
@@ -151,8 +155,15 @@ def upsert_external_app(
             organization_credentials=request.organization_credentials,
         )
 
-    # Persist the admin's per-action choices (full-replace).
-    replace_policies(db_session, app.id, action_policies)
+    # Persist the admin's per-action choices (full-replace). Skipped when the
+    # request omitted the field, so a partial update keeps existing rows.
+    if action_policies is not None:
+        replace_policies(db_session, app.id, action_policies)
+        # replace_policies mutates rows out-of-band (bulk delete + insert), so
+        # the app's already-loaded ``policies`` collection is stale. With
+        # ``expire_on_commit=False`` the commit won't refresh it, so expire it
+        # explicitly — otherwise the response echoes the pre-edit policies.
+        db_session.expire(app, ["policies"])
 
     # Refresh already-running sandboxes so an enable/disable (or content/grant
     # change) takes effect live, not just on the next sandbox. The rebuilt
