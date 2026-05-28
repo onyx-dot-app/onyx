@@ -1,7 +1,6 @@
 import React, { useMemo } from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
-import { Tabs } from "@opal/components";
-import { Button } from "@opal/components";
+import { Button, Tabs } from "@opal/components";
 import { TurnGroup } from "../transformers";
 import {
   getToolIcon,

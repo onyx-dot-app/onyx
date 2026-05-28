@@ -2,10 +2,9 @@
 
 import { useMemo } from "react";
 import { SvgOrganization, SvgUsers, SvgX } from "@opal/icons";
-import { Button, Card, MessageCard } from "@opal/components";
+import { Button, Card, MessageCard, Switch, Tabs } from "@opal/components";
 import { ContentAction, InputHorizontal } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
-import { Switch, Tabs } from "@opal/components";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
 import { Section } from "@/layouts/general-layouts";
 import useShareableGroups from "@/hooks/useShareableGroups";
