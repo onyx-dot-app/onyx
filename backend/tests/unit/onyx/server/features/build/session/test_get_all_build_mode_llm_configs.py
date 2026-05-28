@@ -5,10 +5,14 @@ providers baked into ``OPENCODE_CONFIG_CONTENT``. Bugs here surface as
 "Model not found: <provider>/<model>" errors at agent invocation time
 because per-prompt overrides can only target providers that were
 pre-registered when the pod was created.
+
+Build mode is provider-agnostic: any LLM provider in the DB is eligible,
+no naming convention required.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import cast
 from unittest.mock import MagicMock
@@ -24,33 +28,52 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.manager import get_all_build_mode_llm_configs
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.manage.llm.models import ModelConfigurationView
 
 
-def _model(name: str, is_visible: bool = True) -> ModelConfigurationView:
-    return ModelConfigurationView(
-        name=name,
-        is_visible=is_visible,
-        supports_image_input=False,
-    )
+@dataclass
+class _FakeModelConfig:
+    name: str
+    is_visible: bool = True
+
+
+class _FakeEncryptedApiKey:
+    def __init__(self, value: str | None) -> None:
+        self._value = value
+
+    def get_value(self, apply_mask: bool = True) -> str | None:  # noqa: ARG002
+        return self._value
+
+    def __bool__(self) -> bool:
+        return self._value is not None
+
+
+@dataclass
+class _FakeProvider:
+    """Stand-in for ``LLMProviderModel`` — only the attributes
+    ``get_all_build_mode_llm_configs`` reads."""
+
+    provider: str
+    model_configurations: list[_FakeModelConfig]
+    api_key: _FakeEncryptedApiKey
+    api_base: str | None = None
+
+
+def _model(name: str, is_visible: bool = True) -> _FakeModelConfig:
+    return _FakeModelConfig(name=name, is_visible=is_visible)
 
 
 def _provider(
     *,
-    name: str,
     provider: str,
-    models: list[ModelConfigurationView],
+    models: list[_FakeModelConfig],
     api_key: str | None = "k",
     api_base: str | None = None,
-) -> LLMProviderView:
-    return LLMProviderView(
-        id=1,
-        name=name,
+) -> _FakeProvider:
+    return _FakeProvider(
         provider=provider,
-        api_key=api_key,
-        api_base=api_base,
         model_configurations=models,
+        api_key=_FakeEncryptedApiKey(api_key),
+        api_base=api_base,
     )
 
 
@@ -62,10 +85,10 @@ _OPENAI_DEFAULT = LLMProviderConfig(
 )
 
 
-def _run(rows: list[LLMProviderView]) -> list[LLMProviderConfig]:
-    """Invoke under a patched ``fetch_all_build_mode_llm_providers``."""
+def _run(rows: list[_FakeProvider]) -> list[LLMProviderConfig]:
+    """Invoke under a patched ``fetch_existing_llm_providers``."""
     with patch(
-        "onyx.server.features.build.session.manager.fetch_all_build_mode_llm_providers",
+        "onyx.server.features.build.session.manager.fetch_existing_llm_providers",
         return_value=rows,
     ):
         # db_session is unused once the fetch is patched.
@@ -84,7 +107,6 @@ class TestGetAllBuildModeLlmConfigs:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
                     provider="anthropic",
                     models=[_model("claude-opus-4-7")],
                     api_key="k-anthropic",
@@ -101,7 +123,6 @@ class TestGetAllBuildModeLlmConfigs:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
                     provider="anthropic",
                     models=[_model("claude-hidden", is_visible=False)],
                 )
@@ -113,7 +134,6 @@ class TestGetAllBuildModeLlmConfigs:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
                     provider="anthropic",
                     models=[],
                 )
@@ -125,7 +145,6 @@ class TestGetAllBuildModeLlmConfigs:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
                     provider="anthropic",
                     models=[
                         _model("claude-opus-4-6"),
@@ -141,7 +160,6 @@ class TestGetAllBuildModeLlmConfigs:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
                     provider="anthropic",
                     models=[
                         _model("claude-hidden-1", is_visible=False),
@@ -153,12 +171,11 @@ class TestGetAllBuildModeLlmConfigs:
         assert configs[1].model_name == "claude-opus-4-7"
 
     def test_dedupes_when_default_provider_also_in_build_mode_rows(self) -> None:
-        """If the default's provider type is also tagged as build-mode, we
-        keep the default (with its real config) and skip the duplicate."""
+        """If a fetched provider has the same type as the default, we keep
+        the default (with its real config) and skip the duplicate."""
         configs = _run(
             [
                 _provider(
-                    name="build-mode-openai",
                     provider="openai",
                     models=[_model("gpt-4o-mini")],
                     api_key="k-build-openai",
@@ -166,19 +183,17 @@ class TestGetAllBuildModeLlmConfigs:
             ]
         )
         assert configs == [_OPENAI_DEFAULT]
-        # The default's api_key wins; we never overwrite with the build-mode row's.
+        # The default's api_key wins; we never overwrite with the fetched row's.
         assert configs[0].api_key == "k-openai"
 
     def test_multiple_distinct_build_mode_providers(self) -> None:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
                     provider="anthropic",
                     models=[_model("claude-opus-4-7")],
                 ),
                 _provider(
-                    name="build-mode-google",
                     provider="google",
                     models=[_model("gemini-2.5-pro")],
                 ),
@@ -195,7 +210,6 @@ class TestGetAllBuildModeLlmConfigs:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
                     provider="anthropic",
                     models=[_model("claude-opus-4-7")],
                 )

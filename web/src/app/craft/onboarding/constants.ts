@@ -3,7 +3,7 @@
 // =============================================================================
 
 export interface BuildLlmSelection {
-  providerName: string; // e.g., "build-mode-anthropic" (LLMProviderDescriptor.name)
+  providerName: string; // LLMProviderDescriptor.name
   provider: string; // e.g., "anthropic"
   modelName: string; // e.g., "claude-opus-4-7"
 }
@@ -22,24 +22,15 @@ interface MinimalLlmProvider {
   model_configurations: { name: string; is_visible: boolean }[];
 }
 
-export const BUILD_MODE_PROVIDER_PREFIX = "build-mode-";
-
-// Priority: Anthropic > OpenAI > OpenRouter > first available. Only build-mode providers count.
+// Priority: Anthropic > OpenAI > OpenRouter > first available.
 export function getDefaultLlmSelection(
   llmProviders: MinimalLlmProvider[] | undefined
 ): BuildLlmSelection | null {
   if (!llmProviders || llmProviders.length === 0) return null;
 
-  const buildProviders = llmProviders.filter((p) =>
-    p.name?.startsWith(BUILD_MODE_PROVIDER_PREFIX)
-  );
-  if (buildProviders.length === 0) return null;
-
   // Try each priority provider in order
   for (const { provider, modelName } of LLM_SELECTION_PRIORITY) {
-    const matchingProvider = buildProviders.find(
-      (p) => p.provider === provider
-    );
+    const matchingProvider = llmProviders.find((p) => p.provider === provider);
     if (matchingProvider) {
       return {
         providerName: matchingProvider.name ?? "",
@@ -49,7 +40,7 @@ export function getDefaultLlmSelection(
     }
   }
 
-  const firstProvider = buildProviders[0];
+  const firstProvider = llmProviders[0];
   if (firstProvider) {
     const firstModel = firstProvider.model_configurations.find(
       (m) => m.is_visible

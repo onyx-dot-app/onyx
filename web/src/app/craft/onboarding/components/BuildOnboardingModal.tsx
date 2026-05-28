@@ -106,6 +106,7 @@ export default function BuildOnboardingModal({
   initialValues,
   isAdmin,
   hasUserInfo,
+  allProvidersConfigured: _allProvidersConfigured,
   hasAnyProvider,
   onComplete,
   onLlmComplete,
@@ -218,7 +219,7 @@ export default function BuildOnboardingModal({
     setConnectionStatus("testing");
     setErrorMessage("");
 
-    const providerName = `build-mode-${currentProviderConfig.providerName}`;
+    const providerName = currentProviderConfig.providerName;
     const payload = {
       name: providerName,
       provider: currentProviderConfig.providerName,

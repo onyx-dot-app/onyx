@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useMemo, useEffect } from "react";
+import { useCallback, useState, useMemo } from "react";
 import { useUser } from "@/providers/UserProvider";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { LLMProviderName } from "@/lib/languageModels/types";
@@ -12,27 +12,21 @@ import {
 import {
   getBuildUserPersona,
   setBuildUserPersona,
-  BUILD_MODE_PROVIDER_PREFIX,
 } from "@/app/craft/onboarding/constants";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 
 import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
 
-function isBuildModeProvider(provider: LLMProviderDescriptor): boolean {
-  return !!provider.name?.startsWith(BUILD_MODE_PROVIDER_PREFIX);
-}
-
-// Check if all 3 build mode providers are configured (anthropic, openai, openrouter)
+// Check if all 3 recommended providers (anthropic, openai, openrouter) are
+// configured — any provider matching the type counts.
 function checkAllProvidersConfigured(
   llmProviders: LLMProviderDescriptor[] | undefined
 ): boolean {
   if (!llmProviders || llmProviders.length === 0) {
     return false;
   }
-  const configuredProviders = new Set(
-    llmProviders.filter(isBuildModeProvider).map((p) => p.provider)
-  );
+  const configuredProviders = new Set(llmProviders.map((p) => p.provider));
   return (
     configuredProviders.has(LLMProviderName.ANTHROPIC) &&
     configuredProviders.has(LLMProviderName.OPENAI) &&
@@ -40,11 +34,11 @@ function checkAllProvidersConfigured(
   );
 }
 
-// Check if at least one build-mode provider is configured
+// Check if at least one LLM provider is configured
 function checkHasAnyProvider(
   llmProviders: LLMProviderDescriptor[] | undefined
 ): boolean {
-  return !!llmProviders?.some(isBuildModeProvider);
+  return !!(llmProviders && llmProviders.length > 0);
 }
 
 export function useOnboardingModal(): OnboardingModalController {
@@ -62,7 +56,7 @@ export function useOnboardingModal(): OnboardingModalController {
 
   // Modal mode state
   const [mode, setMode] = useState<OnboardingModalMode>({ type: "closed" });
-  const [hasInitialized, setHasInitialized] = useState(false);
+  // const [hasInitialized, setHasInitialized] = useState(false);
 
   // Compute initial values for the form (read fresh on every render)
   const existingPersona = getBuildUserPersona();
@@ -85,39 +79,41 @@ export function useOnboardingModal(): OnboardingModalController {
     return !!getBuildUserPersona()?.workArea;
   }, [user]);
 
-  // Check if all providers are configured (skip LLM step entirely if so)
+  // Check if all 3 recommended providers are configured.
   const allProvidersConfigured = useMemo(
     () => checkAllProvidersConfigured(llmProviders),
     [llmProviders]
   );
 
-  // Check if at least one provider is configured (allow skipping LLM step)
+  // Check if at least one provider is configured.
   const hasAnyProvider = useMemo(
     () => checkHasAnyProvider(llmProviders),
     [llmProviders]
   );
 
-  // Auto-open initial onboarding modal on first load
-  // Shows if: user info (role) missing OR (admin AND no providers configured)
-  useEffect(() => {
-    if (hasInitialized || isLoadingLlm || !user) return;
-
-    const needsUserInfo = !hasUserInfo;
-    const needsLlmSetup = isAdmin && !hasAnyProvider;
-
-    if (needsUserInfo || needsLlmSetup) {
-      setMode({ type: "initial-onboarding" });
-    }
-
-    setHasInitialized(true);
-  }, [
-    hasInitialized,
-    isLoadingLlm,
-    user,
-    hasUserInfo,
-    isAdmin,
-    hasAnyProvider,
-  ]);
+  // ONBOARDING MODAL TEMPORARILY DISABLED — see BuildOnboardingProvider.
+  // The auto-open effect is commented out so the modal never opens itself.
+  // Uncomment to restore.
+  //
+  // useEffect(() => {
+  //   if (hasInitialized || isLoadingLlm || !user) return;
+  //
+  //   const needsUserInfo = !hasUserInfo;
+  //   const needsLlmSetup = isAdmin && !hasAnyProvider;
+  //
+  //   if (needsUserInfo || needsLlmSetup) {
+  //     setMode({ type: "initial-onboarding" });
+  //   }
+  //
+  //   setHasInitialized(true);
+  // }, [
+  //   hasInitialized,
+  //   isLoadingLlm,
+  //   user,
+  //   hasUserInfo,
+  //   isAdmin,
+  //   hasAnyProvider,
+  // ]);
 
   // Complete user info callback
   const completeUserInfo = useCallback(

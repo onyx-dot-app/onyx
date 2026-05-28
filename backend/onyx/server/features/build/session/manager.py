@@ -32,6 +32,7 @@ from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.llm import fetch_default_llm_model
+from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
@@ -60,12 +61,6 @@ from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import delete_build_session__no_commit
-from onyx.server.features.build.db.build_session import (
-    fetch_all_build_mode_llm_providers,
-)
-from onyx.server.features.build.db.build_session import (
-    fetch_llm_provider_by_type_for_build_mode,
-)
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import get_empty_session_for_user
 from onyx.server.features.build.db.build_session import get_session_messages
@@ -113,26 +108,32 @@ def get_all_build_mode_llm_configs(
     db_session: DBSession,
     default: LLMProviderConfig,
 ) -> list[LLMProviderConfig]:
-    """``default`` first, then every other ``build-mode-*`` provider with a
+    """``default`` first, then every other configured LLM provider with a
     visible model. Used at sandbox provision time so every configured
     provider is pre-registered in opencode.json and per-prompt model
     overrides can cross providers without a pod restart.
     """
     configs: list[LLMProviderConfig] = [default]
     seen_providers: set[str] = {default.provider}
-    for provider in fetch_all_build_mode_llm_providers(db_session):
-        if provider.provider in seen_providers:
+    for provider_model in fetch_existing_llm_providers(db_session, flow_type_filter=[]):
+        if provider_model.provider in seen_providers:
             continue
-        seen_providers.add(provider.provider)
-        visible_models = [m for m in provider.model_configurations if m.is_visible]
+        seen_providers.add(provider_model.provider)
+        visible_models = [
+            m for m in provider_model.model_configurations if m.is_visible
+        ]
         if not visible_models:
             continue
         configs.append(
             LLMProviderConfig(
-                provider=provider.provider,
+                provider=provider_model.provider,
                 model_name=visible_models[0].name,
-                api_key=provider.api_key,
-                api_base=provider.api_base,
+                api_key=(
+                    provider_model.api_key.get_value(apply_mask=False)
+                    if provider_model.api_key
+                    else None
+                ),
+                api_base=provider_model.api_base,
             )
         )
     return configs
@@ -372,19 +373,31 @@ class SessionManager:
             ValueError: If no LLM provider is configured
         """
         if requested_provider_type and requested_model_name:
-            # Look up provider by type (e.g., "anthropic", "openai", "openrouter")
-            provider = fetch_llm_provider_by_type_for_build_mode(
-                self._db_session, requested_provider_type
+            # Find any provider in the DB matching the requested type
+            # (e.g., "anthropic", "openai", "openrouter").
+            provider_model = next(
+                (
+                    p
+                    for p in fetch_existing_llm_providers(
+                        self._db_session, flow_type_filter=[]
+                    )
+                    if p.provider == requested_provider_type
+                ),
+                None,
             )
-            if provider:
+            if provider_model:
                 # Use the requested model directly - the provider's API will
                 # reject invalid models. This allows users to use models that
                 # aren't explicitly configured as "visible" in the admin UI.
                 return LLMProviderConfig(
-                    provider=provider.provider,
+                    provider=provider_model.provider,
                     model_name=requested_model_name,
-                    api_key=provider.api_key,
-                    api_base=provider.api_base,
+                    api_key=(
+                        provider_model.api_key.get_value(apply_mask=False)
+                        if provider_model.api_key
+                        else None
+                    ),
+                    api_base=provider_model.api_base,
                 )
             else:
                 logger.warning(

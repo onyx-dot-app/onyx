@@ -1,10 +1,10 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import { useRouter } from "next/navigation";
+// import { useRouter } from "next/navigation";
 import { useOnboardingModal } from "@/app/craft/onboarding/hooks/useOnboardingModal";
-import BuildOnboardingModal from "@/app/craft/onboarding/components/BuildOnboardingModal";
-import NoLlmProvidersModal from "@/app/craft/onboarding/components/NoLlmProvidersModal";
+// import BuildOnboardingModal from "@/app/craft/onboarding/components/BuildOnboardingModal";
+// import NoLlmProvidersModal from "@/app/craft/onboarding/components/NoLlmProvidersModal";
 import { OnboardingModalController } from "@/app/craft/onboarding/types";
 import { useUser } from "@/providers/UserProvider";
 
@@ -28,7 +28,7 @@ interface BuildOnboardingProviderProps {
 export function BuildOnboardingProvider({
   children,
 }: BuildOnboardingProviderProps) {
-  const router = useRouter();
+  // const router = useRouter();
   const { user } = useUser();
   const controller = useOnboardingModal();
 
@@ -41,20 +41,23 @@ export function BuildOnboardingProvider({
     );
   }
 
-  // Non-admin users with no LLM providers cannot use Craft
-  // Don't show modal while loading to prevent flash
-  const showNoProvidersModal =
-    !controller.isLoading && !controller.isAdmin && !controller.hasAnyProvider;
+  // ONBOARDING MODAL TEMPORARILY DISABLED.
+  // The unified onboarding modal (initial-onboarding, edit-user-info, add-llm)
+  // and the no-providers gate are disabled while we re-think the flow.
+  // Uncomment the block below to restore them.
+  //
+  // // Non-admin users with no LLM providers cannot use Craft
+  // // Don't show modal while loading to prevent flash
+  // const showNoProvidersModal =
+  //   !controller.isLoading && !controller.isAdmin && !controller.hasAnyProvider;
 
   return (
     <OnboardingContext.Provider value={controller}>
-      {/* Block non-admin users when no LLM providers are configured */}
-      <NoLlmProvidersModal
+      {/* Onboarding modal renders are disabled — see comment above. */}
+      {/* <NoLlmProvidersModal
         open={showNoProvidersModal}
         onClose={() => router.push("/app")}
       />
-
-      {/* Unified onboarding modal - only show if not blocked by no providers */}
       {!showNoProvidersModal && (
         <BuildOnboardingModal
           mode={controller.mode}
@@ -68,7 +71,7 @@ export function BuildOnboardingProvider({
           onLlmComplete={controller.completeLlmSetup}
           onClose={controller.close}
         />
-      )}
+      )} */}
 
       {/* Build content - always rendered, modals overlay it */}
       {children}
