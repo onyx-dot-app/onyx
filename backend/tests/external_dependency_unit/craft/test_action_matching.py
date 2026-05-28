@@ -3,9 +3,8 @@
 Exercises the real provider catalogs + a real DB (no structural mocking):
 
 - ``match_action``: a Slack REST call, a Google Calendar method+path, and a
-  Linear GraphQL body each resolve to their action's policy; a stored override
-  wins, an unset action falls back to ASK, and an off-catalog request resolves
-  to ``None``.
+  Linear GraphQL body each resolve to their action's stored policy; an action
+  with no stored row (and an off-catalog request) resolves to ``None``.
 - most-restrictive-wins when one request matches several actions.
 """
 
@@ -70,13 +69,15 @@ def test_match_slack_rest_uses_stored_override(
     assert match_action(db_session, app, request) == EndpointPolicy.ALWAYS
 
 
-def test_match_slack_rest_unset_defaults_to_ask(
+def test_match_slack_rest_unset_returns_none(
     db_session: Session,
     test_user: object,  # noqa: ARG001
 ) -> None:
+    # A real catalog action, but with no stored policy row → un-gated (None),
+    # since the stored rows are the source of truth for what's gated.
     app = _connect_app(db_session, ExternalAppType.SLACK)
     request = ProxiedRequest(method="POST", path="/api/conversations.list")
-    assert match_action(db_session, app, request) == EndpointPolicy.ASK
+    assert match_action(db_session, app, request) is None
 
 
 def test_match_google_calendar_method_and_path(
@@ -92,12 +93,13 @@ def test_match_google_calendar_method_and_path(
     )
     assert match_action(db_session, app, delete_req) == EndpointPolicy.DENY
 
-    # Same path, read method → a different (unset) action → ASK, not DENY.
+    # Same path, read method → a different action with no stored row → None
+    # (un-gated), not DENY.
     read_req = ProxiedRequest(
         method="GET",
         path="/calendar/v3/calendars/primary/events/evt123",
     )
-    assert match_action(db_session, app, read_req) == EndpointPolicy.ASK
+    assert match_action(db_session, app, read_req) is None
 
 
 def test_match_linear_graphql_body(

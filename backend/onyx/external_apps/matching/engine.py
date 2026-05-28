@@ -25,28 +25,25 @@ def match_action(
     app: ExternalApp,
     request: ProxiedRequest,
 ) -> EndpointPolicy | None:
-    """Resolve the policy verdict for ``request`` against ``app``'s catalog.
+    """Resolve the policy verdict for ``request`` from ``app``'s stored policies.
 
-    Returns ``ALWAYS | ASK | DENY`` when one or more catalog actions match (the
-    most restrictive of the matched actions' resolved policies), or ``None`` when
-    nothing matches — an off-catalog request the caller's business logic governs.
+    Stored rows are the source of truth: only catalog actions with a row for this
+    app are gated (the catalog supplies recognition rules; an action with no row
+    is un-gated, not defaulted to ASK). Returns the most restrictive policy of the
+    matched actions, or ``None`` when nothing matches.
     """
     context = MatchContext(request)
-    catalog = get_endpoint_catalog(app.app_type)
-    matched_ids = [
-        endpoint.id
-        for endpoint in catalog
-        if any(rule_matches(rule, context) for rule in endpoint.matches)
-    ]
-    if not matched_ids:
-        return None
-
     stored = get_policies(db_session, app.id)
-    # A matched catalog action with no stored row — an app connected before dense
-    # seeding, or a catalog action added since its last save — defaults to ASK
-    # rather than raising.
-    policies = [stored.get(action_id, EndpointPolicy.ASK) for action_id in matched_ids]
-    return _most_restrictive(policies)
+    catalog = get_endpoint_catalog(app.app_type)
+    matched_policies = [
+        stored[endpoint.id]
+        for endpoint in catalog
+        if endpoint.id in stored
+        and any(rule_matches(rule, context) for rule in endpoint.matches)
+    ]
+    if not matched_policies:
+        return None
+    return _most_restrictive(matched_policies)
 
 
 def _most_restrictive(policies: list[EndpointPolicy]) -> EndpointPolicy:
