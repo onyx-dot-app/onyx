@@ -5,7 +5,7 @@ import { useSWRConfig } from "swr";
 
 import { Button, Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgChevronDown, SvgShield } from "@opal/icons";
+import { SvgChevronDown, SvgLoader } from "@opal/icons";
 import {
   Collapsible,
   CollapsibleContent,
@@ -25,22 +25,31 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 
 interface ApprovalCardProps {
   approval: ApprovalView;
+  defaultOpen?: boolean;
 }
 
 /**
  * ApprovalCard - one row per pending approval. Mirrors CraftToolCard's
- * shape: shield icon + label + chevron in a hover-tinted header row,
- * with the structured payload preview and Approve/Reject buttons in the
- * expandable body. Reads as a sibling to the tool cards above.
+ * shape: spinning loader + label + chevron in a hover-tinted header
+ * row, with the structured payload preview in the expandable body.
+ * Approve and Reject sit in the header so the user can decide without
+ * expanding — the label alone is enough context for most low-stakes
+ * actions, and the payload is one click away when verification is
+ * needed.
  *
- * Defaults to open — the user explicitly needs the payload visible to
- * make a decision, not behind a click.
+ * Visual treatment: status-info (blue) border on a transparent body.
+ * Pairs with the SvgLoader spinner (also status-info) to read as
+ * "agent is paused waiting on you" — distinct from the regular tool
+ * cards (no border) but not alarming.
  */
-export default function ApprovalCard({ approval }: ApprovalCardProps) {
+export default function ApprovalCard({
+  approval,
+  defaultOpen = false,
+}: ApprovalCardProps) {
   const { mutate } = useSWRConfig();
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
 
   // Guards setState after the post-decision SWR revalidation drops
   // this row from /live and the card unmounts mid-await.
@@ -71,6 +80,10 @@ export default function ApprovalCard({ approval }: ApprovalCardProps) {
         setErrorMessage(
           e instanceof Error ? e.message : "Failed to submit decision"
         );
+        // Expand so the error message + the payload the user tried to
+        // approve are both visible. Avoids the "click Approve in a
+        // collapsed card, nothing visible changes" dead end.
+        setIsOpen(true);
       }
     } finally {
       // Card usually unmounts on the next render once /live drops the
@@ -83,46 +96,76 @@ export default function ApprovalCard({ approval }: ApprovalCardProps) {
   }
 
   return (
-    <div className="rounded-08 border border-status-warning-03 bg-status-warning-00">
+    <div className="rounded-08 border border-status-info-03 overflow-hidden">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger asChild>
-          <button className="w-full text-left rounded-md px-3 py-2 transition-colors hover:bg-background-tint-02">
-            <div className="flex items-center gap-2 min-w-0 w-full">
-              <SvgShield className="size-4 shrink-0 stroke-status-warning-05" />
+        {/*
+         * Header row: shield+label is one trigger, chevron at the far
+         * right is a second trigger (so the chevron sits in the
+         * conventional position, after the action buttons). Action
+         * buttons sit between as siblings — they can't live inside a
+         * trigger (nested <button> is invalid HTML) and we don't want
+         * clicking Approve to also toggle the collapse.
+         *
+         * Hover tint lives on the row container via `has-[...]:` so
+         * it spans across the action buttons when the user hovers
+         * either trigger. Hovering an action button doesn't match the
+         * selector (no `data-approval-trigger` on those), so the row
+         * goes clear and the button's own hover state takes over.
+         */}
+        <div
+          className={cn(
+            "flex items-center gap-1 pr-2 transition-colors",
+            "has-[[data-approval-trigger]:hover]:bg-background-tint-02"
+          )}
+        >
+          <CollapsibleTrigger asChild>
+            <button
+              data-approval-trigger
+              className="flex items-center gap-2 min-w-0 flex-1 text-left px-3 py-1.5"
+            >
+              <SvgLoader className="size-4 shrink-0 stroke-status-info-05 animate-spin" />
               <Text font="main-ui-muted" color="text-04" nowrap>
                 {label}
               </Text>
+            </button>
+          </CollapsibleTrigger>
+          <Button
+            prominence="primary"
+            size="sm"
+            disabled={submitting}
+            onClick={() => decide("APPROVED")}
+          >
+            Approve
+          </Button>
+          <Button
+            prominence="secondary"
+            size="sm"
+            disabled={submitting}
+            onClick={() => decide("REJECTED")}
+          >
+            Reject
+          </Button>
+          <CollapsibleTrigger asChild>
+            <button
+              data-approval-trigger
+              aria-label={isOpen ? "Hide details" : "Show details"}
+              className="p-1.5"
+            >
               <SvgChevronDown
                 className={cn(
-                  "size-4 stroke-text-03 transition-transform duration-150 shrink-0 ml-auto",
+                  "size-4 stroke-text-03 transition-transform duration-150",
                   !isOpen && "-rotate-90"
                 )}
               />
-            </div>
-          </button>
-        </CollapsibleTrigger>
+            </button>
+          </CollapsibleTrigger>
+        </div>
         <CollapsibleContent>
-          <div className="px-3 pb-3 pt-0 flex flex-col gap-3">
+          <div className="p-2 flex flex-col gap-3">
             <PayloadView
               actionType={approval.action_type}
               payload={approval.payload}
             />
-            <div className="flex items-center gap-2">
-              <Button
-                prominence="primary"
-                disabled={submitting}
-                onClick={() => decide("APPROVED")}
-              >
-                Approve
-              </Button>
-              <Button
-                prominence="secondary"
-                disabled={submitting}
-                onClick={() => decide("REJECTED")}
-              >
-                Reject
-              </Button>
-            </div>
             {errorMessage && (
               <div className="text-status-error-05">
                 <Text font="secondary-body" color="inherit">
