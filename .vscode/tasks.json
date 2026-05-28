@@ -2,6 +2,32 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "ods-compose-dev-infra",
+      "type": "shell",
+      "command": "uv",
+      "args": ["run", "--with", "onyx-devtools", "ods", "compose", "dev", "--infra"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "UV_LINK_MODE": "copy"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "ods-env",
+      "type": "shell",
+      "command": "uv",
+      "args": ["run", "--with", "onyx-devtools", "ods", "env"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "UV_LINK_MODE": "copy"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
       "type": "shell",
       "label": "start backend",
       "options": {
