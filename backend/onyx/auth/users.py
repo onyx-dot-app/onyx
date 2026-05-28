@@ -877,7 +877,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise exceptions.UserNotExists()
 
                 except exceptions.UserNotExists:
-                    verify_email_domain(account_email, is_registration=True)
+                    # OAuth-created accounts are not subject to the dotted-Gmail
+                    # signup block: the provider vouches for one canonical email
+                    # per account, so dot-alias abuse isn't possible here.
+                    verify_email_domain(account_email)
 
                     # Lock + check on the same session that does the insert.
                     await self.user_db.session.run_sync(
