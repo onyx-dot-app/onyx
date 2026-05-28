@@ -141,6 +141,11 @@ def create_session(
         return DetailedSessionResponse.from_session_response(
             base_response, session_loaded_in_sandbox=True
         )
+    except OnyxError:
+        # e.g. no provider exposes a supported model; let the global handler
+        # return its own status code instead of collapsing to 429/500.
+        db_session.rollback()
+        raise
     except ValueError as e:
         logger.exception("Session creation failed")
         db_session.rollback()
@@ -396,7 +401,7 @@ def restore_session(
                 # Fall through to TERMINATED handling below
 
         session_manager = SessionManager(db_session)
-        llm_config = session_manager._get_llm_config(None, None)
+        llm_config = session_manager._get_llm_config(None, None, user)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
             # Mint/look up the PAT before flipping to PROVISIONING so that a
@@ -415,7 +420,7 @@ def restore_session(
             # Pre-register every build-mode provider so per-prompt model
             # overrides can cross providers without re-provisioning the pod.
             all_llm_configs = get_all_build_mode_llm_configs(
-                db_session, default=llm_config
+                db_session, default=llm_config, user=user
             )
             sandbox_manager.provision(
                 sandbox_id=sandbox.id,

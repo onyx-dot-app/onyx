@@ -125,6 +125,13 @@ SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get(
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
+# Provider types Onyx Craft can run on (v0), in priority order. A provider is
+# only usable if the requesting user can access it (can_user_access_llm_provider).
+# Keep in sync with BUILD_MODE_PROVIDERS keys in the frontend
+# (web/src/app/craft/onboarding/constants.ts); enforced by
+# test_build_mode_provider_types_sync.py.
+BUILD_MODE_ALLOWED_PROVIDER_TYPES = ["anthropic", "openai", "openrouter"]
+
 # Dev/debug-only: when true, exposes a frontend button + SSE endpoint that
 # tails the user's sandbox pod's opencode-serve container logs. Never
 # enable in prod — the logs include LLM I/O and tool invocations that may

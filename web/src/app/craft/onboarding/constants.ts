@@ -3,128 +3,15 @@
 // =============================================================================
 
 export interface BuildLlmSelection {
-  providerName: string; // e.g., "build-mode-anthropic" (LLMProviderDescriptor.name)
+  providerName: string; // LLMProviderDescriptor.name (any configured provider)
   provider: string; // e.g., "anthropic"
   modelName: string; // e.g., "claude-opus-4-7"
 }
 
-// Priority order for smart default LLM selection
-const LLM_SELECTION_PRIORITY = [
-  { provider: "anthropic", modelName: "claude-opus-4-7" },
-  { provider: "openai", modelName: "gpt-5.5" },
-  { provider: "openrouter", modelName: "minimax/minimax-m2.1" },
-] as const;
+export type ProviderKey = "anthropic" | "openai" | "openrouter";
 
-// Minimal provider interface for selection logic
-interface MinimalLlmProvider {
-  name: string | null;
-  provider: string;
-  model_configurations: { name: string; is_visible: boolean }[];
-}
-
-/**
- * Get the best default LLM selection based on available providers.
- * Priority: Anthropic > OpenAI > OpenRouter > first available
- */
-export function getDefaultLlmSelection(
-  llmProviders: MinimalLlmProvider[] | undefined
-): BuildLlmSelection | null {
-  if (!llmProviders || llmProviders.length === 0) return null;
-
-  // Try each priority provider in order
-  for (const { provider, modelName } of LLM_SELECTION_PRIORITY) {
-    const matchingProvider = llmProviders.find((p) => p.provider === provider);
-    if (matchingProvider) {
-      return {
-        providerName: matchingProvider.name ?? "",
-        provider: matchingProvider.provider,
-        modelName,
-      };
-    }
-  }
-
-  // Fallback: first available provider, use its first visible model
-  const firstProvider = llmProviders[0];
-  if (firstProvider) {
-    const firstModel = firstProvider.model_configurations.find(
-      (m) => m.is_visible
-    );
-    return {
-      providerName: firstProvider.name ?? "",
-      provider: firstProvider.provider,
-      modelName: firstModel?.name ?? "",
-    };
-  }
-
-  return null;
-}
-
-// Recommended models config (for UI display)
-export const RECOMMENDED_BUILD_MODELS = {
-  preferred: {
-    provider: "anthropic",
-    modelName: "claude-opus-4-7",
-    displayName: "Claude Opus 4.7",
-  },
-  alternatives: [
-    { provider: "anthropic", modelName: "claude-opus-4-6" },
-    { provider: "anthropic", modelName: "claude-sonnet-4-6" },
-    { provider: "openai", modelName: "gpt-5.5" },
-    { provider: "openai", modelName: "gpt-5.4" },
-    { provider: "openai", modelName: "gpt-5.3" },
-    { provider: "openrouter", modelName: "minimax/minimax-m2.1" },
-  ],
-} as const;
-
-// Cookie utilities
-const BUILD_LLM_COOKIE_KEY = "build_llm_selection";
-
-export function getBuildLlmSelection(): BuildLlmSelection | null {
-  if (typeof document === "undefined") return null;
-  const cookie = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith(`${BUILD_LLM_COOKIE_KEY}=`));
-  if (!cookie) return null;
-  try {
-    const value = cookie.split("=")[1];
-    if (!value) return null;
-    return JSON.parse(decodeURIComponent(value));
-  } catch {
-    return null;
-  }
-}
-
-export function setBuildLlmSelection(selection: BuildLlmSelection): void {
-  if (typeof document === "undefined") return;
-  const value = encodeURIComponent(JSON.stringify(selection));
-  // Cookie expires in 1 year
-  const expires = new Date(
-    Date.now() + 365 * 24 * 60 * 60 * 1000
-  ).toUTCString();
-  document.cookie = `${BUILD_LLM_COOKIE_KEY}=${value}; path=/; expires=${expires}; SameSite=Lax`;
-}
-
-export function clearBuildLlmSelection(): void {
-  if (typeof document === "undefined") return;
-  document.cookie = `${BUILD_LLM_COOKIE_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
-}
-
-export function isRecommendedModel(
-  provider: string,
-  modelName: string
-): boolean {
-  const { preferred, alternatives } = RECOMMENDED_BUILD_MODELS;
-  // Exact match for preferred model
-  if (preferred.provider === provider && modelName === preferred.modelName) {
-    return true;
-  }
-  // Exact match for alternatives
-  return alternatives.some(
-    (alt) => alt.provider === provider && modelName === alt.modelName
-  );
-}
-
-// Curated providers for Build mode (shared between BuildOnboardingModal and BuildLLMPopover)
+// Single source of truth for Craft providers/models; everything below derives
+// from it (allowed types, recommended flags, default selection).
 export interface BuildModeModel {
   name: string;
   label: string;
@@ -132,7 +19,7 @@ export interface BuildModeModel {
 }
 
 export interface BuildModeProvider {
-  key: string;
+  key: ProviderKey;
   label: string;
   providerName: string;
   recommended?: boolean;
@@ -177,8 +64,8 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
     providerName: "openrouter",
     models: [
       {
-        name: "minimax/minimax-m2.1",
-        label: "MiniMax M2.1",
+        name: "moonshotai/kimi-k2.6",
+        label: "Kimi K2.6",
         recommended: true,
       },
     ],
@@ -187,6 +74,88 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
     apiKeyLabel: "OpenRouter Dashboard",
   },
 ];
+
+// Allowed provider types are just the curated providers' keys. Keep
+// BUILD_MODE_PROVIDERS in sync with the backend BUILD_MODE_ALLOWED_PROVIDER_TYPES
+// (enforced by test_build_mode_provider_types_sync.py).
+const ALLOWED_PROVIDER_TYPES = new Set<string>(
+  BUILD_MODE_PROVIDERS.map((p) => p.key)
+);
+const RECOMMENDED_MODEL_NAMES = new Set(
+  BUILD_MODE_PROVIDERS.flatMap((p) =>
+    p.models.filter((m) => m.recommended).map((m) => m.name)
+  )
+);
+
+interface MinimalLlmProvider {
+  name: string | null;
+  provider: string;
+}
+
+export function isSupportedProviderType(provider: string): boolean {
+  return ALLOWED_PROVIDER_TYPES.has(provider);
+}
+
+export function isRecommendedModel(modelName: string): boolean {
+  return RECOMMENDED_MODEL_NAMES.has(modelName);
+}
+
+function defaultModelForType(key: ProviderKey): string {
+  const p = BUILD_MODE_PROVIDERS.find((x) => x.key === key)!;
+  return (p.models.find((m) => m.recommended) ?? p.models[0]!).name;
+}
+
+// Highest-priority configured provider of a supported type, with that type's
+// recommended model. Access control is enforced server-side at session create.
+export function getDefaultLlmSelection(
+  llmProviders: MinimalLlmProvider[] | undefined
+): BuildLlmSelection | null {
+  if (!llmProviders || llmProviders.length === 0) return null;
+
+  for (const p of BUILD_MODE_PROVIDERS) {
+    const match = llmProviders.find((lp) => lp.provider === p.key);
+    if (match) {
+      return {
+        providerName: match.name ?? "",
+        provider: match.provider,
+        modelName: defaultModelForType(p.key),
+      };
+    }
+  }
+
+  return null;
+}
+
+const BUILD_LLM_COOKIE_KEY = "build_llm_selection";
+
+export function getBuildLlmSelection(): BuildLlmSelection | null {
+  if (typeof document === "undefined") return null;
+  const cookie = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${BUILD_LLM_COOKIE_KEY}=`));
+  if (!cookie) return null;
+  try {
+    const value = cookie.split("=")[1];
+    if (!value) return null;
+    return JSON.parse(decodeURIComponent(value));
+  } catch {
+    return null;
+  }
+}
+
+export function setBuildLlmSelection(selection: BuildLlmSelection): void {
+  if (typeof document === "undefined") return;
+  const value = encodeURIComponent(JSON.stringify(selection));
+  const expires = new Date(
+    Date.now() + 365 * 24 * 60 * 60 * 1000
+  ).toUTCString();
+  document.cookie = `${BUILD_LLM_COOKIE_KEY}=${value}; path=/; expires=${expires}; SameSite=Lax`;
+}
+
+export function clearBuildLlmSelection(): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${BUILD_LLM_COOKIE_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+}
 
 // =============================================================================
 // User Info Constants

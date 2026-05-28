@@ -91,6 +91,20 @@ export interface CreateSessionOptions {
   llmModelName?: string | null;
 }
 
+// Pull the backend's human-readable error detail out of a failed response,
+// falling back to the status code when the body isn't the expected shape.
+async function errorDetail(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = await res.json();
+    if (typeof body?.detail === "string" && body.detail.trim()) {
+      return body.detail;
+    }
+  } catch {
+    // body wasn't JSON — fall through
+  }
+  return `${fallback}: ${res.status}`;
+}
+
 export async function createSession(
   options?: CreateSessionOptions
 ): Promise<ApiDetailedSessionResponse> {
@@ -105,7 +119,7 @@ export async function createSession(
   });
 
   if (!res.ok) {
-    throw new Error(`Failed to create session: ${res.status}`);
+    throw new Error(await errorDetail(res, "Failed to create session"));
   }
 
   return res.json();

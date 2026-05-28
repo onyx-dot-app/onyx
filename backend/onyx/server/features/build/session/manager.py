@@ -31,12 +31,13 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SessionOrigin
-from onyx.db.llm import fetch_default_llm_model
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.db.users import fetch_user_by_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.factory import get_default_llm
 from onyx.llm.models import LanguageModelInput
@@ -53,6 +54,7 @@ from onyx.server.features.build.api.packets import ApprovalRequestedPacket
 from onyx.server.features.build.api.packets import BuildPacket
 from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
+from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
@@ -61,10 +63,7 @@ from onyx.server.features.build.db.build_session import create_build_session__no
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import delete_build_session__no_commit
 from onyx.server.features.build.db.build_session import (
-    fetch_all_build_mode_llm_providers,
-)
-from onyx.server.features.build.db.build_session import (
-    fetch_llm_provider_by_type_for_build_mode,
+    fetch_all_supported_build_llm_providers,
 )
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import get_empty_session_for_user
@@ -96,6 +95,7 @@ from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
+from onyx.server.manage.llm.models import LLMProviderView
 from onyx.skills.push import build_user_skills_payload
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.tracing.flows import LLMFlow
@@ -112,15 +112,16 @@ logger = setup_logger()
 def get_all_build_mode_llm_configs(
     db_session: DBSession,
     default: LLMProviderConfig,
+    user: User,
 ) -> list[LLMProviderConfig]:
-    """``default`` first, then every other ``build-mode-*`` provider with a
-    visible model. Used at sandbox provision time so every configured
-    provider is pre-registered in opencode.json and per-prompt model
+    """``default`` first, then every other user-accessible supported-type
+    provider with a visible model. Used at sandbox provision time so every
+    configured provider is pre-registered in opencode.json and per-prompt model
     overrides can cross providers without a pod restart.
     """
     configs: list[LLMProviderConfig] = [default]
     seen_providers: set[str] = {default.provider}
-    for provider in fetch_all_build_mode_llm_providers(db_session):
+    for provider in fetch_all_supported_build_llm_providers(db_session, user):
         if provider.provider in seen_providers:
             continue
         seen_providers.add(provider.provider)
@@ -354,59 +355,71 @@ class SessionManager:
         self,
         requested_provider_type: str | None,
         requested_model_name: str | None,
+        user: User,
     ) -> LLMProviderConfig:
         """Get LLM config for sandbox provisioning.
 
         Resolution priority:
-        1. User's requested provider/model (from cookie)
-        2. System default provider
-
-        Args:
-            requested_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
-            requested_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
-
-        Returns:
-            LLMProviderConfig for sandbox provisioning
+        1. User's requested provider/model (from cookie), if the type is an
+           accessible supported provider
+        2. Highest-priority accessible supported provider, with its first
+           visible model
 
         Raises:
-            ValueError: If no LLM provider is configured
+            OnyxError: If no accessible supported provider is configured
         """
+        providers = fetch_all_supported_build_llm_providers(self._db_session, user)
+
         if requested_provider_type and requested_model_name:
-            # Look up provider by type (e.g., "anthropic", "openai", "openrouter")
-            provider = fetch_llm_provider_by_type_for_build_mode(
-                self._db_session, requested_provider_type
+            for provider in providers:
+                if provider.provider == requested_provider_type:
+                    # Use the requested model directly - the provider's API
+                    # rejects invalid models, so this also allows models not
+                    # marked "visible" in the admin UI.
+                    return LLMProviderConfig(
+                        provider=provider.provider,
+                        model_name=requested_model_name,
+                        api_key=provider.api_key,
+                        api_base=provider.api_base,
+                    )
+            logger.warning(
+                "Requested provider type %s not accessible, falling back",
+                requested_provider_type,
             )
-            if provider:
-                # Use the requested model directly - the provider's API will
-                # reject invalid models. This allows users to use models that
-                # aren't explicitly configured as "visible" in the admin UI.
+
+        # Fallback (headless provision / sandbox wake): the interactive path
+        # supplies the model via the cookie; here pick the best available.
+        default_config = self._default_build_llm_config(providers)
+        if default_config is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "No accessible LLM provider of a supported type "
+                f"({', '.join(BUILD_MODE_ALLOWED_PROVIDER_TYPES)}) is configured.",
+            )
+        return default_config
+
+    @staticmethod
+    def _default_build_llm_config(
+        providers: list[LLMProviderView],
+    ) -> LLMProviderConfig | None:
+        """Highest-priority supported provider (per BUILD_MODE_ALLOWED_PROVIDER_TYPES)
+        with a visible model, from an already-fetched accessible list."""
+        for provider_type in BUILD_MODE_ALLOWED_PROVIDER_TYPES:
+            for provider in providers:
+                if provider.provider != provider_type:
+                    continue
+                visible_models = [
+                    m for m in provider.model_configurations if m.is_visible
+                ]
+                if not visible_models:
+                    continue
                 return LLMProviderConfig(
                     provider=provider.provider,
-                    model_name=requested_model_name,
+                    model_name=visible_models[0].name,
                     api_key=provider.api_key,
                     api_base=provider.api_base,
                 )
-            else:
-                logger.warning(
-                    "Requested provider type %s not found, falling back to default",
-                    requested_provider_type,
-                )
-
-        # Fallback to system default
-        default_model = fetch_default_llm_model(self._db_session)
-        if not default_model:
-            raise ValueError("No default LLM model found")
-
-        return LLMProviderConfig(
-            provider=default_model.llm_provider.provider,
-            model_name=default_model.name,
-            api_key=(
-                default_model.llm_provider.api_key.get_value(apply_mask=False)
-                if default_model.llm_provider.api_key
-                else None
-            ),
-            api_base=default_model.llm_provider.api_base,
-        )
+        return None
 
     # =========================================================================
     # Session CRUD Operations
@@ -457,7 +470,7 @@ class SessionManager:
         providers without a pod restart."""
         onyx_pat = ensure_sandbox_pat(self._db_session, sandbox, user)
         all_llm_configs = get_all_build_mode_llm_configs(
-            self._db_session, default=llm_config
+            self._db_session, default=llm_config, user=user
         )
         sandbox_info = self._sandbox_manager.provision(
             sandbox_id=sandbox.id,
@@ -551,7 +564,7 @@ class SessionManager:
         if user is None:
             raise ValueError(f"User {user_id} not found")
 
-        llm_config = self._get_llm_config(None, None)
+        llm_config = self._get_llm_config(None, None, user)
 
         if sandbox is None:
             sandbox = create_sandbox__no_commit(
@@ -660,8 +673,13 @@ class SessionManager:
                     f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) reached"
                 )
 
+        # Fetch user early — needed for provider access checks, PAT, AGENTS.md.
+        user = fetch_user_by_id(self._db_session, user_id)
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
         # Get LLM config (uses user's selection or falls back to default)
-        llm_config = self._get_llm_config(llm_provider_type, llm_model_name)
+        llm_config = self._get_llm_config(llm_provider_type, llm_model_name, user)
 
         # Allocate port for this session (per-session port allocation).
         # Both LOCAL and KUBERNETES backends use the same port allocation
@@ -692,11 +710,6 @@ class SessionManager:
             user_id,
             nextjs_port,
         )
-
-        # Fetch user early — needed for PAT provisioning and AGENTS.md personalization
-        user = fetch_user_by_id(self._db_session, user_id)
-        if not user:
-            raise ValueError(f"User {user_id} not found")
 
         # Check if user already has a sandbox (one sandbox per user model)
         existing_sandbox = get_sandbox_by_user_id(self._db_session, user_id)
