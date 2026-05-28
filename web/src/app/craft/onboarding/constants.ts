@@ -24,11 +24,7 @@ interface MinimalLlmProvider {
 
 export const BUILD_MODE_PROVIDER_PREFIX = "build-mode-";
 
-/**
- * Get the best default LLM selection based on available providers.
- * Only considers providers created by Build mode (name prefixed with `build-mode-`).
- * Priority: Anthropic > OpenAI > OpenRouter > first available build-mode provider.
- */
+// Priority: Anthropic > OpenAI > OpenRouter > first available. Only build-mode providers count.
 export function getDefaultLlmSelection(
   llmProviders: MinimalLlmProvider[] | undefined
 ): BuildLlmSelection | null {
@@ -53,7 +49,6 @@ export function getDefaultLlmSelection(
     }
   }
 
-  // Fallback: first available build-mode provider, use its first visible model
   const firstProvider = buildProviders[0];
   if (firstProvider) {
     const firstModel = firstProvider.model_configurations.find(

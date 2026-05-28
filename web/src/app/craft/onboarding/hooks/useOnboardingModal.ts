@@ -19,9 +19,6 @@ import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 
 import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
 
-// Build-mode providers are identified by a `name` prefixed with `build-mode-`
-// (see BuildOnboardingModal.handleConnect). Other LLM providers configured for
-// the workspace should not satisfy the build onboarding requirements.
 function isBuildModeProvider(provider: LLMProviderDescriptor): boolean {
   return !!provider.name?.startsWith(BUILD_MODE_PROVIDER_PREFIX);
 }

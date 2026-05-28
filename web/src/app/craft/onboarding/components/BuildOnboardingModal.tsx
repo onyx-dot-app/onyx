@@ -77,7 +77,6 @@ function getStepsForMode(
 ): OnboardingStep[] {
   switch (mode.type) {
     case "initial-onboarding":
-      // Full flow: page1 → llm-setup (only if admin and no provider configured yet) → user-info
       const steps: OnboardingStep[] = ["page1"];
 
       if (isAdmin && !hasAnyProvider) {
