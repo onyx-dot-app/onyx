@@ -1,14 +1,13 @@
 """Pure helpers for compiling, validating, and reasoning about schedules.
 
-Single source of truth for the cron/timezone semantics described in
+Single source of truth for the cron semantics described in
 ``docs/craft/features/scheduled-tasks.md``:
 
-- The DB stores a canonical 5-field cron string + IANA timezone +
-  ``editor_mode`` (UI hint). All three editor modes (interval, daily/weekly,
-  advanced) compile to the same cron form on save.
-- ``compute_next_run_at`` returns UTC datetimes. Comparison happens in UTC;
-  ``ZoneInfo`` handles DST so a "9 AM PT weekly" task stays 9 AM local
-  across PST/PDT.
+- The DB stores a canonical 5-field cron string + ``editor_mode`` (UI hint).
+  All three editor modes (interval, daily/weekly, advanced) compile to the
+  same cron form on save.
+- ``compute_next_run_at`` returns UTC datetimes. Comparison happens in UTC,
+  and cron expressions are evaluated in UTC.
 - Editor payloads are strictly typed via the Pydantic models below. Anything
   reaching ``compile_to_cron`` has already been validated by Pydantic at the
   HTTP boundary, so the function is a pure transformation — no
@@ -24,8 +23,6 @@ import re
 from datetime import datetime
 from datetime import timezone
 from typing import Literal
-from zoneinfo import ZoneInfo
-from zoneinfo import ZoneInfoNotFoundError
 
 from cron_descriptor import ExpressionDescriptor
 from croniter import croniter
@@ -132,17 +129,6 @@ EDITOR_PAYLOAD_MODELS: dict[EditorMode, type[_PayloadBase]] = {
 }
 
 
-def validate_timezone(tz: str) -> None:
-    """Raise ``OnyxError(INVALID_INPUT)`` if ``tz`` is not a valid IANA name."""
-    try:
-        ZoneInfo(tz)
-    except (ZoneInfoNotFoundError, ValueError) as e:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Unknown timezone: {tz!r}",
-        ) from e
-
-
 def _validate_cron(cron: str) -> None:
     """Raise ``OnyxError(INVALID_INPUT)`` if ``cron`` is not a valid 5-field expression.
 
@@ -208,49 +194,43 @@ def compile_to_cron(payload: EditorPayload) -> str:
     return f"{minute} {hour} * * {weekday_field}"
 
 
-def compute_next_run_at(cron: str, tz: str, after: datetime) -> datetime:
+def compute_next_run_at(cron: str, after: datetime) -> datetime:
     """Return the next UTC datetime ``cron`` fires after ``after``.
 
     Args:
         cron: 5-field cron expression.
-        tz: IANA timezone name (used to anchor the cron schedule).
         after: Reference time. Naive datetimes are treated as UTC.
 
     Returns:
         Aware UTC datetime of the next fire.
 
     Raises:
-        OnyxError(INVALID_INPUT): if ``cron``/``tz`` are invalid, or if no
-            future fire exists (e.g. an impossible expression).
+        OnyxError(INVALID_INPUT): if ``cron`` is invalid, or if no future fire
+            exists (e.g. an impossible expression).
     """
     _validate_cron(cron)
-    validate_timezone(tz)
 
     if after.tzinfo is None:
         after = after.replace(tzinfo=timezone.utc)
+    else:
+        after = after.astimezone(timezone.utc)
 
-    zone = ZoneInfo(tz)
-    # croniter operates in the zone supplied via the start argument.
-    local_after = after.astimezone(zone)
     try:
-        itr = croniter(cron, local_after)
-        next_local = itr.get_next(datetime)
+        itr = croniter(cron, after)
+        next_fire = itr.get_next(datetime)
     except (ValueError, KeyError) as e:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"Cron expression has no future fire: {cron!r} (tz={tz})",
+            f"Cron expression has no future fire: {cron!r}",
         ) from e
 
-    # croniter returns a naive datetime in the supplied tz on some versions;
-    # ensure it's aware in `zone` and convert back to UTC.
-    if next_local.tzinfo is None:
-        next_local = next_local.replace(tzinfo=zone)
-    return next_local.astimezone(timezone.utc)
+    if next_fire.tzinfo is None:
+        return next_fire.replace(tzinfo=timezone.utc)
+    return next_fire.astimezone(timezone.utc)
 
 
 def next_n_fires(
     cron: str,
-    tz: str,
     after: datetime,
     n: int,
 ) -> list[datetime]:
@@ -262,14 +242,13 @@ def next_n_fires(
     if n <= 0:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "n must be positive")
     _validate_cron(cron)
-    validate_timezone(tz)
 
     if after.tzinfo is None:
         after = after.replace(tzinfo=timezone.utc)
+    else:
+        after = after.astimezone(timezone.utc)
 
-    zone = ZoneInfo(tz)
-    local_after = after.astimezone(zone)
-    itr = croniter(cron, local_after)
+    itr = croniter(cron, after)
     fires: list[datetime] = []
     for _ in range(n):
         try:
@@ -277,26 +256,23 @@ def next_n_fires(
         except (ValueError, KeyError) as e:
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
-                f"Cron expression has no future fire: {cron!r} (tz={tz})",
+                f"Cron expression has no future fire: {cron!r}",
             ) from e
         if nxt.tzinfo is None:
-            nxt = nxt.replace(tzinfo=zone)
+            nxt = nxt.replace(tzinfo=timezone.utc)
         fires.append(nxt.astimezone(timezone.utc))
     return fires
 
 
-def human_readable(cron: str, tz: str) -> str:
-    """Render a human-readable description of ``cron`` with the tz appended.
+def human_readable(cron: str) -> str:
+    """Render a human-readable description of ``cron``.
 
     Falls back to the raw cron expression if cron-descriptor can't render it
-    (rare; cron-descriptor is permissive). The tz is always included so the
-    user sees the schedule's anchor.
+    (rare; cron-descriptor is permissive).
     """
     _validate_cron(cron)
-    validate_timezone(tz)
     try:
         descriptor = ExpressionDescriptor(cron, use_24hour_time_format=False)
-        text = descriptor.get_description()
+        return descriptor.get_description()
     except Exception:
-        text = cron
-    return f"{text} ({tz})"
+        return cron

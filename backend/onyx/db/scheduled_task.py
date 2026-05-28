@@ -35,7 +35,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.scheduled_tasks.schedule import compute_next_run_at
 from onyx.server.features.build.scheduled_tasks.schedule import EditorMode
-from onyx.server.features.build.scheduled_tasks.schedule import validate_timezone
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -53,31 +52,28 @@ def create_scheduled_task(
     name: str,
     prompt: str,
     cron_expression: str,
-    timezone_name: str,
     editor_mode: EditorMode,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Insert a new ``ScheduledTask``.
 
-    Computes the initial ``next_run_at`` from ``cron_expression`` /
-    ``timezone_name`` if ``status`` is ACTIVE; PAUSED tasks store NULL.
+    Computes the initial ``next_run_at`` from ``cron_expression`` if
+    ``status`` is ACTIVE; PAUSED tasks store NULL.
 
     Raises:
-        OnyxError(INVALID_INPUT): if the cron or timezone is invalid.
+        OnyxError(INVALID_INPUT): if the cron is invalid.
     """
-    validate_timezone(timezone_name)
     now = now or datetime.now(tz=timezone.utc)
     next_run_at: datetime | None = None
     if status == ScheduledTaskStatus.ACTIVE:
-        next_run_at = compute_next_run_at(cron_expression, timezone_name, now)
+        next_run_at = compute_next_run_at(cron_expression, now)
 
     task = ScheduledTask(
         user_id=user_id,
         name=name,
         prompt=prompt,
         cron_expression=cron_expression,
-        timezone=timezone_name,
         editor_mode=editor_mode,
         status=status,
         next_run_at=next_run_at,
@@ -137,7 +133,6 @@ def update_scheduled_task(
     name: str | None = None,
     prompt: str | None = None,
     cron_expression: str | None = None,
-    timezone_name: str | None = None,
     editor_mode: EditorMode | None = None,
     status: ScheduledTaskStatus | None = None,
     now: datetime | None = None,
@@ -145,15 +140,15 @@ def update_scheduled_task(
     """Apply a partial update to a scheduled task.
 
     Recompute rules:
-      - If ``cron_expression`` or ``timezone_name`` changed and the task is
-        (or becomes) ACTIVE, ``next_run_at`` is recomputed from ``now``.
+      - If ``cron_expression`` changed and the task is (or becomes) ACTIVE,
+        ``next_run_at`` is recomputed from ``now``.
       - If ``status`` transitions to PAUSED, ``next_run_at`` is set to NULL.
       - If ``status`` transitions to ACTIVE, ``next_run_at`` is recomputed.
 
     Raises:
         OnyxError(NOT_FOUND): the task does not exist or is not owned by
             the caller.
-        OnyxError(INVALID_INPUT): the new cron/timezone is invalid.
+        OnyxError(INVALID_INPUT): the new cron is invalid.
     """
     task = get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user_id)
     now = now or datetime.now(tz=timezone.utc)
@@ -168,10 +163,6 @@ def update_scheduled_task(
     if cron_expression is not None and cron_expression != task.cron_expression:
         task.cron_expression = cron_expression
         schedule_changed = True
-    if timezone_name is not None and timezone_name != task.timezone:
-        validate_timezone(timezone_name)
-        task.timezone = timezone_name
-        schedule_changed = True
 
     if status is not None and status != task.status:
         task.status = status
@@ -179,11 +170,9 @@ def update_scheduled_task(
             task.next_run_at = None
         else:
             # Becoming ACTIVE — recompute from now regardless of schedule change.
-            task.next_run_at = compute_next_run_at(
-                task.cron_expression, task.timezone, now
-            )
+            task.next_run_at = compute_next_run_at(task.cron_expression, now)
     elif schedule_changed and task.status == ScheduledTaskStatus.ACTIVE:
-        task.next_run_at = compute_next_run_at(task.cron_expression, task.timezone, now)
+        task.next_run_at = compute_next_run_at(task.cron_expression, now)
 
     db_session.flush()
     return task
@@ -280,7 +269,7 @@ def advance_next_run_at(
 
     Returns the new ``next_run_at`` (UTC).
     """
-    next_run_at = compute_next_run_at(task.cron_expression, task.timezone, now)
+    next_run_at = compute_next_run_at(task.cron_expression, now)
     task.next_run_at = next_run_at
     db_session.flush()
     return next_run_at
