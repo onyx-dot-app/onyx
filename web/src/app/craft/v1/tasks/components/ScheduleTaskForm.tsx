@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import { Button, Divider, Tooltip } from "@opal/components";
+import { Button, Divider } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { SettingsLayouts, InputVertical } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
@@ -160,6 +161,13 @@ export default function ScheduleTaskForm({
 
   const canSubmit = !nameError && !promptError && !scheduleError && !saving;
 
+  // Reason a submit button is blocked, surfaced via the `Disabled` wrapper's
+  // tooltip. A natively-disabled <button> is inert and never fires hover
+  // events, so the tooltip must live on the (interactive) wrapper instead.
+  const disabledReason = saving
+    ? "Saving..."
+    : (nameError ?? promptError ?? scheduleError ?? undefined);
+
   const submit = useCallback(
     async (runImmediately: boolean) => {
       if (!compiled.ok) return; // validation should already block, but typescript needs this
@@ -224,7 +232,7 @@ export default function ScheduleTaskForm({
         backButton={onBack}
         divider
         rightChildren={
-          <div className="flex gap-2">
+          <div className="flex gap-2 self-start">
             <Button
               variant="default"
               prominence="secondary"
@@ -235,24 +243,27 @@ export default function ScheduleTaskForm({
               Cancel
             </Button>
             {!isEdit && (
-              <Button
-                variant="default"
-                prominence="secondary"
-                type="button"
+              <Disabled
                 disabled={!canSubmit}
-                onClick={() => void submit(true)}
-                data-testid="save-and-run-now"
+                tooltip={disabledReason}
+                tooltipSide="bottom"
               >
-                Save and run now
-              </Button>
+                <Button
+                  variant="default"
+                  prominence="secondary"
+                  type="button"
+                  disabled={!canSubmit}
+                  onClick={() => void submit(true)}
+                  data-testid="save-and-run-now"
+                >
+                  Save and run now
+                </Button>
+              </Disabled>
             )}
-            <Tooltip
-              tooltip={
-                saving
-                  ? "Saving..."
-                  : nameError || promptError || scheduleError || undefined
-              }
-              side="bottom"
+            <Disabled
+              disabled={!canSubmit}
+              tooltip={disabledReason}
+              tooltipSide="bottom"
             >
               <Button
                 variant="default"
@@ -264,7 +275,7 @@ export default function ScheduleTaskForm({
               >
                 {isEdit ? "Save changes" : "Save"}
               </Button>
-            </Tooltip>
+            </Disabled>
           </div>
         }
       />
