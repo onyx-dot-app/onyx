@@ -20,7 +20,9 @@ import {
   StreamItem,
   ToolCallState,
   TodoListState,
+  PanelTab,
 } from "@/app/craft/types/displayTypes";
+import { panelTabId } from "@/app/craft/types/displayTypes";
 
 import {
   createSession as apiCreateSession,
@@ -259,12 +261,6 @@ export type PreProvisioningState =
 // Module-level variable to store the provisioning promise (not in Zustand state for serializability)
 let provisioningPromise: Promise<string | null> | null = null;
 
-/** File preview tab data */
-export interface FilePreviewTab {
-  path: string;
-  fileName: string;
-}
-
 /** Files tab state - persisted across tab switches */
 export interface FilesTabState {
   expandedPaths: string[];
@@ -273,10 +269,10 @@ export interface FilesTabState {
   directoryCache: Record<string, unknown[]>;
 }
 
-/** Tab history entry - can be a pinned tab or a file preview */
+/** Tab history entry - can be a pinned tab or a transient panel tab */
 export type TabHistoryEntry =
   | { type: "pinned"; tab: OutputTabType }
-  | { type: "file"; path: string };
+  | { type: "panel-tab"; tabId: string };
 
 /** Browser-style tab navigation history */
 export interface TabNavigationHistory {
@@ -312,12 +308,12 @@ export interface BuildSessionData {
   webappNeedsRefresh: number;
   /** Counter to trigger files list refresh when outputs/ directory changes (increments on each write/edit) */
   filesNeedsRefresh: number;
-  /** File preview tabs open in this session */
-  filePreviewTabs: FilePreviewTab[];
+  /** Transient panel tabs open in this session (files, subagents, etc.) */
+  panelTabs: PanelTab[];
   /** Active pinned tab in output panel */
   activeOutputTab: OutputTabType;
-  /** Active file preview path (when set, this is the active tab instead of pinned tab) */
-  activeFilePreviewPath: string | null;
+  /** Active transient panel tab ID (when set, takes precedence over pinned tab) */
+  activePanelTabId: string | null;
   /** Files tab state - expanded folders and scroll position */
   filesTabState: FilesTabState;
   /** Browser-style tab navigation history for back/forward */
@@ -452,7 +448,7 @@ interface BuildSessionStore {
   openMarkdownPreview: (sessionId: string, filePath: string) => void;
   closeFilePreview: (sessionId: string, path: string) => void;
   setActiveOutputTab: (sessionId: string, tab: OutputTabType) => void;
-  setActiveFilePreviewPath: (sessionId: string, path: string | null) => void;
+  setActivePanelTabId: (sessionId: string, tabId: string | null) => void;
   /** Set active tab when no session exists (for pre-provisioned sandbox viewing) */
   setNoSessionActiveOutputTab: (tab: OutputTabType) => void;
 
@@ -490,9 +486,9 @@ const createInitialSessionData = (
   outputPanelOpen: false,
   webappNeedsRefresh: 0,
   filesNeedsRefresh: 0,
-  filePreviewTabs: [],
+  panelTabs: [],
   activeOutputTab: "preview",
-  activeFilePreviewPath: null,
+  activePanelTabId: null,
   filesTabState: { expandedPaths: [], scrollTop: 0, directoryCache: {} },
   tabHistory: {
     entries: [{ type: "pinned", tab: "preview" }],
@@ -1611,20 +1607,19 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const session = state.sessions.get(sessionId);
       if (!session) return state;
 
-      // Check if tab already exists
-      const existingTab = session.filePreviewTabs.find(
-        (tab) => tab.path === path
+      const newTab: PanelTab = { kind: "file", path, fileName };
+      const tabId = panelTabId(newTab);
+
+      const existingTab = session.panelTabs.find(
+        (t) => panelTabId(t) === tabId
       );
 
-      let filePreviewTabs = session.filePreviewTabs;
-      if (!existingTab) {
-        // Add new tab
-        filePreviewTabs = [...session.filePreviewTabs, { path, fileName }];
-      }
+      const panelTabs = existingTab
+        ? session.panelTabs
+        : [...session.panelTabs, newTab];
 
-      // Push to history (truncate forward history if navigating from middle)
       const { tabHistory } = session;
-      const newEntry: TabHistoryEntry = { type: "file", path };
+      const newEntry: TabHistoryEntry = { type: "panel-tab", tabId };
       const newEntries = [
         ...tabHistory.entries.slice(0, tabHistory.currentIndex + 1),
         newEntry,
@@ -1632,8 +1627,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       const updatedSession: BuildSessionData = {
         ...session,
-        filePreviewTabs,
-        activeFilePreviewPath: path, // Always switch to this tab
+        panelTabs,
+        activePanelTabId: tabId,
         tabHistory: {
           entries: newEntries,
           currentIndex: newEntries.length - 1,
@@ -1652,20 +1647,19 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const session = state.sessions.get(sessionId);
       if (!session) return state;
 
-      const existingTab = session.filePreviewTabs.find(
-        (t) => t.path === filePath
-      );
-      let filePreviewTabs = session.filePreviewTabs;
-      if (!existingTab) {
-        filePreviewTabs = [
-          ...session.filePreviewTabs,
-          { path: filePath, fileName },
-        ];
-      }
+      const newTab: PanelTab = { kind: "file", path: filePath, fileName };
+      const tabId = panelTabId(newTab);
 
-      // Push to history (truncate forward history if navigating from middle)
+      const existingTab = session.panelTabs.find(
+        (t) => panelTabId(t) === tabId
+      );
+
+      const panelTabs = existingTab
+        ? session.panelTabs
+        : [...session.panelTabs, newTab];
+
       const { tabHistory } = session;
-      const newEntry: TabHistoryEntry = { type: "file", path: filePath };
+      const newEntry: TabHistoryEntry = { type: "panel-tab", tabId };
       const newEntries = [
         ...tabHistory.entries.slice(0, tabHistory.currentIndex + 1),
         newEntry,
@@ -1674,8 +1668,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         outputPanelOpen: true,
-        filePreviewTabs,
-        activeFilePreviewPath: filePath,
+        panelTabs,
+        activePanelTabId: tabId,
         tabHistory: {
           entries: newEntries,
           currentIndex: newEntries.length - 1,
@@ -1693,27 +1687,26 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const session = state.sessions.get(sessionId);
       if (!session) return state;
 
-      // Remove the tab
-      const filePreviewTabs = session.filePreviewTabs.filter(
-        (tab) => tab.path !== path
+      const closingTabId = panelTabId({ kind: "file", path, fileName: "" });
+
+      const panelTabs = session.panelTabs.filter(
+        (t) => panelTabId(t) !== closingTabId
       );
 
-      // If closing the active preview tab, switch to Files tab
-      const activeFilePreviewPath =
-        session.activeFilePreviewPath === path
+      const activePanelTabId =
+        session.activePanelTabId === closingTabId
           ? null
-          : session.activeFilePreviewPath;
+          : session.activePanelTabId;
 
-      // If we closed the active tab, set activeOutputTab to "files"
       const activeOutputTab =
-        session.activeFilePreviewPath === path
+        session.activePanelTabId === closingTabId
           ? "files"
           : session.activeOutputTab;
 
       const updatedSession: BuildSessionData = {
         ...session,
-        filePreviewTabs,
-        activeFilePreviewPath,
+        panelTabs,
+        activePanelTabId,
         activeOutputTab,
         lastAccessed: new Date(),
       };
@@ -1739,7 +1732,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         activeOutputTab: tab,
-        activeFilePreviewPath: null, // Clear file preview when selecting pinned tab
+        activePanelTabId: null, // Clear transient tab when selecting pinned tab
         tabHistory: {
           entries: newEntries,
           currentIndex: newEntries.length - 1,
@@ -1752,16 +1745,16 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     });
   },
 
-  setActiveFilePreviewPath: (sessionId: string, path: string | null) => {
+  setActivePanelTabId: (sessionId: string, tabId: string | null) => {
     set((state) => {
       const session = state.sessions.get(sessionId);
       if (!session) return state;
 
-      // Push to history if switching to a file (truncate forward history)
+      // Push to history if switching to a panel tab (truncate forward history)
       const { tabHistory } = session;
       let newTabHistory = tabHistory;
-      if (path !== null) {
-        const newEntry: TabHistoryEntry = { type: "file", path };
+      if (tabId !== null) {
+        const newEntry: TabHistoryEntry = { type: "panel-tab", tabId };
         const newEntries = [
           ...tabHistory.entries.slice(0, tabHistory.currentIndex + 1),
           newEntry,
@@ -1774,7 +1767,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       const updatedSession: BuildSessionData = {
         ...session,
-        activeFilePreviewPath: path,
+        activePanelTabId: tabId,
         tabHistory: newTabHistory,
         lastAccessed: new Date(),
       };
@@ -1824,19 +1817,17 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const entry = tabHistory.entries[newIndex];
       if (!entry) return state;
 
-      // Re-open file tab if it was closed
-      let filePreviewTabs = session.filePreviewTabs;
-      if (entry.type === "file") {
-        const tabExists = filePreviewTabs.some(
-          (tab) => tab.path === entry.path
-        );
+      // Re-open panel tab if it was closed
+      let panelTabs = session.panelTabs;
+      if (entry.type === "panel-tab") {
+        const tabExists = panelTabs.some((t) => panelTabId(t) === entry.tabId);
         if (!tabExists) {
-          // Extract filename from path
-          const fileName = entry.path.split("/").pop() || entry.path;
-          filePreviewTabs = [
-            ...filePreviewTabs,
-            { path: entry.path, fileName },
-          ];
+          // Reconstruct a file tab from the ID (format: "file:<path>")
+          if (entry.tabId.startsWith("file:")) {
+            const path = entry.tabId.slice("file:".length);
+            const fileName = path.split("/").pop() || path;
+            panelTabs = [...panelTabs, { kind: "file", path, fileName }];
+          }
         }
       }
 
@@ -1845,8 +1836,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         tabHistory: { ...tabHistory, currentIndex: newIndex },
         activeOutputTab:
           entry.type === "pinned" ? entry.tab : session.activeOutputTab,
-        activeFilePreviewPath: entry.type === "file" ? entry.path : null,
-        filePreviewTabs,
+        activePanelTabId: entry.type === "panel-tab" ? entry.tabId : null,
+        panelTabs,
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -1868,19 +1859,17 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const entry = tabHistory.entries[newIndex];
       if (!entry) return state;
 
-      // Re-open file tab if it was closed
-      let filePreviewTabs = session.filePreviewTabs;
-      if (entry.type === "file") {
-        const tabExists = filePreviewTabs.some(
-          (tab) => tab.path === entry.path
-        );
+      // Re-open panel tab if it was closed
+      let panelTabs = session.panelTabs;
+      if (entry.type === "panel-tab") {
+        const tabExists = panelTabs.some((t) => panelTabId(t) === entry.tabId);
         if (!tabExists) {
-          // Extract filename from path
-          const fileName = entry.path.split("/").pop() || entry.path;
-          filePreviewTabs = [
-            ...filePreviewTabs,
-            { path: entry.path, fileName },
-          ];
+          // Reconstruct a file tab from the ID (format: "file:<path>")
+          if (entry.tabId.startsWith("file:")) {
+            const path = entry.tabId.slice("file:".length);
+            const fileName = path.split("/").pop() || path;
+            panelTabs = [...panelTabs, { kind: "file", path, fileName }];
+          }
         }
       }
 
@@ -1889,8 +1878,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         tabHistory: { ...tabHistory, currentIndex: newIndex },
         activeOutputTab:
           entry.type === "pinned" ? entry.tab : session.activeOutputTab,
-        activeFilePreviewPath: entry.type === "file" ? entry.path : null,
-        filePreviewTabs,
+        activePanelTabId: entry.type === "panel-tab" ? entry.tabId : null,
+        panelTabs,
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -1906,7 +1895,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
 // Stable empty references for SSR hydration (prevents infinite loop)
 const EMPTY_ARRAY: never[] = [];
-const EMPTY_FILE_PREVIEW_TABS: FilePreviewTab[] = [];
+const EMPTY_PANEL_TABS: PanelTab[] = [];
 const EMPTY_FILES_TAB_STATE: FilesTabState = {
   expandedPaths: [],
   scrollTop: 0,
@@ -2043,14 +2032,12 @@ export const useFilesNeedsRefresh = () =>
     return sessions.get(currentSessionId)?.filesNeedsRefresh ?? 0;
   });
 
-// File preview selectors
-export const useFilePreviewTabs = () =>
+// Panel tab selectors
+export const usePanelTabs = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return EMPTY_FILE_PREVIEW_TABS;
-    return (
-      sessions.get(currentSessionId)?.filePreviewTabs ?? EMPTY_FILE_PREVIEW_TABS
-    );
+    if (!currentSessionId) return EMPTY_PANEL_TABS;
+    return sessions.get(currentSessionId)?.panelTabs ?? EMPTY_PANEL_TABS;
   });
 
 export const useActiveOutputTab = () =>
@@ -2060,11 +2047,11 @@ export const useActiveOutputTab = () =>
     return sessions.get(currentSessionId)?.activeOutputTab ?? "preview";
   });
 
-export const useActiveFilePreviewPath = () =>
+export const useActivePanelTabId = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
     if (!currentSessionId) return null;
-    return sessions.get(currentSessionId)?.activeFilePreviewPath ?? null;
+    return sessions.get(currentSessionId)?.activePanelTabId ?? null;
   });
 
 export const useFilesTabState = () =>
