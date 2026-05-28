@@ -35,7 +35,7 @@ export function Code({ children, showCopyButton = true, ...props }: CodeProps) {
     <div className="relative w-full">
       <Hoverable.Root group="code">
         <code
-          className="block p-2 bg-background-tint-00 border border-border-01 rounded-12 break-all font-secondary-mono text-text-03 w-full"
+          className="block p-2 bg-background-tint-00 border border-border-01 rounded-12 break-all whitespace-pre-wrap font-secondary-mono text-text-03 w-full"
           {...props}
         >
           {children}
@@ -58,5 +58,3 @@ export function Code({ children, showCopyButton = true, ...props }: CodeProps) {
     </div>
   );
 }
-
-export default Code;
