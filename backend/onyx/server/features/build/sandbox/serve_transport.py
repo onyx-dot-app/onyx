@@ -43,9 +43,10 @@ SandboxEvent = Any
 # Tags serve-transport logs with the api_server replica handling the prompt.
 _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 
-# opencode-serve boot lags backend Ready by ~1–3s warm, up to ~15s cold.
-OPENCODE_SERVE_READY_TIMEOUT_SECONDS = 30
+# 60s covers cold-start in CI under shared-CPU pressure; 30s was too tight.
+OPENCODE_SERVE_READY_TIMEOUT_SECONDS = 60
 OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.5
+_OPENCODE_SERVE_READY_PROGRESS_LOG_INTERVAL_SECONDS = 10.0
 
 
 @dataclass(frozen=True)
@@ -230,19 +231,38 @@ class _ServeMixin:
         with OpencodeServeClient(
             base_url=info.base_url, password=info.password, event_bus=None
         ) as client:
-            deadline = time.time() + timeout
+            start = time.time()
+            deadline = start + timeout
             last_err = "no probe completed"
+            next_progress_log = (
+                start + _OPENCODE_SERVE_READY_PROGRESS_LOG_INTERVAL_SECONDS
+            )
             while time.time() < deadline:
                 try:
                     if client.health_check():
                         logger.info(
-                            "[SANDBOX-SERVE] opencode-serve ready for sandbox %s",
+                            "[SANDBOX-SERVE] opencode-serve ready for sandbox %s "
+                            "after %.1fs",
                             sandbox_id,
+                            time.time() - start,
                         )
                         return True
                     last_err = "health_check returned False"
                 except Exception as e:
                     last_err = f"{type(e).__name__}: {e}"
+                now = time.time()
+                if now >= next_progress_log:
+                    logger.info(
+                        "[SANDBOX-SERVE] still waiting on opencode-serve for "
+                        "sandbox %s (%.0fs/%.0fs, last error: %s)",
+                        sandbox_id,
+                        now - start,
+                        timeout,
+                        last_err,
+                    )
+                    next_progress_log = (
+                        now + _OPENCODE_SERVE_READY_PROGRESS_LOG_INTERVAL_SECONDS
+                    )
                 time.sleep(OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS)
         logger.error(
             "[SANDBOX-SERVE] opencode-serve never became ready for sandbox %s "
