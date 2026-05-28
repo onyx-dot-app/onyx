@@ -120,6 +120,11 @@ function StructuredValue({ value }: { value: unknown }) {
     );
   }
   if (Array.isArray(value)) {
+    // Empty arrays go through JSON so they render as `[]` (matching
+    // how empty objects render)
+    if (value.length === 0) {
+      return <NestedJsonValue value={value} />;
+    }
     // Arrays of primitives flatten to a comma-joined line; arrays of
     // objects fall through to JSON so per-object structure stays
     // legible.
