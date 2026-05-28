@@ -1,85 +1,8 @@
 package docker
 
 import (
-	"net"
-	"strconv"
 	"testing"
 )
-
-func freePort(t *testing.T) int {
-	t.Helper()
-	ln, err := net.Listen("tcp", ":0")
-	if err != nil {
-		t.Fatalf("failed to find a free port: %v", err)
-	}
-	port := ln.Addr().(*net.TCPAddr).Port
-	_ = ln.Close()
-	return port
-}
-
-func TestFindAvailablePort_returnsBaseWhenFree(t *testing.T) {
-	base := freePort(t)
-	port, err := findAvailablePort(base, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if port != base {
-		t.Fatalf("expected %d, got %d", base, port)
-	}
-}
-
-func TestFindAvailablePort_skipsOccupiedPort(t *testing.T) {
-	base := freePort(t)
-	ln, err := net.Listen("tcp", ":"+strconv.Itoa(base))
-	if err != nil {
-		t.Fatalf("failed to occupy port: %v", err)
-	}
-	defer func() { _ = ln.Close() }()
-
-	port, err := findAvailablePort(base, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if port <= base {
-		t.Fatalf("expected port > %d (occupied), got %d", base, port)
-	}
-}
-
-func TestFindAvailablePort_skipsClaimedPort(t *testing.T) {
-	base := freePort(t)
-	claimed := map[int]bool{base: true}
-	port, err := findAvailablePort(base, claimed)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if port <= base {
-		t.Fatalf("expected port > %d (claimed), got %d", base, port)
-	}
-}
-
-func TestFindAvailablePort_errorWhenAllOccupied(t *testing.T) {
-	base := freePort(t)
-
-	var listeners []net.Listener
-	defer func() {
-		for _, ln := range listeners {
-			_ = ln.Close()
-		}
-	}()
-
-	for i := 0; i < maxPortScanRange; i++ {
-		ln, err := net.Listen("tcp", ":"+strconv.Itoa(base+i))
-		if err != nil {
-			t.Fatalf("failed to occupy port %d: %v", base+i, err)
-		}
-		listeners = append(listeners, ln)
-	}
-
-	_, err := findAvailablePort(base, nil)
-	if err == nil {
-		t.Fatal("expected error when all ports occupied, got nil")
-	}
-}
 
 func TestName_usesFlag(t *testing.T) {
 	SetProjectFlags("custom-project")

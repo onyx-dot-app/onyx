@@ -130,21 +130,6 @@ func ProjectName() string {
 	return filepath.Base(root)
 }
 
-// findAvailablePort probes TCP ports starting from base, incrementing by 1, and
-// returns the first port that is bindable and not in the claimed set.
-func findAvailablePort(base int, claimed map[int]bool) (int, error) {
-	for port := base; port < base+maxPortScanRange; port++ {
-		if claimed[port] {
-			continue
-		}
-		if !portutil.IsAvailable(port) {
-			continue
-		}
-		return port, nil
-	}
-	return 0, fmt.Errorf("no available port found in range %d-%d", base, base+maxPortScanRange-1)
-}
-
 // FindAvailablePorts scans for a free host port for each port spec in
 // InfraServices. A global claimed set prevents cross-service collisions (e.g.,
 // inference_model_server and minio both defaulting near port 9000).
@@ -154,7 +139,7 @@ func FindAvailablePorts() (*ResolvedPorts, error) {
 
 	for _, svc := range InfraServices {
 		for _, spec := range svc.Ports {
-			port, err := findAvailablePort(spec.DefaultHost, claimed)
+			port, err := portutil.FindAvailable(spec.DefaultHost, maxPortScanRange, claimed)
 			if err != nil {
 				return nil, fmt.Errorf("%s port %d: %w", svc.Name, spec.ContainerPort, err)
 			}

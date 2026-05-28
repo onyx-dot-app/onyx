@@ -94,38 +94,16 @@ Examples:
 	return cmd
 }
 
-func getProcessOnPort(port int) string {
-	out, err := exec.Command("lsof", "-i", fmt.Sprintf(":%d", port), "-t").Output()
-	if err != nil || len(strings.TrimSpace(string(out))) == 0 {
-		return "an unknown process"
-	}
-	pid := strings.Split(strings.TrimSpace(string(out)), "\n")[0]
-	nameOut, err := exec.Command("ps", "-p", pid, "-o", "comm=").Output()
-	if err != nil || len(strings.TrimSpace(string(nameOut))) == 0 {
-		return fmt.Sprintf("process (PID %s)", pid)
-	}
-	return fmt.Sprintf("%s (PID %s)", strings.TrimSpace(string(nameOut)), pid)
-}
-
 func resolvePort(port string) string {
 	portNum, err := strconv.Atoi(port)
 	if err != nil {
 		log.Fatalf("Invalid port %q: %v", port, err)
 	}
-	if portutil.IsAvailable(portNum) {
-		return port
+	resolved, err := portutil.FindAvailable(portNum, 65535-portNum, nil)
+	if err != nil {
+		log.Fatalf("No available ports found starting from %d", portNum)
 	}
-	proc := getProcessOnPort(portNum)
-	candidate := portNum + 1
-	for candidate <= 65535 {
-		if portutil.IsAvailable(candidate) {
-			log.Warnf("⚠ Port %d is in use by %s, using available port %d instead.", portNum, proc, candidate)
-			return strconv.Itoa(candidate)
-		}
-		candidate++
-	}
-	log.Fatalf("No available ports found starting from %d", portNum)
-	return port
+	return strconv.Itoa(resolved)
 }
 
 func runBackendService(name, module, port string, opts *BackendOptions) {
