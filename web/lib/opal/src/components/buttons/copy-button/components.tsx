@@ -105,17 +105,13 @@ export function CopyButton({
     }
   }
 
-  function getTooltip() {
-    return tooltip ?? "Copy";
-  }
-
   const resolvedProps = {
     prominence,
     ...buttonProps,
     children,
     icon: getIcon(),
     onClick: handleCopy,
-    tooltip: getTooltip(),
+    tooltip: tooltip ?? "Copy",
   } as ButtonProps;
 
   return <Button {...resolvedProps} />;
