@@ -3,16 +3,15 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/project"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
 
 // NewEnvCommand creates the env command for writing infrastructure connection
@@ -49,38 +48,10 @@ Examples:
 	return cmd
 }
 
-// getHostPort runs "docker port <container> <containerPort>" and extracts the
-// host-side port number from the output (e.g. "0.0.0.0:5432" -> 5432).
-func getHostPort(container string, containerPort int) (int, error) {
-	cmd := exec.Command("docker", "port", container, strconv.Itoa(containerPort))
-	out, err := cmd.Output()
-	if err != nil {
-		return 0, fmt.Errorf("docker port %s %d: %w", container, containerPort, err)
-	}
-	// Dual-stack hosts return two lines (e.g., "0.0.0.0:5432\n[::]:5432").
-	line := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
-	if line == "" {
-		return 0, fmt.Errorf("port %d not exposed on %s", containerPort, container)
-	}
-	parts := strings.Split(line, ":")
-	if len(parts) < 2 {
-		return 0, fmt.Errorf("unexpected docker port output: %s", line)
-	}
-	port, err := strconv.Atoi(parts[len(parts)-1])
-	if err != nil {
-		return 0, fmt.Errorf("invalid port number in docker port output: %s", line)
-	}
-	return port, nil
-}
-
 func runEnv(dryRun bool) {
-	projName := project.Name()
+	projName := docker.ProjectName()
 
-	resolved, err := queryContainerPorts(projName)
-	if err != nil {
-		log.Fatalf("Failed to query container ports: %v", err)
-	}
-
+	resolved := queryContainerPorts(projName)
 	appEnv := resolved.AppEnv()
 
 	log.Infof("Project: %s", projName)
@@ -98,6 +69,17 @@ func runEnv(dryRun bool) {
 	}
 
 	envPath := filepath.Join(gitRoot, ".vscode", ".env")
+
+	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		log.Warnf("%s does not exist. Creating it with port variables only.", envPath)
+		log.Warnf("This file normally contains additional settings (API keys, auth config, etc.).")
+		log.Warnf("You may want to copy the template from the repo wiki or another developer's setup.")
+		if !prompt.Confirm("Continue creating a minimal .vscode/.env? (yes/no): ") {
+			log.Info("Aborted.")
+			return
+		}
+	}
+
 	if err := setEnvValues(envPath, appEnv); err != nil {
 		log.Fatalf("Failed to update %s: %v", envPath, err)
 	}
@@ -110,22 +92,24 @@ func runEnv(dryRun bool) {
 
 // queryContainerPorts discovers the actual host ports of running containers by
 // calling "docker port" for each port spec in InfraServices. Container names
-// follow the Docker Compose convention "<project>-<service>-1".
-func queryContainerPorts(projName string) (*project.ResolvedPorts, error) {
-	resolved := project.NewResolvedPorts()
+// follow the Docker Compose convention "<project>-<service>-1". If a container
+// is not running, the default host port from the spec is used instead.
+func queryContainerPorts(projName string) *docker.ResolvedPorts {
+	resolved := docker.NewResolvedPorts()
 
-	for _, svc := range project.InfraServices {
+	for _, svc := range docker.InfraServices {
 		container := fmt.Sprintf("%s-%s-1", projName, svc.Name)
 		for _, spec := range svc.Ports {
-			port, err := getHostPort(container, spec.ContainerPort)
+			port, err := docker.GetHostPort(container, spec.ContainerPort)
 			if err != nil {
-				return nil, fmt.Errorf("%s: %w", svc.Name, err)
+				log.Warnf("%s: container not running, skipping getting its port.", svc.Name)
+				continue
 			}
 			resolved.Append(port, spec)
 		}
 	}
 
-	return resolved, nil
+	return resolved
 }
 
 // setEnvValues upserts multiple key=value pairs in a dotenv file. For each key,

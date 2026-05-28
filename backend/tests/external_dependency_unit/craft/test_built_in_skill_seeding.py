@@ -80,7 +80,6 @@ class TestAvailabilityGate:
             gated_id,
             BuiltInSkillDefinition(
                 built_in_skill_id=original.built_in_skill_id,
-                source_dir=original.source_dir,
                 is_available=lambda _: False,
                 unavailable_reason="dependency missing in test",
             ),
@@ -121,7 +120,6 @@ class TestAvailabilityGate:
             gated_id,
             BuiltInSkillDefinition(
                 built_in_skill_id=original.built_in_skill_id,
-                source_dir=original.source_dir,
                 is_available=lambda _: False,
             ),
         )

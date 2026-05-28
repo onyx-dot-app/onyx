@@ -9,7 +9,6 @@ import (
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/project"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
 
@@ -52,7 +51,7 @@ WARNING: This is a destructive operation. All data will be lost.`,
 
 func runDBDrop(opts *DBDropOptions) {
 	// Find PostgreSQL container.
-	container, err := docker.FindPostgresContainer(project.Name())
+	container, err := docker.FindPostgresContainer(docker.ProjectName())
 	if err != nil {
 		log.Fatalf("Failed to find PostgreSQL container: %v", err)
 	}

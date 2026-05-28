@@ -45,7 +45,7 @@ import {
 } from "@/lib/hierarchy/svc";
 import { AgentAttachedDocument } from "@/lib/agents/types";
 import { timeAgo } from "@/lib/time";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 
 // ============================================================================
 // HIERARCHY BREADCRUMB - Navigation path for folder hierarchy

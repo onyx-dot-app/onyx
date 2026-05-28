@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { useSWRConfig } from "swr";
 
 import {
   Artifact,
@@ -15,6 +16,7 @@ import {
   generateFollowupSuggestions,
   RateLimitError,
 } from "@/app/craft/services/apiServices";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { StreamItem } from "@/app/craft/types/displayTypes";
@@ -31,6 +33,7 @@ import { parsePacket } from "@/app/craft/utils/parsePacket";
  * - Tool calls are interleaved with text in the exact order they arrive
  */
 export function useBuildStreaming() {
+  const { mutate: globalMutate } = useSWRConfig();
   const appendMessageToSession = useBuildSessionStore(
     (state) => state.appendMessageToSession
   );
@@ -233,7 +236,8 @@ export function useBuildStreaming() {
                 toolCall: {
                   id: parsed.toolCallId,
                   kind: parsed.kind,
-                  title: "",
+                  toolName: parsed.toolName,
+                  title: parsed.title,
                   status: "pending",
                   description: "",
                   command: "",
@@ -265,7 +269,10 @@ export function useBuildStreaming() {
                 description: parsed.description,
                 command: parsed.command,
                 rawOutput: parsed.rawOutput,
+                toolName: parsed.toolName,
                 subagentType: parsed.subagentType ?? undefined,
+                skillName: parsed.skillName ?? undefined,
+                taskOutput: parsed.taskOutput ?? undefined,
                 ...(parsed.kind === "edit" && {
                   isNewFile: parsed.isNewFile,
                   oldContent: parsed.oldContent,
@@ -283,17 +290,8 @@ export function useBuildStreaming() {
                 }
               }
 
-              // Task completion → emit text StreamItem
-              if (parsed.taskOutput) {
-                appendStreamItem(sessionId, {
-                  type: "text",
-                  id: genId("task-output"),
-                  content: parsed.taskOutput,
-                  isStreaming: false,
-                });
-                lastItemType = "text";
-                accumulatedText = "";
-              }
+              // Task completion: taskOutput is now stored on the tool call
+              // itself (rendered by TaskBody) — no separate text item.
               break;
             }
 
@@ -395,6 +393,12 @@ export function useBuildStreaming() {
               break;
             }
 
+            // Invalidate the /live cache so the approval card refetches.
+            case "approval_requested": {
+              void globalMutate(SWR_KEYS.buildSessionLiveApprovals(sessionId));
+              break;
+            }
+
             // Error
             case "error": {
               updateSessionData(sessionId, {
@@ -442,6 +446,7 @@ export function useBuildStreaming() {
       OUTPUT_FILE_DETECTORS,
       setFollowupSuggestions,
       setSuggestionsLoading,
+      globalMutate,
     ]
   );
 

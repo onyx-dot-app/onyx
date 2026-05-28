@@ -13,7 +13,6 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/project"
 )
 
 // Schema represents an Alembic schema configuration.
@@ -71,7 +70,7 @@ func shouldUseDockerExec() bool {
 	}
 
 	// Check if we can find a postgres container with exposed port.
-	container, err := docker.FindPostgresContainer(project.Name())
+	container, err := docker.FindPostgresContainer(docker.ProjectName())
 	if err != nil {
 		return false
 	}
@@ -149,8 +148,9 @@ func runViaDockerExec(args []string, schema Schema) error {
 	return cmd.Run()
 }
 
-// alembicContainerNames lists containers that typically have alembic installed.
-var alembicContainerNames = []string{
+// legacyAlembicContainerNames are fallback names tried after the
+// project-specific name.
+var legacyAlembicContainerNames = []string{
 	"onyx-api_server-1",
 	"onyx-stack-api_server-1",
 	"api_server",
@@ -194,9 +194,15 @@ func buildAlembicEnv() []string {
 	return env
 }
 
-// findAlembicContainer finds a running container that has alembic installed.
+// findAlembicContainer finds a running container that has alembic installed. It
+// tries the project-specific name first, then legacy names.
 func findAlembicContainer() (string, error) {
-	for _, name := range alembicContainerNames {
+	projectContainer := fmt.Sprintf("%s-api_server-1", docker.ProjectName())
+	if isContainerRunning(projectContainer) {
+		return projectContainer, nil
+	}
+
+	for _, name := range legacyAlembicContainerNames {
 		if isContainerRunning(name) {
 			return name, nil
 		}
@@ -217,7 +223,7 @@ func isContainerRunning(name string) bool {
 // detectPostgresHost attempts to find a running PostgreSQL container
 // and return the host to connect to (for local execution).
 func detectPostgresHost() string {
-	container, err := docker.FindPostgresContainer(project.Name())
+	container, err := docker.FindPostgresContainer(docker.ProjectName())
 	if err != nil {
 		log.Debugf("Could not find PostgreSQL container: %v", err)
 		return ""

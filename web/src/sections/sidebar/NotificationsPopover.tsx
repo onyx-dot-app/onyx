@@ -168,6 +168,9 @@ export default function NotificationsPopover({
         return;
       }
 
+      if (!notification.dismissed) {
+        handleDismiss(notification.id);
+      }
       onNavigate();
       router.push(link as Route);
     },

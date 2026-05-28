@@ -1,0 +1,77 @@
+---
+name: linear
+description: Query and mutate Linear (issues, projects, teams) on the connected user's behalf via a light GraphQL wrapper.
+---
+
+# Linear
+
+Call Linear as the connected user via the bundled helper.
+
+## Usage
+
+    python .opencode/skills/linear/linear_api.py <command> [args]
+
+Read commands auto-paginate and prune empty fields. `create-issue` and
+`comment` are the only writes. Use `--raw` to skip empty-field pruning;
+`python linear_api.py <command> -h` shows its flags.
+
+### The connected user
+
+```
+python linear_api.py me
+```
+
+### Teams
+
+```
+python linear_api.py teams [--limit N]
+```
+
+### Issues (filtered)
+
+```
+python linear_api.py issues [--team KEY] [--assignee me] [--state NAME] [--limit N]
+```
+
+### One issue (by id or identifier)
+
+```
+python linear_api.py issue ENG-123
+```
+
+### Search issues
+
+```
+python linear_api.py search "login bug" [--limit N]
+```
+
+### Projects
+
+```
+python linear_api.py projects [--limit N]
+```
+
+### Create an issue (write)
+
+```
+python linear_api.py create-issue <team_id> "Title" [--description D] [--assignee USER_ID]
+```
+
+### Comment on an issue (write)
+
+```
+python linear_api.py comment <issue_id> "Looking into this"
+```
+
+## Output
+
+JSON on stdout. List commands return `{"ok": true, "<key>": [...], "count": N,
+"truncated": bool}` (`truncated` means more results existed past `--limit`).
+Failures return `{"ok": false, "errors": [...]}` and exit non-zero — surface
+the error rather than retrying blindly.
+
+## Notes
+
+- `create-issue` needs a team id (from `teams`); `--assignee` takes a user id.
+- `call` lets you send any GraphQL — pass user input as variables, not by
+  string-formatting into the query.

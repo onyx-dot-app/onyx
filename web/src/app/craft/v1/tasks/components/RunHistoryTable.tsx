@@ -38,6 +38,7 @@ interface RunHistoryTableProps {
 }
 
 const tc = createTableColumns<ScheduledRunSummary>();
+const RUN_HISTORY_REFRESH_INTERVAL_MS = 5000;
 
 interface NonClickableCellProps {
   reason: string | null;
@@ -148,8 +149,8 @@ function buildColumns() {
 
 export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   const router = useRouter();
-  const [pages, setPages] = useState<ScheduledRunSummary[][]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [olderPages, setOlderPages] = useState<ScheduledRunSummary[][]>([]);
+  const [olderNextCursor, setOlderNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const firstPageUrl = `${SWR_KEYS.scheduledTaskRuns(
@@ -158,31 +159,34 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   const { data, error, isLoading, mutate } = useSWR<ScheduledRunListResponse>(
     firstPageUrl,
     errorHandlingFetcher,
-    { revalidateOnFocus: false }
+    {
+      revalidateOnFocus: false,
+      refreshInterval: RUN_HISTORY_REFRESH_INTERVAL_MS,
+    }
   );
 
-  // Reset paginated state whenever the first page is (re)fetched so the
-  // table snaps back to page 1 after a revalidation (e.g. "Run Now").
   useEffect(() => {
-    if (!data) return;
-    setPages([data.items]);
-    setNextCursor(data.next_cursor);
-  }, [data]);
+    setOlderPages([]);
+    setOlderNextCursor(null);
+  }, [taskId]);
+
+  const loadMoreCursor =
+    olderPages.length > 0 ? olderNextCursor : (data?.next_cursor ?? null);
 
   const loadMore = useCallback(async () => {
-    if (!nextCursor) return;
+    if (!loadMoreCursor) return;
     setLoadingMore(true);
     try {
       const res = await listScheduledTaskRuns(taskId, {
-        cursor: nextCursor,
+        cursor: loadMoreCursor,
         limit: RUNS_PAGE_SIZE,
       });
-      setPages((prev) => [...prev, res.items]);
-      setNextCursor(res.next_cursor);
+      setOlderPages((prev) => [...prev, res.items]);
+      setOlderNextCursor(res.next_cursor);
     } finally {
       setLoadingMore(false);
     }
-  }, [nextCursor, taskId]);
+  }, [loadMoreCursor, taskId]);
 
   const refresh = useCallback(() => {
     void mutate();
@@ -190,7 +194,25 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
 
   const columns = useMemo(() => buildColumns(), []);
 
-  const allRuns = pages.flat();
+  const allRuns = useMemo(() => {
+    const runs: ScheduledRunSummary[] = [];
+    const seenRunIds = new Set<string>();
+
+    for (const run of data?.items ?? []) {
+      runs.push(run);
+      seenRunIds.add(run.id);
+    }
+
+    for (const page of olderPages) {
+      for (const run of page) {
+        if (seenRunIds.has(run.id)) continue;
+        runs.push(run);
+        seenRunIds.add(run.id);
+      }
+    }
+
+    return runs;
+  }, [data?.items, olderPages]);
 
   if (isLoading && !data) {
     return (
@@ -240,7 +262,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
           }
         }}
       />
-      {nextCursor && (
+      {loadMoreCursor && (
         <div className="flex justify-center pt-2">
           <Button
             variant="default"
