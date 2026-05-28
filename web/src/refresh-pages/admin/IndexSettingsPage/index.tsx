@@ -38,7 +38,7 @@ import {
   SvgUnplug,
   SvgVector,
 } from "@opal/icons";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";

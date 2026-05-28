@@ -58,7 +58,7 @@ import {
   Tooltip,
 } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";

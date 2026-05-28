@@ -15,7 +15,7 @@ import { Card } from "@/refresh-components/cards";
 import { Button, Divider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import { Checkbox } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import {

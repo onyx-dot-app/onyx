@@ -1,29 +1,40 @@
 "use client";
 
+import "@opal/components/inputs/switch/styles.css";
 import React, { useState } from "react";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 export interface SwitchProps extends WithoutStyles<
   Omit<React.ComponentPropsWithoutRef<"button">, "onChange">
 > {
-  // Switch variants
   disabled?: boolean;
-
   checked?: boolean;
   defaultChecked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
 }
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+/**
+ * Accessible toggle switch. Supports controlled and uncontrolled modes.
+ *
+ * - Controlled: pass `checked` + `onCheckedChange`.
+ * - Uncontrolled: pass `defaultChecked` (defaults to `false`).
+ */
 const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
   (
     {
       disabled,
-
       checked: controlledChecked,
       defaultChecked,
       onCheckedChange,
-
       onClick,
       ...props
     },
@@ -80,3 +91,4 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
 Switch.displayName = "Switch";
 
 export default Switch;
+export { Switch };

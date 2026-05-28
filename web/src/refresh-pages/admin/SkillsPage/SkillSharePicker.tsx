@@ -6,7 +6,7 @@ import { Button, Card, MessageCard } from "@opal/components";
 import { ContentAction, InputHorizontal } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import Tabs from "@/refresh-components/Tabs";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
 import { Section } from "@/layouts/general-layouts";
 import useShareableGroups from "@/hooks/useShareableGroups";
