@@ -1,79 +1,29 @@
 # Plan 1 — Unified Credential-Injection Seam
 
-Replaces the original Phase 1 (a host-keyed dispatcher run in `requestheaders`). Defines a single
-host-claim seam, run from the gate's post-verdict path, that hosts three credential sources — Dane's
-user-connected external apps, the per-sandbox Onyx PAT ([Plan 2](./02-onyx-pat.md)), and the
-per-tenant LLM provider keys ([Plan 3](./03-llm-key.md)) — so long-lived secrets live only in the
-proxy and never in the sandbox pod.
+A single host-claim dispatcher in the egress proxy, run from the gate's post-verdict path, hosts
+three credential sources behind one Protocol: user-connected external apps, the per-sandbox Onyx
+PAT ([Plan 2](./02-onyx-pat.md)), and per-tenant LLM provider keys ([Plan 3](./03-llm-key.md)).
+Long-lived secrets live only in the proxy; the sandbox pod ships placeholders that the proxy
+overwrites on the wire. Action gating (matcher) and credential injection (dispatcher) compose at
+the gate but are independent — a request can need injection without gating (the Onyx API, LLM
+calls).
 
-## Status on main
+## How it works
 
-`main` delivers credential injection for one source — user-connected external apps (PRs
-#11366, #11457, #11471, plus follow-up #11403). `GateAddon._inject_credentials_or_block` wraps
-`_inject_credentials` and is called on `ALWAYS` (`gate.py` line ~341) and `ASK → APPROVED`
-(`gate.py` line ~244); the wrapper fails closed with `_http_403(_CODE_CREDENTIAL_ERROR)` on a
-resolver exception. `DENY` blocks with `_CODE_POLICY_DENIED`; off-catalog forwards uncredentialed.
+The gate's verdict ladder is unchanged: `_resolve_and_match` produces one of four outcomes —
+off-catalog forward, `DENY` block, `ALWAYS` auto-approved forward, or `ASK` (which becomes
+`APPROVED` / `REJECTED` / `EXPIRED` via the approval pipeline). Today only the two
+forward-with-credentials paths (`ALWAYS` and `ASK → APPROVED`) call `_inject_credentials_or_block`,
+which 403s with `_CODE_CREDENTIAL_ERROR` on a resolver exception and forwards otherwise.
+Off-catalog forwards uncredentialed, even when it shouldn't (the Onyx API, LLM providers).
 
-That covers external apps but not the two system credentials this project must broker:
-
-| Source | Lives in | Why the existing API doesn't fit |
-|---|---|---|
-| External-app credentials | `external_app_user_credentials` (per user × app) | Already wired through `resolve_injection_headers(db, external_app_id, user_id)`. |
-| Onyx PAT ([Plan 2](./02-onyx-pat.md)) | `Sandbox.encrypted_pat` | The PAT lives on the `Sandbox` row, not on any `ExternalApp`; the Onyx API isn't a third-party app a user "connected". |
-| LLM provider keys ([Plan 3](./03-llm-key.md)) | `llm_provider` rows (per tenant schema) | Per-tenant infrastructure, not user-connected. Modelling them as `ExternalApp`s would duplicate the LLM-admin data model. |
-
-And: off-catalog hosts (the Onyx API, LLM providers) forward uncredentialed today.
-
-## Issues to Address
-
-1. The credential-injection seam is hard-wired to one source. No plug-in point for additional sources.
-2. Off-catalog flows forward uncredentialed — fine for arbitrary traffic, wrong for known system
-   endpoints.
-3. The existing fail policy mixes two behaviours: `_inject_credentials_or_block` fails *closed* on
-   resolver exceptions (`_CODE_CREDENTIAL_ERROR`), but `build_auth_headers` silently *drops* an
-   individual header whose placeholder won't render. That per-header drop is right for
-   user-in-the-loop apps (the upstream's 401 surfaces to the user) but wrong for system credentials:
-   a missing PAT or LLM key is a configuration error, and we want it surfaced as a Craft 403, not as
-   a (drop → upstream 401 → fingerprintable response).
-4. The Onyx API host is on `NO_PROXY` (`_compute_no_proxy_list()`); its traffic bypasses the proxy
-   entirely.
-
-## Important Notes
-
-**Two orthogonal concerns at the gate.** Action *gating* (matcher) decides whether a request needs
-user approval. Credential *injection* (dispatcher) decides what auth headers go on the wire. They
-compose at the gate but are independent — a request can need injection without gating (the Onyx API,
-LLM calls).
-
-**Disjoint host responsibilities.** External-app hosts come from `ExternalApp.upstream_url_patterns`;
-the Onyx API host is `SANDBOX_API_SERVER_URL`; LLM provider hosts are the canonical provider hosts
-plus each tenant's `LLMProvider.api_base`. The dispatcher logs at startup if two resolvers' claim
-predicates overlap; the dispatcher unit test fails on overlap.
-
-**Placeholder/overwrite contract.** The pod ships a non-empty placeholder for each credential header
-(opencode's AI SDK throws on unset keys; onyx-cli treats empty as unconfigured). The proxy
-overwrites only the named header.
-
-**Decryption.** `ENCRYPTION_KEY_SECRET` is wired into the proxy Deployment (#11451), so
-`LLMProviderView.from_model()` and the encrypted per-sandbox PAT both decrypt in-process.
-
-**Kubernetes-only.** The egress proxy exists only in the K8s sandbox backend; the docker
-self-hosted backend has no proxy wiring (`docker_sandbox_manager.py` has no `HTTPS_PROXY` /
-`NO_PROXY` / CA env vars). This seam is a no-op on docker, which keeps injecting real credentials
-via env vars. Step 6 below scopes pod-side changes to K8s.
-
-**Supersedes the existing scaffold.** `onyx/sandbox_proxy/credential_injection.py` on
-`whuang/craft-proxy-secrets-injection-scaffold` defines an early host-only dispatcher run in
-`requestheaders`. This plan re-shapes it: post-verdict call site, `InjectionContext` that carries the
-matcher's output, and `_inject_credentials` becomes a delegation to it.
-
-## The seam
+This plan generalises that single call site into a dispatcher with a uniform contract:
 
 ```python
 @dataclass(frozen=True)
 class InjectionContext:
     sandbox: ResolvedSandbox
-    match: ActionMatch | None      # None for off-catalog flows
+    match: ActionMatch | None      # None on off-catalog flows
     db_session_factory: DBSessionFactory
 
 
@@ -83,7 +33,7 @@ class CredentialUnavailableError(Exception):
 
 class CredentialResolver(Protocol):
     def claims(self, host: str, match: ActionMatch | None) -> bool:
-        """Cheap, no-DB: does this resolver claim this request? First claim wins."""
+        """Cheap, no-DB: does this resolver own this request? First claim wins."""
         ...
 
     def resolve(self, request: http.Request, ctx: InjectionContext) -> dict[str, str]:
@@ -91,21 +41,56 @@ class CredentialResolver(Protocol):
         ...
 ```
 
-`CredentialInjectionDispatcher.apply(flow, ctx)` iterates resolvers in registered order, picks the
-first whose `claims(host, match)` returns True, calls `resolve`, and sets the returned headers on
-`flow.request` (set/replace, never append). Outcome:
+`CredentialInjectionDispatcher.apply(flow, ctx)` iterates resolvers in registered order, calls the
+first whose `claims(host, match)` returns True, and sets the returned headers on `flow.request`
+(set/replace, never append). The dispatcher never raises:
 
 - No resolver claims → `PASS_THROUGH`.
 - Resolver returns headers → `INJECTED`.
 - Resolver raises `CredentialUnavailableError` (or any other exception) → `BLOCKED`; the gate maps
-  it to `_http_403(_CODE_CREDENTIAL_ERROR)` (reusing main's existing constant; see `gate.py:63`).
+  it to `_http_403(_CODE_CREDENTIAL_ERROR)`, reusing the existing constant.
 
-`apply` never raises.
+The dispatch points are the three verdicts that forward: `ALWAYS`, `ASK → APPROVED`, and
+`OFF_CATALOG`. `DENY` and `ASK → REJECTED` still skip injection. The off-catalog path is the new
+one — today's gate returns uncredentialed, and the dispatcher now runs there with `match=None` so
+the Onyx PAT and LLM resolvers get a chance to claim.
 
-## Implementation Strategy
+**Fail policy.** Two layers, deliberately distinct. A resolver that raises
+`CredentialUnavailableError` blocks the request (system credentials are configuration errors;
+surfacing them as Craft 403s beats a fingerprintable upstream 401). Within the external-app
+resolver, the existing `build_auth_headers` continues to silently drop an individual header whose
+placeholder can't be rendered — that's correct for user-in-the-loop apps where the upstream 401
+surfaces to the user. The dispatcher's outer `BLOCKED` and the renderer's per-header drop coexist.
 
-1. **Refactor `_inject_credentials` + `_inject_credentials_or_block`** so the wrapper delegates to
-   the dispatcher:
+**Claim disjointness.** External-app hosts come from `ExternalApp.upstream_url_patterns`; the Onyx
+API host is `SANDBOX_API_SERVER_URL`; LLM hosts are the canonical provider hosts plus each tenant's
+`LLMProvider.api_base`. These sets are disjoint by construction. The dispatcher's unit test fails
+the build on overlap, and startup logs any predicate collision.
+
+**Placeholder / overwrite contract.** The pod ships a non-empty placeholder for each credential
+header — opencode's AI SDK throws on unset keys and onyx-cli treats empty as unconfigured. The
+proxy overwrites only the named header. The real secret never leaves the proxy.
+
+## Resolvers
+
+- **`ExternalAppResolver`** — claims iff `match is not None`. The matcher has already done URL→app
+  resolution; the resolver opens a session via `ctx.db_session_factory(ctx.sandbox.tenant_id)` and
+  delegates to `resolve_injection_headers(db, ctx.match.external_app_id, ctx.sandbox.user_id)`.
+  Behaviour identical to the current `_inject_credentials`.
+- **`OnyxPatResolver`** — claims the `SANDBOX_API_SERVER_URL` host; reads `Sandbox.encrypted_pat`.
+  See [Plan 2](./02-onyx-pat.md).
+- **`LLMProviderKeyResolver`** — claims canonical LLM provider hosts plus each tenant's `api_base`;
+  reads `llm_provider` rows. See [Plan 3](./03-llm-key.md).
+
+In-proxy decryption works because the proxy Deployment already has `ENCRYPTION_KEY_SECRET` wired.
+
+**Kubernetes-only.** The egress proxy exists only in the K8s sandbox backend. The docker
+self-hosted manager has no `HTTPS_PROXY` / `NO_PROXY` / CA env vars and keeps injecting real
+credentials via env vars. Every pod-side placeholder swap below is scoped to the K8s manager.
+
+## Implementation
+
+1. **Refactor the gate call site.** `_inject_credentials_or_block` delegates to the dispatcher:
 
    ```python
    ctx = InjectionContext(
@@ -115,76 +100,60 @@ first whose `claims(host, match)` returns True, calls `resolve`, and sets the re
        flow.response = _http_403(_CODE_CREDENTIAL_ERROR)
    ```
 
-   The wrapper today calls `_inject_credentials` on `ALWAYS` (`gate.py:341`) and `ASK → APPROVED`
-   (`gate.py:244`); add a third invocation for `OFF_CATALOG` forwards inside `_resolve_and_match`
-   just before the off-catalog `return None` (`gate.py:333-334`). `DENY` and `ASK → REJECTED` still
-   skip injection. Pass `match=None` on `OFF_CATALOG`.
+   Add the third invocation for off-catalog forwards inside `_resolve_and_match`, just before its
+   off-catalog `return None`, with `match=None`. `_inject_credentials` collapses into the
+   `ExternalAppResolver`.
 
-2. **`ExternalAppResolver`** — wraps the existing logic on main, no new DB helpers needed.
-   - `claims`: True iff `match is not None` (`ActionMatch.external_app_id` is non-Optional;
-     `external_apps/matching/engine.py:46`). The matcher already did URL→app resolution; the
-     resolver delegates rather than redoing it.
-   - `resolve`: opens a session via `ctx.db_session_factory(ctx.sandbox.tenant_id)` and calls
-     main's existing `resolve_injection_headers(db, ctx.match.external_app_id, ctx.sandbox.user_id)`
-     (`external_apps/credentials.py:36`). Returns whatever it returns — including `{}` on missing
-     app / disabled skill / unrenderable headers. Behaviour preserved: per-header drop inside
-     `build_auth_headers` stays, the wrapper still 403s on exceptions.
-
-3. **`OnyxPatResolver`** ([Plan 2](./02-onyx-pat.md)) — claims by host.
-
-4. **`LLMProviderKeyResolver`** ([Plan 3](./03-llm-key.md)) — claims by host (canonical + each
-   tenant's `api_base`).
-
-5. **Route the Onyx API through the proxy.** Today `_compute_no_proxy_list()` appends
+2. **Route the Onyx API through the proxy.** `_compute_no_proxy_list()` currently appends
    `SANDBOX_API_SERVER_URL`'s host to `NO_PROXY`, but `firewall-init.sh` drops everything except
    loopback and TCP to `sandbox-proxy:8080` — so clients honour `NO_PROXY`, try direct DNS, and
    get `EPERM`. Replace the function with a `_NO_PROXY = "127.0.0.1,localhost"` constant (loopback
    is the only thing the firewall permits to bypass the proxy) and a comment naming the firewall
-   constraint; pin the value with a regression test so non-loopback entries can't be added by
-   accident.
+   constraint. Pin the value with a regression test.
 
-6. **Remove sandbox-side credentials** atomically with each resolver's flag (K8s only — see Note):
-   - `ONYX_PAT` env in `kubernetes_sandbox_manager.py` → non-empty placeholder.
-     `ensure_sandbox_pat` keeps minting and persisting the PAT on the `Sandbox` row. The docker
-     manager continues to inject the real PAT.
+3. **Add `OnyxPatResolver` and `LLMProviderKeyResolver`** per Plans 2 and 3.
+
+4. **Swap pod-side credentials for placeholders** (K8s manager only), atomically with each
+   resolver's config flag:
+   - `ONYX_PAT` env in `kubernetes_sandbox_manager.py` → non-empty placeholder. `ensure_sandbox_pat`
+     keeps minting and persisting the PAT on the `Sandbox` row.
    - LLM keys in `OPENCODE_CONFIG_CONTENT` (built by `opencode_config.py`) → non-empty placeholders
-     for the K8s manager only; the docker manager keeps the real keys. While here, fix the existing
-     `block["api"]` → `provider.<provider_name>.options.baseURL` mismatch
-     ([[project_craft_beta_no_backcompat]]).
+     for each `options.apiKey`. While in `_build_provider_block`, fix the pre-existing
+     `block["api"]` → `provider.<provider_name>.options.baseURL` field-name bug.
 
-7. **Wire in `server.py`.** `build_resolvers()` returns
+   The docker manager continues to inject real credentials in both cases.
+
+5. **Wire in `server.py`.** `build_resolvers()` returns
    `[OnyxPatResolver(), LLMProviderKeyResolver(), ExternalAppResolver()]`. The dispatcher is
    constructed once at startup and passed into `GateAddon`.
 
 ## Tests
 
-Reuse `backend/tests/unit/sandbox_proxy/conftest.py` (shared helpers landed in #11467):
-`make_flow`, `make_resolved_sandbox`, `StubResolver`. Don't re-roll fixtures.
+Reuse the shared helpers in `backend/tests/unit/sandbox_proxy/conftest.py` (`make_flow`,
+`make_resolved_sandbox`, `StubResolver`).
 
-- **Dispatcher unit** (mocked resolvers): first-claim-wins; unclaimed → `PASS_THROUGH`; resolver
+- **Dispatcher unit (mocked resolvers).** First-claim-wins; unclaimed → `PASS_THROUGH`; resolver
   raises `CredentialUnavailableError` → `BLOCKED` → 403; the `InjectionContext` passed to `resolve`
   carries the right `sandbox` and `match`. Two resolvers that both claim the same `(host, match)`
-  fail the test.
-- **`ExternalAppResolver` regression**: the existing external-dependency
-  `backend/tests/external_dependency_unit/craft/test_credential_injection.py` passes unchanged —
-  behaviour preserved.
-- **Gate integration**: dispatcher runs on `ALWAYS` / `OFF_CATALOG` / `ASK → APPROVED`; skipped on
-  `DENY` / `ASK → REJECTED`.
-- **`NO_PROXY`**: the computed list no longer contains the Onyx API host (regression test on the
-  `_NO_PROXY` constant; see step 5).
+  fail the build.
+- **`ExternalAppResolver` regression.** The existing
+  `backend/tests/external_dependency_unit/craft/test_credential_injection.py` passes unchanged.
+- **Gate integration.** Dispatcher fires on `ALWAYS`, `OFF_CATALOG`, and `ASK → APPROVED`; skipped
+  on `DENY` and `ASK → REJECTED`.
+- **`NO_PROXY` regression.** Pins the `_NO_PROXY` constant so non-loopback entries can't be added
+  by accident.
 
 Per-resolver tests live in [Plan 2](./02-onyx-pat.md) and [Plan 3](./03-llm-key.md).
 
-## Landing plan (PRs)
+## Landing plan
 
-Four PRs, in order; each flag-gated where behavioural and independently revertible.
+Four PRs, each flag-gated where behavioural and independently revertible:
 
 1. **Seam extraction (refactor only).** Protocol + dispatcher + `ExternalAppResolver`.
-   `_inject_credentials` becomes a delegation. Call site moves to fire on `OFF_CATALOG`. With only
-   `ExternalAppResolver` registered, off-catalog stays a no-op. Dane's external-dep tests unchanged.
-2. **Route the Onyx API through the proxy.** Per step 5: replace `_compute_no_proxy_list()` with a
-   loopback-only constant and pin it with a regression test. Independently revertible. Also fixes
-   a pre-existing `EPERM` on outbound calls to the Onyx API from inside a Craft sandbox.
+   `_inject_credentials` becomes a delegation; the off-catalog call site is added but, with only
+   the external-app resolver registered, off-catalog stays a no-op.
+2. **Route the Onyx API through the proxy.** Loopback-only `NO_PROXY`; independently fixes a
+   pre-existing `EPERM` on outbound Onyx API calls from the sandbox.
 3. **Onyx PAT resolver** ([Plan 2](./02-onyx-pat.md)).
 4. **LLM provider-key resolver** ([Plan 3](./03-llm-key.md)).
 
@@ -192,8 +161,8 @@ Four PRs, in order; each flag-gated where behavioural and independently revertib
 
 ## Out of scope
 
-- Action gating (matcher) — unchanged.
+- Action gating (matcher).
 - Migrating `llm_provider` rows into the `ExternalApp` data model.
-- PAT scopes; a CRAFT PAT grants full user access today.
-- The pre-body `requestheaders` injection seam and its `INJECTION_HANDLED_FLAG`. Both abandoned;
+- PAT scopes — a CRAFT PAT grants full user access today.
+- The pre-body `requestheaders` injection seam and its `INJECTION_HANDLED_FLAG`. Abandoned;
   injection runs post-verdict in the same `request` task as the gate.
