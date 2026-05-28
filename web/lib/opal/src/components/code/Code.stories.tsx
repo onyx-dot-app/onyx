@@ -1,15 +1,17 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import Code from "./Code";
+import { Code } from "./components";
 
 const meta: Meta<typeof Code> = {
-  title: "refresh-components/Code",
+  title: "opal/Code",
   component: Code,
   tags: ["autodocs"],
   decorators: [
     (Story) => (
       <TooltipPrimitive.Provider>
-        <Story />
+        <div className="w-96">
+          <Story />
+        </div>
       </TooltipPrimitive.Provider>
     ),
   ],
@@ -39,5 +41,11 @@ export const MultiLine: Story = {
 }
 
 console.log(fibonacci(10));`,
+  },
+};
+
+export const LongLine: Story = {
+  args: {
+    children: `abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz`,
   },
 };
