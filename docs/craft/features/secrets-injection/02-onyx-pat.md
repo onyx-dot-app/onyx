@@ -1,74 +1,103 @@
 # Plan 2 — Onyx PAT Resolver
 
-Reference: [Plan 1](./01-framework.md) for project context and the shared seam this plugs into.
+Reference: [Plan 1](./01-framework.md) for the shared dispatcher and `InjectionContext` this plugs
+into.
 
 ## Issues to Address
 
-The sandbox authenticates back to the Onyx API server with a CRAFT-type Personal Access Token,
-currently provisioned into the pod as the `ONYX_PAT` env var (`kubernetes_sandbox_manager.py`;
-docker manager too). It's a 30-day token scoped to the owning user (`ensure_sandbox_pat`,
-`sandbox.py`). This plan moves it out of the pod so it lives only in the proxy: an `OnyxPatResolver`
-behind the [Plan 1](./01-framework.md) seam injects auth on requests to the Onyx API host.
+The sandbox authenticates back to the Onyx API with a CRAFT-type Personal Access Token, currently
+provisioned into the pod as the `ONYX_PAT` env var (`kubernetes_sandbox_manager.py` and the docker
+manager). It's a 30-day per-user token minted by `ensure_sandbox_pat` (`onyx/server/features/build/
+db/sandbox.py`). This plan removes the real PAT from the pod and injects it from the proxy via an
+`OnyxPatResolver` that claims the `SANDBOX_API_SERVER_URL` host on the [Plan 1](./01-framework.md)
+dispatcher.
 
 ## Important Notes
 
-**Blocker — the Onyx API host is on `NO_PROXY`, so the proxy never sees that traffic.**
-`_compute_no_proxy_list()` (`kubernetes_sandbox_manager.py`) adds the `SANDBOX_API_SERVER_URL`
-hostname. Routing it through the proxy (step 2) is the central change of this plan; the external-app
-and LLM hosts already traverse the proxy.
+**Per-sandbox key scope, not per-user.** Plan 1's `InjectionContext` carries
+`sandbox: ResolvedSandbox`, so the resolver keys off `ctx.sandbox.sandbox_id` — it does not
+re-resolve identity. A user can own multiple sandboxes; the dispatcher has already pinned the
+request to one.
 
-**onyx-cli works with a non-empty placeholder (confirmed against v1.0.3 Go source).** `IsConfigured()`
-only checks the token is non-empty (no format validation), and the client sets it on **both**
-`Authorization` and `X-Onyx-Authorization` — so per Plan 1's placeholder/overwrite contract, keep
-`ONYX_PAT` a non-empty placeholder and have the resolver overwrite both headers. onyx-cli honors
-`HTTPS_PROXY`/`NO_PROXY` (it clones `http.DefaultTransport`) and trusts the proxy MITM CA via
-`SSL_CERT_FILE` (which Go honors; it ignores `REQUESTS_CA_BUNDLE`) plus the system-store install in
-`firewall-init.sh` — so it routes through the proxy once off `NO_PROXY`. That path isn't exercised
-today, so cover it with an integration test. `ONYX_SERVER_URL` stays set (onyx-cli appends `/api`).
+**Depends on Plan 1's NO_PROXY change.** `_compute_no_proxy_list()` in
+`kubernetes_sandbox_manager.py` currently adds the API host so the pod talks to the API directly.
+[Plan 1](./01-framework.md) (step 5) removes that entry; until it lands, the resolver claims a host
+the proxy never sees.
 
-**How the resolver obtains the PAT: read + decrypt the stored per-sandbox PAT (chosen).** The proxy
-has `ENCRYPTION_KEY_SECRET` (Plan 1), so `OnyxPatResolver` reuses the PAT provisioning already mints
-and stores encrypted on the `Sandbox` row (`ensure_sandbox_pat`): resolve `sandbox_id` from source
-IP, read the row, decrypt. Provisioning is unchanged except the pod gets the placeholder; lifecycle
-is unchanged (30-day, rotated on re-provision).
+**MITM TLS contract for onyx-cli (Go).** Once the API host is off `NO_PROXY`, onyx-cli must trust
+the proxy MITM CA. It clones `http.DefaultTransport` (so it honors `HTTPS_PROXY`/`NO_PROXY`), and
+Go's TLS stack reads `SSL_CERT_FILE` (it ignores `REQUESTS_CA_BUNDLE`); `firewall-init.sh` also
+installs the CA into the system trust store. Both paths are already wired in
+`_proxy_main_container_env_vars()`. This route isn't exercised today — integration test required.
 
-> **Pre-implementation check.** Confirm the `Sandbox` PAT column stores the *raw token encrypted*
-> (recoverable), not just the SHA-256 lookup hash. If only the hash, persist the raw token encrypted
-> at provisioning — acceptable under [[project_craft_beta_no_backcompat]]. This gates the chosen path.
+**Pod-side placeholder is non-empty.** onyx-cli's Go `IsConfigured()` checks the token is non-empty
+only (no format validation); the client sets the same value on `Authorization` and
+`X-Onyx-Authorization`. Per Plan 1's placeholder/overwrite contract, `ONYX_PAT` ships as a non-empty
+placeholder and the resolver overwrites both headers.
 
-*Alternative (not chosen):* the resolver mints + caches its own session PAT (`create_pat`), revoked
-on teardown — tighter lifecycle, more machinery. Revisit only if we want per-session revocation.
+**PAT storage is already recoverable.** `Sandbox.encrypted_pat` is a `SensitiveValue[str]` over an
+`EncryptedString` column — `ensure_sandbox_pat` stores the raw token encrypted at provisioning and
+reads it back with `get_value(apply_mask=False)`. No schema or provisioning change needed.
+(`PersonalAccessToken.hashed_token` is the API-side lookup hash, not what the proxy reads.) The
+proxy decrypts in-process via `ENCRYPTION_KEY_SECRET` (already wired by Plan 1).
 
-**What the resolver injects.** `Authorization: Bearer <pat>` + `X-Onyx-Authorization: Bearer <pat>`,
-and `X-Onyx-Tenant-ID = resolved.tenant_id` (the server resolves the PAT via the standard auth path
-and the tenant via `add_onyx_tenant_id_middleware`).
+**Fail closed.** Per Plan 1, a missing or undecryptable PAT raises `CredentialUnavailableError`,
+and the dispatcher serves `_http_403(_CODE_CREDENTIAL_UNAVAILABLE)`.
 
-Scopes are out of scope — see Plan 1 (a CRAFT PAT grants full user access today).
+**Headers injected:**
+
+| Header | Value |
+|---|---|
+| `Authorization` | `Bearer <pat>` |
+| `X-Onyx-Authorization` | `Bearer <pat>` |
+| `X-Onyx-Tenant-ID` | `ctx.sandbox.tenant_id` |
+
+The server resolves the PAT via the standard auth path and the tenant via
+`add_onyx_tenant_id_middleware`.
 
 ## Implementation Strategy
 
-1. **Stop pre-populating the real PAT.** In `kubernetes_sandbox_manager.py` and the docker manager,
-   set `ONYX_PAT` to the Plan 1 placeholder. `ensure_sandbox_pat` keeps minting and storing the
-   encrypted PAT on the `Sandbox` row — the resolver reads from there.
+1. **`OnyxPatResolver`** implementing Plan 1's `CredentialResolver` Protocol.
+   - `claims(host, match)`: returns True iff `host` is the host of `SANDBOX_API_SERVER_URL`. Ignores
+     `match` (the Onyx API is never an external app).
+   - `resolve(request, ctx)`: opens a session via `ctx.db_session_factory(ctx.sandbox.tenant_id)`,
+     loads `Sandbox` by `ctx.sandbox.sandbox_id`, decrypts `encrypted_pat`. Returns the three
+     headers above. Raises `CredentialUnavailableError` if the row is missing, `encrypted_pat` is
+     `None`, or decryption fails.
 
-2. **Route API traffic through the proxy.** Remove the `SANDBOX_API_SERVER_URL` hostname from
-   `_compute_no_proxy_list()` (keep `127.0.0.1`/`localhost`); verify the proxy can reach the API host.
+2. **Pod-side placeholder swap** in `kubernetes_sandbox_manager.py` and `docker_sandbox_manager.py`:
+   set `ONYX_PAT` to the Plan 1 placeholder constant. `ensure_sandbox_pat` is unchanged.
 
-3. **Implement `OnyxPatResolver`** for the Onyx API host: read + decrypt the `Sandbox` PAT, overwrite
-   both `Authorization` and `X-Onyx-Authorization`, set `X-Onyx-Tenant-ID`; fail closed if identity
-   or token can't be resolved.
+3. **Register in `build_resolvers()`** (Plan 1, step 7) alongside `ExternalAppResolver` and
+   `LLMProviderKeyResolver`. Hosts are disjoint; order is for clarity.
 
-4. **Config**: an enable flag for the PAT resolver, separate from the LLM-key resolver.
+4. **Config flag** independent of the LLM-key resolver, so each pod-side placeholder change is
+   atomic with its proxy-side flip.
 
 ## Tests
 
-Integration test (CI only — [[feedback_no_integration_tests_locally]]) in
-`backend/tests/integration/tests/craft/`:
+**Unit** (`backend/tests/unit/sandbox_proxy/test_onyx_pat_resolver.py`): given a fake `Sandbox` row
+with a stored `encrypted_pat` and a mock `db_session_factory`, the resolver returns the three
+headers with `Bearer <pat>` on `Authorization` + `X-Onyx-Authorization`. Negative cases — row
+missing, `encrypted_pat is None`, decrypt raises — each raise `CredentialUnavailableError`. `claims`
+returns True for the configured API host and False for others.
 
-- A request with the placeholder, routed through the proxy from a known sandbox IP, reaches the API
-  and authenticates as the owning user (proxy overwrote the headers + set the tenant header).
-- A request from an unidentifiable source IP to the API host is blocked (fail-closed).
+**External-dependency unit** in `backend/tests/external_dependency_unit/sandbox_proxy/`: against a
+real DB, provision a `Sandbox`, run `OnyxPatResolver.resolve` with a real `InjectionContext`, and
+assert the returned `Authorization` token matches what `ensure_sandbox_pat` minted (round-trips
+through real `EncryptedString`).
 
-External-dependency unit test in `sandbox_proxy/`: given a `Sandbox` row with a stored PAT, a request
-from that sandbox's IP gets both auth headers overwritten and the tenant header set; and
-`_compute_no_proxy_list` no longer contains the API host.
+**Integration** (CI only — [[feedback_no_integration_tests_locally]], gated under
+[[feedback_no_local_craft_k8s_tests]]) in `backend/tests/integration/tests/craft/`: onyx-cli inside
+a real sandbox calls the Onyx API. The placeholder leaves the pod; the proxy overwrites both auth
+headers and the tenant header; the API authenticates the request as the sandbox's owning user. This
+exercises the MITM-trust path that isn't exercised today.
+
+## Out of scope
+
+- PAT scopes — a CRAFT PAT grants full user access today; scope work is separate.
+- Per-session PAT minting / revocation. The persistent per-sandbox PAT (30-day, rotated on
+  re-provision) is sufficient.
+- LLM provider keys — see [Plan 3](./03-llm-key.md).
+- Any change to `_inject_credentials`, the matcher, or the gate's verdict paths — owned by
+  [Plan 1](./01-framework.md).
