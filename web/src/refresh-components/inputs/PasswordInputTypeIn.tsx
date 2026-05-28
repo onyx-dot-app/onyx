@@ -1,9 +1,7 @@
 "use client";
 
 import * as React from "react";
-import InputTypeIn, {
-  InputTypeInProps,
-} from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn, type InputTypeInProps } from "@opal/components";
 import { Button } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { SvgEye, SvgEyeClosed } from "@opal/icons";
@@ -121,7 +119,7 @@ export function computeMaskedInputChange(
 
 export interface PasswordInputTypeInProps extends Omit<
   InputTypeInProps,
-  "type" | "rightSection" | "leftSearchIcon" | "variant"
+  "type" | "rightChildren" | "searchIcon" | "variant"
 > {
   /**
    * Ref to the input element.
@@ -166,7 +164,7 @@ export default function PasswordInputTypeIn({
   onBlur,
   disabled,
   error,
-  showClearButton = false,
+  clearButton = false,
   ...props
 }: PasswordInputTypeInProps) {
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
@@ -299,10 +297,10 @@ export default function PasswordInputTypeIn({
         onSelect={captureSelection}
         onKeyDown={captureSelection}
         variant={disabled ? "disabled" : error ? "error" : undefined}
-        showClearButton={showClearButton}
+        clearButton={showToggleButton ? false : clearButton}
         autoComplete="off"
         data-ph-no-capture
-        rightSection={
+        rightChildren={
           showToggleButton ? (
             <Button
               disabled={disabled || effectiveNonRevealable}

@@ -11,9 +11,7 @@ import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
 import { CombinedSettings, Tier } from "@/interfaces/settings";
 import { tierAtLeast } from "@/lib/tiers";
-import { Divider, SidebarTab } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { Spacer } from "@opal/components";
+import { Divider, InputTypeIn, Spacer, SidebarTab } from "@opal/components";
 import { SvgArrowUpCircle, SvgSearch, SvgX } from "@opal/icons";
 import {
   useBillingInformation,
@@ -254,10 +252,11 @@ function AdminSidebarInner() {
           <InputTypeIn
             ref={searchRef}
             variant="internal"
-            leftSearchIcon
+            searchIcon
             placeholder="Search..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            clearButton
           />
         )}
       </SidebarLayouts.Header>

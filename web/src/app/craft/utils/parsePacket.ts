@@ -1,7 +1,7 @@
 /**
  * Parse Packet
  *
- * Single entry point for converting raw ACP packets into strongly-typed
+ * Single entry point for converting raw sandbox-event packets into strongly-typed
  * ParsedPacket values. All field resolution, tool detection, and path
  * sanitization happen here. Consumers never touch Record<string, unknown>.
  */
@@ -173,7 +173,7 @@ function resolveKind(toolName: ToolName, rawKind: string | null): ToolKind {
 
 // ─── Shared Helpers ───────────────────────────────────────────────
 
-/** Extract text from ACP content structure (string, {type,text}, or array) */
+/** Extract text from sandbox event content (string, {type,text}, or array) */
 function extractText(content: unknown): string {
   if (!content) return "";
   if (typeof content === "string") return content;

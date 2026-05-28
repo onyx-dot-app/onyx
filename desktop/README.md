@@ -34,14 +34,10 @@ Built with [Tauri](https://tauri.app) for minimal bundle size (~10MB vs Electron
    source $HOME/.cargo/env
    ```
 
-2. **Node.js** (18+)
+2. **Bun** (1.3+)
 
    ```bash
-   # Using homebrew
-   brew install node
-
-   # Or using nvm
-   nvm install 18
+   curl -fsSL https://bun.sh/install | bash
    ```
 
 3. **Xcode Command Line Tools**
@@ -51,15 +47,22 @@ Built with [Tauri](https://tauri.app) for minimal bundle size (~10MB vs Electron
 
 ## Development
 
-```bash
-# Install dependencies
-npm install
+Dependencies for `desktop/` are managed by the root bun workspace, so install
+once at the repo root:
 
+```bash
+# From the repo root
+bun install
+```
+
+Then, from `desktop/`:
+
+```bash
 # Run in development mode
-npm run dev
+bun run dev
 
 # Run in debug mode
-npm run debug
+bun run debug
 ```
 
 ## Building
@@ -67,7 +70,7 @@ npm run debug
 ### Build for current architecture
 
 ```bash
-npm run build
+bun run build
 ```
 
 ### Build Universal Binary (Intel + Apple Silicon)
@@ -78,7 +81,7 @@ rustup target add x86_64-apple-darwin
 rustup target add aarch64-apple-darwin
 
 # Build universal binary
-npm run build:dmg
+bun run build:dmg
 ```
 
 The built `.dmg` will be in `src-tauri/target/release/bundle/dmg/`.
@@ -92,7 +95,7 @@ _TIP: if facing `Error failed to build app: 'cargo-xwin' command not found.`, tr
 Once the first-time setup is complete,
 
 ```bash
-npm run build:windows
+bun run build:windows
 ```
 
 ## Project Structure
@@ -125,7 +128,7 @@ You can generate these from a 1024x1024 source image using:
 
 ```bash
 # Using tauri's icon generator
-npm run tauri icon path/to/your-icon.png
+bunx tauri icon path/to/your-icon.png
 ```
 
 ## Customization

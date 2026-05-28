@@ -61,7 +61,7 @@ export default function CreateProjectModal({
                     <InputTypeInField
                       name="projectName"
                       placeholder="What are you working on?"
-                      showClearButton
+                      clearButton
                     />
                   </InputVertical>
                 </Modal.Body>

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { FormField } from "./FormField";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 
 const meta: Meta<typeof FormField> = {
   title: "refresh-components/form/FormField",

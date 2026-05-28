@@ -40,7 +40,7 @@ import {
 } from "@opal/icons";
 import Switch from "@/refresh-components/inputs/Switch";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -1139,10 +1139,7 @@ export default function IndexSettingsPage() {
                               padding={viewAllModelsOpen ? "fit" : "sm"}
                               expandedContent={
                                 <>
-                                  <Tabs.Content
-                                    value={MODEL_TAB_CLOUD}
-                                    className="pt-0"
-                                  >
+                                  <Tabs.Content value={MODEL_TAB_CLOUD}>
                                     {filteredCloudProviders.length > 0 ? (
                                       <GeneralLayouts.Section
                                         gap={0.5}
@@ -1203,10 +1200,7 @@ export default function IndexSettingsPage() {
                                     )}
                                   </Tabs.Content>
 
-                                  <Tabs.Content
-                                    value={MODEL_TAB_SELF}
-                                    className="pt-0"
-                                  >
+                                  <Tabs.Content value={MODEL_TAB_SELF}>
                                     {filteredSelfHostedProviders.length > 0 ? (
                                       <GeneralLayouts.Section
                                         gap={0.5}
@@ -1316,7 +1310,7 @@ export default function IndexSettingsPage() {
                                     <InputTypeIn
                                       placeholder="Search models..."
                                       variant="internal"
-                                      leftSearchIcon
+                                      searchIcon
                                       value={query}
                                       onChange={(e) => setQuery(e.target.value)}
                                     />
@@ -1347,7 +1341,7 @@ export default function IndexSettingsPage() {
                                   </div>
 
                                   <div className="px-2">
-                                    <Tabs.List variant="underline">
+                                    <Tabs.List>
                                       <Tabs.Trigger value={MODEL_TAB_CLOUD}>
                                         Cloud-based
                                       </Tabs.Trigger>

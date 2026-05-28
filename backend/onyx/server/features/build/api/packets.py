@@ -1,13 +1,14 @@
 """Build Mode packet types for streaming agent responses.
 
-This module defines CUSTOM Onyx packet types that extend ACP (Agent Client Protocol).
-ACP events are passed through directly from the agent - this module only contains
-Onyx-specific extensions like artifacts and file operations.
+Custom Onyx packet types layered on top of the sandbox-event schema
+(:mod:`sandbox.event_schema`). Sandbox events pass through directly from
+the agent; this module only contains Onyx-specific extensions like
+artifacts and file operations.
 
-All packets use SSE (Server-Sent Events) format with `event: message` and include
-a `type` field to distinguish packet types.
+All packets use SSE (Server-Sent Events) format with `event: message` and
+include a `type` field to distinguish packet types.
 
-ACP events (passed through directly from acp.schema):
+Sandbox events (re-emitted from :mod:`sandbox.event_schema`):
 - agent_message_chunk: Text/image content from agent
 - agent_thought_chunk: Agent's internal reasoning
 - tool_call_start: Tool invocation started
@@ -19,9 +20,6 @@ ACP events (passed through directly from acp.schema):
 
 Custom Onyx packets (defined here):
 - error: Onyx-specific errors (e.g., session not found)
-
-Based on:
-- Agent Client Protocol (ACP): https://agentclientprotocol.com
 """
 
 from datetime import datetime

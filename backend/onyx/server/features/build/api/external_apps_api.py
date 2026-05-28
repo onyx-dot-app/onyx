@@ -16,6 +16,7 @@ from onyx.db.external_app import create_external_app
 from onyx.db.external_app import delete_external_app
 from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import get_external_apps
+from onyx.db.external_app import get_policies
 from onyx.db.external_app import get_user_credentials_by_app_id
 from onyx.db.external_app import required_user_credential_keys
 from onyx.db.external_app import update_external_app
@@ -27,8 +28,10 @@ from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers import fetch_available_built_in_apps
-from onyx.external_apps.providers import fetch_built_in_app
+from onyx.external_apps.providers.registry import action_policy_views
+from onyx.external_apps.providers.registry import build_action_policies
+from onyx.external_apps.providers.registry import fetch_available_built_in_apps
+from onyx.external_apps.providers.registry import fetch_built_in_app
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
@@ -52,6 +55,7 @@ _STR_DICT_ADAPTER: TypeAdapter[dict[str, str]] = TypeAdapter(dict[str, str])
 
 def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
     # Display + lifecycle fields live on the linked Skill row.
+    stored = {policy.action_id: policy.policy for policy in app.policies}
     return ExternalAppAdminResponse(
         id=app.id,
         name=app.skill.name,
@@ -61,6 +65,7 @@ def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
         auth_template=app.auth_template,
         organization_credentials=app.organization_credentials,
         enabled=app.skill.enabled,
+        actions=action_policy_views(app.app_type, stored),
     )
 
 
@@ -109,6 +114,15 @@ def upsert_external_app(
             OnyxErrorCode.INVALID_INPUT,
             "Custom apps must be managed via POST /admin/apps/custom.",
         )
+    # Build the complete policy set to persist: one row per catalog action so
+    # the stored rows are the full source of truth. The admin's submitted
+    # choices win, unmentioned actions keep their stored value, and anything
+    # still unset defaults to ASK. Validation (unknown ids) happens here, before
+    # any mutation.
+    existing = get_policies(db_session, request.id) if request.id is not None else {}
+    action_policies = build_action_policies(
+        request.app_type, request.action_policies, existing
+    )
 
     if request.id is not None:
         # Built-in apps have no bundle to swap; ignore the returned old-blob id.
@@ -122,6 +136,7 @@ def upsert_external_app(
             upstream_url_patterns=request.upstream_url_patterns,
             auth_template=request.auth_template,
             organization_credentials=request.organization_credentials,
+            action_policies=action_policies,
         )
     else:
         # Skill identity is server-derived from app_type: built-in providers
@@ -140,7 +155,14 @@ def upsert_external_app(
             upstream_url_patterns=request.upstream_url_patterns,
             auth_template=request.auth_template,
             organization_credentials=request.organization_credentials,
+            action_policies=action_policies,
         )
+
+    # create/update wrote the rows out-of-band (bulk delete + insert) within
+    # their own commit, so the app's loaded ``policies`` collection is stale.
+    # With ``expire_on_commit=False`` the commit won't refresh it; expire so the
+    # response reflects what was just persisted.
+    db_session.expire(app, ["policies"])
 
     # Refresh already-running sandboxes so an enable/disable (or content/grant
     # change) takes effect live, not just on the next sandbox. The rebuilt

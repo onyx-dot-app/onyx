@@ -22,3 +22,25 @@ updates:
       - "jmelahman"
     labels:
       - "dependabot:python"
+  - package-ecosystem: "bun"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    assignees:
+      - "jmelahman"
+    labels:
+      - "dependabot:javascript"
+  - package-ecosystem: "bun"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    assignees:
+      - "jmelahman"
+    labels:
+      - "dependabot:javascript"

@@ -206,49 +206,23 @@ SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0
 SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
 
 # ============================================================================
-# ACP (Agent Communication Protocol) Configuration
+# Opencode-serve Configuration
 # ============================================================================
 
-# Timeout for ACP message processing in seconds
-# This is the maximum time to wait for a complete response from the agent
-ACP_MESSAGE_TIMEOUT = float(os.environ.get("ACP_MESSAGE_TIMEOUT", "900.0"))
-
-
-class AgentTransport(str, Enum):
-    """Wire protocol used to drive the in-sandbox agent.
-
-    ACP: subprocess-per-message `opencode acp` over JSON-RPC (stdin/stdout).
-         The historical default. Deprecated — opencode 1.15.7 non-deterministically
-         drops the per-turn terminator; see docs/craft/opencode-serve-migration.md.
-    SERVE: long-lived `opencode serve` HTTP server inside the sandbox pod.
-         Streaming via /event SSE, prompts via POST /session/.../prompt_async.
-         Target post-Phase 5.
-    """
-
-    ACP = "acp"
-    SERVE = "serve"
-
-
-# Transport for driving the in-sandbox agent. Default ACP until serve has soaked.
-# The OpencodeServeClient path is gated on this; setting "serve" routes
-# SandboxManager.send_message through HTTP instead of the per-message exec'd
-# `opencode acp` subprocess. See docs/craft/opencode-serve-migration.md.
-AGENT_TRANSPORT = AgentTransport(
-    os.environ.get("AGENT_TRANSPORT", AgentTransport.ACP.value)
+# Wall-clock budget for one user-message turn against opencode-serve.
+SANDBOX_TURN_TIMEOUT_SECONDS = float(
+    os.environ.get("SANDBOX_TURN_TIMEOUT_SECONDS", "900.0")
 )
 
 # Port `opencode serve` listens on inside the sandbox container.
 # Match against the EXPOSE directive in the sandbox Dockerfile.
 OPENCODE_SERVE_PORT = int(os.environ.get("OPENCODE_SERVE_PORT", "4096"))
 
-# Name of the env var inside the sandbox container that holds the
-# per-pod HTTP Basic Auth password for opencode serve. The sandbox manager
-# is responsible for generating + provisioning the per-pod K8s Secret
-# (see docs/craft/opencode-serve-migration.md §Pod / image changes) and
-# mounting it under this name in the sandbox container's env.
-OPENCODE_SERVER_PASSWORD_ENV = os.environ.get(
-    "OPENCODE_SERVER_PASSWORD_ENV", "OPENCODE_SERVER_PASSWORD"
-)
+# Env var inside the sandbox container that holds the per-pod HTTP Basic
+# password for opencode serve. Internal contract — the api_server writes
+# this name and opencode-serve reads it, so both ends must agree. Not
+# operator-tunable.
+OPENCODE_SERVER_PASSWORD = "OPENCODE_SERVER_PASSWORD"
 
 # Username for HTTP Basic Auth against opencode serve. Opencode's serve
 # implementation hard-codes the username to "opencode" when only

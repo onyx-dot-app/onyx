@@ -14,13 +14,13 @@ from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
 from onyx.cache.interface import CacheBackend
-from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.sandbox_proxy.action_matcher import SlackPostMessageMatcher
+from onyx.sandbox_proxy.action_matcher import ExternalAppActionMatcher
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.ca import CABootstrap
 from onyx.sandbox_proxy.ca import MaterializedCA
 from onyx.sandbox_proxy.ca_k8s import K8sSecretCAStore
+from onyx.sandbox_proxy.identity import default_session_factory
 from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIPLookup
 from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup
@@ -217,12 +217,13 @@ def main() -> int:
                 snapshot_policy.bucket,
                 snapshot_policy.endpoint_host,
             )
+        db_session_factory = default_session_factory
         gate = GateAddon(
             identity=identity,
-            action_matcher=SlackPostMessageMatcher(),
-            db_session_factory=lambda tenant_id: get_session_with_tenant(
-                tenant_id=tenant_id
+            action_matcher=ExternalAppActionMatcher(
+                db_session_factory=db_session_factory
             ),
+            db_session_factory=db_session_factory,
             cache_factory=_build_cache_factory(),
             proxy_instance_id=proxy_instance_id,
             snapshot_policy=snapshot_policy,
