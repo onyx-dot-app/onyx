@@ -103,6 +103,29 @@ def validate_action_policies(
     return policies
 
 
+def build_action_policies(
+    app_type: ExternalAppType,
+    requested: dict[str, EndpointPolicy] | None,
+    existing: dict[str, EndpointPolicy],
+) -> dict[str, EndpointPolicy]:
+    """The complete policy set to persist for a built-in app: one entry per
+    catalog action, so the stored rows are the full source of truth.
+
+    Each action resolves to the admin's validated override if supplied, else the
+    value already stored, else the ``ASK`` default. Unmentioned actions keep
+    their stored choice — a partial update (or an enable toggle that omits the
+    map) never clobbers existing policies. Raises if ``requested`` names an
+    action id outside the catalog.
+    """
+    validated = validate_action_policies(app_type, requested or {})
+    return {
+        endpoint.id: validated.get(
+            endpoint.id, existing.get(endpoint.id, EndpointPolicy.ASK)
+        )
+        for endpoint in _catalog_for(app_type)
+    }
+
+
 def action_policy_views(
     app_type: ExternalAppType,
     stored: dict[str, EndpointPolicy],

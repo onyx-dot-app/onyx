@@ -146,6 +146,7 @@ def create_external_app(
     is_public: bool = False,
     author_user_id: UUID | None = None,
     slug: str | None = None,
+    action_policies: dict[str, EndpointPolicy] | None = None,
 ) -> ExternalApp:
     """Create the backing Skill row and the ExternalApp that references it,
     committing atomically. The skill owns display metadata + lifecycle; the
@@ -197,6 +198,9 @@ def create_external_app(
         organization_credentials=organization_credentials,
     )
     db_session.add(app)
+    if action_policies is not None:
+        db_session.flush()  # assign app.id before writing its policy rows
+        _write_policies__no_commit(db_session, app.id, action_policies)
     db_session.commit()
     return app
 
@@ -213,6 +217,7 @@ def update_external_app(
     organization_credentials: dict[str, Any],
     new_bundle_file_id: str | None = None,
     new_bundle_sha256: str | None = None,
+    action_policies: dict[str, EndpointPolicy] | None = None,
 ) -> tuple[ExternalApp, str | None]:
     """Replace mutable fields on the external app and its linked skill,
     committing atomically. Returns ``(app, old_bundle_file_id)``.
@@ -260,6 +265,9 @@ def update_external_app(
     app.auth_template = auth_template
     app.organization_credentials = organization_credentials
 
+    if action_policies is not None:
+        _write_policies__no_commit(db_session, app.id, action_policies)
+
     db_session.commit()
     return app, old_bundle_file_id
 
@@ -278,15 +286,14 @@ def get_policies(
     return {row.action_id: row.policy for row in rows}
 
 
-def replace_policies(
+def _write_policies__no_commit(
     db_session: Session,
     external_app_id: int,
     policies: dict[str, EndpointPolicy],
 ) -> None:
-    """Replace the app's per-action policy rows with ``policies`` and commit.
-
-    Full-replace semantics: the stored set becomes exactly the admin's choices
-    (callers pass the complete map, not a delta). ``action_id`` validation
+    """Replace the app's per-action policy rows with exactly ``policies`` (full
+    delete + insert). No commit — runs inside the create/update transaction so
+    the app and its policies persist atomically. ``action_id`` validation
     against the provider catalog is the caller's responsibility.
     """
     db_session.execute(
@@ -302,7 +309,6 @@ def replace_policies(
                 policy=policy,
             )
         )
-    db_session.commit()
 
 
 def delete_external_app(

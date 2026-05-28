@@ -16,8 +16,8 @@ from onyx.db.external_app import create_external_app
 from onyx.db.external_app import delete_external_app
 from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import get_external_apps
+from onyx.db.external_app import get_policies
 from onyx.db.external_app import get_user_credentials_by_app_id
-from onyx.db.external_app import replace_policies
 from onyx.db.external_app import required_user_credential_keys
 from onyx.db.external_app import update_external_app
 from onyx.db.external_app import upsert_external_app_user_credential
@@ -29,9 +29,9 @@ from onyx.db.skill import affected_user_ids_for_skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import action_policy_views
+from onyx.external_apps.providers.registry import build_action_policies
 from onyx.external_apps.providers.registry import fetch_available_built_in_apps
 from onyx.external_apps.providers.registry import fetch_built_in_app
-from onyx.external_apps.providers.registry import validate_action_policies
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
@@ -114,13 +114,14 @@ def upsert_external_app(
             OnyxErrorCode.INVALID_INPUT,
             "Custom apps must be managed via POST /admin/apps/custom.",
         )
-    # Reject unknown action ids before mutating anything; canonicalise aliases.
-    # ``None`` means "leave stored policies untouched" (partial update); only a
-    # supplied map is validated and later full-replaces the stored set.
-    action_policies = (
-        validate_action_policies(request.app_type, request.action_policies)
-        if request.action_policies is not None
-        else None
+    # Build the complete policy set to persist: one row per catalog action so
+    # the stored rows are the full source of truth. The admin's submitted
+    # choices win, unmentioned actions keep their stored value, and anything
+    # still unset defaults to ASK. Validation (unknown ids) happens here, before
+    # any mutation.
+    existing = get_policies(db_session, request.id) if request.id is not None else {}
+    action_policies = build_action_policies(
+        request.app_type, request.action_policies, existing
     )
 
     if request.id is not None:
@@ -135,6 +136,7 @@ def upsert_external_app(
             upstream_url_patterns=request.upstream_url_patterns,
             auth_template=request.auth_template,
             organization_credentials=request.organization_credentials,
+            action_policies=action_policies,
         )
     else:
         # Skill identity is server-derived from app_type: built-in providers
@@ -153,17 +155,14 @@ def upsert_external_app(
             upstream_url_patterns=request.upstream_url_patterns,
             auth_template=request.auth_template,
             organization_credentials=request.organization_credentials,
+            action_policies=action_policies,
         )
 
-    # Persist the admin's per-action choices (full-replace). Skipped when the
-    # request omitted the field, so a partial update keeps existing rows.
-    if action_policies is not None:
-        replace_policies(db_session, app.id, action_policies)
-        # replace_policies mutates rows out-of-band (bulk delete + insert), so
-        # the app's already-loaded ``policies`` collection is stale. With
-        # ``expire_on_commit=False`` the commit won't refresh it, so expire it
-        # explicitly — otherwise the response echoes the pre-edit policies.
-        db_session.expire(app, ["policies"])
+    # create/update wrote the rows out-of-band (bulk delete + insert) within
+    # their own commit, so the app's loaded ``policies`` collection is stale.
+    # With ``expire_on_commit=False`` the commit won't refresh it; expire so the
+    # response reflects what was just persisted.
+    db_session.expire(app, ["policies"])
 
     # Refresh already-running sandboxes so an enable/disable (or content/grant
     # change) takes effect live, not just on the next sandbox. The rebuilt

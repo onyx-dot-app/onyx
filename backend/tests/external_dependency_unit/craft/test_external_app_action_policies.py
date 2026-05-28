@@ -4,10 +4,12 @@ apps, driven through the ``/admin/apps`` endpoint functions.
 These exercise the real provider catalog (Slack) + DB, asserting the
 create/edit/read contract:
 
-- supplied ``action_policies`` persist and come back in the merged view;
-- unset actions resolve to ``ASK`` (merge-on-read);
-- a supplied map full-replaces the stored set (empty map clears);
-- an omitted map (``None``) leaves stored policies untouched;
+- storage is dense: every catalog action gets a row, so the stored rows are the
+  full source of truth (unset actions persist as ``ASK``);
+- supplied ``action_policies`` win for the actions they name and merge over the
+  stored set — unmentioned actions keep their stored value (no clobber);
+- an omitted map (``None``) or an empty map (``{}``) is a no-op for existing
+  choices; clearing an override means sending that action explicitly as ``ASK``;
 - unknown action ids are rejected before anything is written;
 - orphan rows (id no longer in the catalog) are silently dropped on read.
 
@@ -32,10 +34,15 @@ from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.slack import SlackAction
+from onyx.external_apps.providers.slack import SlackProvider
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import UpsertExternalAppRequest
 
 _AUTH_TEMPLATE = {"Authorization": "Bearer {token}"}
+
+# Derived from the live catalog so these tests track action additions/removals
+# instead of hardcoding the current Slack action set.
+_CATALOG_IDS = {endpoint.id.value for endpoint in SlackProvider.spec.endpoint_catalog}
 
 
 @pytest.fixture(autouse=True)
@@ -92,7 +99,17 @@ def _view(resp: ExternalAppAdminResponse) -> dict[str, EndpointPolicy]:
     return {action.action_id: action.state for action in resp.actions}
 
 
-def test_create_persists_overrides_and_merges_unset_to_ask(
+def _row_count(db_session: Session, app_id: int) -> int:
+    """Raw policy-row count (not de-duplicated like ``_stored``), so duplicate
+    rows for the same action would be caught."""
+    return len(
+        db_session.scalars(
+            select(ExternalAppPolicy).where(ExternalAppPolicy.external_app_id == app_id)
+        ).all()
+    )
+
+
+def test_create_persists_dense_policies_with_unset_as_ask(
     db_session: Session,
     test_user: User,
 ) -> None:
@@ -105,35 +122,32 @@ def test_create_persists_overrides_and_merges_unset_to_ask(
         },
     )
 
-    # Only the two overrides are stored (sparse).
-    assert _stored(db_session, resp.id) == {
+    # Dense: a row for every catalog action — overrides honoured, the rest ASK.
+    stored = _stored(db_session, resp.id)
+    assert stored == {
+        SlackAction.CHANNELS_READ.value: EndpointPolicy.ASK,
         SlackAction.MESSAGES_READ.value: EndpointPolicy.ALWAYS,
+        SlackAction.USERS_READ.value: EndpointPolicy.ASK,
+        SlackAction.SEARCH_READ.value: EndpointPolicy.ASK,
         SlackAction.MESSAGES_WRITE.value: EndpointPolicy.DENY,
     }
-
-    # The merged view spans the whole catalog: overrides honoured, the rest ASK.
-    view = _view(resp)
-    assert view[SlackAction.MESSAGES_READ.value] == EndpointPolicy.ALWAYS
-    assert view[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.DENY
-    assert view[SlackAction.CHANNELS_READ.value] == EndpointPolicy.ASK
-    assert view[SlackAction.USERS_READ.value] == EndpointPolicy.ASK
-    # Every catalog action appears exactly once.
-    assert len(resp.actions) == len(view)
-    assert SlackAction.SEARCH_READ.value in view
+    # The read view echoes the stored set exactly (one entry per action).
+    assert _view(resp) == stored
 
 
-def test_create_without_policies_yields_all_ask(
+def test_create_without_policies_seeds_all_ask(
     db_session: Session,
     test_user: User,
 ) -> None:
     resp = _upsert(db_session, test_user, action_policies=None)
 
-    assert _stored(db_session, resp.id) == {}
-    assert resp.actions  # catalog is non-empty
-    assert all(action.state == EndpointPolicy.ASK for action in resp.actions)
+    stored = _stored(db_session, resp.id)
+    assert stored  # a row was seeded for every catalog action
+    assert len(stored) == len(resp.actions)
+    assert all(policy == EndpointPolicy.ASK for policy in stored.values())
 
 
-def test_edit_with_map_replaces_stored_set(
+def test_edit_merges_overrides_preserving_unmentioned(
     db_session: Session,
     test_user: User,
 ) -> None:
@@ -146,6 +160,8 @@ def test_edit_with_map_replaces_stored_set(
         },
     )
 
+    # A partial map updates only the actions it names; the prior choices for
+    # unmentioned actions are preserved (merge, not full-replace).
     edited = _upsert(
         db_session,
         test_user,
@@ -153,17 +169,14 @@ def test_edit_with_map_replaces_stored_set(
         action_policies={SlackAction.CHANNELS_READ: EndpointPolicy.ALWAYS},
     )
 
-    # Full-replace: the prior two overrides are gone, only the new one remains.
-    assert _stored(db_session, created.id) == {
-        SlackAction.CHANNELS_READ.value: EndpointPolicy.ALWAYS,
-    }
     view = _view(edited)
     assert view[SlackAction.CHANNELS_READ.value] == EndpointPolicy.ALWAYS
-    assert view[SlackAction.MESSAGES_READ.value] == EndpointPolicy.ASK
-    assert view[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.ASK
+    assert view[SlackAction.MESSAGES_READ.value] == EndpointPolicy.ALWAYS
+    assert view[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.DENY
+    assert view[SlackAction.USERS_READ.value] == EndpointPolicy.ASK
 
 
-def test_edit_omitting_policies_preserves_existing(
+def test_edit_omitting_or_emptying_policies_preserves_existing(
     db_session: Session,
     test_user: User,
 ) -> None:
@@ -173,16 +186,16 @@ def test_edit_omitting_policies_preserves_existing(
         action_policies={SlackAction.MESSAGES_WRITE: EndpointPolicy.DENY},
     )
 
-    # A partial update (e.g. a rename / enable-disable) that omits the field
-    # must NOT wipe the admin's stored choices.
-    _upsert(db_session, test_user, app_id=created.id, action_policies=None)
+    # Neither an omitted map (enable toggle / rename) nor an explicit empty map
+    # may wipe the admin's stored choices.
+    for omitted in (None, {}):
+        edited = _upsert(
+            db_session, test_user, app_id=created.id, action_policies=omitted
+        )
+        assert _view(edited)[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.DENY
 
-    assert _stored(db_session, created.id) == {
-        SlackAction.MESSAGES_WRITE.value: EndpointPolicy.DENY,
-    }
 
-
-def test_edit_with_empty_map_clears_overrides(
+def test_edit_with_explicit_ask_clears_override(
     db_session: Session,
     test_user: User,
 ) -> None:
@@ -192,11 +205,99 @@ def test_edit_with_empty_map_clears_overrides(
         action_policies={SlackAction.MESSAGES_WRITE: EndpointPolicy.DENY},
     )
 
-    # An explicit empty map is a deliberate full-replace to "no overrides".
-    edited = _upsert(db_session, test_user, app_id=created.id, action_policies={})
+    # Clearing an override means naming the action explicitly as ASK.
+    edited = _upsert(
+        db_session,
+        test_user,
+        app_id=created.id,
+        action_policies={SlackAction.MESSAGES_WRITE: EndpointPolicy.ASK},
+    )
 
-    assert _stored(db_session, created.id) == {}
-    assert all(action.state == EndpointPolicy.ASK for action in edited.actions)
+    assert _view(edited)[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.ASK
+
+
+def test_create_seeds_a_row_for_every_catalog_action(
+    db_session: Session,
+    test_user: User,
+) -> None:
+    resp = _upsert(
+        db_session,
+        test_user,
+        action_policies={SlackAction.MESSAGES_WRITE: EndpointPolicy.DENY},
+    )
+
+    stored = _stored(db_session, resp.id)
+    # Exactly the catalog — nothing missing, nothing extra...
+    assert set(stored) == _CATALOG_IDS
+    # ...and one row per action (no duplicates).
+    assert _row_count(db_session, resp.id) == len(_CATALOG_IDS)
+
+
+def test_edit_keeps_full_catalog_dense(
+    db_session: Session,
+    test_user: User,
+) -> None:
+    created = _upsert(
+        db_session,
+        test_user,
+        action_policies={SlackAction.MESSAGES_WRITE: EndpointPolicy.DENY},
+    )
+
+    edited = _upsert(
+        db_session,
+        test_user,
+        app_id=created.id,
+        action_policies={SlackAction.CHANNELS_READ: EndpointPolicy.ALWAYS},
+    )
+
+    stored = _stored(db_session, created.id)
+    # The edit keeps the row set complete — every action still present, once.
+    assert set(stored) == _CATALOG_IDS
+    assert _row_count(db_session, created.id) == len(_CATALOG_IDS)
+    # Both overrides persisted; the view echoes the stored rows exactly.
+    assert stored[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.DENY
+    assert stored[SlackAction.CHANNELS_READ.value] == EndpointPolicy.ALWAYS
+    assert _view(edited) == stored
+
+
+def test_sequential_edits_accumulate_and_stay_dense(
+    db_session: Session,
+    test_user: User,
+) -> None:
+    created = _upsert(db_session, test_user, action_policies=None)  # all ASK
+
+    # Three edits, each setting a different action, should accumulate.
+    _upsert(
+        db_session,
+        test_user,
+        app_id=created.id,
+        action_policies={SlackAction.MESSAGES_WRITE: EndpointPolicy.DENY},
+    )
+    _upsert(
+        db_session,
+        test_user,
+        app_id=created.id,
+        action_policies={SlackAction.MESSAGES_READ: EndpointPolicy.ALWAYS},
+    )
+    edited = _upsert(
+        db_session,
+        test_user,
+        app_id=created.id,
+        action_policies={SlackAction.CHANNELS_READ: EndpointPolicy.ALWAYS},
+    )
+
+    stored = _stored(db_session, created.id)
+    # Still exactly the catalog after a sequence of edits — no drift, no dupes.
+    assert set(stored) == _CATALOG_IDS
+    assert _row_count(db_session, created.id) == len(_CATALOG_IDS)
+    # Every override from the sequence survived...
+    assert stored[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.DENY
+    assert stored[SlackAction.MESSAGES_READ.value] == EndpointPolicy.ALWAYS
+    assert stored[SlackAction.CHANNELS_READ.value] == EndpointPolicy.ALWAYS
+    # ...and actions never touched stayed ASK.
+    assert stored[SlackAction.USERS_READ.value] == EndpointPolicy.ASK
+    assert stored[SlackAction.SEARCH_READ.value] == EndpointPolicy.ASK
+    assert _view(edited) == stored
 
 
 def test_unknown_action_id_rejected_before_create(
