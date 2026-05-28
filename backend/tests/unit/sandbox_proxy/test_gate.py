@@ -757,6 +757,104 @@ async def test_requestheaders_noop_without_policy() -> None:
 
 
 # ---------------------------------------------------------------------------
+# responseheaders — stream all responses (don't buffer streaming bodies)
+# ---------------------------------------------------------------------------
+
+
+def test_responseheaders_streams_response_body() -> None:
+    """Responses are never gated, so they must stream through unbuffered —
+    otherwise long SSE bodies (the agent's streamed LLM completions) are held
+    until complete and can truncate."""
+    addon = _build(resolver=_StubResolver(), matcher=_StubMatcher())
+    flow = _flow()
+    flow.response = MagicMock()
+    flow.response.stream = False
+
+    addon.responseheaders(flow)
+
+    assert flow.response.stream is True
+
+
+def test_responseheaders_no_response_is_noop() -> None:
+    """A flow without a response (shouldn't happen at this hook) must not raise."""
+    addon = _build(resolver=_StubResolver(), matcher=_StubMatcher())
+    flow = _flow()
+    flow.response = None
+
+    addon.responseheaders(flow)  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# _inject_credentials — apply resolved auth headers to a verified forward
+# ---------------------------------------------------------------------------
+
+
+def test_inject_credentials_sets_resolved_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resolved headers are written onto the request, overwriting any value the
+    sandbox supplied (the real secret lives only in the proxy)."""
+    addon = _build(
+        resolver=_StubResolver(),
+        matcher=_StubMatcher(),
+        db_factory=_recorder_db_factory([]),
+    )
+    monkeypatch.setattr(
+        gate_mod,
+        "resolve_injection_headers",
+        lambda _db, _aid, _uid: {"Authorization": "Bearer real-secret"},
+    )
+    flow = _flow()
+    flow.request.headers["Authorization"] = "sandbox-placeholder"
+
+    addon._inject_credentials(flow, _MATCH_ALWAYS, user_id=uuid4(), tenant_id="public")
+
+    assert flow.request.headers["Authorization"] == "Bearer real-secret"
+
+
+def test_inject_credentials_noop_when_no_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No resolvable credentials -> no header injected (upstream answers 401)."""
+    addon = _build(
+        resolver=_StubResolver(),
+        matcher=_StubMatcher(),
+        db_factory=_recorder_db_factory([]),
+    )
+    monkeypatch.setattr(
+        gate_mod, "resolve_injection_headers", lambda _db, _aid, _uid: {}
+    )
+    flow = _flow()  # headers default to {}
+
+    addon._inject_credentials(flow, _MATCH_ALWAYS, user_id=uuid4(), tenant_id="public")
+
+    assert dict(flow.request.headers) == {}
+
+
+def test_inject_credentials_fail_open_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A resolution error must not raise or inject — the gate-approved request
+    just forwards without the credential."""
+    addon = _build(
+        resolver=_StubResolver(),
+        matcher=_StubMatcher(),
+        db_factory=_recorder_db_factory([]),
+    )
+
+    def _boom(_db: Any, _aid: int, _uid: UUID) -> dict[str, str]:
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(gate_mod, "resolve_injection_headers", _boom)
+    flow = _flow()  # headers default to {}
+
+    # Must not raise.
+    addon._inject_credentials(flow, _MATCH_ALWAYS, user_id=uuid4(), tenant_id="public")
+
+    assert "Authorization" not in flow.request.headers
+
+
+# ---------------------------------------------------------------------------
 # _write_response_for_decision
 # ---------------------------------------------------------------------------
 

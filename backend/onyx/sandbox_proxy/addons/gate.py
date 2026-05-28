@@ -19,6 +19,7 @@ from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
+from onyx.db.external_app import resolve_injection_headers
 from onyx.db.notification import create_notification
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.action_matcher import ActionMatch
@@ -200,6 +201,19 @@ class GateAddon:
             flow.request.host,
             flow.request.method,
         )
+
+    def responseheaders(self, flow: http.HTTPFlow) -> None:
+        """Stream every response body straight through instead of buffering it.
+
+        The gate only ever inspects *requests* (the matcher reads the request
+        body); responses are never gated. mitmproxy buffers the full response
+        body by default, which serializes and can truncate long streaming
+        responses — notably the sandbox agent's streamed LLM completions (SSE),
+        which would otherwise arrive only after the whole generation finishes
+        and can drop mid-stream. Streaming passes bytes through as they arrive.
+        """
+        if flow.response is not None:
+            flow.response.stream = True
 
     async def request(self, flow: http.HTTPFlow) -> None:
         task = asyncio.current_task()
@@ -514,22 +528,51 @@ class GateAddon:
 
     def _inject_credentials(
         self,
-        flow: http.HTTPFlow,  # noqa: ARG002 — used once injection is implemented
-        match: ActionMatch,  # noqa: ARG002
+        flow: http.HTTPFlow,
+        match: ActionMatch,
         *,
-        user_id: UUID,  # noqa: ARG002
-        tenant_id: str,  # noqa: ARG002
+        user_id: UUID,
+        tenant_id: str,
     ) -> None:
         """Attach the connected app's credentials to a verified forward.
 
         The sole credential-injection seam: called only on ALWAYS (auto-approved)
-        and ASK-approved requests, never on off-catalog or blocked ones.
+        and ASK-approved requests, never on off-catalog or blocked ones. Renders
+        the app's ``auth_template`` from the org + per-user (``user_id``)
+        credentials and sets the resulting headers on the outbound request, so
+        the real secret lives only here — never in the sandbox.
 
-        No-op for now. To implement: load ExternalApp(match.external_app_id) and
-        its auth_template, fill the {placeholder} headers from the org + per-user
-        (user_id) credentials, and set them on flow.request.headers.
+        Fail-open on resolution errors: the request is already gate-approved, so
+        a missing credential just means the upstream answers 401, never a leak.
         """
-        return
+        try:
+            with self._db_session_factory(tenant_id) as db:
+                headers = resolve_injection_headers(db, match.external_app_id, user_id)
+        except Exception:
+            logger.exception(
+                "gate.inject_error external_app_id=%s host=%s",
+                match.external_app_id,
+                flow.request.host,
+            )
+            return
+
+        if not headers:
+            logger.info(
+                "gate.inject_skipped external_app_id=%s host=%s (no credentials)",
+                match.external_app_id,
+                flow.request.host,
+            )
+            return
+
+        for name, value in headers.items():
+            flow.request.headers[name] = value
+        # Log header NAMES only — never the injected secret values.
+        logger.info(
+            "gate.inject external_app_id=%s host=%s headers=%s",
+            match.external_app_id,
+            flow.request.host,
+            sorted(headers),
+        )
 
     def _terminalize_after_unhandled_error(
         self, approval_id: UUID, tenant_id: str
