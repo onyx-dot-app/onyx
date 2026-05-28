@@ -229,3 +229,18 @@ local_resource(
     ),
     labels=['app'],
 )
+
+# ---- 10. Craft sandbox pods (dynamic, not in chart) ----
+# Stern tails all sandbox pod logs (including init containers) and surfaces
+# pod lifecycle events, so a sandbox failure shows up here instead of being
+# discoverable only via kubectl.
+local_resource(
+    'sandbox-pods',
+    serve_cmd=(
+        'stern --context k3d-onyx-local ' +
+        '--namespace ' + APP_NS + '-sandboxes ' +
+        '--since 5m --tail 100 sandbox-'
+    ),
+    resource_deps=[APP_RELEASE + '-api-server'],
+    labels=['app'],
+)

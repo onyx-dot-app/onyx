@@ -91,6 +91,12 @@ configMap:
   # the per-worktree values file overrides with the namespaced api service.
   ENABLE_CRAFT: "true"
 
+  # The code default `onyxdotapp/sandbox:v0.1.44` predates firewall-init.sh
+  # and breaks sandbox pod init. Pin to a known-good tag. Bump manually as
+  # new sandbox versions land. Avoid `:latest` — pullPolicy=IfNotPresent
+  # means the node keeps the first sha pulled under that tag.
+  SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:v0.1.49"
+
 # Sandbox egress proxy. Chart default is replicaCount=2 with podAntiAffinity
 # (prod). On single-node k3d both pods land on the same node anyway and
 # 2 replicas just doubles the memory footprint — drop to 1 to match the
