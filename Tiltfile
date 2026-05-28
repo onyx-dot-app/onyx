@@ -224,16 +224,3 @@ for (label, host_port, deploy_suffix) in DEBUG_TARGETS:
         # noisy with reconnect messages every time a pod restarts.
         labels=['debug'],
     )
-
-# ---- 9. Route warmup ----
-# Pre-compile turbopack route bundles so the first interactive load is warm.
-WARMUP_PATHS = ['/', '/auth/login', '/chat', '/app', '/admin/configuration/llm']
-
-local_resource(
-    'warm-web-routes',
-    cmd='for p in ' + ' '.join(WARMUP_PATHS) + '; do ' +
-        'curl -sSL -o /dev/null -w "warm %{http_code} %{time_total}s ' + INGRESS_HOST + '$p\\n" ' +
-        '"http://' + INGRESS_HOST + ':13000$p"; done',
-    resource_deps=[APP_RELEASE + '-web-server', APP_RELEASE + '-api-server'],
-    labels=['warmup'],
-)

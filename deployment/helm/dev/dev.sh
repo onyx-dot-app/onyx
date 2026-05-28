@@ -546,6 +546,19 @@ ingress:
     host: "${ingress_host}"
   webserver:
     host: "${ingress_host}"
+
+# Persist /app/.next on the k3d node so turbopack's incremental cache
+# survives pod respins (image rebuild, OOM, manual delete). Per-slug
+# path so concurrent worktrees don't collide.
+webserver:
+  volumeMounts:
+    - name: dotnext-cache
+      mountPath: /app/.next
+  volumes:
+    - name: dotnext-cache
+      hostPath:
+        path: /var/lib/onyx-dev/dotnext/${slug}
+        type: DirectoryOrCreate
 EOF
   log "wrote ${out}"
 }
