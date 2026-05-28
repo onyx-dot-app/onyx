@@ -7,8 +7,10 @@ metadata:
     {{- if not .Values.ingress.className }}
     kubernetes.io/ingress.class: nginx
     {{- end }}
+    {{- if .Values.ingress.tls.enabled }}
     cert-manager.io/cluster-issuer: {{ include "onyx.fullname" . }}-letsencrypt
     kubernetes.io/tls-acme: "true"
+    {{- end }}
     {{- with .Values.ingress.extraAnnotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}

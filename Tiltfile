@@ -211,9 +211,9 @@ for (label, host_port, deploy_suffix) in DEBUG_TARGETS:
 local_resource(
     'next-dev',
     serve_cmd=(
-        'set -a && [ -f ' + os.getcwd() + '/.vscode/.env.k3d ] && ' +
-        '. ' + os.getcwd() + '/.vscode/.env.k3d ; set +a ; ' +
-        'cd ' + os.getcwd() + '/web && ' +
+        'set -a && [ -f "' + os.getcwd() + '/.vscode/.env.k3d" ] && ' +
+        '. "' + os.getcwd() + '/.vscode/.env.k3d" ; set +a ; ' +
+        'cd "' + os.getcwd() + '/web" && ' +
         'INTERNAL_URL=http://' + INGRESS_HOST + ':13000/api ' +
         'PORT=' + NEXT_PORT + ' ' +
         'WEB_DOMAIN=http://localhost:' + NEXT_PORT + ' ' +

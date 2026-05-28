@@ -368,16 +368,18 @@ allocate_offsets() {
   done
   shopt -u nullglob
 
-  local tp rb np i
+  local tp="" rb="" np="" i
   for ((i=0; i<100; i++)); do
     tp=$((10350 + i))
     if [[ "${used_tilt}" != *" ${tp} "* ]]; then break; fi
+    tp=""
   done
   [[ -n "${tp}" ]] || die "couldn't allocate a free tilt port"
 
   for ((i=0; i<80; i++)); do
     rb=$((i * 3))
     if [[ "${used_redis}" != *" ${rb} "* ]]; then break; fi
+    rb=""
   done
   [[ -n "${rb}" ]] || die "couldn't allocate a free redis db base"
 
@@ -579,7 +581,6 @@ cmd_up() {
   done
 
   require_tool k3d
-  require_tool tilt
   require_tool kubectl
   require_tool helm
   require_tool jq
@@ -658,6 +659,7 @@ cmd_up() {
     return 0
   fi
 
+  require_tool tilt
   ensure_opal_built
 
   cd "${REPO_ROOT}"

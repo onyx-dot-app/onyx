@@ -12,7 +12,9 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "{{ .Values.nginx.timeouts.read }}"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "{{ .Values.nginx.timeouts.send }}"
     nginx.ingress.kubernetes.io/proxy-body-size: "5G"
+    {{- if .Values.ingress.tls.enabled }}
     cert-manager.io/cluster-issuer: {{ include "onyx.fullname" . }}-letsencrypt
+    {{- end }}
     {{- with .Values.ingress.extraAnnotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
