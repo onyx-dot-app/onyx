@@ -33,19 +33,13 @@ class LicenseMetricsCollector(_CachedCollector):
         if MULTI_TENANT:
             return []
 
-        try:
-            with get_session_with_tenant(
-                tenant_id=POSTGRES_DEFAULT_SCHEMA
-            ) as db_session:
-                metadata = get_license_metadata(
-                    db_session, tenant_id=POSTGRES_DEFAULT_SCHEMA
-                )
-                if metadata is None:
-                    return []
-                used_seats = get_used_seats(POSTGRES_DEFAULT_SCHEMA)
-        except Exception:
-            logger.debug("Failed to collect license metrics", exc_info=True)
-            return []
+        with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as db_session:
+            metadata = get_license_metadata(
+                db_session, tenant_id=POSTGRES_DEFAULT_SCHEMA
+            )
+            if metadata is None:
+                return []
+            used_seats = get_used_seats(POSTGRES_DEFAULT_SCHEMA)
 
         total_seats = metadata.seats
         available_seats = max(0, total_seats - used_seats)
