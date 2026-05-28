@@ -80,15 +80,7 @@ def resolve_masked_credentials(
     incoming: dict[str, Any],
     existing: SensitiveValue[dict[str, Any]] | None,
 ) -> dict[str, Any]:
-    """Restore real secret values when the caller submits masked placeholders.
-
-    Admin responses mask organization credentials (e.g. ``client_secret`` shows
-    as ``abcd...wxyz``); re-saving the form without editing a secret echoes that
-    placeholder back. Replace any masked value with the stored one so an edit
-    that leaves a secret untouched doesn't overwrite the real credential with the
-    mask. A masked value with no stored counterpart is rejected — there's nothing
-    to restore, so the caller must supply the real value.
-    """
+    """Restore real secret values when the caller submits masked placeholders."""
     existing_values = (
         existing.get_value(apply_mask=False) if existing is not None else {}
     )
