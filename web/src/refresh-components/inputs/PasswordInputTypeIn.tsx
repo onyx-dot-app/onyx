@@ -140,6 +140,12 @@ export interface PasswordInputTypeInProps extends Omit<
    * The input remains editable so users can type a new value.
    */
   isNonRevealable?: boolean;
+  /**
+   * When true, the reveal toggle is never rendered at all. Use this for secrets
+   * that must never be shown in plaintext in the UI (e.g. an external app's
+   * client secret). The value stays masked and remains editable.
+   */
+  hideRevealToggle?: boolean;
 }
 
 /**
@@ -158,6 +164,7 @@ export interface PasswordInputTypeInProps extends Omit<
 export default function PasswordInputTypeIn({
   ref,
   isNonRevealable = false,
+  hideRevealToggle = false,
   value,
   onChange,
   onFocus,
@@ -273,7 +280,7 @@ export default function PasswordInputTypeIn({
     [isHidden, realValue, onChange]
   );
 
-  const showToggleButton = hasValue || isFocused;
+  const showToggleButton = !hideRevealToggle && (hasValue || isFocused);
   const isRevealed = isPasswordVisible && !effectiveNonRevealable;
   const toggleLabel = effectiveNonRevealable
     ? "Value cannot be revealed"

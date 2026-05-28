@@ -17,7 +17,9 @@ from onyx.db.models import ExternalAppUserCredential
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
+from onyx.utils.encryption import is_masked_credential
 from onyx.utils.logger import setup_logger
+from onyx.utils.sensitive import SensitiveValue
 
 logger = setup_logger()
 
@@ -74,6 +76,37 @@ def validate_auth_template(
             )
 
 
+def resolve_masked_credentials(
+    incoming: dict[str, Any],
+    existing: SensitiveValue[dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """Restore real secret values when the caller submits masked placeholders.
+
+    Admin responses mask organization credentials (e.g. ``client_secret`` shows
+    as ``abcd...wxyz``); re-saving the form without editing a secret echoes that
+    placeholder back. Replace any masked value with the stored one so an edit
+    that leaves a secret untouched doesn't overwrite the real credential with the
+    mask. A masked value with no stored counterpart is rejected — there's nothing
+    to restore, so the caller must supply the real value.
+    """
+    existing_values = (
+        existing.get_value(apply_mask=False) if existing is not None else {}
+    )
+    resolved: dict[str, Any] = {}
+    for key, value in incoming.items():
+        if isinstance(value, str) and is_masked_credential(value):
+            if key not in existing_values:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Credential '{key}' was submitted masked but has no stored "
+                    "value to restore — provide the actual value.",
+                )
+            resolved[key] = existing_values[key]
+        else:
+            resolved[key] = value
+    return resolved
+
+
 def is_user_authenticated_for_app(
     app: ExternalApp,
     user_cred: ExternalAppUserCredential | None,
@@ -82,13 +115,14 @@ def is_user_authenticated_for_app(
     ``auth_template`` requires that the org hasn't pre-filled. Apps with no
     user-required keys need no credential row."""
     required = required_user_credential_keys(
-        app.auth_template, app.organization_credentials
+        app.auth_template, app.organization_credentials.get_value(apply_mask=False)
     )
     if not required:
         return True
     if user_cred is None:
         return False
-    return all(k in user_cred.user_credentials for k in required)
+    stored = user_cred.user_credentials.get_value(apply_mask=False)
+    return all(k in stored for k in required)
 
 
 def get_external_app_by_id(
@@ -175,6 +209,11 @@ def create_external_app(
     """
     from onyx.db.skill import create_built_in_skill_row__no_commit
     from onyx.db.skill import create_skill__no_commit
+
+    # No existing app to restore from on create, so a masked value is rejected.
+    organization_credentials = resolve_masked_credentials(
+        organization_credentials, None
+    )
 
     built_in_skill_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app_type)
     if built_in_skill_id is not None:
@@ -278,7 +317,11 @@ def update_external_app(
 
     app.upstream_url_patterns = upstream_url_patterns
     app.auth_template = auth_template
-    app.organization_credentials = organization_credentials
+    # Admin responses mask org credentials; restore any masked value the form
+    # echoed back so an unchanged secret isn't overwritten with its mask.
+    app.organization_credentials = resolve_masked_credentials(  # ty: ignore[invalid-assignment]
+        organization_credentials, app.organization_credentials
+    )
 
     if action_policies is not None:
         _write_policies__no_commit(db_session, app.id, action_policies)

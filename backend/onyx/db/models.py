@@ -5867,11 +5867,10 @@ class ExternalApp(Base):
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
-    organization_credentials: Mapped[dict[str, Any]] = mapped_column(
-        postgresql.JSONB(),
+    organization_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
+        EncryptedJson(),
         nullable=False,
         default=dict,
-        server_default=text("'{}'::jsonb"),
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -5913,8 +5912,10 @@ class ExternalAppUserCredential(Base):
         nullable=False,
         index=True,
     )
-    user_credentials: Mapped[dict[str, Any]] = mapped_column(
-        postgresql.JSONB(), nullable=False, default=dict
+    # Encrypted at rest: the calling user's credential values for this app.
+    # Read via .get_value(apply_mask=False).
+    user_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
+        EncryptedJson(), nullable=False, default=dict
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
