@@ -120,5 +120,9 @@ export function panelTabId(tab: PanelTab): string {
   switch (tab.kind) {
     case "file":
       return `file:${tab.path}`;
+    default: {
+      const _exhaustive: never = tab.kind;
+      throw new Error(`Unknown PanelTab kind: ${String(_exhaustive)}`);
+    }
   }
 }

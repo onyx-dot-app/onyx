@@ -15,8 +15,7 @@ import {
   useTabHistory,
   OutputTabType,
 } from "@/app/craft/hooks/useBuildSessionStore";
-import type { PanelTab } from "@/app/craft/types/displayTypes";
-import { panelTabId } from "@/app/craft/types/displayTypes";
+import { type PanelTab, panelTabId } from "@/app/craft/types/displayTypes";
 import {
   fetchWebappInfo,
   fetchArtifacts,
@@ -123,7 +122,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   );
 
   const handlePanelTabClose = useCallback(
-    (e: React.MouseEvent, tabId: string, tab: PanelTab) => {
+    (e: React.MouseEvent, tab: PanelTab) => {
       e.stopPropagation();
       if (!session?.id) return;
       if (tab.kind === "file") {
@@ -543,7 +542,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                       <Text className="truncate text-sm">{tab.fileName}</Text>
                       {/* Close button */}
                       <button
-                        onClick={(e) => handlePanelTabClose(e, id, tab)}
+                        onClick={(e) => handlePanelTabClose(e, tab)}
                         className={cn(
                           "shrink-0 p-0.5 rounded-sm hover:bg-background-tint-03 transition-colors",
                           isActive

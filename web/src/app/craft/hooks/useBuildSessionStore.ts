@@ -20,9 +20,9 @@ import {
   StreamItem,
   ToolCallState,
   TodoListState,
-  PanelTab,
+  type PanelTab,
+  panelTabId,
 } from "@/app/craft/types/displayTypes";
-import { panelTabId } from "@/app/craft/types/displayTypes";
 
 import {
   createSession as apiCreateSession,
@@ -1817,6 +1817,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const entry = tabHistory.entries[newIndex];
       if (!entry) return state;
 
+      // TODO: extract a shared reconstructPanelTab(tabId) helper, or store the
+      // full PanelTab in TabHistoryEntry instead of just the tabId, to avoid
+      // duplicating this parsing in both navigateTabBack and navigateTabForward.
       // Re-open panel tab if it was closed
       let panelTabs = session.panelTabs;
       if (entry.type === "panel-tab") {
