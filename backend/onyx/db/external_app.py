@@ -3,13 +3,16 @@ from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
+from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
+from onyx.db.models import ExternalAppPolicy
 from onyx.db.models import ExternalAppUserCredential
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -94,7 +97,10 @@ def get_external_app_by_id(
 ) -> ExternalApp | None:
     stmt = (
         select(ExternalApp)
-        .options(selectinload(ExternalApp.skill))
+        .options(
+            selectinload(ExternalApp.skill),
+            selectinload(ExternalApp.policies),
+        )
         .where(ExternalApp.id == external_app_id)
     )
     return db_session.scalar(stmt)
@@ -105,7 +111,10 @@ def get_external_apps(
 ) -> list[ExternalApp]:
     stmt = (
         select(ExternalApp)
-        .options(selectinload(ExternalApp.skill))
+        .options(
+            selectinload(ExternalApp.skill),
+            selectinload(ExternalApp.policies),
+        )
         .order_by(ExternalApp.id)
     )
     return list(db_session.scalars(stmt).all())
@@ -123,6 +132,21 @@ def get_user_credentials_by_app_id(
     return {row.external_app_id: row for row in db_session.scalars(stmt).all()}
 
 
+def get_external_app_user_credential(
+    db_session: Session,
+    *,
+    external_app_id: int,
+    user_id: UUID,
+) -> ExternalAppUserCredential | None:
+    """The calling user's stored credentials for one app, or None if unset."""
+    return db_session.scalar(
+        select(ExternalAppUserCredential).where(
+            ExternalAppUserCredential.external_app_id == external_app_id,
+            ExternalAppUserCredential.user_id == user_id,
+        )
+    )
+
+
 def create_external_app(
     db_session: Session,
     name: str,
@@ -137,6 +161,7 @@ def create_external_app(
     is_public: bool = False,
     author_user_id: UUID | None = None,
     slug: str | None = None,
+    action_policies: dict[str, EndpointPolicy] | None = None,
 ) -> ExternalApp:
     """Create the backing Skill row and the ExternalApp that references it,
     committing atomically. The skill owns display metadata + lifecycle; the
@@ -188,6 +213,9 @@ def create_external_app(
         organization_credentials=organization_credentials,
     )
     db_session.add(app)
+    if action_policies is not None:
+        db_session.flush()  # assign app.id before writing its policy rows
+        _write_policies__no_commit(db_session, app.id, action_policies)
     db_session.commit()
     return app
 
@@ -204,6 +232,7 @@ def update_external_app(
     organization_credentials: dict[str, Any],
     new_bundle_file_id: str | None = None,
     new_bundle_sha256: str | None = None,
+    action_policies: dict[str, EndpointPolicy] | None = None,
 ) -> tuple[ExternalApp, str | None]:
     """Replace mutable fields on the external app and its linked skill,
     committing atomically. Returns ``(app, old_bundle_file_id)``.
@@ -251,8 +280,50 @@ def update_external_app(
     app.auth_template = auth_template
     app.organization_credentials = organization_credentials
 
+    if action_policies is not None:
+        _write_policies__no_commit(db_session, app.id, action_policies)
+
     db_session.commit()
     return app, old_bundle_file_id
+
+
+def get_policies(
+    db_session: Session,
+    external_app_id: int,
+) -> dict[str, EndpointPolicy]:
+    """Return the app's stored per-action policy overrides as
+    ``{action_id: policy}``. Sparse — only actions the admin has set."""
+    rows = db_session.scalars(
+        select(ExternalAppPolicy).where(
+            ExternalAppPolicy.external_app_id == external_app_id
+        )
+    ).all()
+    return {row.action_id: row.policy for row in rows}
+
+
+def _write_policies__no_commit(
+    db_session: Session,
+    external_app_id: int,
+    policies: dict[str, EndpointPolicy],
+) -> None:
+    """Replace the app's per-action policy rows with exactly ``policies`` (full
+    delete + insert). No commit — runs inside the create/update transaction so
+    the app and its policies persist atomically. ``action_id`` validation
+    against the provider catalog is the caller's responsibility.
+    """
+    db_session.execute(
+        delete(ExternalAppPolicy).where(
+            ExternalAppPolicy.external_app_id == external_app_id
+        )
+    )
+    for action_id, policy in policies.items():
+        db_session.add(
+            ExternalAppPolicy(
+                external_app_id=external_app_id,
+                action_id=action_id,
+                policy=policy,
+            )
+        )
 
 
 def delete_external_app(

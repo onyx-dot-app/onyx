@@ -76,7 +76,7 @@ class _UnusedResolver:
 
 
 class _UnusedMatcher:
-    def match(self, request: Any) -> Any:  # noqa: ARG002
+    def match(self, request: Any, tenant_id: str) -> Any:  # noqa: ARG002
         raise AssertionError("action_matcher.match unexpectedly used")
 
 
@@ -89,7 +89,7 @@ def _build_addon() -> GateAddon:
 
     return GateAddon(
         identity=_UnusedResolver(),
-        action_matcher=_UnusedMatcher(),  # type: ignore[arg-type]
+        action_matcher=_UnusedMatcher(),
         db_session_factory=lambda tenant_id: get_session_with_tenant(
             tenant_id=tenant_id
         ),

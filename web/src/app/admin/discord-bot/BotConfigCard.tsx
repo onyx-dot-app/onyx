@@ -162,7 +162,6 @@ export function BotConfigCard() {
                 onChange={(e) => setBotToken(e.target.value)}
                 placeholder="Enter bot token..."
                 disabled={isSubmitting}
-                className="flex-1"
               />
               <Button
                 disabled={isSubmitting || !botToken.trim()}

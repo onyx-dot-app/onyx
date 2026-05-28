@@ -304,7 +304,7 @@ def create_message(
         session_id: Session UUID
         message_type: Type of message (USER, ASSISTANT, SYSTEM)
         turn_index: 0-indexed user message number this message belongs to
-        message_metadata: Required structured data (the raw ACP packet JSON)
+        message_metadata: Required structured data (the raw sandbox event packet JSON)
         db_session: Database session
     """
     message = BuildMessage(

@@ -132,7 +132,7 @@ export function GenericMultiSelect<
                 value: String(item.id),
               }))}
             strict
-            leftSearchIcon
+            searchIcon
           />
         </div>
       </Disabled>

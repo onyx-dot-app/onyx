@@ -28,7 +28,6 @@ class LLMFlow(StrEnum):
 
     # Build session (assistants)
     BUILD_SESSION_NAMING = "build_session_naming"
-    BUILD_FOLLOWUP_SUGGESTIONS = "build_followup_suggestions"
 
     # Federated search helpers
     SLACK_DATE_EXTRACTION = "slack_date_extraction"

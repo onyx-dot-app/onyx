@@ -20,8 +20,8 @@ Lifecycle (see ``docs/craft/features/scheduled-tasks.md``):
 3. Transition QUEUED -> RUNNING.
 4. Create a fresh ``BuildSession`` with ``origin=SCHEDULED``. Record its
    id on the run row.
-5. Drive the agent via the shared ``_yield_acp_events`` generator,
-   persisting each event with ``_persist_acp_event``. Enforce a 30 min
+5. Drive the agent via the shared ``_yield_sandbox_events`` generator,
+   persisting each event with ``_persist_sandbox_event``. Enforce a 30 min
    monotonic budget (Celery thread-pool time limits are silently
    disabled — see CLAUDE.md).
 6. On ``RequestPermissionRequest`` (approval gate): mark
@@ -41,8 +41,6 @@ import time
 from typing import Any
 from uuid import UUID
 
-from acp.schema import RequestPermissionRequest
-
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -54,6 +52,7 @@ from onyx.db.scheduled_task import get_run
 from onyx.db.scheduled_task import mark_run_status
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_session_messages
+from onyx.server.features.build.sandbox.event_schema import RequestPermissionRequest
 from onyx.server.features.build.session.manager import BuildStreamingState
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.utils.logger import setup_logger
@@ -317,7 +316,7 @@ def _drive_agent(
 ) -> bool:
     """Drive the agent for a single scheduled run.
 
-    Creates the BuildSession, persists the user prompt, iterates ACP
+    Creates the BuildSession, persists the user prompt, iterates sandbox
     events with the shared persistence consumer, and writes the terminal
     run status.
 
@@ -326,7 +325,7 @@ def _drive_agent(
         AWAITING_APPROVAL). ``False`` otherwise (run status is terminal).
     """
     # We open a single session for the whole drive so that the
-    # `_persist_acp_event` calls (which write `BuildMessage` rows) and the
+    # `_persist_sandbox_event` calls (which write `BuildMessage` rows) and the
     # final `mark_run_status` happen against the same connection. The
     # session is committed eagerly at key points so observers see progress.
     with get_session_with_current_tenant() as db_session:
@@ -384,13 +383,13 @@ def _drive_agent(
         prompt_slot_cm = sandbox_manager.prompt_slot(sandbox_id, session_id)
         prompt_slot_cm.__enter__()
         try:
-            for acp_event in session_manager._yield_acp_events(
+            for sandbox_event in session_manager._yield_sandbox_events(
                 sandbox_id, session_id, task_prompt
             ):
                 # Approval gate: mark awaiting_approval, return. Resume
                 # mechanics are owned by the approvals project; this is
                 # "terminal for display" until it ships.
-                if isinstance(acp_event, RequestPermissionRequest):
+                if isinstance(sandbox_event, RequestPermissionRequest):
                     approval_required = True
                     break
 
@@ -416,7 +415,7 @@ def _drive_agent(
                     db_session.commit()
                     return False
 
-                session_manager._persist_acp_event(session_id, state, acp_event)
+                session_manager._persist_sandbox_event(session_id, state, sandbox_event)
                 final_event_count += 1
 
             if approval_required:

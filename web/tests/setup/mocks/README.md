@@ -184,7 +184,7 @@ moduleNameMapper: {
 ### Step 4: Verify Tests Pass
 
 ```bash
-npm test
+bun run test
 ```
 
 ## Decision Tree
@@ -299,7 +299,7 @@ export default function AuthProvider({ children }: { children?: React.ReactNode 
 
 **Check:**
 
-1. Is package installed? `npm ls package-name`
+1. Is package installed? `bun pm ls package-name`
 2. Is path in `jest.config.js` correct?
 3. Did you add to `transformIgnorePatterns` if it's ESM?
 
@@ -318,7 +318,7 @@ export default function AuthProvider({ children }: { children?: React.ReactNode 
 **If tests are too slow:**
 
 1. Use `jest --maxWorkers=50%` to parallelize (already configured)
-2. Run specific test files during development: `npm test -- --testPathPattern=MyComponent`
+2. Run specific test files during development: `bun run test -- --testPathPattern=MyComponent`
 3. Let CI run the full suite
 
 ### Package still fails after adding to transformIgnorePatterns

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import * as SettingsLayouts from "@opal/layouts/settings/components";
-import { SvgSettings, SvgDatabase, SvgUser } from "@opal/icons";
+import { SvgSettings, SvgServer, SvgUser } from "@opal/icons";
 import { Button } from "@opal/components";
 
 const meta: Meta = {
@@ -33,7 +33,7 @@ export const WithActions: Story = {
   render: () => (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={SvgDatabase}
+        icon={SvgServer}
         title="Data Sources"
         description="Manage connected data sources"
         rightChildren={<Button prominence="primary">Add source</Button>}

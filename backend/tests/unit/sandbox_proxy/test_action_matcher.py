@@ -1,129 +1,55 @@
-import pytest
-from mitmproxy import http
+"""Unit tests for the proxy's URL → ExternalApp resolution.
 
-from onyx.sandbox_proxy.action_matcher import ACTION_TYPE_SLACK_POST_MESSAGE
-from onyx.sandbox_proxy.action_matcher import ActionMatch
-from onyx.sandbox_proxy.action_matcher import SlackPostMessageMatcher
+``resolve_app_for_url`` is the proxy-side glue that binds a request to a
+connected app before deferring to ``external_apps.matching.match_action``.
+Transient (un-flushed) ``ExternalApp`` objects suffice — it only reads
+``upstream_url_patterns`` (and ``id`` for a warning log), never the DB.
+"""
 
+from __future__ import annotations
 
-def _make_request(
-    *,
-    method: str = "POST",
-    url: str = "https://slack.com/api/chat.postMessage",
-    content: bytes = b"",
-    headers: dict[str | bytes, str | bytes] | None = None,
-) -> http.Request:
-    return http.Request.make(method, url, content=content, headers=headers or {})
+from onyx.db.enums import ExternalAppType
+from onyx.db.models import ExternalApp
+from onyx.sandbox_proxy.action_matcher import resolve_app_for_url
 
 
-def test_happy_path_json() -> None:
-    request = _make_request(
-        content=b'{"channel": "#test", "text": "hi"}',
-        headers={"content-type": "application/json"},
+def _app(
+    patterns: list[str],
+    app_type: ExternalAppType = ExternalAppType.CUSTOM,
+) -> ExternalApp:
+    return ExternalApp(app_type=app_type, upstream_url_patterns=patterns)
+
+
+def test_matches_the_app_whose_pattern_fires() -> None:
+    slack = _app(["https://slack\\.com/api/.*"], ExternalAppType.SLACK)
+    gcal = _app(
+        ["https://www\\.googleapis\\.com/calendar/.*"],
+        ExternalAppType.GOOGLE_CALENDAR,
     )
+    apps = [slack, gcal]
 
-    match = SlackPostMessageMatcher().match(request)
-
-    assert match == ActionMatch(
-        action_type=ACTION_TYPE_SLACK_POST_MESSAGE,
-        payload={"channel": "#test", "text": "hi"},
-    )
+    assert resolve_app_for_url("https://slack.com/api/chat.postMessage", apps) is slack
+    assert resolve_app_for_url("https://www.googleapis.com/calendar/v3/x", apps) is gcal
 
 
-def test_happy_path_urlencoded() -> None:
-    request = _make_request(
-        content=b"channel=%23test&text=hi",
-        headers={"content-type": "application/x-www-form-urlencoded"},
-    )
-
-    match = SlackPostMessageMatcher().match(request)
-
-    assert match == ActionMatch(
-        action_type=ACTION_TYPE_SLACK_POST_MESSAGE,
-        payload={"channel": "#test", "text": "hi"},
-    )
+def test_no_pattern_matches_returns_none() -> None:
+    slack = _app(["https://slack\\.com/api/.*"])
+    assert resolve_app_for_url("https://example.com/", [slack]) is None
 
 
-@pytest.mark.parametrize(
-    "url,override_host",
-    [
-        ("https://foo.slack.com/api/chat.postMessage", None),
-        ("https://slack.com./api/chat.postMessage", None),
-        # mitmproxy lowercases hosts on URL construction; override directly to
-        # exercise the matcher's case folding.
-        ("https://slack.com/api/chat.postMessage", "SLACK.COM"),
-        ("https://slack.com/API/chat.postMessage", None),
-    ],
-    ids=["subdomain", "trailing_dot", "case_host", "case_path"],
-)
-def test_host_path_normalization_is_lenient(
-    url: str, override_host: str | None
-) -> None:
-    request = _make_request(
-        url=url,
-        content=b'{"channel": "#x", "text": "y"}',
-        headers={"content-type": "application/json"},
-    )
-    if override_host is not None:
-        request.host = override_host
-
-    match = SlackPostMessageMatcher().match(request)
-
-    assert match is not None
-    assert match.action_type == ACTION_TYPE_SLACK_POST_MESSAGE
+def test_empty_patterns_never_match() -> None:
+    assert resolve_app_for_url("https://slack.com/api/x", [_app([])]) is None
 
 
-@pytest.mark.parametrize(
-    "url",
-    [
-        "https://example.com/api/chat.postMessage",
-        "https://notslack.com/api/chat.postMessage",
-    ],
-    ids=["non_slack", "slack_lookalike"],
-)
-def test_non_slack_host_returns_none(url: str) -> None:
-    request = _make_request(
-        url=url,
-        content=b'{"channel": "#x", "text": "y"}',
-        headers={"content-type": "application/json"},
-    )
-
-    assert SlackPostMessageMatcher().match(request) is None
+def test_first_app_in_order_wins_on_overlap() -> None:
+    broad = _app(["https://slack\\.com/.*"])
+    narrow = _app(["https://slack\\.com/api/.*"])
+    # Caller passes apps id-ordered; the earlier one wins.
+    assert resolve_app_for_url("https://slack.com/api/x", [broad, narrow]) is broad
 
 
-def test_wrong_method_returns_none() -> None:
-    request = _make_request(method="GET")
-
-    assert SlackPostMessageMatcher().match(request) is None
-
-
-def test_wrong_path_returns_none() -> None:
-    request = _make_request(
-        url="https://slack.com/api/conversations.list",
-        content=b'{"foo": "bar"}',
-        headers={"content-type": "application/json"},
-    )
-
-    assert SlackPostMessageMatcher().match(request) is None
-
-
-@pytest.mark.parametrize(
-    "content,headers",
-    [
-        (b"not-json{", {"content-type": "application/json"}),
-        (b'{"channel": "#x", "text": "y"}', None),
-        (b"[1, 2, 3]", {"content-type": "application/json"}),
-    ],
-    ids=["unparseable_json", "missing_content_type", "json_non_dict"],
-)
-def test_unparseable_body_gates_with_empty_payload(
-    content: bytes, headers: dict[str | bytes, str | bytes] | None
-) -> None:
-    request = _make_request(content=content, headers=headers)
-
-    match = SlackPostMessageMatcher().match(request)
-
-    assert match == ActionMatch(
-        action_type=ACTION_TYPE_SLACK_POST_MESSAGE,
-        payload={},
-    )
+def test_malformed_pattern_is_skipped_not_fatal() -> None:
+    bad = _app(["("])  # invalid regex
+    good = _app(["https://slack\\.com/api/.*"])
+    # The bad pattern is skipped; resolution continues to the good app.
+    assert resolve_app_for_url("https://slack.com/api/x", [bad, good]) is good

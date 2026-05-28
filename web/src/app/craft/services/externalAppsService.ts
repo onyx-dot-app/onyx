@@ -5,6 +5,7 @@
  */
 
 import {
+  EndpointPolicy,
   ExternalAppAdminResponse,
   ExternalAppType,
 } from "@/app/craft/v1/apps/registry";
@@ -27,6 +28,8 @@ interface UpsertExternalAppBody {
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
   enabled: boolean;
+  // Full replace when present; omit to leave stored policies untouched.
+  action_policies?: Record<string, EndpointPolicy>;
 }
 
 export async function upsertExternalApp(
@@ -121,6 +124,7 @@ export async function setExternalAppEnabled(
     auth_template: app.auth_template,
     organization_credentials: app.organization_credentials,
     enabled,
+    // action_policies omitted: a toggle must not touch stored policies.
   });
 }
 

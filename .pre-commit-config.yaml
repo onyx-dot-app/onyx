@@ -145,6 +145,22 @@ repos:
         pass_filenames: false
         files: ^web/(package\.json|bun\.lock|lib/opal/package\.json)$
 
+      - id: root-bun-install
+        name: root bun install
+        description: "Automatically run 'bun install' at the repo root after a checkout, pull or rebase"
+        language: system
+        entry: bun install
+        pass_filenames: false
+        files: ^(package\.json|bun\.lock|(widget|examples/widget|desktop)/package\.json)$
+        stages: [post-checkout, post-merge, post-rewrite]
+      - id: root-bun-install-check
+        name: root bun install
+        description: "Check the root 'bun.lock' is updated"
+        language: system
+        entry: bun install
+        pass_filenames: false
+        files: ^(package\.json|bun\.lock|(widget|examples/widget|desktop)/package\.json)$
+
       - id: oxfmt
         name: oxfmt
         entry: bash -c 'cd web && bunx oxfmt "${@#web/}"' _

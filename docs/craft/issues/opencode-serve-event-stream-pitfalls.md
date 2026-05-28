@@ -1,6 +1,6 @@
 # Opencode-serve event stream: turn termination & delta races
 
-**Audience:** engineers working on the `AGENT_TRANSPORT=serve` path —
+**Audience:** engineers working on the opencode-serve transport —
 specifically the consumer logic that translates an upstream agent
 event stream into ACP packets for the frontend. Captures three real
 bugs found in the translator and the broader event-ordering principles

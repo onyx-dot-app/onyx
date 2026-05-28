@@ -382,6 +382,15 @@ class ExternalAppType(str, PyEnum):
     CUSTOM = "CUSTOM"
 
 
+class EndpointPolicy(str, PyEnum):
+    """What the egress layer does with an outbound request once it has been
+    matched to an action of a connected external app."""
+
+    ALWAYS = "ALWAYS"  # auto-approve: the call proceeds without prompting
+    ASK = "ASK"  # require approval: the user accepts or denies in-session
+    DENY = "DENY"  # block the call outright
+
+
 class PatType(str, PyEnum):
     USER = "USER"
     CRAFT = "CRAFT"

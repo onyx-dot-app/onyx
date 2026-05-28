@@ -31,6 +31,22 @@ export interface OrgCredentialFieldDescriptor {
   secret: boolean;
 }
 
+// Mirrors `onyx.db.enums.EndpointPolicy` on the backend.
+export type EndpointPolicy = "ALWAYS" | "ASK" | "DENY";
+
+export interface EndpointDescriptor {
+  action_id: string;
+  normalised_name: string;
+  description: string;
+}
+
+export interface ActionPolicyView {
+  action_id: string;
+  normalised_name: string;
+  description: string;
+  state: EndpointPolicy;
+}
+
 export interface BuiltInExternalAppDescriptor {
   app_type: ExternalAppType;
   name: string;
@@ -39,6 +55,7 @@ export interface BuiltInExternalAppDescriptor {
   auth_template: Record<string, string>;
   required_org_credential_fields: OrgCredentialFieldDescriptor[];
   setup_instructions: string;
+  actions: EndpointDescriptor[];
 }
 
 export interface ExternalAppAdminResponse {
@@ -50,6 +67,7 @@ export interface ExternalAppAdminResponse {
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
   enabled: boolean;
+  actions: ActionPolicyView[];
 }
 
 export interface ExternalAppUserResponse {
