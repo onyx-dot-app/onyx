@@ -168,6 +168,7 @@ APP_WORKLOAD_SUFFIXES = [
     'celery-worker-monitoring',
     'celery-worker-user-file-processing',
     'celery-worker-scheduled-tasks',
+    'sandbox-proxy',
 ]
 
 for suffix in APP_WORKLOAD_SUFFIXES:
