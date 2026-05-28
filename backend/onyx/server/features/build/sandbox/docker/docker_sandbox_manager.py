@@ -71,6 +71,7 @@ import time
 from collections.abc import Generator
 from pathlib import Path
 from typing import TypedDict
+from urllib.parse import urlparse
 from uuid import UUID
 
 from docker import DockerClient
@@ -91,6 +92,9 @@ from onyx.server.features.build.configs import SANDBOX_DOCKER_MEMORY_LIMIT
 from onyx.server.features.build.configs import SANDBOX_DOCKER_NETWORK
 from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
 from onyx.server.features.build.configs import SANDBOX_DOCKER_VOLUME_PREFIX
+from onyx.server.features.build.configs import SANDBOX_PROXY_CA_VOLUME_NAME
+from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
+from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -143,6 +147,22 @@ MANAGED_SKILLS_PATH = f"{WORKSPACE_ROOT}/managed/skills"
 # which are also module-level and not env-tunable.
 CONTAINER_READY_TIMEOUT_SECONDS = 120
 CONTAINER_READY_POLL_INTERVAL_SECONDS = 1.0
+
+
+# Egress proxy file paths inside the sandbox container. Matched by
+# ``firewall-init.sh``: ``CA_SRC`` defaults to ``/sandbox-ca/ca.crt`` and
+# ``CA_DST`` to ``/etc/ssl/sandbox/ca-bundle.crt``. The bundle dir lives
+# in the container's writable layer (not a separate volume) since only
+# the init step writes to it and only the agent reads it.
+_PROXY_CA_SOURCE_DIR = "/sandbox-ca"
+_PROXY_CA_BUNDLE_DIR = "/etc/ssl/sandbox"
+_PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
+
+# Per-session egress tagging plugin, baked into the sandbox image (see
+# kubernetes/docker/Dockerfile). Path must match the COPY destination
+# there. Registered in the opencode config only when the proxy is wired
+# up; otherwise it would no-op (no HTTP(S)_PROXY to re-tag).
+_OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
 
 
 def _build_nextjs_start_script(
@@ -280,11 +300,67 @@ def build_sandbox_labels(
     return labels
 
 
-class ContainerCreateKwargs(TypedDict):
+def _compute_no_proxy_list(api_server_url: str) -> str:
+    """Hostnames the sandbox should reach directly, bypassing the proxy.
+
+    Mirrors ``kubernetes_sandbox_manager._compute_no_proxy_list``. The api
+    server is in the list because onyx-cli inside the sandbox uses the
+    PAT to call back -- no need (or value) to gate that hop.
+    """
+    entries = ["127.0.0.1", "localhost"]
+    if api_server_url:
+        hostname = urlparse(api_server_url).hostname
+        if hostname:
+            entries.append(hostname)
+    return ",".join(entries)
+
+
+def _proxy_env_vars(
+    *,
+    sandbox_proxy_host: str,
+    sandbox_proxy_port: int,
+    api_server_url: str,
+) -> dict[str, str]:
+    """Proxy-enabled env additions for the sandbox container.
+
+    Mirrors ``kubernetes_sandbox_manager._proxy_main_container_env_vars``
+    but layered on the docker env dict instead of a list of V1EnvVars.
+    Includes the firewall-init.sh contract vars (``SANDBOX_PROXY_*``,
+    ``CA_BUNDLE_SRC``/``DST``) since the script runs as the container's
+    entrypoint wrapper and reads them from its own environment.
+    """
+    proxy_url = f"http://{sandbox_proxy_host}:{sandbox_proxy_port}"
+    no_proxy = _compute_no_proxy_list(api_server_url)
+    return {
+        # firewall-init.sh contract
+        "SANDBOX_PROXY_HOST": sandbox_proxy_host,
+        "SANDBOX_PROXY_PORT": str(sandbox_proxy_port),
+        "SANDBOX_PROXY_BOOTSTRAP_MODE": "entrypoint",
+        "SANDBOX_PROXY_CA_BUNDLE_SRC": f"{_PROXY_CA_SOURCE_DIR}/ca.crt",
+        "SANDBOX_PROXY_CA_BUNDLE_DST": _PROXY_CA_BUNDLE_FILE,
+        # Agent-side proxy + CA wiring
+        "HTTPS_PROXY": proxy_url,
+        "HTTP_PROXY": proxy_url,
+        "https_proxy": proxy_url,
+        "http_proxy": proxy_url,
+        "NO_PROXY": no_proxy,
+        "no_proxy": no_proxy,
+        # SDK-specific CA env vars for libs that bypass /etc/ssl/certs.
+        "NODE_EXTRA_CA_CERTS": _PROXY_CA_BUNDLE_FILE,
+        "REQUESTS_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
+        "SSL_CERT_FILE": _PROXY_CA_BUNDLE_FILE,
+        "AWS_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
+        "CURL_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
+        "GIT_SSL_CAINFO": _PROXY_CA_BUNDLE_FILE,
+    }
+
+
+class ContainerCreateKwargs(TypedDict, total=False):
     """Kwargs we pass to ``DockerClient.containers.run``.
 
     Typed so ``test_docker_manager_config.py`` can read specific fields
-    without ``cast``.
+    without ``cast``. ``total=False`` because proxy-mode adds optional
+    keys (``cap_add``) that legacy posture omits.
     """
 
     name: str
@@ -294,6 +370,7 @@ class ContainerCreateKwargs(TypedDict):
     labels: dict[str, str]
     user: str
     cap_drop: list[str]
+    cap_add: list[str]
     security_opt: list[str]
     privileged: bool
     read_only: bool
@@ -320,11 +397,15 @@ def build_container_create_kwargs(
     opencode_password: str,
     opencode_config_json: str,
     compose_project: str | None = None,
+    sandbox_proxy_host: str | None = None,
+    sandbox_proxy_port: int | None = None,
+    proxy_ca_volume_name: str | None = None,
 ) -> ContainerCreateKwargs:
     """Build the kwargs dict for ``DockerClient.containers.create``.
 
-    Sandbox isolation invariants enforced here (locked down by
-    ``test_docker_manager_config.py``):
+    Two postures gated on ``sandbox_proxy_host`` truthiness:
+
+    Legacy (proxy disabled, default in tests/dev without proxy stack):
 
     - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL, plus
       ``OPENCODE_SERVER_PASSWORD`` and ``OPENCODE_CONFIG_CONTENT``.
@@ -338,6 +419,26 @@ def build_container_create_kwargs(
       dedicated ``onyx_craft_sandbox`` bridge). Does NOT join compose's
       default network; api_server / postgres / redis / minio are
       unreachable by service name.
+
+    Proxy-enabled (``sandbox_proxy_host`` set; production self-host
+    compose with ``--include-craft``):
+
+    - Env layered with ``HTTPS_PROXY`` / SDK CA vars + the
+      ``firewall-init.sh`` contract vars (``SANDBOX_PROXY_BOOTSTRAP_MODE=
+      entrypoint``, ``CA_BUNDLE_SRC``/``DST``). The legacy 4-key core is
+      preserved; proxy keys are layered on top.
+    - Command swapped to
+      ``["/workspace/firewall-init.sh", "/workspace/entrypoint.sh"]`` so
+      the init script runs first; ``capsh`` drops caps + setuid's to UID
+      1000 + exec's the agent entrypoint.
+    - ``cap_add=["NET_ADMIN", "SETPCAP"]`` (NET_ADMIN runs iptables;
+      SETPCAP authorises ``capsh --drop=all``). Both are dropped from
+      the bounding set by capsh before the agent execve, so the running
+      container ends up with no caps at all.
+    - ``user="0:0"`` so the init starts as root for iptables. capsh
+      then drops to UID 1000.
+    - The named proxy-CA volume is mounted read-only at ``/sandbox-ca``
+      for ``firewall-init.sh`` to read ``ca.crt``.
 
     ``ONYX_SERVER_URL`` must be the *public* Onyx URL (the one onyx-cli
     inside the sandbox will hit over HTTPS) — not an internal compose DNS
@@ -361,7 +462,7 @@ def build_container_create_kwargs(
             api_server_url,
         )
 
-    env = {
+    env: dict[str, str] = {
         "ONYX_PAT": onyx_pat,
         "ONYX_SERVER_URL": api_server_url,
         OPENCODE_SERVER_PASSWORD: opencode_password,
@@ -369,30 +470,61 @@ def build_container_create_kwargs(
     }
 
     security_opts = ["no-new-privileges:true"]
+    volumes: dict[str, dict[str, str]] = {
+        volume_name: {"bind": SESSIONS_ROOT, "mode": "rw"},
+    }
 
-    return ContainerCreateKwargs(
-        name=_sandbox_container_name(sandbox_id),
-        image=image,
-        command=["/workspace/entrypoint.sh"],
-        detach=True,
-        labels=build_sandbox_labels(
+    if sandbox_proxy_host:
+        # All-or-nothing: port + ca volume must be supplied when host is.
+        if sandbox_proxy_port is None or not proxy_ca_volume_name:
+            raise ValueError(
+                "sandbox_proxy_host is set but sandbox_proxy_port or "
+                "proxy_ca_volume_name is missing; proxy posture requires all "
+                "three"
+            )
+        env.update(
+            _proxy_env_vars(
+                sandbox_proxy_host=sandbox_proxy_host,
+                sandbox_proxy_port=sandbox_proxy_port,
+                api_server_url=api_server_url,
+            )
+        )
+        volumes[proxy_ca_volume_name] = {
+            "bind": _PROXY_CA_SOURCE_DIR,
+            "mode": "ro",
+        }
+        command = ["/workspace/firewall-init.sh", "/workspace/entrypoint.sh"]
+        user = "0:0"
+        cap_add = ["NET_ADMIN", "SETPCAP"]
+    else:
+        command = ["/workspace/entrypoint.sh"]
+        user = "1000:1000"
+        cap_add = []
+
+    kwargs: ContainerCreateKwargs = {
+        "name": _sandbox_container_name(sandbox_id),
+        "image": image,
+        "command": command,
+        "detach": True,
+        "labels": build_sandbox_labels(
             sandbox_id, tenant_id, user_id, compose_project=compose_project
         ),
-        user="1000:1000",
-        cap_drop=["ALL"],
-        security_opt=security_opts,
-        privileged=False,
-        read_only=False,
-        network=network,
-        environment=env,
-        volumes={
-            volume_name: {"bind": SESSIONS_ROOT, "mode": "rw"},
-        },
-        mem_limit=memory_limit,
-        nano_cpus=int(cpu_limit * 1_000_000_000),
-        restart_policy={"Name": "unless-stopped"},
+        "user": user,
+        "cap_drop": ["ALL"],
+        "security_opt": security_opts,
+        "privileged": False,
+        "read_only": False,
+        "network": network,
+        "environment": env,
+        "volumes": volumes,
+        "mem_limit": memory_limit,
+        "nano_cpus": int(cpu_limit * 1_000_000_000),
+        "restart_policy": {"Name": "unless-stopped"},
         # No docker socket mount. No S3/MinIO env. No FileStore credentials.
-    )
+    }
+    if cap_add:
+        kwargs["cap_add"] = cap_add
+    return kwargs
 
 
 class DockerSandboxManager(SandboxManager):
@@ -550,6 +682,12 @@ class DockerSandboxManager(SandboxManager):
             # opencode-serve reads provider config from env at startup;
             # must be in create_kwargs before the container ever runs.
             opencode_password = secrets.token_urlsafe(32)
+            # Only register the egress-tagging plugin when the proxy is
+            # wired up; otherwise it would no-op (no HTTP(S)_PROXY to
+            # re-tag). Mirrors the K8s manager's gating.
+            session_tag_plugins = (
+                [_OPENCODE_SESSION_TAG_PLUGIN_PATH] if SANDBOX_PROXY_HOST else None
+            )
             opencode_config_json = json.dumps(
                 build_opencode_config(
                     provider=llm_config.provider,
@@ -557,6 +695,7 @@ class DockerSandboxManager(SandboxManager):
                     api_key=llm_config.api_key or None,
                     api_base=llm_config.api_base,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    plugins=session_tag_plugins,
                 )
             )
             self._ensure_sandbox_network()
@@ -619,6 +758,10 @@ class DockerSandboxManager(SandboxManager):
         opencode_config_json: str,
     ) -> Container:
         """Run docker create + start with our security/network/labels invariants."""
+        # Proxy posture is gated on SANDBOX_PROXY_HOST; threaded through
+        # build_container_create_kwargs to layer on the legacy posture
+        # without bifurcating this call site.
+        proxy_host = SANDBOX_PROXY_HOST or None
         create_kwargs = build_container_create_kwargs(
             sandbox_id=sandbox_id,
             user_id=user_id,
@@ -633,6 +776,9 @@ class DockerSandboxManager(SandboxManager):
             opencode_password=opencode_password,
             opencode_config_json=opencode_config_json,
             compose_project=self._compose_project,
+            sandbox_proxy_host=proxy_host,
+            sandbox_proxy_port=SANDBOX_PROXY_PORT if proxy_host else None,
+            proxy_ca_volume_name=(SANDBOX_PROXY_CA_VOLUME_NAME if proxy_host else None),
         )
         try:
             # Types pinned by ContainerCreateKwargs; ty can't match run's overloads.

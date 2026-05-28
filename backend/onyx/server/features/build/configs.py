@@ -179,6 +179,14 @@ SANDBOX_PROXY_CA_VOLUME_PATH = os.environ.get(
     "SANDBOX_PROXY_CA_VOLUME_PATH", "/var/lib/sandbox-proxy/ca"
 )
 
+# Docker named-volume name for the proxy CA. The docker_sandbox_manager
+# mounts it read-only into each sandbox container so firewall-init.sh can
+# install ca.crt into the system trust store. The proxy's compose service
+# mounts the same volume read-write. Ignored when SANDBOX_BACKEND=kubernetes.
+SANDBOX_PROXY_CA_VOLUME_NAME = os.environ.get(
+    "SANDBOX_PROXY_CA_VOLUME_NAME", "sandbox_proxy_ca"
+)
+
 # ============================================================================
 # Docker Sandbox Configuration
 # Only used when SANDBOX_BACKEND = "docker" (self-hosted docker-compose)
