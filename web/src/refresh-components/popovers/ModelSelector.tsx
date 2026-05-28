@@ -6,6 +6,7 @@ import { getModelIcon } from "@/lib/languageModels";
 import { Button, SelectButton, Popover, Divider } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import useScreenSize from "@/hooks/useScreenSize";
 import { LLMOption } from "@/refresh-components/popovers/interfaces";
 import ModelListContent from "@/refresh-components/popovers/ModelListContent";
 
@@ -44,8 +45,11 @@ export default function ModelSelector({
   const anchorRef = useRef<HTMLElement | null>(null);
 
   const settings = useSettingsContext();
+  const { isMobile } = useScreenSize();
+  // Multi-model (side-by-side) comparison is a poor fit for phone widths, so it's
+  // disabled on mobile regardless of the workspace setting.
   const multiModelAllowed =
-    settings?.settings?.multi_model_chat_enabled ?? true;
+    !isMobile && (settings?.settings?.multi_model_chat_enabled ?? true);
 
   const isMultiModel = selectedModels.length > 1;
   const atMax = selectedModels.length >= MAX_MODELS || !multiModelAllowed;
