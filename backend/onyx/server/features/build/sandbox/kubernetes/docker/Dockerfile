@@ -87,9 +87,24 @@ COPY --from=oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab7
 COPY --from=peakcom/s5cmd:v2.3.0@sha256:2ff939e2ee3c76adcadd78dbfc3e2569b18a3743ed9dcfccb1ec589af7fb9903 \
     /s5cmd /usr/local/bin/s5cmd
 
+# Pin opencode's cache dir so the build-time warm-up below and the runtime
+# `opencode serve` agree on one location. The entrypoint overrides only
+# XDG_DATA_HOME (-> /workspace, an emptyDir wiped each boot), so the catalog
+# must live under XDG_CACHE_HOME, which stays in this image layer.
+ENV XDG_CACHE_HOME=/home/sandbox/.cache
+
 USER sandbox
 RUN curl -fsSL https://opencode.ai/install \
     | bash -s -- --version "${OPENCODE_VERSION}" --no-modify-path
+# Warm opencode's models.dev catalog into its on-disk cache while egress is
+# still open (build time). At runtime firewall-init.sh locks egress to the
+# proxy, which denies models.dev; without a warm cache `opencode serve` can't
+# resolve any model, never answers GET /doc, and provisioning's readiness
+# check times out. See docs/craft/opencode-serve-test-report.md.
+RUN PATH="/home/sandbox/.opencode/bin:${PATH}" opencode models --refresh \
+    && { echo "=== opencode cache dump (expect catalog under ${XDG_CACHE_HOME}/opencode) ==="; \
+         find /home/sandbox/.cache /home/sandbox/.local/share /home/sandbox/.config \
+           -maxdepth 4 2>/dev/null | grep -iE 'opencode|models' | head -60; true; }
 # Pre-warm Bun's tarball cache so per-session installs hit a local store.
 RUN cd /workspace/templates/outputs/web && \
     bun install --frozen-lockfile && \
