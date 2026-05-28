@@ -20,10 +20,10 @@ func IsAvailable(port int) bool {
 }
 
 // FindAvailable scans TCP ports starting from base up to base+maxRange-1,
-// returning the first port that is bindable and not in the claimed set.
-// Pass nil for claimed if cross-caller deduplication is not needed.
-// When the base port is occupied, logs a warning identifying the process
-// holding it and the fallback port chosen.
+// returning the first port that is bindable and not in the claimed set. Pass
+// nil for claimed if cross-caller deduplication is not needed. When the base
+// port is occupied, logs a warning identifying the process holding it and the
+// fallback port chosen.
 func FindAvailable(base, maxRange int, claimed map[int]bool) (int, error) {
 	if !claimed[base] && IsAvailable(base) {
 		return base, nil
@@ -38,7 +38,7 @@ func FindAvailable(base, maxRange int, claimed map[int]bool) (int, error) {
 		if !IsAvailable(port) {
 			continue
 		}
-		log.Warnf("Port %d is in use by %s, using available port %d instead", base, proc, port)
+		log.Warnf("Port %d is in use by %s, using available port %d instead.", base, proc, port)
 		return port, nil
 	}
 	return 0, fmt.Errorf("no available port found in range %d-%d", base, base+maxRange-1)
