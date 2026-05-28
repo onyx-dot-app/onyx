@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { mutate } from "swr";
 import { ContentAction } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@/hooks/useToast";

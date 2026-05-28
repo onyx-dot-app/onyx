@@ -286,6 +286,14 @@ class SharingScope(str, PyEnum):
     PUBLIC_ORG = "public_org"
 
 
+class ApprovalDecision(str, PyEnum):
+    """Terminal decision on a gated action; `decision IS NULL` means pending."""
+
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+
+
 class ScheduledTaskStatus(str, PyEnum):
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"
@@ -372,6 +380,15 @@ class ExternalAppType(str, PyEnum):
     SLACK = "SLACK"
     LINEAR = "LINEAR"
     CUSTOM = "CUSTOM"
+
+
+class EndpointPolicy(str, PyEnum):
+    """What the egress layer does with an outbound request once it has been
+    matched to an action of a connected external app."""
+
+    ALWAYS = "ALWAYS"  # auto-approve: the call proceeds without prompting
+    ASK = "ASK"  # require approval: the user accepts or denies in-session
+    DENY = "DENY"  # block the call outright
 
 
 class PatType(str, PyEnum):

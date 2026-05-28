@@ -1,6 +1,6 @@
 /* Hoverable — item transitions */
 .hoverable-item {
-  transition: opacity 150ms ease-in-out;
+  transition: opacity var(--interactive-duration) var(--interactive-easing);
 }
 
 .hoverable-item[data-hoverable-variant="appear-on-hover"] {

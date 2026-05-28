@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Button, Text } from "@opal/components";
@@ -16,6 +16,7 @@ import {
   disconnectUserFromApp,
   startExternalAppOAuth,
 } from "@/app/craft/services/externalAppsService";
+import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { toast } from "@/hooks/useToast";
 
 export default function ExternalAppsUserPage() {
@@ -68,8 +69,15 @@ interface ProviderConnectRowProps {
 
 function ProviderConnectRow({ userApp, onChange }: ProviderConnectRowProps) {
   const [isStarting, setIsStarting] = useState(false);
+  const [credModalOpen, setCredModalOpen] = useState(false);
 
   async function connect() {
+    // Custom apps have no OAuth provider — collect the user's credentials
+    // directly via a popup instead of redirecting to an authorize URL.
+    if (userApp.app_type === "CUSTOM") {
+      setCredModalOpen(true);
+      return;
+    }
     setIsStarting(true);
     try {
       const { authorize_url } = await startExternalAppOAuth(userApp.id);
@@ -97,35 +105,50 @@ function ProviderConnectRow({ userApp, onChange }: ProviderConnectRowProps) {
   }
 
   const Logo = getAppTypeLogo(userApp.app_type);
+  const connectLabel =
+    userApp.app_type === "CUSTOM"
+      ? "Connect"
+      : isStarting
+        ? "Redirecting…"
+        : "Connect";
   return (
-    <Card>
-      <div className="flex items-center gap-3 w-full">
-        <Logo className="w-8 h-8" />
-        <div className="flex-1 flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            <Text font="main-ui-action">{userApp.name}</Text>
-            {userApp.authenticated && (
-              <SvgCheckCircle className="w-4 h-4 text-status-success-05" />
-            )}
+    <>
+      <Card>
+        <div className="flex items-center gap-3 w-full">
+          <Logo className="w-8 h-8" />
+          <div className="flex-1 flex flex-col gap-0.5">
+            <div className="flex items-center gap-2">
+              <Text font="main-ui-action">{userApp.name}</Text>
+              {userApp.authenticated && (
+                <SvgCheckCircle className="w-4 h-4 text-status-success-05" />
+              )}
+            </div>
+            <Text font="secondary-body" color="text-03">
+              {userApp.authenticated ? "Connected" : userApp.description}
+            </Text>
           </div>
-          <Text font="secondary-body" color="text-03">
-            {userApp.authenticated ? "Connected" : userApp.description}
-          </Text>
+          {userApp.authenticated ? (
+            <Button
+              prominence="secondary"
+              disabled={isStarting}
+              onClick={disconnect}
+            >
+              {isStarting ? "…" : "Disconnect"}
+            </Button>
+          ) : (
+            <Button disabled={isStarting} onClick={connect}>
+              {connectLabel}
+            </Button>
+          )}
         </div>
-        {userApp.authenticated ? (
-          <Button
-            prominence="secondary"
-            disabled={isStarting}
-            onClick={disconnect}
-          >
-            {isStarting ? "…" : "Disconnect"}
-          </Button>
-        ) : (
-          <Button disabled={isStarting} onClick={connect}>
-            {isStarting ? "Redirecting…" : "Connect"}
-          </Button>
-        )}
-      </div>
-    </Card>
+      </Card>
+
+      <UserCredentialsModal
+        open={credModalOpen}
+        onClose={() => setCredModalOpen(false)}
+        onSaved={onChange}
+        userApp={userApp}
+      />
+    </>
   );
 }

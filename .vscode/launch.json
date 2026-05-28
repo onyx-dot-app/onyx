@@ -154,6 +154,7 @@
       "request": "launch",
       "module": "uvicorn",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -268,6 +269,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -299,6 +301,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -330,6 +333,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -362,6 +366,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -393,6 +398,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -425,6 +431,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -457,6 +464,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -488,6 +496,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "ENABLE_MULTIPASS_INDEXING": "false",
@@ -520,6 +529,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -880,13 +890,12 @@
       }
     },
     {
-      "name": "Clear and Restart External Volumes and Containers",
+      "name": "Start External Infrastructure Containers",
       "type": "node",
       "request": "launch",
+      "preLaunchTask": "ods-compose-dev-infra",
       "runtimeExecutable": "bash",
-      "runtimeArgs": [
-        "${workspaceFolder}/backend/scripts/restart_containers.sh"
-      ],
+      "runtimeArgs": ["-c", "true"],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "presentation": {
@@ -922,6 +931,7 @@
       "request": "launch",
       "program": "scripts/dev_run_background_jobs.py",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",

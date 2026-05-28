@@ -25,62 +25,61 @@ from tests.external_dependency_unit.craft._test_helpers import reset_built_in_sk
 _FRONTMATTER = "---\nname: {slug}\ndescription: {slug}\n---\n"
 
 
+def _write_skill_dir(
+    skills_root: Path,
+    skill_id: str,
+    *,
+    template_body: str | None = None,
+    extra_files: dict[str, str] | None = None,
+) -> None:
+    """Write a built-in's on-disk content at ``skills_root/<skill_id>`` — the
+    same ``SKILLS_TEMPLATE_PATH/<built_in_skill_id>`` layout production uses, so
+    the definition's computed ``source_dir`` resolves here once the caller has
+    redirected ``SKILLS_TEMPLATE_PATH`` at ``skills_root``.
+    """
+    source_dir = skills_root / skill_id
+    source_dir.mkdir(parents=True)
+    if template_body is not None:
+        (source_dir / "SKILL.md.template").write_text(template_body, encoding="utf-8")
+    else:
+        (source_dir / "SKILL.md").write_text(
+            _FRONTMATTER.format(slug=skill_id), encoding="utf-8"
+        )
+    for rel, content in (extra_files or {}).items():
+        path = source_dir / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+
 def _register_built_in(
     monkeypatch: pytest.MonkeyPatch,
     db_session: Session,
+    skills_root: Path,
     *,
-    source_dir: Path,
+    extra_files: dict[str, str] | None = None,
+    template_body: str | None = None,
 ) -> str:
-    """Register a fresh built-in definition + Skill row for one test.
-
-    ``has_template`` is computed from ``source_dir`` (whether a
-    ``SKILL.md.template`` exists), so callers just write the right files.
-    Returns the synthetic ``built_in_skill_id`` (also used as slug).
+    """Register a fresh synthetic built-in (definition + Skill row) whose
+    content lives under ``skills_root/<id>``, redirecting ``SKILLS_TEMPLATE_PATH``
+    so its computed ``source_dir`` resolves there. Returns the synthetic
+    ``built_in_skill_id`` (also the slug and on-disk dir name).
     """
+    monkeypatch.setattr(built_in_module, "SKILLS_TEMPLATE_PATH", str(skills_root))
     built_in_skill_id = f"test-builtin-{uuid4().hex[:8]}"
-    definition = BuiltInSkillDefinition(
-        built_in_skill_id=built_in_skill_id,
-        source_dir=source_dir,
+    _write_skill_dir(
+        skills_root,
+        built_in_skill_id,
+        template_body=template_body,
+        extra_files=extra_files,
     )
-    monkeypatch.setitem(built_in_module.BUILT_IN_SKILLS, built_in_skill_id, definition)
+    monkeypatch.setitem(
+        built_in_module.BUILT_IN_SKILLS,
+        built_in_skill_id,
+        BuiltInSkillDefinition(built_in_skill_id=built_in_skill_id),
+    )
     make_built_in_skill_row(db_session, built_in_skill_id=built_in_skill_id)
     db_session.commit()
     return built_in_skill_id
-
-
-def _write_static_dir(
-    tmp_path: Path,
-    slug: str,
-    extra_files: dict[str, str] | None = None,
-) -> Path:
-    """Create a source dir under ``tmp_path`` with SKILL.md + optional siblings."""
-    source_dir = tmp_path / slug
-    source_dir.mkdir(parents=True)
-    (source_dir / "SKILL.md").write_text(
-        _FRONTMATTER.format(slug=slug), encoding="utf-8"
-    )
-    for rel, content in (extra_files or {}).items():
-        path = source_dir / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
-    return source_dir
-
-
-def _write_template_dir(
-    tmp_path: Path,
-    slug: str,
-    *,
-    template_body: str,
-    extra_files: dict[str, str] | None = None,
-) -> Path:
-    source_dir = tmp_path / slug
-    source_dir.mkdir(parents=True)
-    (source_dir / "SKILL.md.template").write_text(template_body, encoding="utf-8")
-    for rel, content in (extra_files or {}).items():
-        path = source_dir / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
-    return source_dir
 
 
 class TestBuiltInFromDisk:
@@ -91,14 +90,16 @@ class TestBuiltInFromDisk:
         test_user: User,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        source = _write_static_dir(
-            tmp_path, "pptx", {"scripts/preview.py": "print('hi')"}
+        slug = _register_built_in(
+            monkeypatch,
+            db_session,
+            tmp_path,
+            extra_files={"scripts/preview.py": "print('hi')"},
         )
-        slug = _register_built_in(monkeypatch, db_session, source_dir=source)
 
         files = build_skills_fileset_for_user(test_user, db_session)
 
-        assert b"name: pptx" in files[f"{slug}/SKILL.md"]
+        assert f"name: {slug}".encode() in files[f"{slug}/SKILL.md"]
         assert files[f"{slug}/scripts/preview.py"] == b"print('hi')"
 
     def test_excluded_dirs_and_dotfiles_are_skipped(
@@ -108,16 +109,16 @@ class TestBuiltInFromDisk:
         test_user: User,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        source = _write_static_dir(
+        slug = _register_built_in(
+            monkeypatch,
+            db_session,
             tmp_path,
-            "pptx",
-            {
+            extra_files={
                 "__pycache__/cached.pyc": "junk",
                 ".DS_Store": "junk",
                 "scripts/.hidden": "junk",
             },
         )
-        slug = _register_built_in(monkeypatch, db_session, source_dir=source)
 
         files = build_skills_fileset_for_user(test_user, db_session)
 
@@ -144,20 +145,12 @@ class TestBuiltInTemplate:
             f"{_FRONTMATTER.format(slug='company-search')}"
             "Sources:\n{{AVAILABLE_SOURCES_SECTION}}\n"
         )
-        source = _write_template_dir(
-            tmp_path, "company-search", template_body=template_body
-        )
-        # Redirect the company-search definition at the tmp_path source
-        # and (re)create its row. reset_* is idempotent against the
-        # migration-seeded canonical row.
-        monkeypatch.setitem(
-            built_in_module.BUILT_IN_SKILLS,
-            "company-search",
-            BuiltInSkillDefinition(
-                built_in_skill_id="company-search",
-                source_dir=source,
-            ),
-        )
+        # Redirect SKILLS_TEMPLATE_PATH at tmp_path and write the template under
+        # company-search/ — the registry's existing definition computes its
+        # source_dir from there, so no definition swap is needed. reset_* is
+        # idempotent against the migration-seeded canonical row.
+        monkeypatch.setattr(built_in_module, "SKILLS_TEMPLATE_PATH", str(tmp_path))
+        _write_skill_dir(tmp_path, "company-search", template_body=template_body)
         reset_built_in_skill_row(db_session, built_in_skill_id="company-search")
         db_session.commit()
         make_cc_pair(db_session, DocumentSource.SLACK)
@@ -179,19 +172,12 @@ class TestBuiltInTemplate:
             f"{_FRONTMATTER.format(slug='company-search')}"
             "{{AVAILABLE_SOURCES_SECTION}}\n"
         )
-        source = _write_template_dir(
+        monkeypatch.setattr(built_in_module, "SKILLS_TEMPLATE_PATH", str(tmp_path))
+        _write_skill_dir(
             tmp_path,
             "company-search",
             template_body=template_body,
             extra_files={"scripts/search.py": "print('search')"},
-        )
-        monkeypatch.setitem(
-            built_in_module.BUILT_IN_SKILLS,
-            "company-search",
-            BuiltInSkillDefinition(
-                built_in_skill_id="company-search",
-                source_dir=source,
-            ),
         )
         reset_built_in_skill_row(db_session, built_in_skill_id="company-search")
         db_session.commit()

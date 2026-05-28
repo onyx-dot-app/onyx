@@ -1,0 +1,6 @@
+LABEL_SANDBOX_ID = "onyx.app/sandbox-id"
+LABEL_TENANT_ID = "onyx.app/tenant-id"
+LABEL_K8S_COMPONENT = "app.kubernetes.io/component"
+LABEL_K8S_COMPONENT_SANDBOX = "sandbox"
+LABEL_K8S_MANAGED_BY = "app.kubernetes.io/managed-by"
+LABEL_K8S_MANAGED_BY_ONYX = "onyx"

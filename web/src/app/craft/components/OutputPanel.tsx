@@ -229,12 +229,15 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   }, [webappInfo?.webapp_url, session?.id, cachedForSessionId]);
 
-  // Refresh when web/ file changes or after restore
+  // Refresh when web/ file changes or after restore.
   // webappNeedsRefresh is a counter that increments on each edit/restore,
-  // ensuring each triggers a new refresh even if the panel is already open
+  // ensuring each triggers a new refresh even if the panel is already open.
+  // Also bump previewRefreshKey so the iframe actually remounts — SWR
+  // re-fetching webapp-info isn't enough when the URL stays the same.
   useEffect(() => {
     if (webappNeedsRefresh > 0 && isFullyOpen && session?.id) {
       mutate();
+      setPreviewRefreshKey((k) => k + 1);
     }
   }, [webappNeedsRefresh, isFullyOpen, mutate, session?.id]);
 

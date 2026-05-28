@@ -7,11 +7,13 @@ These tests pin the contract for the push pipeline:
 - ``hydrate_sandbox_skills`` — single-sandbox cold-start hydration.
 - ``build_skills_fileset_for_user`` — exercised transitively.
 
-All tests run against real Postgres and a real ``LocalSandboxManager`` bound
-to ``tmp_path``. We assert observable outcomes only — files on disk, file
-contents, log records. The single sanctioned mock is ``StubSandboxManager``
-in ``test_one_failing_sandbox_does_not_abort_push_to_others``, used to inject
-a ``FatalWriteError`` we cannot reproduce against the real filesystem.
+All tests run against real Postgres and a real ``KubernetesSandboxManager``
+bound to a kind cluster (see ``conftest.SandboxHandle``). We assert
+observable outcomes only — files in the sandbox pod (queried via a
+``WorkspaceProxy`` that mirrors ``pathlib.Path``), file contents, log
+records. The single sanctioned mock is ``StubSandboxManager`` in
+``test_one_failing_sandbox_does_not_abort_push_to_others``, used to inject
+a ``FatalWriteError`` we cannot reproduce against a real cluster.
 """
 
 from __future__ import annotations
@@ -55,14 +57,17 @@ from tests.external_dependency_unit.craft._test_helpers import make_group
 from tests.external_dependency_unit.craft._test_helpers import make_user
 from tests.external_dependency_unit.craft._test_helpers import reset_built_in_skill_row
 from tests.external_dependency_unit.craft.conftest import SandboxHandle
+from tests.external_dependency_unit.craft.conftest import WorkspaceProxy
 from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 
 
-def _skill_file_path(workspace: Path, slug: str, name: str = "SKILL.md") -> Path:
+def _skill_file_path(
+    workspace: WorkspaceProxy, slug: str, name: str = "SKILL.md"
+) -> WorkspaceProxy:
     return workspace / "managed" / "skills" / slug / name
 
 
-def _skills_dir(workspace: Path) -> Path:
+def _skills_dir(workspace: WorkspaceProxy) -> WorkspaceProxy:
     return workspace / "managed" / "skills"
 
 
@@ -90,7 +95,7 @@ class TestSkillPush:
 
         # Delete sandbox rows created by granted_users (they lack FS
         # provisioning) and re-provision via handle.provision_for.
-        workspaces: dict[UUID, Path] = {}
+        workspaces: dict[UUID, WorkspaceProxy] = {}
         for user in (user_a, user_b, user_c):
             row = db_session.query(Sandbox).filter(Sandbox.user_id == user.id).one()
             db_session.delete(row)
@@ -132,7 +137,7 @@ class TestSkillPush:
             db_session.query(UserGroup).filter(UserGroup.name == "engineering").one()
         )
 
-        workspaces: dict[UUID, Path] = {}
+        workspaces: dict[UUID, WorkspaceProxy] = {}
         for user in (user_a, user_b, user_c):
             row = db_session.query(Sandbox).filter(Sandbox.user_id == user.id).one()
             db_session.delete(row)
@@ -545,7 +550,8 @@ class TestSkillPush:
         # Build a synthetic built-in skill source tree with a mix of files
         # the exclusion rule should keep IN and files it must keep OUT.
         slug = f"excl-builtin-{uuid4().hex[:6]}"
-        source_dir = tmp_path / "builtin_src" / slug
+        skills_root = tmp_path / "builtin_src"
+        source_dir = skills_root / slug
         source_dir.mkdir(parents=True)
 
         # In: SKILL.md + a vanilla script.
@@ -561,13 +567,13 @@ class TestSkillPush:
         pycache.mkdir()
         (pycache / "foo.pyc").write_bytes(b"\x00\x01")
 
+        # source_dir is computed as SKILLS_TEMPLATE_PATH/<id>; redirect the root
+        # at our synthetic tree so the definition resolves to source_dir.
+        monkeypatch.setattr(built_in_module, "SKILLS_TEMPLATE_PATH", str(skills_root))
         monkeypatch.setitem(
             built_in_module.BUILT_IN_SKILLS,
             slug,
-            BuiltInSkillDefinition(
-                built_in_skill_id=slug,
-                source_dir=source_dir,
-            ),
+            BuiltInSkillDefinition(built_in_skill_id=slug),
         )
         make_built_in_skill_row(db_session, built_in_skill_id=slug)
 

@@ -4,7 +4,7 @@
  * Covers:
  *   - KH Teka @font-face declaration
  *   - Font family CSS custom properties (--font-hanken-grotesk, --font-dm-mono, --font-kh-teka)
- *   - Font utility classes (.font-heading-h1, .font-main-ui-body, etc.)
+ *   - Font utility classes (font-heading-h1, font-main-ui-body, etc.)
  *
  * Automatically included when consumers import `@onyx-ai/opal/root.css`.
  */
@@ -72,9 +72,10 @@
   font-weight: 450;
   line-height: 24px;
   letter-spacing: 0px;
-  & strong {
-    font-weight: 700;
-  }
+}
+
+.font-main-content-body strong {
+  font-weight: 700;
 }
 
 @utility font-main-content-emphasis {

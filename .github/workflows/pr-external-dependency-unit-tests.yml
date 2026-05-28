@@ -24,6 +24,8 @@ permissions:
   contents: read
 
 env:
+  SANDBOX_BACKEND: "docker"
+
   # AWS credentials for S3-specific test
   S3_AWS_ACCESS_KEY_ID_FOR_TEST: ${{ secrets.S3_AWS_ACCESS_KEY_ID }}
   S3_AWS_SECRET_ACCESS_KEY_FOR_TEST: ${{ secrets.S3_AWS_SECRET_ACCESS_KEY }}

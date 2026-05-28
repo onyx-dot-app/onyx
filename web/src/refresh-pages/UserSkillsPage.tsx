@@ -5,10 +5,10 @@ import { MessageCard } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SvgBlocks } from "@opal/icons";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import TextSeparator from "@/refresh-components/TextSeparator";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -69,7 +69,7 @@ export default function UserSkillsPage() {
           placeholder="Search skills..."
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
-          leftSearchIcon
+          searchIcon
         />
       </SettingsLayouts.Header>
 

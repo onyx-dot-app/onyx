@@ -264,7 +264,7 @@ Tests are located at `web/tests/e2e`. Tests are written in TypeScript.
 To run them:
 
 ```bash
-npx playwright test <TEST_NAME>
+bunx playwright test <TEST_NAME>
 ```
 
 For shared fixtures, best practices, and detailed guidance, see `backend/tests/README.md`.

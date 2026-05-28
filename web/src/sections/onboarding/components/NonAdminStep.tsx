@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect } from "react";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@/hooks/useToast";
@@ -115,7 +115,6 @@ export default function NonAdminStep() {
                       handleSave();
                     }
                   }}
-                  className="w-[26%] min-w-40"
                 />
                 <Button disabled={name === ""} onClick={handleSave}>
                   Save

@@ -6,6 +6,7 @@ const config: StorybookConfig = {
     "./*.mdx",
     "../lib/opal/src/**/*.stories.@(ts|tsx)",
     "../src/refresh-components/**/*.stories.@(ts|tsx)",
+    "../src/app/craft/**/*.stories.@(ts|tsx)",
   ],
   addons: ["@storybook/addon-essentials", "@storybook/addon-themes"],
   framework: {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Button, Divider, Text } from "@opal/components";
@@ -15,6 +15,7 @@ import {
   getAppTypeLogo,
 } from "@/app/craft/v1/apps/registry";
 import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
+import CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
 import {
   deleteExternalApp,
   setExternalAppEnabled,
@@ -41,6 +42,10 @@ export default function ExternalAppsAdminPage() {
   );
 
   const [modalState, setModalState] = useState<ModalState | null>(null);
+  // Custom-app create/edit modal. `existingApp: null` → create; non-null → edit.
+  const [customModal, setCustomModal] = useState<{
+    existingApp: ExternalAppAdminResponse | null;
+  } | null>(null);
 
   if (!isAdmin) {
     return (
@@ -95,6 +100,9 @@ export default function ExternalAppsAdminPage() {
                         onEdit={(descriptor) =>
                           setModalState({ descriptor, existingApp: app })
                         }
+                        onEditCustom={(customApp) =>
+                          setCustomModal({ existingApp: customApp })
+                        }
                         onChange={() => mutateApps()}
                       />
                     ))}
@@ -124,6 +132,9 @@ export default function ExternalAppsAdminPage() {
                     }
                   />
                 ))}
+                <CreateCustomAppCard
+                  onClick={() => setCustomModal({ existingApp: null })}
+                />
               </div>
             </section>
           </div>
@@ -138,6 +149,15 @@ export default function ExternalAppsAdminPage() {
             existingApp={modalState.existingApp}
           />
         )}
+
+        {customModal && (
+          <CreateCustomAppModal
+            open={customModal !== null}
+            onClose={() => setCustomModal(null)}
+            onSaved={() => mutateApps()}
+            existingApp={customModal.existingApp}
+          />
+        )}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
@@ -149,7 +169,10 @@ interface ConfiguredAppCardProps {
   app: ExternalAppAdminResponse;
   /** Null when the app's app_type no longer has a backend descriptor. */
   descriptor: BuiltInExternalAppDescriptor | null;
+  /** Edit a built-in provider instance (driven by its descriptor). */
   onEdit: (descriptor: BuiltInExternalAppDescriptor) => void;
+  /** Edit a custom app (no descriptor — config is on the row itself). */
+  onEditCustom: (app: ExternalAppAdminResponse) => void;
   onChange: () => void;
 }
 
@@ -157,6 +180,7 @@ function ConfiguredAppCard({
   app,
   descriptor,
   onEdit,
+  onEditCustom,
   onChange,
 }: ConfiguredAppCardProps) {
   const [isMutating, setIsMutating] = useState(false);
@@ -203,14 +227,24 @@ function ConfiguredAppCard({
           </Text>
         </div>
         <div className="flex items-center gap-2">
-          {descriptor && (
+          {app.app_type === "CUSTOM" ? (
             <Button
               prominence="secondary"
-              onClick={() => onEdit(descriptor)}
+              onClick={() => onEditCustom(app)}
               disabled={isMutating}
             >
               Edit
             </Button>
+          ) : (
+            descriptor && (
+              <Button
+                prominence="secondary"
+                onClick={() => onEdit(descriptor)}
+                disabled={isMutating}
+              >
+                Edit
+              </Button>
+            )
           )}
           <Button
             prominence="secondary"
@@ -254,6 +288,32 @@ function AvailableAppCard({ descriptor, onClick }: AvailableAppCardProps) {
         </div>
         <Button icon={SvgPlus} onClick={onClick}>
           Add
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+// ── Create-custom-app card ────────────────────────────────────────
+
+interface CreateCustomAppCardProps {
+  onClick: () => void;
+}
+
+function CreateCustomAppCard({ onClick }: CreateCustomAppCardProps) {
+  return (
+    <Card>
+      <div className="flex items-center gap-3 w-full">
+        <SvgPlug className="w-8 h-8" />
+        <div className="flex-1 flex flex-col gap-0.5">
+          <Text font="main-ui-action">Custom app</Text>
+          <Text font="secondary-body" color="text-03">
+            Bring your own integration: upload a skill bundle and configure its
+            credentials.
+          </Text>
+        </div>
+        <Button icon={SvgPlus} onClick={onClick}>
+          Create
         </Button>
       </div>
     </Card>

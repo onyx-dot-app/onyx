@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import datetime
 import threading
-from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 from unittest.mock import PropertyMock
@@ -42,6 +41,8 @@ from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.models import ScheduledTask
 from onyx.db.models import ScheduledTaskRun
 from onyx.db.models import User
+from onyx.server.features.build.configs import SANDBOX_BACKEND
+from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
@@ -51,16 +52,6 @@ from tests.external_dependency_unit.craft._test_helpers import make_user
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _autouse_local_sandbox_paths(local_sandbox_paths: Path) -> None:  # noqa: ARG001
-    """``SessionManager.__init__`` instantiates the real ``LocalSandboxManager``
-    via ``get_sandbox_manager`` — see ``test_ensure_sandbox_running.py`` for
-    the same pattern. ``local_sandbox_paths`` (from conftest) redirects the
-    template + base paths so ``_validate_templates()`` passes in CI / dev.
-    """
-    return None
 
 
 @pytest.fixture(autouse=True)
@@ -80,7 +71,6 @@ def _seed_task_and_queued_run(
         name="nightly-report",
         prompt="Summarise yesterday's events",
         cron_expression="0 9 * * *",
-        timezone="UTC",
         editor_mode="advanced",
         status=ScheduledTaskStatus.ACTIVE,
         next_run_at=datetime.datetime.now(datetime.timezone.utc)
@@ -106,6 +96,12 @@ def _seed_task_and_queued_run(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(
+    SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
+    reason="Exercises run_scheduled_task_logic → SessionManager → real "
+    "KubernetesSandboxManager init; requires SANDBOX_BACKEND=kubernetes "
+    "(runs in the dedicated K8s CI job).",
+)
 def test_run_fails_when_wake_fails(
     db_session: Session,
     test_user: User,  # noqa: ARG001
@@ -166,7 +162,6 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
             name=f"due-{i}",
             prompt=f"prompt-{i}",
             cron_expression="* * * * *",
-            timezone="UTC",
             editor_mode="advanced",
             status=ScheduledTaskStatus.ACTIVE,
             next_run_at=now - datetime.timedelta(seconds=10),
@@ -258,7 +253,6 @@ def test_cleanup_stuck_runs_marks_queued_over_threshold_failed(
         name="stale",
         prompt="...",
         cron_expression="0 9 * * *",
-        timezone="UTC",
         editor_mode="advanced",
         status=ScheduledTaskStatus.ACTIVE,
         next_run_at=datetime.datetime.now(datetime.timezone.utc)
@@ -304,7 +298,6 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
         name="long-running",
         prompt="...",
         cron_expression="0 9 * * *",
-        timezone="UTC",
         editor_mode="advanced",
         status=ScheduledTaskStatus.ACTIVE,
         next_run_at=datetime.datetime.now(datetime.timezone.utc)

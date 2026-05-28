@@ -31,6 +31,7 @@ jobs:
       is-cloud-tag: ${{ steps.check.outputs.is-cloud-tag }}
       is-beta: ${{ steps.check.outputs.is-beta }}
       is-beta-standalone: ${{ steps.check.outputs.is-beta-standalone }}
+      is-stable: ${{ steps.check.outputs.is-stable }}
       is-latest: ${{ steps.check.outputs.is-latest }}
       is-experimental-cc4a: ${{ steps.check.outputs.is-experimental-cc4a }}
       is-test-run: ${{ steps.check.outputs.is-test-run }}
@@ -157,6 +158,7 @@ jobs:
             echo "is-cloud-tag=$IS_CLOUD"
             echo "is-beta=$IS_BETA"
             echo "is-beta-standalone=$IS_BETA_STANDALONE"
+            echo "is-stable=$IS_STABLE"
             echo "is-latest=$IS_LATEST"
             echo "is-experimental-cc4a=$IS_EXPERIMENTAL_CC4A"
             echo "is-test-run=$IS_TEST_RUN"
@@ -317,11 +319,10 @@ jobs:
             curl \
             xdg-utils
 
-      - name: setup node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v6.3.0
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning]
         with:
-          node-version: 24
-          package-manager-cache: false
+          bun-version: "1.3.13"
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # zizmor: ignore[impostor-commit]
@@ -330,8 +331,7 @@ jobs:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: install frontend dependencies
-        working-directory: ./desktop
-        run: npm install
+        run: bun install --frozen-lockfile
 
       - name: Inject version (Unix)
         if: runner.os != 'Windows'
@@ -422,6 +422,7 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
           APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
         with:
+          projectPath: desktop
           # Use the release created by the create-release job to avoid race conditions
           # when multiple matrix jobs try to create/update the same release simultaneously
           releaseId: ${{ needs.create-release.outputs.release-id }}
@@ -624,6 +625,9 @@ jobs:
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
+            type=semver,pattern={{version}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
 
       - name: Create and push manifest
         env:
@@ -1053,6 +1057,9 @@ jobs:
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
+            type=semver,pattern={{version}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
 
       - name: Create and push manifest
         env:
@@ -1476,6 +1483,9 @@ jobs:
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
+            type=semver,pattern={{version}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
 
       - name: Create and push manifest
         env:

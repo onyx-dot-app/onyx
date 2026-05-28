@@ -13,6 +13,9 @@ mkdirSync(distDir, { recursive: true });
 const colorsCss = join(srcDir, "styles", "colors.css");
 const referenceCss = join(srcDir, "_reference.css");
 const rootCss = join(srcDir, "root.css");
+// dbg.css contains dev-only debugging utilities and is excluded from the bundle.
+// It is imported by _reference.css for @apply resolution during authoring only.
+const dbgCss = join(srcDir, "styles", "dbg.css");
 
 function findCss(dir) {
   const out = [];
@@ -70,7 +73,7 @@ function clean(source, filePath) {
 // (no shared selectors), so order between them is not load-bearing.
 const allCss = findCss(srcDir).sort();
 const leafCss = allCss.filter(
-  (p) => p !== referenceCss && p !== rootCss && p !== colorsCss
+  (p) => p !== referenceCss && p !== rootCss && p !== dbgCss
 );
 const order = [referenceCss, rootCss, ...leafCss];
 
@@ -83,8 +86,9 @@ const parts = order.map((file) => {
 
 const bundled = parts.join("\n");
 writeFileSync(join(distDir, "styles.css"), bundled);
+
 console.log(
-  `bundled ${order.length} css file(s) -> dist/styles.css (${bundled.length} bytes)`
+  `bundled ${order.length} css file(s) -> dist/styles.css + dist/root.css (${bundled.length} bytes)`
 );
 
 // colors.css is a standalone design-token file — copy it verbatim to dist/.

@@ -43,7 +43,9 @@ hljs.registerLanguage("sql", sql);
 /**
  * Get language from file extension
  */
-function getLanguageFromPath(filePath: string | undefined): string | undefined {
+export function getLanguageFromPath(
+  filePath: string | undefined
+): string | undefined {
   if (!filePath) return undefined;
   const ext = filePath.split(".").pop()?.toLowerCase();
   if (!ext) return undefined;
@@ -67,6 +69,25 @@ function getLanguageFromPath(filePath: string | undefined): string | undefined {
   };
 
   return langMap[ext];
+}
+
+/**
+ * Highlight a single line of code. Falls back to plain text on unknown
+ * language or any internal error. Multi-line constructs (template strings,
+ * block comments) won't highlight perfectly per-line, but typical syntax
+ * (keywords, identifiers, single-line strings) renders correctly.
+ */
+export function highlightLineHtml(
+  line: string,
+  language: string | undefined
+): string | null {
+  if (!language) return null;
+  try {
+    if (!hljs.getLanguage(language)) return null;
+    return hljs.highlight(line, { language, ignoreIllegals: true }).value;
+  } catch {
+    return null;
+  }
 }
 
 interface RawOutputBlockProps {

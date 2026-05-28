@@ -19,7 +19,7 @@ Rationale
 3. **Enables fault injection.** Several attributes
    (``write_files_to_sandbox_raises_for``, ``send_message_events``, ...) let
    tests inject the rare-but-load-bearing failures (RetriableWriteError,
-   FatalWriteError, ACP event sequences) without reaching for ``MagicMock``.
+   FatalWriteError, sandbox event sequences) without reaching for ``MagicMock``.
 
 Observable state (P1: assert behaviour, not implementation)
 ----------------------------------------------------------
@@ -49,19 +49,21 @@ Usage
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
 from typing import Any
 from typing import cast
 from uuid import UUID
 
-from onyx.server.features.build.sandbox.base import ACPEvent
+from onyx.server.features.build.sandbox.base import SandboxEvent
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 
 _UNSET = object()
 
@@ -85,7 +87,7 @@ class StubSandboxManager(SandboxManager):
     - ``health_check_returns``: bool returned by ``health_check``.
     - ``session_workspace_exists_returns``: bool returned by
       ``session_workspace_exists``.
-    - ``send_message_events``: iterable of ACP events yielded by
+    - ``send_message_events``: iterable of sandbox events yielded by
       ``send_message``. The iterable is **snapshotted to a list on
       assignment** so the same stub can be re-driven across multiple
       ``send_message`` calls.
@@ -119,6 +121,9 @@ class StubSandboxManager(SandboxManager):
     """
 
     def __init__(self) -> None:
+        # Tests hitting prompt_slot / list_subagents need the mixin state.
+        self._init_serve_state()
+
         # Return-value hooks.
         self.provision_returns: SandboxInfo | None = None
         self.health_check_returns: bool | None = None
@@ -145,7 +150,7 @@ class StubSandboxManager(SandboxManager):
 
         # ``send_message_events`` is stored via the property below so it is
         # materialised at assignment time (see __setattr__-like setter).
-        self._send_message_events: list[ACPEvent] | None = None
+        self._send_message_events: list[SandboxEvent] | None = None
 
         # Observable state: scoped counters and last-payload snapshots.
         self.provision_count: int = 0
@@ -196,11 +201,11 @@ class StubSandboxManager(SandboxManager):
     # ------------------------------------------------------------------
 
     @property
-    def send_message_events(self) -> list[ACPEvent] | None:
+    def send_message_events(self) -> list[SandboxEvent] | None:
         return self._send_message_events
 
     @send_message_events.setter
-    def send_message_events(self, value: Iterable[ACPEvent] | None) -> None:
+    def send_message_events(self, value: Iterable[SandboxEvent] | None) -> None:
         self._send_message_events = None if value is None else list(value)
 
     def provision(
@@ -210,6 +215,8 @@ class StubSandboxManager(SandboxManager):
         tenant_id: str,
         llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
+        *,
+        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         self.provision_count += 1
         self.last_provision_payload = {
@@ -218,6 +225,7 @@ class StubSandboxManager(SandboxManager):
             "tenant_id": tenant_id,
             "llm_config": llm_config,
             "onyx_pat": onyx_pat,
+            "all_llm_configs": all_llm_configs,
         }
         if self.provision_returns is None:
             raise _not_configured("provision")
@@ -344,12 +352,21 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
         message: str,
-    ) -> Generator[ACPEvent, None, None]:
+        *,
+        opencode_session_id: str | None = None,
+        agent_provider: str | None = None,
+        agent_model: str | None = None,
+        on_opencode_session_resolved: Callable[[str], None] | None = None,
+    ) -> Generator[SandboxEvent, None, None]:
         self.send_message_count += 1
         self.last_send_message_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
             "message": message,
+            "opencode_session_id": opencode_session_id,
+            "agent_provider": agent_provider,
+            "agent_model": agent_model,
+            "on_opencode_session_resolved": on_opencode_session_resolved,
         }
         if self._send_message_events is None:
             raise _not_configured("send_message")
@@ -442,6 +459,17 @@ class StubSandboxManager(SandboxManager):
         if self.get_upload_stats_returns is None:
             raise _not_configured("get_upload_stats")
         return self.get_upload_stats_returns
+
+    def _load_serve_connection_info(
+        self, sandbox_id: UUID
+    ) -> ServeConnectionInfo | None:
+        # Stub doesn't drive a real opencode-serve — return a deterministic
+        # URL + no password so any code path that touches the cache gets a
+        # reasonable value.
+        return ServeConnectionInfo(
+            base_url=f"http://stub-{str(sandbox_id)[:8]}:4096",
+            password=None,
+        )
 
     def write_files_to_sandbox(
         self,

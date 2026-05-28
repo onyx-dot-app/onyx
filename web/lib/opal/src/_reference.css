@@ -19,4 +19,6 @@
 @import "tw-animate-css";
 @config "../tailwind-preset.cjs";
 @import "./styles/colors.css";
+@import "./styles/sizes.css";
 @import "./styles/typography.css";
+@import "./styles/dbg.css";
