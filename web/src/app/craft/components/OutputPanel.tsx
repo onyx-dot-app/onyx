@@ -31,7 +31,6 @@ import {
   SvgX,
   SvgMinus,
   SvgMaximize2,
-  SvgPinned,
 } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import CraftingLoader from "@/app/craft/components/CraftingLoader";
@@ -369,17 +368,10 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   return (
     <div
       className={cn(
-        "absolute z-20 flex flex-col border rounded-12 border-border-01 bg-background-neutral-00 overflow-hidden transition-all duration-300 ease-in-out",
-        isMaximized
-          ? "top-4 right-16 bottom-4 w-[calc(100%-8rem)]"
-          : "top-4 right-4 bottom-4 w-[calc(50%-2rem)]",
-        isOpen
-          ? "opacity-100 translate-x-0"
-          : "opacity-0 translate-x-full pointer-events-none"
+        "absolute z-20 inset-y-0 right-0 flex flex-col border-l border-border-01 bg-background-neutral-00 overflow-hidden transition-transform duration-300 ease-in-out",
+        isMaximized ? "w-[calc(100%-4rem)]" : "w-1/2",
+        isOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
       )}
-      style={{
-        boxShadow: "0 8px 60px 30px rgba(0, 0, 0, 0.07)",
-      }}
     >
       {/* Tab List - Chrome-style tabs */}
       <div className="flex flex-col w-full">
@@ -474,11 +466,6 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                           ? "stroke-text-04"
                           : "stroke-text-03"
                     )}
-                  />
-                  <SvgPinned
-                    size={10}
-                    className="stroke-text-04 shrink-0 opacity-60"
-                    aria-hidden
                   />
                   <Text
                     className={cn("truncate", isDisabled && "text-text-02")}
