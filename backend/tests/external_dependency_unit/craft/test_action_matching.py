@@ -2,10 +2,10 @@
 
 Exercises the real provider catalogs + a real DB (no structural mocking):
 
-- ``resolve_policy``: stored override wins; an unset action falls back to ASK.
 - ``match_action``: a Slack REST call, a Google Calendar method+path, and a
-  Linear GraphQL body each resolve to their action's policy; an off-catalog
-  request resolves to ``None``.
+  Linear GraphQL body each resolve to their action's policy; a stored override
+  wins, an unset action falls back to ASK, and an off-catalog request resolves
+  to ``None``.
 - most-restrictive-wins when one request matches several actions.
 """
 
@@ -24,7 +24,6 @@ from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppPolicy
 from onyx.external_apps.matching import match_action
 from onyx.external_apps.matching import ProxiedRequest
-from onyx.external_apps.policy import resolve_policy
 from onyx.sandbox_proxy.action_matcher import DBSessionFactory
 from onyx.sandbox_proxy.action_matcher import ExternalAppActionMatcher
 from tests.external_dependency_unit.craft._test_helpers import make_external_app
@@ -55,18 +54,6 @@ def _set_policy(
         )
     )
     db_session.flush()
-
-
-# ── resolve_policy: the seam shared with the admin view ────────────
-
-
-def test_resolve_policy_override_wins() -> None:
-    stored = {"slack.messages.write": EndpointPolicy.DENY}
-    assert resolve_policy("slack.messages.write", stored) == EndpointPolicy.DENY
-
-
-def test_resolve_policy_unset_defaults_to_ask() -> None:
-    assert resolve_policy("slack.messages.write", {}) == EndpointPolicy.ASK
 
 
 # ── match_action: per-provider recognition ────────────────────────

@@ -9,7 +9,6 @@ from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.request import MatchContext
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
-from onyx.external_apps.policy import resolve_policy
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 
 # DENY is the most restrictive verdict, ALWAYS the least; when several catalog
@@ -43,7 +42,10 @@ def match_action(
         return None
 
     stored = get_policies(db_session, app.id)
-    policies = [resolve_policy(action_id, stored) for action_id in matched_ids]
+    # A matched catalog action with no stored row — an app connected before dense
+    # seeding, or a catalog action added since its last save — defaults to ASK
+    # rather than raising.
+    policies = [stored.get(action_id, EndpointPolicy.ASK) for action_id in matched_ids]
     return _most_restrictive(policies)
 
 
