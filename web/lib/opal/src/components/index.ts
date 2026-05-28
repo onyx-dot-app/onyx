@@ -10,7 +10,7 @@ export {
 export {
   Button,
   type ButtonProps,
-} from "@opal/components/buttons/Button/components";
+} from "@opal/components/buttons/button/components";
 
 /* SelectButton */
 export {
