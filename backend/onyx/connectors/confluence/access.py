@@ -44,6 +44,48 @@ def get_page_restrictions(
     )
 
 
+def get_page_restrictions_with_per_ancestor_fetch(
+    confluence_client: OnyxConfluence,
+    page_id: str,
+    page_restrictions: dict[str, Any],
+    ancestors: list[dict[str, Any]],
+    ancestor_restrictions_cache: dict[str, dict[str, Any] | None],
+    add_prefix: bool = False,
+) -> ExternalAccess | None:
+    """CONFCLOUD-77618 variant of `get_page_restrictions`. Ancestors
+    arrive without inline restrictions; each is fetched via
+    `restriction/byOperation` with 403/404 swallowed for drafts. EE-only."""
+    if not global_version.is_ee_version():
+        return None
+
+    ee_get_per_ancestor = cast(
+        Callable[
+            [
+                OnyxConfluence,
+                str,
+                dict[str, Any],
+                list[dict[str, Any]],
+                dict[str, dict[str, Any] | None],
+                bool,
+            ],
+            ExternalAccess | None,
+        ],
+        fetch_versioned_implementation(
+            "onyx.external_permissions.confluence.page_access",
+            "get_page_restrictions_with_per_ancestor_fetch",
+        ),
+    )
+
+    return ee_get_per_ancestor(
+        confluence_client,
+        page_id,
+        page_restrictions,
+        ancestors,
+        ancestor_restrictions_cache,
+        add_prefix,
+    )
+
+
 def get_all_space_permissions(
     confluence_client: OnyxConfluence,
     is_cloud: bool,
