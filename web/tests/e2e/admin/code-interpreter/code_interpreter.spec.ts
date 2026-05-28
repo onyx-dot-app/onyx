@@ -57,8 +57,8 @@ async function mockCodeInterpreterApi(
  * it, then click it.
  */
 async function clickDisconnectIconButton(page: Page) {
-  // Hover over the card to reveal hover-only buttons (Hoverable.Item)
-  await page.getByText("Code Interpreter").first().hover();
+  // Hover over the Hoverable.Root card to reveal hover-only buttons (Hoverable.Item)
+  await page.locator('[data-hover-group="code-interpreter/Card"]').hover();
   await page
     .locator("button:has(.interactive-foreground-icon):not(:has(span))")
     .first()
