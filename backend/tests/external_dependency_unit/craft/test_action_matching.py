@@ -22,8 +22,8 @@ from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppPolicy
-from onyx.external_apps.matching import match_action
-from onyx.external_apps.matching import ProxiedRequest
+from onyx.external_apps.matching.engine import match_action
+from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.sandbox_proxy.action_matcher import DBSessionFactory
 from onyx.sandbox_proxy.action_matcher import ExternalAppActionMatcher
 from tests.external_dependency_unit.craft._test_helpers import make_external_app

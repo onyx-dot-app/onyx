@@ -18,8 +18,8 @@ from mitmproxy import http
 from onyx.db.enums import EndpointPolicy
 from onyx.db.external_app import get_external_apps
 from onyx.db.models import ExternalApp
-from onyx.external_apps.matching import match_action
-from onyx.external_apps.matching import ProxiedRequest
+from onyx.external_apps.matching.engine import match_action
+from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.utils.logger import setup_logger
 
