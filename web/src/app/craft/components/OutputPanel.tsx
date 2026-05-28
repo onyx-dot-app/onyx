@@ -31,6 +31,7 @@ import {
   SvgX,
   SvgMinus,
   SvgMaximize2,
+  SvgPinned,
 } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import CraftingLoader from "@/app/craft/components/CraftingLoader";
@@ -473,6 +474,11 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                           ? "stroke-text-04"
                           : "stroke-text-03"
                     )}
+                  />
+                  <SvgPinned
+                    size={10}
+                    className="stroke-text-04 shrink-0 opacity-60"
+                    aria-hidden
                   />
                   <Text
                     className={cn("truncate", isDisabled && "text-text-02")}
