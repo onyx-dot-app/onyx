@@ -174,31 +174,54 @@ def upsert_parents(
     is_connector_public: bool = False,
 ) -> None:
     """
-    Upsert the parents of a hierarchy node.
+    Upsert the in-batch ancestors of ``node`` in oldest-to-newest order.
+
+    Walks ``raw_parent_id`` links iteratively (not recursively) so deeply nested
+    hierarchies — Notion page chains can exceed Python's recursion limit — and
+    cyclic parent references do not raise ``RecursionError``.
     """
-    if (
-        node.node_type == HierarchyNodeType.SOURCE
-        or (node.raw_parent_id not in node_by_id)
-        or (node.raw_parent_id in done_ids)
-    ):
-        return
-    parent_node = node_by_id[node.raw_parent_id]
-    upsert_parents(
-        db_session,
-        parent_node,
-        source,
-        node_by_id,
-        done_ids,
-        is_connector_public=is_connector_public,
-    )
-    upsert_hierarchy_node(
-        db_session,
-        parent_node,
-        source,
-        commit=False,
-        is_connector_public=is_connector_public,
-    )
-    done_ids.add(parent_node.raw_node_id)
+    # Walk ancestors, newest-first, collecting any that still need upserting.
+    # ``visiting`` seeded with ``node`` so a self-parent (A -> A) is treated as
+    # a cycle, not appended to ``pending``.
+    pending: list[PydanticHierarchyNode] = []
+    visiting: set[str] = {node.raw_node_id}
+    current = node
+    while True:
+        parent_raw_id = current.raw_parent_id
+        if (
+            current.node_type == HierarchyNodeType.SOURCE
+            or parent_raw_id is None
+            or parent_raw_id not in node_by_id
+            or parent_raw_id in done_ids
+        ):
+            break
+        if parent_raw_id in visiting:
+            # Cycle in the parent chain (e.g. A -> B -> A or A -> A). Stop
+            # walking.
+            logger.warning(
+                "Cycle detected in hierarchy parent chain for source=%s "
+                "at raw_node_id=%s (raw_parent_id=%s); falling back to SOURCE "
+                "for the cyclic ancestors.",
+                source,
+                current.raw_node_id,
+                parent_raw_id,
+            )
+            break
+        parent_node = node_by_id[parent_raw_id]
+        pending.append(parent_node)
+        visiting.add(parent_raw_id)
+        current = parent_node
+
+    # Drain oldest-first so each parent is persisted before its children.
+    for parent_node in reversed(pending):
+        upsert_hierarchy_node(
+            db_session,
+            parent_node,
+            source,
+            commit=False,
+            is_connector_public=is_connector_public,
+        )
+        done_ids.add(parent_node.raw_node_id)
 
 
 def upsert_hierarchy_node(

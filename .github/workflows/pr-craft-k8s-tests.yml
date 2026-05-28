@@ -79,9 +79,9 @@ env:
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
   BACKEND_IMAGE: "localhost:5001/onyx-backend:ci"
   # Fail fast on opencode hangs (default is 900s). Without this, CI
-  # waits 15 min for ACP timeout while the 20-min workflow timeout
+  # waits 15 min for the per-turn timeout while the 20-min workflow timeout
   # kills the job first — losing failure logs and giving zero signal.
-  ACP_MESSAGE_TIMEOUT: "120"
+  SANDBOX_TURN_TIMEOUT_SECONDS: "120"
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
 

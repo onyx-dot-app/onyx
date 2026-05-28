@@ -7,11 +7,10 @@ import { checkUserOwnsAgent } from "@/lib/agents/utils";
 import { useAgents } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { SettingsLayouts } from "@opal/layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import Tabs from "@/refresh-components/Tabs";
-import { Button } from "@opal/components";
+import { Button, InputTypeIn } from "@opal/components";
 import { SvgOnyxOctagon, SvgPlus } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
 import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
@@ -117,7 +116,7 @@ export default function AgentsNavigationPage() {
                 placeholder="Search agents..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                leftSearchIcon
+                searchIcon
               />
             </div>
             <div className="flex-1">

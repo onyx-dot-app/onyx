@@ -17,7 +17,7 @@ import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Switch from "@/refresh-components/inputs/Switch";
 import { Checkbox } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import {
   SvgPlusCircle,
   SvgArrowUpRight,
@@ -200,7 +200,7 @@ function KnowledgeTable<T>({
         {onSearchChange !== undefined && (
           <GeneralLayouts.Section height="auto">
             <InputTypeIn
-              leftSearchIcon
+              searchIcon
               value={searchValue ?? ""}
               onChange={(e) => onSearchChange?.(e.target.value)}
               placeholder={searchPlaceholder}

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 
 from onyx.db.enums import ExternalAppType
+from onyx.external_apps.providers.actions import EndpointSpec
 
 
 class OrgCredentialField(BaseModel):
@@ -53,15 +54,17 @@ class AdminDescriptorSpec(BaseModel):
 
 class ProviderSpec(BaseModel):
     """The base declarative definition every built-in provider must supply:
-    identity + the admin descriptor. Pydantic enforces that nothing is
-    missing. OAuth providers use the :class:`OAuthProviderSpec` subtype, which
-    additionally carries the flow."""
+    identity, the admin descriptor, and the action catalog. Pydantic enforces
+    that nothing is missing. OAuth providers use the :class:`OAuthProviderSpec`
+    subtype, which additionally carries the flow."""
 
     model_config = ConfigDict(frozen=True)
 
     app_type: ExternalAppType
     app_name: str
     descriptor: AdminDescriptorSpec
+    # The actions an admin can govern. Empty for a provider with no catalog yet.
+    endpoint_catalog: list[EndpointSpec] = []
 
 
 class OAuthProviderSpec(ProviderSpec):

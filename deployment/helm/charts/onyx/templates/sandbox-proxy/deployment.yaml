@@ -82,6 +82,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           resources:
             {{- toYaml .Values.sandboxProxy.resources | nindent 12 }}
           readinessProbe:

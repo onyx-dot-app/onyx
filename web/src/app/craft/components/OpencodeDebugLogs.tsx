@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SvgCheck, SvgCopy, SvgTerminal, SvgTrash } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Modal from "@/refresh-components/Modal";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { cn } from "@opal/utils";
 
@@ -396,11 +395,11 @@ function StatusBar({
 
       <div className="flex-1 min-w-0">
         <InputTypeIn
-          leftSearchIcon
+          searchIcon
           placeholder="Filter…"
           value={filter}
           onChange={(e) => onFilterChange(e.target.value)}
-          onClear={() => onFilterChange("")}
+          clearButton
         />
       </div>
 

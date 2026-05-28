@@ -1,8 +1,8 @@
-"""Unit tests for `SessionManager._merge_acp_with_announces`.
+"""Unit tests for `SessionManager._merge_events_with_announces`.
 
-The merger is a generator that interleaves a synchronous ACP iterator with
+The merger is a generator that interleaves a synchronous event iterator with
 approval-announce events drained from a Redis-style BLPOP. Two daemon threads
-write onto a shared `queue.Queue` until the ACP iterator completes.
+write onto a shared `queue.Queue` until the event iterator completes.
 """
 
 import json
@@ -57,23 +57,23 @@ def _stub_pop_announcement(monkeypatch: pytest.MonkeyPatch, fn: Any) -> None:
 
 
 def _always_none(_session_id: UUID, timeout_s: int, cache: Any) -> UUID | None:  # noqa: ARG001 — kwarg name must match production caller
-    # Honor the timeout so the poll loop doesn't spin while ACP produces.
+    # Honor the timeout so the poll loop doesn't spin while events produces.
     time.sleep(min(0.05, float(timeout_s)))
     return None
 
 
-def test_acp_only_pass_through(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_events_only_pass_through(monkeypatch: pytest.MonkeyPatch) -> None:
     _stub_get_cache_backend(monkeypatch)
     _stub_pop_announcement(monkeypatch, _always_none)
 
-    def acp() -> Generator[str, None, None]:
+    def events() -> Generator[str, None, None]:
         yield "a"
         yield "b"
         yield "c"
 
     out = _collect_with_timeout(
-        SessionManager._merge_acp_with_announces(
-            acp(), session_id=uuid4(), tenant_id="public"
+        SessionManager._merge_events_with_announces(
+            events(), session_id=uuid4(), tenant_id="public"
         )
     )
 
@@ -91,7 +91,7 @@ def test_announce_emitted_as_approval_requested_packet(
     def pop(_sid: UUID, timeout_s: int, cache: Any) -> UUID | None:  # noqa: ARG001 — kwarg name must match production caller
         # Deliver the approval on the first call. By the second call the
         # announce-pump has already enqueued the packet, so signalling here
-        # lets ACP end deterministically once the packet is on the queue.
+        # lets events end deterministically once the packet is on the queue.
         pop_call_count.append(1)
         if len(pop_call_count) == 1:
             return approval_id
@@ -102,14 +102,14 @@ def test_announce_emitted_as_approval_requested_packet(
     _stub_get_cache_backend(monkeypatch)
     _stub_pop_announcement(monkeypatch, pop)
 
-    def acp() -> Generator[str, None, None]:
+    def events() -> Generator[str, None, None]:
         # Wait until the announce packet is queued before ending (no sleeps).
         assert announce_enqueued.wait(timeout=2.0), "announce packet was never enqueued"
-        yield "acp-end"
+        yield "events-end"
 
     out = _collect_with_timeout(
-        SessionManager._merge_acp_with_announces(
-            acp(), session_id=session_id, tenant_id="public"
+        SessionManager._merge_events_with_announces(
+            events(), session_id=session_id, tenant_id="public"
         )
     )
 
@@ -128,13 +128,13 @@ def test_announce_emitted_as_approval_requested_packet(
     assert parsed["session_id"] == str(session_id)
 
 
-def test_interleaving_acp_and_announce(
+def test_interleaving_events_and_announce(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The announce packet is yielded BETWEEN "x" and "y".
 
     Two events make the FIFO order deterministic: `x_yielded` blocks the
-    announce stub until "x" is queued; `announce_enqueued` blocks ACP from
+    announce stub until "x" is queued; `announce_enqueued` blocks events from
     yielding "y" until the packet is queued. Output: `["x", <packet>, "y"]`.
     """
     session_id = uuid4()
@@ -150,7 +150,7 @@ def test_interleaving_acp_and_announce(
         pop_call_count.append(1)
         if len(pop_call_count) == 1:
             return approval_id
-        # By the second call the packet is enqueued; let ACP yield "y".
+        # By the second call the packet is enqueued; let events yield "y".
         announce_enqueued.set()
         time.sleep(min(0.02, float(timeout_s)))
         return None
@@ -158,15 +158,15 @@ def test_interleaving_acp_and_announce(
     _stub_get_cache_backend(monkeypatch)
     _stub_pop_announcement(monkeypatch, pop)
 
-    def acp() -> Generator[str, None, None]:
+    def events() -> Generator[str, None, None]:
         yield "x"
         x_yielded.set()
         assert announce_enqueued.wait(timeout=2.0), "announce packet was never enqueued"
         yield "y"
 
     out = _collect_with_timeout(
-        SessionManager._merge_acp_with_announces(
-            acp(), session_id=session_id, tenant_id="public"
+        SessionManager._merge_events_with_announces(
+            events(), session_id=session_id, tenant_id="public"
         )
     )
 
@@ -177,19 +177,19 @@ def test_interleaving_acp_and_announce(
     assert out[2] == "y"
 
 
-def test_terminates_when_acp_iterator_ends(
+def test_terminates_when_event_iterator_ends(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _stub_get_cache_backend(monkeypatch)
     _stub_pop_announcement(monkeypatch, _always_none)
 
-    def acp() -> Generator[str, None, None]:
+    def events() -> Generator[str, None, None]:
         yield "only"
 
     # Generator must finish even though the announce thread would BLPOP forever.
     out = _collect_with_timeout(
-        SessionManager._merge_acp_with_announces(
-            acp(), session_id=uuid4(), tenant_id="public"
+        SessionManager._merge_events_with_announces(
+            events(), session_id=uuid4(), tenant_id="public"
         ),
         timeout_s=1.0,
     )
@@ -204,13 +204,13 @@ def test_no_deadlock_when_announce_thread_sees_nothing(
 
     pre_threads = {t.name for t in threading.enumerate()}
 
-    def acp() -> Generator[str, None, None]:
+    def events() -> Generator[str, None, None]:
         yield "p"
         yield "q"
 
     out = _collect_with_timeout(
-        SessionManager._merge_acp_with_announces(
-            acp(), session_id=uuid4(), tenant_id="public"
+        SessionManager._merge_events_with_announces(
+            events(), session_id=uuid4(), tenant_id="public"
         )
     )
     assert out == ["p", "q"]
@@ -223,7 +223,7 @@ def test_no_deadlock_when_announce_thread_sees_nothing(
             t
             for t in threading.enumerate()
             if t.name not in pre_threads
-            and ("announce-pump" in t.name or "acp-pump" in t.name)
+            and ("announce-pump" in t.name or "events-pump" in t.name)
             and t.is_alive()
         ]
         if not leaked:
@@ -233,7 +233,7 @@ def test_no_deadlock_when_announce_thread_sees_nothing(
         t
         for t in threading.enumerate()
         if t.name not in pre_threads
-        and ("announce-pump" in t.name or "acp-pump" in t.name)
+        and ("announce-pump" in t.name or "events-pump" in t.name)
         and t.is_alive()
     ]
     assert leaked == [], f"threads did not exit cleanly: {leaked}"
@@ -259,14 +259,14 @@ def test_pop_announcement_exception_is_swallowed(
     _stub_get_cache_backend(monkeypatch)
     _stub_pop_announcement(monkeypatch, pop)
 
-    def acp() -> Generator[str, None, None]:
+    def events() -> Generator[str, None, None]:
         # Wait for the second raise to prove the loop survived the first.
         assert second_call.wait(timeout=2.0), "announce loop did not retry"
         yield "still-ok"
 
     out = _collect_with_timeout(
-        SessionManager._merge_acp_with_announces(
-            acp(), session_id=uuid4(), tenant_id="public"
+        SessionManager._merge_events_with_announces(
+            events(), session_id=uuid4(), tenant_id="public"
         )
     )
 

@@ -90,10 +90,16 @@ class SandboxIPLookup(Protocol):
     def stop(self) -> None: ...
 
 
+# Canonical type for the proxy's tenant-id -> DB-session factory. Imported by
+# action_matcher and the gate addon so the signature has a single source.
 DBSessionFactory = Callable[[str], AbstractContextManager[Session]]
 
 
-def _default_session_factory(tenant_id: str) -> AbstractContextManager[Session]:
+def default_session_factory(tenant_id: str) -> AbstractContextManager[Session]:
+    """tenant_id -> a tenant-scoped DB session context manager. The single
+    production factory: the gate (approval-row writes), the action matcher (app
+    + policy reads), and ``IdentityResolver`` all share it so they resolve the
+    same tenant schema."""
     return get_session_with_tenant(tenant_id=tenant_id)
 
 
@@ -107,7 +113,7 @@ class IdentityResolver:
         self._session_factory = (
             db_session_factory
             if db_session_factory is not None
-            else _default_session_factory
+            else default_session_factory
         )
 
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None:

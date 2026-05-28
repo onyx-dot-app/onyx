@@ -11,13 +11,13 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentThoughtChunk
-from acp.schema import Error
-from acp.schema import PromptResponse
-from acp.schema import ToolCallProgress
-from acp.schema import ToolCallStart
 
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
+from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.opencode.serve_client import (
     _synthesize_tool_content,
 )
@@ -752,8 +752,8 @@ def test_tool_first_sighting_with_running_emits_start_and_progress() -> None:
     """When the first sighting carries status=running (out-of-order publish),
     follow up with a progress event so the consumer sees both stages.
 
-    Note: opencode's "running" maps to ACP's "in_progress" — the consumer
-    sees ACP enum values, not opencode raw ones.
+    Note: opencode's "running" maps to the schema's "in_progress" — the consumer
+    sees sandbox-event enum values, not opencode raw ones.
     """
     s = _state()
     out = _drain(
@@ -909,7 +909,7 @@ def test_edit_tool_propagates_through_translation() -> None:
 
 
 @pytest.mark.parametrize(
-    "opencode_status, acp_status",
+    "opencode_status, schema_status",
     [
         ("pending", "pending"),
         ("running", "in_progress"),
@@ -923,8 +923,8 @@ def test_edit_tool_propagates_through_translation() -> None:
         (42, "pending"),
     ],
 )
-def test_tool_status_mapping(opencode_status: Any, acp_status: str) -> None:
-    assert _tool_status(opencode_status) == acp_status
+def test_tool_status_mapping(opencode_status: Any, schema_status: str) -> None:
+    assert _tool_status(opencode_status) == schema_status
 
 
 # ───────────────────────── raw_output wrapping ────────────────────
