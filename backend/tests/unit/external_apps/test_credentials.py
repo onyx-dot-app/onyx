@@ -59,3 +59,17 @@ def test_non_string_template_value_skipped() -> None:
         {"t": "x"},
     )
     assert headers == {"Authorization": "Bearer x"}
+
+
+def test_attribute_or_index_access_skips_only_the_bad_header() -> None:
+    # `{t.x}` / `{t[x]}` raise AttributeError / TypeError during render; they
+    # must skip only that header, not abort the whole render.
+    headers = build_auth_headers(
+        {
+            "Authorization": "Bearer {t}",
+            "Attr": "{t.value}",
+            "Index": "{t[id]}",
+        },
+        {"t": "x"},
+    )
+    assert headers == {"Authorization": "Bearer x"}

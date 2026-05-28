@@ -35,10 +35,8 @@ from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import NotificationType
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import ExternalAppType
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
-from onyx.db.models import ExternalApp
 from onyx.db.models import Notification
 from onyx.db.models import Sandbox
 from onyx.db.models import User
@@ -69,14 +67,8 @@ pytestmark = pytest.mark.skipif(
 # Label the helm chart attaches to the proxy Deployment + pods.
 _PROXY_COMPONENT_LABEL = "app.kubernetes.io/component=sandbox-proxy"
 
-# Slack's chat.postMessage endpoint. The gate gates this via the external-app
-# catalog matcher (action ``slack.messages.write``), which requires a connected
-# Slack ExternalApp — the ``gated_session`` fixture connects one.
+# Matches the gate's SlackPostMessageMatcher (case-insensitive URL prefix).
 _SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
-
-# The provider's upstream URL pattern (mirrors SlackProvider.spec). The gate
-# resolves slack.com egress to the connected app by matching this.
-_SLACK_UPSTREAM_PATTERN = "https://slack\\.com/api/.*"
 
 # Spec value for approval_cache.WAIT_TIMEOUT_S; pinned by
 # test_wait_timeout_constant_matches_spec.

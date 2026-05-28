@@ -29,7 +29,7 @@ def build_auth_headers(
             continue
         try:
             headers[name] = template.format(**credentials)
-        except (KeyError, IndexError, ValueError):
-            # Missing placeholder / malformed template — skip this header.
+        except (KeyError, IndexError, ValueError, AttributeError, TypeError):
+            # Render failed for this header
             continue
     return headers
