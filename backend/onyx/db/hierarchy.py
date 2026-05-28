@@ -197,8 +197,7 @@ def upsert_parents(
             break
         if parent_raw_id in visiting:
             # Cycle in the parent chain (e.g. A -> B -> A or A -> A). Stop
-            # walking; remaining ancestors in the cycle will fall back to the
-            # SOURCE node via resolve_parent_hierarchy_node_id.
+            # walking.
             logger.warning(
                 "Cycle detected in hierarchy parent chain for source=%s "
                 "at raw_node_id=%s (raw_parent_id=%s); falling back to SOURCE "
