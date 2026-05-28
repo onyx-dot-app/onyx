@@ -1,12 +1,3 @@
-"""Resolve and render an external app's outbound auth headers.
-
-The egress proxy injects credentials into verified requests by filling the
-``auth_template``'s ``{placeholder}`` fields from the app's resolved credentials
-(org + per-user). ``build_auth_headers`` is the pure substitution step (no DB,
-unit-testable on its own); ``resolve_injection_headers`` orchestrates the DB
-reads (via ``onyx.db.external_app`` getters) and delegates to it.
-"""
-
 from typing import Any
 from uuid import UUID
 
