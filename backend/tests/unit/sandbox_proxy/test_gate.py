@@ -269,11 +269,19 @@ def test_resolve_and_match_matcher_raises_fails_open() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_and_match_always_forwards_without_session() -> None:
-    """ALWAYS auto-approves: forward unchanged, no approval row, and (since
-    it's not gated) no session lookup — even when a tag is present."""
+def test_resolve_and_match_always_forwards_without_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ALWAYS auto-approves: forward (with credentials injected), no approval
+    row, and (since it's not gated) no session lookup — even when a tag is
+    present."""
     resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
-    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH_ALWAYS))
+    addon = _build(
+        resolver=resolver,
+        matcher=_StubMatcher(result=_MATCH_ALWAYS),
+        db_factory=_recorder_db_factory([]),
+    )
+    _patch_headers(monkeypatch, {})
     flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
 
     result = addon._resolve_and_match(flow)
@@ -353,8 +361,9 @@ def _spy_pipeline(
         *,
         user_id: UUID,
         tenant_id: str,
-    ) -> None:
+    ) -> bool:
         spy.injected.append((match, user_id, tenant_id))
+        return True
 
     monkeypatch.setattr(addon, "_persist_approval_row", _persist)
     monkeypatch.setattr(addon, "_await_decision", _await)
@@ -754,6 +763,150 @@ async def test_requestheaders_noop_without_policy() -> None:
     assert flow.request.stream is False
     assert gate_mod._SNAPSHOT_STREAM_FLAG not in flow.metadata
     assert resolver.resolve_sandbox_calls == 0
+
+
+# ---------------------------------------------------------------------------
+# responseheaders — stream all responses (don't buffer streaming bodies)
+# ---------------------------------------------------------------------------
+
+
+def test_responseheaders_streams_response_body() -> None:
+    """Responses are never gated, so they must stream through unbuffered —
+    otherwise long SSE bodies (the agent's streamed LLM completions) are held
+    until complete and can truncate."""
+    addon = _build(resolver=_StubResolver(), matcher=_StubMatcher())
+    flow = _flow()
+    flow.response = MagicMock()
+    flow.response.stream = False
+
+    addon.responseheaders(flow)
+
+    assert flow.response.stream is True
+
+
+def test_responseheaders_no_response_is_noop() -> None:
+    """A flow without a response (shouldn't happen at this hook) must not raise."""
+    addon = _build(resolver=_StubResolver(), matcher=_StubMatcher())
+    flow = _flow()
+    flow.response = None
+
+    addon.responseheaders(flow)  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# _inject_credentials — apply resolved auth headers to a verified forward
+# ---------------------------------------------------------------------------
+
+
+def _patch_headers(monkeypatch: pytest.MonkeyPatch, headers: dict[str, str]) -> None:
+    monkeypatch.setattr(
+        gate_mod, "resolve_injection_headers", lambda _db, _aid, _uid: headers
+    )
+
+
+def test_inject_credentials_sets_resolved_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resolved headers are written onto the request, overwriting any value the
+    sandbox supplied (the real secret lives only in the proxy)."""
+    addon = _build(
+        resolver=_StubResolver(),
+        matcher=_StubMatcher(),
+        db_factory=_recorder_db_factory([]),
+    )
+    _patch_headers(monkeypatch, {"Authorization": "Bearer real-secret"})
+    flow = _flow()
+    flow.request.headers["Authorization"] = "sandbox-placeholder"
+
+    assert addon._inject_credentials(
+        flow, _MATCH_ALWAYS, user_id=uuid4(), tenant_id="public"
+    )
+    assert flow.request.headers["Authorization"] == "Bearer real-secret"
+
+
+def test_inject_credentials_succeeds_with_no_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No resolvable credentials -> nothing injected, but still a success (the
+    request forwards; a missing credential just means upstream answers 401)."""
+    addon = _build(
+        resolver=_StubResolver(),
+        matcher=_StubMatcher(),
+        db_factory=_recorder_db_factory([]),
+    )
+    _patch_headers(monkeypatch, {})
+    flow = _flow()  # headers default to {}
+
+    assert addon._inject_credentials(
+        flow, _MATCH_ALWAYS, user_id=uuid4(), tenant_id="public"
+    )
+    assert dict(flow.request.headers) == {}
+
+
+def test_inject_credentials_fails_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A resolution error must not raise, must not inject, and reports failure
+    so the caller can block."""
+    addon = _build(
+        resolver=_StubResolver(),
+        matcher=_StubMatcher(),
+        db_factory=_recorder_db_factory([]),
+    )
+
+    def _boom(_db: Any, _aid: int, _uid: UUID) -> dict[str, str]:
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(gate_mod, "resolve_injection_headers", _boom)
+    flow = _flow()  # headers default to {}
+
+    assert not addon._inject_credentials(
+        flow, _MATCH_ALWAYS, user_id=uuid4(), tenant_id="public"
+    )
+    assert "Authorization" not in flow.request.headers
+
+
+def test_inject_credentials_or_block_sets_403_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wrapper blocks a verified forward with a 403 when injection fails,
+    rather than forwarding it with the sandbox's own headers."""
+    addon = _build(
+        resolver=_StubResolver(),
+        matcher=_StubMatcher(),
+        db_factory=_recorder_db_factory([]),
+    )
+
+    def _boom(_db: Any, _aid: int, _uid: UUID) -> dict[str, str]:
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(gate_mod, "resolve_injection_headers", _boom)
+    flow = _flow()
+
+    addon._inject_credentials_or_block(
+        flow, _MATCH_ALWAYS, user_id=uuid4(), tenant_id="public"
+    )
+
+    _assert_403(flow, gate_mod._CODE_CREDENTIAL_ERROR)
+
+
+def test_inject_credentials_or_block_forwards_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wrapper leaves the response unset (forwards) when injection succeeds."""
+    addon = _build(
+        resolver=_StubResolver(),
+        matcher=_StubMatcher(),
+        db_factory=_recorder_db_factory([]),
+    )
+    _patch_headers(monkeypatch, {"Authorization": "Bearer real-secret"})
+    flow = _flow()
+
+    addon._inject_credentials_or_block(
+        flow, _MATCH_ALWAYS, user_id=uuid4(), tenant_id="public"
+    )
+
+    assert flow.response is None
 
 
 # ---------------------------------------------------------------------------

@@ -132,6 +132,21 @@ def get_user_credentials_by_app_id(
     return {row.external_app_id: row for row in db_session.scalars(stmt).all()}
 
 
+def get_external_app_user_credential(
+    db_session: Session,
+    *,
+    external_app_id: int,
+    user_id: UUID,
+) -> ExternalAppUserCredential | None:
+    """The calling user's stored credentials for one app, or None if unset."""
+    return db_session.scalar(
+        select(ExternalAppUserCredential).where(
+            ExternalAppUserCredential.external_app_id == external_app_id,
+            ExternalAppUserCredential.user_id == user_id,
+        )
+    )
+
+
 def create_external_app(
     db_session: Session,
     name: str,
