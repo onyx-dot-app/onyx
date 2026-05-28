@@ -1295,7 +1295,7 @@ h2==4.3.0 \
     # via
     #   httpx
     #   mitmproxy
-hf-xet==1.4.3 ; platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64' \
+hf-xet==1.4.3 ; platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64' \
     --hash=sha256:0392c79b7cf48418cd61478c1a925246cf10639f4cd9d94368d8ca1e8df9ea07 \
     --hash=sha256:1feb0f3abeacee143367c326a128a2e2b60868ec12a36c225afb1d6c5a05e6d2 \
     --hash=sha256:21644b404bb0100fe3857892f752c4d09642586fd988e61501c95bbf44b393a3 \
@@ -1355,7 +1355,6 @@ httpx==0.28.1 \
     #   fastmcp
     #   google-genai
     #   httpx-oauth
-    #   huggingface-hub
     #   langfuse
     #   langsmith
     #   litellm
@@ -1374,9 +1373,9 @@ httpx-sse==0.4.3 \
 hubspot-api-client==11.1.0 \
     --hash=sha256:0c49e2c2f511a56d249c6890d2dfdd62afd04f66edc69a591e8348e28804634b \
     --hash=sha256:93ed914f1cd4dad67bacf26b8a1ec8506847483fa801cb2bddd4b2d887d0f825
-huggingface-hub==1.12.0 \
-    --hash=sha256:7c3fe85e24b652334e5d456d7a812cd9a071e75630fac4365d9165ab5e4a34b6 \
-    --hash=sha256:d74939969585ee35748bd66de09baf84099d461bda7287cd9043bfb99b0e424d
+huggingface-hub==0.36.2 \
+    --hash=sha256:1934304d2fb224f8afa3b87007d58501acfda9215b334eed53072dd5e815ff7a \
+    --hash=sha256:48f0c8eac16145dfce371e9d2d7772854a4f591bcb56c9cf548accf531d54270
     # via tokenizers
 humanfriendly==10.0 \
     --hash=sha256:1697e1a8a8f550fd43c2865cd84542fc175a61dcb779b6fee18cf6b6ccba1477 \
@@ -3298,6 +3297,7 @@ requests==2.33.0 \
     #   google-cloud-storage
     #   google-genai
     #   hubspot-api-client
+    #   huggingface-hub
     #   jira
     #   kubernetes
     #   langfuse
@@ -3771,9 +3771,7 @@ trafilatura==1.12.2 \
 typer==0.20.0 \
     --hash=sha256:1aaf6494031793e4876fb0bacfa6a912b551cf43c1e63c800df8b1a866720c37 \
     --hash=sha256:5b463df6793ec1dca6213a3cf4c0f03bc6e322ac5e16e13ddd622a889489784a
-    # via
-    #   huggingface-hub
-    #   mcp
+    # via mcp
 types-awscrt==0.28.4 \
     --hash=sha256:15929da84802f27019ee8e4484fb1c102e1f6d4cf22eb48688c34a5a86d02eb6 \
     --hash=sha256:2d453f9e27583fcc333771b69a5255a5a4e2c52f86e70f65f3c5a6789d3443d0
