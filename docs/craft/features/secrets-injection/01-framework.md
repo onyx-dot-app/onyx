@@ -8,17 +8,18 @@ proxy and never in the sandbox pod.
 
 ## Status after Dane's PRs land
 
-Dane's `dane/ea-matcher` + `dane/ea-inject-creds` deliver credential injection for one source — user-
-connected external apps — through `GateAddon._inject_credentials`, called on `ALWAYS` and
-`ASK → APPROVED`. `DENY` blocks; off-catalog forwards uncredentialed.
+Dane's stack delivers credential injection for one source — user-connected external apps:
+`dane/ea-matcher` adds the matcher and the `DENY` / off-catalog gate paths; `dane/ea-inject-creds`
+adds `GateAddon._inject_credentials`, called on `ALWAYS` and `ASK → APPROVED`. `DENY` blocks;
+off-catalog forwards uncredentialed.
 
 That covers external apps but not the two system credentials this project must broker:
 
-| Source | Key scope | Why Dane's API doesn't fit |
+| Source | Lives in | Why Dane's API doesn't fit |
 |---|---|---|
-| External-app credentials | `(external_app_id, user_id)` | What Dane built. |
-| Onyx PAT ([Plan 2](./02-onyx-pat.md)) | `sandbox_id` | API takes `user_id`; one user can own multiple sandboxes. The PAT lives on the `Sandbox` row, not in any `ExternalApp`. The Onyx API isn't an external app. |
-| LLM provider keys ([Plan 3](./03-llm-key.md)) | `tenant_id` (per provider) | Per-tenant infrastructure, not user-connected. Keys live in `llm_provider` rows; modelling them as `ExternalApp`s would duplicate the LLM-admin data model. |
+| External-app credentials | `external_app_user_credentials` (per user × app) | What Dane built. |
+| Onyx PAT ([Plan 2](./02-onyx-pat.md)) | `Sandbox.encrypted_pat` | The PAT lives on the `Sandbox` row, not on any `ExternalApp`; the Onyx API isn't a third-party app a user "connected". |
+| LLM provider keys ([Plan 3](./03-llm-key.md)) | `llm_provider` rows (per tenant schema) | Per-tenant infrastructure, not user-connected. Modelling them as `ExternalApp`s would duplicate the LLM-admin data model. |
 
 And: off-catalog hosts (the Onyx API, LLM providers) forward uncredentialed today.
 
@@ -51,6 +52,11 @@ overwrites only the named header.
 
 **Decryption.** `ENCRYPTION_KEY_SECRET` is wired into the proxy Deployment (#11451), so
 `LLMProviderView.from_model()` and the encrypted per-sandbox PAT both decrypt in-process.
+
+**Kubernetes-only.** The egress proxy exists only in the K8s sandbox backend; the docker
+self-hosted backend has no proxy wiring (`docker_sandbox_manager.py` has no `HTTPS_PROXY` /
+`NO_PROXY` / CA env vars). This seam is a no-op on docker, which keeps injecting real credentials
+via env vars. Step 6 below scopes pod-side changes to K8s.
 
 **Supersedes the existing scaffold.** `onyx/sandbox_proxy/credential_injection.py` on
 `whuang/craft-proxy-secrets-injection-scaffold` defines an early host-only dispatcher run in
@@ -109,8 +115,9 @@ first whose `claims(host, match)` returns True, calls `resolve`, and sets the re
    `OFF_CATALOG`.
 
 2. **`ExternalAppResolver`** — wraps Dane's existing logic.
-   - `claims`: True iff `match is not None and match.external_app_id is not None`. The matcher
-     already did URL→app resolution; the resolver delegates rather than redoing it.
+   - `claims`: True iff `match is not None` (`ActionMatch.external_app_id` is non-Optional on the
+     matcher today). The matcher already did URL→app resolution; the resolver delegates rather
+     than redoing it.
    - `resolve`: opens a session via `ctx.db_session_factory(ctx.sandbox.tenant_id)` and calls Dane's
      existing `resolve_injection_headers(db, ctx.match.external_app_id, ctx.sandbox.user_id)`.
      Returns `{}` rather than raising on Dane's existing error paths — preserves the per-header
@@ -121,14 +128,21 @@ first whose `claims(host, match)` returns True, calls `resolve`, and sets the re
 4. **`LLMProviderKeyResolver`** ([Plan 3](./03-llm-key.md)) — claims by host (canonical + each
    tenant's `api_base`).
 
-5. **Route the Onyx API through the proxy.** Remove `SANDBOX_API_SERVER_URL` from
-   `_compute_no_proxy_list()` (keep loopback). Verify in CI that the proxy reaches the API.
+5. **Route the Onyx API through the proxy.** Today `_compute_no_proxy_list()` appends
+   `SANDBOX_API_SERVER_URL`'s host to `NO_PROXY`, but `firewall-init.sh` drops everything except
+   loopback and TCP to `sandbox-proxy:8080` — so clients honour `NO_PROXY`, try direct DNS, and
+   get `EPERM`. Replace the function with a `_NO_PROXY = "127.0.0.1,localhost"` constant (loopback
+   is the only thing the firewall permits to bypass the proxy) and a comment naming the firewall
+   constraint; pin the value with a regression test so non-loopback entries can't be added by
+   accident.
 
-6. **Remove sandbox-side credentials** atomically with each resolver's flag:
-   - `ONYX_PAT` env in `kubernetes_sandbox_manager.py` (and the docker manager) → non-empty
-     placeholder. `ensure_sandbox_pat` keeps minting and persisting the PAT on the `Sandbox` row.
-   - LLM keys in `OPENCODE_CONFIG_CONTENT` (`opencode_config.py`) → non-empty placeholders. While
-     here, fix the existing `block["api"]` → `provider.<id>.options.baseURL` mismatch
+6. **Remove sandbox-side credentials** atomically with each resolver's flag (K8s only — see Note):
+   - `ONYX_PAT` env in `kubernetes_sandbox_manager.py` → non-empty placeholder.
+     `ensure_sandbox_pat` keeps minting and persisting the PAT on the `Sandbox` row. The docker
+     manager continues to inject the real PAT.
+   - LLM keys in `OPENCODE_CONFIG_CONTENT` (built by `opencode_config.py`) → non-empty placeholders
+     for the K8s manager only; the docker manager keeps the real keys. While here, fix the existing
+     `block["api"]` → `provider.<provider_name>.options.baseURL` mismatch
      ([[project_craft_beta_no_backcompat]]).
 
 7. **Wire in `server.py`.** `build_resolvers()` returns
@@ -156,8 +170,9 @@ Four PRs, in order; each flag-gated where behavioural and independently revertib
 1. **Seam extraction (refactor only).** Protocol + dispatcher + `ExternalAppResolver`.
    `_inject_credentials` becomes a delegation. Call site moves to fire on `OFF_CATALOG`. With only
    `ExternalAppResolver` registered, off-catalog stays a no-op. Dane's external-dep tests unchanged.
-2. **Route the Onyx API through the proxy.** Remove the API host from `_compute_no_proxy_list()`.
-   Independently revertible.
+2. **Route the Onyx API through the proxy.** Per step 5: replace `_compute_no_proxy_list()` with a
+   loopback-only constant and pin it with a regression test. Independently revertible. Also fixes
+   a pre-existing `EPERM` on outbound calls to the Onyx API from inside a Craft sandbox.
 3. **Onyx PAT resolver** ([Plan 2](./02-onyx-pat.md)).
 4. **LLM provider-key resolver** ([Plan 3](./03-llm-key.md)).
 
