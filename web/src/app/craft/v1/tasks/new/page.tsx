@@ -59,7 +59,7 @@ export default function NewScheduledTaskPage() {
     <ScheduleTaskForm
       initial={initial}
       isEdit={false}
-      title="New scheduled task"
+      title="New Scheduled Task"
       description="Save a prompt + schedule. Craft will run it on a timer."
       onBack={handleBack}
     />

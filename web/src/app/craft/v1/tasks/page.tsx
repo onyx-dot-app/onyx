@@ -180,7 +180,7 @@ export default function ScheduledTasksListPage() {
         href={NEW_TASK_PATH}
         data-testid="new-task-button"
       >
-        New scheduled task
+        New Scheduled Task
       </Button>
     ),
     []
