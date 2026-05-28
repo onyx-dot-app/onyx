@@ -62,36 +62,30 @@ export default function BuildMessageList({
     rawItems: StreamItem[],
     opts: { isCurrentStream: boolean; extractLatestTodo: boolean }
   ): { nodes: React.ReactNode[]; pinnedTodo: TodoListState | null } => {
-    // Per-turn structure: [Working block, last thinking?, final text].
-    // - Drop every settled thinking before the last tool_call (pre-tool narration).
-    // - Keep only the last settled thinking, and only if it sits after the last
-    //   tool_call (post-tool reasoning; never a hidden pre-tool one that
-    //   happened to be the last).
-    // - Keep only the LAST text item.
-    // - All tool_calls survive; the grouping walker below rolls consecutive
-    //   runs into a single "Working" card.
-    let lastThinkingIdx = -1;
+    // Render items in the order they streamed: tool calls, text, and thinking
+    // appear interleaved instead of all tools first / all text at the bottom.
+    // Consecutive tool calls (with no non-tool item between them) are still
+    // rolled into a single "Working" CraftToolGroup.
+    //
+    // Filtering rules that still apply:
+    // - Only the LATEST todo_list is kept (either pinned via extractLatestTodo
+    //   or rendered inline at its original position).
+    // - Settled thinking blocks that occur before a later tool_call are dropped
+    //   as pre-tool narration. (Streaming thinkings always pass through.)
     let lastToolIdx = -1;
-    let lastTextIdx = -1;
     let latestTodoIdx = -1;
     rawItems.forEach((it, idx) => {
-      if (it.type === "thinking") lastThinkingIdx = idx;
       if (it.type === "tool_call") lastToolIdx = idx;
-      if (it.type === "text") lastTextIdx = idx;
       if (it.type === "todo_list") latestTodoIdx = idx;
     });
 
     const items = rawItems.filter((it, idx) => {
-      if (it.type === "thinking" && !it.isStreaming) {
-        if (idx !== lastThinkingIdx) return false;
-        if (lastToolIdx > idx) return false;
-      }
-      if (it.type === "text" && !it.isStreaming && idx !== lastTextIdx) {
+      // Drop settled thinking that's followed by a later tool_call (pre-tool
+      // narration that the model has already moved past).
+      if (it.type === "thinking" && !it.isStreaming && lastToolIdx > idx) {
         return false;
       }
-      // Always collapse to a single todo_list per turn — either pinned at
-      // the top of the streaming column, or rendered inline at the latest
-      // index for history.
+      // Collapse to one todo_list per turn.
       if (it.type === "todo_list" && idx !== latestTodoIdx) {
         return false;
       }
@@ -101,7 +95,6 @@ export default function BuildMessageList({
       return true;
     });
 
-    const nodes: React.ReactNode[] = [];
     const pinnedTodo =
       opts.extractLatestTodo && latestTodoIdx !== -1
         ? (
@@ -112,38 +105,39 @@ export default function BuildMessageList({
           ).todoList
         : null;
 
-    // Render order is enforced — tool calls always come first, then any
-    // surviving thinking/text/todo at the bottom. The model can emit tools
-    // anywhere in the stream, but the UI always presents work above answer.
-    const toolItems = items.filter(
-      (it): it is Extract<StreamItem, { type: "tool_call" }> =>
-        it.type === "tool_call"
-    );
-    const trailingItems = items.filter((it) => it.type !== "tool_call");
-
+    const nodes: React.ReactNode[] = [];
     let i = 0;
-    while (i < toolItems.length) {
-      const item = toolItems[i]!;
-      const groupTools: ToolCallState[] = [item.toolCall];
-      let j = i + 1;
-      while (j < toolItems.length) {
-        groupTools.push(toolItems[j]!.toolCall);
-        j++;
-      }
-      if (groupTools.length === 1) {
-        nodes.push(<CraftToolCard key={item.id} toolCall={item.toolCall} />);
-      } else {
-        nodes.push(
-          <CraftToolGroup key={`group-${item.id}`} toolCalls={groupTools} />
-        );
-      }
-      i = j;
-    }
+    while (i < items.length) {
+      const item = items[i]!;
 
-    const hasToolsBefore = toolItems.length > 0;
-    trailingItems.forEach((item, idx) => {
-      const isFirstTrailing = idx === 0;
-      const topMargin = isFirstTrailing && hasToolsBefore ? "mt-3" : "";
+      if (item.type === "tool_call") {
+        // Roll consecutive tool_calls into a single group.
+        const groupTools: ToolCallState[] = [item.toolCall];
+        let j = i + 1;
+        while (j < items.length && items[j]!.type === "tool_call") {
+          groupTools.push(
+            (items[j]! as Extract<StreamItem, { type: "tool_call" }>).toolCall
+          );
+          j++;
+        }
+        if (groupTools.length === 1) {
+          nodes.push(<CraftToolCard key={item.id} toolCall={item.toolCall} />);
+        } else {
+          nodes.push(
+            <CraftToolGroup key={`group-${item.id}`} toolCalls={groupTools} />
+          );
+        }
+        i = j;
+        continue;
+      }
+
+      // Non-tool items render inline in stream order. Add a small top margin
+      // when the previous rendered node was a tool group to give the
+      // assistant text some breathing room.
+      const prev = items[i - 1];
+      const followsTool = prev?.type === "tool_call";
+      const topMargin = followsTool ? "mt-3" : "";
+
       switch (item.type) {
         case "text":
           nodes.push(
@@ -176,7 +170,8 @@ export default function BuildMessageList({
           );
           break;
       }
-    });
+      i++;
+    }
 
     return { nodes, pinnedTodo };
   };
