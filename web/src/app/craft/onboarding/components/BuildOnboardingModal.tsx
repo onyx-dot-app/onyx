@@ -72,15 +72,15 @@ interface BuildOnboardingModalProps {
 function getStepsForMode(
   mode: OnboardingModalMode,
   isAdmin: boolean,
-  allProvidersConfigured: boolean,
+  hasAnyProvider: boolean,
   hasUserInfo: boolean
 ): OnboardingStep[] {
   switch (mode.type) {
     case "initial-onboarding":
-      // Full flow: page1 → llm-setup (if admin + not all configured) → user-info
+      // Full flow: page1 → llm-setup (only if admin and no provider configured yet) → user-info
       const steps: OnboardingStep[] = ["page1"];
 
-      if (isAdmin && !allProvidersConfigured) {
+      if (isAdmin && !hasAnyProvider) {
         steps.push("llm-setup");
       }
 
@@ -107,7 +107,6 @@ export default function BuildOnboardingModal({
   initialValues,
   isAdmin,
   hasUserInfo,
-  allProvidersConfigured,
   hasAnyProvider,
   onComplete,
   onLlmComplete,
@@ -115,8 +114,8 @@ export default function BuildOnboardingModal({
 }: BuildOnboardingModalProps) {
   // Compute steps based on mode
   const steps = useMemo(
-    () => getStepsForMode(mode, isAdmin, allProvidersConfigured, hasUserInfo),
-    [mode, isAdmin, allProvidersConfigured, hasUserInfo]
+    () => getStepsForMode(mode, isAdmin, hasAnyProvider, hasUserInfo),
+    [mode, isAdmin, hasAnyProvider, hasUserInfo]
   );
 
   // Determine initial step based on mode
