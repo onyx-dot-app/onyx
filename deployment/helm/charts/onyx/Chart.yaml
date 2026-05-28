@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.7
+version: 0.5.12
 appVersion: latest
 annotations:
   category: Productivity
@@ -17,11 +17,10 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: changed
-      description: Gate the `celery-worker-scheduled-tasks` deployment (and
-        its metrics Service, HPA, KEDA ScaledObject, and ServiceMonitor) on
-        `configMap.ENABLE_CRAFT=true`. The worker only services Craft
-        scheduled-task fires, so it no longer spawns on installs where
-        Craft is disabled.
+      description: Inject `extraEnvFromSecret` into the `sandbox-proxy`
+        Deployment so the proxy receives credentials (e.g.
+        `ENCRYPTION_KEY_SECRET`) from the same Secret as the api_server,
+        enabling it to decrypt DB columns for egress credential injection.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0

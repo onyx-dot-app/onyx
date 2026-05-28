@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { mutate as globalMutate } from "swr";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import { Button, Text } from "@opal/components";
 import { SvgPlug } from "@opal/icons";

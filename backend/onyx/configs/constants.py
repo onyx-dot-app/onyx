@@ -289,6 +289,7 @@ class NotificationType(str, Enum):
     LICENSE_EXPIRY_WARNING = "license_expiry_warning"
     SCHEDULED_TASK_FAILED = "scheduled_task_failed"
     SCHEDULED_TASK_AWAITING_APPROVAL = "scheduled_task_awaiting_approval"
+    APPROVAL_REQUESTED = "approval_requested"
 
 
 class BlobType(str, Enum):

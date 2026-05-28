@@ -41,29 +41,30 @@ import json
 import mimetypes
 import os
 import re
+import secrets
 import shlex
+import socket
 import tarfile
 import threading
 import time
-from collections.abc import Generator
 from collections.abc import Iterator
 from pathlib import Path
+from urllib.parse import urlparse
 from uuid import UUID
 from uuid import uuid4
 
 import httpx
-from acp.schema import PromptResponse
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import PublicFormat
 from kubernetes import client
-from kubernetes import config
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
 
 from onyx.db.enums import SandboxStatus
-from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
+from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
+from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
 from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
@@ -73,9 +74,11 @@ from onyx.server.features.build.configs import SANDBOX_POD_CPU_LIMIT
 from onyx.server.features.build.configs import SANDBOX_POD_CPU_REQUEST
 from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_LIMIT
 from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_REQUEST
+from onyx.server.features.build.configs import SANDBOX_PROXY_CA_CONFIGMAP
+from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
+from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
-from onyx.server.features.build.sandbox.acp.base import ACPEvent
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -88,9 +91,13 @@ from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models 
 from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
     SnapshotRestoreRequest,
 )
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    ACPExecClient,
-)
+from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT_SANDBOX
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
+from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
+from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
 from onyx.server.features.build.sandbox.models import FatalWriteError
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
@@ -98,6 +105,7 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import RetriableWriteError
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
 )
@@ -105,7 +113,7 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
-    build_opencode_config,
+    build_multi_provider_opencode_config,
 )
 from onyx.utils.logger import setup_logger
 
@@ -118,7 +126,6 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 # Constants for pod configuration
 # Note: Next.js ports are dynamically allocated from SANDBOX_NEXTJS_PORT_START to
 # SANDBOX_NEXTJS_PORT_END range, with one port per session.
-AGENT_PORT = 8081
 PUSH_DAEMON_PORT = 8731
 POD_READY_TIMEOUT_SECONDS = 60
 # Progressive poll cadence: short intervals up front (pods usually become
@@ -140,6 +147,119 @@ RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
 
 _PUSH_PRIVATE_KEY_ENV = "ONYX_SANDBOX_PUSH_PRIVATE_KEY"
 _PUSH_PUBLIC_KEY_ENV = "ONYX_SANDBOX_PUSH_PUBLIC_KEY"
+
+_PROXY_CA_BUNDLE_DIR = "/etc/ssl/sandbox"
+_PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
+_PROXY_CA_SOURCE_DIR = "/sandbox-ca"
+_PROXY_CA_BUNDLE_VOLUME = "sandbox-ca-bundle"
+_PROXY_CA_SOURCE_VOLUME = "sandbox-ca-source"
+# Pinned to the proxy IP via pod hostAliases — the iptables lockdown
+# blocks DNS, so the sandbox can't resolve it on its own.
+_PROXY_ALIAS = "sandbox-proxy"
+
+# Per-session egress tagging plugin, baked into the sandbox image (see
+# docker/Dockerfile). Path must match the COPY destination there.
+_OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
+
+
+_PROXY_DNS_RETRY_ATTEMPTS = 5
+_PROXY_DNS_RETRY_BACKOFF_S = 0.5
+
+
+def _resolve_proxy_ip() -> str:
+    if not SANDBOX_PROXY_HOST:
+        raise RuntimeError("_resolve_proxy_ip called without SANDBOX_PROXY_HOST")
+    last_err: OSError | None = None
+    for attempt in range(_PROXY_DNS_RETRY_ATTEMPTS):
+        try:
+            return socket.gethostbyname(SANDBOX_PROXY_HOST)
+        except OSError as e:
+            last_err = e
+            if attempt < _PROXY_DNS_RETRY_ATTEMPTS - 1:
+                time.sleep(_PROXY_DNS_RETRY_BACKOFF_S * (2**attempt))
+    raise RuntimeError(
+        f"failed to resolve SANDBOX_PROXY_HOST={SANDBOX_PROXY_HOST!r} "
+        f"after {_PROXY_DNS_RETRY_ATTEMPTS} attempts: {last_err}"
+    )
+
+
+def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
+    if not SANDBOX_PROXY_HOST:
+        return []
+    proxy_url = f"http://{_PROXY_ALIAS}:{SANDBOX_PROXY_PORT}"
+    no_proxy = _compute_no_proxy_list()
+    return [
+        client.V1EnvVar(name="HTTPS_PROXY", value=proxy_url),
+        client.V1EnvVar(name="HTTP_PROXY", value=proxy_url),
+        client.V1EnvVar(name="https_proxy", value=proxy_url),
+        client.V1EnvVar(name="http_proxy", value=proxy_url),
+        client.V1EnvVar(name="NO_PROXY", value=no_proxy),
+        client.V1EnvVar(name="no_proxy", value=no_proxy),
+        # SDK-specific CA env vars for libs that bypass /etc/ssl/certs.
+        client.V1EnvVar(name="NODE_EXTRA_CA_CERTS", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="REQUESTS_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="SSL_CERT_FILE", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="AWS_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="CURL_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="GIT_SSL_CAINFO", value=_PROXY_CA_BUNDLE_FILE),
+    ]
+
+
+def _compute_no_proxy_list() -> str:
+    entries = ["127.0.0.1", "localhost"]
+    if SANDBOX_API_SERVER_URL:
+        parsed = urlparse(SANDBOX_API_SERVER_URL)
+        if parsed.hostname:
+            entries.append(parsed.hostname)
+    return ",".join(entries)
+
+
+def _proxy_init_container() -> client.V1Container:
+    return client.V1Container(
+        name="sandbox-init",
+        image=SANDBOX_CONTAINER_IMAGE,
+        image_pull_policy="IfNotPresent",
+        command=["/workspace/firewall-init.sh"],
+        env=[
+            client.V1EnvVar(name="SANDBOX_PROXY_HOST", value=SANDBOX_PROXY_HOST),
+            client.V1EnvVar(name="SANDBOX_PROXY_PORT", value=str(SANDBOX_PROXY_PORT)),
+            client.V1EnvVar(name="SANDBOX_PROXY_BOOTSTRAP_MODE", value="initcontainer"),
+            client.V1EnvVar(
+                name="SANDBOX_PROXY_CA_BUNDLE_SRC",
+                value=f"{_PROXY_CA_SOURCE_DIR}/ca.crt",
+            ),
+            client.V1EnvVar(
+                name="SANDBOX_PROXY_CA_BUNDLE_DST",
+                value=_PROXY_CA_BUNDLE_FILE,
+            ),
+        ],
+        volume_mounts=[
+            client.V1VolumeMount(
+                name=_PROXY_CA_SOURCE_VOLUME,
+                mount_path=_PROXY_CA_SOURCE_DIR,
+                read_only=True,
+            ),
+            client.V1VolumeMount(
+                name=_PROXY_CA_BUNDLE_VOLUME,
+                mount_path=_PROXY_CA_BUNDLE_DIR,
+            ),
+        ],
+        resources=client.V1ResourceRequirements(
+            requests={"cpu": "50m", "memory": "32Mi"},
+            limits={"cpu": "500m", "memory": "128Mi"},
+        ),
+        security_context=client.V1SecurityContext(
+            # Overrides pod-level runAsNonRoot so this container can
+            # run iptables.
+            run_as_non_root=False,
+            run_as_user=0,
+            allow_privilege_escalation=False,
+            read_only_root_filesystem=False,
+            privileged=False,
+            capabilities=client.V1Capabilities(drop=["ALL"], add=["NET_ADMIN"]),
+        ),
+    )
+
 
 _push_private_key: Ed25519PrivateKey | None = None
 _push_public_key_b64: str | None = None
@@ -236,7 +356,7 @@ set -e
 cd {session_path}/outputs/web
 {install_check}
 echo "Starting Next.js dev server on port {nextjs_port}..."
-nohup bun run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
+nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
@@ -270,18 +390,7 @@ class KubernetesSandboxManager(SandboxManager):
 
     def _initialize(self) -> None:
         """Initialize Kubernetes client and configuration."""
-        # Load Kubernetes config (in-cluster or kubeconfig)
-        try:
-            config.load_incluster_config()
-            logger.info("Loaded in-cluster Kubernetes configuration")
-        except config.ConfigException:
-            try:
-                config.load_kube_config()
-                logger.info("Loaded kubeconfig from default location")
-            except config.ConfigException as e:
-                raise RuntimeError(
-                    f"Failed to load Kubernetes configuration: {e}"
-                ) from e
+        load_kube_config()
 
         # IMPORTANT: We use separate ApiClient instances for REST vs streaming operations.
         # The kubernetes.stream.stream function monkey-patches the ApiClient's request
@@ -304,6 +413,8 @@ class KubernetesSandboxManager(SandboxManager):
         self._s3_bucket = SANDBOX_S3_BUCKET
         self._service_account = SANDBOX_SERVICE_ACCOUNT_NAME
 
+        self._init_serve_state()
+
         # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
@@ -321,6 +432,110 @@ class KubernetesSandboxManager(SandboxManager):
     def _get_service_name(self, sandbox_id: str) -> str:
         """Generate service name from sandbox ID."""
         return self._get_pod_name(sandbox_id)
+
+    def _get_opencode_secret_name(self, sandbox_id: str | UUID) -> str:
+        """Per-pod K8s Secret holding OPENCODE_SERVER_PASSWORD."""
+        return f"{self._get_pod_name(sandbox_id)}-opencode-auth"
+
+    _OPENCODE_PASSWORD_SECRET_KEY = "password"
+    _OPENCODE_CONFIG_SECRET_KEY = "config"
+
+    def _provision_opencode_secret(self, sandbox_id: str, config_json: str) -> None:
+        """Per-pod Secret with ``password`` (HTTP Basic) + ``config``
+        (full opencode.json, surfaced as ``OPENCODE_CONFIG_CONTENT``).
+
+        Without ``config``, opencode-serve loads no provider config and
+        falls back to its built-in ``opencode/big-pickle`` default.
+        """
+        secret_name = self._get_opencode_secret_name(sandbox_id)
+
+        def _build_secret(password: str) -> "client.V1Secret":
+            return client.V1Secret(
+                metadata=client.V1ObjectMeta(
+                    name=secret_name,
+                    namespace=self._namespace,
+                    labels={
+                        "app.kubernetes.io/component": "sandbox-opencode-auth",
+                        "onyx.app/sandbox-id": str(sandbox_id),
+                    },
+                ),
+                type="Opaque",
+                string_data={
+                    self._OPENCODE_PASSWORD_SECRET_KEY: password,
+                    self._OPENCODE_CONFIG_SECRET_KEY: config_json,
+                },
+            )
+
+        existing_password = self._read_opencode_password(sandbox_id)
+        password = existing_password or secrets.token_urlsafe(32)
+        try:
+            self._core_api.create_namespaced_secret(
+                namespace=self._namespace, body=_build_secret(password)
+            )
+            logger.info("Created opencode secret %s", secret_name)
+        except ApiException as e:
+            if e.status != 409:
+                raise
+            # Re-read after 409: the winner's password is the one already
+            # bound into the racing pod's env (K8s does not propagate
+            # Secret updates to running container env vars), so we must
+            # NOT overwrite with our locally-generated value.
+            winner_password = self._read_opencode_password(sandbox_id)
+            if winner_password is None:
+                logger.warning(
+                    "opencode secret %s 409'd on create but read None on "
+                    "follow-up — Secret may have been deleted mid-flight",
+                    secret_name,
+                )
+                raise
+            self._core_api.replace_namespaced_secret(
+                name=secret_name,
+                namespace=self._namespace,
+                body=_build_secret(winner_password),
+            )
+            logger.info(
+                "Replaced opencode secret %s (preserved winner password)",
+                secret_name,
+            )
+            return
+
+    def _read_opencode_password(self, sandbox_id: str | UUID) -> str | None:
+        """Fetch the cleartext OPENCODE_SERVER_PASSWORD from the per-pod Secret.
+
+        Returns ``None`` if the Secret doesn't exist (e.g. legacy pod
+        provisioned before this code landed). Callers should fall back
+        to no-auth in that case.
+        """
+        secret_name = self._get_opencode_secret_name(sandbox_id)
+        try:
+            secret = self._core_api.read_namespaced_secret(
+                name=secret_name, namespace=self._namespace
+            )
+        except ApiException as e:
+            if e.status == 404:
+                return None
+            raise
+        data = secret.data or {}
+        raw = data.get(self._OPENCODE_PASSWORD_SECRET_KEY)
+        if not raw:
+            return None
+        return base64.b64decode(raw).decode("utf-8")
+
+    def _delete_opencode_password_secret(self, sandbox_id: str | UUID) -> None:
+        """Delete the per-pod opencode-serve auth Secret. Idempotent."""
+        secret_name = self._get_opencode_secret_name(sandbox_id)
+        try:
+            self._core_api.delete_namespaced_secret(
+                name=secret_name, namespace=self._namespace
+            )
+            logger.info("Deleted opencode auth secret %s", secret_name)
+        except ApiException as e:
+            if e.status not in (404, 410):
+                logger.warning(
+                    "Failed to delete opencode auth secret %s: %s",
+                    secret_name,
+                    e,
+                )
 
     def _get_nextjs_url(self, sandbox_id: str, port: int) -> str:
         """Get the internal cluster URL for a session's Next.js server.
@@ -375,7 +590,7 @@ class KubernetesSandboxManager(SandboxManager):
         # Sandbox container — runs the agent. No IRSA (skip-containers annotation
         # on the SA strips AWS env vars and the projected token from this container).
         sandbox_ports = [
-            client.V1ContainerPort(name="agent", container_port=AGENT_PORT),
+            client.V1ContainerPort(name="opencode", container_port=OPENCODE_SERVE_PORT),
         ]
         for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
             sandbox_ports.append(
@@ -391,6 +606,25 @@ class KubernetesSandboxManager(SandboxManager):
             env=[
                 client.V1EnvVar(name="ONYX_PAT", value=onyx_pat),
                 client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
+                client.V1EnvVar(
+                    name=OPENCODE_SERVER_PASSWORD,
+                    value_from=client.V1EnvVarSource(
+                        secret_key_ref=client.V1SecretKeySelector(
+                            name=self._get_opencode_secret_name(sandbox_id),
+                            key=self._OPENCODE_PASSWORD_SECRET_KEY,
+                        )
+                    ),
+                ),
+                client.V1EnvVar(
+                    name="OPENCODE_CONFIG_CONTENT",
+                    value_from=client.V1EnvVarSource(
+                        secret_key_ref=client.V1SecretKeySelector(
+                            name=self._get_opencode_secret_name(sandbox_id),
+                            key=self._OPENCODE_CONFIG_SECRET_KEY,
+                        )
+                    ),
+                ),
+                *_proxy_main_container_env_vars(),
             ],
             volume_mounts=[
                 client.V1VolumeMount(
@@ -398,6 +632,17 @@ class KubernetesSandboxManager(SandboxManager):
                 ),
                 client.V1VolumeMount(
                     name="managed", mount_path="/workspace/managed", read_only=True
+                ),
+                *(
+                    [
+                        client.V1VolumeMount(
+                            name=_PROXY_CA_BUNDLE_VOLUME,
+                            mount_path=_PROXY_CA_BUNDLE_DIR,
+                            read_only=True,
+                        )
+                    ]
+                    if SANDBOX_PROXY_HOST
+                    else []
                 ),
             ],
             resources=client.V1ResourceRequirements(
@@ -423,9 +668,13 @@ class KubernetesSandboxManager(SandboxManager):
         # forwarded AWS_* / AWS_ENDPOINT_URL from the api_server env in
         # local-dev / CI where IRSA isn't available and an S3-compatible
         # service (e.g. minio) is reachable in-cluster.
+        #
+        # The iptables lockdown is pod-wide, so the sidecar's `aws s3 cp`
+        # must also route through the proxy.
         _, push_public_key_b64 = _get_push_key_pair()
         sidecar_env = [
             client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
+            *_proxy_main_container_env_vars(),
         ]
         for var in (
             "AWS_ACCESS_KEY_ID",
@@ -469,6 +718,17 @@ class KubernetesSandboxManager(SandboxManager):
                     name="workspace", mount_path="/workspace/sessions"
                 ),
                 client.V1VolumeMount(name="managed", mount_path="/workspace/managed"),
+                *(
+                    [
+                        client.V1VolumeMount(
+                            name=_PROXY_CA_BUNDLE_VOLUME,
+                            mount_path=_PROXY_CA_BUNDLE_DIR,
+                            read_only=True,
+                        )
+                    ]
+                    if SANDBOX_PROXY_HOST
+                    else []
+                ),
             ],
             resources=client.V1ResourceRequirements(
                 requests={"cpu": "100m", "memory": "256Mi"},
@@ -503,9 +763,36 @@ class KubernetesSandboxManager(SandboxManager):
             ),
         ]
 
+        init_containers: list[client.V1Container] = []
+        host_aliases: list[client.V1HostAlias] | None = None
+        if SANDBOX_PROXY_HOST:
+            init_containers.append(_proxy_init_container())
+            volumes.extend(
+                [
+                    client.V1Volume(
+                        name=_PROXY_CA_SOURCE_VOLUME,
+                        config_map=client.V1ConfigMapVolumeSource(
+                            name=SANDBOX_PROXY_CA_CONFIGMAP,
+                            optional=False,
+                        ),
+                    ),
+                    client.V1Volume(
+                        name=_PROXY_CA_BUNDLE_VOLUME,
+                        empty_dir=client.V1EmptyDirVolumeSource(),
+                    ),
+                ]
+            )
+            # kubelet injects hostAliases into every container's /etc/hosts;
+            # initContainer mutations don't propagate, so we set it here.
+            host_aliases = [
+                client.V1HostAlias(ip=_resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
+            ]
+
         pod_spec = client.V1PodSpec(
             service_account_name=self._service_account,
+            init_containers=init_containers or None,
             containers=[sandbox_container, sidecar_container],
+            host_aliases=host_aliases,
             share_process_namespace=False,
             volumes=volumes,
             restart_policy="Never",
@@ -546,10 +833,10 @@ class KubernetesSandboxManager(SandboxManager):
                 name=pod_name,
                 namespace=self._namespace,
                 labels={
-                    "app.kubernetes.io/component": "sandbox",
-                    "app.kubernetes.io/managed-by": "onyx",
-                    "onyx.app/sandbox-id": sandbox_id,
-                    "onyx.app/tenant-id": tenant_id,
+                    LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
+                    LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
+                    LABEL_SANDBOX_ID: sandbox_id,
+                    LABEL_TENANT_ID: tenant_id,
                     "admission.datadoghq.com/enabled": "false",
                 },
             ),
@@ -572,9 +859,13 @@ class KubernetesSandboxManager(SandboxManager):
 
         service_name = self._get_service_name(sandbox_id_str)
 
-        # Build port list: agent port + all session Next.js ports
+        # Build port list: opencode-serve + all session Next.js ports
         ports = [
-            client.V1ServicePort(name="agent", port=AGENT_PORT, target_port=AGENT_PORT),
+            client.V1ServicePort(
+                name="opencode",
+                port=OPENCODE_SERVE_PORT,
+                target_port=OPENCODE_SERVE_PORT,
+            ),
         ]
 
         # Add ports for session Next.js servers (one port per potential session)
@@ -594,15 +885,15 @@ class KubernetesSandboxManager(SandboxManager):
                 name=service_name,
                 namespace=self._namespace,
                 labels={
-                    "app.kubernetes.io/component": "sandbox",
-                    "app.kubernetes.io/managed-by": "onyx",
-                    "onyx.app/sandbox-id": sandbox_id_str,
-                    "onyx.app/tenant-id": tenant_id_str,
+                    LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
+                    LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
+                    LABEL_SANDBOX_ID: sandbox_id_str,
+                    LABEL_TENANT_ID: tenant_id_str,
                 },
             ),
             spec=client.V1ServiceSpec(
                 type="ClusterIP",
-                selector={"onyx.app/sandbox-id": sandbox_id_str},
+                selector={LABEL_SANDBOX_ID: sandbox_id_str},
                 ports=ports,
             ),
         )
@@ -660,6 +951,59 @@ class KubernetesSandboxManager(SandboxManager):
                     )
             else:
                 raise
+
+    def stream_pod_logs(
+        self,
+        sandbox_id: UUID,
+        *,
+        container: str = "sandbox",
+        tail_lines: int = 200,
+    ) -> Iterator[str]:
+        """Yield log lines from a sandbox pod's container as they arrive.
+
+        Dev/debug surface — gated by ``ENABLE_OPENCODE_DEBUGGING`` in the
+        API layer. Uses ``read_namespaced_pod_log(follow=True)``, which
+        returns an iterable of bytes chunks; we decode and split into
+        lines ourselves so the consumer sees one log line per yield.
+        """
+        pod_name = self._get_pod_name(sandbox_id)
+        try:
+            stream = self._core_api.read_namespaced_pod_log(
+                name=pod_name,
+                namespace=self._namespace,
+                container=container,
+                follow=True,
+                tail_lines=tail_lines,
+                _preload_content=False,  # required for streaming response
+            )
+        except ApiException as e:
+            logger.warning(
+                "stream_pod_logs: read_namespaced_pod_log failed for %s/%s: %s",
+                pod_name,
+                container,
+                e,
+            )
+            return
+
+        buf = ""
+        try:
+            for chunk in stream.stream(decode_content=True):
+                if not chunk:
+                    continue
+                buf += chunk.decode("utf-8", errors="replace")
+                while "\n" in buf:
+                    line, buf = buf.split("\n", 1)
+                    yield line
+        finally:
+            # No `yield buf` here even if a partial line is in flight —
+            # PEP 342 forbids yielding while a generator is closing via
+            # GeneratorExit (raises RuntimeError). Losing the last
+            # unterminated chunk on client disconnect is acceptable; it
+            # would be incomplete anyway.
+            try:
+                stream.close()
+            except Exception:  # noqa: BLE001
+                pass
 
     def _get_init_container_logs(self, pod_name: str, container_name: str) -> str:
         """Get logs from an init container.
@@ -850,8 +1194,10 @@ class KubernetesSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,  # noqa: ARG002
+        llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
+        *,
+        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
@@ -903,6 +1249,11 @@ class KubernetesSandboxManager(SandboxManager):
                     f"Timeout waiting for existing sandbox pod {pod_name} to become ready"
                 )
 
+            if not self._wait_for_opencode_serve_ready(sandbox_id):
+                raise RuntimeError(
+                    f"opencode-serve never became ready in existing sandbox pod {pod_name}"
+                )
+
             logger.info(
                 "Reusing existing Kubernetes sandbox %s, pod: %s", sandbox_id, pod_name
             )
@@ -921,6 +1272,33 @@ class KubernetesSandboxManager(SandboxManager):
             )
 
         try:
+            # Re-provision: clear tombstone + cached info so subscribes
+            # build a fresh bus with the new Secret's password.
+            with self._event_buses_lock:
+                self._terminated_sandboxes.discard(sandbox_id)
+            self._invalidate_serve_connection_info(sandbox_id)
+
+            # Secret must exist before the Pod (env references it via
+            # secretKeyRef). Pre-load every configured provider so
+            # cross-provider per-prompt model overrides work without a
+            # pod restart.
+            providers = all_llm_configs or [llm_config]
+            # Only register the egress-tagging plugin when the proxy is
+            # deployed; otherwise it would no-op (no HTTP(S)_PROXY to re-tag).
+            session_tag_plugins = (
+                [_OPENCODE_SESSION_TAG_PLUGIN_PATH] if SANDBOX_PROXY_HOST else None
+            )
+            opencode_config_json = json.dumps(
+                build_multi_provider_opencode_config(
+                    providers=providers,
+                    default_provider=llm_config.provider,
+                    default_model=llm_config.model_name,
+                    disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    plugins=session_tag_plugins,
+                )
+            )
+            self._provision_opencode_secret(str(sandbox_id), opencode_config_json)
+
             # 1. Create Pod (user-level only, no session setup)
             logger.debug("Creating Pod %s", pod_name)
             pod = self._create_sandbox_pod(
@@ -965,6 +1343,12 @@ class KubernetesSandboxManager(SandboxManager):
             if not self._wait_for_pod_ready(pod_name):
                 raise RuntimeError(
                     f"Timeout waiting for sandbox pod {pod_name} to become ready"
+                )
+
+            # 4. Wait for opencode-serve to bind :4096 .
+            if not self._wait_for_opencode_serve_ready(sandbox_id):
+                raise RuntimeError(
+                    f"opencode-serve never became ready in sandbox pod {pod_name}"
                 )
 
             logger.info(
@@ -1113,6 +1497,11 @@ class KubernetesSandboxManager(SandboxManager):
                 logger.error("Error deleting Pod %s: %s", pod_name, e)
                 raise
 
+        # Delete the per-pod opencode-serve auth Secret. Idempotent.
+        # Done after the Pod is being torn down so no live container is
+        # still trying to resolve the secretKeyRef.
+        self._delete_opencode_password_secret(sandbox_id)
+
         # Wait for resources to be fully deleted to prevent 409 conflicts
         # on immediate re-provisioning
         if wait_for_deletion:
@@ -1122,18 +1511,9 @@ class KubernetesSandboxManager(SandboxManager):
                 self._wait_for_resource_deletion("pod", pod_name)
 
     def terminate(self, sandbox_id: UUID) -> None:
-        """Terminate a sandbox and clean up Kubernetes resources.
-
-        Removes session mappings for this sandbox, then deletes the
-        Service and Pod. ACP clients are ephemeral (created per message),
-        so there's nothing to stop here.
-
-        Args:
-            sandbox_id: The sandbox ID to terminate
-        """
-        # Clean up Kubernetes resources (needs string for pod/service names)
+        """Tear down event buses, then delete Service + Pod."""
+        self._close_all_sandbox_buses(sandbox_id)
         self._cleanup_kubernetes_resources(str(sandbox_id))
-
         logger.info("Terminated Kubernetes sandbox %s", sandbox_id)
 
     def setup_session_workspace(
@@ -1192,18 +1572,6 @@ class KubernetesSandboxManager(SandboxManager):
             user_role=user_role,
         )
 
-        # Build opencode config JSON using shared config builder
-        opencode_config = build_opencode_config(
-            provider=llm_config.provider,
-            model_name=llm_config.model_name,
-            api_key=llm_config.api_key if llm_config.api_key else None,
-            api_base=llm_config.api_base,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
-        )
-
-        opencode_json = json.dumps(opencode_config)
-        # Escape for shell
-        opencode_json_escaped = opencode_json.replace("'", "'\\''")
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
 
         # Copy outputs template from baked-in location and install npm dependencies
@@ -1267,10 +1635,6 @@ echo "Linked user_library to /workspace/managed/user_library"
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
 
-# Write opencode config
-echo "Writing opencode.json"
-printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
-
 # Start Next.js dev server
 {nextjs_start_script}
 
@@ -1318,10 +1682,8 @@ echo "Session workspace setup complete"
         session_id: UUID,
         nextjs_port: int | None = None,  # noqa: ARG002
     ) -> None:
-        """Clean up a session workspace (on session delete).
-
-        Removes the ACP session mapping and executes kubectl exec to remove
-        the session directory. The shared ACP client persists for other sessions.
+        """Clean up a session workspace (on session delete). Executes
+        kubectl exec to remove the session directory.
 
         Args:
             sandbox_id: The sandbox ID
@@ -1329,6 +1691,8 @@ echo "Session workspace setup complete"
             nextjs_port: Optional port where Next.js server is running (unused in K8s,
                         we use PID file instead)
         """
+        self._close_session_buses(sandbox_id, session_id)
+
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
@@ -1660,29 +2024,13 @@ echo "Session cleanup complete"
             user_role=None,
         )
 
-        # Generate opencode.json
-        opencode_config = build_opencode_config(
-            provider=llm_config.provider,
-            model_name=llm_config.model_name,
-            api_key=llm_config.api_key if llm_config.api_key else None,
-            api_base=llm_config.api_base,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
-        )
-        opencode_json = json.dumps(opencode_config)
-
-        # Escape for shell (single quotes)
-        opencode_json_escaped = opencode_json.replace("'", "'\\''")
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
-
-        # Snapshot tar only carries outputs/, attachments/, .opencode-data/ —
-        # re-link the managed-tree symlinks that setup_session_workspace creates.
         config_script = f"""
 set -e
 mkdir -p {session_path}/.opencode
 ln -sfn /workspace/managed/skills {session_path}/.opencode/skills
 ln -sfn /workspace/managed/user_library {session_path}/user_library
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
-printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
 """
 
         logger.info("Regenerating session configuration files")
@@ -1715,171 +2063,19 @@ printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
         except httpx.TransportError:
             return False
 
-    def _create_ephemeral_acp_client(
-        self, sandbox_id: UUID, session_path: str
-    ) -> ACPExecClient:
-        """Create a new ephemeral ACP client for a single message exchange.
-
-        Each call starts a fresh `opencode acp` process in the sandbox pod.
-        The process is short-lived — stopped after the message completes.
-        This prevents the bug where multiple long-lived processes (one per
-        API replica) operate on the same session's flat file storage
-        concurrently, causing the JSON-RPC response to be silently lost.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_path: Working directory for the session (e.g. /workspace/sessions/{id}).
-                XDG_DATA_HOME is set relative to this so opencode's session data
-                lives inside the snapshot directory.
-
-        Returns:
-            A running ACPExecClient (caller must stop it when done)
-        """
-        pod_name = self._get_pod_name(str(sandbox_id))
-        acp_client = ACPExecClient(
-            pod_name=pod_name,
-            namespace=self._namespace,
-            container="sandbox",
+    def _load_serve_connection_info(
+        self, sandbox_id: UUID
+    ) -> ServeConnectionInfo | None:
+        """Build serve connection info from the per-pod Secret. URL uses
+        the Service DNS (not pod IP) so telepresence dev paths work."""
+        service_name = self._get_service_name(str(sandbox_id))
+        return ServeConnectionInfo(
+            base_url=(
+                f"http://{service_name}.{self._namespace}.svc.cluster.local"
+                f":{OPENCODE_SERVE_PORT}"
+            ),
+            password=self._read_opencode_password(sandbox_id),
         )
-        acp_client.start(cwd=session_path)
-
-        logger.info(
-            "[SANDBOX-ACP] Created ephemeral ACP client: sandbox=%s pod=%s api_pod=%s",
-            sandbox_id,
-            pod_name,
-            _API_SERVER_HOSTNAME,
-        )
-        return acp_client
-
-    def send_message(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        message: str,
-    ) -> Generator[ACPEvent, None, None]:
-        """Send a message to the CLI agent and stream ACP events.
-
-        Creates an ephemeral `opencode acp` process for each message.
-        The process resumes the session from opencode's on-disk storage,
-        handles the prompt, then is stopped. This ensures only one process
-        operates on a session's flat files at a time, preventing the bug
-        where multiple long-lived processes (one per API replica) corrupt
-        each other's in-memory state.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID (determines workspace directory)
-            message: The message content to send
-
-        Yields:
-            Typed ACP schema event objects
-        """
-        packet_logger = get_packet_logger()
-        session_path = f"/workspace/sessions/{session_id}"
-
-        # Create an ephemeral ACP client for this message
-        acp_client = self._create_ephemeral_acp_client(sandbox_id, session_path)
-
-        try:
-            # Resume (or create) the ACP session from opencode's on-disk storage
-            acp_session_id = acp_client.resume_or_create_session(cwd=session_path)
-
-            logger.info(
-                "[SANDBOX-ACP] Sending message: session=%s acp_session=%s api_pod=%s",
-                session_id,
-                acp_session_id,
-                _API_SERVER_HOSTNAME,
-            )
-
-            # Log the send_message call at sandbox manager level
-            packet_logger.log_session_start(session_id, sandbox_id, message)
-
-            events_count = 0
-            got_prompt_response = False
-            try:
-                for event in acp_client.send_message(
-                    message, session_id=acp_session_id
-                ):
-                    events_count += 1
-                    if isinstance(event, PromptResponse):
-                        got_prompt_response = True
-                    yield event
-
-                logger.info(
-                    "[SANDBOX-ACP] send_message completed: session=%s events=%s got_prompt_response=%s",
-                    session_id,
-                    events_count,
-                    got_prompt_response,
-                )
-                packet_logger.log_session_end(
-                    session_id, success=True, events_count=events_count
-                )
-            except GeneratorExit:
-                logger.warning(
-                    "[SANDBOX-ACP] GeneratorExit: session=%s events=%s, sending session/cancel",
-                    session_id,
-                    events_count,
-                )
-                try:
-                    acp_client.cancel(session_id=acp_session_id)
-                except Exception as cancel_err:
-                    logger.warning(
-                        "[SANDBOX-ACP] session/cancel failed on GeneratorExit: %s",
-                        cancel_err,
-                    )
-                packet_logger.log_session_end(
-                    session_id,
-                    success=False,
-                    error="GeneratorExit: Client disconnected or stream closed by consumer",
-                    events_count=events_count,
-                )
-                raise
-            except Exception as e:
-                logger.error(
-                    "[SANDBOX-ACP] Exception: session=%s events=%s error=%s, sending session/cancel",
-                    session_id,
-                    events_count,
-                    e,
-                )
-                try:
-                    acp_client.cancel(session_id=acp_session_id)
-                except Exception as cancel_err:
-                    logger.warning(
-                        "[SANDBOX-ACP] session/cancel failed on Exception: %s",
-                        cancel_err,
-                    )
-                packet_logger.log_session_end(
-                    session_id,
-                    success=False,
-                    error=f"Exception: {str(e)}",
-                    events_count=events_count,
-                )
-                raise
-            except BaseException as e:
-                logger.error(
-                    "[SANDBOX-ACP] %s: session=%s error=%s",
-                    type(e).__name__,
-                    session_id,
-                    e,
-                )
-                packet_logger.log_session_end(
-                    session_id,
-                    success=False,
-                    error=f"{type(e).__name__}: {str(e) if str(e) else 'System-level interruption'}",
-                    events_count=events_count,
-                )
-                raise
-        finally:
-            # Always stop the ephemeral ACP client to kill the opencode process.
-            # This ensures no stale processes linger in the sandbox container.
-            try:
-                acp_client.stop()
-            except Exception as e:
-                logger.warning(
-                    "[SANDBOX-ACP] Failed to stop ephemeral ACP client: session=%s error=%s",
-                    session_id,
-                    e,
-                )
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str

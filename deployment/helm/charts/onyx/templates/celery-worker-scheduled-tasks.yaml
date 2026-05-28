@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-scheduled-tasks
+  name: {{ include "onyx.resourceName" (list . "celery-worker-scheduled-tasks") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.celery_worker_scheduled_tasks.deploymentLabels }}

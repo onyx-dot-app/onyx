@@ -150,36 +150,6 @@ export async function generateSessionName(sessionId: string): Promise<string> {
   return data.name;
 }
 
-export interface SuggestionBubble {
-  theme: "add" | "question";
-  text: string;
-}
-
-export async function generateFollowupSuggestions(
-  sessionId: string,
-  userMessage: string,
-  agentMessage: string
-): Promise<SuggestionBubble[]> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/generate-suggestions`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_message: userMessage,
-        assistant_message: agentMessage,
-      }),
-    }
-  );
-
-  if (!res.ok) {
-    throw new Error(`Failed to generate suggestions: ${res.status}`);
-  }
-
-  const data = await res.json();
-  return data.suggestions;
-}
-
 export async function updateSessionName(
   sessionId: string,
   name: string | null

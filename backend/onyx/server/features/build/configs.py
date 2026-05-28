@@ -125,6 +125,15 @@ SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get(
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
+# Dev/debug-only: when true, exposes a frontend button + SSE endpoint that
+# tails the user's sandbox pod's opencode-serve container logs. Never
+# enable in prod — the logs include LLM I/O and tool invocations that may
+# contain sensitive data. Disabled by default; the SSE endpoint 404s when
+# this is false so the surface is gone (not just hidden).
+ENABLE_OPENCODE_DEBUGGING = (
+    os.environ.get("ENABLE_OPENCODE_DEBUGGING", "false").lower() == "true"
+)
+
 # Internal URL the sandbox uses to reach the Onyx API server.
 # Must be set when SANDBOX_BACKEND=kubernetes (no default — varies per deployment).
 SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
@@ -138,6 +147,30 @@ SANDBOX_POD_CPU_REQUEST = os.environ.get("SANDBOX_POD_CPU_REQUEST", "1000m")
 SANDBOX_POD_MEMORY_REQUEST = os.environ.get("SANDBOX_POD_MEMORY_REQUEST", "2Gi")
 SANDBOX_POD_CPU_LIMIT = os.environ.get("SANDBOX_POD_CPU_LIMIT", "2000m")
 SANDBOX_POD_MEMORY_LIMIT = os.environ.get("SANDBOX_POD_MEMORY_LIMIT", "10Gi")
+
+# ============================================================================
+# Sandbox Egress Proxy Configuration
+# Consumed by both the api-server (building sandbox pod specs) and the
+# proxy itself (on boot).
+# ============================================================================
+
+# Empty SANDBOX_PROXY_HOST disables proxy wiring for tests/dev (the
+# initContainer is skipped and HTTPS_PROXY isn't set on the sandbox).
+SANDBOX_PROXY_HOST = os.environ.get("SANDBOX_PROXY_HOST", "")
+SANDBOX_PROXY_PORT = int(os.environ.get("SANDBOX_PROXY_PORT", "8080"))
+
+SANDBOX_PROXY_LISTEN_PORT = int(os.environ.get("SANDBOX_PROXY_LISTEN_PORT", "8080"))
+SANDBOX_PROXY_HEALTHZ_PORT = int(os.environ.get("SANDBOX_PROXY_HEALTHZ_PORT", "8081"))
+
+# Namespace the proxy runs in. The CA Secret lives here; the CA
+# ConfigMap is projected into SANDBOX_NAMESPACE so sandboxes can mount
+# it (K8s does not allow cross-namespace ConfigMap mounts).
+SANDBOX_PROXY_NAMESPACE = os.environ.get("SANDBOX_PROXY_NAMESPACE", "onyx")
+
+SANDBOX_PROXY_CA_SECRET = os.environ.get("SANDBOX_PROXY_CA_SECRET", "sandbox-proxy-ca")
+SANDBOX_PROXY_CA_CONFIGMAP = os.environ.get(
+    "SANDBOX_PROXY_CA_CONFIGMAP", "sandbox-proxy-ca-bundle"
+)
 
 # ============================================================================
 # Docker Sandbox Configuration
@@ -173,12 +206,42 @@ SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0
 SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
 
 # ============================================================================
-# ACP (Agent Communication Protocol) Configuration
+# Opencode-serve Configuration
 # ============================================================================
 
-# Timeout for ACP message processing in seconds
-# This is the maximum time to wait for a complete response from the agent
-ACP_MESSAGE_TIMEOUT = float(os.environ.get("ACP_MESSAGE_TIMEOUT", "900.0"))
+# Wall-clock budget for one user-message turn against opencode-serve.
+SANDBOX_TURN_TIMEOUT_SECONDS = float(
+    os.environ.get("SANDBOX_TURN_TIMEOUT_SECONDS", "900.0")
+)
+
+# Port `opencode serve` listens on inside the sandbox container.
+# Match against the EXPOSE directive in the sandbox Dockerfile.
+OPENCODE_SERVE_PORT = int(os.environ.get("OPENCODE_SERVE_PORT", "4096"))
+
+# Env var inside the sandbox container that holds the per-pod HTTP Basic
+# password for opencode serve. Internal contract — the api_server writes
+# this name and opencode-serve reads it, so both ends must agree. Not
+# operator-tunable.
+OPENCODE_SERVER_PASSWORD = "OPENCODE_SERVER_PASSWORD"
+
+# Username for HTTP Basic Auth against opencode serve. Opencode's serve
+# implementation hard-codes the username to "opencode" when only
+# OPENCODE_SERVER_PASSWORD is set; using any other value yields a 401
+# (verified empirically against opencode 1.15.7, see test report).
+OPENCODE_SERVER_USERNAME = "opencode"
+
+# Per-request HTTP timeouts when talking to opencode serve, in seconds.
+OPENCODE_SERVE_CONNECT_TIMEOUT = float(
+    os.environ.get("OPENCODE_SERVE_CONNECT_TIMEOUT", "5.0")
+)
+OPENCODE_SERVE_REQUEST_TIMEOUT = float(
+    os.environ.get("OPENCODE_SERVE_REQUEST_TIMEOUT", "30.0")
+)
+# Idle timeout for /event SSE. The reader reconnects (with backoff) if the
+# stream is silent for this long.
+OPENCODE_SERVE_EVENT_READ_TIMEOUT = float(
+    os.environ.get("OPENCODE_SERVE_EVENT_READ_TIMEOUT", "60.0")
+)
 
 # ============================================================================
 # Rate Limiting Configuration

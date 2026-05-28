@@ -438,7 +438,7 @@ def test_update_or_delete_nonexistent_app_returns_404(
             app_id=missing_id,
             name="x",
             description="x",
-            upstream_url_patterns=[],
+            upstream_url_patterns=[r"^https://api\.example\.com/.*$"],
             auth_template={},
             organization_credentials={},
         )

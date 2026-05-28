@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
@@ -112,8 +112,7 @@ export default function ScheduledTaskDetailPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title="Scheduled task"
-          backButton
-          onBack={handleBack}
+          backButton={handleBack}
         />
         <SettingsLayouts.Body>
           <Text mainUiBody text03>
@@ -130,8 +129,7 @@ export default function ScheduledTaskDetailPage() {
         icon={SvgClock}
         title={data?.name ?? "Scheduled task"}
         description={scheduleDescription}
-        backButton
-        onBack={handleBack}
+        backButton={handleBack}
         rightChildren={
           data ? (
             <div className="flex items-center gap-2">

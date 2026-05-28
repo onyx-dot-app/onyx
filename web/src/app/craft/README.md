@@ -162,7 +162,7 @@ Key configuration categories (see source for full reference):
 
 **Agent**
 
-- OpenCode CLI with ACP (Agent Communication Protocol)
+- opencode-serve (HTTP transport)
 - JSON-RPC 2.0 over stdin/stdout
 
 **Sandbox Environment**

@@ -27,8 +27,6 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import ArtifactResponse
 from onyx.server.features.build.api.models import DetailedSessionResponse
 from onyx.server.features.build.api.models import DirectoryListing
-from onyx.server.features.build.api.models import GenerateSuggestionsRequest
-from onyx.server.features.build.api.models import GenerateSuggestionsResponse
 from onyx.server.features.build.api.models import PptxPreviewResponse
 from onyx.server.features.build.api.models import PreProvisionedCheckResponse
 from onyx.server.features.build.api.models import SessionCreateRequest
@@ -38,8 +36,6 @@ from onyx.server.features.build.api.models import SessionResponse
 from onyx.server.features.build.api.models import SessionUpdateRequest
 from onyx.server.features.build.api.models import SetSessionSharingRequest
 from onyx.server.features.build.api.models import SetSessionSharingResponse
-from onyx.server.features.build.api.models import SuggestionBubble
-from onyx.server.features.build.api.models import SuggestionTheme
 from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
@@ -51,6 +47,7 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
+from onyx.server.features.build.session.manager import get_all_build_mode_llm_configs
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.manager import UploadLimitExceededError
 from onyx.server.features.build.utils import sanitize_filename
@@ -245,41 +242,6 @@ def generate_session_name(
     return SessionNameGenerateResponse(name=generated_name)
 
 
-@router.post(
-    "/{session_id}/generate-suggestions", response_model=GenerateSuggestionsResponse
-)
-def generate_suggestions(
-    session_id: UUID,
-    request: GenerateSuggestionsRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> GenerateSuggestionsResponse:
-    """Generate follow-up suggestions based on the first exchange in a session."""
-    session_manager = SessionManager(db_session)
-
-    # Verify session exists and belongs to user
-    session = session_manager.get_session(session_id, user.id)
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    # Generate suggestions
-    suggestions_data = session_manager.generate_followup_suggestions(
-        user_message=request.user_message,
-        assistant_message=request.assistant_message,
-    )
-
-    # Convert to response model
-    suggestions = [
-        SuggestionBubble(
-            theme=SuggestionTheme(item["theme"]),
-            text=item["text"],
-        )
-        for item in suggestions_data
-    ]
-
-    return GenerateSuggestionsResponse(suggestions=suggestions)
-
-
 @router.put("/{session_id}/name", response_model=SessionResponse)
 def update_session_name(
     session_id: UUID,
@@ -450,12 +412,18 @@ def restore_session(
             )
             db_session.commit()
 
+            # Pre-register every build-mode provider so per-prompt model
+            # overrides can cross providers without re-provisioning the pod.
+            all_llm_configs = get_all_build_mode_llm_configs(
+                db_session, default=llm_config
+            )
             sandbox_manager.provision(
                 sandbox_id=sandbox.id,
                 user_id=user.id,
                 tenant_id=tenant_id,
                 llm_config=llm_config,
                 onyx_pat=onyx_pat,
+                all_llm_configs=all_llm_configs,
             )
 
             # Mark as RUNNING after successful provision
@@ -867,8 +835,8 @@ def upload_file_endpoint(
     # Read file content (use sync file interface)
     content = file.file.read()
 
-    # Validate file (extension, mime type, size)
-    is_valid, error = validate_file(file.filename, file.content_type, len(content))
+    # Validate file size (extension/type are intentionally unrestricted)
+    is_valid, error = validate_file(len(content))
     if not is_valid:
         raise HTTPException(status_code=400, detail=error)
 

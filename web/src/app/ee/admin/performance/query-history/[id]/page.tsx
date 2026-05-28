@@ -3,7 +3,7 @@ import { use } from "react";
 
 import { Divider, Text } from "@opal/components";
 import Title from "@/components/ui/title";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import { ChatSessionSnapshot, MessageSnapshot } from "../../usage/types";
 import { FiBook } from "react-icons/fi";
 import { timestampToReadableDate } from "@/lib/dateUtils";

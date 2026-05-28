@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
 import ScheduleTaskForm, {
   defaultFormInitial,
@@ -64,8 +64,7 @@ export default function NewScheduledTaskPage() {
         icon={SvgClock}
         title="New scheduled task"
         description="Save a prompt + schedule. Craft will run it on a timer."
-        backButton
-        onBack={handleBack}
+        backButton={handleBack}
       />
       <SettingsLayouts.Body>
         <ScheduleTaskForm initial={initial} isEdit={false} />

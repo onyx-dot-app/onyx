@@ -34,25 +34,21 @@ def create_build_session__no_commit(
     db_session: Session,
     name: str | None = None,
     origin: SessionOrigin = SessionOrigin.INTERACTIVE,
+    agent_provider: str | None = None,
+    agent_model: str | None = None,
 ) -> BuildSession:
-    """Create a new build session for the given user.
+    """``flush()`` only — caller commits.
 
-    NOTE: This function uses flush() instead of commit(). The caller is
-    responsible for committing the transaction when ready.
-
-    Args:
-        user_id: The user ID
-        db_session: Database session
-        name: Optional session name
-        origin: How the session was started. Defaults to INTERACTIVE
-            (user-driven via the Craft UI); the scheduled-tasks executor
-            passes SCHEDULED so the row is filtered out of the sidebar.
+    ``agent_provider`` / ``agent_model`` are nullable for legacy rows;
+    the send-message path then falls back to opencode's startup default.
     """
     session = BuildSession(
         user_id=user_id,
         name=name,
         status=BuildSessionStatus.ACTIVE,
         origin=origin,
+        agent_provider=agent_provider,
+        agent_model=agent_model,
     )
     db_session.add(session)
     db_session.flush()
@@ -308,7 +304,7 @@ def create_message(
         session_id: Session UUID
         message_type: Type of message (USER, ASSISTANT, SYSTEM)
         turn_index: 0-indexed user message number this message belongs to
-        message_metadata: Required structured data (the raw ACP packet JSON)
+        message_metadata: Required structured data (the raw sandbox event packet JSON)
         db_session: Database session
     """
     message = BuildMessage(
@@ -599,3 +595,21 @@ def fetch_llm_provider_by_type_for_build_mode(
     if not provider_model:
         return None
     return LLMProviderView.from_model(provider_model)
+
+
+def fetch_all_build_mode_llm_providers(
+    db_session: Session,
+) -> list[LLMProviderView]:
+    """Every ``build-mode-*`` LLM provider configured for this tenant."""
+    provider_models = list(
+        db_session.scalars(
+            select(LLMProviderModel)
+            .where(LLMProviderModel.name.like("build-mode-%"))
+            .options(
+                selectinload(LLMProviderModel.model_configurations),
+                selectinload(LLMProviderModel.groups),
+                selectinload(LLMProviderModel.personas),
+            )
+        )
+    )
+    return [LLMProviderView.from_model(p) for p in provider_models]

@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import Text from "@/refresh-components/texts/Text";
@@ -38,8 +38,7 @@ export default function EditScheduledTaskPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title="Edit scheduled task"
-          backButton
-          onBack={handleBack}
+          backButton={handleBack}
         />
         <SettingsLayouts.Body>
           <Text mainUiBody text03>
@@ -55,8 +54,7 @@ export default function EditScheduledTaskPage() {
       <SettingsLayouts.Header
         icon={SvgClock}
         title={data ? `Edit "${data.name}"` : "Edit scheduled task"}
-        backButton
-        onBack={handleBack}
+        backButton={handleBack}
       />
       <SettingsLayouts.Body>
         {isLoading ? (

@@ -16,7 +16,7 @@ import {
 } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { getProvider } from "@/lib/languageModels";
