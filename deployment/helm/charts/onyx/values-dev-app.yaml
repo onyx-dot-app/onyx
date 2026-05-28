@@ -12,8 +12,6 @@ postgresql:
 
 redis:
   enabled: false
-  operator:
-    enabled: false
 
 opensearch:
   enabled: false

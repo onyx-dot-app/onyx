@@ -267,18 +267,6 @@ ensure_operators() {
   else
     log "CNPG operator already installed"
   fi
-
-  helm repo add ot-helm https://ot-container-kit.github.io/helm-charts >/dev/null 2>&1 || true
-  helm repo update ot-helm >/dev/null
-
-  if ! helm -n redis-operator-system status redis-operator >/dev/null 2>&1; then
-    log "installing redis-operator (one-time)"
-    helm install redis-operator ot-helm/redis-operator \
-      --namespace redis-operator-system --create-namespace \
-      --version 0.24.0 --wait --timeout 5m
-  else
-    log "redis-operator already installed"
-  fi
 }
 
 ensure_infra_release() {
@@ -289,7 +277,6 @@ ensure_infra_release() {
 
   clear_pending_helm_release "${INFRA_NS}" "${INFRA_RELEASE}"
   clear_pending_helm_release cnpg-system cnpg
-  clear_pending_helm_release redis-operator-system redis-operator
 
   # Short-circuit when the CNPG Cluster CR is present — i.e. the actual
   # infra state is healthy regardless of what helm metadata says.

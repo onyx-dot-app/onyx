@@ -40,8 +40,6 @@ postgresql:
 
 redis:
   enabled: true
-  operator:
-    enabled: false
   redisStandalone:
     # Bump the database count so we can allocate 3 consecutive DB numbers
     # per worktree (worker cache + celery result backend + celery broker).
