@@ -28,9 +28,8 @@ interface UpsertExternalAppBody {
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
   enabled: boolean;
-  // Full per-action policy map (not a delta) — the backend replaces the stored
-  // set with exactly this, so callers must pass the complete intended state.
-  action_policies: Record<string, EndpointPolicy>;
+  // Full replace when present; omit to leave stored policies untouched.
+  action_policies?: Record<string, EndpointPolicy>;
 }
 
 export async function upsertExternalApp(
@@ -125,11 +124,7 @@ export async function setExternalAppEnabled(
     auth_template: app.auth_template,
     organization_credentials: app.organization_credentials,
     enabled,
-    // Preserve existing policies — a toggle full-replaces the row, so omitting
-    // these would wipe the admin's action choices.
-    action_policies: Object.fromEntries(
-      app.actions.map((a) => [a.action_id, a.state])
-    ),
+    // action_policies omitted: a toggle must not touch stored policies.
   });
 }
 

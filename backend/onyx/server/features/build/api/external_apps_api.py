@@ -28,10 +28,10 @@ from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers import action_policy_views
-from onyx.external_apps.providers import fetch_available_built_in_apps
-from onyx.external_apps.providers import fetch_built_in_app
-from onyx.external_apps.providers import validate_action_policies
+from onyx.external_apps.providers.registry import action_policy_views
+from onyx.external_apps.providers.registry import fetch_available_built_in_apps
+from onyx.external_apps.providers.registry import fetch_built_in_app
+from onyx.external_apps.providers.registry import validate_action_policies
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor

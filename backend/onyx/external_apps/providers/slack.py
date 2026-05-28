@@ -30,36 +30,37 @@ _ENDPOINTS: list[EndpointSpec] = [
         id=SlackAction.CHANNELS_READ,
         normalised_name="List channels",
         description="List the workspace's channels and conversations.",
-        matches=(RestRoute(method="POST", path_regex=r"^/api/conversations\.list$"),),
+        matches=(RestRoute(method="POST", path="/api/conversations.list"),),
     ),
     EndpointSpec(
         id=SlackAction.MESSAGES_READ,
         normalised_name="Read channel messages",
         description="Read messages and thread replies in a channel.",
         matches=(
-            RestRoute(
-                method="POST",
-                path_regex=r"^/api/conversations\.(history|replies)$",
-            ),
+            RestRoute(method="POST", path="/api/conversations.history"),
+            RestRoute(method="POST", path="/api/conversations.replies"),
         ),
     ),
     EndpointSpec(
         id=SlackAction.USERS_READ,
         normalised_name="Read users",
         description="List workspace users and look up individual profiles.",
-        matches=(RestRoute(method="POST", path_regex=r"^/api/users\.(list|info)$"),),
+        matches=(
+            RestRoute(method="POST", path="/api/users.list"),
+            RestRoute(method="POST", path="/api/users.info"),
+        ),
     ),
     EndpointSpec(
         id=SlackAction.SEARCH_READ,
         normalised_name="Search messages",
         description="Full-text search across messages the user can see.",
-        matches=(RestRoute(method="POST", path_regex=r"^/api/search\.messages$"),),
+        matches=(RestRoute(method="POST", path="/api/search.messages"),),
     ),
     EndpointSpec(
         id=SlackAction.MESSAGES_WRITE,
         normalised_name="Post a message",
         description="Post a message to a channel or conversation.",
-        matches=(RestRoute(method="POST", path_regex=r"^/api/chat\.postMessage$"),),
+        matches=(RestRoute(method="POST", path="/api/chat.postMessage"),),
     ),
 ]
 

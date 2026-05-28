@@ -27,17 +27,15 @@ class GoogleCalendarAction(ExternalAppAction):
     EVENTS_DELETE = "gcal.events.delete"
 
 
-_EVENTS_COLLECTION = r"^/calendar/v3/calendars/[^/]+/events/?$"
-_EVENT_ITEM = r"^/calendar/v3/calendars/[^/]+/events/[^/]+$"
+_EVENTS_COLLECTION = "/calendar/v3/calendars/{calendarId}/events"
+_EVENT_ITEM = "/calendar/v3/calendars/{calendarId}/events/{eventId}"
 _ENDPOINTS: list[EndpointSpec] = [
     EndpointSpec(
         id=GoogleCalendarAction.CALENDARS_READ,
         normalised_name="List calendars",
         description="List the calendars on the user's calendar list.",
         matches=(
-            RestRoute(
-                method="GET", path_regex=r"^/calendar/v3/users/[^/]+/calendarList/?$"
-            ),
+            RestRoute(method="GET", path="/calendar/v3/users/{userId}/calendarList"),
         ),
     ),
     EndpointSpec(
@@ -45,36 +43,36 @@ _ENDPOINTS: list[EndpointSpec] = [
         normalised_name="Read events",
         description="List events in a calendar or fetch a single event.",
         matches=(
-            RestRoute(method="GET", path_regex=_EVENTS_COLLECTION),
-            RestRoute(method="GET", path_regex=_EVENT_ITEM),
+            RestRoute(method="GET", path=_EVENTS_COLLECTION),
+            RestRoute(method="GET", path=_EVENT_ITEM),
         ),
     ),
     EndpointSpec(
         id=GoogleCalendarAction.FREEBUSY_READ,
         normalised_name="Query free/busy",
         description="Query busy intervals across calendars.",
-        matches=(RestRoute(method="POST", path_regex=r"^/calendar/v3/freeBusy$"),),
+        matches=(RestRoute(method="POST", path="/calendar/v3/freeBusy"),),
     ),
     EndpointSpec(
         id=GoogleCalendarAction.EVENTS_CREATE,
         normalised_name="Create an event",
         description="Create a new event on a calendar.",
-        matches=(RestRoute(method="POST", path_regex=_EVENTS_COLLECTION),),
+        matches=(RestRoute(method="POST", path=_EVENTS_COLLECTION),),
     ),
     EndpointSpec(
         id=GoogleCalendarAction.EVENTS_UPDATE,
         normalised_name="Update an event",
         description="Modify an existing event.",
         matches=(
-            RestRoute(method="PUT", path_regex=_EVENT_ITEM),
-            RestRoute(method="PATCH", path_regex=_EVENT_ITEM),
+            RestRoute(method="PUT", path=_EVENT_ITEM),
+            RestRoute(method="PATCH", path=_EVENT_ITEM),
         ),
     ),
     EndpointSpec(
         id=GoogleCalendarAction.EVENTS_DELETE,
         normalised_name="Delete an event",
         description="Permanently delete an event.",
-        matches=(RestRoute(method="DELETE", path_regex=_EVENT_ITEM),),
+        matches=(RestRoute(method="DELETE", path=_EVENT_ITEM),),
     ),
 ]
 

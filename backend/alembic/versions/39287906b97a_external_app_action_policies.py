@@ -24,8 +24,6 @@ def upgrade() -> None:
         sa.Column("external_app_id", sa.Integer(), nullable=False),
         sa.Column("action_id", sa.Text(), nullable=False),
         sa.Column("policy", sa.String(), nullable=False),
-        sa.Column("name", sa.Text(), nullable=True),
-        sa.Column("description", sa.Text(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

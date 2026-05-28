@@ -20,17 +20,39 @@ class ExternalAppAction(str, Enum):
 
 
 class RestRoute(BaseModel):
-    """Recognises a REST request as an action by HTTP method + path. The
-    ``path_regex`` is matched against the request path; a named group may
-    capture a resource id for the approval prompt (decision uses only the
-    matched action, not the capture)."""
+    """Recognises a REST request as an action by HTTP method + path.
+
+    ``path`` is a template compared segment-by-segment against the request path
+    (see ``path_matches``): a ``{name}`` segment matches exactly one path
+    segment (a resource id), literal segments must match verbatim, and a single
+    trailing slash is ignored. Placeholders name the resource for readability;
+    the decision uses only the matched action, not the captured value."""
 
     model_config = ConfigDict(frozen=True)
 
     kind: Literal["rest"] = "rest"
     method: str
-    path_regex: str
+    path: str
     resource_type: str | None = None
+
+
+def path_matches(template: str, path: str) -> bool:
+    """Whether request ``path`` matches a ``RestRoute.path`` template.
+
+    Segments (split on ``/``) are compared positionally: a ``{name}`` segment
+    matches any single non-empty segment, a literal segment must match exactly.
+    A single trailing slash on either side is ignored."""
+    expected_segments = template.rstrip("/").split("/")
+    actual_segments = path.rstrip("/").split("/")
+    if len(expected_segments) != len(actual_segments):
+        return False
+    for expected, actual in zip(expected_segments, actual_segments):
+        if expected.startswith("{") and expected.endswith("}"):
+            if not actual:  # a placeholder requires a non-empty segment
+                return False
+        elif expected != actual:
+            return False
+    return True
 
 
 class GraphQLOp(BaseModel):
@@ -65,6 +87,3 @@ class EndpointSpec(BaseModel):
     normalised_name: str
     description: str
     matches: tuple[MatchRule, ...]
-    # Prior ids this action has had, so renames don't break stored admin rows.
-    # Plain strings: a retired id need not exist as a current enum member.
-    aliases: tuple[str, ...] = ()

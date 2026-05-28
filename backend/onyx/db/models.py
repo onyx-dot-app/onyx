@@ -5947,9 +5947,9 @@ class ExternalAppPolicy(Base):
     Sparse: only actions the admin has set are stored; an action without a row
     resolves to ``ASK`` (the default ask-approval behaviour).
 
-    For built-in apps ``action_id`` is a catalog id and ``name`` / ``description``
-    stay NULL (display comes from the code catalog). They are reserved for
-    admin-authored custom-app rules.
+    ``action_id`` is a catalog id; display (name/description) comes from the code
+    catalog. Admin-authored custom-app rules will add their own action
+    name/description/match columns when that feature lands.
     """
 
     __tablename__ = "external_app_policy"
@@ -5966,9 +5966,6 @@ class ExternalAppPolicy(Base):
         Enum(EndpointPolicy, native_enum=False),
         nullable=False,
     )
-    # NULL for built-in (display from the code catalog); set for custom apps.
-    name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
