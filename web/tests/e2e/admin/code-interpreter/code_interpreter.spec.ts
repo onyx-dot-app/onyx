@@ -58,8 +58,9 @@ async function mockCodeInterpreterApi(
  */
 async function clickDisconnectIconButton(page: Page) {
   // The disconnect button is inside a Hoverable.Item (opacity: 0 at rest).
-  // force: true bypasses the visibility check so we can click it directly.
+  // Scope to the card and use force: true to bypass the opacity-0 visibility check.
   await page
+    .locator('[data-hover-group="code-interpreter/Card"]')
     .locator("button:has(.interactive-foreground-icon):not(:has(span))")
     .first()
     .click({ force: true });
