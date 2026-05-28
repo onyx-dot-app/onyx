@@ -246,7 +246,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                         api_key_changed=True,
                         model_configurations=[
                             ModelConfigurationUpsertRequest(
-                                name="gpt-4o-mini", is_visible=True
+                                name="gpt-5-mini", is_visible=True
                             )
                         ],
                     ),
@@ -254,7 +254,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                 )
                 update_default_provider(
                     provider_id=provider.id,
-                    model_name="gpt-4o-mini",
+                    model_name="gpt-5-mini",
                     db_session=session,
                 )
                 session.commit()
