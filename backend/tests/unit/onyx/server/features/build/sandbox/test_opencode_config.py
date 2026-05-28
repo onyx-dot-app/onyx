@@ -206,3 +206,26 @@ def test_plugins_are_emitted_when_provided() -> None:
         plugins=["/workspace/opencode-plugins/session-proxy-tag.ts"],
     )
     assert config["plugin"] == ["/workspace/opencode-plugins/session-proxy-tag.ts"]
+
+
+def test_single_provider_wrapper_forwards_plugins() -> None:
+    """The docker backend uses the single-provider builder and needs the
+    same session-tagging plugin the K8s multi-provider path registers.
+    Without forwarding, the proxy can't route approval cards to the
+    originating session for docker sandboxes."""
+    config = build_opencode_config(
+        provider="anthropic",
+        model_name="claude-opus-4-7",
+        api_key="sk-test",
+        plugins=["/workspace/opencode-plugins/session-proxy-tag.ts"],
+    )
+    assert config["plugin"] == ["/workspace/opencode-plugins/session-proxy-tag.ts"]
+
+
+def test_single_provider_wrapper_omits_plugins_by_default() -> None:
+    config = build_opencode_config(
+        provider="anthropic",
+        model_name="claude-opus-4-7",
+        api_key="sk-test",
+    )
+    assert "plugin" not in config

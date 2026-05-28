@@ -17,13 +17,13 @@ from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.sandbox_proxy.action_matcher import ExternalAppActionMatcher
 from onyx.sandbox_proxy.addons.gate import GateAddon
+from onyx.sandbox_proxy.backend import build_ca_store
+from onyx.sandbox_proxy.backend import build_ip_lookup
 from onyx.sandbox_proxy.ca import CABootstrap
 from onyx.sandbox_proxy.ca import MaterializedCA
-from onyx.sandbox_proxy.ca_k8s import K8sSecretCAStore
 from onyx.sandbox_proxy.identity import default_session_factory
 from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIPLookup
-from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_HEALTHZ_PORT
@@ -110,11 +110,11 @@ def _start_healthz_server(readiness: _Readiness, lookup: SandboxIPLookup) -> HTT
 
 
 def _bootstrap_ca() -> MaterializedCA:
-    return CABootstrap(store=K8sSecretCAStore()).ensure_ca()
+    return CABootstrap(store=build_ca_store()).ensure_ca()
 
 
-def _build_lookup() -> K8sInformerLookup:
-    lookup = K8sInformerLookup()
+def _build_lookup() -> SandboxIPLookup:
+    lookup = build_ip_lookup()
     lookup.start()
     synced = lookup.wait_for_initial_sync(
         timeout_seconds=_LOOKUP_INITIAL_SYNC_TIMEOUT_S
