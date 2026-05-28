@@ -24,14 +24,7 @@ import {
 import { getFileIcon } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
-import {
-  SvgGlobe,
-  SvgHardDrive,
-  SvgFiles,
-  SvgX,
-  SvgMinus,
-  SvgMaximize2,
-} from "@opal/icons";
+import { SvgGlobe, SvgHardDrive, SvgFiles, SvgX } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import CraftingLoader from "@/app/craft/components/CraftingLoader";
 
@@ -138,16 +131,10 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   };
 
-  const handleMaximize = () => {
-    setIsMaximized((prev) => !prev);
-  };
-
   // Track when panel animation completes (defer fetch until fully open)
   const [isFullyOpen, setIsFullyOpen] = useState(false);
   // Track when content should unmount (delayed on close for animation)
   const [shouldRenderContent, setShouldRenderContent] = useState(false);
-  // Track if panel is maximized
-  const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -368,8 +355,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   return (
     <div
       className={cn(
-        "absolute z-20 inset-y-0 right-0 flex flex-col border-l border-border-01 bg-background-neutral-00 overflow-hidden transition-transform duration-300 ease-in-out",
-        isMaximized ? "w-[calc(100%-4rem)]" : "w-1/2",
+        "absolute z-20 inset-y-0 right-0 w-1/2 flex flex-col border-l border-border-01 bg-background-neutral-00 overflow-hidden transition-transform duration-300 ease-in-out",
         isOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
       )}
     >
@@ -377,47 +363,8 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
       <div className="flex flex-col w-full">
         {/* Tabs row */}
         <div className="flex items-end w-full pt-1 bg-background-tint-03">
-          {/* macOS-style window controls - sticky on left */}
-          <div className="group flex items-center gap-2 pl-3 pr-1.5 py-2 shrink-0">
-            <button
-              onClick={onClose}
-              className="relative w-3.5 h-3.5 rounded-full bg-[#ff5f57] hover:bg-[#ff3b30] transition-colors shrink-0 flex items-center justify-center"
-              aria-label="No action"
-            >
-              <SvgX
-                size={12}
-                strokeWidth={4}
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ stroke: "#8a2e2a" }}
-              />
-            </button>
-            <button
-              onClick={onClose}
-              className="relative w-3.5 h-3.5 rounded-full bg-[#ffbd2e] hover:bg-[#ffa000] transition-colors shrink-0 flex items-center justify-center"
-              aria-label="Close panel"
-            >
-              <SvgMinus
-                size={12}
-                strokeWidth={3}
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ stroke: "#8a6618" }}
-              />
-            </button>
-            <button
-              onClick={handleMaximize}
-              className="relative w-3.5 h-3.5 rounded-full bg-[#28ca42] hover:bg-[#1fb832] transition-colors shrink-0 flex items-center justify-center"
-              aria-label="Maximize panel"
-            >
-              <SvgMaximize2
-                size={8}
-                strokeWidth={2.5}
-                className="opacity-0 group-hover:opacity-90 rotate-90 transition-opacity"
-                style={{ stroke: "#155c24" }}
-              />
-            </button>
-          </div>
           {/* Scrollable tabs container */}
-          <div className="flex items-end gap-1.5 flex-1 pl-3 pr-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <div className="flex items-end flex-1 pl-2 pr-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {/* Pinned tabs */}
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -440,10 +387,22 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                     isDisabled
                       ? "text-text-02 bg-transparent cursor-not-allowed"
                       : isActive
-                        ? "bg-background-neutral-00 text-text-04"
+                        ? "bg-background-neutral-00 text-text-04 z-10"
                         : "text-text-03 bg-transparent hover:bg-background-tint-02"
                   )}
                 >
+                  {/* Left curved joint — bleeds active tab into the row */}
+                  {isActive && (
+                    <div
+                      className="absolute -left-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                      style={{
+                        maskImage:
+                          "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
+                        WebkitMaskImage:
+                          "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
+                      }}
+                    />
+                  )}
                   <Icon
                     size={16}
                     className={cn(
@@ -460,6 +419,18 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                   >
                     {tab.label}
                   </Text>
+                  {/* Right curved joint */}
+                  {isActive && (
+                    <div
+                      className="absolute -right-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                      style={{
+                        maskImage:
+                          "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
+                        WebkitMaskImage:
+                          "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
+                      }}
+                    />
+                  )}
                 </button>
               );
             })}
@@ -485,10 +456,21 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                         "group relative inline-flex items-center justify-center gap-1.5 px-3 pr-2 py-1.5 rounded-t-lg",
                         "max-w-[150px] min-w-fit",
                         isActive
-                          ? "bg-background-neutral-00 text-text-04"
+                          ? "bg-background-neutral-00 text-text-04 z-10"
                           : "text-text-03 bg-transparent hover:bg-background-tint-02"
                       )}
                     >
+                      {isActive && (
+                        <div
+                          className="absolute -left-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                          style={{
+                            maskImage:
+                              "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
+                            WebkitMaskImage:
+                              "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
+                          }}
+                        />
+                      )}
                       <TabIcon
                         size={14}
                         className={cn(
@@ -510,6 +492,17 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                       >
                         <SvgX size={12} className="stroke-text-03" />
                       </button>
+                      {isActive && (
+                        <div
+                          className="absolute -right-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                          style={{
+                            maskImage:
+                              "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
+                            WebkitMaskImage:
+                              "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
+                          }}
+                        />
+                      )}
                     </button>
                   );
                 }
