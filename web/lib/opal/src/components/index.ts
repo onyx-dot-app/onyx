@@ -123,3 +123,9 @@ export {
 
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";
+
+/* Switch */
+export {
+  Switch,
+  type SwitchProps,
+} from "@opal/components/inputs/switch/components";

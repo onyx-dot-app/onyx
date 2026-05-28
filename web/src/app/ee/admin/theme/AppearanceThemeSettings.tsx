@@ -5,7 +5,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Tabs from "@/refresh-components/Tabs";
 import { Preview } from "./Preview";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import InputImage from "@/refresh-components/inputs/InputImage";
 import { Button, Divider, Tag } from "@opal/components";

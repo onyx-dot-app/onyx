@@ -1,18 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import Switch from "./Switch";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import { Switch } from "./components";
 
 const meta: Meta<typeof Switch> = {
-  title: "refresh-components/inputs/Switch",
+  title: "opal/Inputs/Switch",
   component: Switch,
   tags: ["autodocs"],
-  decorators: [
-    (Story) => (
-      <TooltipPrimitive.Provider>
-        <Story />
-      </TooltipPrimitive.Provider>
-    ),
-  ],
 };
 
 export default meta;
@@ -28,8 +20,27 @@ export const Checked: Story = {
   },
 };
 
+export const Unchecked: Story = {
+  args: {
+    checked: false,
+  },
+};
+
 export const Disabled: Story = {
   args: {
     disabled: true,
+  },
+};
+
+export const DisabledChecked: Story = {
+  args: {
+    disabled: true,
+    checked: true,
+  },
+};
+
+export const DefaultChecked: Story = {
+  args: {
+    defaultChecked: true,
   },
 };

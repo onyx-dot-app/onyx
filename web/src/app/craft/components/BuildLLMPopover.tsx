@@ -9,7 +9,7 @@ import {
 } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
 import { Popover, PopoverMenu } from "@opal/components";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import {
