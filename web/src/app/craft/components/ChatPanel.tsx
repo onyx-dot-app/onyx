@@ -393,8 +393,8 @@ export default function BuildChatPanel({
               onClick={toggleOutputPanel}
               tooltip="Open output panel"
               tertiary
-              className="bg-background-tint-00! border rounded-full"
-              iconClassName="stroke-text-04!"
+              className="bg-background-tint-00! border rounded-full p-2.5!"
+              iconClassName="stroke-text-04! h-5! w-5!"
             />
           )}
           {/* Soft fade border at bottom */}
