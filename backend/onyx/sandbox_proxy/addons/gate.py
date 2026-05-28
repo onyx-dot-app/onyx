@@ -9,21 +9,22 @@ import base64
 import binascii
 import json
 from collections.abc import Callable
-from contextlib import AbstractContextManager
 from typing import Protocol
 from uuid import UUID
 
 from mitmproxy import http
-from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.enums import ApprovalDecision
+from onyx.db.enums import EndpointPolicy
 from onyx.db.notification import create_notification
+from onyx.external_apps.credentials import resolve_injection_headers
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.action_matcher import ActionMatch
 from onyx.sandbox_proxy.action_matcher import ActionMatcher
+from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
@@ -48,7 +49,6 @@ class _Resolver(Protocol):
     ) -> UUID | None: ...
 
 
-DBSessionFactory = Callable[[str], AbstractContextManager[Session]]
 CacheFactory = Callable[[str], CacheBackend]
 
 
@@ -59,6 +59,8 @@ _CODE_BODY_TOO_LARGE = "body_too_large"
 _CODE_USER_REJECTED = "user_rejected"
 _CODE_NOT_AUTHORIZED = "not_authorized"
 _CODE_INTERNAL_ERROR = "internal_error"
+_CODE_POLICY_DENIED = "policy_denied"
+_CODE_CREDENTIAL_ERROR = "credential_error"
 
 # Relative deep link routed through the Next router by NotificationsPopover.tsx;
 # must mirror the frontend's CRAFT_PATH + sessionId search param.
@@ -227,7 +229,13 @@ class GateAddon:
         try:
             approval_id = self._persist_approval_row(ctx, match)
             decision = await self._await_decision(approval_id, ctx, match)
+            # APPROVED → forward (no 403) WITH credential injection; REJECTED /
+            # EXPIRED → `_write_response_for_decision` sets a 403 (stop here).
             self._write_response_for_decision(flow, decision)
+            if decision == ApprovalDecision.APPROVED:
+                self._inject_credentials_or_block(
+                    flow, match, user_id=ctx.user_id, tenant_id=ctx.tenant_id
+                )
         except Exception:
             logger.exception(
                 "gate.unhandled_error session_id=%s tenant_id=%s "
@@ -287,7 +295,7 @@ class GateAddon:
             return None
 
         try:
-            match = self._action_matcher.match(flow.request)
+            match = self._action_matcher.match(flow.request, sandbox.tenant_id)
         except Exception as e:
             logger.exception(
                 "gate.matcher_error host=%s error=%s",
@@ -296,10 +304,39 @@ class GateAddon:
             )
             return None
 
+        # Audit every evaluated request. session_id is the unvalidated claimed
+        # tag (the ASK path validates it below); off_catalog = nothing matched.
+        logger.info(
+            "gate.request tenant_id=%s sandbox_id=%s session_id=%s host=%s "
+            "action_type=%s policy=%s",
+            sandbox.tenant_id,
+            sandbox.sandbox_id,
+            self._extract_session_tag(flow),
+            flow.request.host,
+            match.action_type if match is not None else "-",
+            match.policy.value if match is not None else "off_catalog",
+        )
+
+        # Path per verdict (see _inject_credentials for the injection contract):
+        #   off-catalog -> forward, no credentials
+        #   DENY        -> block
+        #   ALWAYS      -> forward + inject credentials (auto-approved)
+        #   ASK         -> approval pipeline (forward+inject or block, in request())
         if match is None:
             return None
 
-        # Gated — an unattributable action is blocked, not guessed.
+        if match.policy is EndpointPolicy.DENY:
+            flow.response = _http_403(_CODE_POLICY_DENIED)
+            return None
+
+        if match.policy is EndpointPolicy.ALWAYS:
+            self._inject_credentials_or_block(
+                flow, match, user_id=sandbox.user_id, tenant_id=sandbox.tenant_id
+            )
+            return None
+
+        # ASK: resolve the originating session before prompting. An
+        # unattributable action is blocked, not guessed.
         try:
             session_id = self._resolve_gated_session(flow, sandbox)
         except Exception:
@@ -476,6 +513,76 @@ class GateAddon:
             else _CODE_NOT_AUTHORIZED
         )
         flow.response = _http_403(code)
+
+    def _inject_credentials_or_block(
+        self,
+        flow: http.HTTPFlow,
+        match: ActionMatch,
+        *,
+        user_id: UUID,
+        tenant_id: str,
+    ) -> None:
+        """Inject credentials onto a verified forward, or block it with a 403.
+
+        Wraps ``_inject_credentials`` for the verdict paths: if resolution fails,
+        the request is blocked rather than forwarded with the sandbox's own
+        headers (which would bypass the proxy-only credential boundary).
+        """
+        if not self._inject_credentials(
+            flow, match, user_id=user_id, tenant_id=tenant_id
+        ):
+            flow.response = _http_403(_CODE_CREDENTIAL_ERROR)
+
+    def _inject_credentials(
+        self,
+        flow: http.HTTPFlow,
+        match: ActionMatch,
+        *,
+        user_id: UUID,
+        tenant_id: str,
+    ) -> bool:
+        """Attach the connected app's credentials to a verified forward.
+
+        The sole credential-injection seam: called only on ALWAYS (auto-approved)
+        and ASK-approved requests, never on off-catalog or blocked ones. Renders
+        the app's ``auth_template`` from the org + per-user (``user_id``)
+        credentials and sets the resulting headers on the outbound request, so
+        the real secret lives only here — never in the sandbox.
+
+        Returns ``False`` only when resolution raises — the caller blocks rather
+        than forward the request with the sandbox's own headers. Any successful
+        resolution returns ``True`` (including when there are no headers to
+        inject, e.g. an allowlist-only app).
+        """
+        try:
+            with self._db_session_factory(tenant_id) as db:
+                headers = resolve_injection_headers(db, match.external_app_id, user_id)
+        except Exception:
+            logger.exception(
+                "gate.inject_error external_app_id=%s host=%s",
+                match.external_app_id,
+                flow.request.host,
+            )
+            return False
+
+        if not headers:
+            logger.info(
+                "gate.inject_skipped external_app_id=%s host=%s (no credentials)",
+                match.external_app_id,
+                flow.request.host,
+            )
+            return True
+
+        for name, value in headers.items():
+            flow.request.headers[name] = value
+        # Log header NAMES only — never the injected secret values.
+        logger.info(
+            "gate.inject external_app_id=%s host=%s headers=%s",
+            match.external_app_id,
+            flow.request.host,
+            sorted(headers),
+        )
+        return True
 
     def _terminalize_after_unhandled_error(
         self, approval_id: UUID, tenant_id: str

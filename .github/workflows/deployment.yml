@@ -31,6 +31,7 @@ jobs:
       is-cloud-tag: ${{ steps.check.outputs.is-cloud-tag }}
       is-beta: ${{ steps.check.outputs.is-beta }}
       is-beta-standalone: ${{ steps.check.outputs.is-beta-standalone }}
+      is-stable: ${{ steps.check.outputs.is-stable }}
       is-latest: ${{ steps.check.outputs.is-latest }}
       is-experimental-cc4a: ${{ steps.check.outputs.is-experimental-cc4a }}
       is-test-run: ${{ steps.check.outputs.is-test-run }}
@@ -157,6 +158,7 @@ jobs:
             echo "is-cloud-tag=$IS_CLOUD"
             echo "is-beta=$IS_BETA"
             echo "is-beta-standalone=$IS_BETA_STANDALONE"
+            echo "is-stable=$IS_STABLE"
             echo "is-latest=$IS_LATEST"
             echo "is-experimental-cc4a=$IS_EXPERIMENTAL_CC4A"
             echo "is-test-run=$IS_TEST_RUN"
@@ -623,6 +625,9 @@ jobs:
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
+            type=semver,pattern={{version}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
 
       - name: Create and push manifest
         env:
@@ -1052,6 +1057,9 @@ jobs:
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
+            type=semver,pattern={{version}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
 
       - name: Create and push manifest
         env:
@@ -1475,6 +1483,9 @@ jobs:
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
+            type=semver,pattern={{version}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
 
       - name: Create and push manifest
         env:

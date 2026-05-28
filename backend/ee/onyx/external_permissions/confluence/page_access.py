@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any
 
 from onyx.access.models import ExternalAccess
@@ -69,29 +70,31 @@ def _extract_read_access_restrictions(
     )
 
 
-def get_page_restrictions(
+# Resolve an ancestor's read-restrictions; None means "unreadable, skip
+# and keep walking up" (e.g. a draft owned by another user).
+_AncestorRestrictionsResolver = Callable[[dict[str, Any]], dict[str, Any] | None]
+
+
+def _maybe_prefix_groups(group_names: set[str], add_prefix: bool) -> set[str]:
+    if not add_prefix:
+        return group_names
+    return {
+        build_ext_group_name_for_onyx(g, DocumentSource.CONFLUENCE) for g in group_names
+    }
+
+
+def _resolve_external_access(
     confluence_client: OnyxConfluence,
     page_id: str,
     page_restrictions: dict[str, Any],
     ancestors: list[dict[str, Any]],
-    add_prefix: bool = False,
+    resolve_ancestor_restrictions: _AncestorRestrictionsResolver,
+    add_prefix: bool,
 ) -> ExternalAccess | None:
-    """
-    This function gets the restrictions for a page. In Confluence, a child can have
-    at MOST the same level accessibility as its immediate parent.
-
-    If no restrictions are found anywhere, then return None, indicating that the page
-    should inherit the space's restrictions.
-
-    add_prefix: When True, prefix group IDs with source type (for indexing path).
-               When False (default), leave unprefixed (for permission sync path).
-    """
-    found_user_emails: set[str] = set()
-    found_group_names: set[str] = set()
-
-    # NOTE: need the found_any_restriction, since we can find restrictions
-    # but not be able to extract any user emails or group names
-    # in this case, we should just give no access
+    """Shared inheritance walk. Page-level restriction wins outright;
+    otherwise walk ancestors closest-parent-first (they arrive root-first)
+    and apply the closest one with a restriction. Returns None when
+    nothing restricts the page so the caller falls back to space-level."""
     found_user_emails, found_group_names, found_any_page_level_restriction = (
         _extract_read_access_restrictions(
             confluence_client=confluence_client,
@@ -99,43 +102,29 @@ def get_page_restrictions(
         )
     )
 
-    def _maybe_prefix_groups(group_names: set[str]) -> set[str]:
-        if add_prefix:
-            return {
-                build_ext_group_name_for_onyx(g, DocumentSource.CONFLUENCE)
-                for g in group_names
-            }
-        return group_names
-
-    # if there are individual page-level restrictions, then this is the accurate
-    # restriction for the page. You cannot both have page-level restrictions AND
-    # inherit restrictions from the parent.
     if found_any_page_level_restriction:
         return ExternalAccess(
             external_user_emails=found_user_emails,
-            external_user_group_ids=_maybe_prefix_groups(found_group_names),
+            external_user_group_ids=_maybe_prefix_groups(found_group_names, add_prefix),
             is_public=False,
         )
 
-    # ancestors seem to be in order from root to immediate parent
-    # https://community.atlassian.com/forums/Confluence-questions/Order-of-ancestors-in-REST-API-response-Confluence-Server-amp/qaq-p/2385981
-    # we want the restrictions from the immediate parent to take precedence, so we should
-    # reverse the list
     for ancestor in reversed(ancestors):
+        ancestor_restrictions = resolve_ancestor_restrictions(ancestor)
+        if ancestor_restrictions is None:
+            # Unreadable (draft / 403 / 404); skip and keep walking.
+            continue
         (
             ancestor_user_emails,
             ancestor_group_names,
             found_any_restrictions_in_ancestor,
         ) = _extract_read_access_restrictions(
             confluence_client=confluence_client,
-            restrictions=ancestor.get("restrictions", {}),
+            restrictions=ancestor_restrictions,
         )
         if found_any_restrictions_in_ancestor:
-            # if inheriting restrictions from the parent, then the first one we run into
-            # should be applied (the reason why we'd traverse more than one ancestor is if
-            # the ancestor also is in "inherit" mode.)
             logger.debug(
-                "Found user restrictions %s and group restrictions %sfor document %s based on ancestor %s",
+                "Found user restrictions %s and group restrictions %s for document %s based on ancestor %s",
                 ancestor_user_emails,
                 ancestor_group_names,
                 page_id,
@@ -143,9 +132,70 @@ def get_page_restrictions(
             )
             return ExternalAccess(
                 external_user_emails=ancestor_user_emails,
-                external_user_group_ids=_maybe_prefix_groups(ancestor_group_names),
+                external_user_group_ids=_maybe_prefix_groups(
+                    ancestor_group_names, add_prefix
+                ),
                 is_public=False,
             )
 
-    # we didn't find any restrictions, so the page inherits the space's restrictions
     return None
+
+
+def get_page_restrictions(
+    confluence_client: OnyxConfluence,
+    page_id: str,
+    page_restrictions: dict[str, Any],
+    ancestors: list[dict[str, Any]],
+    add_prefix: bool = False,
+) -> ExternalAccess | None:
+    """Standard expand-driven inheritance: read restrictions come from
+    inline data on the page and each ancestor.
+
+    add_prefix: True for the indexing path (Document.external_access) so
+    group IDs carry the source-type prefix the search filter expects;
+    False for the perm-sync path, where `upsert_document_external_perms`
+    adds the prefix instead.
+    """
+    return _resolve_external_access(
+        confluence_client=confluence_client,
+        page_id=page_id,
+        page_restrictions=page_restrictions,
+        ancestors=ancestors,
+        resolve_ancestor_restrictions=lambda ancestor: ancestor.get("restrictions", {}),
+        add_prefix=add_prefix,
+    )
+
+
+def get_page_restrictions_with_per_ancestor_fetch(
+    confluence_client: OnyxConfluence,
+    page_id: str,
+    page_restrictions: dict[str, Any],
+    ancestors: list[dict[str, Any]],
+    ancestor_restrictions_cache: dict[str, dict[str, Any] | None],
+    add_prefix: bool = False,
+) -> ExternalAccess | None:
+    """CONFCLOUD-77618 variant: each ancestor's restrictions come from
+    `restriction/byOperation`, with 403/404 -> "unreadable, skip" (the
+    only correct semantic for drafts owned by another user).
+    `ancestor_restrictions_cache` is caller-scoped per perm-sync run so
+    sibling pages sharing ancestors only pay the GET once."""
+
+    def _resolve(ancestor: dict[str, Any]) -> dict[str, Any] | None:
+        ancestor_id = ancestor.get("id")
+        if ancestor_id is None:
+            return None
+        cache_key = str(ancestor_id)
+        if cache_key in ancestor_restrictions_cache:
+            return ancestor_restrictions_cache[cache_key]
+        restrictions = confluence_client.fetch_content_read_restrictions(cache_key)
+        ancestor_restrictions_cache[cache_key] = restrictions
+        return restrictions
+
+    return _resolve_external_access(
+        confluence_client=confluence_client,
+        page_id=page_id,
+        page_restrictions=page_restrictions,
+        ancestors=ancestors,
+        resolve_ancestor_restrictions=_resolve,
+        add_prefix=add_prefix,
+    )

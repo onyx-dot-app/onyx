@@ -18,6 +18,7 @@ on:
       - "web/lib/opal/**"
       - "web/src/refresh-components/**"
       - "web/.storybook/**"
+      - "web/src/app/craft/components/tool-cards/**"
       - "web/package.json"
       - "web/bun.lock"
 permissions:

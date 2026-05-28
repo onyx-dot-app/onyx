@@ -7,7 +7,7 @@ import { SvgBlocks, SvgUser } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import type { CustomSkill } from "@/refresh-pages/admin/SkillsPage/interfaces";
 import { summarizeVisibility } from "@/refresh-pages/admin/SkillsPage/helpers";
 import { Section } from "@/layouts/general-layouts";
@@ -123,7 +123,7 @@ export default function CustomSkillsTable({
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         placeholder="Search skills..."
-        leftSearchIcon
+        searchIcon
       />
       <Table
         data={skills}

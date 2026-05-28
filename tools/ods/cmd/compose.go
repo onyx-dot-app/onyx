@@ -110,12 +110,27 @@ func composeFiles(profile string) []string {
 	}
 }
 
-// baseArgs builds the common "docker compose -p <project> -f ... -f ..."
-// argument prefix.
+// composeProfiles returns Docker Compose profile names to activate. Minio is
+// defined with profiles: ["s3-filestore"] in docker-compose.yml, so it must be
+// activated explicitly for commands like "down" that don't name services.
+func composeProfiles(profile string) []string {
+	switch profile {
+	case "dev":
+		return []string{"s3-filestore"}
+	default:
+		return nil
+	}
+}
+
+// baseArgs builds the common "docker compose -p <project> -f ... -f ...
+// --profile ..." argument prefix.
 func baseArgs(profile string) []string {
 	args := []string{"compose", "-p", docker.ProjectName()}
 	for _, f := range composeFiles(profile) {
 		args = append(args, "-f", f)
+	}
+	for _, p := range composeProfiles(profile) {
+		args = append(args, "--profile", p)
 	}
 	return args
 }

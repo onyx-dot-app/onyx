@@ -11,7 +11,7 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import useGroups from "@/hooks/useGroups";
@@ -206,7 +206,7 @@ export default function UsersTable({
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         placeholder="Search users..."
-        leftSearchIcon
+        searchIcon
       />
       <UserFilters
         selectedRoles={selectedRoles}
