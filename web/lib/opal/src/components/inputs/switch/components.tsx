@@ -1,5 +1,6 @@
 "use client";
 
+import "@opal/components/inputs/switch/styles.css";
 import React, { useState } from "react";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
