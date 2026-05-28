@@ -13,7 +13,6 @@ import {
   sendMessageStream,
   processSSEStream,
   fetchSession,
-  generateFollowupSuggestions,
   RateLimitError,
 } from "@/app/craft/services/apiServices";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -77,12 +76,6 @@ export function useBuildStreaming() {
   );
   const openMarkdownPreview = useBuildSessionStore(
     (state) => state.openMarkdownPreview
-  );
-  const setFollowupSuggestions = useBuildSessionStore(
-    (state) => state.setFollowupSuggestions
-  );
-  const setSuggestionsLoading = useBuildSessionStore(
-    (state) => state.setSuggestionsLoading
   );
 
   // ── Output file detector registry ──────────────────────────────────────
@@ -345,31 +338,6 @@ export function useBuildStreaming() {
                   .map((item) => item.content)
                   .join("");
 
-                const isFirstAgentMessage =
-                  session.messages.filter((m) => m.type === "assistant")
-                    .length === 0;
-
-                const firstUserMessage = session.messages.find(
-                  (m) => m.type === "user"
-                );
-
-                if (isFirstAgentMessage && firstUserMessage && textContent) {
-                  (async () => {
-                    try {
-                      setSuggestionsLoading(sessionId, true);
-                      const suggestions = await generateFollowupSuggestions(
-                        sessionId,
-                        firstUserMessage.content,
-                        textContent
-                      );
-                      setFollowupSuggestions(sessionId, suggestions);
-                    } catch (err) {
-                      console.error("Failed to generate suggestions:", err);
-                      setFollowupSuggestions(sessionId, null);
-                    }
-                  })();
-                }
-
                 appendMessageToSession(sessionId, {
                   id: genId("agent-msg"),
                   type: "assistant",
@@ -444,8 +412,6 @@ export function useBuildStreaming() {
       addArtifactToSession,
       appendMessageToSession,
       OUTPUT_FILE_DETECTORS,
-      setFollowupSuggestions,
-      setSuggestionsLoading,
       globalMutate,
     ]
   );
