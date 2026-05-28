@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.13
+version: 0.5.14
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,12 +16,11 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: Bump the `code-interpreter` subchart from 0.3.3 to 0.4.2,
-        which makes the executor egress lockdown configurable
-        (`kubernetesExecutor.netAdminLockdown`) and adds an always-applied
-        deny-all egress NetworkPolicy for executor/session pods running
-        untrusted code.
+    - kind: added
+      description: Sandbox-proxy support, opt-in debugpy + hot-reload
+        commands on api / celery Deployments, and a `redis-operator`
+        subchart gate (`redis.operator.enabled`) so the operator can be
+        split from the Redis CR.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0

@@ -2,17 +2,9 @@
 # Layered by dev.sh under the per-slug values file in ~/.config/onyx-dev/.
 
 global:
-  # Worktree pods pull from the local k3d registry that Tilt pushes to.
-  # `latest` is fine because Tilt content-hash tags images on each build.
   pullPolicy: "IfNotPresent"
 
-# ---- Infra subcharts: all OFF ----
-#
-# Pods point at the shared infra release in `onyx-infra` instead. The
-# `enabled: false` here both gates the subchart install AND prevents the
-# corresponding host auto-derivation in templates/configmap.yaml, so the
-# explicit hosts below take effect.
-
+# Infra subcharts off — pods point at the shared onyx-infra release.
 postgresql:
   enabled: false
   cluster:
@@ -35,24 +27,8 @@ nginx:
 codeInterpreter:
   enabled: false
 
-# ---- Cross-namespace host overrides ----
-#
-# When the matching subchart is disabled above, configmap.yaml does NOT
-# auto-derive these. Set explicitly here pointing at the shared
-# `onyx-infra` release. The release name in the infra deploy is
-# `onyx-infra`, so the Services are:
-#   onyx-infra-pg-rw.onyx-infra.svc.cluster.local
-#   onyx-infra.onyx-infra.svc.cluster.local         (Redis CR named after release)
-#   onyx-opensearch-master.onyx-infra.svc.cluster.local
-#   onyx-infra-minio.onyx-infra.svc.cluster.local
-#   onyx-infra-inference-model-service.onyx-infra.svc.cluster.local
-#   onyx-infra-indexing-model-service.onyx-infra.svc.cluster.local
-
 configMap:
-  # Pointers to the shared infra in onyx-infra.
   POSTGRES_HOST: "onyx-infra-pg-rw.onyx-infra.svc.cluster.local"
-  # Redis CR + Service are named after the release (`onyx-infra`) by default —
-  # see `redisStandalone.name | default .Release.Name` in the chart.
   REDIS_HOST: "onyx-infra.onyx-infra.svc.cluster.local"
   OPENSEARCH_HOST: "onyx-opensearch-master.onyx-infra.svc.cluster.local"
   OPENSEARCH_REST_API_PORT: "9200"
@@ -62,31 +38,14 @@ configMap:
   MODEL_SERVER_HOST: "onyx-infra-inference-model-service.onyx-infra.svc.cluster.local"
   INDEXING_MODEL_SERVER_HOST: "onyx-infra-indexing-model-service.onyx-infra.svc.cluster.local"
   DISABLE_VECTOR_DB: "false"
-
-  # POSTGRES_DB / S3_FILE_STORE_BUCKET_NAME / REDIS_DB_NUMBER* are
-  # filled in by the per-worktree values file.
-
-  # Craft is on by default for the local-cluster dev path. SANDBOX_API_SERVER_URL
-  # is needed for sandbox-spawned pods to call back to the worktree's api;
-  # the per-worktree values file overrides with the namespaced api service.
   ENABLE_CRAFT: "true"
-
   # Code default v0.1.44 predates firewall-init.sh. Bump as new versions land.
   SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:v0.1.49"
 
-# Sandbox egress proxy. Chart default is replicaCount=2 with podAntiAffinity
-# (prod). On single-node k3d both pods land on the same node anyway and
-# 2 replicas just doubles the memory footprint — drop to 1 to match the
-# rest of the dev convention (every other service is replicaCount: 1).
-# Enabled is left at chart default (true) so local dev exercises the same
-# proxy/CA wiring path Craft sandboxes hit in prod.
+# Single-node k3d: replicaCount=1 is enough; prod uses 2 with podAntiAffinity.
 sandboxProxy:
   replicaCount: 1
 
-# Local-dev superuser secrets. These match the infra release's secret
-# values so the per-worktree pods can authenticate against the shared
-# Postgres / MinIO / Redis with the same credentials. Two namespaces, two
-# Secret objects, same payload.
 auth:
   postgresql:
     values:
@@ -109,23 +68,12 @@ auth:
     values:
       private_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
-# ---- App pods (all ON) ----
-#
-# Single replica per service. No HPAs (autoscaling disabled below).
-
 api:
   replicaCount: 1
   autoscaling:
     enabled: false
-  # uvicorn --reload keeps the parent process alive across reloads —
-  # imports stay cached, only the worker child re-execs on file change.
-  # That drops the cold-restart Python import bill (3-5s) off every save.
-  #
-  # Debugpy is opt-in via the ENABLE_DEBUGPY env var below. The listener
-  # is started inside the uvicorn worker by `onyx.dev_debugpy.maybe_listen`
-  # called from `onyx/main.py` — VSCode attaches directly via the
-  # Tilt-forwarded port. The new worker on each reload re-listens; the
-  # VSCode attach config has `restart: true` to auto-reattach.
+  # uvicorn --reload keeps the parent alive; the worker child re-execs on
+  # file change — saves the 3-5s Python import cost on every save.
   command:
     - "/bin/sh"
     - "-c"
@@ -149,13 +97,8 @@ webserver:
   autoscaling:
     enabled: false
 
-# Each celery worker runs through the watchfiles-based
-# dev_celery_reload.py helper for hot-reload on source change. Debugpy is
-# opt-in via ENABLE_DEBUGPY + DEBUGPY_PORT env vars below; the listener
-# starts inside the celery worker via the `celeryd_init` signal handler
-# in `onyx/background/celery/apps/app_base.py`. VSCode attaches via the
-# Tilt-forwarded port (configs in .vscode/launch.json).
-
+# Celery workers: dev_celery_reload.py drives watchfiles hot-reload.
+# Debugpy listens on the per-worker port (see .vscode/launch.json).
 celery_beat:
   replicaCount: 1
   command:
@@ -264,8 +207,6 @@ celery_worker_scheduled_tasks:
     - {name: ENABLE_DEBUGPY, value: "true"}
     - {name: DEBUGPY_PORT, value: "5687"}
 
-# Bots / mcpServer / model servers off in the worktree namespace
-# (model servers are shared from onyx-infra; see configMap hosts above).
 slackbot:
   enabled: false
 discordbot:
@@ -277,7 +218,6 @@ inferenceCapability:
 indexCapability:
   replicaCount: 0
 
-# ---- Monitoring off in worktree ----
 monitoring:
   grafana:
     dashboards:
@@ -285,18 +225,9 @@ monitoring:
   serviceMonitors:
     enabled: false
 
-# ---- Ingress (per-worktree host) ----
-#
-# `ingress.<svc>.host` is overridden by the per-worktree values file to
-# `<slug>.onyx.localhost`. The ingressClass uses the cluster-wide
-# nginx controller installed by the infra release.
-
 ingress:
   enabled: true
   className: nginx
-  # Disable TLS in dev — no real cert; serve plain HTTP. The annotations
-  # also turn off ingress-nginx's force-HTTPS redirect so `curl http://`
-  # and the browser work without trust-store gymnastics.
   tls:
     enabled: false
   extraAnnotations:
@@ -307,15 +238,9 @@ ingress:
   webserver:
     host: "PLACEHOLDER-set-by-dev.sh"
 
-# ---- Sandbox push NetworkPolicy ----
-#
-# No telepresence in the new workflow — leave the prod-strict policy in place.
 sandboxPushPolicy:
   allowTelepresenceAmbassador: false
 
-# ---- Persistence: opt out ----
-#
-# All persistent state lives in the shared infra release. The worktree
-# release has no PVCs of its own.
+# All persistent state lives in the shared onyx-infra release; no worktree PVCs.
 persistent:
   storageClassName: ""
