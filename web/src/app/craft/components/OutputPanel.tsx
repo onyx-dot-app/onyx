@@ -435,27 +435,15 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                       : undefined
                   }
                   className={cn(
-                    "relative inline-flex items-center justify-center gap-2 px-5",
+                    "relative inline-flex items-center justify-center gap-2 px-5 py-1.5 rounded-t-lg",
                     "max-w-[15%] min-w-fit",
                     isDisabled
-                      ? "text-text-02 bg-transparent cursor-not-allowed py-1 mb-1"
+                      ? "text-text-02 bg-transparent cursor-not-allowed"
                       : isActive
-                        ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-1.5"
-                        : "text-text-03 bg-transparent hover:bg-background-tint-02 rounded-full py-1 mb-1"
+                        ? "bg-background-neutral-00 text-text-04"
+                        : "text-text-03 bg-transparent hover:bg-background-tint-02"
                   )}
                 >
-                  {/* Left curved joint */}
-                  {isActive && (
-                    <div
-                      className="absolute -left-3 bottom-0 w-3 h-3 bg-background-neutral-00"
-                      style={{
-                        maskImage:
-                          "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
-                        WebkitMaskImage:
-                          "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
-                      }}
-                    />
-                  )}
                   <Icon
                     size={16}
                     className={cn(
@@ -472,18 +460,6 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                   >
                     {tab.label}
                   </Text>
-                  {/* Right curved joint */}
-                  {isActive && (
-                    <div
-                      className="absolute -right-3 bottom-0 w-3 h-3 bg-background-neutral-00"
-                      style={{
-                        maskImage:
-                          "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
-                        WebkitMaskImage:
-                          "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
-                      }}
-                    />
-                  )}
                 </button>
               );
             })}
@@ -506,25 +482,13 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                       key={id}
                       onClick={() => handlePanelTabClick(id)}
                       className={cn(
-                        "group relative inline-flex items-center justify-center gap-1.5 px-3 pr-2",
+                        "group relative inline-flex items-center justify-center gap-1.5 px-3 pr-2 py-1.5 rounded-t-lg",
                         "max-w-[150px] min-w-fit",
                         isActive
-                          ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-1.5"
-                          : "text-text-03 bg-transparent hover:bg-background-tint-02 rounded-full py-1 mb-1"
+                          ? "bg-background-neutral-00 text-text-04"
+                          : "text-text-03 bg-transparent hover:bg-background-tint-02"
                       )}
                     >
-                      {/* Left curved joint */}
-                      {isActive && (
-                        <div
-                          className="absolute -left-3 bottom-0 w-3 h-3 bg-background-neutral-00"
-                          style={{
-                            maskImage:
-                              "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
-                            WebkitMaskImage:
-                              "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
-                          }}
-                        />
-                      )}
                       <TabIcon
                         size={14}
                         className={cn(
@@ -546,18 +510,6 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                       >
                         <SvgX size={12} className="stroke-text-03" />
                       </button>
-                      {/* Right curved joint */}
-                      {isActive && (
-                        <div
-                          className="absolute -right-3 bottom-0 w-3 h-3 bg-background-neutral-00"
-                          style={{
-                            maskImage:
-                              "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
-                            WebkitMaskImage:
-                              "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
-                          }}
-                        />
-                      )}
                     </button>
                   );
                 }
