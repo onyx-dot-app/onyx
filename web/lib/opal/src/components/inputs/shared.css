@@ -17,8 +17,8 @@
 .opal-input {
   @apply flex flex-row items-center justify-between flex-1 h-fit p-1.5 rounded-08 relative w-full;
   transition:
-    border-color 150ms ease,
-    box-shadow 150ms ease;
+    border-color var(--interactive-duration) var(--interactive-easing),
+    box-shadow var(--interactive-duration) var(--interactive-easing);
 }
 
 .opal-input[data-variant="primary"] {
