@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "ods-compose-dev",
+      "label": "ods-compose-dev-infra",
       "type": "shell",
       "command": "uv",
       "args": ["run", "--with", "onyx-devtools", "ods", "compose", "dev", "--infra"],

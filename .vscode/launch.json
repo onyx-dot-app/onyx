@@ -895,14 +895,12 @@
       }
     },
     {
-      "name": "Start Infrastructure (ods compose dev)",
+      "name": "Start External Infrastructure Containers",
       "type": "node",
       "request": "launch",
+      "preLaunchTask": "ods-compose-dev-infra",
       "runtimeExecutable": "bash",
-      "runtimeArgs": [
-        "-c",
-        "uv run --with onyx-devtools ods compose dev"
-      ],
+      "runtimeArgs": ["-c", "true"],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "presentation": {
