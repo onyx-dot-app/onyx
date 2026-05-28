@@ -40,15 +40,37 @@ describe("scheduled task browser-local schedule helpers", () => {
     ).toBe("Mon, Wed, Fri at 9:30 AM");
   });
 
-  it("shifts every weekday uniformly when the local time crosses UTC midnight", () => {
-    // 23:00 local (PDT, UTC-7) lands at 06:00 UTC the *next* day, so every
-    // selected weekday must advance by one. The old code converted each
-    // weekday's next occurrence independently and collapsed the time to the
-    // first weekday, which could diverge by an hour across DST boundaries.
+  it("converts daily/weekly schedules via a single shared day-shift", () => {
+    // A late-evening local time can roll into the next UTC day. The whole
+    // schedule must shift by ONE shared day-delta (derived from a single
+    // instant) rather than converting each weekday independently — otherwise
+    // weekdays could diverge across a DST boundary. We derive the expected
+    // cron from the host's own timezone instead of hard-coding a zone-specific
+    // string, so the assertion holds under any TZ (CI runs in UTC; dev
+    // machines often don't).
     const payload: DailyWeeklyPayload = {
       time_of_day: "23:00",
       weekdays: [1, 3, 5],
     };
+
+    // Independent reference conversion: one instant in, one day-shift out.
+    const instant = new Date(REFERENCE_DATE.getTime());
+    instant.setHours(23, 0, 0, 0);
+    const localMidnight = Date.UTC(
+      instant.getFullYear(),
+      instant.getMonth(),
+      instant.getDate()
+    );
+    const utcMidnight = Date.UTC(
+      instant.getUTCFullYear(),
+      instant.getUTCMonth(),
+      instant.getUTCDate()
+    );
+    const dayDelta = Math.round((utcMidnight - localMidnight) / 86_400_000);
+    const expectedWeekdays = payload.weekdays
+      .map((weekday) => (((weekday + dayDelta) % 7) + 7) % 7)
+      .sort((a, b) => a - b);
+    const expectedCron = `${instant.getUTCMinutes()} ${instant.getUTCHours()} * * ${expectedWeekdays.join(",")}`;
 
     const compiled = compileLocalPayloadToUtcCron(
       "daily_weekly",
@@ -57,8 +79,9 @@ describe("scheduled task browser-local schedule helpers", () => {
     );
     if (!compiled.ok) throw new Error(compiled.error);
 
-    // 06:00 UTC, weekdays uniformly shifted +1 → Tue, Thu, Sat.
-    expect(compiled.cron).toBe("0 6 * * 2,4,6");
+    // One shared time + a uniform weekday shift, with no weekdays dropped.
+    expect(compiled.cron).toBe(expectedCron);
+    expect(expectedWeekdays).toHaveLength(payload.weekdays.length);
 
     const decoded = decodeUtcCronToLocalPayload(
       "daily_weekly",
