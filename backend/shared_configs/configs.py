@@ -75,6 +75,13 @@ DEV_LOGGING_ENABLED = os.environ.get("DEV_LOGGING_ENABLED", "").lower() == "true
 # notset, debug, info, notice, warning, error, or critical
 LOG_LEVEL = os.environ.get("LOG_LEVEL") or "info"
 
+# Log output format: "plain" (human-readable text, default) or "json" (structured
+# single-line JSON, suitable for container log aggregators). When "json", context
+# such as tenant/request/task ids are emitted as discrete fields rather than being
+# prefixed into the message string.
+LOG_FORMAT = (os.environ.get("LOG_FORMAT") or "plain").lower()
+JSON_LOGGING = LOG_FORMAT == "json"
+
 # Timeout for API-based embedding models
 # NOTE: does not apply for Google VertexAI, since the python client doesn't
 # allow us to specify a custom timeout
