@@ -136,11 +136,19 @@ class GateAddon:
         `client_disconnected`. Best-effort.
         """
         conn_id = getattr(flow.client_conn, "id", None)
+        auth_header = flow.request.headers.get("Proxy-Authorization")
+        tag = _parse_proxy_auth_username(auth_header)
+
+        logger.debug(
+            "gate.http_connect conn_id=%s host=%s port=%s proxy_auth=%r parsed_tag=%s",
+            conn_id,
+            flow.request.host,
+            flow.request.port,
+            auth_header,
+            tag,
+        )
         if conn_id is None:
             return
-        tag = _parse_proxy_auth_username(
-            flow.request.headers.get("Proxy-Authorization")
-        )
         if tag:
             self._conn_session_tags[conn_id] = tag
 
@@ -764,13 +772,22 @@ class GateAddon:
         request directly, since there's no CONNECT to carry the header.
         """
         conn_id = getattr(flow.client_conn, "id", None)
-        if conn_id is not None:
-            cached = self._conn_session_tags.get(conn_id)
-            if cached:
-                return cached
-        return _parse_proxy_auth_username(
-            flow.request.headers.get("Proxy-Authorization")
+        cached = self._conn_session_tags.get(conn_id) if conn_id else None
+        direct_auth_header = flow.request.headers.get("Proxy-Authorization")
+        direct = _parse_proxy_auth_username(direct_auth_header)
+        tag = cached or direct
+
+        logger.debug(
+            "gate.session_tag_extract conn_id=%s host=%s cached=%s "
+            "direct=%s direct_proxy_auth=%r resolved=%s",
+            conn_id,
+            flow.request.host,
+            cached,
+            direct,
+            direct_auth_header,
+            tag,
         )
+        return tag
 
 
 # -----------------------------------------------------------------------
@@ -781,8 +798,11 @@ class GateAddon:
 def _parse_proxy_auth_username(header_value: str | None) -> str | None:
     """Extract the basic-auth username from a `Proxy-Authorization` header.
 
-    The proxy-tag plugin encodes the BuildSession id as the username with an
-    empty password: `Basic base64("<session_id>:")`. Never raises.
+    The proxy-tag plugin encodes the BuildSession id as the username and
+    uses a placeholder password (the password is required for Python's
+    `urllib.request.ProxyHandler` to emit the header at all, but the
+    proxy treats it as discardable — see session-proxy-tag.ts). Never
+    raises.
     """
     if not header_value:
         return None
