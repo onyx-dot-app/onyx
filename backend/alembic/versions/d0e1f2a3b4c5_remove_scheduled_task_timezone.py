@@ -1,7 +1,7 @@
 """remove scheduled task timezone
 
 Revision ID: d0e1f2a3b4c5
-Revises: 7f5b159041be
+Revises: 39287906b97a
 Create Date: 2026-05-25 09:10:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "d0e1f2a3b4c5"
-down_revision = "7f5b159041be"
+down_revision = "39287906b97a"
 branch_labels = None
 depends_on = None
 
