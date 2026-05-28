@@ -195,7 +195,13 @@ model_server = [
     "safetensors==0.5.3",
     "sentence-transformers==5.4.1",
     "torch==2.9.1",
-    "transformers==5.5.4",
+    # Do NOT upgrade to >=5 without addressing the `from_pretrained()` buffer
+    # corruption bug: persistent=False buffers (notably RoPE `inv_freq`) are
+    # loaded with garbage memory, producing all-NaN embeddings.
+    # See https://github.com/huggingface/transformers/issues/44534 and
+    # https://github.com/huggingface/transformers/issues/43950 (both closed
+    # wontfix upstream).
+    "transformers==4.57.6",
     "sentry-sdk[fastapi,celery,starlette]==2.14.0",
 ]
 
