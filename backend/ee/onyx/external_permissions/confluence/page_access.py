@@ -182,7 +182,7 @@ def get_page_restrictions_with_per_ancestor_fetch(
 
     def _resolve(ancestor: dict[str, Any]) -> dict[str, Any] | None:
         ancestor_id = ancestor.get("id")
-        if not ancestor_id:
+        if ancestor_id is None:
             return None
         cache_key = str(ancestor_id)
         if cache_key in ancestor_restrictions_cache:

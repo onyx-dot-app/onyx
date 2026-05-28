@@ -348,11 +348,12 @@ def test_perm_sync_no_retry_when_first_attempt_succeeds(
     assert call_kwargs[0]["expand_per_page"] is False
 
 
-def test_pruning_does_not_request_restrictions_expand(
+def test_pruning_expand_skips_restrictions_but_keeps_hierarchy(
     confluence_connector: ConfluenceConnector,
 ) -> None:
-    """Pruning ignores restrictions, so it must not send the expand
-    that's the sole 77618 trigger."""
+    """Pruning must drop the `restrictions.read.restrictions.*` expand
+    (the 77618 trigger) but keep `space` and `ancestors` so the
+    hierarchy graph isn't flattened."""
     captured_expands: list[str | None] = []
 
     def fake_paginate(**kwargs: Any) -> Iterator[Any]:
@@ -377,8 +378,13 @@ def test_pruning_does_not_request_restrictions_expand(
 
     assert captured_expands, "expected at least one CQL paginated call"
     for expand in captured_expands:
-        assert expand is None, (
-            f"pruning must not request a restrictions expand, got: {expand!r}"
+        assert expand is not None
+        fields = set(expand.split(","))
+        assert "space" in fields
+        assert "ancestors" in fields
+        assert not any(f.startswith("restrictions.read.restrictions.") for f in fields)
+        assert not any(
+            f.startswith("ancestors.restrictions.read.restrictions.") for f in fields
         )
 
 

@@ -95,6 +95,10 @@ _PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS = [
     "restrictions.read.restrictions.group",
     "ancestors",
 ]
+# Pruning needs `space` + `ancestors` to populate hierarchy nodes and
+# parent ids; skipping them would flatten the graph. No restrictions
+# expand here, so CONFCLOUD-77618 can't fire.
+_PRUNING_EXPANSION_FIELDS = ["space", "ancestors"]
 
 _SLIM_DOC_BATCH_SIZE = 5000
 
@@ -1062,10 +1066,10 @@ class ConfluenceConnector(
     ) -> GenerateSlimDocumentOutput:
         doc_metadata_list: list[SlimDocument | HierarchyNode] = []
 
-        # Pruning (no perm sync) doesn't read restrictions; skip the
-        # expand entirely so it can't trip CONFCLOUD-77618.
+        # Pruning skips the restrictions expand (the CONFCLOUD-77618
+        # trigger) but still needs space + ancestors for hierarchy.
         if not include_permissions:
-            restrictions_expand: str | None = None
+            restrictions_expand = ",".join(_PRUNING_EXPANSION_FIELDS)
         elif expand_per_page:
             restrictions_expand = ",".join(_PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS)
         else:
