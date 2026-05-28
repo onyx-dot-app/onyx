@@ -404,8 +404,10 @@ jobs:
       # follower per pod, retrying the attach) so failures leave a trail.
       - name: Start sandbox pod log capture
         run: |
-          # shellcheck disable=SC2016  # inner `bash -c` expands these at runtime
           mkdir -p sandbox-logs
+          # The inner `bash -c` body is single-quoted on purpose: its $vars
+          # expand at runtime inside that shell, not here.
+          # shellcheck disable=SC2016
           nohup bash -c '
             while true; do
               for name in $(kubectl -n onyx-sandboxes get pods \
