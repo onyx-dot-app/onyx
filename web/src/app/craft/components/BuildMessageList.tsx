@@ -190,7 +190,7 @@ export default function BuildMessageList({
 
     return (
       <div key={message.id} className="flex items-start gap-3 py-4">
-        <div className="shrink-0 mt-0.5">
+        <div className="shrink-0 mt-2">
           <Logo folded size={24} />
         </div>
         <div className="flex-1 flex flex-col gap-2 min-w-0">
@@ -234,7 +234,7 @@ export default function BuildMessageList({
 
         {showStreamingArea && (
           <div className="flex items-start gap-3 py-4">
-            <div className="shrink-0 mt-0.5">
+            <div className="shrink-0 mt-2">
               <Logo folded size={24} />
             </div>
             <div className="flex-1 flex flex-col gap-2 min-w-0">
