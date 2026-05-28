@@ -225,9 +225,9 @@ button is what you want.
 | What you changed | What happens |
 |---|---|
 | Python in `backend/onyx/` or `backend/ee/` | Tilt `sync()`s the file into the backend pods (api + all celery), then `restart_container()` so they re-exec with the new code. **p50 3–5 s.** |
-| `web/` source | Tilt `sync()`s into the webserver pod. `next dev` HMR re-renders in the browser. **p50 <1 s.** |
+| `web/` source | `next dev` is running natively on the host (via Tilt `local_resource`); turbopack HMR re-renders in the browser. **p50 <1 s.** |
 | `backend/requirements/*.txt` or `backend/Dockerfile` | Tilt rebuilds the backend image. **p50 30–90 s.** |
-| `web/package.json` or `web/Dockerfile.dev` | Tilt rebuilds the web-dev image. |
+| `web/package.json` or `bun.lock` | Re-run `bun install` in `web/`; the running `next dev` picks up new modules. |
 | Helm chart templates / values | Restart the `onyx-<slug>` resource in the Tilt UI (or Ctrl-C and re-run `dev.sh up`). |
 | Chart subchart versions or infra config | `dev.sh destroy all && dev.sh up` (the only path that re-runs the infra install). |
 
@@ -289,8 +289,6 @@ deployment/helm/charts/onyx/
 
 Tiltfile                Per-worktree Tilt driver (reads env from dev.sh)
 Brewfile                k3d/tilt/kubectl/helm/k9s/stern/jq
-
-web/Dockerfile.dev      Node 24 + bun image; `bun run dev` entrypoint for HMR
 ```
 
 Per-worktree state lives in `~/.config/onyx-dev/<slug>.json` (allocation

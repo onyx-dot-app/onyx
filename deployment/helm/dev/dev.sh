@@ -244,13 +244,12 @@ ensure_cluster() {
 }
 
 ensure_opal_built() {
-  # web/Dockerfile.dev relies on the host's lib/opal/dist/ via COPY.
   local dist="${REPO_ROOT}/web/lib/opal/dist"
   [[ -d "${dist}" ]] && return 0
 
   require_tool bun
   log "building web/lib/opal/dist (cold worktree — one-time)"
-  # Two-pass workaround for opal's prepare-hook race; see web/Dockerfile.dev.
+  # Two-pass workaround for opal prepare-hook race on cold install.
   ( cd "${REPO_ROOT}/web" && bun install --frozen-lockfile >/dev/null 2>&1 || true )
   ( cd "${REPO_ROOT}/web" && bun install --frozen-lockfile >/dev/null )
   [[ -d "${dist}" ]] || die "opal build did not produce ${dist}"
@@ -535,7 +534,7 @@ write_worktree_values() {
 # Re-running 'dev.sh up' overwrites this file.
 
 configMap:
-  # User .vscode/.env.k3d first so per-slug entries below win when keys collide.
+  # .env.k3d first so per-slug entries below win on key collision.
 ${env_k3d_yaml}
   POSTGRES_DB: "${db}"
   S3_FILE_STORE_BUCKET_NAME: "${bucket}"
@@ -544,8 +543,6 @@ ${env_k3d_yaml}
   REDIS_DB_NUMBER_CELERY: "$((redis_base + 2))"
   SANDBOX_NAMESPACE: "${sandbox_ns}"
   SANDBOX_API_SERVER_URL: "http://${app_release}-api-service.${app_ns}.svc.cluster.local:8080"
-  # next-dev is on the host at this per-slug port; backend uses WEB_DOMAIN
-  # to build the sandbox webapp URL it returns to the browser.
   WEB_DOMAIN: "http://localhost:${next_port}"
 
 # Mirror the actually-deployed OpenSearch admin password so worktree
@@ -692,6 +689,14 @@ cmd_up() {
 
   if [[ "${open_browser}" -eq 1 ]]; then
     ( sleep 3 && open_url "http://localhost:${tilt_port}" ) &
+    disown
+    (
+      for _ in $(seq 1 120); do
+        curl -sf -o /dev/null "http://localhost:${next_port}/" && \
+          { open_url "http://localhost:${next_port}"; break; }
+        sleep 2
+      done
+    ) &
     disown
   fi
 

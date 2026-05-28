@@ -11,17 +11,18 @@
 #      into the running pods. The chart's command override runs each
 #      backend process under backend/scripts/dev_{api,celery}_reload.py,
 #      which uses watchfiles to re-exec the inner process on source change.
-#   2. Builds the onyx-web-dev image. live_update syncs web/ into /app;
-#      bun's `next dev` HMR reloads in the browser (~sub-second).
+#   2. Runs `next dev` natively on the host via a local_resource on a
+#      per-slug port (23000+). Browser /api/* is server-side-proxied by
+#      web/src/app/api/[...path]/route.ts to INTERNAL_URL (the cluster
+#      ingress). APFS + native cores avoid the 2-4x slowdown of running
+#      next dev inside a Linux container on macOS.
 #   3. Renders the onyx Helm chart into onyx-<slug>, pointing at the
 #      shared infra in onyx-infra.
-#   4. Routes localhost:13000 -> k3d serverlb -> nodePort 30080 -> the
-#      shared ingress-nginx so the browser can reach
-#      <slug>.onyx.localhost:13000. The host->nodePort map lives in
-#      dev.sh's `k3d cluster create -p` flag; no kubectl port-forward.
-#   5. Port-forwards each backend pod's debugpy port (5678–5687) so
+#   4. Port-forwards each backend pod's debugpy port (5678–5687) so
 #      VSCode attach configs (see .vscode/launch.json) can hit
 #      breakpoints in the synced source.
+#   5. Tails Craft sandbox pod logs (init containers included) via stern,
+#      so dynamically-created sandbox pods get a log pane in the Tilt UI.
 #
 # See docs/dev/local-cluster.md.
 
@@ -92,10 +93,7 @@ docker_build(
     ],
 )
 
-# ---- 5. Web dev (native on host, not in cluster) ----
-# `next dev` runs on macOS via `local_resource` below (see section 9).
-# values-dev-app.yaml sets webserver.replicaCount=0 so the chart omits
-# the Deployment + Service + Ingress for the webserver.
+# ---- 5. Web: see `next-dev` local_resource in section 9 (native, not in cluster). ----
 
 # ---- 6. App chart (helm template -> per-workload Tilt resources) ----
 #
@@ -208,15 +206,11 @@ for (label, host_port, deploy_suffix) in DEBUG_TARGETS:
     )
 
 # ---- 9. next-dev (native on host) ----
-# /api/* is proxied by web/src/app/api/[...path]/route.ts to INTERNAL_URL.
-# INTERNAL_URL ends in /api so the cluster ingress's /api(/|$)(.*) rewrite
-# strips it back off before the api-server sees the path.
+# /api/* proxied by web/src/app/api/[...path]/route.ts to INTERNAL_URL;
+# the cluster's /api(/|$)(.*) rewrite strips the /api back off.
 local_resource(
     'next-dev',
     serve_cmd=(
-        # Inherit user-curated .vscode/.env.k3d so the FE sees feature flags
-        # (NEXT_PUBLIC_*), password policy, EE toggles, etc. — the same keys
-        # the api/celery pods get via the chart configmap.
         'set -a && [ -f ' + os.getcwd() + '/.vscode/.env.k3d ] && ' +
         '. ' + os.getcwd() + '/.vscode/.env.k3d ; set +a ; ' +
         'cd ' + os.getcwd() + '/web && ' +
@@ -237,10 +231,7 @@ local_resource(
     labels=['app'],
 )
 
-# ---- 10. Craft sandbox pods (dynamic, not in chart) ----
-# Stern tails all sandbox pod logs (including init containers) and surfaces
-# pod lifecycle events, so a sandbox failure shows up here instead of being
-# discoverable only via kubectl.
+# ---- 10. Craft sandbox pods (dynamic; stern-tailed). ----
 local_resource(
     'sandbox-pods',
     serve_cmd=(

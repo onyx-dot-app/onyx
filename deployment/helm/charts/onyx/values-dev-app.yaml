@@ -91,10 +91,7 @@ configMap:
   # the per-worktree values file overrides with the namespaced api service.
   ENABLE_CRAFT: "true"
 
-  # The code default `onyxdotapp/sandbox:v0.1.44` predates firewall-init.sh
-  # and breaks sandbox pod init. Pin to a known-good tag. Bump manually as
-  # new sandbox versions land. Avoid `:latest` — pullPolicy=IfNotPresent
-  # means the node keeps the first sha pulled under that tag.
+  # Code default v0.1.44 predates firewall-init.sh. Bump as new versions land.
   SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:v0.1.49"
 
 # Sandbox egress proxy. Chart default is replicaCount=2 with podAntiAffinity
@@ -167,13 +164,7 @@ api:
       memory: 3Gi
 
 webserver:
-  # `next dev` runs natively on the macOS host via the Tiltfile's
-  # `next-dev` local_resource, not in the cluster. APFS + native cores
-  # beat overlay2 + LinuxKit by 2-4x on compile time. Browser hits
-  # localhost:3000; /api/* requests get proxied server-side by
-  # web/src/app/api/[...path]/route.ts to INTERNAL_URL (the cluster
-  # ingress). With replicaCount=0 the webserver Deployment + Ingress
-  # both omit themselves.
+  # next dev runs on the host via Tiltfile's next-dev local_resource.
   replicaCount: 0
   autoscaling:
     enabled: false
