@@ -79,7 +79,10 @@ _PERMISSIONS_TEMPLATE: dict[str, Any] = {
     "list": "allow",
     "lsp": "allow",
     "patch": "allow",
-    "skill": "allow",
+    # Deny opencode's built-in customize-opencode skill (edits opencode.json
+    # via the skill tool, bypassing our edit/write denies). "*" must precede
+    # the named deny — opencode evaluates skill rules with findLast().
+    "skill": {"*": "allow", "customize-opencode": "deny"},
     "question": "allow",
     "webfetch": "allow",
 }
