@@ -378,14 +378,14 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
         {/* Tabs row */}
         <div className="flex items-end w-full pt-1.5 bg-background-tint-03">
           {/* macOS-style window controls - sticky on left */}
-          <div className="group flex items-center gap-1.5 pl-2.5 pr-1 py-2 shrink-0">
+          <div className="group flex items-center gap-2 pl-3 pr-1.5 py-2 shrink-0">
             <button
               onClick={onClose}
-              className="relative w-3 h-3 rounded-full bg-[#ff5f57] hover:bg-[#ff3b30] transition-colors shrink-0 flex items-center justify-center"
+              className="relative w-3.5 h-3.5 rounded-full bg-[#ff5f57] hover:bg-[#ff3b30] transition-colors shrink-0 flex items-center justify-center"
               aria-label="No action"
             >
               <SvgX
-                size={10}
+                size={12}
                 strokeWidth={4}
                 className="opacity-0 group-hover:opacity-100 transition-opacity"
                 style={{ stroke: "#8a2e2a" }}
@@ -393,11 +393,11 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             </button>
             <button
               onClick={onClose}
-              className="relative w-3 h-3 rounded-full bg-[#ffbd2e] hover:bg-[#ffa000] transition-colors shrink-0 flex items-center justify-center"
+              className="relative w-3.5 h-3.5 rounded-full bg-[#ffbd2e] hover:bg-[#ffa000] transition-colors shrink-0 flex items-center justify-center"
               aria-label="Close panel"
             >
               <SvgMinus
-                size={10}
+                size={12}
                 strokeWidth={3}
                 className="opacity-0 group-hover:opacity-100 transition-opacity"
                 style={{ stroke: "#8a6618" }}
@@ -405,11 +405,11 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             </button>
             <button
               onClick={handleMaximize}
-              className="relative w-3 h-3 rounded-full bg-[#28ca42] hover:bg-[#1fb832] transition-colors shrink-0 flex items-center justify-center"
+              className="relative w-3.5 h-3.5 rounded-full bg-[#28ca42] hover:bg-[#1fb832] transition-colors shrink-0 flex items-center justify-center"
               aria-label="Maximize panel"
             >
               <SvgMaximize2
-                size={7}
+                size={8}
                 strokeWidth={2.5}
                 className="opacity-0 group-hover:opacity-90 rotate-90 transition-opacity"
                 style={{ stroke: "#155c24" }}
