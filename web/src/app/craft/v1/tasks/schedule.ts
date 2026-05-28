@@ -76,34 +76,32 @@ function utcTimeOfDayToLocal(
   return { hour: date.getHours(), minute: date.getMinutes() };
 }
 
-function nextLocalDateForWeekday(
-  weekday: number,
-  hour: number,
-  minute: number,
-  referenceDate: Date
-): Date {
-  const date = new Date(referenceDate.getTime());
-  date.setHours(hour, minute, 0, 0);
-  const daysToAdd = (weekday - date.getDay() + 7) % 7;
-  date.setDate(date.getDate() + daysToAdd);
-  return date;
-}
-
-function nextUtcDateForWeekday(
-  weekday: number,
-  hour: number,
-  minute: number,
-  referenceDate: Date
-): Date {
-  const date = new Date(referenceDate.getTime());
-  date.setUTCHours(hour, minute, 0, 0);
-  const daysToAdd = (weekday - date.getUTCDay() + 7) % 7;
-  date.setUTCDate(date.getUTCDate() + daysToAdd);
-  return date;
-}
-
 function uniqueSortedWeekdays(weekdays: number[]): number[] {
   return Array.from(new Set(weekdays)).sort((a, b) => a - b);
+}
+
+/**
+ * For a given absolute instant, how many calendar days its UTC date sits ahead
+ * of its local date (-1, 0, or +1). When a wall-clock time converts across
+ * midnight, the weekday shifts with it; this lets us apply that one shift
+ * uniformly across a daily/weekly schedule's weekday set.
+ */
+function utcMinusLocalDayDelta(instant: Date): number {
+  const localMidnight = Date.UTC(
+    instant.getFullYear(),
+    instant.getMonth(),
+    instant.getDate()
+  );
+  const utcMidnight = Date.UTC(
+    instant.getUTCFullYear(),
+    instant.getUTCMonth(),
+    instant.getUTCDate()
+  );
+  return Math.round((utcMidnight - localMidnight) / 86_400_000);
+}
+
+function shiftWeekday(weekday: number, dayDelta: number): number {
+  return (((weekday + dayDelta) % 7) + 7) % 7;
 }
 
 export function localPayloadToUtcPayload(
@@ -130,41 +128,24 @@ export function localPayloadToUtcPayload(
     const localTime = parseTimeOfDay(dailyWeeklyPayload.time_of_day);
     if (!localTime) return dailyWeeklyPayload;
 
+    // Convert the wall-clock time once on the reference date. A single
+    // `M H * * d1,d2,...` cron carries only one (hour, minute) and one
+    // day-shift, so we derive both from one instant and apply the same shift
+    // to every selected weekday. Converting each weekday's next occurrence
+    // independently would diverge across a DST boundary.
+    const instant = new Date(referenceDate.getTime());
+    instant.setHours(localTime.hour, localTime.minute, 0, 0);
+    const dayDelta = utcMinusLocalDayDelta(instant);
+
     const weekdays = Array.isArray(dailyWeeklyPayload.weekdays)
       ? dailyWeeklyPayload.weekdays
       : [];
-    if (weekdays.length === 0) {
-      const utcTime = localTimeOfDayToUtc(
-        dailyWeeklyPayload.time_of_day,
-        referenceDate
-      );
-      if (!utcTime) return dailyWeeklyPayload;
-      return {
-        ...dailyWeeklyPayload,
-        time_of_day: timeOfDay(utcTime.hour, utcTime.minute),
-        weekdays: [],
-      };
-    }
-
-    const converted = weekdays.map((weekday) => {
-      const date = nextLocalDateForWeekday(
-        weekday,
-        localTime.hour,
-        localTime.minute,
-        referenceDate
-      );
-      return {
-        weekday: date.getUTCDay(),
-        hour: date.getUTCHours(),
-        minute: date.getUTCMinutes(),
-      };
-    });
-    const first = converted[0];
-    if (!first) return dailyWeeklyPayload;
     return {
       ...dailyWeeklyPayload,
-      time_of_day: timeOfDay(first.hour, first.minute),
-      weekdays: uniqueSortedWeekdays(converted.map((item) => item.weekday)),
+      time_of_day: timeOfDay(instant.getUTCHours(), instant.getUTCMinutes()),
+      weekdays: uniqueSortedWeekdays(
+        weekdays.map((weekday) => shiftWeekday(weekday, dayDelta))
+      ),
     };
   }
 
@@ -195,41 +176,22 @@ function utcPayloadToLocalPayload(
     const utcTime = parseTimeOfDay(dailyWeeklyPayload.time_of_day);
     if (!utcTime) return dailyWeeklyPayload;
 
+    // Mirror of the encode path: convert the stored UTC wall-clock once and
+    // apply the resulting day-shift uniformly to every weekday. See
+    // `localPayloadToUtcPayload`.
+    const instant = new Date(referenceDate.getTime());
+    instant.setUTCHours(utcTime.hour, utcTime.minute, 0, 0);
+    const dayDelta = utcMinusLocalDayDelta(instant);
+
     const weekdays = Array.isArray(dailyWeeklyPayload.weekdays)
       ? dailyWeeklyPayload.weekdays
       : [];
-    if (weekdays.length === 0) {
-      const localTime = utcTimeOfDayToLocal(
-        dailyWeeklyPayload.time_of_day,
-        referenceDate
-      );
-      if (!localTime) return dailyWeeklyPayload;
-      return {
-        ...dailyWeeklyPayload,
-        time_of_day: timeOfDay(localTime.hour, localTime.minute),
-        weekdays: [],
-      };
-    }
-
-    const converted = weekdays.map((weekday) => {
-      const date = nextUtcDateForWeekday(
-        weekday,
-        utcTime.hour,
-        utcTime.minute,
-        referenceDate
-      );
-      return {
-        weekday: date.getDay(),
-        hour: date.getHours(),
-        minute: date.getMinutes(),
-      };
-    });
-    const first = converted[0];
-    if (!first) return dailyWeeklyPayload;
     return {
       ...dailyWeeklyPayload,
-      time_of_day: timeOfDay(first.hour, first.minute),
-      weekdays: uniqueSortedWeekdays(converted.map((item) => item.weekday)),
+      time_of_day: timeOfDay(instant.getHours(), instant.getMinutes()),
+      weekdays: uniqueSortedWeekdays(
+        weekdays.map((weekday) => shiftWeekday(weekday, -dayDelta))
+      ),
     };
   }
 
