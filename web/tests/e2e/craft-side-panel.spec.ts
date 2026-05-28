@@ -5,7 +5,8 @@
  * 1. Closed state on first load
  * 2. Toggle opens the panel — pinned tabs visible with pin indicators
  * 3. Pinned-to-pinned tab switching
- * 4. No transient tabs on fresh load (separator absent)
+ * 4A. Opening a markdown file via stream creates a transient tab and activates it
+ * 4B. Closing a transient file tab removes it and reverts active tab to Files
  * 5. Toggle closes panel; reopening preserves active tab state
  * 6. Auto-open on first webapp preview; does not re-open after manual dismissal
  */
@@ -197,29 +198,259 @@ test.describe("Craft side panel", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Test 4: No transient tabs on fresh load — separator and close buttons absent
+  // Test 4A: Opening a file creates a transient tab
+  //
+  // Strategy: same mock layer as test 6. We send a message to provision a
+  // real session ID, then stream a tool_call_progress packet whose file_path
+  // matches the outputs/*.md detector. That packet triggers openMarkdownPreview
+  // in the store, which (a) opens the panel and (b) adds the transient tab.
+  //
+  // We never call openFilePreview directly from page.evaluate because the
+  // Zustand store is not exposed on window — we drive it through the existing
+  // streaming channel that the production code already exercises.
   // -------------------------------------------------------------------------
-  test("no transient tabs and no separator on a fresh craft session", async ({
+  test("opening a markdown file via stream creates a transient tab and activates it", async ({
     page,
   }) => {
     const craftEnabled = await gotocraft(page);
     test.skip(!craftEnabled, "Onyx Craft is not enabled in this environment");
 
-    await chatHeaderPanelToggle(page).click();
-    await waitForPanelOpen(page);
+    const FAKE_SESSION_ID = "e2e-test-session-file-open";
+    const FILE_NAME = "report.md";
+    const FILE_PATH = `outputs/${FILE_NAME}`;
 
-    // Transient-tab close buttons have aria-label="Close <filename>"
-    // On a fresh session with no files opened, none should exist.
-    // We use a broad regex for any "Close " prefixed button in the tab bar.
-    const closeTabButtons = page.getByRole("button", {
-      name: /^Close /,
+    // ---- 1. Mock session creation ----
+    await page.route("**/api/build/sessions", async (route) => {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            id: FAKE_SESSION_ID,
+            status: "idle",
+            created_at: new Date().toISOString(),
+            sandbox: { nextjs_port: null },
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([]),
+        });
+      }
     });
-    await expect(closeTabButtons).toHaveCount(0, { timeout: 3000 });
 
-    // The separator (1px wide div between pinned and transient) only renders
-    // when panelTabs.length > 0 — with no open files, it must be absent.
-    // We check by counting tab close buttons (0 = no transient tabs = no separator).
-    // (The separator itself has no accessible label, so we rely on the count above.)
+    // ---- 2. Mock fetchSession ----
+    await page.route(
+      `**/api/build/sessions/${FAKE_SESSION_ID}`,
+      async (route) => {
+        if (route.request().method() === "GET") {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              id: FAKE_SESSION_ID,
+              status: "idle",
+              created_at: new Date().toISOString(),
+              sandbox: { nextjs_port: null },
+              messages: [],
+              artifacts: [],
+            }),
+          });
+        } else {
+          await route.continue();
+        }
+      }
+    );
+
+    // ---- 3. Mock send-message: emit a tool_call_progress for an outputs/*.md file.
+    //        parsePacket routes this through the "edit" detector which calls
+    //        openMarkdownPreview(sessionId, filePath). That action atomically
+    //        sets outputPanelOpen=true, adds the transient tab, and activates it.
+    await page.route(
+      `**/api/build/sessions/${FAKE_SESSION_ID}/send-message`,
+      async (route) => {
+        const editPacket = JSON.stringify({
+          type: "tool_call_progress",
+          tool_name: "edit",
+          tool_call_id: "tc-report-md",
+          kind: "edit",
+          status: "completed",
+          raw_input: { file_path: FILE_PATH },
+        });
+        const donePacket = JSON.stringify({ type: "prompt_response" });
+        await route.fulfill({
+          status: 200,
+          contentType: "text/plain",
+          body: [editPacket, donePacket].join("\n") + "\n",
+        });
+      }
+    );
+
+    // ---- 4. Assert panel starts closed ----
+    await expect(panelCloseButton(page)).not.toBeVisible({ timeout: 3000 });
+
+    // ---- 5. Send a message to trigger session creation + streaming ----
+    const messageInput = page.getByRole("textbox", { name: "Message input" });
+    await expect(messageInput).toBeVisible({ timeout: 20000 });
+    await messageInput.click();
+    await messageInput.fill("write a report");
+    await page.keyboard.press("Enter");
+
+    // Wait for session ID to appear in URL
+    await page.waitForFunction(
+      () => window.location.href.includes("sessionId="),
+      null,
+      { timeout: 30000 }
+    );
+
+    // ---- 6. Panel auto-opens (openMarkdownPreview sets outputPanelOpen=true) ----
+    await waitForPanelOpen(page, 15000);
+
+    // ---- 7. A button with the file name exists in the tab bar ----
+    const fileTab = page.getByRole("button", { name: FILE_NAME }).first();
+    await expect(fileTab).toBeVisible({ timeout: 5000 });
+
+    // ---- 8. The close button for the transient tab is present ----
+    const closeTabBtn = page.getByRole("button", {
+      name: `Close ${FILE_NAME}`,
+    });
+    await expect(closeTabBtn).toBeVisible({ timeout: 5000 });
+
+    // ---- 9. UrlBar shows the sandbox:// path for the open file ----
+    await expect(
+      page.getByText(`sandbox://${FILE_PATH}`, { exact: false })
+    ).toBeVisible({ timeout: 5000 });
+
+    // ---- 10. No close button exists for the three pinned tabs ----
+    // (Pinned tabs do not have a "Close X" button — only transient tabs do.)
+    const allCloseButtons = page.getByRole("button", { name: /^Close / });
+    await expect(allCloseButtons).toHaveCount(1, { timeout: 3000 });
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 4B: Closing a transient tab removes it and reverts to Files tab
+  //
+  // Setup: same as 4A (get a session, stream the markdown edit packet).
+  // Then click the close × and assert:
+  //   - The transient button is gone
+  //   - The Files pinned tab is now active (closeFilePreview sets
+  //     activeOutputTab: "files" when closing the active file tab)
+  // -------------------------------------------------------------------------
+  test("closing a transient file tab removes it and reverts active tab to Files", async ({
+    page,
+  }) => {
+    const craftEnabled = await gotocraft(page);
+    test.skip(!craftEnabled, "Onyx Craft is not enabled in this environment");
+
+    const FAKE_SESSION_ID = "e2e-test-session-file-close";
+    const FILE_NAME = "report.md";
+    const FILE_PATH = `outputs/${FILE_NAME}`;
+
+    // ---- 1. Mock session creation ----
+    await page.route("**/api/build/sessions", async (route) => {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            id: FAKE_SESSION_ID,
+            status: "idle",
+            created_at: new Date().toISOString(),
+            sandbox: { nextjs_port: null },
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([]),
+        });
+      }
+    });
+
+    // ---- 2. Mock fetchSession ----
+    await page.route(
+      `**/api/build/sessions/${FAKE_SESSION_ID}`,
+      async (route) => {
+        if (route.request().method() === "GET") {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              id: FAKE_SESSION_ID,
+              status: "idle",
+              created_at: new Date().toISOString(),
+              sandbox: { nextjs_port: null },
+              messages: [],
+              artifacts: [],
+            }),
+          });
+        } else {
+          await route.continue();
+        }
+      }
+    );
+
+    // ---- 3. Mock send-message: same edit packet as 4A ----
+    await page.route(
+      `**/api/build/sessions/${FAKE_SESSION_ID}/send-message`,
+      async (route) => {
+        const editPacket = JSON.stringify({
+          type: "tool_call_progress",
+          tool_name: "edit",
+          tool_call_id: "tc-report-md",
+          kind: "edit",
+          status: "completed",
+          raw_input: { file_path: FILE_PATH },
+        });
+        const donePacket = JSON.stringify({ type: "prompt_response" });
+        await route.fulfill({
+          status: 200,
+          contentType: "text/plain",
+          body: [editPacket, donePacket].join("\n") + "\n",
+        });
+      }
+    );
+
+    // ---- 4. Send a message to trigger the stream ----
+    const messageInput = page.getByRole("textbox", { name: "Message input" });
+    await expect(messageInput).toBeVisible({ timeout: 20000 });
+    await messageInput.click();
+    await messageInput.fill("write a report");
+    await page.keyboard.press("Enter");
+
+    await page.waitForFunction(
+      () => window.location.href.includes("sessionId="),
+      null,
+      { timeout: 30000 }
+    );
+
+    // ---- 5. Wait for panel and transient tab to appear ----
+    await waitForPanelOpen(page, 15000);
+    const closeTabBtn = page.getByRole("button", {
+      name: `Close ${FILE_NAME}`,
+    });
+    await expect(closeTabBtn).toBeVisible({ timeout: 5000 });
+
+    // ---- 6. Click the close × on the transient tab ----
+    await closeTabBtn.click();
+
+    // ---- 7. Transient tab button is gone ----
+    const fileTabBtn = page.getByRole("button", { name: FILE_NAME });
+    await expect(fileTabBtn).toHaveCount(0, { timeout: 3000 });
+
+    // ---- 8. No more close buttons (separator gone implicitly) ----
+    const allCloseButtons = page.getByRole("button", { name: /^Close / });
+    await expect(allCloseButtons).toHaveCount(0, { timeout: 3000 });
+
+    // ---- 9. Files tab content is now visible (closeFilePreview sets activeOutputTab="files") ----
+    await expect(
+      page.getByText(
+        /No files yet|Loading files|sandbox:\/\/|Preparing sandbox|No files in this directory/i
+      )
+    ).toBeVisible({ timeout: 8000 });
   });
 
   // -------------------------------------------------------------------------
