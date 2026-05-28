@@ -1659,7 +1659,12 @@ echo "Session workspace setup complete"
                 tty=False,
             )
 
-            logger.debug("Session setup output: %s", exec_response)
+            logger.info(
+                "Session setup output for %s in sandbox %s:\n%s",
+                session_id,
+                sandbox_id,
+                exec_response,
+            )
             logger.info(
                 "Set up session workspace %s in sandbox %s", session_id, sandbox_id
             )
