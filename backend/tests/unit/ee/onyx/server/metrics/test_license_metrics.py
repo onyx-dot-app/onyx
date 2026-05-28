@@ -88,6 +88,27 @@ class TestLicenseMetricsCollector:
         assert values["onyx_license_active"] == 0.0
         assert values["onyx_license_seats_available"] == 0
 
+    def test_active_zero_when_seat_limit_exceeded(self) -> None:
+        # ACTIVE license but used > seats — the enforcement middleware 402-blocks
+        # this, so active must read 0 even though status is not GATED_ACCESS.
+        collector = LicenseMetricsCollector(cache_ttl=0)
+        with (
+            patch("ee.onyx.server.metrics.license_metrics.MULTI_TENANT", False),
+            patch("ee.onyx.server.metrics.license_metrics.get_session_with_tenant"),
+            patch(
+                "ee.onyx.server.metrics.license_metrics.get_license_metadata",
+                return_value=_metadata(5, ApplicationStatus.ACTIVE),
+            ),
+            patch(
+                "ee.onyx.server.metrics.license_metrics.get_used_seats",
+                return_value=8,
+            ),
+        ):
+            values = _values(collector.collect())
+
+        assert values["onyx_license_active"] == 0.0
+        assert values["onyx_license_seats_available"] == 0
+
     def test_empty_when_multi_tenant(self) -> None:
         collector = LicenseMetricsCollector(cache_ttl=0)
         with patch("ee.onyx.server.metrics.license_metrics.MULTI_TENANT", True):

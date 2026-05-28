@@ -68,13 +68,19 @@ class LicenseMetricsCollector(_CachedCollector):
         )
         expires.add_metric([], metadata.expires_at.timestamp())
 
+        # Mirror the license-enforcement middleware's two block conditions:
+        # fully-expired (GATED_ACCESS) or seat limit exceeded (used > total).
+        # Status alone never carries SEAT_LIMIT_EXCEEDED, so the seat check is
+        # explicit here.
+        access_blocked = (
+            metadata.status == ApplicationStatus.GATED_ACCESS
+            or used_seats > total_seats
+        )
         active = GaugeMetricFamily(
             "onyx_license_active",
-            "Whether the license is active (1=active, 0=gated/expired)",
+            "License access status (1=ok, 0=blocked: expired/gated or seat limit exceeded)",
         )
-        active.add_metric(
-            [], 0.0 if metadata.status == ApplicationStatus.GATED_ACCESS else 1.0
-        )
+        active.add_metric([], 0.0 if access_blocked else 1.0)
 
         return [seats_total, seats_used, seats_available, expires, active]
 
