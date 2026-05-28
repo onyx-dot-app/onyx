@@ -411,7 +411,8 @@ def test_restore_with_missing_snapshot_creates_fresh_workspace(
     )
     assert "outputs" in listing
     assert "AGENTS.md" in listing
-    assert "opencode.json" in listing
+    # opencode.json is pod-level under the serve transport
+    # (OPENCODE_CONFIG_CONTENT), not written per-session.
 
 
 def test_snapshot_failure_does_not_block_pod_termination(
