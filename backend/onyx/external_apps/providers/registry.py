@@ -80,7 +80,7 @@ def _descriptor_for(
     )
 
 
-def _catalog_for(app_type: ExternalAppType) -> list[EndpointSpec]:
+def get_endpoint_catalog(app_type: ExternalAppType) -> list[EndpointSpec]:
     """The action catalog for an app_type (empty for CUSTOM / unregistered)."""
     provider = PROVIDERS.get(app_type)
     return list(provider.spec.endpoint_catalog) if provider is not None else []
@@ -93,7 +93,7 @@ def validate_action_policies(
     """Validate admin-submitted ``{action_id: policy}`` against the provider
     catalog: reject any id that doesn't exist for this ``app_type``. Returns the
     validated map unchanged."""
-    valid_ids = {endpoint.id for endpoint in _catalog_for(app_type)}
+    valid_ids = {endpoint.id for endpoint in get_endpoint_catalog(app_type)}
     for action_id in policies:
         if action_id not in valid_ids:
             raise OnyxError(
@@ -122,7 +122,7 @@ def build_action_policies(
         endpoint.id: validated.get(
             endpoint.id, existing.get(endpoint.id, EndpointPolicy.ASK)
         )
-        for endpoint in _catalog_for(app_type)
+        for endpoint in get_endpoint_catalog(app_type)
     }
 
 
@@ -140,7 +140,7 @@ def action_policy_views(
             description=endpoint.description,
             state=stored.get(endpoint.id, EndpointPolicy.ASK),
         )
-        for endpoint in _catalog_for(app_type)
+        for endpoint in get_endpoint_catalog(app_type)
     ]
 
 

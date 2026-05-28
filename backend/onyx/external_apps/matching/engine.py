@@ -10,7 +10,7 @@ from onyx.external_apps.matching.request import MatchContext
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.policy import resolve_policy
-from onyx.external_apps.providers import get_endpoint_catalog
+from onyx.external_apps.providers.registry import get_endpoint_catalog
 
 # DENY is the most restrictive verdict, ALWAYS the least; when several catalog
 # actions match one request (e.g. a batched GraphQL body) the strictest wins.

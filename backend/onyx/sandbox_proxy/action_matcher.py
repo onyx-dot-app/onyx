@@ -7,22 +7,20 @@ lockdown, not this heuristic.
 
 import json
 import re
-from collections.abc import Callable
 from collections.abc import Iterable
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Any
 from typing import Protocol
 from urllib.parse import parse_qs
 
 from mitmproxy import http
-from sqlalchemy.orm import Session
 
 from onyx.db.enums import EndpointPolicy
 from onyx.db.external_app import get_external_apps
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching import match_action
 from onyx.external_apps.matching import ProxiedRequest
+from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -41,9 +39,6 @@ class ActionMatcher(Protocol):
     def match(self, request: http.Request, tenant_id: str) -> ActionMatch | None: ...
 
 
-DBSessionFactory = Callable[[str], AbstractContextManager[Session]]
-
-
 def resolve_app_for_url(
     url: str,
     apps: Iterable[ExternalApp],
@@ -59,7 +54,7 @@ def resolve_app_for_url(
     for app in apps:
         for pattern in app.upstream_url_patterns:
             try:
-                if re.search(pattern, url):
+                if re.match(pattern, url):
                     return app
             except re.error:
                 logger.warning(
@@ -88,8 +83,8 @@ class ExternalAppActionMatcher:
             if app is None:
                 return None
 
-            # Catalog path_regex matchers are anchored against the path only;
-            # mitmproxy's `request.path` carries the query string, so drop it.
+            # Catalog path matchers test the URL path only; mitmproxy's
+            # `request.path` carries the query string, so drop it.
             proxied = ProxiedRequest(
                 method=request.method or "",
                 path=(request.path or "").split("?", 1)[0],

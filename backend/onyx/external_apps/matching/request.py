@@ -18,7 +18,7 @@ class ProxiedRequest(BaseModel):
     """
 
     method: str  # HTTP verb; compared case-insensitively
-    path: str  # URL path, tested against RestRoute.path_regex
+    path: str  # URL path, tested against RestRoute.path
     body: bytes | None = None  # raw body; parsed lazily for GraphQLOp matching
 
 

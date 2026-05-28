@@ -9,12 +9,10 @@ import base64
 import binascii
 import json
 from collections.abc import Callable
-from contextlib import AbstractContextManager
 from typing import Protocol
 from uuid import UUID
 
 from mitmproxy import http
-from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.cache.interface import CacheBackend
@@ -25,6 +23,7 @@ from onyx.db.notification import create_notification
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.action_matcher import ActionMatch
 from onyx.sandbox_proxy.action_matcher import ActionMatcher
+from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
@@ -49,7 +48,6 @@ class _Resolver(Protocol):
     ) -> UUID | None: ...
 
 
-DBSessionFactory = Callable[[str], AbstractContextManager[Session]]
 CacheFactory = Callable[[str], CacheBackend]
 
 

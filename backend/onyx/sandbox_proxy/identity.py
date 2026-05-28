@@ -90,6 +90,8 @@ class SandboxIPLookup(Protocol):
     def stop(self) -> None: ...
 
 
+# Canonical type for the proxy's tenant-id -> DB-session factory. Imported by
+# action_matcher and the gate addon so the signature has a single source.
 DBSessionFactory = Callable[[str], AbstractContextManager[Session]]
 
 

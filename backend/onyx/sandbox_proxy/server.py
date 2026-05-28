@@ -19,11 +19,11 @@ from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.sandbox_proxy.action_matcher import ExternalAppActionMatcher
-from onyx.sandbox_proxy.addons.gate import DBSessionFactory
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.ca import CABootstrap
 from onyx.sandbox_proxy.ca import MaterializedCA
 from onyx.sandbox_proxy.ca_k8s import K8sSecretCAStore
+from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIPLookup
 from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup

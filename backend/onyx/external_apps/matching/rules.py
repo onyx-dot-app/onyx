@@ -4,7 +4,6 @@ registry. Adding a new rule kind is "write a ``RuleMatcher`` + register it" —
 the dispatch in ``rule_matches`` never changes (open/closed).
 """
 
-import re
 from abc import ABC
 from abc import abstractmethod
 from typing import Any
@@ -16,6 +15,7 @@ from typing import TypeVar
 from onyx.external_apps.matching.request import MatchContext
 from onyx.external_apps.providers.actions import GraphQLOp
 from onyx.external_apps.providers.actions import MatchRule
+from onyx.external_apps.providers.actions import path_matches
 from onyx.external_apps.providers.actions import RestRoute
 
 RuleT = TypeVar("RuleT")
@@ -40,7 +40,7 @@ class RestRouteMatcher(RuleMatcher[RestRoute]):
     def matches(self, rule: RestRoute, context: MatchContext) -> bool:
         if rule.method.upper() != context.request.method.upper():
             return False
-        return re.search(rule.path_regex, context.request.path) is not None
+        return path_matches(rule.path, context.request.path)
 
 
 class GraphQLOpMatcher(RuleMatcher[GraphQLOp]):
