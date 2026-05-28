@@ -229,11 +229,7 @@ auth:
     values:
       opensearch_admin_password: "Aa1!onyx-localdev-opensearch"
 
-# ---- Sandbox namespaces ----
-#
-# The chart auto-creates `onyx-sandboxes`. With the multi-worktree model,
-# sandbox namespaces are per-worktree (`onyx-<slug>-sandboxes`) and created
-# by worktree-up.sh, so disable the chart's bundled one.
+# Sandbox namespaces are per-worktree (`onyx-<slug>-sandboxes`), created by dev.sh.
 
 configMap:
   # ENABLE_CRAFT is off in the infra release (it has no api server).

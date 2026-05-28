@@ -1,25 +1,5 @@
 # Onyx local-cluster APP overlay (per-worktree).
-#
-# Layered on top of values.yaml by worktree-up.sh:
-#
-#   helm upgrade --install onyx-<slug> deployment/helm/charts/onyx \
-#     -f deployment/helm/charts/onyx/values-dev-app.yaml \
-#     -f ~/.config/onyx-dev/<slug>.values.yaml   # slug-specific values
-#
-# This file:
-#   - Disables every infra subchart (postgres/opensearch/minio/redis/nginx)
-#     so the per-worktree release only renders app pods.
-#   - Points the chart's configmap at services in the shared `onyx-infra`
-#     namespace via cross-namespace DNS.
-#   - Enables api + webserver + every celery worker with replicaCount=1.
-#   - Sets the webserver command to `pnpm dev` for HMR.
-#
-# The per-worktree values file (rendered by worktree-up.sh) fills in:
-#   - configMap.POSTGRES_DB
-#   - configMap.S3_FILE_STORE_BUCKET_NAME
-#   - configMap.REDIS_DB_NUMBER / *_CELERY_RESULT_BACKEND / *_CELERY
-#   - ingress.api.host / ingress.webserver.host
-#   - image tags for backend + web (set by Tilt)
+# Layered by dev.sh under the per-slug values file in ~/.config/onyx-dev/.
 
 global:
   # Worktree pods pull from the local k3d registry that Tilt pushes to.
@@ -323,9 +303,9 @@ ingress:
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
   api:
-    host: "PLACEHOLDER-set-by-worktree-up"
+    host: "PLACEHOLDER-set-by-dev.sh"
   webserver:
-    host: "PLACEHOLDER-set-by-worktree-up"
+    host: "PLACEHOLDER-set-by-dev.sh"
 
 # ---- Sandbox push NetworkPolicy ----
 #

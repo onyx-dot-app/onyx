@@ -367,7 +367,7 @@ workflow is **not implemented in Phase 1**. The pieces needed:
    (`backend/alembic/versions/dbaa756c2ccf_embedding_models.py`) prepends
    to `danswer_chunk_<encoder>`. Set per worktree from values.
 4. **`alembic_tenants` pipeline.** The shared-schema migrations need to
-   run against the worktree's database on first `worktree-up`. Wire into
+   run against the worktree's database on first `dev.sh up`. Wire into
    the script as a pre-step (`python -m alembic_tenants upgrade head`
    in a kubectl exec or one-off pod).
 5. **Tenant seeding script.** A new `deployment/helm/dev/seed-tenant.sh`
