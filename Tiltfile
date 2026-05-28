@@ -214,11 +214,18 @@ for (label, host_port, deploy_suffix) in DEBUG_TARGETS:
 local_resource(
     'next-dev',
     serve_cmd=(
+        # Inherit user-curated .vscode/.env.k3d so the FE sees feature flags
+        # (NEXT_PUBLIC_*), password policy, EE toggles, etc. — the same keys
+        # the api/celery pods get via the chart configmap.
+        'set -a && [ -f ' + os.getcwd() + '/.vscode/.env.k3d ] && ' +
+        '. ' + os.getcwd() + '/.vscode/.env.k3d ; set +a ; ' +
         'cd ' + os.getcwd() + '/web && ' +
         'INTERNAL_URL=http://' + INGRESS_HOST + ':13000/api ' +
         'PORT=' + NEXT_PORT + ' ' +
-        'AUTH_TYPE=basic ENABLE_CRAFT=true DEV_MODE=true ' +
         'WEB_DOMAIN=http://localhost:' + NEXT_PORT + ' ' +
+        'AUTH_TYPE="${AUTH_TYPE:-basic}" ' +
+        'ENABLE_CRAFT="${ENABLE_CRAFT:-true}" ' +
+        'DEV_MODE="${DEV_MODE:-true}" ' +
         'bun run dev'
     ),
     resource_deps=[APP_RELEASE + '-api-server'],

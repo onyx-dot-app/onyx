@@ -535,6 +535,8 @@ write_worktree_values() {
 # Re-running 'dev.sh up' overwrites this file.
 
 configMap:
+  # User .vscode/.env.k3d first so per-slug entries below win when keys collide.
+${env_k3d_yaml}
   POSTGRES_DB: "${db}"
   S3_FILE_STORE_BUCKET_NAME: "${bucket}"
   REDIS_DB_NUMBER: "${redis_base}"
@@ -545,7 +547,6 @@ configMap:
   # next-dev is on the host at this per-slug port; backend uses WEB_DOMAIN
   # to build the sandbox webapp URL it returns to the browser.
   WEB_DOMAIN: "http://localhost:${next_port}"
-${env_k3d_yaml}
 
 # Mirror the actually-deployed OpenSearch admin password so worktree
 # pods can authenticate to the shared OpenSearch in onyx-infra.
