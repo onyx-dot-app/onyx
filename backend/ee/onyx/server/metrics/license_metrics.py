@@ -73,7 +73,7 @@ class LicenseMetricsCollector(_CachedCollector):
             "Whether the license is active (1=active, 0=gated/expired)",
         )
         active.add_metric(
-            [], 1.0 if metadata.status == ApplicationStatus.ACTIVE else 0.0
+            [], 0.0 if metadata.status == ApplicationStatus.GATED_ACCESS else 1.0
         )
 
         return [seats_total, seats_used, seats_available, expires, active]
