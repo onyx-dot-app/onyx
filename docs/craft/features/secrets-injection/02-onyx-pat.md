@@ -45,7 +45,7 @@ either; see `API_KEY_HEADER_*` and `auth/utils.py`). Per Plan 1's placeholder/ov
 `ONYX_PAT` ships as a non-empty placeholder and the resolver overwrites both headers.
 
 **Fail closed.** Per Plan 1, a missing or undecryptable PAT raises `CredentialUnavailableError`,
-and the dispatcher serves `_http_403(_CODE_CREDENTIAL_UNAVAILABLE)`.
+and the dispatcher serves `_http_403(_CODE_CREDENTIAL_ERROR)` (reusing main's existing constant).
 
 **Headers injected:**
 

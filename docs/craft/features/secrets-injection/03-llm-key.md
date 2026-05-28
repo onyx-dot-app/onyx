@@ -12,10 +12,8 @@ JSON is mounted as `OPENCODE_CONFIG_CONTENT` on the pod. This plan removes the k
 injects it from the proxy via an `LLMProviderKeyResolver` that claims the canonical provider hosts
 plus each tenant's `LLMProvider.api_base`.
 
-While here, fix an existing bug: a tenant's custom endpoint is currently written as `block["api"]`,
-but the opencode schema reads it from `provider.<provider_name>.options.baseURL` — so the custom
-endpoint silently doesn't take effect and traffic goes to the canonical host
-([[project_craft_beta_no_backcompat]]).
+The `block["api"]` → `block["options"]["baseURL"]` mismatch on the same file is owned by
+[Plan 1](./01-framework.md) step 6, atomic with the placeholder swap.
 
 ## Important Notes
 
@@ -24,16 +22,24 @@ endpoint silently doesn't take effect and traffic goes to the canonical host
 opens a session via `ctx.db_session_factory(ctx.sandbox.tenant_id)` and reads the tenant's rows.
 
 **Row resolution rule.** `llm_provider` has no uniqueness constraint, so a tenant can have multiple
-rows of the same `provider` type (e.g. both `build-mode-anthropic` and `anthropic`). The resolver
-reuses `fetch_llm_provider_by_type_for_build_mode` (`onyx/server/features/build/db/build_session.py`),
-which prefers the `build-mode-{type}` named row and falls back to any row of that `provider` type.
-For custom-host matching, it iterates `fetch_all_build_mode_llm_providers` and matches the request's
-host against each row's `api_base`. Both helpers return `LLMProviderView` with the `api_key` already
-decrypted by `LLMProviderView.from_model()`. This works in-proxy because Plan 1 wires
-`ENCRYPTION_KEY_SECRET` into the proxy Deployment.
+rows of the same `provider` type (e.g. both `build-mode-anthropic` and `anthropic`). For canonical
+hosts the resolver reuses `fetch_llm_provider_by_type_for_build_mode`
+(`onyx/server/features/build/db/build_session.py`), which prefers the `build-mode-{type}` row and
+falls back to any row of that provider type. For custom-host matching the resolver scans
+`fetch_all_build_mode_llm_providers` — note this function returns only rows whose `name` matches
+`build-mode-%`, so a tenant's custom `api_base` is only routed when configured on a
+`build-mode-{type}` row (the existing build-mode naming convention). Both helpers return
+`LLMProviderView` with the `api_key` decrypted by `LLMProviderView.from_model()`; in-proxy
+decryption works because Plan 1 wires `ENCRYPTION_KEY_SECRET` into the proxy Deployment.
 
 **Keys stay in `llm_provider`.** Per Plan 1, LLM keys are not migrated into the `ExternalApp` data
 model — no sync surface with the LLM-admin UI.
+
+**Opencode-serve loads config once at pod start.** Per #11408, the in-pod `opencode serve` process
+reads `OPENCODE_CONFIG_CONTENT` at startup and does not hot-reload. The placeholder swap therefore
+applies at provisioning; a key rotation that arrives after the pod is running takes effect on the
+next sandbox provision (or on a manual pod recycle). This is acceptable — the proxy still injects
+the *current* tenant key on each request, so a stale placeholder in the pod is fine.
 
 **Per-provider auth conventions** (overwrite only the named header):
 
@@ -68,13 +74,13 @@ SSE and long-running streams pass through untouched.
    the real keys — docker self-hosted doesn't route through the proxy; see Plan 1's
    "Kubernetes-only" note). In `_build_provider_block` / `build_multi_provider_opencode_config`
    (`opencode_config.py`), write the Plan 1 placeholder for each `options.apiKey` behind the LLM-key
-   resolver flag. Keep `model`, `enabled_providers`, and provider blocks intact. *Also* fix the
-   custom-endpoint field: `block["api"]` → `block["options"]["baseURL"]`.
+   resolver flag. Keep `model`, `enabled_providers`, and provider blocks intact. (Plan 1 step 6
+   handles the adjacent `block["api"]` → `options.baseURL` fix atomically.)
 
 2. **`LLMProviderKeyResolver`** implementing Plan 1's `CredentialResolver` Protocol.
    - `claims(host, match)`: True iff `host` is one of the canonical LLM provider hosts or a
-     configured tenant `api_base` host. Ignores `match`. A per-tenant `api_base` cache is populated
-     lazily on first claim for a tenant and refreshed on provider-row updates.
+     configured tenant `api_base` host (on a `build-mode-*` row). Ignores `match`. A per-tenant
+     `api_base` cache is populated lazily on first claim and refreshed on provider-row updates.
    - `resolve(request, ctx)`: opens a session via `ctx.db_session_factory(ctx.sandbox.tenant_id)`,
      finds the matching provider row (canonical host → `fetch_llm_provider_by_type_for_build_mode`;
      custom host → scan `fetch_all_build_mode_llm_providers` by `api_base`), pulls the decrypted
