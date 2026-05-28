@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"unicode"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/portutil"
@@ -116,29 +118,58 @@ func SetProjectFlags(project string) {
 	flagProject = project
 }
 
-// Name returns the Docker Compose project name. Uses --project if set,
+// ProjectName returns the Docker Compose project name. Uses --project if set,
 // otherwise the basename of the git working tree root (e.g. "onyx" for the main
-// checkout, "feature-x" for a worktree at .../feature-x).
+// checkout, "feature-x" for a worktree at .../feature-x). The result is
+// normalized to satisfy Docker Compose's naming rules (lowercase alphanumeric,
+// hyphens, and underscores).
 func ProjectName() string {
 	if flagProject != "" {
-		return flagProject
+		return normalizeProjectName(flagProject)
 	}
 	root, err := paths.GitRoot()
 	if err != nil {
 		return defaultProjectName
 	}
-	return filepath.Base(root)
+	return normalizeProjectName(filepath.Base(root))
 }
 
-// FindAvailablePorts scans for a free host port for each port spec in
-// InfraServices. A global claimed set prevents cross-service collisions (e.g.,
-// inference_model_server and minio both defaulting near port 9000).
+// normalizeProjectName converts a string into a valid Docker Compose project
+// name: lowercase, keeping only alphanumeric characters, hyphens, and
+// underscores. Characters that don't match are dropped.
+func normalizeProjectName(name string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(name) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' {
+			b.WriteRune(r)
+		}
+	}
+	if b.Len() == 0 {
+		return defaultProjectName
+	}
+	return b.String()
+}
+
+// FindAvailablePorts resolves host ports for each port spec in InfraServices.
+// For each port it first checks whether the project's container is already
+// running with a mapped host port (via ``docker port``) and reuses it. Only
+// when the container is not running does it probe for a free port. A global
+// claimed set prevents cross-service collisions (e.g., inference_model_server
+// and minio both defaulting near port 9000).
 func FindAvailablePorts() (*ResolvedPorts, error) {
 	resolved := NewResolvedPorts()
 	claimed := make(map[int]bool)
+	projName := ProjectName()
 
 	for _, svc := range InfraServices {
+		container := fmt.Sprintf("%s-%s-1", projName, svc.Name)
 		for _, spec := range svc.Ports {
+			if hp, err := GetHostPort(container, spec.ContainerPort); err == nil {
+				claimed[hp] = true
+				resolved.Append(hp, spec)
+				continue
+			}
+
 			port, err := portutil.FindAvailable(spec.DefaultHost, maxPortScanRange, claimed)
 			if err != nil {
 				return nil, fmt.Errorf("%s port %d: %w", svc.Name, spec.ContainerPort, err)

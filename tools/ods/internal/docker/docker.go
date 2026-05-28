@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -142,29 +143,33 @@ func GetContainerIP(container string) (string, error) {
 	return ips[0], nil
 }
 
-// GetExposedPort returns the host port that maps to a container port, if any.
-// Returns empty string if the port is not exposed.
-func GetExposedPort(container string, containerPort string) string {
-	cmd := exec.Command("docker", "port", container, containerPort)
-	output, err := cmd.Output()
+// GetHostPort runs "docker port <container> <containerPort>" and returns the
+// host-side port number. Returns an error if the container is not running or the
+// port is not mapped.
+func GetHostPort(container string, containerPort int) (int, error) {
+	cmd := exec.Command("docker", "port", container, strconv.Itoa(containerPort))
+	out, err := cmd.Output()
 	if err != nil {
-		return ""
+		return 0, fmt.Errorf("docker port %s %d: %w", container, containerPort, err)
 	}
-
-	// Dual-stack hosts return two lines (e.g., "0.0.0.0:5432\n[::]:5432").
-	line := strings.SplitN(strings.TrimSpace(string(output)), "\n", 2)[0]
+	line := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
 	if line == "" {
-		return ""
+		return 0, fmt.Errorf("port %d not exposed on %s", containerPort, container)
 	}
-
 	parts := strings.Split(line, ":")
-	if len(parts) >= 2 {
-		return parts[len(parts)-1]
+	if len(parts) < 2 {
+		return 0, fmt.Errorf("unexpected docker port output: %s", line)
 	}
-	return ""
+	port, err := strconv.Atoi(parts[len(parts)-1])
+	if err != nil {
+		return 0, fmt.Errorf("invalid port number in docker port output: %s", line)
+	}
+	return port, nil
 }
 
 // IsPortExposed checks if a container port is exposed to the host.
 func IsPortExposed(container string, containerPort string) bool {
-	return GetExposedPort(container, containerPort) != ""
+	port, _ := strconv.Atoi(containerPort)
+	_, err := GetHostPort(container, port)
+	return err == nil
 }

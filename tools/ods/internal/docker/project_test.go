@@ -13,6 +13,26 @@ func TestName_usesFlag(t *testing.T) {
 	}
 }
 
+func TestNormalizeProjectName(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"onyx", "onyx"},
+		{"feature-x", "feature-x"},
+		{"My.Feature", "myfeature"},
+		{"UPPER_CASE", "upper_case"},
+		{"has space", "hasspace"},
+		{"123-numeric", "123-numeric"},
+		{"...", defaultProjectName},
+	}
+	for _, tt := range tests {
+		if got := normalizeProjectName(tt.input); got != tt.want {
+			t.Errorf("normalizeProjectName(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func TestName_defaultsWhenNoFlag(t *testing.T) {
 	SetProjectFlags("")
 	name := ProjectName()
