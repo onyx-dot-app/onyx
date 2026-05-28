@@ -170,8 +170,9 @@ def test_session_workspace_setup_creates_expected_tree(
     pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """After ``setup_session_workspace``, the session dir contains the
-    canonical tree: ``outputs/``, ``attachments/``, ``AGENTS.md``,
-    ``opencode.json``, and the ``.opencode/skills`` symlink.
+    canonical tree: ``outputs/``, ``attachments/``, ``AGENTS.md``, and the
+    ``.opencode/skills`` symlink. (opencode config is pod-level under the
+    serve transport, not a per-session file.)
     """
     _, session_id, pod_name = pool_session
     session_path = f"/workspace/sessions/{session_id}"
@@ -187,7 +188,7 @@ def test_session_workspace_setup_creates_expected_tree(
         assert "OK" in resp, f"{session_path}/{sub} should exist: {resp!r}"
 
     # Files
-    for fname in ("AGENTS.md", "opencode.json"):
+    for fname in ("AGENTS.md",):
         resp = pod_exec(
             k8s_client,
             pod_name,
@@ -199,14 +200,6 @@ def test_session_workspace_setup_creates_expected_tree(
     # AGENTS.md content has non-zero bytes
     agents_md = _read_pod_file(k8s_client, pod_name, f"{session_path}/AGENTS.md")
     assert agents_md, "AGENTS.md should not be empty"
-
-    # opencode.json is valid JSON-ish (starts with `{`)
-    opencode_json = _read_pod_file(
-        k8s_client, pod_name, f"{session_path}/opencode.json"
-    )
-    assert opencode_json.lstrip().startswith("{"), (
-        f"opencode.json should be JSON-formatted, got: {opencode_json[:60]!r}"
-    )
 
     # .opencode/skills must be a symlink targeting /workspace/managed/skills
     link_target = pod_exec(

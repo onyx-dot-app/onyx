@@ -199,6 +199,14 @@ First, you must activate the virtual environment with `source .venv/bin/activate
 
 There are 4 main types of tests within Onyx:
 
+### Model choice for tests that make real LLM calls
+
+When a test makes a real LLM call (e.g. External Dependency Unit / integration tests
+that hit a live provider), use the cheap-and-fast tier for each provider:
+
+- **OpenAI**: `gpt-5-mini` (never `gpt-4o` / `gpt-4o-mini`)
+- **Anthropic**: `claude-haiku-4-5`
+
 ### Unit Tests
 
 These should not assume any Onyx/external services are available to be called.

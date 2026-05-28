@@ -134,7 +134,7 @@ def test_load_serve_connection_info_handles_password_with_equals_sign() -> None:
 def llm_config() -> LLMProviderConfig:
     return LLMProviderConfig(
         provider="openai",
-        model_name="gpt-4o",
+        model_name="gpt-5-mini",
         api_key="sk-test",
         api_base=None,
     )

@@ -125,13 +125,13 @@ def test_api_base_propagates() -> None:
         providers=[
             _cfg(
                 "openai",
-                "gpt-4o",
+                "gpt-5-mini",
                 api_key="sk-x",
                 api_base="https://my-azure-mirror.example.com/v1",
             )
         ],
         default_provider="openai",
-        default_model="gpt-4o",
+        default_model="gpt-5-mini",
     )
     assert (
         config["provider"]["openai"]["api"] == "https://my-azure-mirror.example.com/v1"
