@@ -47,7 +47,6 @@ import socket
 import tarfile
 import threading
 import time
-from collections.abc import Generator
 from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import urlparse
@@ -55,7 +54,6 @@ from uuid import UUID
 from uuid import uuid4
 
 import httpx
-from acp.schema import PromptResponse
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import PublicFormat
@@ -64,9 +62,6 @@ from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
 
 from onyx.db.enums import SandboxStatus
-from onyx.server.features.build.api.packet_logger import get_packet_logger
-from onyx.server.features.build.configs import AGENT_TRANSPORT
-from onyx.server.features.build.configs import AgentTransport
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
 from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
@@ -84,7 +79,6 @@ from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
 from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
-from onyx.server.features.build.sandbox.acp.base import ACPEvent
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -96,9 +90,6 @@ from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models 
 )
 from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
     SnapshotRestoreRequest,
-)
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    ACPExecClient,
 )
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
@@ -124,9 +115,6 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
 )
-from onyx.server.features.build.sandbox.util.opencode_config import (
-    build_opencode_config,
-)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -138,7 +126,6 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 # Constants for pod configuration
 # Note: Next.js ports are dynamically allocated from SANDBOX_NEXTJS_PORT_START to
 # SANDBOX_NEXTJS_PORT_END range, with one port per session.
-AGENT_PORT = 8081
 PUSH_DAEMON_PORT = 8731
 POD_READY_TIMEOUT_SECONDS = 60
 # Progressive poll cadence: short intervals up front (pods usually become
@@ -603,7 +590,6 @@ class KubernetesSandboxManager(SandboxManager):
         # Sandbox container — runs the agent. No IRSA (skip-containers annotation
         # on the SA strips AWS env vars and the projected token from this container).
         sandbox_ports = [
-            client.V1ContainerPort(name="agent", container_port=AGENT_PORT),
             client.V1ContainerPort(name="opencode", container_port=OPENCODE_SERVE_PORT),
         ]
         for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
@@ -638,10 +624,6 @@ class KubernetesSandboxManager(SandboxManager):
                         )
                     ),
                 ),
-                client.V1EnvVar(
-                    name="OPENCODE_SERVE_PORT", value=str(OPENCODE_SERVE_PORT)
-                ),
-                client.V1EnvVar(name="AGENT_TRANSPORT", value=AGENT_TRANSPORT.value),
                 *_proxy_main_container_env_vars(),
             ],
             volume_mounts=[
@@ -877,9 +859,8 @@ class KubernetesSandboxManager(SandboxManager):
 
         service_name = self._get_service_name(sandbox_id_str)
 
-        # Build port list: agent port + opencode-serve + all session Next.js ports
+        # Build port list: opencode-serve + all session Next.js ports
         ports = [
-            client.V1ServicePort(name="agent", port=AGENT_PORT, target_port=AGENT_PORT),
             client.V1ServicePort(
                 name="opencode",
                 port=OPENCODE_SERVE_PORT,
@@ -1364,7 +1345,7 @@ class KubernetesSandboxManager(SandboxManager):
                     f"Timeout waiting for sandbox pod {pod_name} to become ready"
                 )
 
-            # 4. Wait for opencode-serve to bind :4096 (no-op under ACP).
+            # 4. Wait for opencode-serve to bind :4096 .
             if not self._wait_for_opencode_serve_ready(sandbox_id):
                 raise RuntimeError(
                     f"opencode-serve never became ready in sandbox pod {pod_name}"
@@ -1591,19 +1572,6 @@ class KubernetesSandboxManager(SandboxManager):
             user_role=user_role,
         )
 
-        # Per-session opencode.json is only needed by the ACP transport
-        # (``opencode acp`` walks up from cwd=session_path looking for
-        # config). On serve, OPENCODE_CONFIG_CONTENT covers it pod-wide.
-        opencode_json_escaped: str | None = None
-        if AGENT_TRANSPORT == AgentTransport.ACP:
-            opencode_config = build_opencode_config(
-                provider=llm_config.provider,
-                model_name=llm_config.model_name,
-                api_key=llm_config.api_key or None,
-                api_base=llm_config.api_base,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
-            )
-            opencode_json_escaped = json.dumps(opencode_config).replace("'", "'\\''")
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
 
         # Copy outputs template from baked-in location and install npm dependencies
@@ -1642,13 +1610,6 @@ fi
             else ""
         )
 
-        opencode_json_write_line = (
-            f'echo "Writing opencode.json"\n'
-            f"printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json"
-            if opencode_json_escaped is not None
-            else "# AGENT_TRANSPORT=serve: opencode.json is pod-level via OPENCODE_CONFIG_CONTENT"
-        )
-
         setup_script = f"""
 set -e
 
@@ -1673,8 +1634,6 @@ echo "Linked user_library to /workspace/managed/user_library"
 # Write agent instructions
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
-
-{opencode_json_write_line}
 
 # Start Next.js dev server
 {nextjs_start_script}
@@ -1723,10 +1682,8 @@ echo "Session workspace setup complete"
         session_id: UUID,
         nextjs_port: int | None = None,  # noqa: ARG002
     ) -> None:
-        """Clean up a session workspace (on session delete).
-
-        Removes the ACP session mapping and executes kubectl exec to remove
-        the session directory. The shared ACP client persists for other sessions.
+        """Clean up a session workspace (on session delete). Executes
+        kubectl exec to remove the session directory.
 
         Args:
             sandbox_id: The sandbox ID
@@ -2067,31 +2024,13 @@ echo "Session cleanup complete"
             user_role=None,
         )
 
-        # ACP path only; serve uses OPENCODE_CONFIG_CONTENT (pod-wide).
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
-        opencode_json_write_line = ""
-        if AGENT_TRANSPORT == AgentTransport.ACP:
-            opencode_config = build_opencode_config(
-                provider=llm_config.provider,
-                model_name=llm_config.model_name,
-                api_key=llm_config.api_key or None,
-                api_base=llm_config.api_base,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
-            )
-            opencode_json_escaped = json.dumps(opencode_config).replace("'", "'\\''")
-            opencode_json_write_line = (
-                f"printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json"
-            )
-
-        # Snapshot tar only carries outputs/, attachments/, .opencode-data/ —
-        # re-link the managed-tree symlinks that setup_session_workspace creates.
         config_script = f"""
 set -e
 mkdir -p {session_path}/.opencode
 ln -sfn /workspace/managed/skills {session_path}/.opencode/skills
 ln -sfn /workspace/managed/user_library {session_path}/user_library
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
-{opencode_json_write_line}
 """
 
         logger.info("Regenerating session configuration files")
@@ -2123,163 +2062,6 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             return resp.status_code == 200
         except httpx.TransportError:
             return False
-
-    def _create_ephemeral_acp_client(
-        self, sandbox_id: UUID, session_path: str
-    ) -> ACPExecClient:
-        """Create a new ephemeral ACP client for a single message exchange.
-
-        Each call starts a fresh `opencode acp` process in the sandbox pod.
-        The process is short-lived — stopped after the message completes.
-        This prevents the bug where multiple long-lived processes (one per
-        API replica) operate on the same session's flat file storage
-        concurrently, causing the JSON-RPC response to be silently lost.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_path: Working directory for the session (e.g. /workspace/sessions/{id}).
-                XDG_DATA_HOME is set relative to this so opencode's session data
-                lives inside the snapshot directory.
-
-        Returns:
-            A running ACPExecClient (caller must stop it when done)
-        """
-        pod_name = self._get_pod_name(str(sandbox_id))
-        acp_client = ACPExecClient(
-            pod_name=pod_name,
-            namespace=self._namespace,
-            container="sandbox",
-        )
-        acp_client.start(cwd=session_path)
-
-        logger.info(
-            "[SANDBOX-ACP] Created ephemeral ACP client: sandbox=%s pod=%s api_pod=%s",
-            sandbox_id,
-            pod_name,
-            _API_SERVER_HOSTNAME,
-        )
-        return acp_client
-
-    # ``send_message`` lives on the base class; it dispatches to
-    # ``_send_message_via_serve`` (in :class:`_ServeMixin`) or
-    # ``_send_message_via_acp`` (below) based on ``AGENT_TRANSPORT``.
-
-    def _send_message_via_acp(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        message: str,
-    ) -> Generator[ACPEvent, None, None]:
-        """Original ACP path. Kept callable behind AGENT_TRANSPORT=acp as
-        the rollback target for the serve migration; deletion happens
-        in the drop-acp-layer follow-up.
-        """
-        packet_logger = get_packet_logger()
-        session_path = f"/workspace/sessions/{session_id}"
-
-        # Create an ephemeral ACP client for this message
-        acp_client = self._create_ephemeral_acp_client(sandbox_id, session_path)
-
-        try:
-            # Resume (or create) the ACP session from opencode's on-disk storage
-            acp_session_id = acp_client.resume_or_create_session(cwd=session_path)
-
-            logger.info(
-                "[SANDBOX-ACP] Sending message: session=%s acp_session=%s api_pod=%s",
-                session_id,
-                acp_session_id,
-                _API_SERVER_HOSTNAME,
-            )
-
-            # Log the send_message call at sandbox manager level
-            packet_logger.log_session_start(session_id, sandbox_id, message)
-
-            events_count = 0
-            got_prompt_response = False
-            try:
-                for event in acp_client.send_message(
-                    message, session_id=acp_session_id
-                ):
-                    events_count += 1
-                    if isinstance(event, PromptResponse):
-                        got_prompt_response = True
-                    yield event
-
-                logger.info(
-                    "[SANDBOX-ACP] send_message completed: session=%s events=%s got_prompt_response=%s",
-                    session_id,
-                    events_count,
-                    got_prompt_response,
-                )
-                packet_logger.log_session_end(
-                    session_id, success=True, events_count=events_count
-                )
-            except GeneratorExit:
-                logger.warning(
-                    "[SANDBOX-ACP] GeneratorExit: session=%s events=%s, sending session/cancel",
-                    session_id,
-                    events_count,
-                )
-                try:
-                    acp_client.cancel(session_id=acp_session_id)
-                except Exception as cancel_err:
-                    logger.warning(
-                        "[SANDBOX-ACP] session/cancel failed on GeneratorExit: %s",
-                        cancel_err,
-                    )
-                packet_logger.log_session_end(
-                    session_id,
-                    success=False,
-                    error="GeneratorExit: Client disconnected or stream closed by consumer",
-                    events_count=events_count,
-                )
-                raise
-            except Exception as e:
-                logger.error(
-                    "[SANDBOX-ACP] Exception: session=%s events=%s error=%s, sending session/cancel",
-                    session_id,
-                    events_count,
-                    e,
-                )
-                try:
-                    acp_client.cancel(session_id=acp_session_id)
-                except Exception as cancel_err:
-                    logger.warning(
-                        "[SANDBOX-ACP] session/cancel failed on Exception: %s",
-                        cancel_err,
-                    )
-                packet_logger.log_session_end(
-                    session_id,
-                    success=False,
-                    error=f"Exception: {str(e)}",
-                    events_count=events_count,
-                )
-                raise
-            except BaseException as e:
-                logger.error(
-                    "[SANDBOX-ACP] %s: session=%s error=%s",
-                    type(e).__name__,
-                    session_id,
-                    e,
-                )
-                packet_logger.log_session_end(
-                    session_id,
-                    success=False,
-                    error=f"{type(e).__name__}: {str(e) if str(e) else 'System-level interruption'}",
-                    events_count=events_count,
-                )
-                raise
-        finally:
-            # Always stop the ephemeral ACP client to kill the opencode process.
-            # This ensures no stale processes linger in the sandbox container.
-            try:
-                acp_client.stop()
-            except Exception as e:
-                logger.warning(
-                    "[SANDBOX-ACP] Failed to stop ephemeral ACP client: session=%s error=%s",
-                    session_id,
-                    e,
-                )
 
     def _load_serve_connection_info(
         self, sandbox_id: UUID

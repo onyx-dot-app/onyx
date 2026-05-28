@@ -21,13 +21,18 @@ from abc import abstractmethod
 from collections.abc import Callable
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
 from uuid import UUID
 
-from onyx.server.features.build.configs import AGENT_TRANSPORT
-from onyx.server.features.build.configs import AgentTransport
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentPlanUpdate
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
+from onyx.server.features.build.sandbox.event_schema import CurrentModeUpdate
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
+from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.models import FatalWriteError
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
@@ -38,6 +43,7 @@ from onyx.server.features.build.sandbox.models import RetriableWriteError
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
+from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -52,10 +58,20 @@ logger = setup_logger()
 BUN_CACHE_DIR = "/workspace/sessions/.bun-cache"
 BUN_IMAGE_CACHE_DIR = "/home/sandbox/.bun/install/cache"
 
-# ACPEvent is a union type defined in both local and kubernetes modules
-# Using Any here to avoid circular imports - the actual type checking
-# happens in the implementation modules
-ACPEvent = Any
+# Internal sandbox-event protocol — the type contract between the agent
+# harness and everything downstream (session manager, SSE encoder,
+# persistence, frontend). Schema lives in :mod:`event_schema`.
+SandboxEvent = (
+    AgentMessageChunk
+    | AgentThoughtChunk
+    | ToolCallStart
+    | ToolCallProgress
+    | AgentPlanUpdate
+    | CurrentModeUpdate
+    | PromptResponse
+    | Error
+    | SSEKeepalive
+)
 
 
 class SandboxManager(_ServeMixin, ABC):
@@ -79,7 +95,6 @@ class SandboxManager(_ServeMixin, ABC):
             │   ├── venv/              # Python virtual environment
             │   ├── .opencode/skills   # Symlink → managed/skills
             │   ├── AGENTS.md          # Agent instructions
-            │   ├── opencode.json      # LLM config
             │   └── attachments/
             └── $session_id_2/
                 └── ...
@@ -107,11 +122,10 @@ class SandboxManager(_ServeMixin, ABC):
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
-        ``all_llm_configs`` (serve transport only): the full set of LLM
-        providers the user has configured. K8s pre-loads each into
-        opencode-serve's startup config so per-prompt model overrides
-        can cross providers without restarting the pod. Defaults to
-        ``[llm_config]`` (single-provider, back-compat).
+        ``all_llm_configs``: the full set of LLM providers the user has
+        configured. K8s pre-loads each into opencode-serve's startup config
+        so per-prompt model overrides can cross providers without restarting
+        the pod. Defaults to ``[llm_config]`` (single-provider, back-compat).
 
         Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces
@@ -164,13 +178,12 @@ class SandboxManager(_ServeMixin, ABC):
         - sessions/$session_id/venv/
         - sessions/$session_id/.opencode/skills (symlink → managed skills dir)
         - sessions/$session_id/AGENTS.md
-        - sessions/$session_id/opencode.json
         - sessions/$session_id/attachments/
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
-            llm_config: LLM provider configuration for opencode.json
+            llm_config: LLM provider configuration (passed to AGENTS.md rendering)
             nextjs_port: Port for the Next.js dev server, or None for headless.
             skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for AGENTS.md.
             snapshot_path: Optional storage path to restore outputs from
@@ -212,7 +225,7 @@ class SandboxManager(_ServeMixin, ABC):
         - sessions/$session_id/outputs/ (generated artifacts, web apps)
         - sessions/$session_id/attachments/ (user uploaded files)
 
-        Does NOT include: venv, skills, AGENTS.md, opencode.json, files symlink
+        Does NOT include: venv, skills, AGENTS.md, files symlink
         (these are regenerated during restore)
 
         Args:
@@ -253,7 +266,7 @@ class SandboxManager(_ServeMixin, ABC):
             tenant_id: Tenant identifier for storage access
             nextjs_port: Port number for the NextJS dev server, or None to
                 skip starting it (e.g. headless scheduled-task fires).
-            llm_config: LLM provider configuration for opencode.json
+            llm_config: LLM provider configuration (used to regenerate AGENTS.md)
 
         Raises:
             RuntimeError: If snapshot restoration fails
@@ -320,12 +333,9 @@ class SandboxManager(_ServeMixin, ABC):
         agent_provider: str | None = None,
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
-    ) -> Generator[ACPEvent, None, None]:
-        """Stream typed ACP events for one user message. Dispatches on
-        ``AGENT_TRANSPORT`` — ``serve`` to ``_send_message_via_serve``,
-        ``acp`` (rollback) to ``_send_message_via_acp``.
-
-        Serve-only kwargs (ignored by ACP):
+    ) -> Generator[SandboxEvent, None, None]:
+        """Stream typed sandbox events for one user message via
+        opencode-serve.
 
         - ``opencode_session_id``: persistent serve session id; pass
           ``BuildSession.opencode_session_id`` or ``None`` to mint.
@@ -335,30 +345,15 @@ class SandboxManager(_ServeMixin, ABC):
           when it differs from the caller's. Caller persists it so later
           turns don't orphan a fresh session each time.
         """
-        if AGENT_TRANSPORT == AgentTransport.SERVE:
-            yield from self._send_message_via_serve(
-                sandbox_id,
-                session_id,
-                message,
-                opencode_session_id,
-                agent_provider,
-                agent_model,
-                on_opencode_session_resolved=on_opencode_session_resolved,
-            )
-            return
-        yield from self._send_message_via_acp(sandbox_id, session_id, message)
-
-    @abstractmethod
-    def _send_message_via_acp(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        message: str,
-    ) -> Generator[ACPEvent, None, None]:
-        """Rollback transport: exec ``opencode acp`` per message. Only
-        reached under ``AGENT_TRANSPORT=acp``; dropped once the rollback
-        window closes."""
-        ...
+        yield from self._send_message_via_serve(
+            sandbox_id,
+            session_id,
+            message,
+            opencode_session_id,
+            agent_provider,
+            agent_model,
+            on_opencode_session_resolved=on_opencode_session_resolved,
+        )
 
     @abstractmethod
     def list_directory(

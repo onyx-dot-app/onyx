@@ -135,8 +135,6 @@ def test_container_kwargs_env_allowlist_excludes_storage_credentials(
     assert env["ONYX_PAT"] == "pat-redacted"
     assert env["ONYX_SERVER_URL"] == "http://api_server:8080"
     # opencode-serve transport wiring
-    assert env["AGENT_TRANSPORT"] in {"acp", "serve"}
-    assert env["OPENCODE_SERVE_PORT"] == "4096"
     assert env["OPENCODE_SERVER_PASSWORD"] == _OPENCODE_PASSWORD
     assert env["OPENCODE_CONFIG_CONTENT"] == _OPENCODE_CONFIG_JSON
     # Forbidden env - any storage credential leaking into the sandbox would
@@ -239,8 +237,6 @@ def test_container_kwargs_env_is_a_minimal_allowlist(
     assert set(env.keys()) == {
         "ONYX_PAT",
         "ONYX_SERVER_URL",
-        "AGENT_TRANSPORT",
-        "OPENCODE_SERVE_PORT",
         "OPENCODE_SERVER_PASSWORD",
         "OPENCODE_CONFIG_CONTENT",
     }

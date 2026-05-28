@@ -12,7 +12,6 @@ import uuid
 from typing import Any
 
 import httpx
-import pytest
 
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -87,22 +86,6 @@ def test_create_session_returns_201_with_session_and_sandbox_shape(
     assert body["session_loaded_in_sandbox"] is True
     assert "sharing_scope" in body
     assert body["artifacts"] == [] or isinstance(body["artifacts"], list)
-
-
-@pytest.mark.skip(
-    reason=(
-        "Subscription cap path is gated on MULTI_TENANT mode "
-        "(SessionManager.create_session__no_commit only checks "
-        "SANDBOX_MAX_CONCURRENT_PER_ORG when MULTI_TENANT=true). "
-        "Multi-tenant integration tests live under "
-        "backend/tests/integration/multitenant_tests/ and require the "
-        "schema_private alembic head; this HTTP-half file runs against the "
-        "single-tenant deployment and cannot reach the 429 branch."
-    )
-)
-def test_create_session_blocked_by_subscription_cap() -> None:
-    """In a multi-tenant deployment at the subscription cap, POST returns 429."""
-    pass
 
 
 def test_get_session_404_for_other_users_session(

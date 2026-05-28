@@ -206,35 +206,12 @@ SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0
 SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
 
 # ============================================================================
-# ACP (Agent Communication Protocol) Configuration
+# Opencode-serve Configuration
 # ============================================================================
 
-# Timeout for ACP message processing in seconds
-# This is the maximum time to wait for a complete response from the agent
-ACP_MESSAGE_TIMEOUT = float(os.environ.get("ACP_MESSAGE_TIMEOUT", "900.0"))
-
-
-class AgentTransport(str, Enum):
-    """Wire protocol used to drive the in-sandbox agent.
-
-    ACP: subprocess-per-message `opencode acp` over JSON-RPC (stdin/stdout).
-         The historical default. Deprecated — opencode 1.15.7 non-deterministically
-         drops the per-turn terminator; see docs/craft/opencode-serve-migration.md.
-    SERVE: long-lived `opencode serve` HTTP server inside the sandbox pod.
-         Streaming via /event SSE, prompts via POST /session/.../prompt_async.
-         Target post-Phase 5.
-    """
-
-    ACP = "acp"
-    SERVE = "serve"
-
-
-# Transport for driving the in-sandbox agent. Default ACP until serve has soaked.
-# The OpencodeServeClient path is gated on this; setting "serve" routes
-# SandboxManager.send_message through HTTP instead of the per-message exec'd
-# `opencode acp` subprocess. See docs/craft/opencode-serve-migration.md.
-AGENT_TRANSPORT = AgentTransport(
-    os.environ.get("AGENT_TRANSPORT", AgentTransport.ACP.value)
+# Wall-clock budget for one user-message turn against opencode-serve.
+SANDBOX_TURN_TIMEOUT_SECONDS = float(
+    os.environ.get("SANDBOX_TURN_TIMEOUT_SECONDS", "900.0")
 )
 
 # Port `opencode serve` listens on inside the sandbox container.

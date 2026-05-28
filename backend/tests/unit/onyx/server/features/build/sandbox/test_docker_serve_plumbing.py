@@ -9,9 +9,7 @@ docker-sandbox-serve port — no Docker engine required. We use
   URL + cleartext password from a mocked container's ``inspect.Config.Env``,
   yields a ``None`` password for legacy containers, and returns ``None``
   when the container is gone.
-- ``_render_session_files`` returns ``None`` for ``opencode.json`` under
-  ``AGENT_TRANSPORT=serve`` (so snapshots stay clean) and a JSON blob
-  under ``AGENT_TRANSPORT=acp``.
+- ``_render_agents_md`` produces shell-escaped AGENTS.md content.
 """
 
 from __future__ import annotations
@@ -24,7 +22,6 @@ from uuid import UUID
 import pytest
 
 import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
-from onyx.server.features.build.configs import AgentTransport
 from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
 from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
@@ -74,7 +71,6 @@ def test_load_serve_connection_info_parses_password_from_container_env() -> None
                 "ONYX_PAT=pat-redacted",
                 "ONYX_SERVER_URL=http://api_server:8080",
                 f"{OPENCODE_SERVER_PASSWORD}=correct-horse-battery-staple",
-                "AGENT_TRANSPORT=serve",
             ]
         }
     }
@@ -144,43 +140,20 @@ def llm_config() -> LLMProviderConfig:
     )
 
 
-def test_render_session_files_returns_none_for_opencode_json_under_serve(
-    monkeypatch: pytest.MonkeyPatch,
+def test_render_agents_md_returns_escaped_string(
     llm_config: LLMProviderConfig,
 ) -> None:
-    """Under ``AGENT_TRANSPORT=serve`` the per-session ``opencode.json``
-    is redundant (opencode-serve loaded providers from
-    ``OPENCODE_CONFIG_CONTENT`` at startup) and would pollute snapshots."""
-    monkeypatch.setattr(dsm, "AGENT_TRANSPORT", AgentTransport.SERVE)
+    """opencode.json is not rendered per-session; only AGENTS.md is, with
+    single quotes shell-escaped for ``printf '%s' '...'``."""
     mgr = _bare_manager()
-    agents_md, opencode_json = mgr._render_session_files(
+    agents_md = mgr._render_agents_md(
         llm_config=llm_config,
         nextjs_port=None,
         skills_section="",
     )
-    assert agents_md  # not empty
-    assert opencode_json is None
-
-
-def test_render_session_files_writes_opencode_json_under_acp(
-    monkeypatch: pytest.MonkeyPatch,
-    llm_config: LLMProviderConfig,
-) -> None:
-    """Under ``AGENT_TRANSPORT=acp`` (rollback) the per-session file is
-    still emitted because each exec'd ``opencode acp`` invocation reads it."""
-    monkeypatch.setattr(dsm, "AGENT_TRANSPORT", AgentTransport.ACP)
-    mgr = _bare_manager()
-    _agents_md, opencode_json = mgr._render_session_files(
-        llm_config=llm_config,
-        nextjs_port=None,
-        skills_section="",
-    )
-    assert opencode_json is not None
-    # Shell-escaped single quotes are present in the rendered form; the raw
-    # JSON should still round-trip after the substitution is reversed.
-    raw = opencode_json.replace("'\\''", "'")
-    parsed: Any = json.loads(raw)
-    assert "openai" in parsed.get("provider", {})
+    assert isinstance(agents_md, str)
+    assert agents_md
+    assert "'" not in agents_md or "'\\''" in agents_md
 
 
 def test_init_serve_state_is_idempotent() -> None:
@@ -194,14 +167,9 @@ def test_init_serve_state_is_idempotent() -> None:
     assert mgr._terminated_sandboxes == set()
 
 
-def test_prompt_slot_serializes_on_docker_under_serve(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_prompt_slot_serializes_on_docker() -> None:
     """Pins the prompt-slot lock contract on Docker — same as the K8s
     test, catches a regression if Docker skips ``_init_serve_state``."""
-    from onyx.server.features.build.sandbox import serve_transport
-
-    monkeypatch.setattr(serve_transport, "AGENT_TRANSPORT", AgentTransport.SERVE)
     mgr = _bare_manager()
 
     other_session = UUID("00000000-0000-0000-0000-000000000001")
@@ -218,7 +186,6 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     """``provision()`` must mint a per-call HTTP Basic password and
     thread it through ``build_container_create_kwargs`` into the
     container env — otherwise every later request 401s."""
-    monkeypatch.setattr(dsm, "AGENT_TRANSPORT", AgentTransport.SERVE)
     monkeypatch.setattr(dsm, "SANDBOX_API_SERVER_URL", "https://onyx.example.com")
     # Skip the actual readiness HTTP probe — that needs a real container.
     monkeypatch.setattr(
@@ -266,17 +233,12 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     assert info.status.value == "running"
     assert len(run_calls) == 1
     env = run_calls[0]["environment"]
-    # All six required env vars are present.
     assert set(env.keys()) == {
         "ONYX_PAT",
         "ONYX_SERVER_URL",
-        "AGENT_TRANSPORT",
-        "OPENCODE_SERVE_PORT",
         OPENCODE_SERVER_PASSWORD,
         "OPENCODE_CONFIG_CONTENT",
     }
-    # AGENT_TRANSPORT mirrors the patched serve value.
-    assert env["AGENT_TRANSPORT"] == "serve"
     # The password is a fresh token_urlsafe(32) — long-ish, no spaces.
     pw = env[OPENCODE_SERVER_PASSWORD]
     assert len(pw) >= 32

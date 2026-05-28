@@ -1,7 +1,7 @@
 # Opencode-serve transport: deploy & runtime gotchas
 
 **Audience:** future engineers (and agents) deploying or debugging the
-`AGENT_TRANSPORT=serve` path on a real Kubernetes cluster. Captures the
+opencode-serve transport on a real Kubernetes cluster. Captures the
 failure modes hit during the first production-cluster rollout and the
 institutional knowledge about how the opencode-serve provider chain
 wires up at runtime.
@@ -329,6 +329,6 @@ actually needs.
 ## 5. Provenance
 
 Captured during the first production-cluster rollout of the
-`AGENT_TRANSPORT=serve` transport. The imperative recovery commands
+opencode-serve transport. The imperative recovery commands
 above were validated against a single-tenant cluster; the source-level
 fixes are tracked in §4.

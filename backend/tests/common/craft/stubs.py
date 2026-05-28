@@ -19,7 +19,7 @@ Rationale
 3. **Enables fault injection.** Several attributes
    (``write_files_to_sandbox_raises_for``, ``send_message_events``, ...) let
    tests inject the rare-but-load-bearing failures (RetriableWriteError,
-   FatalWriteError, ACP event sequences) without reaching for ``MagicMock``.
+   FatalWriteError, sandbox event sequences) without reaching for ``MagicMock``.
 
 Observable state (P1: assert behaviour, not implementation)
 ----------------------------------------------------------
@@ -56,7 +56,7 @@ from typing import Any
 from typing import cast
 from uuid import UUID
 
-from onyx.server.features.build.sandbox.base import ACPEvent
+from onyx.server.features.build.sandbox.base import SandboxEvent
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
@@ -87,7 +87,7 @@ class StubSandboxManager(SandboxManager):
     - ``health_check_returns``: bool returned by ``health_check``.
     - ``session_workspace_exists_returns``: bool returned by
       ``session_workspace_exists``.
-    - ``send_message_events``: iterable of ACP events yielded by
+    - ``send_message_events``: iterable of sandbox events yielded by
       ``send_message``. The iterable is **snapshotted to a list on
       assignment** so the same stub can be re-driven across multiple
       ``send_message`` calls.
@@ -150,7 +150,7 @@ class StubSandboxManager(SandboxManager):
 
         # ``send_message_events`` is stored via the property below so it is
         # materialised at assignment time (see __setattr__-like setter).
-        self._send_message_events: list[ACPEvent] | None = None
+        self._send_message_events: list[SandboxEvent] | None = None
 
         # Observable state: scoped counters and last-payload snapshots.
         self.provision_count: int = 0
@@ -201,11 +201,11 @@ class StubSandboxManager(SandboxManager):
     # ------------------------------------------------------------------
 
     @property
-    def send_message_events(self) -> list[ACPEvent] | None:
+    def send_message_events(self) -> list[SandboxEvent] | None:
         return self._send_message_events
 
     @send_message_events.setter
-    def send_message_events(self, value: Iterable[ACPEvent] | None) -> None:
+    def send_message_events(self, value: Iterable[SandboxEvent] | None) -> None:
         self._send_message_events = None if value is None else list(value)
 
     def provision(
@@ -357,7 +357,7 @@ class StubSandboxManager(SandboxManager):
         agent_provider: str | None = None,
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
-    ) -> Generator[ACPEvent, None, None]:
+    ) -> Generator[SandboxEvent, None, None]:
         self.send_message_count += 1
         self.last_send_message_payload = {
             "sandbox_id": sandbox_id,
@@ -470,17 +470,6 @@ class StubSandboxManager(SandboxManager):
             base_url=f"http://stub-{str(sandbox_id)[:8]}:4096",
             password=None,
         )
-
-    def _send_message_via_acp(
-        self,
-        sandbox_id: UUID,  # noqa: ARG002
-        session_id: UUID,  # noqa: ARG002
-        message: str,  # noqa: ARG002
-    ) -> Generator[ACPEvent, None, None]:
-        # The stub overrides ``send_message`` directly, so this leg is
-        # unreachable. Defined to satisfy the ABC.
-        raise _not_configured("_send_message_via_acp")
-        yield  # pragma: no cover — make this a generator function
 
     def write_files_to_sandbox(
         self,

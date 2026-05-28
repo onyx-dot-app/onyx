@@ -25,17 +25,9 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.server.features.build.configs import AgentTransport
-from onyx.server.features.build.sandbox import serve_transport
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
-
-
-@pytest.fixture(autouse=True)
-def _serve_transport(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Force SERVE — the lock is a no-op under ACP."""
-    monkeypatch.setattr(serve_transport, "AGENT_TRANSPORT", AgentTransport.SERVE)
 
 
 @pytest.fixture
@@ -118,18 +110,4 @@ def test_prompt_slot_different_sandboxes_dont_block(
     with mgr.prompt_slot(_SBX, _SES) as first:
         assert first is True
         with mgr.prompt_slot(other_sandbox, _SES) as second:
-            assert second is True
-
-
-def test_prompt_slot_yields_true_when_not_in_serve_mode(
-    mgr: KubernetesSandboxManager, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Outside SERVE mode (i.e., ACP transport), the slot is a no-op —
-    it should always yield True without touching the lock dict, because
-    each ACP call exec's its own opencode process and can't race."""
-    monkeypatch.setattr(serve_transport, "AGENT_TRANSPORT", AgentTransport.ACP)
-    # Two concurrent acquires on the same session both succeed — no lock.
-    with mgr.prompt_slot(_SBX, _SES) as first:
-        assert first is True
-        with mgr.prompt_slot(_SBX, _SES) as second:
             assert second is True

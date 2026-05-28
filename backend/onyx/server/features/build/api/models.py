@@ -184,7 +184,7 @@ class MessageRequest(BaseModel):
 class MessageResponse(BaseModel):
     """Response containing message details.
 
-    All message data is stored in message_metadata as JSON (the raw ACP packet).
+    All message data is stored in message_metadata as JSON (the raw sandbox event packet).
     The turn_index groups all assistant responses under the user prompt they respond to.
 
     Packet types in message_metadata:

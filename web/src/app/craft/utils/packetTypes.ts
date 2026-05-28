@@ -1,7 +1,7 @@
 /**
  * Packet Types
  *
- * Type definitions for raw and parsed ACP packets.
+ * Type definitions for raw and parsed sandbox event packets.
  * Centralizes all snake_case / camelCase field resolution.
  * Defines the ParsedPacket discriminated union consumed by both
  * useBuildStreaming (live SSE) and useBuildSessionStore (DB reload).
