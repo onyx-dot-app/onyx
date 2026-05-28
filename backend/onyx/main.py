@@ -347,7 +347,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
     # Self-hosted license seat + expiry gauges on /metrics (EE-only, no-op on CE)
     fetch_ee_implementation_or_noop(
-        "ee.onyx.server.metrics.license_metrics", "register_license_metrics"
+        "onyx.server.metrics.license_metrics", "register_license_metrics"
     )()
 
     verify_auth = fetch_versioned_implementation(
