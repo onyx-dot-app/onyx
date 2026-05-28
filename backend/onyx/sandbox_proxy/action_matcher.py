@@ -54,7 +54,7 @@ def resolve_app_for_url(
     for app in apps:
         for pattern in app.upstream_url_patterns:
             try:
-                if re.match(pattern, url):
+                if re.fullmatch(pattern, url):
                     return app
             except re.error:
                 logger.warning(
