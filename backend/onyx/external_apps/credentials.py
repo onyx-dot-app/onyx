@@ -1,13 +1,19 @@
-"""Render an external app's outbound auth headers from its template.
+"""Resolve and render an external app's outbound auth headers.
 
 The egress proxy injects credentials into verified requests by filling the
 ``auth_template``'s ``{placeholder}`` fields from the app's resolved credentials
-(org + per-user). Kept pure so the substitution rules are testable without a DB;
-the caller (``onyx.db.external_app.resolve_injection_headers``) resolves the
-credentials.
+(org + per-user). ``build_auth_headers`` is the pure substitution step (no DB,
+unit-testable on its own); ``resolve_injection_headers`` orchestrates the DB
+reads (via ``onyx.db.external_app`` getters) and delegates to it.
 """
 
 from typing import Any
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+from onyx.db.external_app import get_external_app_by_id
+from onyx.db.external_app import get_external_app_user_credential
 
 
 def build_auth_headers(
@@ -33,3 +39,31 @@ def build_auth_headers(
             # Render failed for this header
             continue
     return headers
+
+
+def resolve_injection_headers(
+    db_session: Session,
+    external_app_id: int,
+    user_id: UUID,
+) -> dict[str, str]:
+    """Auth headers the egress proxy should inject for a *verified* request to
+    ``external_app_id`` on behalf of ``user_id``.
+
+    Returns ``{}`` when the app is gone or disabled (the linked skill's
+    ``enabled`` flag is the proxy's kill switch), or when no header's
+    placeholders can be filled. Merges the app's organization credentials with
+    the user's stored credentials (the user's win on key conflicts), then
+    renders the ``auth_template`` via :func:`build_auth_headers`.
+    """
+    app = get_external_app_by_id(db_session, external_app_id)
+    if app is None or not app.skill.enabled:
+        return {}
+
+    credentials: dict[str, Any] = dict(app.organization_credentials)
+    user_cred = get_external_app_user_credential(
+        db_session, external_app_id=external_app_id, user_id=user_id
+    )
+    if user_cred is not None:
+        credentials.update(user_cred.user_credentials)
+
+    return build_auth_headers(app.auth_template, credentials)

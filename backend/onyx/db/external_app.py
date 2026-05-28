@@ -16,7 +16,6 @@ from onyx.db.models import ExternalAppPolicy
 from onyx.db.models import ExternalAppUserCredential
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.credentials import build_auth_headers
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.utils.logger import setup_logger
 
@@ -146,34 +145,6 @@ def get_external_app_user_credential(
             ExternalAppUserCredential.user_id == user_id,
         )
     )
-
-
-def resolve_injection_headers(
-    db_session: Session,
-    external_app_id: int,
-    user_id: UUID,
-) -> dict[str, str]:
-    """Auth headers the egress proxy should inject for a *verified* request to
-    ``external_app_id`` on behalf of ``user_id``.
-
-    Returns ``{}`` when the app is gone or disabled (the linked skill's
-    ``enabled`` flag is the proxy's kill switch), or when no header's
-    placeholders can be filled. Merges the app's organization credentials with
-    the user's stored credentials (the user's win on key conflicts), then
-    renders the ``auth_template`` via :func:`build_auth_headers`.
-    """
-    app = get_external_app_by_id(db_session, external_app_id)
-    if app is None or not app.skill.enabled:
-        return {}
-
-    credentials: dict[str, Any] = dict(app.organization_credentials)
-    user_cred = get_external_app_user_credential(
-        db_session, external_app_id=external_app_id, user_id=user_id
-    )
-    if user_cred is not None:
-        credentials.update(user_cred.user_credentials)
-
-    return build_auth_headers(app.auth_template, credentials)
 
 
 def create_external_app(

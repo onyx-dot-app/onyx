@@ -10,7 +10,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
-from onyx.db.external_app import resolve_injection_headers
+from onyx.external_apps.credentials import resolve_injection_headers
 from tests.external_dependency_unit.craft._test_helpers import make_external_app
 from tests.external_dependency_unit.craft._test_helpers import make_skill
 from tests.external_dependency_unit.craft._test_helpers import make_user

@@ -19,8 +19,8 @@ from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
-from onyx.db.external_app import resolve_injection_headers
 from onyx.db.notification import create_notification
+from onyx.external_apps.credentials import resolve_injection_headers
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.action_matcher import ActionMatch
 from onyx.sandbox_proxy.action_matcher import ActionMatcher
@@ -201,19 +201,6 @@ class GateAddon:
             flow.request.host,
             flow.request.method,
         )
-
-    def responseheaders(self, flow: http.HTTPFlow) -> None:
-        """Stream every response body straight through instead of buffering it.
-
-        The gate only ever inspects *requests* (the matcher reads the request
-        body); responses are never gated. mitmproxy buffers the full response
-        body by default, which serializes and can truncate long streaming
-        responses — notably the sandbox agent's streamed LLM completions (SSE),
-        which would otherwise arrive only after the whole generation finishes
-        and can drop mid-stream. Streaming passes bytes through as they arrive.
-        """
-        if flow.response is not None:
-            flow.response.stream = True
 
     async def request(self, flow: http.HTTPFlow) -> None:
         task = asyncio.current_task()
