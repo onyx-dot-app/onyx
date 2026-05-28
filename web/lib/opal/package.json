@@ -66,6 +66,7 @@
   },
   "dependencies": {
     "clsx": "^2.0.0",
+    "copy-to-clipboard": "^3.3.3",
     "tailwind-merge": "^2.0.0"
   },
   "peerDependencies": {

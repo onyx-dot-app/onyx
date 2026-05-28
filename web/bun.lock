@@ -132,6 +132,7 @@
       "version": "0.1.3",
       "dependencies": {
         "clsx": "^2.0.0",
+        "copy-to-clipboard": "^3.3.3",
         "tailwind-merge": "^2.0.0",
       },
       "devDependencies": {

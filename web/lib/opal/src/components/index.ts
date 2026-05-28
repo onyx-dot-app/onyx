@@ -135,3 +135,9 @@ export {
   Switch,
   type SwitchProps,
 } from "@opal/components/inputs/switch/components";
+
+/* CopyButton */
+export {
+  CopyButton,
+  type CopyButtonProps,
+} from "@opal/components/buttons/copy-button/components";

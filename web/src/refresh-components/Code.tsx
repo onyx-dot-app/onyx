@@ -1,5 +1,5 @@
 import type { WithoutStyles } from "@opal/types";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 
 interface CodeProps extends WithoutStyles<React.HTMLAttributes<HTMLElement>> {
   children: string;
@@ -18,7 +18,7 @@ export default function Code({
       </code>
       {showCopyButton && (
         <div className="code-copy-button">
-          <CopyIconButton getCopyText={() => children} />
+          <CopyButton getCopyText={() => children} />
         </div>
       )}
     </div>

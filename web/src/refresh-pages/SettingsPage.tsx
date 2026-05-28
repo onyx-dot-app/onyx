@@ -50,7 +50,7 @@ import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Code from "@/refresh-components/Code";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/interfaces";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
@@ -124,12 +124,12 @@ function PATModal({
           <Modal.Footer>
             <BasicModalFooter
               submit={
-                <CopyIconButton
+                <CopyButton
                   getCopyText={() => createdToken.token}
                   prominence="primary"
                 >
                   Copy Token
-                </CopyIconButton>
+                </CopyButton>
               }
             />
           </Modal.Footer>
