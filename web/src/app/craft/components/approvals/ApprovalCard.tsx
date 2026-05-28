@@ -96,7 +96,7 @@ export default function ApprovalCard({
   }
 
   return (
-    <div className="rounded-08 border border-status-info-03 overflow-hidden">
+    <div className="rounded-08 border border-status-info-03 overflow-hidden bg-background-neutral-00">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         {/*
          * Header row: shield+label is one trigger, chevron at the far
