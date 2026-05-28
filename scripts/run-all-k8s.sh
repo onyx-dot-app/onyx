@@ -23,6 +23,15 @@ OS_PW=$($KUBE -n onyx get secret onyx-opensearch \
 TMP=$(mktemp)
 awk -v pw="$OS_PW" 'BEGIN{f=0} /^OPENSEARCH_ADMIN_PASSWORD=/{print "OPENSEARCH_ADMIN_PASSWORD=" pw; f=1; next} {print} END{if(!f) print "OPENSEARCH_ADMIN_PASSWORD=" pw}' "$ENV_FILE" > "$TMP" && mv "$TMP" "$ENV_FILE"
 
+# If telepresence is already connected to a different context, bail — otherwise
+# `intercept` would silently attach to the wrong cluster's onyx-api-server.
+TP_CTX=$(telepresence status 2>/dev/null | awk '/Kubernetes context/{sub(/^[^:]*: */, ""); print; exit}' || true)
+if [ -n "$TP_CTX" ] && [ "$TP_CTX" != "kind-onyx-dev" ]; then
+  echo "error: telepresence is connected to context '$TP_CTX', expected 'kind-onyx-dev'." >&2
+  echo "       run 'telepresence quit -s' first, then re-run this script." >&2
+  exit 1
+fi
+
 telepresence connect --context kind-onyx-dev -n onyx
 telepresence leave onyx-api-server 2>/dev/null || true
 telepresence intercept onyx-api-server --namespace onyx --port 8080:8080 --mount=false

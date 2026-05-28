@@ -192,12 +192,6 @@ func runK8sDown() {
 	leaveCmd.Stderr = os.Stderr
 	// Ignore errors — intercept may not exist, which is fine.
 	_ = leaveCmd.Run()
-
-	log.Info("Quitting telepresence daemon...")
-	quitCmd := exec.Command("telepresence", "quit", "-s")
-	quitCmd.Stdout = os.Stdout
-	quitCmd.Stderr = os.Stderr
-	_ = quitCmd.Run()
 }
 
 // killByPattern sends SIGTERM to all processes matching the pgrep -f pattern.
