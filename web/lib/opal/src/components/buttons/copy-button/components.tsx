@@ -2,8 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import copy from "copy-to-clipboard";
-import { Button, ButtonProps } from "@opal/components";
+import {
+  Button,
+  type ButtonProps,
+} from "@opal/components/buttons/button/components";
 import { SvgAlertTriangle, SvgCheck, SvgCopy } from "@opal/icons";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 type CopyState = "idle" | "copied" | "error";
 
@@ -12,30 +19,45 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
   ? Omit<T, K>
   : never;
 
-export type CopyIconButtonProps = DistributiveOmit<
+export type CopyButtonProps = DistributiveOmit<
   ButtonProps,
-  "variant" | "icon" | "onClick"
+  "icon" | "onClick" | "rightIcon" | "children"
 > & {
-  // Function that returns the text to copy to clipboard
+  /** Returns the text to copy to clipboard. */
   getCopyText: () => string;
-  // Optional function to get HTML content for rich copy
+  /** Returns HTML content for rich copy (falls back to plain text). */
   getHtmlContent?: () => string;
+  /** Optional label. When provided, renders a text button. When omitted, renders icon-only. */
+  children?: string;
 };
 
-export default function CopyIconButton({
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+/**
+ * Button that copies text to the clipboard on click.
+ *
+ * The icon is always `SvgCopy` (idle), `SvgCheck` (copied), or
+ * `SvgAlertTriangle` (error) — callers cannot override it.
+ *
+ * When `children` is provided, the button renders with a text label.
+ * When omitted, it renders as an icon-only button.
+ */
+export function CopyButton({
   getCopyText,
   getHtmlContent,
   tooltip,
+  children,
   prominence = "tertiary",
-  ...iconButtonProps
-}: CopyIconButtonProps) {
+  ...buttonProps
+}: CopyButtonProps) {
   const [copyState, setCopyState] = useState<CopyState>("idle");
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   async function handleCopy() {
     const text = getCopyText();
 
-    // Clear existing timeout if any
     if (copyTimeoutRef.current) {
       clearTimeout(copyTimeoutRef.current);
     }
@@ -53,22 +75,17 @@ export default function CopyIconButton({
       } else if (!copy(text)) {
         throw new Error("copy-to-clipboard returned false");
       }
-
       setCopyState("copied");
     } catch (err) {
       console.error("Failed to copy:", err);
-
-      // Show "error" state
       setCopyState("error");
     }
 
-    // Reset to normal state after 3 seconds
     copyTimeoutRef.current = setTimeout(() => {
       setCopyState("idle");
     }, 3000);
   }
 
-  // Clean up timeout on unmount
   useEffect(() => {
     return () => {
       if (copyTimeoutRef.current) {
@@ -83,7 +100,6 @@ export default function CopyIconButton({
         return SvgCheck;
       case "error":
         return SvgAlertTriangle;
-      case "idle":
       default:
         return SvgCopy;
     }
@@ -95,21 +111,19 @@ export default function CopyIconButton({
         return "Copied!";
       case "error":
         return "Failed to copy";
-      case "idle":
       default:
-        return tooltip || "Copy";
+        return tooltip ?? "Copy";
     }
   }
 
-  // Assertion is safe: CopyIconButton always supplies icon + onClick,
-  // satisfying Button's content union. Spread may override prominence.
-  const buttonProps = {
+  const resolvedProps = {
     prominence,
-    ...iconButtonProps,
+    ...buttonProps,
+    children,
     icon: getIcon(),
     onClick: handleCopy,
     tooltip: getTooltip(),
   } as ButtonProps;
 
-  return <Button {...buttonProps} />;
+  return <Button {...resolvedProps} />;
 }

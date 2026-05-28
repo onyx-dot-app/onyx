@@ -10,10 +10,8 @@ import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
-import {
-  CopyButton,
-  DownloadButton,
-} from "@/sections/modals/PreviewModal/variants/shared";
+import { CopyButton } from "@opal/components";
+import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
 import TextSeparator from "@/refresh-components/TextSeparator";
 
 interface CsvData {
@@ -103,7 +101,7 @@ export const csvVariant: PreviewVariant = {
   },
   renderFooterRight: (ctx) => (
     <Section flexDirection="row" width="fit">
-      <CopyButton getText={() => ctx.fileContent} />
+      <CopyButton getCopyText={() => ctx.fileContent} />
       <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
     </Section>
   ),

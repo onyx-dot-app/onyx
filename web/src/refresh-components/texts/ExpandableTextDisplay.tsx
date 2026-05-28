@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import Modal from "@/refresh-components/Modal";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgDownload, SvgMaximize2, SvgX } from "@opal/icons";
 import { Button } from "@opal/components";
@@ -365,7 +365,7 @@ export default function ExpandableTextDisplay({
               </Text>
             </div>
             <div className="flex items-center gap-1 bg-background-tint-00 p-1 rounded-12">
-              <CopyIconButton
+              <CopyButton
                 prominence="tertiary"
                 size="sm"
                 getCopyText={() => content}

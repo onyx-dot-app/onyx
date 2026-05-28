@@ -1,7 +1,7 @@
 import Modal from "@/refresh-components/Modal";
 import { SvgAlertTriangle } from "@opal/icons";
 import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
-import { CopyButton } from "@/sections/modals/PreviewModal/variants/shared";
+import { CopyButton } from "@opal/components";
 import FloatingFooter from "@/sections/modals/PreviewModal/FloatingFooter";
 
 interface ExceptionTraceModalProps {
@@ -38,7 +38,7 @@ export default function ExceptionTraceModal({
         </div>
 
         <FloatingFooter
-          right={<CopyButton getText={() => exceptionTrace} />}
+          right={<CopyButton getCopyText={() => exceptionTrace} />}
           codeBackground
         />
       </Modal.Content>

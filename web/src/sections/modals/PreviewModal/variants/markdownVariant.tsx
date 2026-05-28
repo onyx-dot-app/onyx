@@ -1,11 +1,9 @@
+import { CopyButton } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { isMarkdownFile } from "@/lib/languages";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
-import {
-  CopyButton,
-  DownloadButton,
-} from "@/sections/modals/PreviewModal/variants/shared";
+import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
 
 const MARKDOWN_MIMES = [
   "text/markdown",
@@ -33,7 +31,7 @@ export const markdownVariant: PreviewVariant = {
 
   renderFooterRight: (ctx) => (
     <Section flexDirection="row" width="fit">
-      <CopyButton getText={() => ctx.fileContent} />
+      <CopyButton getCopyText={() => ctx.fileContent} />
       <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
     </Section>
   ),

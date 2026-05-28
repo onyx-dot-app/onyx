@@ -1,12 +1,9 @@
-import { Text } from "@opal/components";
+import { Text, CopyButton } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { getCodeLanguage } from "@/lib/languages";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
-import {
-  CopyButton,
-  DownloadButton,
-} from "@/sections/modals/PreviewModal/variants/shared";
+import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
 
 export const codeVariant: PreviewVariant = {
   matches: (name) => !!getCodeLanguage(name || ""),
@@ -34,7 +31,7 @@ export const codeVariant: PreviewVariant = {
 
   renderFooterRight: (ctx) => (
     <Section flexDirection="row" width="fit">
-      <CopyButton getText={() => ctx.fileContent} />
+      <CopyButton getCopyText={() => ctx.fileContent} />
       <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
     </Section>
   ),
