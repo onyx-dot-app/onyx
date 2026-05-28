@@ -65,17 +65,8 @@ _OPENAI_DEFAULT = LLMProviderConfig(
 
 
 def _run(rows: list[LLMProviderView]) -> list[LLMProviderConfig]:
-    """Invoke under a patched ``fetch_all_supported_build_llm_providers``."""
-    with patch(
-        "onyx.server.features.build.session.manager.fetch_all_supported_build_llm_providers",
-        return_value=rows,
-    ):
-        # db_session/user are unused once the fetch is patched.
-        return get_all_build_mode_llm_configs(
-            db_session=cast(Session, None),
-            default=_OPENAI_DEFAULT,
-            user=cast(User, MagicMock()),
-        )
+    """``get_all_build_mode_llm_configs`` is pure over an already-fetched list."""
+    return get_all_build_mode_llm_configs(rows, _OPENAI_DEFAULT)
 
 
 class TestGetAllBuildModeLlmConfigs:
@@ -124,7 +115,8 @@ class TestGetAllBuildModeLlmConfigs:
         )
         assert configs == [_OPENAI_DEFAULT]
 
-    def test_picks_first_visible_model_when_multiple_visible(self) -> None:
+    def test_prefers_recommended_model_over_first_visible(self) -> None:
+        # Anthropic's recommended model wins even though it isn't first in the list.
         configs = _run(
             [
                 _provider(
@@ -138,7 +130,20 @@ class TestGetAllBuildModeLlmConfigs:
                 )
             ]
         )
-        assert configs[1].model_name == "claude-opus-4-6"
+        assert configs[1].model_name == "claude-opus-4-7"
+
+    def test_uses_first_visible_for_type_without_recommended(self) -> None:
+        # A provider type with no recommended-model entry falls back to first visible.
+        configs = _run(
+            [
+                _provider(
+                    name="Google",
+                    provider="google",
+                    models=[_model("gemini-2.5-pro"), _model("gemini-2.5-flash")],
+                )
+            ]
+        )
+        assert configs[1].model_name == "gemini-2.5-pro"
 
     def test_skips_hidden_models_when_picking_first(self) -> None:
         configs = _run(
@@ -361,7 +366,7 @@ class TestSessionManagerProvisionForwardsAllLlmConfigs:
         manager._db_session = cast(Session, MagicMock())  # type: ignore[attr-defined]
         manager._sandbox_manager = sandbox_manager  # type: ignore[attr-defined]
 
-        expected_configs = [
+        all_configs = [
             _OPENAI_DEFAULT,
             LLMProviderConfig(
                 provider="anthropic",
@@ -377,10 +382,6 @@ class TestSessionManagerProvisionForwardsAllLlmConfigs:
                 return_value="pat-token",
             ),
             patch(
-                "onyx.server.features.build.session.manager.get_all_build_mode_llm_configs",
-                return_value=expected_configs,
-            ) as mock_get_all_configs,
-            patch(
                 "onyx.server.features.build.session.manager.update_sandbox_status__no_commit"
             ),
         ):
@@ -389,13 +390,13 @@ class TestSessionManagerProvisionForwardsAllLlmConfigs:
                 user=user,
                 user_id=user_id,
                 tenant_id=tenant_id,
-                llm_config=_OPENAI_DEFAULT,
+                all_llm_configs=all_configs,
             )
 
-        mock_get_all_configs.assert_called_once()
         sandbox_manager.provision.assert_called_once()
         kwargs = sandbox_manager.provision.call_args.kwargs
-        assert kwargs["all_llm_configs"] == expected_configs
+        assert kwargs["all_llm_configs"] == all_configs
+        # default model is the first entry
         assert kwargs["llm_config"] == _OPENAI_DEFAULT
         assert kwargs["sandbox_id"] == sandbox_id
         assert kwargs["onyx_pat"] == "pat-token"

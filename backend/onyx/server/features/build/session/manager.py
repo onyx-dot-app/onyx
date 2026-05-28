@@ -55,6 +55,7 @@ from onyx.server.features.build.api.packets import BuildPacket
 from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
+from onyx.server.features.build.configs import BUILD_MODE_RECOMMENDED_MODEL_BY_TYPE
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
@@ -109,29 +110,41 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
+def _model_for_provider(provider: LLMProviderView) -> str | None:
+    """The Craft model to register for ``provider``: the type's recommended
+    model when defined, else the first visible model. None if the provider has
+    no usable (visible) model."""
+    visible_models = [m for m in provider.model_configurations if m.is_visible]
+    if not visible_models:
+        return None
+    return BUILD_MODE_RECOMMENDED_MODEL_BY_TYPE.get(
+        provider.provider, visible_models[0].name
+    )
+
+
 def get_all_build_mode_llm_configs(
-    db_session: DBSession,
+    providers: list[LLMProviderView],
     default: LLMProviderConfig,
-    user: User,
 ) -> list[LLMProviderConfig]:
-    """``default`` first, then every other user-accessible supported-type
-    provider with a visible model. Used at sandbox provision time so every
-    configured provider is pre-registered in opencode.json and per-prompt model
-    overrides can cross providers without a pod restart.
+    """``default`` first, then one config per other supported provider type
+    from ``providers`` (an already-fetched, access-filtered list). Used at
+    sandbox provision time so every configured provider is pre-registered in
+    opencode.json and per-prompt model overrides can cross providers without a
+    pod restart.
     """
     configs: list[LLMProviderConfig] = [default]
     seen_providers: set[str] = {default.provider}
-    for provider in fetch_all_supported_build_llm_providers(db_session, user):
+    for provider in providers:
         if provider.provider in seen_providers:
             continue
-        seen_providers.add(provider.provider)
-        visible_models = [m for m in provider.model_configurations if m.is_visible]
-        if not visible_models:
+        model_name = _model_for_provider(provider)
+        if model_name is None:
             continue
+        seen_providers.add(provider.provider)
         configs.append(
             LLMProviderConfig(
                 provider=provider.provider,
-                model_name=visible_models[0].name,
+                model_name=model_name,
                 api_key=provider.api_key,
                 api_base=provider.api_base,
             )
@@ -351,31 +364,54 @@ class SessionManager:
     # LLM Configuration
     # =========================================================================
 
+    def build_llm_configs(
+        self,
+        user: User,
+        requested_provider_type: str | None = None,
+        requested_model_name: str | None = None,
+    ) -> tuple[LLMProviderConfig, list[LLMProviderConfig]]:
+        """Single access-scoped fetch → (default config, all pre-registered
+        configs). ``configs[0]`` is the default. Used at provision time so the
+        default and the cross-provider override list share one DB read.
+
+        Raises:
+            OnyxError: If no accessible supported provider is configured.
+        """
+        providers = fetch_all_supported_build_llm_providers(self._db_session, user)
+        default = self._select_default_llm_config(
+            providers, requested_provider_type, requested_model_name
+        )
+        return default, get_all_build_mode_llm_configs(providers, default)
+
     def _get_llm_config(
         self,
         requested_provider_type: str | None,
         requested_model_name: str | None,
         user: User,
     ) -> LLMProviderConfig:
-        """Get LLM config for sandbox provisioning.
+        """The default Craft LLM config only (see ``build_llm_configs``)."""
+        return self.build_llm_configs(
+            user, requested_provider_type, requested_model_name
+        )[0]
 
-        Resolution priority:
-        1. User's requested provider/model (from cookie), if the type is an
-           accessible supported provider
-        2. Highest-priority accessible supported provider, with its first
-           visible model
+    @staticmethod
+    def _select_default_llm_config(
+        providers: list[LLMProviderView],
+        requested_provider_type: str | None,
+        requested_model_name: str | None,
+    ) -> LLMProviderConfig:
+        """Resolution priority over an already-fetched accessible list:
+        1. The user's requested provider/model (cookie), if the type is present.
+           The model is used verbatim — the provider's API rejects invalid
+           models, so this also allows models not marked "visible".
+        2. Highest-priority supported provider with its recommended model.
 
         Raises:
-            OnyxError: If no accessible supported provider is configured
+            OnyxError: If no accessible supported provider is configured.
         """
-        providers = fetch_all_supported_build_llm_providers(self._db_session, user)
-
         if requested_provider_type and requested_model_name:
             for provider in providers:
                 if provider.provider == requested_provider_type:
-                    # Use the requested model directly - the provider's API
-                    # rejects invalid models, so this also allows models not
-                    # marked "visible" in the admin UI.
                     return LLMProviderConfig(
                         provider=provider.provider,
                         model_name=requested_model_name,
@@ -387,39 +423,25 @@ class SessionManager:
                 requested_provider_type,
             )
 
-        # Fallback (headless provision / sandbox wake): the interactive path
-        # supplies the model via the cookie; here pick the best available.
-        default_config = self._default_build_llm_config(providers)
-        if default_config is None:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "No accessible LLM provider of a supported type "
-                f"({', '.join(BUILD_MODE_ALLOWED_PROVIDER_TYPES)}) is configured.",
-            )
-        return default_config
-
-    @staticmethod
-    def _default_build_llm_config(
-        providers: list[LLMProviderView],
-    ) -> LLMProviderConfig | None:
-        """Highest-priority supported provider (per BUILD_MODE_ALLOWED_PROVIDER_TYPES)
-        with a visible model, from an already-fetched accessible list."""
         for provider_type in BUILD_MODE_ALLOWED_PROVIDER_TYPES:
             for provider in providers:
                 if provider.provider != provider_type:
                     continue
-                visible_models = [
-                    m for m in provider.model_configurations if m.is_visible
-                ]
-                if not visible_models:
+                model_name = _model_for_provider(provider)
+                if model_name is None:
                     continue
                 return LLMProviderConfig(
                     provider=provider.provider,
-                    model_name=visible_models[0].name,
+                    model_name=model_name,
                     api_key=provider.api_key,
                     api_base=provider.api_base,
                 )
-        return None
+
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "No accessible LLM provider of a supported type "
+            f"({', '.join(BUILD_MODE_ALLOWED_PROVIDER_TYPES)}) is configured.",
+        )
 
     # =========================================================================
     # Session CRUD Operations
@@ -463,20 +485,17 @@ class SessionManager:
         user: User,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
+        all_llm_configs: list[LLMProviderConfig],
     ) -> None:
-        """Ensure PAT, then provision the pod with every configured
-        provider pre-loaded so per-prompt model overrides can cross
-        providers without a pod restart."""
+        """Ensure PAT, then provision the pod with every configured provider
+        pre-loaded so per-prompt model overrides can cross providers without a
+        pod restart. ``all_llm_configs[0]`` is the default model."""
         onyx_pat = ensure_sandbox_pat(self._db_session, sandbox, user)
-        all_llm_configs = get_all_build_mode_llm_configs(
-            self._db_session, default=llm_config, user=user
-        )
         sandbox_info = self._sandbox_manager.provision(
             sandbox_id=sandbox.id,
             user_id=user_id,
             tenant_id=tenant_id,
-            llm_config=llm_config,
+            llm_config=all_llm_configs[0],
             onyx_pat=onyx_pat,
             all_llm_configs=all_llm_configs,
         )
@@ -564,7 +583,7 @@ class SessionManager:
         if user is None:
             raise ValueError(f"User {user_id} not found")
 
-        llm_config = self._get_llm_config(None, None, user)
+        _, all_llm_configs = self.build_llm_configs(user)
 
         if sandbox is None:
             sandbox = create_sandbox__no_commit(
@@ -584,7 +603,7 @@ class SessionManager:
                 user_id,
             )
 
-        self._provision_sandbox(sandbox, user, user_id, tenant_id, llm_config)
+        self._provision_sandbox(sandbox, user, user_id, tenant_id, all_llm_configs)
         return sandbox
 
     def _wait_for_provisioning_to_complete(
@@ -678,8 +697,10 @@ class SessionManager:
         if not user:
             raise ValueError(f"User {user_id} not found")
 
-        # Get LLM config (uses user's selection or falls back to default)
-        llm_config = self._get_llm_config(llm_provider_type, llm_model_name, user)
+        # Resolve the default + all pre-registered provider configs in one read.
+        llm_config, all_llm_configs = self.build_llm_configs(
+            user, llm_provider_type, llm_model_name
+        )
 
         # Allocate port for this session (per-session port allocation).
         # Both LOCAL and KUBERNETES backends use the same port allocation
@@ -731,7 +752,9 @@ class SessionManager:
                     sandbox_id,
                     user_id,
                 )
-                self._provision_sandbox(sandbox, user, user_id, tenant_id, llm_config)
+                self._provision_sandbox(
+                    sandbox, user, user_id, tenant_id, all_llm_configs
+                )
             elif sandbox.status.is_active():
                 # Verify pod is healthy before reusing (use short timeout for quick check)
                 if not self._sandbox_manager.health_check(sandbox_id, timeout=5.0):
@@ -752,7 +775,7 @@ class SessionManager:
                         "Re-provisioning sandbox %s for user %s", sandbox_id, user_id
                     )
                     self._provision_sandbox(
-                        sandbox, user, user_id, tenant_id, llm_config
+                        sandbox, user, user_id, tenant_id, all_llm_configs
                     )
                 else:
                     logger.info(
@@ -781,7 +804,7 @@ class SessionManager:
                 "Created sandbox record %s for session %s", sandbox_id, session_id
             )
 
-            self._provision_sandbox(sandbox, user, user_id, tenant_id, llm_config)
+            self._provision_sandbox(sandbox, user, user_id, tenant_id, all_llm_configs)
 
         # Set up session workspace within the sandbox
         logger.info(

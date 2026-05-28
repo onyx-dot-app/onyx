@@ -578,6 +578,8 @@ def fetch_all_supported_build_llm_providers(
     )
     user_group_ids = fetch_user_group_ids(db_session, user)
     is_admin = user.role == UserRole.ADMIN
+    # persona=None: Craft has no persona context, so a provider restricted to
+    # specific personas is intentionally excluded even when otherwise public.
     return [
         LLMProviderView.from_model(p)
         for p in provider_models

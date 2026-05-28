@@ -258,8 +258,18 @@ export default function BuildOnboardingModal({
       );
 
       if (!response.ok) {
+        // Surface the backend detail (e.g. a name collision) so the user gets
+        // an actionable message instead of a generic failure.
+        const detail = await response
+          .json()
+          .then((b) => (typeof b?.detail === "string" ? b.detail : null))
+          .catch(() => null);
+        const isConflict = response.status === 409 || response.status === 400;
         setErrorMessage(
-          "There was an issue creating the provider. Please try again."
+          detail ??
+            (isConflict
+              ? `A provider named "${providerName}" already exists — remove or rename it in Admin → LLM Providers, then retry.`
+              : "There was an issue creating the provider. Please try again.")
         );
         setConnectionStatus("error");
         return;
