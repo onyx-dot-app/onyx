@@ -66,6 +66,7 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import DefaultAppMode
 from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import GrantSource
 from onyx.db.enums import HierarchyNodeType
@@ -5890,6 +5891,11 @@ class ExternalApp(Base):
         back_populates="external_app",
         cascade="all, delete-orphan",
     )
+    policies: Mapped[list["ExternalAppPolicy"]] = relationship(
+        "ExternalAppPolicy",
+        back_populates="external_app",
+        cascade="all, delete-orphan",
+    )
 
 
 class ExternalAppUserCredential(Base):
@@ -5931,5 +5937,55 @@ class ExternalAppUserCredential(Base):
             "external_app_id",
             "user_id",
             name="uq_external_app_user_credential_app_user",
+        ),
+    )
+
+
+class ExternalAppPolicy(Base):
+    """Admin's per-action policy override for an external app.
+
+    Sparse: only actions the admin has set are stored; an action without a row
+    resolves to ``ASK`` (the default ask-approval behaviour).
+
+    ``action_id`` is a catalog id; display (name/description) comes from the code
+    catalog. Admin-authored custom-app rules will add their own action
+    name/description/match columns when that feature lands.
+    """
+
+    __tablename__ = "external_app_policy"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Hierarchical action id, e.g. "slack.messages.read".
+    action_id: Mapped[str] = mapped_column(Text, nullable=False)
+    policy: Mapped[EndpointPolicy] = mapped_column(
+        Enum(EndpointPolicy, native_enum=False),
+        nullable=False,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    external_app: Mapped["ExternalApp"] = relationship(
+        "ExternalApp", back_populates="policies"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "external_app_id",
+            "action_id",
+            name="uq_external_app_policy_app_action",
         ),
     )

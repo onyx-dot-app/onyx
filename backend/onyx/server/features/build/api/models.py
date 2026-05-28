@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from onyx.configs.constants import MessageType
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SharingScope
@@ -320,6 +321,20 @@ class UpsertExternalAppRequest(BaseModel):
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
     organization_credentials: dict[str, Any]
+    # Per-action overrides by catalog action id (built-in apps); validated on
+    # upsert. A map full-replaces stored overrides (empty clears); None leaves
+    # them untouched, so a partial update can't wipe the admin's choices.
+    action_policies: dict[str, EndpointPolicy] | None = None
+
+
+class ActionPolicyView(BaseModel):
+    """One action of a built-in app, with its effective policy — the admin's
+    stored override if set, otherwise ``ASK``."""
+
+    action_id: str
+    normalised_name: str
+    description: str
+    state: EndpointPolicy
 
 
 class ExternalAppAdminResponse(BaseModel):
@@ -333,6 +348,8 @@ class ExternalAppAdminResponse(BaseModel):
     auth_template: dict[str, Any]
     organization_credentials: dict[str, Any]
     enabled: bool
+    # The merged per-action policy view (built-in apps; empty for custom).
+    actions: list[ActionPolicyView]
 
 
 class UpsertUserCredentialsRequest(BaseModel):
@@ -390,6 +407,15 @@ class OrgCredentialFieldDescriptor(BaseModel):
     secret: bool
 
 
+class EndpointDescriptor(BaseModel):
+    """One action in a built-in provider's catalog, flattened for the admin UI.
+    The admin picks a policy per action; recognition rules stay backend-side."""
+
+    action_id: str
+    normalised_name: str
+    description: str
+
+
 class BuiltInExternalAppDescriptor(BaseModel):
     """Backend-defined preset for a built-in OAuth provider. The admin
     UI fetches these and uses them to render the Configure modal +
@@ -402,3 +428,6 @@ class BuiltInExternalAppDescriptor(BaseModel):
     auth_template: dict[str, str]
     required_org_credential_fields: list[OrgCredentialFieldDescriptor]
     setup_instructions: str
+    # The catalog of actions an admin can govern (empty for providers without
+    # a catalog).
+    actions: list[EndpointDescriptor]

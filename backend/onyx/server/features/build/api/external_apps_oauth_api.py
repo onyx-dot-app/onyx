@@ -19,8 +19,8 @@ from onyx.db.models import ExternalApp
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers import get_provider_or_raise
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
+from onyx.external_apps.providers.registry import get_provider_or_raise
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import OAuthCallbackRequest
 from onyx.server.features.build.api.models import OAuthCallbackResponse
