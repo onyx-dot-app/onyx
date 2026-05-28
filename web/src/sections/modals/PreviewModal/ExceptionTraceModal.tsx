@@ -38,7 +38,13 @@ export default function ExceptionTraceModal({
         </div>
 
         <FloatingFooter
-          right={<CopyButton getCopyText={() => exceptionTrace} />}
+          right={
+            <CopyButton
+              size="sm"
+              tooltip="Copy content"
+              getCopyText={() => exceptionTrace}
+            />
+          }
           codeBackground
         />
       </Modal.Content>

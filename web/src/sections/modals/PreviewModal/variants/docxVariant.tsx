@@ -165,7 +165,11 @@ export const docxVariant: PreviewVariant = {
   renderFooterRight: (ctx: PreviewContext) => (
     <Section flexDirection="row" width="fit">
       {lastDocxResult && (
-        <CopyButton getCopyText={() => lastDocxResult?.plainText ?? ""} />
+        <CopyButton
+          size="sm"
+          tooltip="Copy content"
+          getCopyText={() => lastDocxResult?.plainText ?? ""}
+        />
       )}
       <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
     </Section>

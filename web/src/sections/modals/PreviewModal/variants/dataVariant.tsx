@@ -46,7 +46,11 @@ export const dataVariant: PreviewVariant = {
 
   renderFooterRight: (ctx) => (
     <Section flexDirection="row" width="fit">
-      <CopyButton getCopyText={() => ctx.fileContent} />
+      <CopyButton
+        size="sm"
+        tooltip="Copy content"
+        getCopyText={() => ctx.fileContent}
+      />
       <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
     </Section>
   ),
