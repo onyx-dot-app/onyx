@@ -25,7 +25,6 @@ from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.action_matcher import ActionMatcher
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.credential_injection import InjectionContext
-from onyx.sandbox_proxy.credential_injection import InjectionOutcome
 from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
@@ -44,11 +43,7 @@ _SNAPSHOT_STREAM_FLAG = "onyx_snapshot_stream"
 
 
 class _IdentityResolverProto(Protocol):
-    """Subset of `IdentityResolver` the gate uses.
-
-    Kept distinct from `CredentialResolver` (a different protocol in
-    `credential_injection.py`) to keep the two namespaces separate.
-    """
+    """Subset of `IdentityResolver` the gate uses."""
 
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None: ...
 
@@ -61,6 +56,7 @@ CacheFactory = Callable[[str], CacheBackend]
 
 
 # 403 codes exposed to the sandbox-side caller (distinct from `OnyxError`).
+# `credential_error` lives on `CredentialInjectionDispatcher` as `CODE_CREDENTIAL_ERROR`.
 _CODE_UNIDENTIFIED_SANDBOX = "unidentified_sandbox"
 _CODE_NO_ACTIVE_SESSION = "no_active_session"
 _CODE_BODY_TOO_LARGE = "body_too_large"
@@ -68,7 +64,6 @@ _CODE_USER_REJECTED = "user_rejected"
 _CODE_NOT_AUTHORIZED = "not_authorized"
 _CODE_INTERNAL_ERROR = "internal_error"
 _CODE_POLICY_DENIED = "policy_denied"
-_CODE_CREDENTIAL_ERROR = "credential_error"
 
 # Relative deep link routed through the Next router by NotificationsPopover.tsx;
 # must mirror the frontend's CRAFT_PATH + sessionId search param.
@@ -232,10 +227,11 @@ class GateAddon:
             return
 
         gate_target = self._resolve_and_match(flow)
-        # Strip the session tag so it never reaches the origin. mitmproxy does
-        # NOT strip `Proxy-Authorization` from plain-HTTP requests in regular
-        # mode (no-op for HTTPS, which carries it on the already-consumed
-        # CONNECT). Safe here: `_resolve_and_match` has already read it.
+        # Strip the in-band session tag so it never reaches the origin (it
+        # carries the BuildSession id). mitmproxy does NOT strip
+        # `Proxy-Authorization` from plain-HTTP requests in regular mode (and
+        # for HTTPS the tag rides on the already-consumed CONNECT). The single
+        # strip point: `_resolve_and_match` has read whatever it needs by now.
         flow.request.headers.pop("Proxy-Authorization", None)
         if gate_target is None:
             return
@@ -313,12 +309,15 @@ class GateAddon:
         try:
             match = self._action_matcher.match(flow.request, sandbox.tenant_id)
         except Exception as e:
+            # Matcher crash falls through as off-catalog: host-only resolvers
+            # (Plans 2/3) still get a chance to inject so the request doesn't
+            # forward with a placeholder credential.
             logger.exception(
                 "gate.matcher_error host=%s error=%s",
                 flow.request.host,
                 str(e),
             )
-            return None
+            match = None
 
         # Audit every evaluated request. session_id is the unvalidated claimed
         # tag (the ASK path validates it below); off_catalog = nothing matched.
@@ -334,11 +333,8 @@ class GateAddon:
         )
 
         # ALWAYS / DENY / off-catalog terminate here; ASK falls through to the
-        # approval pipeline in `request()`. Strip the in-band session tag
-        # before any dispatcher sees the flow — the dispatcher logs headers,
-        # and forwarded requests must not carry the tag.
+        # approval pipeline in `request()`.
         if match is None:
-            flow.request.headers.pop("Proxy-Authorization", None)
             self._dispatch_injection_or_block(flow, sandbox=sandbox, match=None)
             return None
 
@@ -347,7 +343,6 @@ class GateAddon:
             return None
 
         if match.policy is EndpointPolicy.ALWAYS:
-            flow.request.headers.pop("Proxy-Authorization", None)
             self._dispatch_injection_or_block(flow, sandbox=sandbox, match=match)
             return None
 
@@ -537,14 +532,15 @@ class GateAddon:
         sandbox: ResolvedSandbox,
         match: ActionMatch | None,
     ) -> None:
-        """Maps `InjectionOutcome.BLOCKED` to the sandbox-visible 403."""
-        ctx = InjectionContext(
-            sandbox=sandbox,
-            match=match,
-            db_session_factory=self._db_session_factory,
+        """Run the credential dispatcher; fail closed with a 403 on BLOCKED."""
+        self._credential_dispatcher.apply_or_block(
+            flow,
+            InjectionContext(
+                sandbox=sandbox,
+                match=match,
+                db_session_factory=self._db_session_factory,
+            ),
         )
-        if self._credential_dispatcher.apply(flow, ctx) is InjectionOutcome.BLOCKED:
-            flow.response = _http_403(_CODE_CREDENTIAL_ERROR)
 
     def _terminalize_after_unhandled_error(
         self, approval_id: UUID, tenant_id: str

@@ -28,6 +28,7 @@ from redis.exceptions import RedisError
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.external_apps.matching.engine import ActionMatch
+from onyx.sandbox_proxy import credential_injection as credential_injection_mod
 from onyx.sandbox_proxy.addons import gate as gate_mod
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.addons.gate import ParkedApprovals
@@ -38,8 +39,10 @@ from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
+from tests.unit.sandbox_proxy.conftest import make_action_match
 from tests.unit.sandbox_proxy.conftest import make_flow as _flow
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
+from tests.unit.sandbox_proxy.conftest import noop_db_factory
 from tests.unit.sandbox_proxy.conftest import RecordingCredentialResolver
 from tests.unit.sandbox_proxy.conftest import StubResolver as _StubResolver
 
@@ -70,17 +73,6 @@ class _StubMatcher:
         return self._result
 
 
-def _noop_db_factory(tenant_id: str) -> Any:  # noqa: ARG001
-    """`DBSessionFactory` that must never be called."""
-
-    @contextmanager
-    def cm() -> Iterator[Any]:
-        raise AssertionError("db factory unexpectedly used")
-        yield  # pragma: no cover
-
-    return cm()
-
-
 def _noop_cache_factory(tenant_id: str) -> Any:  # noqa: ARG001
     raise AssertionError("cache factory unexpectedly used")
 
@@ -105,7 +97,7 @@ def _build(
     *,
     resolver: _StubResolver,
     matcher: _StubMatcher,
-    db_factory: Any = _noop_db_factory,
+    db_factory: Any = noop_db_factory,
     cache_factory: Any = _noop_cache_factory,
     credential_resolvers: list[CredentialResolver] | None = None,
 ) -> GateAddon:
@@ -130,24 +122,11 @@ def _assert_403(flow: http.HTTPFlow, expected_code: str) -> None:
     assert body == {"error": expected_code}
 
 
-_MATCH = ActionMatch(
-    action_type="slack.messages.write",
-    payload={"text": "hi"},
-    policy=EndpointPolicy.ASK,
-    external_app_id=42,
+_MATCH = make_action_match(payload={"text": "hi"})
+_MATCH_ALWAYS = make_action_match(
+    action_type="slack.channels.read", policy=EndpointPolicy.ALWAYS
 )
-_MATCH_ALWAYS = ActionMatch(
-    action_type="slack.channels.read",
-    payload={},
-    policy=EndpointPolicy.ALWAYS,
-    external_app_id=42,
-)
-_MATCH_DENY = ActionMatch(
-    action_type="slack.messages.write",
-    payload={"text": "hi"},
-    policy=EndpointPolicy.DENY,
-    external_app_id=42,
-)
+_MATCH_DENY = make_action_match(payload={"text": "hi"}, policy=EndpointPolicy.DENY)
 
 
 # ---------------------------------------------------------------------------
@@ -263,26 +242,29 @@ def test_resolve_and_match_matcher_returns_none_fails_open() -> None:
     assert resolver.resolve_session_by_id_calls == []
     # The off-catalog dispatch IS wired — the resolver was probed with match=None.
     assert len(spy.claims_calls) == 1
-    _host, ctx = spy.claims_calls[0]
+    _request, ctx = spy.claims_calls[0]
     assert ctx.match is None
     assert ctx.sandbox is sandbox
 
 
-def test_resolve_and_match_matcher_raises_fails_open() -> None:
-    """Matcher exception: no off-catalog dispatch — would risk leaking
-    credentials onto a request whose attribution failed."""
+def test_resolve_and_match_matcher_raises_falls_through_as_off_catalog() -> None:
+    """Matcher exception falls through to off-catalog dispatch — otherwise
+    the request would forward with placeholder credentials, surfacing as a
+    fingerprintable upstream 401 once Plans 2/3 add host-only resolvers."""
     resolver = _StubResolver(sandbox=_sandbox())
     matcher = _StubMatcher(exc=RuntimeError("matcher boom"))
-    spy = RecordingCredentialResolver(claims_result=True)
+    spy = RecordingCredentialResolver(claims_result=False)
     addon = _build(resolver=resolver, matcher=matcher, credential_resolvers=[spy])
     flow = _flow()
 
     result = addon._resolve_and_match(flow)
 
     assert result is None
-    assert flow.response is None
+    assert flow.response is None  # forwarded
     assert resolver.resolve_session_by_id_calls == []
-    assert spy.claims_calls == []  # matcher exception aborts before dispatch
+    # Dispatcher was invoked with match=None (same as a real off-catalog).
+    assert len(spy.claims_calls) == 1
+    assert spy.claims_calls[0][1].match is None
 
 
 # ---------------------------------------------------------------------------
@@ -409,27 +391,6 @@ async def test_always_goes_straight_through(monkeypatch: pytest.MonkeyPatch) -> 
     assert flow.response is None  # forwarded
     assert not spy.approval_ran  # straight through — no prompt
     assert spy.dispatched == [(_MATCH_ALWAYS, sandbox.user_id, sandbox.tenant_id)]
-
-
-@pytest.mark.asyncio
-async def test_off_catalog_dispatches_with_match_none(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """No matching rule: forwarded, dispatcher runs with match=None so
-    host-only resolvers (Onyx PAT, LLM keys) get a chance to claim."""
-    sandbox = _sandbox()
-    addon = _build(
-        resolver=_StubResolver(sandbox=sandbox),
-        matcher=_StubMatcher(result=None),
-    )
-    spy = _spy_pipeline(addon, monkeypatch)
-    flow = _flow()
-
-    await addon.request(flow)
-
-    assert flow.response is None  # forwarded
-    assert not spy.approval_ran
-    assert spy.dispatched == [(None, sandbox.user_id, sandbox.tenant_id)]
 
 
 @pytest.mark.asyncio
@@ -883,7 +844,7 @@ def test_dispatch_injection_credential_unavailable_blocks_with_403() -> None:
 
     addon._dispatch_injection_or_block(flow, sandbox=_sandbox(), match=_MATCH_ALWAYS)
 
-    _assert_403(flow, gate_mod._CODE_CREDENTIAL_ERROR)
+    _assert_403(flow, credential_injection_mod.CODE_CREDENTIAL_ERROR)
 
 
 def test_dispatch_injection_resolver_exception_blocks_with_403() -> None:
@@ -899,26 +860,7 @@ def test_dispatch_injection_resolver_exception_blocks_with_403() -> None:
 
     addon._dispatch_injection_or_block(flow, sandbox=_sandbox(), match=_MATCH_ALWAYS)
 
-    _assert_403(flow, gate_mod._CODE_CREDENTIAL_ERROR)
-
-
-def test_dispatch_injection_off_catalog_passes_match_none_to_resolvers() -> None:
-    """Off-catalog forwards reach the dispatcher with match=None so host-only
-    resolvers (Onyx PAT, LLM keys) can still claim by host."""
-    spy = RecordingCredentialResolver(
-        claims_result=True, headers={"Authorization": "Bearer x"}
-    )
-    addon = _build(
-        resolver=_StubResolver(),
-        matcher=_StubMatcher(),
-        credential_resolvers=[spy],
-    )
-    flow = _flow()
-
-    addon._dispatch_injection_or_block(flow, sandbox=_sandbox(), match=None)
-
-    assert flow.response is None
-    assert spy.resolve_calls[0].match is None
+    _assert_403(flow, credential_injection_mod.CODE_CREDENTIAL_ERROR)
 
 
 # ---------------------------------------------------------------------------

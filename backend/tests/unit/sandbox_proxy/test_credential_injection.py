@@ -6,9 +6,10 @@ The dispatcher is the single seam between the gate and any concrete
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock
-from uuid import uuid4
 
+from onyx.sandbox_proxy.credential_injection import CODE_CREDENTIAL_ERROR
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
@@ -30,11 +31,10 @@ def _ctx(*, match=None) -> InjectionContext:  # type: ignore[no-untyped-def]
 def test_no_resolver_claims_returns_pass_through() -> None:
     a = RecordingCredentialResolver(claims_result=False)
     b = RecordingCredentialResolver(claims_result=False)
-    dispatcher = CredentialInjectionDispatcher([a, b])
     flow = _flow()
     flow.request.headers["X-Existing"] = "preserve"
 
-    outcome = dispatcher.apply(flow, _ctx())
+    outcome = CredentialInjectionDispatcher([a, b]).apply(flow, _ctx())
 
     assert outcome is InjectionOutcome.PASS_THROUGH
     assert flow.request.headers["X-Existing"] == "preserve"
@@ -43,19 +43,17 @@ def test_no_resolver_claims_returns_pass_through() -> None:
 
 
 def test_first_claim_wins() -> None:
-    """Registered order is priority order; later resolvers are not even queried."""
+    """Registered order is priority order; later resolvers are not queried."""
     first = RecordingCredentialResolver(
         claims_result=True, headers={"Authorization": "from-first"}
     )
     second = RecordingCredentialResolver(
         claims_result=True, headers={"Authorization": "from-second"}
     )
-    dispatcher = CredentialInjectionDispatcher([first, second])
     flow = _flow()
 
-    outcome = dispatcher.apply(flow, _ctx())
+    CredentialInjectionDispatcher([first, second]).apply(flow, _ctx())
 
-    assert outcome is InjectionOutcome.INJECTED
     assert flow.request.headers["Authorization"] == "from-first"
     assert first.resolve_calls != []
     assert second.resolve_calls == []
@@ -67,21 +65,19 @@ def test_injected_headers_overwrite_existing() -> None:
     resolver = RecordingCredentialResolver(
         claims_result=True, headers={"Authorization": "Bearer real"}
     )
-    dispatcher = CredentialInjectionDispatcher([resolver])
     flow = _flow()
     flow.request.headers["Authorization"] = "placeholder"
 
-    dispatcher.apply(flow, _ctx())
+    CredentialInjectionDispatcher([resolver]).apply(flow, _ctx())
 
     assert flow.request.headers["Authorization"] == "Bearer real"
 
 
 def test_resolver_claiming_but_returning_no_headers_is_injected() -> None:
-    """The claim is the contract — empty header set is INJECTED, not PASS_THROUGH."""
+    """Claim is the contract — empty header set is INJECTED, not PASS_THROUGH."""
     resolver = RecordingCredentialResolver(claims_result=True, headers={})
-    dispatcher = CredentialInjectionDispatcher([resolver])
 
-    outcome = dispatcher.apply(_flow(), _ctx())
+    outcome = CredentialInjectionDispatcher([resolver]).apply(_flow(), _ctx())
 
     assert outcome is InjectionOutcome.INJECTED
 
@@ -90,23 +86,21 @@ def test_credential_unavailable_returns_blocked() -> None:
     resolver = RecordingCredentialResolver(
         claims_result=True, exc=CredentialUnavailableError("no PAT for sandbox")
     )
-    dispatcher = CredentialInjectionDispatcher([resolver])
     flow = _flow()
 
-    outcome = dispatcher.apply(flow, _ctx())
+    outcome = CredentialInjectionDispatcher([resolver]).apply(flow, _ctx())
 
     assert outcome is InjectionOutcome.BLOCKED
     assert "Authorization" not in flow.request.headers
 
 
 def test_unexpected_exception_returns_blocked() -> None:
-    """Any non-Credential-Unavailable resolver error is also fail-closed."""
+    """Non-CredentialUnavailable resolver errors also fail closed."""
     resolver = RecordingCredentialResolver(
         claims_result=True, exc=RuntimeError("db down mid-resolve")
     )
-    dispatcher = CredentialInjectionDispatcher([resolver])
 
-    outcome = dispatcher.apply(_flow(), _ctx())
+    outcome = CredentialInjectionDispatcher([resolver]).apply(_flow(), _ctx())
 
     assert outcome is InjectionOutcome.BLOCKED
 
@@ -116,10 +110,9 @@ def test_claims_exception_falls_through_to_next_resolver() -> None:
     bad = MagicMock(spec=CredentialResolver)
     bad.claims.side_effect = RuntimeError("claims is buggy")
     good = RecordingCredentialResolver(claims_result=True, headers={"X-Hdr": "val"})
-    dispatcher = CredentialInjectionDispatcher([bad, good])
     flow = _flow()
 
-    outcome = dispatcher.apply(flow, _ctx())
+    outcome = CredentialInjectionDispatcher([bad, good]).apply(flow, _ctx())
 
     assert outcome is InjectionOutcome.INJECTED
     assert flow.request.headers["X-Hdr"] == "val"
@@ -137,23 +130,51 @@ def test_all_claims_raise_returns_pass_through() -> None:
     assert outcome is InjectionOutcome.PASS_THROUGH
 
 
-def test_dispatcher_passes_full_context_to_resolver() -> None:
-    """The `InjectionContext` reaches `resolve()` unchanged (sandbox, match,
-    db_session_factory all forwarded), and `claims()` sees the host + ctx."""
-    sandbox = _sandbox(tenant_id="tenant-xyz", user_id=uuid4())
+def test_apply_or_block_writes_403_on_blocked() -> None:
+    """The high-level seam: BLOCKED → sandbox-visible 403 with the documented body."""
+    resolver = RecordingCredentialResolver(
+        claims_result=True, exc=CredentialUnavailableError("no creds")
+    )
+    flow = _flow()
+
+    CredentialInjectionDispatcher([resolver]).apply_or_block(flow, _ctx())
+
+    assert flow.response is not None
+    assert flow.response.status_code == 403
+    content = flow.response.content
+    assert content is not None
+    assert json.loads(content) == {"error": CODE_CREDENTIAL_ERROR}
+
+
+def test_apply_or_block_leaves_response_unset_on_inject_or_pass_through() -> None:
+    """INJECTED and PASS_THROUGH both leave `flow.response` untouched so the
+    request forwards through mitmproxy."""
+    claiming = RecordingCredentialResolver(claims_result=True, headers={"X": "y"})
+    not_claiming = RecordingCredentialResolver(claims_result=False)
+
+    flow_a = _flow()
+    CredentialInjectionDispatcher([claiming]).apply_or_block(flow_a, _ctx())
+    assert flow_a.response is None
+
+    flow_b = _flow()
+    CredentialInjectionDispatcher([not_claiming]).apply_or_block(flow_b, _ctx())
+    assert flow_b.response is None
+
+
+def test_resolver_receives_request_and_full_context() -> None:
+    """Sanity: `claims` and `resolve` both see the same request + ctx the
+    dispatcher was handed, unchanged."""
+    sandbox = _sandbox(tenant_id="tenant-xyz")
     match = make_action_match()
     resolver = RecordingCredentialResolver(claims_result=True)
-    dispatcher = CredentialInjectionDispatcher([resolver])
     flow = _flow(host="api.anthropic.com")
     ctx = InjectionContext(
         sandbox=sandbox, match=match, db_session_factory=noop_db_factory
     )
 
-    dispatcher.apply(flow, ctx)
+    CredentialInjectionDispatcher([resolver]).apply(flow, ctx)
 
-    assert resolver.claims_calls == [("api.anthropic.com", ctx)]
+    [(claim_request, claim_ctx)] = resolver.claims_calls
+    assert claim_request is flow.request
+    assert claim_ctx is ctx
     assert resolver.resolve_calls == [ctx]
-    seen = resolver.resolve_calls[0]
-    assert seen.sandbox is sandbox
-    assert seen.match is match
-    assert seen.db_session_factory is noop_db_factory

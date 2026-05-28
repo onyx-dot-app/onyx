@@ -5,11 +5,14 @@ and asks each in turn whether it owns the request. The first one that claims
 renders its auth headers; the dispatcher writes them onto `flow.request` so the
 real secret never has to live in the sandbox pod. Resolution outcomes are
 explicit (`PASS_THROUGH` / `INJECTED` / `BLOCKED`) and the dispatcher never
-raises — fail-closed mapping to a 403 is the caller's job.
+raises. The high-level `apply_or_block(flow, ctx)` does both the dispatch and
+the fail-closed 403 in one call; tests use `apply(flow, ctx)` when they want
+to inspect the outcome directly.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol
@@ -22,6 +25,11 @@ from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+# Sandbox-visible 403 code emitted on `BLOCKED`. Exported so the gate's test
+# suite can pin the value end-to-end.
+CODE_CREDENTIAL_ERROR = "credential_error"
 
 
 class CredentialUnavailableError(Exception):
@@ -42,10 +50,15 @@ class InjectionContext:
 
 
 class CredentialResolver(Protocol):
-    """One credential source: claims a request by host, then renders headers."""
+    """One credential source: claims a request, then renders headers."""
 
-    def claims(self, host: str, ctx: InjectionContext) -> bool:
-        """Cheap, no-DB predicate: does this resolver own this request?"""
+    def claims(self, request: http.Request, ctx: InjectionContext) -> bool:
+        """Cheap predicate: does this resolver own this request?
+
+        Implementations should key off `request.host` (and `ctx.match` /
+        `ctx.sandbox.tenant_id` for per-context routing); they MUST NOT open
+        a DB session — that's `resolve()`'s job.
+        """
         ...
 
     def resolve(self, request: http.Request, ctx: InjectionContext) -> dict[str, str]:
@@ -67,7 +80,7 @@ class CredentialInjectionDispatcher:
 
     def apply(self, flow: http.HTTPFlow, ctx: InjectionContext) -> InjectionOutcome:
         host = flow.request.host
-        resolver = self._pick(host, ctx)
+        resolver = self._pick(flow.request, ctx)
         if resolver is None:
             return InjectionOutcome.PASS_THROUGH
 
@@ -101,16 +114,32 @@ class CredentialInjectionDispatcher:
         )
         return InjectionOutcome.INJECTED
 
-    def _pick(self, host: str, ctx: InjectionContext) -> CredentialResolver | None:
+    def apply_or_block(self, flow: http.HTTPFlow, ctx: InjectionContext) -> None:
+        """Run `apply`; on `BLOCKED`, write a sandbox-visible 403 to `flow`.
+
+        The single seam most call sites want — they don't need to inspect the
+        outcome, just to fail closed on it. Tests that need to assert on the
+        outcome directly call `apply` instead.
+        """
+        if self.apply(flow, ctx) is InjectionOutcome.BLOCKED:
+            flow.response = http.Response.make(
+                403,
+                content=json.dumps({"error": CODE_CREDENTIAL_ERROR}).encode(),
+                headers={"content-type": "application/json"},
+            )
+
+    def _pick(
+        self, request: http.Request, ctx: InjectionContext
+    ) -> CredentialResolver | None:
         for resolver in self._resolvers:
             try:
-                if resolver.claims(host, ctx):
+                if resolver.claims(request, ctx):
                     return resolver
             except Exception:
                 # One buggy resolver must not deny the others a chance.
                 logger.exception(
                     "credential_injection.claims_error resolver=%s host=%s",
                     type(resolver).__name__,
-                    host,
+                    request.host,
                 )
         return None

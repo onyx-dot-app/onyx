@@ -21,32 +21,36 @@ logger = setup_logger()
 class ExternalAppResolver:
     """`CredentialResolver` for matcher-attributed external-app requests."""
 
-    def claims(self, host: str, ctx: InjectionContext) -> bool:  # noqa: ARG002
-        # Host is irrelevant: the matcher has already proven this request
-        # belongs to a connected app.
+    def claims(
+        self,
+        request: http.Request,  # noqa: ARG002
+        ctx: InjectionContext,
+    ) -> bool:
+        # The matcher has already proven URL→app attribution; host is unused.
         return ctx.match is not None
 
     def resolve(self, request: http.Request, ctx: InjectionContext) -> dict[str, str]:
         match = ctx.match
         if match is None:
-            # `claims` guarantees this is unreachable; runtime check so a
+            # `claims` guarantees this is unreachable; explicit raise so a
             # broken Protocol contract surfaces as a 403, not a NoneType crash.
             raise CredentialUnavailableError(
                 "ExternalAppResolver invoked without an ActionMatch"
             )
 
-        try:
-            with ctx.db_session_factory(ctx.sandbox.tenant_id) as db:
-                return resolve_injection_headers(
-                    db, match.external_app_id, ctx.sandbox.user_id
-                )
-        except Exception as e:
-            logger.exception(
-                "external_app_resolver.error external_app_id=%s host=%s",
-                match.external_app_id,
-                request.host,
+        with ctx.db_session_factory(ctx.sandbox.tenant_id) as db:
+            headers = resolve_injection_headers(
+                db, match.external_app_id, ctx.sandbox.user_id
             )
-            raise CredentialUnavailableError(
-                f"external_app_id={match.external_app_id} resolution failed: "
-                f"{type(e).__name__}"
-            ) from e
+
+        # Per-app audit line so `external_app_id` survives in logs even when
+        # the dispatcher's `credential_injection.applied` log groups by resolver.
+        # Empty `headers` means "app disabled / deleted / placeholders unfillable" —
+        # the request still forwards (upstream 401 surfaces to the user).
+        logger.info(
+            "external_app_resolver.resolved external_app_id=%s host=%s headers=%s",
+            match.external_app_id,
+            request.host,
+            sorted(headers),
+        )
+        return headers

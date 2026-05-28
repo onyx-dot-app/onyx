@@ -166,7 +166,7 @@ class StubResolver:
 class RecordingCredentialResolver:
     """`CredentialResolver` stub: configurable claim + canned headers/exception.
 
-    Records every `(host, ctx)` claim probe and every `ctx` it was asked to
+    Records every `(request, ctx)` claim probe and every `ctx` it was asked to
     resolve so tests can assert the dispatcher routed correctly.
     """
 
@@ -180,11 +180,11 @@ class RecordingCredentialResolver:
         self._claims_result = claims_result
         self._headers = headers if headers is not None else {}
         self._exc = exc
-        self.claims_calls: list[tuple[str, InjectionContext]] = []
+        self.claims_calls: list[tuple[http.Request, InjectionContext]] = []
         self.resolve_calls: list[InjectionContext] = []
 
-    def claims(self, host: str, ctx: InjectionContext) -> bool:
-        self.claims_calls.append((host, ctx))
+    def claims(self, request: http.Request, ctx: InjectionContext) -> bool:
+        self.claims_calls.append((request, ctx))
         return self._claims_result
 
     def resolve(
@@ -205,7 +205,7 @@ def make_action_match(
     policy: EndpointPolicy = EndpointPolicy.ASK,
     external_app_id: int = 42,
 ) -> ActionMatch:
-    """Factory for `ActionMatch` test rows. Override the few fields each test cares about."""
+    """Factory for `ActionMatch` test rows."""
     return ActionMatch(
         action_type=action_type,
         payload=payload if payload is not None else {},
@@ -221,5 +221,5 @@ def _noop_session(tenant_id: str) -> Iterator[Any]:  # noqa: ARG001
 
 
 def noop_db_factory(tenant_id: str) -> Any:
-    """`DBSessionFactory` whose session never opens — fails the test if it does."""
+    """`DBSessionFactory` whose session never opens."""
     return _noop_session(tenant_id)
