@@ -134,6 +134,21 @@ export default function BuildChatPanel({
     setActiveSession(activeSession);
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
+  const maybeAutoOpenPanelForPreview = useBuildSessionStore(
+    (s) => s.maybeAutoOpenPanelForPreview
+  );
+
+  // Auto-open the panel the first time webappUrl becomes non-null this session.
+  const prevWebappUrlRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevWebappUrlRef.current;
+    const current = session?.webappUrl ?? null;
+    if (prev === null && current !== null && sessionId) {
+      maybeAutoOpenPanelForPreview(sessionId);
+    }
+    prevWebappUrlRef.current = current;
+  }, [session?.webappUrl, sessionId, maybeAutoOpenPanelForPreview]);
+
   // Ref to access InputBar methods
   const inputBarRef = useRef<InputBarHandle>(null);
 

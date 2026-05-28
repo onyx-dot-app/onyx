@@ -318,6 +318,8 @@ export interface BuildSessionData {
   filesTabState: FilesTabState;
   /** Browser-style tab navigation history for back/forward */
   tabHistory: TabNavigationHistory;
+  /** True if the user has manually closed the panel this session; suppresses auto-open-on-first-preview */
+  panelManuallyDismissed: boolean;
 }
 
 interface BuildSessionStore {
@@ -442,6 +444,9 @@ interface BuildSessionStore {
   // Files Refresh Actions
   triggerFilesRefresh: (sessionId: string) => void;
 
+  // Auto-open Actions
+  maybeAutoOpenPanelForPreview: (sessionId: string) => void;
+
   // File Preview Actions
   openFilePreview: (sessionId: string, path: string, fileName: string) => void;
   /** Atomically open panel + create file tab + set active for a markdown file detected during streaming */
@@ -494,6 +499,7 @@ const createInitialSessionData = (
     entries: [{ type: "pinned", tab: "preview" }],
     currentIndex: 0,
   },
+  panelManuallyDismissed: false,
   ...initialData,
 });
 
@@ -696,8 +702,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     if (currentSessionId) {
       const session = sessions.get(currentSessionId);
       if (session) {
+        const closing = session.outputPanelOpen;
         updateSessionData(currentSessionId, {
           outputPanelOpen: !session.outputPanelOpen,
+          ...(closing ? { panelManuallyDismissed: true } : {}),
         });
       }
     } else {
@@ -1596,6 +1604,28 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         },
       });
     }
+  },
+
+  // ===========================================================================
+  // Auto-open Actions
+  // ===========================================================================
+
+  maybeAutoOpenPanelForPreview: (sessionId: string) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+      if (session.outputPanelOpen) return state; // already open
+      if (session.panelManuallyDismissed) return state; // respect user dismissal
+
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, {
+        ...session,
+        outputPanelOpen: true,
+        activeOutputTab: "preview",
+        activePanelTabId: null,
+      });
+      return { sessions: newSessions };
+    });
   },
 
   // ===========================================================================
