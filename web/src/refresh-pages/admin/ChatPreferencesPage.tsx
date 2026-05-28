@@ -11,7 +11,7 @@ import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
@@ -157,7 +157,7 @@ function MCPServerCard({
               <InputTypeIn
                 placeholder="Search tools..."
                 variant="internal"
-                leftSearchIcon
+                searchIcon
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -292,13 +292,12 @@ function NumericLimitField({
     <Hoverable.Root group="numericLimit" width="full">
       <InputTypeIn
         inputMode="numeric"
-        showClearButton={false}
         pattern="[0-9]*"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={allowZero ? "No limit" : `Default: ${defaultValue}`}
         variant={isOverMax ? "error" : undefined}
-        rightSection={
+        rightChildren={
           (value || "") !== defaultValue ? (
             <Hoverable.Item group="numericLimit" variant="appear-on-hover">
               <Button

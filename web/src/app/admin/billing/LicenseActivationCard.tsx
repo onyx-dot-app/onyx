@@ -191,7 +191,6 @@ export default function LicenseActivationCard({
                 setError(null);
               }}
               error={!!error}
-              className="billing-license-input"
             />
             {error && (
               <Section

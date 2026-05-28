@@ -5,7 +5,7 @@ import { Button, Divider } from "@opal/components";
 import { SvgUsers, SvgUser, SvgLogOut, SvgCheck } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import Modal from "@/refresh-components/Modal";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Popover } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -207,7 +207,7 @@ export default function EditUserModal({
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       placeholder="Search groups to join..."
-                      leftSearchIcon
+                      searchIcon
                     />
                   </div>
                 </Popover.Trigger>

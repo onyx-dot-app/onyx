@@ -30,7 +30,7 @@ import { useMemo, useState } from "react";
 import { FilterButton, LineItemButton } from "@opal/components";
 import { SvgActions, SvgUser } from "@opal/icons";
 import { Popover, PopoverMenu } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import useMcpServers from "@/hooks/useMcpServers";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
@@ -299,7 +299,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
                 key="created-by"
                 placeholder="Created by..."
                 variant="internal"
-                leftSearchIcon
+                searchIcon
                 value={creatorFilter.query}
                 onChange={(e) => creatorFilter.setQuery(e.target.value)}
               />,
@@ -354,7 +354,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
                 key="actions"
                 placeholder="Filter actions..."
                 variant="internal"
-                leftSearchIcon
+                searchIcon
                 value={actionsFilter.query}
                 onChange={(e) => actionsFilter.setQuery(e.target.value)}
               />,

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import { FilterComponent, FilterOptions } from "./FilterComponent";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 
 interface SearchAndFilterControlsProps {
   searchQuery: string;
@@ -57,7 +57,6 @@ export function SearchAndFilterControls({
         type="text"
         value={localSearchValue}
         onChange={(event) => setLocalSearchValue(event.target.value)}
-        className="w-96"
       />
 
       <Button onClick={hasExpandedSources ? onCollapseAll : onExpandAll}>

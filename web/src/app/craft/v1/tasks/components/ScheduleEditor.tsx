@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import SimpleTabs from "@/refresh-components/SimpleTabs";
 import { Section } from "@/layouts/general-layouts";

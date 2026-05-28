@@ -8,7 +8,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { Label } from "@opal/layouts";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { Button } from "@opal/components";
 
@@ -141,7 +141,7 @@ export const FederatedConnectorSelector = ({
       <div className="relative">
         <InputTypeIn
           ref={inputRef}
-          leftSearchIcon
+          searchIcon
           placeholder={effectivePlaceholder}
           value={searchQuery}
           variant={isInputDisabled ? "disabled" : undefined}
@@ -155,11 +155,6 @@ export const FederatedConnectorSelector = ({
               setOpen(true);
             }
           }}
-          className={
-            allConnectorsSelected
-              ? "rounded-12 bg-background-neutral-01"
-              : "rounded-12"
-          }
         />
 
         {open && !allConnectorsSelected && (
