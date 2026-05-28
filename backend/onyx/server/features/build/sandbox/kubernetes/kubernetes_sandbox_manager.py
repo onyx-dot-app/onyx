@@ -2077,6 +2077,21 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             password=self._read_opencode_password(sandbox_id),
         )
 
+    def _serve_health_check_base_url(self, sandbox_id: UUID) -> str | None:
+        """Probe the pod IP during the readiness wait. The persistent
+        ``base_url`` is an in-cluster Service FQDN; an out-of-cluster caller
+        (the CI test process driving provision() from the runner) can't
+        resolve it, so the readiness probe would fail with a DNS error even
+        though opencode-serve is healthy. The pod IP is directly reachable
+        (snapshot/push-daemon paths use it too). Returns ``None`` to fall
+        back to ``base_url`` if the IP isn't assigned yet."""
+        pod_name = self._get_pod_name(str(sandbox_id))
+        try:
+            pod_ip = self._get_pod_ip(pod_name)
+        except (FatalWriteError, RetriableWriteError):
+            return None
+        return f"http://{pod_ip}:{OPENCODE_SERVE_PORT}"
+
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
     ) -> list[FilesystemEntry]:

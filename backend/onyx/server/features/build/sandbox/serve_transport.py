@@ -132,6 +132,16 @@ class _ServeMixin:
         with self._serve_conn_info_lock:
             self._serve_conn_info.pop(sandbox_id, None)
 
+    def _serve_health_check_base_url(self, sandbox_id: UUID) -> str | None:  # noqa: ARG002
+        """URL to probe during the readiness wait, when it must differ from
+        the persistent ``base_url``. Default ``None`` → use ``base_url``.
+
+        The K8s ``base_url`` is an in-cluster Service FQDN, which an
+        out-of-cluster caller (e.g. the CI test process driving the manager
+        from the runner) cannot resolve. Subclasses override this to probe a
+        directly reachable address (the pod IP) instead."""
+        return None
+
     @contextlib.contextmanager
     def prompt_slot(
         self,
@@ -225,10 +235,11 @@ class _ServeMixin:
         Ready only proves the supervisor is up; opencode binds :4096 a few
         seconds later."""
         info = self._serve_connection_info(sandbox_id)
+        probe_base_url = self._serve_health_check_base_url(sandbox_id) or info.base_url
         # One client across all polls — saves connect-setup churn while the
         # server is actively refusing connections.
         with OpencodeServeClient(
-            base_url=info.base_url, password=info.password, event_bus=None
+            base_url=probe_base_url, password=info.password, event_bus=None
         ) as client:
             deadline = time.time() + timeout
             last_err = "no probe completed"
