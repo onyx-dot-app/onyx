@@ -5,6 +5,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 )
 
 var (
@@ -12,12 +14,13 @@ var (
 	Commit  string
 )
 
-// RootOptions holds options for the root command
+// RootOptions holds options for the root command.
 type RootOptions struct {
-	Debug bool
+	Debug   bool
+	Project string
 }
 
-// NewRootCommand creates the root command
+// NewRootCommand creates the root command.
 func NewRootCommand() *cobra.Command {
 	opts := &RootOptions{}
 
@@ -34,11 +37,13 @@ func NewRootCommand() *cobra.Command {
 			log.SetFormatter(&log.TextFormatter{
 				DisableTimestamp: true,
 			})
+			docker.SetProjectFlags(opts.Project)
 		},
 		Version: fmt.Sprintf("%s\ncommit %s", Version, Commit),
 	}
 
 	cmd.PersistentFlags().BoolVar(&opts.Debug, "debug", false, "run in debug mode")
+	cmd.PersistentFlags().StringVar(&opts.Project, "project", "", "Docker Compose project name (default: basename of git root)")
 
 	// Add subcommands
 	cmd.AddCommand(NewBackendCommand())
@@ -48,6 +53,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewDeployCommand())
 	cmd.AddCommand(NewOpenAPICommand())
 	cmd.AddCommand(NewComposeCommand())
+	cmd.AddCommand(NewEnvCommand())
 	cmd.AddCommand(NewLogsCommand())
 	cmd.AddCommand(NewPullCommand())
 	cmd.AddCommand(NewRunCICommand())
