@@ -60,6 +60,15 @@ F = TypeVar("F", bound=Callable[..., Any])
 _PROBLEMATIC_EXPANSIONS = "body.storage.value"
 _REPLACEMENT_EXPANSIONS = "body.view.value"
 
+# CONFCLOUD-77618 / CONFCLOUD-76424: ancestor-restrictions expand on
+# content/search 404s the whole batch when an ancestor is unreadable
+# (draft / outdated / trashed). We detect the body signature and raise.
+_ANCESTOR_RESTRICTIONS_EXPAND_PREFIX = "ancestors.restrictions.read.restrictions."
+_CONFCLOUD_77618_404_BODY_SIGNATURES = (
+    "No content with id",
+    "Cannot find content. Outdated version/old_draft/trashed",
+)
+
 _USER_NOT_FOUND = "Unknown Confluence User"
 _USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
 _USER_EMAIL_CACHE: dict[str, str | None] = {}
@@ -107,12 +116,35 @@ class ConfluenceRateLimitError(Exception):
     pass
 
 
+class Confcloud77618Error(Exception):
+    """Signal to the perm-sync caller that the ancestor-restrictions
+    expand 404'd on a draft / outdated / trashed ancestor and the run
+    must restart with per-page restriction lookups."""
+
+    def __init__(self, url: str, body: str) -> None:
+        super().__init__(
+            f"CONFCLOUD-77618: ancestor-restrictions expand 404 from "
+            f"{url}: {body[:500]}"
+        )
+        self.url = url
+        self.body = body
+
+
 class ConfluenceRestSpacePermissionsNotAvailableError(Exception):
     """Raised by REST-API space-permissions calls when the endpoint is missing
     on the upstream Confluence DC instance (e.g. DC < 9.1.0 returning 404).
 
     Callers use this as a signal to fall back to the legacy JSON-RPC path.
     """
+
+
+def _is_confcloud_77618_response(response: requests.Response) -> bool:
+    """Body-signature match for the CONFCLOUD-77618 / CONFCLOUD-76424 404
+    so unrelated 404s still propagate."""
+    if response.status_code != 404:
+        return False
+    body = response.text
+    return any(sig in body for sig in _CONFCLOUD_77618_404_BODY_SIGNATURES)
 
 
 class OnyxConfluence:
@@ -676,6 +708,16 @@ class OnyxConfluence:
                     )
                     continue
 
+                # CONFCLOUD-77618 / 76424: typed signal so the perm-sync
+                # caller can restart in per-page restriction-fetch mode.
+                if (
+                    _ANCESTOR_RESTRICTIONS_EXPAND_PREFIX in url_suffix
+                    and _is_confcloud_77618_response(raw_response)
+                ):
+                    raise Confcloud77618Error(
+                        url=url_suffix, body=raw_response.text
+                    ) from e
+
                 if raw_response.status_code in _SERVER_ERROR_CODES:
                     # Try reducing the page size -- Confluence often times out
                     # on large result sets (especially Cloud 504s).
@@ -792,6 +834,24 @@ class OnyxConfluence:
         expand_string = f"&expand={expand}" if expand else ""
         return f"rest/api/content/search?cql={cql}{expand_string}"
 
+    def fetch_content_read_restrictions(
+        self,
+        content_id: str,
+    ) -> dict[str, Any] | None:
+        """Fetch a single page's restrictions via the dedicated
+        ``content/{id}/restriction/byOperation`` endpoint. Returns
+        ``None`` on 403/404 so unreadable ancestors (drafts owned by
+        another user) resolve as "no inheritable restriction here".
+        ``advanced_mode=True`` bypasses the rate-limit wrapper's 7x
+        403-retry loop which would otherwise burn ~70s per draft."""
+        path = f"rest/api/content/{quote(content_id, safe='')}/restriction/byOperation"
+        response: requests.Response = self.get(path, advanced_mode=True)
+        if response.status_code in (403, 404):
+            return None
+        response.raise_for_status()
+        body = response.json()
+        return cast(dict[str, Any], body or {})
+
     def paginated_cql_retrieval(
         self,
         cql: str,
@@ -830,10 +890,8 @@ class OnyxConfluence:
         expand: str | None = None,
         limit: int | None = None,
     ) -> Iterator[dict[str, Any]]:
-        """
-        This function will paginate through the top level query first, then
-        paginate through all of the expansions.
-        """
+        """Paginate the top-level query, then each `_links.next` discovered
+        in the expansions."""
 
         def _traverse_and_update(data: dict | list) -> None:
             if isinstance(data, dict):
