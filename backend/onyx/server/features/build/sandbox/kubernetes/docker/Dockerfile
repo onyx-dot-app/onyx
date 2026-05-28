@@ -90,21 +90,11 @@ COPY --from=peakcom/s5cmd:v2.3.0@sha256:2ff939e2ee3c76adcadd78dbfc3e2569b18a3743
 USER sandbox
 RUN curl -fsSL https://opencode.ai/install \
     | bash -s -- --version "${OPENCODE_VERSION}" --no-modify-path
-# Warm opencode's models.dev catalog into its on-disk cache while egress is
-# still open (build time). At runtime firewall-init.sh locks egress to the
-# proxy, which denies models.dev; without a warm cache `opencode serve` can't
-# resolve any model, never answers GET /doc, and provisioning's readiness
-# check times out. The catalog lands under the default XDG_CACHE_HOME
-# (~/.cache/opencode); the entrypoint overrides only XDG_DATA_HOME, so this
-# image-layer cache survives at runtime. Do NOT set XDG_CACHE_HOME here — it
-# also redirects bun's install cache away from BUN_IMAGE_CACHE_DIR below.
-RUN PATH="/home/sandbox/.opencode/bin:${PATH}" opencode models --refresh \
-    && { echo "=== opencode cache dump (expect catalog under ~/.cache/opencode) ==="; \
-         find /home/sandbox/.cache /home/sandbox/.local/share /home/sandbox/.config \
-           -maxdepth 4 2>/dev/null | grep -iE 'opencode|models' | head -60; true; }
-# Pre-warm Bun's tarball cache so per-session installs hit a local store.
-# Pin the cache to BUN_IMAGE_CACHE_DIR (bun's default ~/.bun/install/cache),
-# which the session-setup bootstrap copies onto the workspace volume.
+# Warm the models.dev catalog into opencode's cache (~/.cache/opencode) at
+# build time; runtime egress is locked to the proxy which denies models.dev.
+# Don't set XDG_CACHE_HOME — it would also move bun's cache off BUN_IMAGE_CACHE_DIR.
+RUN PATH="/home/sandbox/.opencode/bin:${PATH}" opencode models --refresh
+# Pre-warm Bun's cache (pinned to BUN_IMAGE_CACHE_DIR, which session setup copies).
 RUN cd /workspace/templates/outputs/web && \
     BUN_INSTALL_CACHE_DIR=/home/sandbox/.bun/install/cache \
     bun install --frozen-lockfile && \

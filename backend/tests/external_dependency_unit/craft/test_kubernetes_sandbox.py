@@ -170,12 +170,9 @@ def test_session_workspace_setup_creates_expected_tree(
     pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """After ``setup_session_workspace``, the session dir contains the
-    canonical tree: ``outputs/``, ``attachments/``, and ``AGENTS.md``.
-
-    ``opencode.json`` is NOT per-session under the serve transport: the full
-    config is provisioned once at the pod level (``_provision_opencode_secret``
-    → ``OPENCODE_CONFIG_CONTENT``) and opencode-serve loads it at startup, so
-    no per-session ``opencode.json`` file is written here.
+    canonical tree: ``outputs/``, ``attachments/``, ``AGENTS.md``, and the
+    ``.opencode/skills`` symlink. (opencode config is pod-level under the
+    serve transport, not a per-session file.)
     """
     _, session_id, pod_name = pool_session
     session_path = f"/workspace/sessions/{session_id}"

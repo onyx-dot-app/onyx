@@ -1659,12 +1659,7 @@ echo "Session workspace setup complete"
                 tty=False,
             )
 
-            logger.info(
-                "Session setup output for %s in sandbox %s:\n%s",
-                session_id,
-                sandbox_id,
-                exec_response,
-            )
+            logger.debug("Session setup output: %s", exec_response)
             logger.info(
                 "Set up session workspace %s in sandbox %s", session_id, sandbox_id
             )
@@ -2083,13 +2078,9 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         )
 
     def _serve_health_check_base_url(self, sandbox_id: UUID) -> str | None:
-        """Probe the pod IP during the readiness wait. The persistent
-        ``base_url`` is an in-cluster Service FQDN; an out-of-cluster caller
-        (the CI test process driving provision() from the runner) can't
-        resolve it, so the readiness probe would fail with a DNS error even
-        though opencode-serve is healthy. The pod IP is directly reachable
-        (snapshot/push-daemon paths use it too). Returns ``None`` to fall
-        back to ``base_url`` if the IP isn't assigned yet."""
+        """Probe the pod IP, not the Service FQDN ``base_url`` — an
+        out-of-cluster caller (CI test process) can't resolve cluster DNS.
+        ``None`` falls back to ``base_url`` until the IP is assigned."""
         pod_name = self._get_pod_name(str(sandbox_id))
         try:
             pod_ip = self._get_pod_ip(pod_name)

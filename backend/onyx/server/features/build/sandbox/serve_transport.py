@@ -133,13 +133,8 @@ class _ServeMixin:
             self._serve_conn_info.pop(sandbox_id, None)
 
     def _serve_health_check_base_url(self, sandbox_id: UUID) -> str | None:  # noqa: ARG002
-        """URL to probe during the readiness wait, when it must differ from
-        the persistent ``base_url``. Default ``None`` → use ``base_url``.
-
-        The K8s ``base_url`` is an in-cluster Service FQDN, which an
-        out-of-cluster caller (e.g. the CI test process driving the manager
-        from the runner) cannot resolve. Subclasses override this to probe a
-        directly reachable address (the pod IP) instead."""
+        """Override to probe a different URL during the readiness wait than the
+        persistent ``base_url``. Default ``None`` → use ``base_url``."""
         return None
 
     @contextlib.contextmanager

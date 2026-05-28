@@ -727,20 +727,8 @@ class OpencodeServeClient:
     def health_check(self) -> bool:
         try:
             r = self._http.get("/doc", timeout=self._timeouts.connect_timeout)
-            if r.status_code != 200:
-                logger.info(
-                    "[SANDBOX-SERVE] health_check non-200 url=%s/doc status=%d",
-                    self._base_url,
-                    r.status_code,
-                )
             return r.status_code == 200
-        except httpx.HTTPError as e:
-            logger.info(
-                "[SANDBOX-SERVE] health_check error url=%s/doc %s: %s",
-                self._base_url,
-                type(e).__name__,
-                e,
-            )
+        except httpx.HTTPError:
             return False
 
     # Cold-pod retry tunables — short window, total worst-case ~1.5s.
