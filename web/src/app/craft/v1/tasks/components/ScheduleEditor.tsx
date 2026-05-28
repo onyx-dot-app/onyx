@@ -8,17 +8,12 @@ import SimpleTabs from "@/refresh-components/SimpleTabs";
 import { Section } from "@/layouts/general-layouts";
 import { cn } from "@opal/utils";
 import type {
-  AdvancedPayload,
   DailyWeeklyPayload,
   EditorMode,
   EditorPayload,
   IntervalPayload,
   IntervalUnit,
 } from "@/app/craft/v1/tasks/interfaces";
-import {
-  compileLocalPayloadToUtcCron,
-  humanReadableSchedule,
-} from "@/app/craft/v1/tasks/schedule";
 
 // 0=Sun..6=Sat (cron convention).
 const WEEKDAY_LABELS: ReadonlyArray<{ value: number; short: string }> = [
@@ -34,7 +29,6 @@ const WEEKDAY_LABELS: ReadonlyArray<{ value: number; short: string }> = [
 const INTERVAL_UNITS: ReadonlyArray<{ value: IntervalUnit; label: string }> = [
   { value: "minutes", label: "minutes" },
   { value: "hours", label: "hours" },
-  { value: "days", label: "days" },
 ];
 
 export interface ScheduleEditorProps {
@@ -83,28 +77,8 @@ export default function ScheduleEditor({
           />
         ),
       },
-      advanced: {
-        name: "Advanced",
-        content: (
-          <AdvancedEditor
-            payload={
-              mode === "advanced"
-                ? (payload as AdvancedPayload)
-                : DEFAULT_ADVANCED
-            }
-            onChange={onPayloadChange}
-          />
-        ),
-      },
     }),
     [mode, payload, onPayloadChange]
-  );
-
-  const compiled = compileLocalPayloadToUtcCron(mode, payload);
-  const summary = humanReadableSchedule(
-    mode,
-    payload,
-    mode === "advanced" && compiled.ok ? compiled.cron : null
   );
 
   return (
@@ -124,20 +98,14 @@ export default function ScheduleEditor({
             !isDailyWeeklyPayload(payload)
           ) {
             onPayloadChange(DEFAULT_DAILY_WEEKLY);
-          } else if (next === "advanced" && !isAdvancedPayload(payload)) {
-            onPayloadChange(DEFAULT_ADVANCED);
           }
         }}
       />
-      {error ? (
+      {error && (
         <Text mainUiBody text03 className="text-status-error-05">
           {error}
         </Text>
-      ) : compiled.ok ? (
-        <Text secondaryBody text03>
-          {summary}
-        </Text>
-      ) : null}
+      )}
     </Section>
   );
 }
@@ -151,7 +119,6 @@ const DEFAULT_DAILY_WEEKLY: DailyWeeklyPayload = {
   time_of_day: "09:00",
   weekdays: [1, 2, 3, 4, 5],
 };
-const DEFAULT_ADVANCED: AdvancedPayload = { cron: "0 9 * * 1" };
 
 function isIntervalPayload(p: EditorPayload): p is IntervalPayload {
   return (
@@ -164,10 +131,6 @@ function isDailyWeeklyPayload(p: EditorPayload): p is DailyWeeklyPayload {
   return Array.isArray((p as DailyWeeklyPayload).weekdays);
 }
 
-function isAdvancedPayload(p: EditorPayload): p is AdvancedPayload {
-  return typeof (p as AdvancedPayload).cron === "string";
-}
-
 // ---------------------------------------------------------------------------
 // Interval
 // ---------------------------------------------------------------------------
@@ -178,14 +141,13 @@ interface IntervalEditorProps {
 }
 
 function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
-  const showTimeOfDay = payload.unit === "days";
   return (
     <Section gap={0.5}>
       <div className="flex items-center gap-2 flex-wrap">
         <Text mainUiBody text05>
           Every
         </Text>
-        <div className="w-20">
+        <div className="w-28">
           <InputTypeIn
             type="number"
             min={1}
@@ -214,23 +176,6 @@ function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
           </InputSelect>
         </div>
       </div>
-      {showTimeOfDay && (
-        <div className="flex items-center gap-2">
-          <Text mainUiBody text05>
-            At
-          </Text>
-          <div className="w-32">
-            <InputTypeIn
-              type="time"
-              value={payload.time_of_day ?? "09:00"}
-              onChange={(e) =>
-                onChange({ ...payload, time_of_day: e.target.value })
-              }
-              data-testid="interval-time"
-            />
-          </div>
-        </div>
-      )}
     </Section>
   );
 }
@@ -246,13 +191,20 @@ interface DailyWeeklyEditorProps {
 
 function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
   const weekdaySet = new Set(payload.weekdays ?? []);
+  const selectedDays = WEEKDAY_LABELS.filter((d) =>
+    weekdaySet.has(d.value)
+  ).map((d) => d.short);
+  const scheduleNote =
+    selectedDays.length === 0
+      ? "Runs every day"
+      : `Runs on ${selectedDays.join(", ")}`;
   return (
     <Section gap={0.5}>
       <div className="flex items-center gap-2">
         <Text mainUiBody text05>
           At
         </Text>
-        <div className="w-32">
+        <div className="w-44">
           <InputTypeIn
             type="time"
             value={payload.time_of_day ?? "09:00"}
@@ -265,7 +217,7 @@ function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
       </div>
       <div className="flex flex-col gap-1">
         <Text secondaryBody text03>
-          On these days (leave all unchecked for every day):
+          On these days
         </Text>
         <div className="flex items-center gap-1 flex-wrap">
           {WEEKDAY_LABELS.map((day) => {
@@ -297,32 +249,10 @@ function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
             );
           })}
         </div>
+        <Text secondaryBody text03>
+          {scheduleNote}
+        </Text>
       </div>
-    </Section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Advanced (raw cron)
-// ---------------------------------------------------------------------------
-
-interface AdvancedEditorProps {
-  payload: AdvancedPayload;
-  onChange: (payload: AdvancedPayload) => void;
-}
-
-function AdvancedEditor({ payload, onChange }: AdvancedEditorProps) {
-  return (
-    <Section gap={0.5}>
-      <Text secondaryBody text03>
-        Five-field cron expression (minute hour day-of-month month day-of-week).
-      </Text>
-      <InputTypeIn
-        value={payload.cron ?? ""}
-        onChange={(e) => onChange({ cron: e.target.value })}
-        placeholder="0 9 * * 1"
-        data-testid="advanced-cron"
-      />
     </Section>
   );
 }

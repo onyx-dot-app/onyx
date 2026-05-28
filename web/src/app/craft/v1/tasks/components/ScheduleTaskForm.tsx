@@ -5,15 +5,14 @@ import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import { Button } from "@opal/components";
-import Card from "@/refresh-components/cards/Card";
-import { Section } from "@/layouts/general-layouts";
+import { Button, Divider, Tooltip } from "@opal/components";
+import { SettingsLayouts, InputVertical } from "@opal/layouts";
+import * as GeneralLayouts from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
 import {
   compileLocalPayloadToUtcCron,
-  computeNextRuns,
   localPayloadToUtcPayload,
 } from "@/app/craft/v1/tasks/schedule";
 import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
@@ -30,10 +29,6 @@ import {
   createScheduledTask,
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
-import {
-  formatAbsolute,
-  formatRelativeShort,
-} from "@/app/craft/v1/tasks/utils";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
 
 export interface ScheduleTaskFormInitial {
@@ -49,11 +44,20 @@ interface ScheduleTaskFormProps {
   initial: ScheduleTaskFormInitial;
   /** Used to title the page / customize the submit button. */
   isEdit: boolean;
+  /** Title rendered in the settings header. */
+  title: string;
+  /** Optional sub-title rendered beneath the header title. */
+  description?: string;
+  /** Invoked when the back button is pressed. */
+  onBack: () => void;
 }
 
 export default function ScheduleTaskForm({
   initial,
   isEdit,
+  title,
+  description,
+  onBack,
 }: ScheduleTaskFormProps) {
   const router = useRouter();
   const [name, setName] = useState(initial.name);
@@ -61,6 +65,8 @@ export default function ScheduleTaskForm({
   const [mode, setMode] = useState<EditorMode>(initial.mode);
   const [payload, setPayload] = useState<EditorPayload>(initial.payload);
   const [saving, setSaving] = useState(false);
+  const [nameTouched, setNameTouched] = useState(false);
+  const [promptTouched, setPromptTouched] = useState(false);
 
   // `/` skill picker state for the prompt field. Scoped to the trigger
   // owner's accessible skills (same access query as `GET /skills`).
@@ -139,18 +145,18 @@ export default function ScheduleTaskForm({
 
   const compiled = compileLocalPayloadToUtcCron(mode, payload);
 
-  const nextRuns = useMemo(() => {
-    if (!compiled.ok) return [];
-    return computeNextRuns(compiled.cron, 3);
-  }, [compiled]);
-
   const trimmedName = name.trim();
   const trimmedPrompt = prompt.trim();
 
-  // Validation states surfaced to the user.
+  // Validation states. These gate submission regardless of interaction, but
+  // are only surfaced inline once the user has touched (blurred) the field so
+  // a pristine form doesn't render red on load.
   const nameError = trimmedName.length === 0 ? "Name is required." : null;
   const promptError = trimmedPrompt.length === 0 ? "Prompt is required." : null;
   const scheduleError = !compiled.ok ? compiled.error : null;
+
+  const shownNameError = nameTouched ? nameError : null;
+  const shownPromptError = promptTouched ? promptError : null;
 
   const canSubmit = !nameError && !promptError && !scheduleError && !saving;
 
@@ -210,137 +216,127 @@ export default function ScheduleTaskForm({
   );
 
   return (
-    <Section gap={1}>
-      {/* Name */}
-      <Card>
-        <Text mainUiAction text05>
-          Name
-        </Text>
-        <InputTypeIn
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Weekly customer escalations digest"
-          data-testid="task-name-input"
-          variant={nameError ? "error" : undefined}
-        />
-        {nameError && (
-          <Text secondaryBody text03 className="text-status-error-05">
-            {nameError}
-          </Text>
-        )}
-      </Card>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgClock}
+        title={title}
+        description={description}
+        backButton={onBack}
+        divider
+        rightChildren={
+          <div className="flex gap-2">
+            <Button
+              variant="default"
+              prominence="secondary"
+              type="button"
+              onClick={() => router.push(TASKS_PATH)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            {!isEdit && (
+              <Button
+                variant="default"
+                prominence="secondary"
+                type="button"
+                disabled={!canSubmit}
+                onClick={() => void submit(true)}
+                data-testid="save-and-run-now"
+              >
+                Save and run now
+              </Button>
+            )}
+            <Tooltip
+              tooltip={
+                saving
+                  ? "Saving..."
+                  : nameError || promptError || scheduleError || undefined
+              }
+              side="bottom"
+            >
+              <Button
+                variant="default"
+                prominence="primary"
+                type="button"
+                disabled={!canSubmit}
+                onClick={() => void submit(false)}
+                data-testid="save-task"
+              >
+                {isEdit ? "Save changes" : "Save"}
+              </Button>
+            </Tooltip>
+          </div>
+        }
+      />
 
-      {/* Prompt */}
-      <Card>
-        <Text mainUiAction text05>
-          Prompt
-        </Text>
-        <Text secondaryBody text03>
-          This message is sent to Craft each time the task fires.
-        </Text>
-        <InputTextArea
-          ref={promptTextareaRef}
-          value={prompt}
-          onChange={handlePromptChange}
-          onKeyUp={handlePromptCursorChange}
-          onClick={handlePromptCursorChange}
-          placeholder="Describe what Craft should do on each run..."
-          rows={6}
-          autoResize
-          maxRows={12}
-          data-testid="task-prompt-input"
-          variant={promptError ? "error" : undefined}
-        />
-        <SkillPickerPopover
-          open={skillPicker.open}
-          anchorRect={skillPicker.anchorRect}
-          query={skillPicker.query}
-          skills={pickerSkills}
-          onSelect={handleSkillPickerSelect}
-          onClose={closeSkillPicker}
-        />
-        {promptError && (
-          <Text secondaryBody text03 className="text-status-error-05">
-            {promptError}
-          </Text>
-        )}
-      </Card>
+      <SettingsLayouts.Body>
+        <GeneralLayouts.Section>
+          <InputVertical withLabel title="Name">
+            <InputTypeIn
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => setNameTouched(true)}
+              placeholder="e.g. Weekly customer escalations digest"
+              data-testid="task-name-input"
+              variant={shownNameError ? "error" : undefined}
+            />
+            {shownNameError && (
+              <Text secondaryBody text03 className="text-status-error-05">
+                {shownNameError}
+              </Text>
+            )}
+          </InputVertical>
 
-      {/* Schedule */}
-      <Card>
-        <Text mainUiAction text05>
-          Schedule
-        </Text>
-        <ScheduleEditor
-          mode={mode}
-          onModeChange={setMode}
-          payload={payload}
-          onPayloadChange={setPayload}
-          error={scheduleError}
-        />
-      </Card>
-
-      {/* Next runs preview */}
-      <Card>
-        <div className="flex items-center gap-2">
-          <SvgClock size={16} className="text-text-03" />
-          <Text mainUiAction text05>
-            Next 3 runs
-          </Text>
-        </div>
-        {nextRuns.length === 0 ? (
-          <Text secondaryBody text03>
-            {scheduleError
-              ? "Fix the schedule above to preview future fires."
-              : "No upcoming fires for this expression."}
-          </Text>
-        ) : (
-          <ul className="flex flex-col gap-1">
-            {nextRuns.map((iso, idx) => (
-              <li key={iso} className="flex flex-col">
-                <Text mainUiBody text05>
-                  {idx + 1}. {formatAbsolute(iso)}
-                </Text>
-                <Text secondaryBody text03>
-                  {formatRelativeShort(iso)}
-                </Text>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <div className="flex items-center gap-2 justify-end">
-        <Button
-          variant="default"
-          prominence="secondary"
-          onClick={() => router.push(TASKS_PATH)}
-          disabled={saving}
-        >
-          Cancel
-        </Button>
-        {!isEdit && (
-          <Button
-            variant="default"
-            prominence="secondary"
-            disabled={!canSubmit}
-            onClick={() => void submit(true)}
-            data-testid="save-and-run-now"
+          <InputVertical
+            withLabel
+            title="Prompt"
+            description="This message is sent to Craft each time the task fires."
           >
-            Save and run now
-          </Button>
-        )}
-        <Button
-          variant="default"
-          prominence="primary"
-          disabled={!canSubmit}
-          onClick={() => void submit(false)}
-          data-testid="save-task"
-        >
-          {isEdit ? "Save changes" : "Save"}
-        </Button>
-      </div>
-    </Section>
+            <InputTextArea
+              ref={promptTextareaRef}
+              value={prompt}
+              onChange={handlePromptChange}
+              onKeyUp={handlePromptCursorChange}
+              onClick={handlePromptCursorChange}
+              onBlur={() => setPromptTouched(true)}
+              placeholder="Describe what Craft should do on each run..."
+              rows={6}
+              autoResize
+              maxRows={12}
+              data-testid="task-prompt-input"
+              variant={shownPromptError ? "error" : undefined}
+            />
+            <SkillPickerPopover
+              open={skillPicker.open}
+              anchorRect={skillPicker.anchorRect}
+              query={skillPicker.query}
+              skills={pickerSkills}
+              onSelect={handleSkillPickerSelect}
+              onClose={closeSkillPicker}
+            />
+            {shownPromptError && (
+              <Text secondaryBody text03 className="text-status-error-05">
+                {shownPromptError}
+              </Text>
+            )}
+          </InputVertical>
+        </GeneralLayouts.Section>
+
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+
+        <GeneralLayouts.Section>
+          <InputVertical title="Schedule">
+            <ScheduleEditor
+              mode={mode}
+              onModeChange={setMode}
+              payload={payload}
+              onPayloadChange={setPayload}
+              error={scheduleError}
+            />
+          </InputVertical>
+        </GeneralLayouts.Section>
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }
 
