@@ -106,14 +106,7 @@ export function CopyButton({
   }
 
   function getTooltip() {
-    switch (copyState) {
-      case "copied":
-        return "Copied!";
-      case "error":
-        return "Failed to copy";
-      default:
-        return tooltip ?? "Copy";
-    }
+    return tooltip ?? "Copy";
   }
 
   const resolvedProps = {
