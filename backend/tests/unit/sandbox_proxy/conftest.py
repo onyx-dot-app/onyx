@@ -1,18 +1,27 @@
 """Shared stubs and factories for sandbox_proxy unit tests.
 
 - `StaticLookup` — `SandboxIPLookup` stub keyed by source IP.
-- `make_resolved_sandbox` / `make_flow` — value + mitmproxy-flow factories.
+- `make_resolved_sandbox` / `make_flow` / `make_action_match` — value
+  + mitmproxy-flow factories.
 - `StubResolver` — identity resolver stub (sandbox + session) for the gate.
+- `RecordingCredentialResolver` — `CredentialResolver` stub recording the
+  claim/resolve calls a dispatcher made on it.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID
 from uuid import uuid4
 
 from mitmproxy import http
 
+from onyx.db.enums import EndpointPolicy
+from onyx.external_apps.matching.engine import ActionMatch
+from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SandboxIdentity
 from onyx.sandbox_proxy.identity import SandboxIPLookup
@@ -152,3 +161,65 @@ class StubResolver:
         if self._session_by_id_exc is not None:
             raise self._session_by_id_exc
         return self._session_by_id
+
+
+class RecordingCredentialResolver:
+    """`CredentialResolver` stub: configurable claim + canned headers/exception.
+
+    Records every `(host, ctx)` claim probe and every `ctx` it was asked to
+    resolve so tests can assert the dispatcher routed correctly.
+    """
+
+    def __init__(
+        self,
+        *,
+        claims_result: bool = True,
+        headers: dict[str, str] | None = None,
+        exc: Exception | None = None,
+    ) -> None:
+        self._claims_result = claims_result
+        self._headers = headers if headers is not None else {}
+        self._exc = exc
+        self.claims_calls: list[tuple[str, InjectionContext]] = []
+        self.resolve_calls: list[InjectionContext] = []
+
+    def claims(self, host: str, ctx: InjectionContext) -> bool:
+        self.claims_calls.append((host, ctx))
+        return self._claims_result
+
+    def resolve(
+        self,
+        request: http.Request,  # noqa: ARG002
+        ctx: InjectionContext,
+    ) -> dict[str, str]:
+        self.resolve_calls.append(ctx)
+        if self._exc is not None:
+            raise self._exc
+        return dict(self._headers)
+
+
+def make_action_match(
+    *,
+    action_type: str = "slack.messages.write",
+    payload: dict[str, Any] | None = None,
+    policy: EndpointPolicy = EndpointPolicy.ASK,
+    external_app_id: int = 42,
+) -> ActionMatch:
+    """Factory for `ActionMatch` test rows. Override the few fields each test cares about."""
+    return ActionMatch(
+        action_type=action_type,
+        payload=payload if payload is not None else {},
+        policy=policy,
+        external_app_id=external_app_id,
+    )
+
+
+@contextmanager
+def _noop_session(tenant_id: str) -> Iterator[Any]:  # noqa: ARG001
+    raise AssertionError("db factory unexpectedly used")
+    yield  # pragma: no cover
+
+
+def noop_db_factory(tenant_id: str) -> Any:
+    """`DBSessionFactory` whose session never opens — fails the test if it does."""
+    return _noop_session(tenant_id)

@@ -5,6 +5,7 @@ from uuid import UUID
 from uuid import uuid4
 
 from onyx.sandbox_proxy.identity import IdentityResolver
+from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SandboxIdentity
 from tests.unit.sandbox_proxy.conftest import StaticLookup
 
@@ -105,3 +106,24 @@ def test_resolve_session_by_id_propagates_scalar() -> None:
     assert resolver.resolve_session_by_id(uuid4(), uuid4(), "public") is None
     assert factory.last_tenant_id == "public"
     assert stub.scalar_calls == 2
+
+
+# ---------------------------------------------------------------------------
+# `with_session` / `without_session` round-trip (the credential-injection seam
+# unpacks the SessionContext back to a ResolvedSandbox on ASK→APPROVED).
+# ---------------------------------------------------------------------------
+
+
+def test_with_session_then_without_session_round_trips() -> None:
+    """A regression that drops any field would silently break the ASK→APPROVED
+    credential injection — `OnyxPatResolver` (plan 2) reads `sandbox_id`."""
+    sandbox = ResolvedSandbox(
+        sandbox_id=uuid4(),
+        user_id=uuid4(),
+        tenant_id="tenant-xyz",
+        sandbox_name="sandbox-1",
+        sandbox_ip="10.0.0.99",
+    )
+    session_id = uuid4()
+
+    assert sandbox.with_session(session_id).without_session() == sandbox

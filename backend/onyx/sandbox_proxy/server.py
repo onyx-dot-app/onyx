@@ -20,10 +20,13 @@ from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.ca import CABootstrap
 from onyx.sandbox_proxy.ca import MaterializedCA
 from onyx.sandbox_proxy.ca_k8s import K8sSecretCAStore
+from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
+from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.identity import default_session_factory
 from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIPLookup
 from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup
+from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_HEALTHZ_PORT
@@ -128,6 +131,17 @@ def _build_lookup() -> K8sInformerLookup:
     return lookup
 
 
+def build_resolvers() -> list[CredentialResolver]:
+    """The registered credential resolvers, in first-claim-wins order.
+
+    Host-claim sets are designed to be disjoint (external-app hosts come from
+    the matcher; the Onyx PAT and LLM-key resolvers from Plans 2/3 will claim
+    their own canonical hosts). Order is a safety net against accidental
+    overlap, not a designed-in priority.
+    """
+    return [ExternalAppResolver()]
+
+
 def _build_cache_factory() -> "Callable[[str], CacheBackend]":
     """tenant_id → CacheBackend; must match the API side's namespace to share keys."""
     from onyx.cache.factory import get_cache_backend
@@ -218,6 +232,11 @@ def main() -> int:
                 snapshot_policy.endpoint_host,
             )
         db_session_factory = default_session_factory
+        resolvers = build_resolvers()
+        logger.info(
+            "credential resolvers registered: %s",
+            [type(r).__name__ for r in resolvers],
+        )
         gate = GateAddon(
             identity=identity,
             action_matcher=ExternalAppActionMatcher(
@@ -226,6 +245,7 @@ def main() -> int:
             db_session_factory=db_session_factory,
             cache_factory=_build_cache_factory(),
             proxy_instance_id=proxy_instance_id,
+            credential_dispatcher=CredentialInjectionDispatcher(resolvers),
             snapshot_policy=snapshot_policy,
         )
 

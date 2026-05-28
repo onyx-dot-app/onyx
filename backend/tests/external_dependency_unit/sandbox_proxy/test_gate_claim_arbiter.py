@@ -20,6 +20,7 @@ from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
 from onyx.sandbox_proxy.addons.gate import GateAddon
+from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user
@@ -95,6 +96,7 @@ def _build_addon() -> GateAddon:
         ),
         cache_factory=_factory_raises,
         proxy_instance_id="proxy-test",
+        credential_dispatcher=CredentialInjectionDispatcher([]),
     )
 
 

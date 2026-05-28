@@ -20,10 +20,12 @@ from onyx.configs.constants import NotificationType
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.db.notification import create_notification
-from onyx.external_apps.credentials import resolve_injection_headers
+from onyx.external_apps.matching.engine import ActionMatch
 from onyx.sandbox_proxy import approval_cache
-from onyx.sandbox_proxy.action_matcher import ActionMatch
 from onyx.sandbox_proxy.action_matcher import ActionMatcher
+from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
+from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.sandbox_proxy.credential_injection import InjectionOutcome
 from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
@@ -41,7 +43,13 @@ PARSER_MAX_BODY_BYTES = 1_048_576
 _SNAPSHOT_STREAM_FLAG = "onyx_snapshot_stream"
 
 
-class _Resolver(Protocol):
+class _IdentityResolverProto(Protocol):
+    """Subset of `IdentityResolver` the gate uses.
+
+    Kept distinct from `CredentialResolver` (a different protocol in
+    `credential_injection.py`) to keep the two namespaces separate.
+    """
+
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None: ...
 
     def resolve_session_by_id(
@@ -98,11 +106,12 @@ class GateAddon:
 
     def __init__(
         self,
-        identity: _Resolver,
+        identity: _IdentityResolverProto,
         action_matcher: ActionMatcher,
         db_session_factory: DBSessionFactory,
         cache_factory: CacheFactory,
         proxy_instance_id: str,
+        credential_dispatcher: CredentialInjectionDispatcher,
         snapshot_policy: SnapshotEgressPolicy | None = None,
         stream_responses: bool = True,
     ) -> None:
@@ -111,6 +120,7 @@ class GateAddon:
         self._db_session_factory = db_session_factory
         self._cache_factory = cache_factory
         self._proxy_instance_id = proxy_instance_id
+        self._credential_dispatcher = credential_dispatcher
         self._snapshot_policy = snapshot_policy
         self._stream_responses = stream_responses
         # Invariant: `_persist_approval_row` is the only writer;
@@ -237,12 +247,10 @@ class GateAddon:
         try:
             approval_id = self._persist_approval_row(ctx, match)
             decision = await self._await_decision(approval_id, ctx, match)
-            # APPROVED → forward (no 403) WITH credential injection; REJECTED /
-            # EXPIRED → `_write_response_for_decision` sets a 403 (stop here).
             self._write_response_for_decision(flow, decision)
             if decision == ApprovalDecision.APPROVED:
-                self._inject_credentials_or_block(
-                    flow, match, user_id=ctx.user_id, tenant_id=ctx.tenant_id
+                self._dispatch_injection_or_block(
+                    flow, sandbox=ctx.without_session(), match=match
                 )
         except Exception:
             logger.exception(
@@ -325,12 +333,13 @@ class GateAddon:
             match.policy.value if match is not None else "off_catalog",
         )
 
-        # Path per verdict (see _inject_credentials for the injection contract):
-        #   off-catalog -> forward, no credentials
-        #   DENY        -> block
-        #   ALWAYS      -> forward + inject credentials (auto-approved)
-        #   ASK         -> approval pipeline (forward+inject or block, in request())
+        # ALWAYS / DENY / off-catalog terminate here; ASK falls through to the
+        # approval pipeline in `request()`. Strip the in-band session tag
+        # before any dispatcher sees the flow — the dispatcher logs headers,
+        # and forwarded requests must not carry the tag.
         if match is None:
+            flow.request.headers.pop("Proxy-Authorization", None)
+            self._dispatch_injection_or_block(flow, sandbox=sandbox, match=None)
             return None
 
         if match.policy is EndpointPolicy.DENY:
@@ -338,9 +347,8 @@ class GateAddon:
             return None
 
         if match.policy is EndpointPolicy.ALWAYS:
-            self._inject_credentials_or_block(
-                flow, match, user_id=sandbox.user_id, tenant_id=sandbox.tenant_id
-            )
+            flow.request.headers.pop("Proxy-Authorization", None)
+            self._dispatch_injection_or_block(flow, sandbox=sandbox, match=match)
             return None
 
         # ASK: resolve the originating session before prompting. An
@@ -522,75 +530,21 @@ class GateAddon:
         )
         flow.response = _http_403(code)
 
-    def _inject_credentials_or_block(
+    def _dispatch_injection_or_block(
         self,
         flow: http.HTTPFlow,
-        match: ActionMatch,
         *,
-        user_id: UUID,
-        tenant_id: str,
+        sandbox: ResolvedSandbox,
+        match: ActionMatch | None,
     ) -> None:
-        """Inject credentials onto a verified forward, or block it with a 403.
-
-        Wraps ``_inject_credentials`` for the verdict paths: if resolution fails,
-        the request is blocked rather than forwarded with the sandbox's own
-        headers (which would bypass the proxy-only credential boundary).
-        """
-        if not self._inject_credentials(
-            flow, match, user_id=user_id, tenant_id=tenant_id
-        ):
-            flow.response = _http_403(_CODE_CREDENTIAL_ERROR)
-
-    def _inject_credentials(
-        self,
-        flow: http.HTTPFlow,
-        match: ActionMatch,
-        *,
-        user_id: UUID,
-        tenant_id: str,
-    ) -> bool:
-        """Attach the connected app's credentials to a verified forward.
-
-        The sole credential-injection seam: called only on ALWAYS (auto-approved)
-        and ASK-approved requests, never on off-catalog or blocked ones. Renders
-        the app's ``auth_template`` from the org + per-user (``user_id``)
-        credentials and sets the resulting headers on the outbound request, so
-        the real secret lives only here — never in the sandbox.
-
-        Returns ``False`` only when resolution raises — the caller blocks rather
-        than forward the request with the sandbox's own headers. Any successful
-        resolution returns ``True`` (including when there are no headers to
-        inject, e.g. an allowlist-only app).
-        """
-        try:
-            with self._db_session_factory(tenant_id) as db:
-                headers = resolve_injection_headers(db, match.external_app_id, user_id)
-        except Exception:
-            logger.exception(
-                "gate.inject_error external_app_id=%s host=%s",
-                match.external_app_id,
-                flow.request.host,
-            )
-            return False
-
-        if not headers:
-            logger.info(
-                "gate.inject_skipped external_app_id=%s host=%s (no credentials)",
-                match.external_app_id,
-                flow.request.host,
-            )
-            return True
-
-        for name, value in headers.items():
-            flow.request.headers[name] = value
-        # Log header NAMES only — never the injected secret values.
-        logger.info(
-            "gate.inject external_app_id=%s host=%s headers=%s",
-            match.external_app_id,
-            flow.request.host,
-            sorted(headers),
+        """Maps `InjectionOutcome.BLOCKED` to the sandbox-visible 403."""
+        ctx = InjectionContext(
+            sandbox=sandbox,
+            match=match,
+            db_session_factory=self._db_session_factory,
         )
-        return True
+        if self._credential_dispatcher.apply(flow, ctx) is InjectionOutcome.BLOCKED:
+            flow.response = _http_403(_CODE_CREDENTIAL_ERROR)
 
     def _terminalize_after_unhandled_error(
         self, approval_id: UUID, tenant_id: str
