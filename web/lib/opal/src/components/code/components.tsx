@@ -7,6 +7,7 @@ import { Button } from "@opal/components/buttons/button/components";
 import { copyText } from "@opal/utils";
 import SvgCheck from "@opal/icons/check";
 import SvgCopy from "@opal/icons/copy";
+import "@opal/components/code/styles.css";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,17 +36,14 @@ export function Code({ children, showCopyButton = true, ...props }: CodeProps) {
   }
 
   return (
-    <div className="relative w-full">
+    <div className="opal-code-root">
       <Hoverable.Root group="code">
-        <code
-          className="block p-2 bg-background-tint-00 border border-border-01 rounded-12 break-all whitespace-pre-wrap font-secondary-mono text-text-03 w-full"
-          {...props}
-        >
+        <code className="opal-code" {...props}>
           {children}
         </code>
         {showCopyButton && (
           <Hoverable.Item group="code">
-            <div className="absolute top-2 right-2">
+            <div className="opal-code-copy">
               <Button
                 size="xs"
                 prominence="tertiary"
