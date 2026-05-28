@@ -131,7 +131,6 @@
       "request": "launch",
       "module": "uvicorn",
       "cwd": "${workspaceFolder}/backend",
-      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -206,7 +205,6 @@
       "request": "launch",
       "program": "onyx/onyxbot/slack/listener.py",
       "cwd": "${workspaceFolder}/backend",
-      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -225,7 +223,6 @@
       "request": "launch",
       "program": "onyx/onyxbot/discord/client.py",
       "cwd": "${workspaceFolder}/backend",
-      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -244,7 +241,6 @@
       "request": "launch",
       "module": "uvicorn",
       "cwd": "${workspaceFolder}/backend",
-      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "MCP_SERVER_ENABLED": "true",
@@ -854,7 +850,6 @@
       "request": "launch",
       "module": "pytest",
       "cwd": "${workspaceFolder}/backend",
-      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -915,7 +910,6 @@
       "cwd": "${workspaceFolder}/backend",
       "console": "integratedTerminal",
       "justMyCode": false,
-      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "presentation": {
         "group": "3"
@@ -965,7 +959,6 @@
       "request": "launch",
       "module": "onyx.server.features.build.sandbox.build_templates",
       "cwd": "${workspaceFolder}/backend",
-      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "PYTHONUNBUFFERED": "1",
