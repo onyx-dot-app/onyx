@@ -325,8 +325,13 @@ four legacy keys.
 
 Security context changes:
 
-- `cap_add=["NET_ADMIN"]` only when proxy is enabled. With proxy
-  disabled, `cap_drop=ALL` stays in effect with no additions.
+- `cap_add=["NET_ADMIN", "SETPCAP"]` only when proxy is enabled.
+  `NET_ADMIN` runs `iptables`; `SETPCAP` authorises the
+  `PR_CAPBSET_DROP` syscall that `capsh --drop=all` uses to clear the
+  bounding set before setuid. Both are dropped from the bounding set
+  by capsh before the agent execve, so the running container ends
+  up with no caps at all. With proxy disabled, `cap_drop=ALL` stays
+  in effect with no additions.
 - `user` is dropped from the create kwargs when proxy is enabled. The
   container starts as root (uid 0) so `firewall-init.sh` can run
   iptables; the script's final `exec` drops to UID 1000 (see T5.5 for
@@ -361,12 +366,15 @@ Change the script's tail to explicitly clear the Bounding set before
 exec:
 
 ```bash
-exec capsh --caps='' --user=craft -- -c 'exec "$@"' -- "$@"
+exec capsh --drop=all --user=sandbox -- "$@"
 ```
 
-(`craft` is the existing UID-1000 user in the sandbox image.) `capsh`
-from the `libcap2-bin` package clears Permitted, Effective, and the
-Bounding set in one step and then exec's the entrypoint. After this:
+(`sandbox` is the UID-1000 user the image actually creates -- see the
+Dockerfile's `usermod -l sandbox` step.) `capsh` from the
+`libcap2-bin` package drops every capability from the bounding set,
+then setuid's to `sandbox`, then exec's the entrypoint. The
+subsequent execve has no file capabilities, so the agent process
+ends up with zero caps in any set. After this:
 
 - A process inside the running sandbox cannot acquire `NET_ADMIN` even
   if a setuid-NET_ADMIN binary somehow ended up in its filesystem.

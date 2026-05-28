@@ -13,8 +13,10 @@ ARG ENABLE_SKILLS=true
 ARG OPENCODE_VERSION=1.15.7
 
 # Install system dependencies.
-# firewall-init.sh needs: iptables (egress lockdown), gosu (drop privileges
-# in compose entrypoint mode), ca-certificates (CA trust-store population).
+# firewall-init.sh needs: iptables (egress lockdown), libcap2-bin (capsh to
+# drop CAP_NET_ADMIN/SETPCAP from the bounding set in compose entrypoint
+# mode), gosu (kept for compatibility / future drops), ca-certificates
+# (CA trust-store population).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -26,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libc6-dev \
     iptables \
+    libcap2-bin \
     gosu \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
