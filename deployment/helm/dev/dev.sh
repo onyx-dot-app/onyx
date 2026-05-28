@@ -771,6 +771,8 @@ destroy_all() {
     log "deleting k3d registry '${REGISTRY_NAME}'"
     k3d registry delete "${REGISTRY_NAME}"
   fi
+  # k3d cluster delete leaves the docker network behind.
+  docker network rm -f "k3d-${CLUSTER_NAME}" >/dev/null 2>&1 || true
   rm -f "${KUBECONFIG_FILE}"
   [[ -d "${STATE_DIR}" ]] && rm -rf "${STATE_DIR}"
   log "cluster destroyed."
