@@ -29,6 +29,7 @@ backend/onyx/evals/data/
 backend/onyx/evals/one_off/*.json
 *.log
 *.csv
+/log/
 
 # secret files
 .env

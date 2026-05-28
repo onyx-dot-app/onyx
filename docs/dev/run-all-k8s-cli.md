@@ -20,7 +20,8 @@ parallel:
   `celery_user_file_processing`, `celery_scheduled_tasks`,
   `celery_beat` — each via `backend/scripts/dev_celery_reload.py`
 
-Each service writes to `backend/log/<service>.log`. `Ctrl-C` kills them all.
+Each service writes to `log/<service>.log` at the repo root (gitignored).
+`Ctrl-C` kills them all.
 
 ## Prerequisites
 
@@ -41,15 +42,24 @@ does.
 ## Usage
 
 ```bash
-./scripts/run-all-k8s.sh
+ods k8s up
 ```
+
+Equivalent to running `scripts/run-all-k8s.sh` directly — `ods k8s up` is a
+thin wrapper around it.
 
 Watch logs in another terminal:
 
 ```bash
-tail -f backend/log/*.log
-# or just one service
-tail -f backend/log/api_server.log
+ods k8s logs                 # tail all 10 service logs
+ods k8s logs api_server      # tail just one
+```
+
+Stop everything (useful when the "up" terminal was killed and orphaned
+the services):
+
+```bash
+ods k8s down
 ```
 
 ## Differences vs. the VS Code launch
@@ -58,8 +68,8 @@ tail -f backend/log/api_server.log
   no debugger. If you need to debug one service, run it via VS Code and the
   others via this script (or just don't start the duplicate process in the
   script).
-- **No per-service terminal pane.** Output is redirected to log files. If
-  you want everything in one stream, run `tail -f backend/log/*.log`.
+- **No per-service terminal pane.** Output is redirected to log files. Use
+  `ods k8s logs` to tail them.
 
 ## Worktree setup
 
@@ -79,7 +89,7 @@ just invoke it by absolute path from anywhere.
 
 If you also symlink `web/node_modules` between repos/worktrees, Next.js's
 `.next/` dev cache can reference hashed module names from the *other* repo's
-last build. Symptom in `backend/log/web_server.log`:
+last build. Symptom in `log/web_server.log`:
 
 ```
 Error: Cannot find module 'require-in-the-middle-<hash>'

@@ -6,7 +6,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOG_DIR="$ROOT/backend/log"
+LOG_DIR="$ROOT/log"
 ENV_FILE="$ROOT/.vscode/.env.k8s"
 PY="$ROOT/.venv/bin/python"
 mkdir -p "$LOG_DIR"
