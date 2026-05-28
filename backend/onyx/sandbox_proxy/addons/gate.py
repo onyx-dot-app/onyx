@@ -60,6 +60,7 @@ _CODE_USER_REJECTED = "user_rejected"
 _CODE_NOT_AUTHORIZED = "not_authorized"
 _CODE_INTERNAL_ERROR = "internal_error"
 _CODE_POLICY_DENIED = "policy_denied"
+_CODE_CREDENTIAL_ERROR = "credential_error"
 
 # Relative deep link routed through the Next router by NotificationsPopover.tsx;
 # must mirror the frontend's CRAFT_PATH + sessionId search param.
@@ -232,7 +233,7 @@ class GateAddon:
             # EXPIRED → `_write_response_for_decision` sets a 403 (stop here).
             self._write_response_for_decision(flow, decision)
             if decision == ApprovalDecision.APPROVED:
-                self._inject_credentials(
+                self._inject_credentials_or_block(
                     flow, match, user_id=ctx.user_id, tenant_id=ctx.tenant_id
                 )
         except Exception:
@@ -329,7 +330,7 @@ class GateAddon:
             return None
 
         if match.policy is EndpointPolicy.ALWAYS:
-            self._inject_credentials(
+            self._inject_credentials_or_block(
                 flow, match, user_id=sandbox.user_id, tenant_id=sandbox.tenant_id
             )
             return None
@@ -513,7 +514,7 @@ class GateAddon:
         )
         flow.response = _http_403(code)
 
-    def _inject_credentials(
+    def _inject_credentials_or_block(
         self,
         flow: http.HTTPFlow,
         match: ActionMatch,
@@ -521,6 +522,25 @@ class GateAddon:
         user_id: UUID,
         tenant_id: str,
     ) -> None:
+        """Inject credentials onto a verified forward, or block it with a 403.
+
+        Wraps ``_inject_credentials`` for the verdict paths: if resolution fails,
+        the request is blocked rather than forwarded with the sandbox's own
+        headers (which would bypass the proxy-only credential boundary).
+        """
+        if not self._inject_credentials(
+            flow, match, user_id=user_id, tenant_id=tenant_id
+        ):
+            flow.response = _http_403(_CODE_CREDENTIAL_ERROR)
+
+    def _inject_credentials(
+        self,
+        flow: http.HTTPFlow,
+        match: ActionMatch,
+        *,
+        user_id: UUID,
+        tenant_id: str,
+    ) -> bool:
         """Attach the connected app's credentials to a verified forward.
 
         The sole credential-injection seam: called only on ALWAYS (auto-approved)
@@ -529,8 +549,10 @@ class GateAddon:
         credentials and sets the resulting headers on the outbound request, so
         the real secret lives only here — never in the sandbox.
 
-        Fail-open on resolution errors: the request is already gate-approved, so
-        a missing credential just means the upstream answers 401, never a leak.
+        Returns ``False`` only when resolution raises — the caller blocks rather
+        than forward the request with the sandbox's own headers. Any successful
+        resolution returns ``True`` (including when there are no headers to
+        inject, e.g. an allowlist-only app).
         """
         try:
             with self._db_session_factory(tenant_id) as db:
@@ -541,7 +563,7 @@ class GateAddon:
                 match.external_app_id,
                 flow.request.host,
             )
-            return
+            return False
 
         if not headers:
             logger.info(
@@ -549,7 +571,7 @@ class GateAddon:
                 match.external_app_id,
                 flow.request.host,
             )
-            return
+            return True
 
         for name, value in headers.items():
             flow.request.headers[name] = value
@@ -560,6 +582,7 @@ class GateAddon:
             flow.request.host,
             sorted(headers),
         )
+        return True
 
     def _terminalize_after_unhandled_error(
         self, approval_id: UUID, tenant_id: str
