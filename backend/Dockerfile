@@ -93,10 +93,7 @@ RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
     apt-get update && \
     apt-get remove -y --allow-remove-essential \
         perl-base \
-        xserver-common \
-        xvfb \
         cmake \
-        libldap-2.5-0 \
         libxmlsec1-dev \
         pkg-config \
         gcc && \
@@ -106,6 +103,9 @@ RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
         # Install postgresql-client for easy manual tests
         postgresql-client && \
     apt-get autoremove -y && \
+    # Re-run after autoremove to restore any chromium runtime libs
+    # (libnss3, libnspr4, etc.) that got swept up by the cascade.
+    playwright install-deps chromium && \
     rm -rf /var/lib/apt/lists/* && \
     rm -rf ~/.cache/uv /tmp/*.txt && \
     rm -f /usr/local/lib/python3.11/site-packages/tornado/test/test.key
