@@ -15,6 +15,9 @@ dependencies = [
     "litellm[google]==1.85.1",
     "openai==2.38.0",
     "pydantic==2.11.7",
+    # Shared so structured JSON logging (LOG_FORMAT=json) works in the
+    # model_server image too, not just the backend.
+    "python-json-logger==4.1.0",
     "prometheus_client>=0.21.1",
     "prometheus_fastapi_instrumentator==7.1.0",
     "retry==0.9.2",                             # This pulls in py which is in CVE-2022-42969, must remove py from image
@@ -96,7 +99,6 @@ backend = [
     "pympler==1.1",
     "python-dateutil==2.9.0.post0",
     "python-gitlab==5.6.0",
-    "python-json-logger==4.1.0",
     "python-pptx==0.6.23",
     "pypandoc_binary==1.16.2",
     "pypdf==6.10.2",

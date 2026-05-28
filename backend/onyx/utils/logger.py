@@ -5,12 +5,6 @@ from collections.abc import MutableMapping
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
-try:
-    # python-json-logger >= 3.0
-    from pythonjsonlogger.json import JsonFormatter
-except ImportError:  # pragma: no cover - fallback for older installs
-    from pythonjsonlogger.jsonlogger import JsonFormatter  # type: ignore[no-redef]
-
 from onyx.utils.platform_utils import is_running_in_container
 from onyx.utils.tenant import get_tenant_id_short_string
 from shared_configs.configs import DEV_LOGGING_ENABLED
@@ -143,6 +137,8 @@ class OnyxLoggingAdapter(logging.LoggerAdapter):
                 fields["doc_permission_sync_request_id"] = doc_permission_sync_ctx_dict[
                     "request_id"
                 ]
+            if "cc_pair_id" in doc_permission_sync_ctx_dict:
+                fields["cc_pair_id"] = doc_permission_sync_ctx_dict["cc_pair_id"]
         else:
             index_attempt_info = INDEX_ATTEMPT_INFO_CONTEXTVAR.get()
             if index_attempt_info:
@@ -164,7 +160,12 @@ class OnyxLoggingAdapter(logging.LoggerAdapter):
             fields["slack_channel_id"] = channel_id
 
         if fields:
-            extra = kwargs.setdefault("extra", {})
+            # A caller may pass extra=None explicitly; normalize to a dict
+            # before merging so we never call .setdefault() on None.
+            extra = kwargs.get("extra")
+            if not isinstance(extra, dict):
+                extra = {}
+                kwargs["extra"] = extra
             # An explicit extra passed by the caller wins over injected context.
             for key, value in fields.items():
                 extra.setdefault(key, value)
@@ -216,7 +217,13 @@ class ColoredFormatter(logging.Formatter):
 
 def get_json_formatter() -> logging.Formatter:
     """Returns a structured single-line JSON formatter. Standard record
-    attributes are emitted as fields and any ``extra`` keys are merged in."""
+    attributes are emitted as fields and any ``extra`` keys are merged in.
+
+    The ``pythonjsonlogger`` import is deferred to this call site (only reached
+    when ``LOG_FORMAT=json``) so that importing this module never hard-fails in
+    environments where the optional dependency is absent."""
+    from pythonjsonlogger.json import JsonFormatter
+
     return JsonFormatter(
         "%(asctime)s %(levelname)s %(name)s %(filename)s %(lineno)d %(message)s",
         rename_fields={
