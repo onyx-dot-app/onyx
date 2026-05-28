@@ -243,6 +243,19 @@ ensure_cluster() {
   kubectl label nodes --all onyx.app/workload=sandbox --overwrite >/dev/null
 }
 
+ensure_opal_built() {
+  # web/Dockerfile.dev relies on the host's lib/opal/dist/ via COPY.
+  local dist="${REPO_ROOT}/web/lib/opal/dist"
+  [[ -d "${dist}" ]] && return 0
+
+  require_tool bun
+  log "building web/lib/opal/dist (cold worktree — one-time)"
+  # Two-pass workaround for opal's prepare-hook race; see web/Dockerfile.dev.
+  ( cd "${REPO_ROOT}/web" && bun install --frozen-lockfile >/dev/null 2>&1 || true )
+  ( cd "${REPO_ROOT}/web" && bun install --frozen-lockfile >/dev/null )
+  [[ -d "${dist}" ]] || die "opal build did not produce ${dist}"
+}
+
 ensure_operators() {
   helm repo add cnpg https://cloudnative-pg.github.io/charts >/dev/null 2>&1 || true
   helm repo update cnpg >/dev/null
@@ -624,6 +637,8 @@ cmd_up() {
     log "  cd ${REPO_ROOT} && WORKTREE_SLUG=${slug} TILT_PORT=${tilt_port} tilt up"
     return 0
   fi
+
+  ensure_opal_built
 
   cd "${REPO_ROOT}"
   export WORKTREE_SLUG="${slug}"
