@@ -352,13 +352,9 @@ export default function BuildChatPanel({
           outputPanelOpen ? "w-1/2 pl-4" : "w-full"
         )}
       >
-        {/* Banner shown only when the session was started by a scheduled task. */}
-        <ScheduledRunBanner
-          sessionId={sessionId ?? existingSessionId ?? null}
-        />
         {/* Chat header */}
         <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3 relative overflow-visible">
-          <div className="flex flex-row items-center gap-2 max-w-[75%]">
+          <div className="flex min-w-0 flex-row items-center gap-2 max-w-[75%]">
             {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
             {isMobile && leftSidebarFolded && (
               <OpalButton
@@ -369,6 +365,9 @@ export default function BuildChatPanel({
               />
             )}
             <SandboxStatusIndicator />
+            <ScheduledRunBanner
+              sessionId={sessionId ?? existingSessionId ?? null}
+            />
           </div>
           {/* Output panel toggle - only show when panel is fully closed (after animation) */}
           {isOutputPanelFullyClosed && (
