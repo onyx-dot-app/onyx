@@ -42,6 +42,7 @@ import {
 import Cookies from "js-cookie";
 import { cn } from "@opal/utils";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
+import { MOBILE_SIDEBAR_BREAKPOINT_PX } from "@/lib/constants";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import OverflowDiv from "@/refresh-components/OverflowDiv";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -79,6 +80,13 @@ function SidebarStateProvider({ children }: SidebarStateProviderProps) {
       Cookies.get(SIDEBAR_TOGGLED_COOKIE_NAME) ??
       localStorage.getItem(SIDEBAR_TOGGLED_COOKIE_NAME);
     if (stored === "true") {
+      setFoldedInternal(true);
+    } else if (
+      stored == null &&
+      window.innerWidth <= MOBILE_SIDEBAR_BREAKPOINT_PX
+    ) {
+      // No saved preference on a phone: start collapsed so the drawer doesn't
+      // cover content on first load.
       setFoldedInternal(true);
     }
   }, []);
