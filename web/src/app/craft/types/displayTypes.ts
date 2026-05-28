@@ -96,3 +96,29 @@ export type StreamItem =
   | { type: "thinking"; id: string; content: string; isStreaming: boolean }
   | { type: "tool_call"; id: string; toolCall: ToolCallState }
   | { type: "todo_list"; id: string; todoList: TodoListState };
+
+/**
+ * Discriminated union of transient tabs that the side panel can render.
+ *
+ * Pinned tabs (Preview, Files, Artifacts) are handled separately via the
+ * existing `OutputTabType` — they are not represented in `PanelTab`. Only
+ * tabs that the user opens and closes dynamically (file viewers, subagent
+ * transcripts, etc.) live here.
+ *
+ * Future view kinds: add a new variant here, render its chrome in
+ * `OutputPanel.tsx`'s tab-row map, and its body in the panel body switch.
+ */
+export type PanelTab = { kind: "file"; path: string; fileName: string };
+
+/**
+ * Stable string ID for a `PanelTab`, namespaced by kind. Used as the value
+ * of `activePanelTabId` in the store and as React keys for tab rendering.
+ *
+ * Format: "<kind>:<identifier>" — e.g. "file:web/src/app/page.tsx".
+ */
+export function panelTabId(tab: PanelTab): string {
+  switch (tab.kind) {
+    case "file":
+      return `file:${tab.path}`;
+  }
+}
