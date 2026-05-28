@@ -376,7 +376,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
       {/* Tab List - Chrome-style tabs */}
       <div className="flex flex-col w-full">
         {/* Tabs row */}
-        <div className="flex items-end w-full pt-1.5 bg-background-tint-03">
+        <div className="flex items-end w-full pt-1 bg-background-tint-03">
           {/* macOS-style window controls - sticky on left */}
           <div className="group flex items-center gap-2 pl-3 pr-1.5 py-2 shrink-0">
             <button
@@ -440,7 +440,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                     isDisabled
                       ? "text-text-02 bg-transparent cursor-not-allowed py-1 mb-1"
                       : isActive
-                        ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-2"
+                        ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-1.5"
                         : "text-text-03 bg-transparent hover:bg-background-tint-02 rounded-full py-1 mb-1"
                   )}
                 >
@@ -509,7 +509,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                         "group relative inline-flex items-center justify-center gap-1.5 px-3 pr-2",
                         "max-w-[150px] min-w-fit",
                         isActive
-                          ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-2"
+                          ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-1.5"
                           : "text-text-03 bg-transparent hover:bg-background-tint-02 rounded-full py-1 mb-1"
                       )}
                     >
