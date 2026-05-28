@@ -1148,6 +1148,19 @@ if [ "$INCLUDE_CRAFT" = true ]; then
             echo "    docker network create $SANDBOX_NET"
         fi
     fi
+
+    # Same pattern for the proxy CA volume — compose overlay references it
+    # as external so the name stays unprefixed; the sandbox manager mounts
+    # the same name when provisioning sandbox containers.
+    SANDBOX_PROXY_CA_VOL="${SANDBOX_PROXY_CA_VOLUME_NAME:-sandbox_proxy_ca}"
+    if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker volume inspect "$SANDBOX_PROXY_CA_VOL" >/dev/null 2>&1; then
+        if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker volume create "$SANDBOX_PROXY_CA_VOL" >/dev/null 2>&1; then
+            print_success "Created sandbox proxy CA volume: $SANDBOX_PROXY_CA_VOL"
+        else
+            print_warning "Could not create sandbox proxy CA volume $SANDBOX_PROXY_CA_VOL — create it manually:"
+            echo "    docker volume create $SANDBOX_PROXY_CA_VOL"
+        fi
+    fi
 fi
 
 # Function to check if a port is available
