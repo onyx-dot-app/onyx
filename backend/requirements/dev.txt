@@ -2131,6 +2131,10 @@ python-dotenv==1.2.2 \
     #   litellm
     #   pydantic-settings
     #   pytest-dotenv
+python-json-logger==4.1.0 \
+    --hash=sha256:132994765cf75bf44554be9aa49b06ef2345d23661a96720262716438141b6b2 \
+    --hash=sha256:b396b9e3ed782b09ff9d6e4f1683d46c83ad0d35d2e407c09a9ebbf038f88195
+    # via onyx
 python-multipart==0.0.27 \
     --hash=sha256:6fccfad17a27334bd0193681b369f476eda3409f17381a2d65aa7df3f7275645 \
     --hash=sha256:9870a6a8c5a20a5bf4f07c017bd1489006ff8836cff097b6933355ee2b49b602
