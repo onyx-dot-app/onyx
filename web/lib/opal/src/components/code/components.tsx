@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { WithoutStyles } from "@opal/types";
 import { Hoverable } from "@opal/core";
 import { Button } from "@opal/components/buttons/button/components";
+import { copyText } from "@opal/utils";
 import SvgCheck from "@opal/icons/check";
 import SvgCopy from "@opal/icons/copy";
 
@@ -25,7 +26,7 @@ export function Code({ children, showCopyButton = true, ...props }: CodeProps) {
   const [copied, setCopied] = useState(false);
 
   function handleCopy() {
-    navigator.clipboard.writeText(children).then(() => {
+    copyText(children).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     });
