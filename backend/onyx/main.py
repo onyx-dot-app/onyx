@@ -162,6 +162,7 @@ from onyx.utils.middleware import add_onyx_request_id_middleware
 from onyx.utils.telemetry import get_or_generate_uuid
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from onyx.utils.variable_functionality import global_version
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
@@ -343,6 +344,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
             "readonly": SqlEngine.get_readonly_engine(),
         },
     )
+
+    # Self-hosted license seat + expiry gauges on /metrics (EE-only, no-op on CE)
+    fetch_ee_implementation_or_noop(
+        "onyx.server.metrics.license_metrics", "register_license_metrics"
+    )()
 
     verify_auth = fetch_versioned_implementation(
         "onyx.auth.users", "verify_auth_setting"
