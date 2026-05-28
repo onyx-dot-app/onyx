@@ -70,63 +70,6 @@ _ENDPOINTS: list[EndpointSpec] = [
 ]
 
 
-class LinearAction(ExternalAppAction):
-    """Strongly-typed catalog ids for the Linear provider."""
-
-    VIEWER_READ = "linear.viewer.read"
-    TEAMS_READ = "linear.teams.read"
-    ISSUES_READ = "linear.issues.read"
-    PROJECTS_READ = "linear.projects.read"
-    ISSUES_CREATE = "linear.issues.create"
-    COMMENTS_CREATE = "linear.comments.create"
-
-
-# Linear is a single GraphQL endpoint (POST https://api.linear.app/graphql); the
-# action is the root field of the operation in the request body.
-_ENDPOINTS: list[EndpointSpec] = [
-    EndpointSpec(
-        id=LinearAction.VIEWER_READ,
-        normalised_name="Read the connected user",
-        description="Read the authenticated user's profile (viewer).",
-        matches=(GraphQLOp(operation_type="query", field="viewer"),),
-    ),
-    EndpointSpec(
-        id=LinearAction.TEAMS_READ,
-        normalised_name="Read teams",
-        description="List the workspace's teams.",
-        matches=(GraphQLOp(operation_type="query", field="teams"),),
-    ),
-    EndpointSpec(
-        id=LinearAction.ISSUES_READ,
-        normalised_name="Read issues",
-        description="List, fetch, and search issues.",
-        matches=(
-            GraphQLOp(operation_type="query", field="issues"),
-            GraphQLOp(operation_type="query", field="issue"),
-            GraphQLOp(operation_type="query", field="issueSearch"),
-        ),
-    ),
-    EndpointSpec(
-        id=LinearAction.PROJECTS_READ,
-        normalised_name="Read projects",
-        description="List projects.",
-        matches=(GraphQLOp(operation_type="query", field="projects"),),
-    ),
-    EndpointSpec(
-        id=LinearAction.ISSUES_CREATE,
-        normalised_name="Create an issue",
-        description="Create a new issue.",
-        matches=(GraphQLOp(operation_type="mutation", field="issueCreate"),),
-    ),
-    EndpointSpec(
-        id=LinearAction.COMMENTS_CREATE,
-        normalised_name="Comment on an issue",
-        description="Add a comment to an issue.",
-        matches=(GraphQLOp(operation_type="mutation", field="commentCreate"),),
-    ),
-]
-
-
 class LinearProvider(OAuthExternalAppProvider):
     spec = OAuthProviderSpec(
         app_type=ExternalAppType.LINEAR,

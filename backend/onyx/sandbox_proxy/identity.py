@@ -143,14 +143,11 @@ class IdentityResolver:
     ) -> UUID | None:
         """Validate a sandbox-supplied `BuildSession` id against its owner.
 
-        The session id arrives in-band as the `Proxy-Authorization`
-        username (set by the `session-proxy-tag` opencode plugin from the
-        session's workspace path). It is trusted only after confirming the
-        row exists AND its `user_id` matches the user resolved from the
-        source IP — which the sandbox cannot forge. This bounds a tampered
-        or stale tag to the same user (no cross-user routing); on any
-        mismatch the gate fails the request closed (there is no
-        most-recent-active fallback).
+        The id arrives in-band (the `Proxy-Authorization` username, set by
+        the `session-proxy-tag` opencode plugin) and is forgeable, so it is
+        trusted only if its `user_id` matches the user resolved from the
+        source IP. This bounds a tampered tag to the same user; mismatches
+        fail closed.
 
         Status is intentionally not filtered: this is the session that
         originated the egress regardless of its current status.

@@ -30,57 +30,6 @@ _ENDPOINTS: list[EndpointSpec] = [
         id=SlackAction.CHANNELS_READ,
         normalised_name="List channels",
         description="List the workspace's channels and conversations.",
-        matches=(RestRoute(method="POST", path_regex=r"^/api/conversations\.list$"),),
-    ),
-    EndpointSpec(
-        id=SlackAction.MESSAGES_READ,
-        normalised_name="Read channel messages",
-        description="Read messages and thread replies in a channel.",
-        matches=(
-            RestRoute(
-                method="POST",
-                path_regex=r"^/api/conversations\.(history|replies)$",
-            ),
-        ),
-    ),
-    EndpointSpec(
-        id=SlackAction.USERS_READ,
-        normalised_name="Read users",
-        description="List workspace users and look up individual profiles.",
-        matches=(RestRoute(method="POST", path_regex=r"^/api/users\.(list|info)$"),),
-    ),
-    EndpointSpec(
-        id=SlackAction.SEARCH_READ,
-        normalised_name="Search messages",
-        description="Full-text search across messages the user can see.",
-        matches=(RestRoute(method="POST", path_regex=r"^/api/search\.messages$"),),
-    ),
-    EndpointSpec(
-        id=SlackAction.MESSAGES_WRITE,
-        normalised_name="Post a message",
-        description="Post a message to a channel or conversation.",
-        matches=(RestRoute(method="POST", path_regex=r"^/api/chat\.postMessage$"),),
-    ),
-]
-
-
-class SlackAction(ExternalAppAction):
-    """Strongly-typed catalog ids for the Slack provider."""
-
-    CHANNELS_READ = "slack.channels.read"
-    MESSAGES_READ = "slack.messages.read"
-    USERS_READ = "slack.users.read"
-    SEARCH_READ = "slack.search.read"
-    MESSAGES_WRITE = "slack.messages.write"
-
-
-# Slack Web API calls are POST to https://slack.com/api/<method>; the action is
-# the method segment of the path.
-_ENDPOINTS: list[EndpointSpec] = [
-    EndpointSpec(
-        id=SlackAction.CHANNELS_READ,
-        normalised_name="List channels",
-        description="List the workspace's channels and conversations.",
         matches=(RestRoute(method="POST", path="/api/conversations.list"),),
     ),
     EndpointSpec(

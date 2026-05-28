@@ -7,13 +7,11 @@ import sys
 import threading
 import uuid
 from collections.abc import Callable
-from contextlib import AbstractContextManager
 from http.server import BaseHTTPRequestHandler
 from http.server import HTTPServer
 
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
-from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import SqlEngine
@@ -136,19 +134,6 @@ def _build_cache_factory() -> "Callable[[str], CacheBackend]":
 
     def _factory(tenant_id: str) -> CacheBackend:
         return get_cache_backend(tenant_id=tenant_id)
-
-    return _factory
-
-
-def _build_db_session_factory() -> DBSessionFactory:
-    """tenant_id → a tenant-scoped DB session context manager.
-
-    Shared by the gate (approval-row writes) and the action matcher (app +
-    policy reads) so both resolve the same tenant schema.
-    """
-
-    def _factory(tenant_id: str) -> "AbstractContextManager[Session]":
-        return get_session_with_tenant(tenant_id=tenant_id)
 
     return _factory
 
