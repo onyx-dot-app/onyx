@@ -15,7 +15,8 @@
    ========================================================================== */
 
 .opal-input {
-  @apply flex flex-row items-center justify-between flex-1 h-fit p-1.5 rounded-08 relative w-full transition-all duration-[var(--interactive-duration)] ease-[var(--interactive-easing)];
+  /* `--interactive-duration` (150ms) was too laggy, so we're using 50ms instead. */
+  @apply flex flex-row items-center justify-between flex-1 h-fit p-1.5 rounded-08 relative w-full transition-all duration-[50ms] ease-[var(--interactive-easing)];
 }
 
 .opal-input[data-variant="primary"] {
