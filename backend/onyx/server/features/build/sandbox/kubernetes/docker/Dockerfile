@@ -90,13 +90,8 @@ COPY --from=peakcom/s5cmd:v2.3.0@sha256:2ff939e2ee3c76adcadd78dbfc3e2569b18a3743
 USER sandbox
 RUN curl -fsSL https://opencode.ai/install \
     | bash -s -- --version "${OPENCODE_VERSION}" --no-modify-path
-# Warm the models.dev catalog into opencode's cache (~/.cache/opencode) at
-# build time; runtime egress is locked to the proxy which denies models.dev.
-# Don't set XDG_CACHE_HOME — it would also move bun's cache off BUN_IMAGE_CACHE_DIR.
-RUN PATH="/home/sandbox/.opencode/bin:${PATH}" opencode models --refresh
-# Pre-warm Bun's cache (pinned to BUN_IMAGE_CACHE_DIR, which session setup copies).
+# Pre-warm Bun's tarball cache so per-session installs hit a local store.
 RUN cd /workspace/templates/outputs/web && \
-    BUN_INSTALL_CACHE_DIR=/home/sandbox/.bun/install/cache \
     bun install --frozen-lockfile && \
     rm -rf node_modules
 USER root
