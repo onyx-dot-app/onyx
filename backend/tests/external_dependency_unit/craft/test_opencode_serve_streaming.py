@@ -47,8 +47,8 @@ from acp.schema import ToolCallProgress
 from acp.schema import ToolCallStart
 
 from onyx.server.features.build.configs import AgentTransport
-from onyx.server.features.build.sandbox.base import SSEKeepalive
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config
 
 
