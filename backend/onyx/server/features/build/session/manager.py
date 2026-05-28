@@ -10,7 +10,6 @@ import io
 import json
 import mimetypes
 import queue as queue_lib
-import re
 import tempfile
 import threading
 import time
@@ -97,10 +96,6 @@ from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
-from onyx.server.features.build.session.prompts import (
-    FOLLOWUP_SUGGESTIONS_SYSTEM_PROMPT,
-)
-from onyx.server.features.build.session.prompts import FOLLOWUP_SUGGESTIONS_USER_PROMPT
 from onyx.skills.push import build_user_skills_payload
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.tracing.flows import LLMFlow
@@ -1094,124 +1089,6 @@ class SessionManager:
             logger.warning("Failed to generate session name with LLM: %s", e)
             # Fallback to simple truncation
             return user_message[:40].strip() + ("..." if len(user_message) > 40 else "")
-
-    def generate_followup_suggestions(
-        self,
-        user_message: str,
-        assistant_message: str,
-    ) -> list[dict[str, str]]:
-        """
-        Generate follow-up suggestions based on the first exchange.
-
-        Args:
-            user_message: The first user message content
-            assistant_message: The first assistant response (text only, no tool calls)
-
-        Returns:
-            List of suggestion dicts with "theme" and "text" keys, or empty list on failure
-        """
-        if not user_message or not assistant_message:
-            return []
-
-        try:
-            llm = get_default_llm()
-            prompt_messages: LanguageModelInput = [
-                SystemMessage(content=FOLLOWUP_SUGGESTIONS_SYSTEM_PROMPT),
-                UserMessage(
-                    content=FOLLOWUP_SUGGESTIONS_USER_PROMPT.format(
-                        user_message=user_message[:1000],  # Limit input size
-                        assistant_message=assistant_message[:2000],
-                    )
-                ),
-            ]
-            # Call LLM with Braintrust tracing
-            with ensure_trace("build_followup_suggestions"):
-                with llm_generation_span(
-                    llm=llm,
-                    flow=LLMFlow.BUILD_FOLLOWUP_SUGGESTIONS,
-                    input_messages=prompt_messages,
-                ) as span_generation:
-                    response = llm.invoke(
-                        prompt_messages,
-                        reasoning_effort=ReasoningEffort.OFF,
-                        max_tokens=500,
-                    )
-                    record_llm_response(span_generation, response)
-                    raw_output = llm_response_to_string(response).strip()
-
-            return self._parse_suggestions(raw_output)
-        except Exception as e:
-            logger.warning("Failed to generate follow-up suggestions with LLM: %s", e)
-            return []
-
-    def _parse_suggestions(self, raw_output: str) -> list[dict[str, str]]:
-        """
-        Parse suggestions from LLM output with multiple fallback strategies.
-
-        Args:
-            raw_output: Raw LLM response string
-
-        Returns:
-            List of suggestion dicts or empty list on parse failure
-        """
-        # Strategy 1: Try direct JSON parse
-        try:
-            # Strip common LLM artifacts (code fences, etc.)
-            cleaned = raw_output.strip()
-            if cleaned.startswith("```"):
-                # Extract content between code fences
-                parts = cleaned.split("```")
-                if len(parts) >= 2:
-                    cleaned = parts[1]
-                    if cleaned.startswith("json"):
-                        cleaned = cleaned[4:]
-                    cleaned = cleaned.strip()
-
-            data = json.loads(cleaned)
-            if isinstance(data, list) and len(data) >= 2:
-                suggestions = []
-                for item in data[:2]:
-                    if isinstance(item, dict) and "theme" in item and "text" in item:
-                        theme = item["theme"].lower()
-                        if theme in ("add", "question"):
-                            text = str(item["text"])[:150]  # Truncate to max length
-                            suggestions.append({"theme": theme, "text": text})
-                if len(suggestions) == 2:
-                    return suggestions
-        except (json.JSONDecodeError, KeyError, TypeError):
-            pass
-
-        # Strategy 2: Regex extraction for common patterns
-        # Handles: "theme": "add", "text": "..." patterns
-        suggestions = []
-        for theme in ["add", "question"]:
-            # Match "theme": "add" followed by "text": "..."
-            pattern = rf'"theme"\s*:\s*"{theme}"[^}}]*"text"\s*:\s*"([^"]+)"'
-            match = re.search(pattern, raw_output, re.IGNORECASE | re.DOTALL)
-            if match:
-                text = match.group(1)[:150]
-                suggestions.append({"theme": theme, "text": text})
-
-        if len(suggestions) == 2:
-            return suggestions
-
-        # Strategy 3: Alternative pattern - theme and text in any order
-        suggestions = []
-        for theme in ["add", "question"]:
-            pattern = rf'"text"\s*:\s*"([^"]+)"[^}}]*"theme"\s*:\s*"{theme}"'
-            match = re.search(pattern, raw_output, re.IGNORECASE | re.DOTALL)
-            if match:
-                text = match.group(1)[:150]
-                suggestions.append({"theme": theme, "text": text})
-
-        if len(suggestions) == 2:
-            return suggestions
-
-        # Silent fail - return empty list
-        logger.warning(
-            "Failed to parse suggestions from LLM output: %s", raw_output[:200]
-        )
-        return []
 
     def delete_session(
         self,

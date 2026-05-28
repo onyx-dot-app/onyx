@@ -284,12 +284,6 @@ export interface TabNavigationHistory {
   currentIndex: number;
 }
 
-/** Follow-up suggestion bubble */
-export interface SuggestionBubble {
-  theme: "add" | "question";
-  text: string;
-}
-
 /** Output panel tab types */
 export type OutputTabType = "preview" | "files" | "artifacts";
 
@@ -328,10 +322,6 @@ export interface BuildSessionData {
   filesTabState: FilesTabState;
   /** Browser-style tab navigation history for back/forward */
   tabHistory: TabNavigationHistory;
-  /** Follow-up suggestions after first agent message */
-  followupSuggestions: SuggestionBubble[] | null;
-  /** Whether suggestions are currently being generated */
-  suggestionsLoading: boolean;
 }
 
 interface BuildSessionStore {
@@ -475,14 +465,6 @@ interface BuildSessionStore {
   // Tab Navigation History Actions
   navigateTabBack: (sessionId: string) => void;
   navigateTabForward: (sessionId: string) => void;
-
-  // Follow-up Suggestion Actions
-  setFollowupSuggestions: (
-    sessionId: string,
-    suggestions: SuggestionBubble[] | null
-  ) => void;
-  setSuggestionsLoading: (sessionId: string, loading: boolean) => void;
-  clearFollowupSuggestions: (sessionId: string) => void;
 }
 
 // =============================================================================
@@ -516,8 +498,6 @@ const createInitialSessionData = (
     entries: [{ type: "pinned", tab: "preview" }],
     currentIndex: 0,
   },
-  followupSuggestions: null,
-  suggestionsLoading: false,
   ...initialData,
 });
 
@@ -1918,63 +1898,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       return { sessions: newSessions };
     });
   },
-
-  // ===========================================================================
-  // Follow-up Suggestion Actions
-  // ===========================================================================
-
-  setFollowupSuggestions: (
-    sessionId: string,
-    suggestions: SuggestionBubble[] | null
-  ) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        followupSuggestions: suggestions,
-        suggestionsLoading: false,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  setSuggestionsLoading: (sessionId: string, loading: boolean) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        suggestionsLoading: loading,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  clearFollowupSuggestions: (sessionId: string) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        followupSuggestions: null,
-        suggestionsLoading: false,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
 }));
 
 // =============================================================================
@@ -2158,19 +2081,4 @@ export const useTabHistory = () =>
     const { currentSessionId, sessions } = state;
     if (!currentSessionId) return EMPTY_TAB_HISTORY;
     return sessions.get(currentSessionId)?.tabHistory ?? EMPTY_TAB_HISTORY;
-  });
-
-// Follow-up suggestion selectors
-export const useFollowupSuggestions = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return null;
-    return sessions.get(currentSessionId)?.followupSuggestions ?? null;
-  });
-
-export const useSuggestionsLoading = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return false;
-    return sessions.get(currentSessionId)?.suggestionsLoading ?? false;
   });

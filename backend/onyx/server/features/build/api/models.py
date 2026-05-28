@@ -1,5 +1,4 @@
 from datetime import datetime
-from enum import Enum
 from typing import Any
 from typing import TYPE_CHECKING
 from typing import Union
@@ -288,34 +287,6 @@ class PreProvisionedCheckResponse(BaseModel):
 
     valid: bool  # True if session exists and has no messages
     session_id: str | None = None  # Session ID if valid, None otherwise
-
-
-# ===== Suggestion Bubble Models =====
-class SuggestionTheme(str, Enum):
-    """Theme/category of a follow-up suggestion."""
-
-    ADD = "add"
-    QUESTION = "question"
-
-
-class SuggestionBubble(BaseModel):
-    """A single follow-up suggestion bubble."""
-
-    theme: SuggestionTheme
-    text: str
-
-
-class GenerateSuggestionsRequest(BaseModel):
-    """Request to generate follow-up suggestions."""
-
-    user_message: str  # First user message
-    assistant_message: str  # First assistant text response (accumulated)
-
-
-class GenerateSuggestionsResponse(BaseModel):
-    """Response containing generated suggestions."""
-
-    suggestions: list[SuggestionBubble]
 
 
 class PptxPreviewResponse(BaseModel):
