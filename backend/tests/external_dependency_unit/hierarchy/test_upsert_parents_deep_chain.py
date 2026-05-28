@@ -1,10 +1,9 @@
 """Regression tests for `upsert_parents` recursion safety.
 
-Sky Mavis (a customer with a deeply nested Notion workspace) hit a
-``RecursionError`` from ``upsert_parents`` because the function recursed once
-per ancestor and produced a stack ~1000 deep on real chains. These tests lock
-in the iterative implementation: a deep chain must complete, and a cyclic
-parent reference must not loop or crash.
+Deeply nested Notion workspaces produced parent chains longer than Python's
+default recursion limit, causing ``upsert_parents`` to raise ``RecursionError``.
+These tests lock in the iterative implementation: a deep chain must complete,
+and a cyclic parent reference must not loop or crash.
 """
 
 from collections.abc import Generator
