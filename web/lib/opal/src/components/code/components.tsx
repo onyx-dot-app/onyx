@@ -26,10 +26,12 @@ export function Code({ children, showCopyButton = true, ...props }: CodeProps) {
   const [copied, setCopied] = useState(false);
 
   function handleCopy() {
-    copyText(children).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
-    });
+    copyText(children)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+      })
+      .catch(() => {});
   }
 
   return (
