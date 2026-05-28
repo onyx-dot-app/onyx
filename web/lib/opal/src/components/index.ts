@@ -141,3 +141,6 @@ export {
   CopyButton,
   type CopyButtonProps,
 } from "@opal/components/buttons/copy-button/components";
+
+/* Code */
+export { Code } from "@opal/components/code/components";
