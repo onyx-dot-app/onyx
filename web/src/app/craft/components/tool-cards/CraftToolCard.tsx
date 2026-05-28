@@ -132,14 +132,16 @@ export default function CraftToolCard({
         </span>
       )}
       {toolCall.skillName && <SkillBadge name={toolCall.skillName} />}
-      {expandable && (
-        <SvgChevronDown
-          className={cn(
-            "size-4 stroke-text-03 transition-transform duration-150 shrink-0 ml-auto",
-            !isOpen && "-rotate-90"
-          )}
-        />
-      )}
+      {/* Always render the chevron to reserve space — keeps the row from
+          shifting when expandable flips from false → true on completion. */}
+      <SvgChevronDown
+        aria-hidden={!expandable}
+        className={cn(
+          "size-4 stroke-text-03 transition-transform duration-150 shrink-0 ml-auto",
+          !isOpen && "-rotate-90",
+          !expandable && "invisible"
+        )}
+      />
     </div>
   );
 
