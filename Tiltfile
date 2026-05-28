@@ -32,12 +32,13 @@ APP_NS = os.getenv('WORKTREE_APP_NS')
 APP_RELEASE = os.getenv('WORKTREE_APP_RELEASE')
 INGRESS_HOST = os.getenv('WORKTREE_INGRESS_HOST')
 VALUES_FILE = os.getenv('WORKTREE_VALUES_FILE')
+NEXT_PORT = os.getenv('WORKTREE_NEXT_PORT')
 
-if not SLUG or not APP_NS or not APP_RELEASE or not INGRESS_HOST or not VALUES_FILE:
+if not SLUG or not APP_NS or not APP_RELEASE or not INGRESS_HOST or not VALUES_FILE or not NEXT_PORT:
     fail(
         'Tiltfile must be launched by deployment/helm/dev/dev.sh.\n' +
         'Required env vars: WORKTREE_SLUG, WORKTREE_APP_NS, WORKTREE_APP_RELEASE,\n' +
-        'WORKTREE_INGRESS_HOST, WORKTREE_VALUES_FILE.'
+        'WORKTREE_INGRESS_HOST, WORKTREE_VALUES_FILE, WORKTREE_NEXT_PORT.'
     )
 
 # ---- 1. Safety: only operate against the local k3d cluster ----
@@ -91,27 +92,10 @@ docker_build(
     ],
 )
 
-# ---- 5. Web dev image (next dev with HMR) ----
-
-docker_build(
-    'onyxdotapp/onyx-web-dev',
-    context='./web',
-    dockerfile='./web/Dockerfile.dev',
-    # Only source-tree paths go in live_update. Config-shaped files
-    # (`next.config.js`, `package.json`, `bun.lock`, `tsconfig.json`,
-    # tailwind/postcss config) intentionally do NOT live here — Tilt's
-    # live_update syncs into already-running pods but does not refresh
-    # the image. A subsequent pod restart (helm upgrade, OOM, manual
-    # delete) would boot the new pod from the stale image, masking dev
-    # edits. Files outside live_update trigger image rebuilds on change,
-    # so image + running pods stay consistent.
-    live_update=[
-        sync('./web/src', '/app/src'),
-        sync('./web/public', '/app/public'),
-        sync('./web/lib', '/app/lib'),
-        sync('./web/types', '/app/types'),
-    ],
-)
+# ---- 5. Web dev (native on host, not in cluster) ----
+# `next dev` runs on macOS via `local_resource` below (see section 9).
+# values-dev-app.yaml sets webserver.replicaCount=0 so the chart omits
+# the Deployment + Service + Ingress for the webserver.
 
 # ---- 6. App chart (helm template -> per-workload Tilt resources) ----
 #
@@ -147,7 +131,6 @@ k8s_yaml(helm(
     set=[
         'api.image.repository=onyxdotapp/onyx-backend-dev',
         'celery_shared.image.repository=onyxdotapp/onyx-backend-dev',
-        'webserver.image.repository=onyxdotapp/onyx-web-dev',
     ],
     skip_crds=True,
 ))
@@ -158,7 +141,6 @@ k8s_yaml(helm(
 # render would fail the Tiltfile, so this list must track the chart.
 APP_WORKLOAD_SUFFIXES = [
     'api-server',
-    'web-server',
     'celery-beat',
     'celery-worker-primary',
     'celery-worker-light',
@@ -224,3 +206,26 @@ for (label, host_port, deploy_suffix) in DEBUG_TARGETS:
         # noisy with reconnect messages every time a pod restarts.
         labels=['debug'],
     )
+
+# ---- 9. next-dev (native on host) ----
+# /api/* is proxied by web/src/app/api/[...path]/route.ts to INTERNAL_URL.
+# INTERNAL_URL ends in /api so the cluster ingress's /api(/|$)(.*) rewrite
+# strips it back off before the api-server sees the path.
+local_resource(
+    'next-dev',
+    serve_cmd=(
+        'cd ' + os.getcwd() + '/web && ' +
+        'INTERNAL_URL=http://' + INGRESS_HOST + ':13000/api ' +
+        'PORT=' + NEXT_PORT + ' ' +
+        'AUTH_TYPE=basic ENABLE_CRAFT=true DEV_MODE=true ' +
+        'WEB_DOMAIN=http://localhost:' + NEXT_PORT + ' ' +
+        'bun run dev'
+    ),
+    resource_deps=[APP_RELEASE + '-api-server'],
+    readiness_probe=probe(
+        http_get=http_get_action(port=int(NEXT_PORT), path='/'),
+        period_secs=2,
+        timeout_secs=2,
+    ),
+    labels=['app'],
+)

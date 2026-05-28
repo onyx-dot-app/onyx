@@ -161,31 +161,16 @@ api:
       memory: 3Gi
 
 webserver:
-  replicaCount: 1
+  # `next dev` runs natively on the macOS host via the Tiltfile's
+  # `next-dev` local_resource, not in the cluster. APFS + native cores
+  # beat overlay2 + LinuxKit by 2-4x on compile time. Browser hits
+  # localhost:3000; /api/* requests get proxied server-side by
+  # web/src/app/api/[...path]/route.ts to INTERNAL_URL (the cluster
+  # ingress). With replicaCount=0 the webserver Deployment + Ingress
+  # both omit themselves.
+  replicaCount: 0
   autoscaling:
     enabled: false
-  # Override the production `next start` entrypoint with `bun dev` for HMR.
-  # Tilt syncs `web/` into /app inside the dev image (web/Dockerfile.dev).
-  # The image's bake-time install already populated node_modules; at runtime
-  # we just kick off the Next.js dev server. No re-install — Tilt sync()s
-  # only source files, so package.json / lockfile state matches the image.
-  command:
-    - "/bin/sh"
-    - "-c"
-    - "bun run dev"
-  workingDir: "/app"
-  # `next dev` with Turbopack compiling the full Onyx web tree on a cold
-  # route peaks well above 4 GiB and pegs all available cores. Under-sizing
-  # this causes OOMKill loops that wipe the .next cache on every restart,
-  # so each page load is a cold compile. 8 GiB / 6 CPUs leaves headroom on
-  # a 16 GB / 14 CPU host.
-  resources:
-    requests:
-      cpu: 500m
-      memory: 2Gi
-    limits:
-      cpu: 6000m
-      memory: 8Gi
 
 # Each celery worker runs through the watchfiles-based
 # dev_celery_reload.py helper for hot-reload on source change. Debugpy is

@@ -366,23 +366,23 @@ ensure_infra_release() {
 # ====================================================================
 
 allocate_offsets() {
-  # State files in $STATE_DIR record (tilt_port, redis_db_base) per slug.
-  # Scan siblings to pick the first free offset.
   local slug="$1"
-  local used_tilt=" " used_redis=" "
+  local used_tilt=" " used_redis=" " used_next=" "
   shopt -s nullglob
   local f
   for f in "${STATE_DIR}"/*.json; do
     [[ "$(basename "${f}" .json)" == "${slug}" ]] && continue
-    local tp rb
+    local tp rb np
     tp="$(jq -r '.tilt_port' "${f}" 2>/dev/null || echo "")"
     rb="$(jq -r '.redis_db_base' "${f}" 2>/dev/null || echo "")"
+    np="$(jq -r '.next_port' "${f}" 2>/dev/null || echo "")"
     [[ -n "${tp}" && "${tp}" != "null" ]] && used_tilt+="${tp} "
     [[ -n "${rb}" && "${rb}" != "null" ]] && used_redis+="${rb} "
+    [[ -n "${np}" && "${np}" != "null" ]] && used_next+="${np} "
   done
   shopt -u nullglob
 
-  local tp rb i
+  local tp rb np i
   for ((i=0; i<100; i++)); do
     tp=$((10350 + i))
     if [[ "${used_tilt}" != *" ${tp} "* ]]; then break; fi
@@ -395,7 +395,17 @@ allocate_offsets() {
   done
   [[ -n "${rb}" ]] || die "couldn't allocate a free redis db base"
 
-  echo "${tp} ${rb}"
+  # Base 23000: deliberately well clear of 3000 (the prevailing next-dev
+  # default — likely in use by other Onyx checkouts), of k3d serverlb at
+  # 13000, and of Tilt UI at 10350+.
+  for ((i=0; i<100; i++)); do
+    np=$((23000 + i))
+    if [[ "${used_next}" != *" ${np} "* ]] && ! lsof -nP -iTCP:"${np}" -sTCP:LISTEN >/dev/null 2>&1; then break; fi
+    np=""
+  done
+  [[ -n "${np}" ]] || die "couldn't allocate a free next-dev port in 23000-23099"
+
+  echo "${tp} ${rb} ${np}"
 }
 
 provision_pg_database() {
@@ -614,22 +624,31 @@ cmd_up() {
 
   mkdir -p "${STATE_DIR}"
 
-  local tilt_port redis_base
+  local tilt_port redis_base next_port
   if [[ -f "${state_file}" ]]; then
     tilt_port="$(jq -r '.tilt_port' "${state_file}")"
     redis_base="$(jq -r '.redis_db_base' "${state_file}")"
-    log "reusing allocation: tilt_port=${tilt_port}, redis_db_base=${redis_base}"
+    next_port="$(jq -r '.next_port // empty' "${state_file}")"
+    if [[ -z "${next_port}" ]]; then
+      # Older state files predate next_port; allocate one and migrate.
+      local _tp_unused _rb_unused
+      read -r _tp_unused _rb_unused next_port < <(allocate_offsets "${slug}")
+      jq --argjson p "${next_port}" '. + {next_port: $p}' "${state_file}" \
+        > "${state_file}.tmp" && mv "${state_file}.tmp" "${state_file}"
+    fi
+    log "reusing allocation: tilt_port=${tilt_port}, redis_db_base=${redis_base}, next_port=${next_port}"
   else
-    read -r tilt_port redis_base < <(allocate_offsets "${slug}")
-    log "allocated: tilt_port=${tilt_port}, redis_db_base=${redis_base}"
+    read -r tilt_port redis_base next_port < <(allocate_offsets "${slug}")
+    log "allocated: tilt_port=${tilt_port}, redis_db_base=${redis_base}, next_port=${next_port}"
     jq -n \
       --arg slug "${slug}" \
       --argjson tilt_port "${tilt_port}" \
       --argjson redis_base "${redis_base}" \
+      --argjson next_port "${next_port}" \
       --arg db "${db_name}" \
       --arg bucket "${bucket_name}" \
       --arg host "${ingress_host}" \
-      '{slug:$slug, tilt_port:$tilt_port, redis_db_base:$redis_base, db:$db, bucket:$bucket, ingress_host:$host}' \
+      '{slug:$slug, tilt_port:$tilt_port, redis_db_base:$redis_base, next_port:$next_port, db:$db, bucket:$bucket, ingress_host:$host}' \
       > "${state_file}"
   fi
 
@@ -659,17 +678,14 @@ cmd_up() {
   export WORKTREE_APP_RELEASE="${app_release}"
   export WORKTREE_INGRESS_HOST="${ingress_host}"
   export WORKTREE_VALUES_FILE="${values_file}"
+  export WORKTREE_NEXT_PORT="${next_port}"
   export TILT_PORT="${tilt_port}"
 
   log ""
   log "launching 'tilt up' — Tilt UI at http://localhost:${tilt_port}"
-  log "app will be reachable at http://${ingress_host}:13000 once pods are ready"
+  log "app will be reachable at http://localhost:${next_port} once next-dev is ready"
   log ""
 
-  # Schedule a browser open AFTER tilt has had time to bind :tilt_port. The
-  # subshell forks before exec, so it survives the script being replaced
-  # by `tilt up`. macOS/Linux openers focus an existing tab rather than
-  # opening a duplicate, so re-running `dev.sh up` doesn't spam tabs.
   if [[ "${open_browser}" -eq 1 ]]; then
     ( sleep 3 && open_url "http://localhost:${tilt_port}" ) &
     disown
