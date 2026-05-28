@@ -2345,6 +2345,15 @@ grpc = [
 ]
 
 [[package]]
+name = "graphql-core"
+version = "3.2.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c4/16/7574029da84834349b60ed71614d66ca3afe46e9bf9c7b9562102acb7d4f/graphql_core-3.2.6.tar.gz", hash = "sha256:c08eec22f9e40f0bd61d805907e3b3b1b9a320bc606e23dc145eebca07c8fbab", size = 505353, upload-time = "2025-01-26T16:36:27.374Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ae/4f/7297663840621022bc73c22d7d9d80dbc78b4db6297f764b545cd5dd462d/graphql_core-3.2.6-py3-none-any.whl", hash = "sha256:78b016718c161a6fb20a7d97bbf107f331cd1afe53e45566c59f776ed7f0b45f", size = 203416, upload-time = "2025-01-26T16:36:24.868Z" },
+]
+
+[[package]]
 name = "greenlet"
 version = "3.2.4"
 source = { registry = "https://pypi.org/simple" }
@@ -4594,6 +4603,7 @@ backend = [
     { name = "google-auth-httplib2" },
     { name = "google-auth-oauthlib" },
     { name = "google-cloud-storage" },
+    { name = "graphql-core" },
     { name = "httpcore" },
     { name = "httpx", extra = ["http2"] },
     { name = "httpx-oauth" },
@@ -4772,6 +4782,7 @@ backend = [
     { name = "google-auth-httplib2", specifier = "==0.1.0" },
     { name = "google-auth-oauthlib", specifier = "==1.0.0" },
     { name = "google-cloud-storage", specifier = ">=3.0.0,<4.0.0" },
+    { name = "graphql-core", specifier = "==3.2.6" },
     { name = "httpcore", specifier = "==1.0.9" },
     { name = "httpx", extras = ["http2"], specifier = "==0.28.1" },
     { name = "httpx-oauth", specifier = "==0.15.1" },
