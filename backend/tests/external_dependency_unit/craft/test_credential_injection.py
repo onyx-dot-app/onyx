@@ -1,10 +1,3 @@
-"""resolve_injection_headers against a real DB + real ExternalApp rows.
-
-Covers the credential resolution the egress proxy performs on a verified
-forward: merge org + per-user credentials, honour the enabled kill switch, and
-omit headers whose placeholders can't be filled.
-"""
-
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
