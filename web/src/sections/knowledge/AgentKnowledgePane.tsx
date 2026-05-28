@@ -32,7 +32,7 @@ import { ConnectedSource } from "@/lib/hierarchy/interfaces";
 import { ProjectFile } from "@/app/app/projects/projectsService";
 import { AgentAttachedDocument, AgentHierarchyNode } from "@/lib/agents/types";
 import { timeAgo } from "@/lib/time";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import { Disabled } from "@opal/core";
 import SourceHierarchyBrowser from "./SourceHierarchyBrowser";
 

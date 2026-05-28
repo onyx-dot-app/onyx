@@ -283,10 +283,15 @@ SMTP_SERVER = os.environ.get("SMTP_SERVER") or ""
 SMTP_PORT = int(os.environ.get("SMTP_PORT") or "587")
 SMTP_USER = os.environ.get("SMTP_USER") or ""
 SMTP_PASS = os.environ.get("SMTP_PASS") or ""
+SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "true").lower() not in (
+    "false",
+    "0",
+    "no",
+)
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
 
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY") or ""
-EMAIL_CONFIGURED = all([SMTP_SERVER, SMTP_USER, SMTP_PASS]) or SENDGRID_API_KEY
+EMAIL_CONFIGURED = (bool(SMTP_SERVER) and bool(EMAIL_FROM)) or bool(SENDGRID_API_KEY)
 
 # If set, Onyx will listen to the `expires_at` returned by the identity
 # provider (e.g. Okta, Google, etc.) and force the user to re-authenticate
@@ -1040,6 +1045,13 @@ LOG_ONYX_MODEL_INTERACTIONS = (
 PROMPT_CACHE_CHAT_HISTORY = (
     os.environ.get("PROMPT_CACHE_CHAT_HISTORY", "").lower() == "true"
 )
+
+# Opt-in cap on outgoing image-count for Azure providers (any model_provider
+# starting with "azure"). When enabled, requests are capped at 50 images each
+# (matching the documented Azure OpenAI ceiling) to avoid raw 400s from the
+# gateway. Off by default.
+ENABLE_AZURE_IMAGE_CAP = os.environ.get("ENABLE_AZURE_IMAGE_CAP", "").lower() == "true"
+
 # If set to `true` will enable additional logs about Vespa query performance
 # (time spent on finding the right docs + time spent fetching summaries from disk)
 LOG_VESPA_TIMING_INFORMATION = (

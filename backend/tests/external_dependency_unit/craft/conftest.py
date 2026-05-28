@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
 import shlex
 import threading
@@ -16,6 +17,7 @@ import zipfile
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import PurePosixPath
@@ -30,6 +32,8 @@ from fastapi_users.password import PasswordHelper
 if TYPE_CHECKING:
     from kubernetes import client as k8s_client_module
 from redis import Redis
+from sqlalchemy import select
+from sqlalchemy.orm import class_mapper
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
@@ -38,7 +42,14 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import AccountType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
+from onyx.db.llm import fetch_default_llm_model
+from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import remove_llm_provider
+from onyx.db.llm import update_default_provider
+from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import BuildSession
+from onyx.db.models import ExternalApp
+from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import Sandbox
 from onyx.db.models import Skill
 from onyx.db.models import Skill__UserGroup
@@ -47,15 +58,18 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.models import UserRole
 from onyx.file_store.file_store import get_default_file_store
+from onyx.llm.constants import LlmProviderNames
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.sandbox.base import ACPEvent
+from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
+from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.manage.llm.models import LLMProviderUpsertRequest
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config
@@ -67,6 +81,194 @@ _DEV_PUSH_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 @pytest.fixture(autouse=True)
 def _sandbox_push_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+
+
+# ---------------------------------------------------------------------------
+# Skill-table isolation
+# ---------------------------------------------------------------------------
+#
+# These tests run against the shared ``public`` schema (``TEST_TENANT_ID ==
+# "public"``) — the very schema a self-hosted / local dev deployment uses. The
+# fixtures and helpers below commit ``Skill`` / ``ExternalApp`` rows directly
+# and nothing rolled them back, so every committed row leaked into the
+# developer's live craft skill list (and into the next test's view of the
+# table). Tests also delete/mutate the migration-seeded built-in rows
+# (``pptx``, ``image-generation``, ``company-search``), corrupting them for the
+# live app.
+#
+# The ``_test_helpers`` contract states "the surrounding test owns transaction
+# boundaries"; this autouse fixture is that boundary for the skill tables. It
+# snapshots their committed state before each test and restores it afterward,
+# so a run leaves these tables exactly as it found them (the canonical
+# built-ins on a freshly-migrated DB).
+
+# Parent -> child order (FKs all point child -> parent). Restore/insert in this
+# order; delete in reverse so FK constraints stay satisfied.
+_SKILL_ISOLATION_MODELS: tuple[type[Any], ...] = (
+    Skill,
+    Skill__UserGroup,
+    ExternalApp,
+    ExternalAppUserCredential,
+)
+
+
+def _skill_table_column_keys(model: type[Any]) -> list[str]:
+    return [attr.key for attr in class_mapper(model).column_attrs]
+
+
+def _skill_table_pk_keys(model: type[Any]) -> list[str]:
+    return [col.key for col in class_mapper(model).primary_key]
+
+
+def _snapshot_skill_tables(
+    session: Session,
+) -> dict[type[Any], list[dict[str, Any]]]:
+    snapshot: dict[type[Any], list[dict[str, Any]]] = {}
+    for model in _SKILL_ISOLATION_MODELS:
+        keys = _skill_table_column_keys(model)
+        snapshot[model] = [
+            {key: getattr(row, key) for key in keys}
+            for row in session.execute(select(model)).scalars().all()
+        ]
+    return snapshot
+
+
+def _restore_skill_tables(
+    session: Session, snapshot: dict[type[Any], list[dict[str, Any]]]
+) -> None:
+    # Delete rows created during the test (children first so FKs stay valid).
+    for model in reversed(_SKILL_ISOLATION_MODELS):
+        pk_keys = _skill_table_pk_keys(model)
+        baseline_pks = {tuple(row[key] for key in pk_keys) for row in snapshot[model]}
+        for row in session.execute(select(model)).scalars().all():
+            if tuple(getattr(row, key) for key in pk_keys) not in baseline_pks:
+                session.delete(row)
+        session.flush()
+
+    # Re-insert baseline rows the test deleted and restore any it mutated
+    # (parents first). ``merge`` keys on PK: insert when absent, update when
+    # present.
+    for model in _SKILL_ISOLATION_MODELS:
+        for row in snapshot[model]:
+            session.merge(model(**row))
+        session.flush()
+
+    session.commit()
+
+
+def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
+    """Delete rows by id on a fresh tenant session, swallowing errors.
+
+    For fixture teardown: a failed delete (e.g. an FK that doesn't cascade)
+    must not fail the test — at worst the row leaks, as it did before.
+    """
+    ids = [i for i in ids if i is not None]
+    if not ids:
+        return
+    try:
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+        try:
+            with get_session_with_current_tenant() as session:
+                for row_id in ids:
+                    row = session.get(model, row_id)
+                    if row is not None:
+                        session.delete(row)
+                session.commit()
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    except Exception:
+        pass
+
+
+def _best_effort_delete_memberships(group_ids: list[int]) -> None:
+    """Delete User__UserGroup rows for the given groups (composite PK, so not
+    deletable by ``_best_effort_delete``). Best-effort."""
+    if not group_ids:
+        return
+    try:
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+        try:
+            with get_session_with_current_tenant() as session:
+                session.query(User__UserGroup).filter(
+                    User__UserGroup.user_group_id.in_(group_ids)
+                ).delete(synchronize_session=False)
+                session.commit()
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    except Exception:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def _isolate_skill_tables(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[None, None, None]:
+    """Restore the skill tables to their pre-test state (see note above).
+
+    Shares the test's ``db_session`` so there is a single transaction holder —
+    no second connection that could block on row locks the test still holds.
+    """
+    snapshot = _snapshot_skill_tables(db_session)
+    yield
+    # Drop any uncommitted state a failing/early-exiting test left open before
+    # reconciling against the committed baseline.
+    db_session.rollback()
+    _restore_skill_tables(db_session, snapshot)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _seed_default_llm_provider() -> Generator[None, None, None]:
+    """Seed a default LLM provider so the real provisioning path resolves one.
+
+    No-op (and no teardown) if the DB already has a default, so it never
+    clobbers a dev database. K8s lane only.
+    """
+    from onyx.server.features.build.configs import SANDBOX_BACKEND
+    from onyx.server.features.build.configs import SandboxBackend
+
+    if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
+        yield
+        return
+
+    SqlEngine.init_engine(pool_size=10, max_overflow=5)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    seeded_name: str | None = None
+    try:
+        with get_session_with_current_tenant() as session:
+            if fetch_default_llm_model(session) is None:
+                seeded_name = f"craft-ci-default-{uuid4().hex[:8]}"
+                provider = upsert_llm_provider(
+                    LLMProviderUpsertRequest(
+                        name=seeded_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-craft-ci-not-used",
+                        api_key_changed=True,
+                        model_configurations=[
+                            ModelConfigurationUpsertRequest(
+                                name="gpt-4o-mini", is_visible=True
+                            )
+                        ],
+                    ),
+                    db_session=session,
+                )
+                update_default_provider(
+                    provider_id=provider.id,
+                    model_name="gpt-4o-mini",
+                    db_session=session,
+                )
+                session.commit()
+        yield
+    finally:
+        if seeded_name is not None:
+            with get_session_with_current_tenant() as session:
+                existing = fetch_existing_llm_provider(
+                    name=seeded_name, db_session=session
+                )
+                if existing is not None:
+                    remove_llm_provider(session, existing.id)
+                    session.commit()
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 @pytest.fixture(scope="function")
@@ -88,18 +290,17 @@ def tenant_context() -> Generator[None, None, None]:
 
 
 @pytest.fixture(scope="function")
-def test_user(db_session: Session, tenant_context: None) -> User:  # noqa: ARG001
-    """Create a test user for build session tests."""
-    unique_email = f"build_test_{uuid4().hex[:8]}@example.com"
-
+def test_user(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[User, None, None]:
+    """A committed test user; deleted on teardown (cascades its sandboxes,
+    sessions, and memberships)."""
     password_helper = PasswordHelper()
-    password = password_helper.generate()
-    hashed_password = password_helper.hash(password)
-
     user = User(
         id=uuid4(),
-        email=unique_email,
-        hashed_password=hashed_password,
+        email=f"build_test_{uuid4().hex[:8]}@example.com",
+        hashed_password=password_helper.hash(password_helper.generate()),
         is_active=True,
         is_superuser=False,
         is_verified=True,
@@ -109,7 +310,8 @@ def test_user(db_session: Session, tenant_context: None) -> User:  # noqa: ARG00
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
-    return user
+    yield user
+    _best_effort_delete(User, [user.id])
 
 
 @pytest.fixture(scope="function")
@@ -149,12 +351,10 @@ def sandbox(
         status: SandboxStatus = SandboxStatus.RUNNING,
     ) -> Sandbox:
         owner = user or test_user
-        row = Sandbox(
-            id=uuid4(),
-            user_id=owner.id,
-            status=status,
-        )
-        db_session.add(row)
+        # create_sandbox__no_commit starts at PROVISIONING; move to the asked status.
+        row = create_sandbox__no_commit(db_session=db_session, user_id=owner.id)
+        if status != SandboxStatus.PROVISIONING:
+            update_sandbox_status__no_commit(db_session, row.id, status)
         db_session.commit()
         db_session.refresh(row)
         return row
@@ -401,11 +601,9 @@ class SandboxHandle:
     manager: KubernetesSandboxManager
     sandbox_id: UUID
     session_id: UUID | None
-    info: SandboxInfo
     _k8s_client: "k8s_client_module.CoreV1Api"
     # Required to provision additional sandboxes for other users.
     _db_session: Session
-    _llm_config: LLMProviderConfig
     _register_extra: Callable[[UUID], None]
 
     @property
@@ -415,10 +613,6 @@ class SandboxHandle:
             _pod_name=self.manager._get_pod_name(self.sandbox_id),
             _sandbox_id=self.sandbox_id,
         )
-
-    @property
-    def skills_path(self) -> WorkspaceProxy:
-        return self.workspace_path / "managed" / "skills"
 
     def provision_for(
         self, user: User, status: SandboxStatus = SandboxStatus.RUNNING
@@ -432,23 +626,13 @@ class SandboxHandle:
         If ``status`` is not RUNNING, the row is updated after provisioning
         (the manager always starts with RUNNING).
         """
-        sandbox_row = Sandbox(
-            id=uuid4(),
-            user_id=user.id,
-            status=SandboxStatus.RUNNING,
-        )
-        self._db_session.add(sandbox_row)
-        self._db_session.commit()
-        self._db_session.refresh(sandbox_row)
+        sandbox_id = _provision_sandbox_via_app(user.id)
+        self._register_extra(sandbox_id)
 
-        _provision_with_retry(
-            self.manager,
-            sandbox_id=sandbox_row.id,
-            user_id=user.id,
-            tenant_id=TEST_TENANT_ID,
-            llm_config=self._llm_config,
-        )
-        self._register_extra(sandbox_row.id)
+        # Committed on another session; refresh before reading.
+        self._db_session.expire_all()
+        sandbox_row = self._db_session.get(Sandbox, sandbox_id)
+        assert sandbox_row is not None
 
         if status != SandboxStatus.RUNNING:
             sandbox_row.status = status
@@ -456,70 +640,109 @@ class SandboxHandle:
 
         workspace = WorkspaceProxy(
             _k8s_client=self._k8s_client,
-            _pod_name=self.manager._get_pod_name(sandbox_row.id),
-            _sandbox_id=sandbox_row.id,
+            _pod_name=self.manager._get_pod_name(sandbox_id),
+            _sandbox_id=sandbox_id,
         )
         return sandbox_row, workspace
 
 
-def _wait_until_healthy(
-    manager: KubernetesSandboxManager,
-    sandbox_id: UUID,
-    max_attempts: int = 15,
-    timeout: float = 5.0,
-) -> None:
-    for _ in range(max_attempts):
-        if manager.health_check(sandbox_id, timeout=timeout):
-            return
-        time.sleep(2)
-    raise RuntimeError(f"Sandbox {sandbox_id} never became healthy")
+def _create_committed_craft_user() -> UUID:
+    """Commit a standard craft user and return its id."""
+    password_helper = PasswordHelper()
+    user_id = uuid4()
+    with get_session_with_current_tenant() as session:
+        session.add(
+            User(
+                id=user_id,
+                email=f"craft_sandbox_{user_id.hex[:8]}@example.com",
+                hashed_password=password_helper.hash(password_helper.generate()),
+                is_active=True,
+                is_superuser=False,
+                is_verified=True,
+                role=UserRole.BASIC,
+                account_type=AccountType.STANDARD,
+            )
+        )
+        session.commit()
+    return user_id
 
 
-def _provision_with_retry(
-    manager: KubernetesSandboxManager,
-    *,
-    sandbox_id: UUID,
-    user_id: UUID,
-    tenant_id: str,
-    llm_config: LLMProviderConfig,
-    onyx_pat: str | None = "ci-test-pat",
-) -> SandboxInfo:
-    """Provision + wait-healthy with a one-shot retry on flake.
-
-    kind under load occasionally times out the manager's
-    ``_wait_for_pod_ready`` (cluster scheduling pressure, transient
-    image-pull retries). When that happens we terminate the half-baked
-    pod and try once more — fresh scheduling usually succeeds. Real
-    deterministic failures still raise on the second try.
+def _provision_sandbox_via_app(user_id: UUID) -> UUID:
+    """Provision via the app's own ``ensure_sandbox_running`` (creates the row
+    + provisions the pod), so test setup can't drift from prod. One-shot retry
+    absorbs kind scheduling flake.
     """
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            info = manager.provision(
-                sandbox_id=sandbox_id,
-                user_id=user_id,
-                tenant_id=tenant_id,
-                llm_config=llm_config,
-                onyx_pat=onyx_pat,
-            )
-            _wait_until_healthy(manager, sandbox_id)
-            return info
+            with get_session_with_current_tenant() as session:
+                sandbox = SessionManager(session).ensure_sandbox_running(user_id)
+                sandbox_id = sandbox.id
+                session.commit()
+                return sandbox_id
         except Exception as e:  # noqa: BLE001
             last_err = e
             if attempt == 0:
-                # Tear down the half-baked pod before retrying so the
-                # second attempt starts from a clean slate.
-                try:
-                    manager.terminate(sandbox_id)
-                except Exception:
-                    pass
                 continue
             raise
-    # Unreachable — the loop either returns or raises — but type-checkers
-    # complain without an explicit terminator.
     raise RuntimeError(
-        f"provision retry exhausted for {sandbox_id}: {last_err}"
+        f"ensure_sandbox_running exhausted retries for user {user_id}: {last_err}"
     ) from last_err
+
+
+@contextmanager
+def _provisioned_sandbox(
+    manager: KubernetesSandboxManager,
+    k8s_client: "k8s_client_module.CoreV1Api",
+) -> Generator[tuple[UUID, str], None, None]:
+    """The one way to get a real provisioned sandbox in a test.
+
+    The proxy resolves pod identity via the DB (pod IP -> Sandbox.user_id), so
+    a pod without a committed Sandbox row fails closed — gated egress 403s and
+    snapshot uploads are silently dropped. Provisioning through the app path
+    guarantees the row exists. Yields ``(sandbox_id, pod_name)``; tears the pod
+    + rows down on exit.
+    """
+    user_id = _create_committed_craft_user()
+    try:
+        sandbox_id = _provision_sandbox_via_app(user_id)
+        pod_name = manager._get_pod_name(str(sandbox_id))
+        try:
+            yield sandbox_id, pod_name
+        finally:
+            try:
+                manager.terminate(sandbox_id)
+            except Exception:
+                pass
+            try:
+                wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
+            except Exception:
+                pass
+    finally:
+        with get_session_with_current_tenant() as session:
+            for row in session.query(Sandbox).filter(Sandbox.user_id == user_id).all():
+                session.delete(row)
+            user_row = session.get(User, user_id)
+            if user_row is not None:
+                session.delete(user_row)
+            session.commit()
+
+
+def _setup_default_session(
+    manager: KubernetesSandboxManager,
+    sandbox_id: UUID,
+    session_id: UUID,
+    llm_config: LLMProviderConfig | None = None,
+) -> None:
+    """Set up a session workspace with the standard test defaults."""
+    manager.setup_session_workspace(
+        sandbox_id=sandbox_id,
+        session_id=session_id,
+        llm_config=llm_config
+        or default_llm_config(api_key=os.environ.get("OPENAI_API_KEY", "test-key")),
+        nextjs_port=None,
+        skills_section="No skills available.",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -544,7 +767,6 @@ class _PoolPod:
     pod_name: str
     manager: KubernetesSandboxManager
     k8s_client: "k8s_client_module.CoreV1Api"
-    info: SandboxInfo
 
 
 def _cleanup_pool_workspace(
@@ -590,11 +812,9 @@ def _pool_pod(
     fixture wipes mutable trees on entry, so each test sees a clean
     workspace.
 
-    The DB row backing the pool sandbox is owned by a module-scoped "pool
-    user". Tests that pass ``user=`` to ``running_sandbox()`` get the pool
-    sandbox anyway (the kwarg is honored for back-compat but the primary
-    pod's identity stays stable); tests that genuinely need a user-owned
-    sandbox should use ``SandboxHandle.provision_for(user)`` instead.
+    The pool sandbox's pod identity is fixed regardless of any ``user=``
+    passed to ``running_sandbox()``; for a user-owned pod use
+    ``SandboxHandle.provision_for(user)``.
     """
     from onyx.server.features.build.configs import SANDBOX_BACKEND
     from onyx.server.features.build.configs import SandboxBackend
@@ -609,70 +829,15 @@ def _pool_pod(
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
     manager = KubernetesSandboxManager()
 
-    password_helper = PasswordHelper()
-    pool_user_id = uuid4()
-    pool_sandbox_id = uuid4()
-    pool_user_email = f"pool_{pool_user_id.hex[:8]}@example.com"
-
-    # Create pool user + sandbox DB rows.
-    with get_session_with_current_tenant() as session:
-        pool_user = User(
-            id=pool_user_id,
-            email=pool_user_email,
-            hashed_password=password_helper.hash(password_helper.generate()),
-            is_active=True,
-            is_superuser=False,
-            is_verified=True,
-            role=UserRole.EXT_PERM_USER,
-            account_type=AccountType.EXT_PERM_USER,
-        )
-        session.add(pool_user)
-        session.add(
-            Sandbox(
-                id=pool_sandbox_id,
-                user_id=pool_user_id,
-                status=SandboxStatus.RUNNING,
-            )
-        )
-        session.commit()
-
-    # Provision the pod once, with a one-shot retry on flake.
-    pool_info = _provision_with_retry(
-        manager,
-        sandbox_id=pool_sandbox_id,
-        user_id=pool_user_id,
-        tenant_id=TEST_TENANT_ID,
-        llm_config=default_llm_config(
-            api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
-        ),
-    )
-    pod_name = manager._get_pod_name(pool_sandbox_id)
-
     try:
-        yield _PoolPod(
-            sandbox_id=pool_sandbox_id,
-            pod_name=pod_name,
-            manager=manager,
-            k8s_client=k8s_client,
-            info=pool_info,
-        )
+        with _provisioned_sandbox(manager, k8s_client) as (pool_sandbox_id, pod_name):
+            yield _PoolPod(
+                sandbox_id=pool_sandbox_id,
+                pod_name=pod_name,
+                manager=manager,
+                k8s_client=k8s_client,
+            )
     finally:
-        try:
-            manager.terminate(pool_sandbox_id)
-        except Exception:
-            pass
-        try:
-            wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
-        except Exception:
-            pass
-        with get_session_with_current_tenant() as session:
-            row = session.get(Sandbox, pool_sandbox_id)
-            if row is not None:
-                session.delete(row)
-            user_row = session.get(User, pool_user_id)
-            if user_row is not None:
-                session.delete(user_row)
-            session.commit()
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
@@ -702,10 +867,9 @@ def running_sandbox(
     ``pytestmark``. Tests consuming it run in the K8s CI lane only
     (``pr-craft-k8s-tests.yml``).
 
-    The ``user=`` kwarg on ``_make`` is accepted for source-compat but
-    ignored — the pool pod is owned by a module-scoped pool user. Tests
-    that need a user-owned sandbox should call
-    ``SandboxHandle.provision_for(user)`` instead.
+    The ``user=`` kwarg sets the owner of the session row (when
+    ``with_session=True``) but does not change the pool pod's identity. For a
+    user-owned *pod*, call ``SandboxHandle.provision_for(user)`` instead.
     """
     from onyx.server.features.build.configs import SANDBOX_BACKEND
     from onyx.server.features.build.configs import SandboxBackend
@@ -752,13 +916,7 @@ def running_sandbox(
             db_session.add(session_row)
             db_session.commit()
 
-            pool.manager.setup_session_workspace(
-                sandbox_id=pool.sandbox_id,
-                session_id=session_id,
-                llm_config=config,
-                nextjs_port=None,
-                skills_section="No skills available.",
-            )
+            _setup_default_session(pool.manager, pool.sandbox_id, session_id, config)
 
         def _cleanup() -> None:
             for extra_id in extra_sandbox_ids:
@@ -776,10 +934,8 @@ def running_sandbox(
             manager=pool.manager,
             sandbox_id=pool.sandbox_id,
             session_id=session_id,
-            info=pool.info,
             _k8s_client=pool.k8s_client,
             _db_session=db_session,
-            _llm_config=config,
             _register_extra=_register_extra,
         )
 
@@ -789,6 +945,7 @@ def running_sandbox(
 @pytest.fixture(scope="function")
 def granted_users(
     db_session: Session,
+    request: pytest.FixtureRequest,
     tenant_context: None,  # noqa: ARG001
 ) -> Callable[..., dict[str, list[User]]]:
     """Factory: create users + sandboxes + groups in one call.
@@ -806,6 +963,19 @@ def granted_users(
     realised mapping of group name → list of users.
     """
     password_helper = PasswordHelper()
+    created_user_ids: list[UUID] = []
+    created_group_ids: list[int] = []
+
+    # Delete users (cascades their sandboxes / sessions / memberships), then
+    # any membership left by a pre-existing user (its user_group_id FK is
+    # RESTRICT, so it would block the group delete), then the groups we made.
+    # Best-effort so teardown can't fail a test.
+    def _cleanup() -> None:
+        _best_effort_delete(User, created_user_ids)
+        _best_effort_delete_memberships(created_group_ids)
+        _best_effort_delete(UserGroup, created_group_ids)
+
+    request.addfinalizer(_cleanup)
 
     def _make(grants: dict[str, list[User | None]]) -> dict[str, list[User]]:
         out: dict[str, list[User]] = {}
@@ -825,6 +995,7 @@ def granted_users(
                 db_session.add(group)
                 db_session.commit()
                 db_session.refresh(group)
+                created_group_ids.append(group.id)
 
             created: list[User] = []
             for existing_user in slots:
@@ -845,15 +1016,15 @@ def granted_users(
                     db_session.add(user)
                     db_session.commit()
                     db_session.refresh(user)
+                    created_user_ids.append(user.id)
 
-                # One sandbox per user (status=RUNNING) — the docs say
-                # "creates N users + sandboxes + group memberships".
-                sandbox_row = Sandbox(
-                    id=uuid4(),
-                    user_id=user.id,
-                    status=SandboxStatus.RUNNING,
+                # One RUNNING sandbox per user.
+                sandbox_row = create_sandbox__no_commit(
+                    db_session=db_session, user_id=user.id
                 )
-                db_session.add(sandbox_row)
+                update_sandbox_status__no_commit(
+                    db_session, sandbox_row.id, SandboxStatus.RUNNING
+                )
 
                 membership = User__UserGroup(
                     user_id=user.id,
@@ -892,6 +1063,7 @@ def seeded_bundle() -> Callable[[dict[str, bytes | str]], bytes]:
 @pytest.fixture(scope="function")
 def seeded_skill(
     db_session: Session,
+    request: pytest.FixtureRequest,
     tenant_context: None,  # noqa: ARG001
 ) -> Callable[..., Skill]:
     """Factory: create a ``Skill`` row + its bundle in the file store.
@@ -899,10 +1071,21 @@ def seeded_skill(
     Convenience wrapper over the admin-skills create path. Tests that exercise
     the HTTP boundary should still go through the admin API; this factory is
     for tests that need a Skill row to be **present** without making HTTP
-    calls.
+    calls. The Skill row is reclaimed by ``_isolate_skill_tables``; the bundle
+    blob is deleted on teardown here.
     """
     file_store = get_default_file_store()
     file_store.initialize()
+    bundle_file_ids: list[str] = []
+
+    def _cleanup() -> None:
+        for file_id in bundle_file_ids:
+            try:
+                file_store.delete_file(file_id, error_on_missing=False)
+            except Exception:
+                pass
+
+    request.addfinalizer(_cleanup)
 
     def _make(
         slug: str,
@@ -926,6 +1109,7 @@ def seeded_skill(
             file_origin=FileOrigin.SKILL_BUNDLE,
             file_type="application/zip",
         )
+        bundle_file_ids.append(bundle_file_id)
 
         skill = Skill(
             id=uuid4(),
@@ -1072,23 +1256,6 @@ def assert_lock_serializes_two_threads(
     redis_client.delete(lock_key)
 
 
-@pytest.fixture(scope="function")
-def acp_event_sequence() -> Callable[[Iterable[ACPEvent]], list[ACPEvent]]:
-    """Helper: materialise an iterable of ACP events into a re-driveable list.
-
-    Returns a fresh ``list[ACPEvent]`` suitable for assignment to
-    ``stub.send_message_events``. The stub snapshots the list on assignment
-    so the same stub can be re-driven across multiple ``send_message`` calls;
-    materialising here ensures generators are not exhausted before assignment
-    either.
-    """
-
-    def _make(events: Iterable[ACPEvent]) -> list[ACPEvent]:
-        return list(events)
-
-    return _make
-
-
 # ---------------------------------------------------------------------------
 # Kubernetes helpers (Part V.1)
 #
@@ -1101,16 +1268,6 @@ def acp_event_sequence() -> Callable[[Iterable[ACPEvent]], list[ACPEvent]]:
 # ---------------------------------------------------------------------------
 
 
-def _load_kube_config() -> None:
-    """Load in-cluster config if available, otherwise fall back to kubeconfig."""
-    from kubernetes import config as k8s_config_module
-
-    try:
-        k8s_config_module.load_incluster_config()
-    except k8s_config_module.ConfigException:
-        k8s_config_module.load_kube_config()
-
-
 @pytest.fixture(scope="session")
 def k8s_client() -> "k8s_client_module.CoreV1Api":
     """Session-scope CoreV1Api client.
@@ -1121,7 +1278,11 @@ def k8s_client() -> "k8s_client_module.CoreV1Api":
     """
     from kubernetes import client as k8s_client_module
 
-    _load_kube_config()
+    from onyx.server.features.build.sandbox.kubernetes.k8s_client import (
+        load_kube_config,
+    )
+
+    load_kube_config()
     return k8s_client_module.CoreV1Api()
 
 
@@ -1158,30 +1319,50 @@ def pod_exec(
     return str(resp) if resp is not None else ""
 
 
-def wait_for_nextjs_ready(
+def pod_exec_async(
     client: "k8s_client_module.CoreV1Api",
     pod_name: str,
-    port: int,
-    max_attempts: int = 30,
+    namespace: str,
+    url: str,
+    output_path: str,
+    *,
+    method: str = "POST",
+    headers: dict[str, str] | None = None,
+    body: str | None = None,
+    max_time_s: int = 240,
+    container: str = "sandbox",
+    proxy_session_id: str | None = None,
 ) -> None:
-    """Poll an in-pod Next.js server until it returns 200/304 on ``/``.
+    """Kick off a background sandbox-side ``curl``, writing ``{status}\\n{body}``
+    to a tempfile only after curl exits. Returns immediately; poll via
+    ``wait_for_pod_exec_output`` (a valid leading integer means done).
 
-    Raises ``RuntimeError`` if the server is not ready after ``max_attempts``
-    attempts (2-second sleeps between attempts).
+    ``proxy_session_id`` mimics the ``session-proxy-tag`` opencode plugin,
+    tagging the request with the session id as ``Proxy-Authorization`` userinfo
+    so the proxy can resolve the session. Omit it to exercise the untagged,
+    fail-closed gate path.
     """
+    header_args = ""
+    for key, value in (headers or {}).items():
+        header_args += f" -H {json.dumps(f'{key}: {value}')}"
+    body_arg = f" --data {json.dumps(body)}" if body is not None else ""
+    # Override the ambient proxy with the session id as basic-auth userinfo.
+    proxy_arg = (
+        f" -x {json.dumps(f'http://{proxy_session_id}@sandbox-proxy:8080')}"
+        if proxy_session_id is not None
+        else ""
+    )
     script = (
-        f"curl -s -o /dev/null -w '%{{http_code}}' "
-        f"http://localhost:{port}/ 2>/dev/null || echo 'failed'"
+        f"nohup sh -c '"
+        f"curl -s -X {method}{header_args}{body_arg}{proxy_arg} "
+        f"--max-time {max_time_s} "
+        f'-o {output_path}.body -w "%{{http_code}}" {json.dumps(url)} '
+        f"> {output_path}.code 2>&1; "
+        f'{{ cat {output_path}.code; printf "\\n"; cat {output_path}.body; }} '
+        f"> {output_path}"
+        f"' > /dev/null 2>&1 &"
     )
-    for _attempt in range(max_attempts):
-        resp = pod_exec(client, pod_name, SANDBOX_NAMESPACE, script)
-        if resp and resp.strip() in ("200", "304"):
-            return
-        time.sleep(2)
-    raise RuntimeError(
-        f"Next.js server on pod {pod_name}:{port} not ready after "
-        f"{max_attempts} attempts"
-    )
+    pod_exec(client, pod_name, namespace, script, container=container)
 
 
 def wait_for_pod_deletion(
@@ -1210,6 +1391,82 @@ def wait_for_pod_deletion(
     )
 
 
+def wait_for_pod_exec_output(
+    client: "k8s_client_module.CoreV1Api",
+    pod_name: str,
+    output_path: str,
+    timeout_s: float,
+    namespace: str = SANDBOX_NAMESPACE,
+    container: str = "sandbox",
+) -> tuple[int, str]:
+    """Poll the ``pod_exec_async`` tempfile until it appears, returning
+    ``(status_code, body)`` parsed from its ``{status}\\n{body}`` layout.
+    Raises on timeout."""
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        raw = pod_exec(
+            client,
+            pod_name,
+            namespace,
+            f"cat {output_path} 2>/dev/null || true",
+            container=container,
+        )
+        if raw:
+            head, _, rest = raw.partition("\n")
+            head = head.strip()
+            if head.isdigit():
+                return int(head), rest
+        time.sleep(2)
+    raise RuntimeError(
+        f"pod_exec output {output_path} on pod {pod_name} did not arrive within "
+        f"{timeout_s:.1f}s"
+    )
+
+
+def wait_for_proxy_redeploy(
+    client: "k8s_client_module.CoreV1Api",
+    timeout_s: float = 120,
+) -> None:
+    """Wait until the sandbox-proxy Deployment reports a ready replica.
+
+    Used after a proxy-pod respawn so the next test doesn't hit a half-baked
+    Deployment. Polls both Deployment status and pod-level readiness.
+    """
+    from kubernetes import client as k8s_client_module
+
+    from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
+
+    proxy_component_label = "app.kubernetes.io/component=sandbox-proxy"
+    apps_v1 = k8s_client_module.AppsV1Api()
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        deployments = apps_v1.list_namespaced_deployment(
+            namespace=SANDBOX_PROXY_NAMESPACE,
+            label_selector=proxy_component_label,
+        )
+        for deploy in deployments.items or []:
+            ready = deploy.status.ready_replicas or 0
+            desired = (
+                deploy.spec.replicas if deploy.spec and deploy.spec.replicas else 1
+            )
+            if ready >= desired:
+                pods = client.list_namespaced_pod(
+                    namespace=SANDBOX_PROXY_NAMESPACE,
+                    label_selector=proxy_component_label,
+                )
+                ready_pods = [
+                    p
+                    for p in (pods.items or [])
+                    if any(cs.ready for cs in (p.status.container_statuses or []))
+                ]
+                if ready_pods:
+                    return
+        time.sleep(2)
+    raise RuntimeError(
+        f"sandbox-proxy Deployment did not return to ready within {timeout_s:.1f}s"
+    )
+
+
 # ---------------------------------------------------------------------------
 # K8s shared fixtures (canonical home for k8s_manager + live_pod).
 #
@@ -1223,9 +1480,6 @@ def wait_for_pod_deletion(
 # call here — the cluster check happens implicitly when ``k8s_client`` or
 # the manager makes its first API call.
 # ---------------------------------------------------------------------------
-
-
-_K8S_TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
 
 
 @pytest.fixture(scope="function")
@@ -1268,15 +1522,7 @@ def pool_session(
     """
     _cleanup_pool_workspace(_pool_pod.k8s_client, _pool_pod.pod_name)
     session_id = uuid4()
-    _pool_pod.manager.setup_session_workspace(
-        sandbox_id=_pool_pod.sandbox_id,
-        session_id=session_id,
-        llm_config=default_llm_config(
-            api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
-        ),
-        nextjs_port=None,
-        skills_section="No skills available.",
-    )
+    _setup_default_session(_pool_pod.manager, _pool_pod.sandbox_id, session_id)
     return _pool_pod.sandbox_id, session_id, _pool_pod.pod_name
 
 
@@ -1285,47 +1531,28 @@ def live_pod(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: "k8s_client_module.CoreV1Api",
 ) -> Generator[tuple[UUID, UUID, str], None, None]:
-    """Provision a sandbox + session pod and tear it down on exit.
+    """Provision a fresh sandbox + session pod, torn down on exit.
 
-    Yields ``(sandbox_id, session_id, pod_name)``. The pod is gated for
-    health via a 15-attempt poll on ``manager.health_check``; if the pod
-    never becomes healthy the fixture raises ``RuntimeError`` so the test
-    fails fast rather than running against a half-baked sandbox.
-
-    Prefer ``pool_session`` for tests that just need a sandbox + session
-    and don't mutate pod-level state; this fixture exists for tests that
-    require their own pod (lifecycle assertions, terminate, etc.).
+    Yields ``(sandbox_id, session_id, pod_name)``. Prefer ``pool_session``
+    unless the test mutates pod-level state (lifecycle assertions, terminate).
     """
-    sandbox_id = uuid4()
-    session_id = uuid4()
-    llm_config = default_llm_config(
-        api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
-    )
-
-    info = _provision_with_retry(
-        k8s_manager,
-        sandbox_id=sandbox_id,
-        user_id=_K8S_TEST_USER_ID,
-        tenant_id=TEST_TENANT_ID,
-        llm_config=llm_config,
-    )
-    assert info.status == SandboxStatus.RUNNING
-
-    k8s_manager.setup_session_workspace(
-        sandbox_id=sandbox_id,
-        session_id=session_id,
-        llm_config=llm_config,
-        nextjs_port=None,
-        skills_section="No skills available.",
-    )
-
-    pod_name = k8s_manager._get_pod_name(sandbox_id)
-
-    try:
+    with _provisioned_sandbox(k8s_manager, k8s_client) as (sandbox_id, pod_name):
+        session_id = uuid4()
+        _setup_default_session(k8s_manager, sandbox_id, session_id)
         yield sandbox_id, session_id, pod_name
-    finally:
-        try:
-            k8s_manager.terminate(sandbox_id)
-        except Exception:
-            pass
-        wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
+
+
+@pytest.fixture(scope="function")
+def provisioned_sandbox(
+    k8s_manager: KubernetesSandboxManager,
+    k8s_client: "k8s_client_module.CoreV1Api",
+) -> Generator[tuple[UUID, str], None, None]:
+    """A provisioned sandbox (committed rows + pod), without a session.
+
+    For tests that need a real egressing pod as a precondition but not a
+    session workspace (e.g. the egress proxy test). Backed by the same
+    ``_provisioned_sandbox`` primitive, so the sandbox is identity-resolvable
+    by the proxy. Yields ``(sandbox_id, pod_name)``.
+    """
+    with _provisioned_sandbox(k8s_manager, k8s_client) as (sandbox_id, pod_name):
+        yield sandbox_id, pod_name

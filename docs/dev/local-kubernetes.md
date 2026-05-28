@@ -292,12 +292,15 @@ Visit `http://localhost:3000` once running.
 docker build -t onyxdotapp/onyx-backend:dev backend/
 kind load docker-image onyxdotapp/onyx-backend:dev --name onyx-dev
 
-# Point the chart at it (once per session)
+# Point the chart at it (once per session). Override global.pullPolicy
+# only when you're running a locally-built tag like :dev that isn't on
+# docker.io — otherwise the localdev default (Always) is what you want
+# so the nightly :edge tag refreshes.
 helm upgrade onyx deployment/helm/charts/onyx \
   -n onyx \
   -f deployment/helm/charts/onyx/values-localdev.yaml \
+  --set global.pullPolicy=IfNotPresent \
   --set api.image.tag=dev \
-  --set api.image.pullPolicy=IfNotPresent \
   --set celery_shared.image.tag=dev
 
 kubectl -n onyx rollout restart deployment/onyx-api-server

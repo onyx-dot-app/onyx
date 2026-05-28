@@ -2,7 +2,7 @@
 
 Exercises the upload endpoint via the live API server so we pin both the
 happy-path response shape and the boundary error mapping (auth, foreign
-session, size/count/cumulative caps, blocked extensions, Unicode filenames).
+session, size/count/cumulative caps, arbitrary extensions, Unicode filenames).
 """
 
 from __future__ import annotations
@@ -161,8 +161,13 @@ def test_upload_over_cumulative_cap_returns_429(admin_user: DATestUser) -> None:
     assert response.status_code == 429
 
 
-def test_upload_rejects_blocked_extension_via_http(admin_user: DATestUser) -> None:
-    """Uploading evil.exe is rejected with a 4xx (blocked extension)."""
+def test_upload_accepts_any_extension_via_http(admin_user: DATestUser) -> None:
+    """Uploads are not restricted by extension/MIME; a .exe uploads fine.
+
+    The sandbox is the security boundary, not an extension allow/blocklist, so
+    a previously-blocked type (here ``evil.exe``) must now succeed. This guards
+    against any reintroduction of extension filtering.
+    """
     session_id = _create_session_id(admin_user)
 
     headers = {
@@ -174,9 +179,7 @@ def test_upload_rejects_blocked_extension_via_http(admin_user: DATestUser) -> No
         headers=headers,
         cookies=admin_user.cookies,
     )
-    assert 400 <= response.status_code < 500
-    # Sanity check: this must NOT silently succeed.
-    assert response.status_code != 201
+    assert response.status_code == 201
 
 
 def test_upload_with_unicode_filename_persists_correctly(

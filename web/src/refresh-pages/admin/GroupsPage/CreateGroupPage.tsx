@@ -6,7 +6,7 @@ import { Table, Button, Divider } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import { SvgUsers } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";

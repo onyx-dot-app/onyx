@@ -7,6 +7,10 @@ on:
 
 permissions: write-all
 
+concurrency:
+  group: helm-chart-releases
+  cancel-in-progress: false
+
 jobs:
   release:
     permissions:
