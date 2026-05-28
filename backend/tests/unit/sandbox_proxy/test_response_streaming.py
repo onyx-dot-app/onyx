@@ -113,7 +113,7 @@ class _StubResolver:
 class _NonGatingMatcher:
     """Never matches, so every request fails open and is forwarded."""
 
-    def match(self, request: mitm_http.Request) -> None:  # noqa: ARG002
+    def match(self, request: mitm_http.Request, tenant_id: str) -> None:  # noqa: ARG002
         return None
 
 
@@ -162,7 +162,7 @@ def _start_proxy(
     """
     gate = GateAddon(
         identity=_StubResolver(),
-        action_matcher=_NonGatingMatcher(),  # type: ignore[arg-type]
+        action_matcher=_NonGatingMatcher(),
         db_session_factory=_unused_factory,
         cache_factory=_unused_factory,
         proxy_instance_id="proxy-test",
