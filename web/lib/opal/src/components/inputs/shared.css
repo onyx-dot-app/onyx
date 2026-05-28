@@ -16,9 +16,10 @@
 
 .opal-input {
   @apply flex flex-row items-center justify-between flex-1 h-fit p-1.5 rounded-08 relative w-full;
+  /* --interactive-duration, the standard animation-duration, feels too slow here */
   transition:
-    border-color var(--interactive-duration) var(--interactive-easing),
-    box-shadow var(--interactive-duration) var(--interactive-easing);
+    border-color 100ms var(--interactive-easing),
+    box-shadow 100ms var(--interactive-easing);
 }
 
 .opal-input[data-variant="primary"] {
