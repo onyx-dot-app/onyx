@@ -1,7 +1,7 @@
 """encrypt external app credentials
 
 Revision ID: b4950827c0dd
-Revises: 39287906b97a
+Revises: d0e1f2a3b4c5
 Create Date: 2026-05-28 13:29:23.568531
 
 Moves the external-app credential columns from JSONB to encrypted ``LargeBinary``,
@@ -23,7 +23,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "b4950827c0dd"
-down_revision = "39287906b97a"
+down_revision = "d0e1f2a3b4c5"
 branch_labels = None
 depends_on = None
 
