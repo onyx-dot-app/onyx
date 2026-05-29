@@ -1,15 +1,21 @@
 """Convert Markdown to a DOCX document using mistune + python-docx.
 
-This replaces the previous pypandoc/pandoc-binary based conversion used by the
-build session "export as DOCX" feature. Bundling the ~150 MB pandoc binary
-(via ``pypandoc-binary``) into the production image purely for a single
-Markdown -> DOCX conversion was by far the cheapest large size win available,
-so the conversion is reimplemented here on top of dependencies that are already
-part of the backend image (``mistune`` and ``python-docx``).
+Used by the build session "export as DOCX" feature. ``mistune`` parses the
+Markdown into an AST and ``python-docx`` writes the ``.docx``; both are
+pure-Python, so the conversion needs no external binary.
+
+Supported constructs (covering what the LLM-generated documents emit):
+headings, bold/italic/strikethrough/inline-code, bulleted/numbered/nested
+lists (with loose-list continuation paragraphs and preserved ordered-list
+start values), blockquotes, fenced code blocks, GFM tables, hyperlinks
+(carrying inherited inline formatting), images (rendered as alt text), inline
+``<br>`` line breaks, HTML entities, and horizontal rules. Other raw HTML is
+dropped rather than shown as literal markup.
 """
 
 from dataclasses import dataclass
 from dataclasses import replace
+from html import unescape
 from io import BytesIO
 from typing import Any
 
@@ -31,8 +37,8 @@ _LINK_COLOR = "0563C1"
 # reuses the level-3 style.
 _MAX_LIST_LEVEL = 3
 
-# Enable the table/strikethrough/url plugins so the AST matches what pandoc
-# previously handled for GitHub-Flavored-Markdown style documents.
+# Enable the GFM table/strikethrough/url plugins so the AST covers the Markdown
+# features that appear in these documents.
 _markdown_parser = mistune.create_markdown(
     renderer=None,
     plugins=["table", "strikethrough", "url"],
@@ -260,7 +266,9 @@ def _add_runs(paragraph: Paragraph, nodes: list[Node], fmt: _Fmt) -> None:
     for node in nodes:
         node_type = node.get("type")
         if node_type == "text":
-            _styled_run(paragraph, str(node.get("raw", "")), fmt)
+            # Decode HTML entities (e.g. ``&amp;``, ``&copy;``) the way a Markdown
+            # renderer would; code spans below are intentionally left literal.
+            _styled_run(paragraph, unescape(str(node.get("raw", ""))), fmt)
         elif node_type == "strong":
             _add_runs(paragraph, node.get("children", []), replace(fmt, bold=True))
         elif node_type == "emphasis":
@@ -283,7 +291,7 @@ def _add_runs(paragraph: Paragraph, nodes: list[Node], fmt: _Fmt) -> None:
         elif "children" in node:
             _add_runs(paragraph, node["children"], fmt)
         elif "raw" in node:
-            _styled_run(paragraph, str(node["raw"]), fmt)
+            _styled_run(paragraph, unescape(str(node["raw"])), fmt)
 
 
 def _styled_run(paragraph: Paragraph, text: str, fmt: _Fmt) -> None:
@@ -346,12 +354,13 @@ def _add_inline_html(paragraph: Paragraph, raw: str) -> None:
 
 
 def _collect_text(nodes: list[Node]) -> str:
+    """Flatten inline nodes to plain text (for link labels and image alt text)."""
     parts: list[str] = []
     for node in nodes:
         if node.get("type") == "text":
-            parts.append(str(node.get("raw", "")))
+            parts.append(unescape(str(node.get("raw", ""))))
         elif node.get("children"):
             parts.append(_collect_text(node["children"]))
         elif "raw" in node:
-            parts.append(str(node["raw"]))
+            parts.append(unescape(str(node["raw"])))
     return "".join(parts)

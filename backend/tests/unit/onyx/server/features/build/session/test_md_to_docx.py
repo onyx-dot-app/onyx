@@ -1,4 +1,4 @@
-"""Unit tests for the Markdown -> DOCX converter that replaced pypandoc."""
+"""Unit tests for the Markdown -> DOCX converter."""
 
 from io import BytesIO
 
@@ -141,3 +141,24 @@ def test_unsupported_inline_html_tags_are_not_visible_text() -> None:
     assert [p.text for p in doc.paragraphs] == ["under normal"]
     assert "<u>" not in doc.paragraphs[0].text
     assert "</u>" not in doc.paragraphs[0].text
+
+
+def test_html_entities_are_decoded_in_text() -> None:
+    doc = _render("A &amp; B &lt; C &copy; 2026 &mdash; D")
+    assert [p.text for p in doc.paragraphs] == ["A & B < C © 2026 — D"]
+
+
+def test_html_entities_are_decoded_in_link_text() -> None:
+    doc = _render("[R &amp; D](https://onyx.app)")
+    xml = doc.element.xml
+    # "&" is stored decoded (serialized as the single XML escape &amp;), not left
+    # as the literal entity text (which would double-escape to &amp;amp;).
+    assert "R &amp; D" in xml
+    assert "&amp;amp;" not in xml
+
+
+def test_html_entities_in_code_span_are_left_literal() -> None:
+    # CommonMark does not decode entities inside code spans.
+    doc = _render("`a &amp; b`")
+    runs = [r.text for p in doc.paragraphs for r in p.runs]
+    assert "a &amp; b" in runs
