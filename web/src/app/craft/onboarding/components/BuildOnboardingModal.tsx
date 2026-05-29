@@ -61,7 +61,6 @@ interface BuildOnboardingModalProps {
   initialValues: InitialValues;
   isAdmin: boolean;
   hasUserInfo: boolean;
-  allProvidersConfigured: boolean;
   hasAnyProvider: boolean;
   onComplete: (info: BuildUserInfo) => Promise<void>;
   onLlmComplete: () => Promise<void>;
@@ -77,6 +76,7 @@ function getStepsForMode(
 ): OnboardingStep[] {
   switch (mode.type) {
     case "initial-onboarding":
+      // Full flow: page1 → llm-setup (if admin + no provider yet) → user-info
       const steps: OnboardingStep[] = ["page1"];
 
       if (isAdmin && !hasAnyProvider) {
@@ -218,7 +218,7 @@ export default function BuildOnboardingModal({
     setConnectionStatus("testing");
     setErrorMessage("");
 
-    const providerName = `build-mode-${currentProviderConfig.providerName}`;
+    const providerName = currentProviderConfig.label;
     const payload = {
       name: providerName,
       provider: currentProviderConfig.providerName,
@@ -258,8 +258,18 @@ export default function BuildOnboardingModal({
       );
 
       if (!response.ok) {
+        // Surface the backend detail (e.g. a name collision) so the user gets
+        // an actionable message instead of a generic failure.
+        const detail = await response
+          .json()
+          .then((b) => (typeof b?.detail === "string" ? b.detail : null))
+          .catch(() => null);
+        const isConflict = response.status === 409 || response.status === 400;
         setErrorMessage(
-          "There was an issue creating the provider. Please try again."
+          detail ??
+            (isConflict
+              ? `A provider named "${providerName}" already exists — remove or rename it in Admin → LLM Providers, then retry.`
+              : "There was an issue creating the provider. Please try again.")
         );
         setConnectionStatus("error");
         return;

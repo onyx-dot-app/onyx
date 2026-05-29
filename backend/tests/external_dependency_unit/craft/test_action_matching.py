@@ -21,6 +21,7 @@ from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppPolicy
+from onyx.external_apps.matching.engine import ActionMatch
 from onyx.external_apps.matching.engine import match_action
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.sandbox_proxy.action_matcher import DBSessionFactory
@@ -66,7 +67,11 @@ def test_match_slack_rest_uses_stored_override(
     _set_policy(db_session, app, "slack.messages.write", EndpointPolicy.ALWAYS)
 
     request = ProxiedRequest(method="POST", path="/api/chat.postMessage")
-    assert match_action(db_session, app, request) == EndpointPolicy.ALWAYS
+    assert match_action(db_session, app, request) == ActionMatch(
+        action_type="slack.messages.write",
+        policy=EndpointPolicy.ALWAYS,
+        external_app_id=app.id,
+    )
 
 
 def test_match_slack_rest_unset_returns_none(
@@ -91,7 +96,11 @@ def test_match_google_calendar_method_and_path(
         method="DELETE",
         path="/calendar/v3/calendars/primary/events/evt123",
     )
-    assert match_action(db_session, app, delete_req) == EndpointPolicy.DENY
+    assert match_action(db_session, app, delete_req) == ActionMatch(
+        action_type="gcal.events.delete",
+        policy=EndpointPolicy.DENY,
+        external_app_id=app.id,
+    )
 
     # Same path, read method → a different action with no stored row → None
     # (un-gated), not DENY.
@@ -113,7 +122,11 @@ def test_match_linear_graphql_body(
         {"query": "mutation { issueCreate(input: $i) { issue { id } } }"}
     ).encode()
     request = ProxiedRequest(method="POST", path="/graphql", body=body)
-    assert match_action(db_session, app, request) == EndpointPolicy.DENY
+    assert match_action(db_session, app, request) == ActionMatch(
+        action_type="linear.issues.create",
+        policy=EndpointPolicy.DENY,
+        external_app_id=app.id,
+    )
 
 
 def test_off_catalog_request_returns_none(
@@ -142,7 +155,12 @@ def test_graphql_batched_most_restrictive_wins(
         ]
     ).encode()
     request = ProxiedRequest(method="POST", path="/graphql", body=body)
-    assert match_action(db_session, app, request) == EndpointPolicy.DENY
+    # Strictest (DENY) wins; its action_type is the one carried forward.
+    assert match_action(db_session, app, request) == ActionMatch(
+        action_type="linear.issues.create",
+        policy=EndpointPolicy.DENY,
+        external_app_id=app.id,
+    )
 
 
 # ── ExternalAppActionMatcher: full proxy-request → verdict bridge ───
@@ -187,9 +205,9 @@ def test_external_app_matcher_resolves_app_and_verdict(
     match = matcher.match(_slack_request(), "public")
 
     assert match is not None
-    # `match_action` returns only the verdict, so the recorded action is the
-    # owning app's type, not the specific catalog endpoint.
-    assert match.action_type == ExternalAppType.SLACK.value
+    # The recorded action_type is the per-endpoint catalog id (what the
+    # FE label map keys off), not the owning app's all-caps type.
+    assert match.action_type == "slack.messages.write"
     assert match.policy == EndpointPolicy.DENY
     assert match.payload == {"channel": "C1", "text": "hi"}
     # The app id is threaded through for the gate's credential-injection seam.

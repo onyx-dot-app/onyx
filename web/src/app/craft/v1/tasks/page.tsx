@@ -31,6 +31,7 @@ import {
   formatAbsolute,
   formatRelativeShort,
 } from "@/app/craft/v1/tasks/utils";
+import { humanReadableScheduleFromCron } from "@/app/craft/v1/tasks/schedule";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
@@ -127,7 +128,17 @@ export default function ScheduledTasksListPage() {
     errorHandlingFetcher,
     { revalidateOnFocus: false }
   );
-  const tasks = data?.items ?? [];
+  const tasks = useMemo<ScheduledTaskListItem[]>(
+    () =>
+      data?.items.map((task) => ({
+        ...task,
+        human_readable_schedule: humanReadableScheduleFromCron(
+          task.editor_mode,
+          task.cron_expression
+        ),
+      })) ?? [],
+    [data?.items]
+  );
   const [pendingDelete, setPendingDelete] =
     useState<ScheduledTaskListItem | null>(null);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
@@ -169,7 +180,7 @@ export default function ScheduledTasksListPage() {
         href={NEW_TASK_PATH}
         data-testid="new-task-button"
       >
-        New scheduled task
+        New Scheduled Task
       </Button>
     ),
     []

@@ -49,7 +49,6 @@ def _create_task(
     prompt: str = "Run the daily check.",
     editor_mode: str = "interval",
     editor_payload: dict[str, Any] | None = None,
-    timezone: str = "UTC",
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
     run_immediately: bool = False,
 ) -> httpx.Response:
@@ -58,7 +57,6 @@ def _create_task(
         "prompt": prompt,
         "editor_mode": editor_mode,
         "editor_payload": editor_payload or {"unit": "hours", "every": 1},
-        "timezone": timezone,
         "status": status.value,
         "run_immediately": run_immediately,
     }
@@ -148,7 +146,6 @@ def test_create_task_compiles_cron(admin_user: DATestUser) -> None:
         admin_user,
         editor_mode="interval",
         editor_payload={"unit": "hours", "every": 6},
-        timezone="UTC",
     )
     response.raise_for_status()
     body = response.json()

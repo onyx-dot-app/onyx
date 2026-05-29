@@ -135,3 +135,20 @@ export {
   Switch,
   type SwitchProps,
 } from "@opal/components/inputs/switch/components";
+
+/* CopyButton */
+export {
+  CopyButton,
+  type CopyButtonProps,
+} from "@opal/components/buttons/copy-button/components";
+
+/* Code */
+export { Code } from "@opal/components/code/components";
+
+/* Tabs */
+export {
+  Tabs,
+  type TabsRootProps,
+  type TabsListProps,
+  type TabsTriggerProps,
+} from "@opal/components/tabs/components";

@@ -9,6 +9,7 @@ pre-registered when the pod was created.
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import cast
 from unittest.mock import MagicMock
@@ -20,6 +21,7 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
 from onyx.db.models import User
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.manager import get_all_build_mode_llm_configs
@@ -63,16 +65,8 @@ _OPENAI_DEFAULT = LLMProviderConfig(
 
 
 def _run(rows: list[LLMProviderView]) -> list[LLMProviderConfig]:
-    """Invoke under a patched ``fetch_all_build_mode_llm_providers``."""
-    with patch(
-        "onyx.server.features.build.session.manager.fetch_all_build_mode_llm_providers",
-        return_value=rows,
-    ):
-        # db_session is unused once the fetch is patched.
-        return get_all_build_mode_llm_configs(
-            db_session=cast(Session, None),
-            default=_OPENAI_DEFAULT,
-        )
+    """``get_all_build_mode_llm_configs`` is pure over an already-fetched list."""
+    return get_all_build_mode_llm_configs(rows, _OPENAI_DEFAULT)
 
 
 class TestGetAllBuildModeLlmConfigs:
@@ -84,7 +78,7 @@ class TestGetAllBuildModeLlmConfigs:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
+                    name="Anthropic",
                     provider="anthropic",
                     models=[_model("claude-opus-4-7")],
                     api_key="k-anthropic",
@@ -101,7 +95,7 @@ class TestGetAllBuildModeLlmConfigs:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
+                    name="Anthropic",
                     provider="anthropic",
                     models=[_model("claude-hidden", is_visible=False)],
                 )
@@ -113,7 +107,7 @@ class TestGetAllBuildModeLlmConfigs:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
+                    name="Anthropic",
                     provider="anthropic",
                     models=[],
                 )
@@ -121,11 +115,12 @@ class TestGetAllBuildModeLlmConfigs:
         )
         assert configs == [_OPENAI_DEFAULT]
 
-    def test_picks_first_visible_model_when_multiple_visible(self) -> None:
+    def test_prefers_recommended_model_over_first_visible(self) -> None:
+        # Anthropic's recommended model wins even though it isn't first in the list.
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
+                    name="Anthropic",
                     provider="anthropic",
                     models=[
                         _model("claude-opus-4-6"),
@@ -135,13 +130,26 @@ class TestGetAllBuildModeLlmConfigs:
                 )
             ]
         )
-        assert configs[1].model_name == "claude-opus-4-6"
+        assert configs[1].model_name == "claude-opus-4-7"
+
+    def test_uses_first_visible_for_type_without_recommended(self) -> None:
+        # A provider type with no recommended-model entry falls back to first visible.
+        configs = _run(
+            [
+                _provider(
+                    name="Google",
+                    provider="google",
+                    models=[_model("gemini-2.5-pro"), _model("gemini-2.5-flash")],
+                )
+            ]
+        )
+        assert configs[1].model_name == "gemini-2.5-pro"
 
     def test_skips_hidden_models_when_picking_first(self) -> None:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
+                    name="Anthropic",
                     provider="anthropic",
                     models=[
                         _model("claude-hidden-1", is_visible=False),
@@ -158,7 +166,7 @@ class TestGetAllBuildModeLlmConfigs:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-openai",
+                    name="OpenAI",
                     provider="openai",
                     models=[_model("gpt-4o-mini")],
                     api_key="k-build-openai",
@@ -173,12 +181,12 @@ class TestGetAllBuildModeLlmConfigs:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
+                    name="Anthropic",
                     provider="anthropic",
                     models=[_model("claude-opus-4-7")],
                 ),
                 _provider(
-                    name="build-mode-google",
+                    name="Google",
                     provider="google",
                     models=[_model("gemini-2.5-pro")],
                 ),
@@ -195,13 +203,139 @@ class TestGetAllBuildModeLlmConfigs:
         configs = _run(
             [
                 _provider(
-                    name="build-mode-anthropic",
+                    name="Anthropic",
                     provider="anthropic",
                     models=[_model("claude-opus-4-7")],
                 )
             ]
         )
         assert configs[0] == _OPENAI_DEFAULT
+
+
+class TestGetLlmConfigFallback:
+    """``SessionManager._get_llm_config(None, None, user)`` resolves to the
+    highest-priority accessible provider of a supported type (anthropic >
+    openai > openrouter), using that provider's first visible model."""
+
+    @staticmethod
+    def _manager() -> SessionManager:
+        manager = SessionManager.__new__(SessionManager)
+        manager._db_session = cast(Session, MagicMock())  # type: ignore[attr-defined]
+        return manager
+
+    @staticmethod
+    def _user() -> User:
+        return cast(User, MagicMock())
+
+    @staticmethod
+    def _patch_providers(
+        providers: list[LLMProviderView],
+    ) -> AbstractContextManager[MagicMock]:
+        return patch(
+            "onyx.server.features.build.session.manager."
+            "fetch_all_supported_build_llm_providers",
+            return_value=providers,
+        )
+
+    def test_uses_highest_priority_provider_first_visible_model(self) -> None:
+        provider = _provider(
+            name="Anthropic",
+            provider="anthropic",
+            models=[_model("claude-opus-4-7")],
+            api_key="k-anthropic",
+        )
+        with self._patch_providers([provider]):
+            config = self._manager()._get_llm_config(None, None, self._user())
+        assert (config.provider, config.model_name) == (
+            "anthropic",
+            "claude-opus-4-7",
+        )
+        assert config.api_key == "k-anthropic"
+
+    def test_type_priority_anthropic_over_openai(self) -> None:
+        with self._patch_providers(
+            [
+                _provider(name="o", provider="openai", models=[_model("gpt-5.5")]),
+                _provider(
+                    name="a",
+                    provider="anthropic",
+                    models=[_model("claude-opus-4-7")],
+                ),
+            ]
+        ):
+            config = self._manager()._get_llm_config(None, None, self._user())
+        assert config.provider == "anthropic"
+
+    def test_ignores_unsupported_provider_type(self) -> None:
+        # An azure provider is not a supported type -> treated as none.
+        with self._patch_providers(
+            [_provider(name="az", provider="azure", models=[_model("gpt-5.5")])]
+        ):
+            try:
+                self._manager()._get_llm_config(None, None, self._user())
+            except OnyxError as e:
+                assert e.status_code == 400
+            else:
+                raise AssertionError("expected OnyxError")
+
+    def test_skips_provider_without_visible_model(self) -> None:
+        with self._patch_providers(
+            [
+                _provider(
+                    name="a",
+                    provider="anthropic",
+                    models=[_model("claude-opus-4-7", is_visible=False)],
+                ),
+                _provider(name="o", provider="openai", models=[_model("gpt-5.5")]),
+            ]
+        ):
+            config = self._manager()._get_llm_config(None, None, self._user())
+        assert (config.provider, config.model_name) == ("openai", "gpt-5.5")
+
+    def test_raises_onyx_error_when_no_supported_provider(self) -> None:
+        with self._patch_providers([]):
+            try:
+                self._manager()._get_llm_config(None, None, self._user())
+            except OnyxError as e:
+                assert e.status_code == 400
+            else:
+                raise AssertionError("expected OnyxError")
+
+    def test_requested_provider_and_model_used_verbatim(self) -> None:
+        # The interactive path supplies the model via cookie; honor it as-is
+        # (even a model not marked visible) as long as the type is accessible.
+        provider = _provider(
+            name="Anthropic",
+            provider="anthropic",
+            models=[_model("claude-opus-4-7")],
+            api_key="k-anthropic",
+        )
+        with self._patch_providers([provider]):
+            config = self._manager()._get_llm_config(
+                "anthropic", "claude-sonnet-4-6", self._user()
+            )
+        assert (config.provider, config.model_name) == (
+            "anthropic",
+            "claude-sonnet-4-6",
+        )
+
+    def test_requested_unsupported_type_falls_back(self) -> None:
+        # A stale cookie pointing at a non-supported type is ignored; we fall
+        # back to the highest-priority accessible supported provider.
+        with self._patch_providers(
+            [
+                _provider(
+                    name="a", provider="anthropic", models=[_model("claude-opus-4-7")]
+                )
+            ]
+        ):
+            config = self._manager()._get_llm_config(
+                "azure", "some-azure-model", self._user()
+            )
+        assert (config.provider, config.model_name) == (
+            "anthropic",
+            "claude-opus-4-7",
+        )
 
 
 class TestSessionManagerProvisionForwardsAllLlmConfigs:
@@ -232,7 +366,7 @@ class TestSessionManagerProvisionForwardsAllLlmConfigs:
         manager._db_session = cast(Session, MagicMock())  # type: ignore[attr-defined]
         manager._sandbox_manager = sandbox_manager  # type: ignore[attr-defined]
 
-        expected_configs = [
+        all_configs = [
             _OPENAI_DEFAULT,
             LLMProviderConfig(
                 provider="anthropic",
@@ -248,10 +382,6 @@ class TestSessionManagerProvisionForwardsAllLlmConfigs:
                 return_value="pat-token",
             ),
             patch(
-                "onyx.server.features.build.session.manager.get_all_build_mode_llm_configs",
-                return_value=expected_configs,
-            ) as mock_get_all_configs,
-            patch(
                 "onyx.server.features.build.session.manager.update_sandbox_status__no_commit"
             ),
         ):
@@ -260,13 +390,13 @@ class TestSessionManagerProvisionForwardsAllLlmConfigs:
                 user=user,
                 user_id=user_id,
                 tenant_id=tenant_id,
-                llm_config=_OPENAI_DEFAULT,
+                all_llm_configs=all_configs,
             )
 
-        mock_get_all_configs.assert_called_once()
         sandbox_manager.provision.assert_called_once()
         kwargs = sandbox_manager.provision.call_args.kwargs
-        assert kwargs["all_llm_configs"] == expected_configs
+        assert kwargs["all_llm_configs"] == all_configs
+        # default model is the first entry
         assert kwargs["llm_config"] == _OPENAI_DEFAULT
         assert kwargs["sandbox_id"] == sandbox_id
         assert kwargs["onyx_pat"] == "pat-token"

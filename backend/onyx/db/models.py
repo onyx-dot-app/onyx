@@ -5484,8 +5484,6 @@ class ScheduledTask(Base):
     # Canonical 5-field cron expression. The three UI editor modes (interval,
     # daily/weekly, advanced) all compile to this string on save.
     cron_expression: Mapped[str] = mapped_column(String, nullable=False)
-    # IANA timezone name (e.g. "America/Los_Angeles"). ZoneInfo handles DST.
-    timezone: Mapped[str] = mapped_column(String, nullable=False)
     # UI hint for which editor mode produced this schedule; the cron string
     # is the source of truth for execution.
     editor_mode: Mapped[str] = mapped_column(String, nullable=False)
@@ -5497,7 +5495,7 @@ class ScheduledTask(Base):
         server_default="ACTIVE",
     )
     # The dispatcher's only read field. NULL when paused; recomputed on
-    # every fire and every schedule/timezone edit. Stored UTC.
+    # every fire and every schedule edit. Stored UTC.
     next_run_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

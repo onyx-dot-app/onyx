@@ -326,7 +326,7 @@ def make_cc_pair(
 
 def default_llm_config(
     provider: str = "openai",
-    model_name: str = "gpt-4o-mini",
+    model_name: str = "gpt-5-mini",
     api_key: str = "test-key",
 ) -> LLMProviderConfig:
     """Standard ``LLMProviderConfig`` for tests that don't care about specifics."""
