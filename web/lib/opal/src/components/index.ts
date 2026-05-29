@@ -144,3 +144,11 @@ export {
 
 /* Code */
 export { Code } from "@opal/components/code/components";
+
+/* Tabs */
+export {
+  Tabs,
+  type TabsRootProps,
+  type TabsListProps,
+  type TabsTriggerProps,
+} from "@opal/components/tabs/components";

@@ -1,3 +1,4 @@
+import type { MutableRefObject, Ref, RefCallback } from "react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import copy from "copy-to-clipboard";
@@ -17,6 +18,18 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function markdown(...lines: string[]): RichStr {
   return { __brand: "RichStr", raw: lines.join("\n") };
+}
+
+export function mergeRefs<T>(...refs: (Ref<T> | undefined)[]): RefCallback<T> {
+  return (node: T | null) => {
+    refs.forEach((ref) => {
+      if (typeof ref === "function") {
+        ref(node);
+      } else if (ref) {
+        (ref as MutableRefObject<T | null>).current = node;
+      }
+    });
+  };
 }
 
 /**
