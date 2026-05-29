@@ -48,9 +48,7 @@ def _push_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ksm, "_push_public_key_b64", None, raising=False)
 
 
-@pytest.fixture
-def pod() -> client.V1Pod:
-    """A freshly-built pod spec. Each test gets its own — no cross-test state."""
+def _build_pod() -> client.V1Pod:
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     mgr._namespace = "onyx-sandboxes"  # type: ignore[attr-defined]
     mgr._image = "onyxdotapp/sandbox:test"  # type: ignore[attr-defined]
@@ -60,6 +58,12 @@ def pod() -> client.V1Pod:
         sandbox_id="abc12345-abcd-abcd-abcd-abcdef123456",
         tenant_id="t-1",
     )
+
+
+@pytest.fixture
+def pod() -> client.V1Pod:
+    """A freshly-built pod spec. Each test gets its own — no cross-test state."""
+    return _build_pod()
 
 
 def _container(pod: client.V1Pod, name: str) -> client.V1Container:
@@ -182,10 +186,21 @@ def test_no_proxy_is_loopback_only(monkeypatch: pytest.MonkeyPatch) -> None:
     assert env["no_proxy"] == env["NO_PROXY"]
 
 
-def test_proxy_env_absent_when_proxy_not_configured(
+def test_no_proxy_env_on_sandbox_container_when_proxy_unconfigured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """No proxy host means no proxy/NO_PROXY env at all — pinning that the pod
-    can't silently fall back to a direct, un-injected path."""
+    """With no proxy host, the built pod's sandbox container must carry no proxy
+    env at all — pinning the actual spec, not just the helper, so a hardcoded or
+    misplaced proxy var can't create a silent direct-egress (un-injected) path."""
     monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "")
-    assert ksm._proxy_main_container_env_vars() == []
+    env = {e.name for e in _container(_build_pod(), "sandbox").env}
+    assert env.isdisjoint(
+        {
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "NO_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "no_proxy",
+        }
+    )

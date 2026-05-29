@@ -69,15 +69,31 @@ def resolver(monkeypatch: pytest.MonkeyPatch) -> OnyxPatResolver:
     return OnyxPatResolver()
 
 
-def test_claims_true_only_for_api_host(resolver: OnyxPatResolver) -> None:
-    assert resolver.claims(_flow(host=_API_HOST).request, _ctx()) is True
-    assert resolver.claims(_flow(host=_API_HOST.upper()).request, _ctx()) is True
-    assert resolver.claims(_flow(host="api.slack.com").request, _ctx()) is False
+def test_claims_requires_matching_host_and_port(resolver: OnyxPatResolver) -> None:
+    # _API_URL is https with no explicit port, so the effective port is 443.
+    assert resolver.claims(_flow(host=_API_HOST, port=443).request, _ctx()) is True
+    assert (
+        resolver.claims(_flow(host=_API_HOST.upper(), port=443).request, _ctx()) is True
+    )
+    assert resolver.claims(_flow(host=_API_HOST, port=8080).request, _ctx()) is False
+    assert (
+        resolver.claims(_flow(host="api.slack.com", port=443).request, _ctx()) is False
+    )
+
+
+def test_claims_matches_explicit_port(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(onyx_pat_mod, "SANDBOX_API_SERVER_URL", "http://internal:8080")
+    resolver = OnyxPatResolver()
+    assert resolver.claims(_flow(host="internal", port=8080).request, _ctx()) is True
+    assert resolver.claims(_flow(host="internal", port=443).request, _ctx()) is False
 
 
 def test_inert_when_api_url_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(onyx_pat_mod, "SANDBOX_API_SERVER_URL", "")
-    assert OnyxPatResolver().claims(_flow(host=_API_HOST).request, _ctx()) is False
+    assert (
+        OnyxPatResolver().claims(_flow(host=_API_HOST, port=443).request, _ctx())
+        is False
+    )
 
 
 def test_resolve_renders_pat_on_both_auth_headers(

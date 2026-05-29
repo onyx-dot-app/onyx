@@ -78,7 +78,8 @@ codeInterpreter:
 
 configMap:
   ENABLE_CRAFT: "true"
-  SANDBOX_API_SERVER_URL: "http://onyx-api-service.onyx.svc.cluster.local:8080"
+  # Host gateway (Docker Desktop), not internal cluster DNS; Linux-kind devs sub their own.
+  SANDBOX_API_SERVER_URL: "http://host.docker.internal:3000"
   ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
 
 # Can't be disabled when ENABLE_CRAFT=true: sandbox pods won't start

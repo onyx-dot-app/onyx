@@ -26,22 +26,27 @@ logger = setup_logger()
 
 
 class OnyxPatResolver(CredentialResolver):
-    """`CredentialResolver` brokering the sandbox's Onyx API PAT by host."""
+    """Injects the sandbox's Onyx API PAT on requests to the configured API host."""
 
     def __init__(self) -> None:
-        host = (
-            urlparse(SANDBOX_API_SERVER_URL).hostname
-            if SANDBOX_API_SERVER_URL
-            else None
-        )
+        parsed = urlparse(SANDBOX_API_SERVER_URL) if SANDBOX_API_SERVER_URL else None
+        host = parsed.hostname if parsed else None
         self._api_host = host.lower() if host else None
+        if parsed is not None and host:
+            self._api_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        else:
+            self._api_port = None
 
     def claims(
         self,
         request: http.Request,
         ctx: InjectionContext,  # noqa: ARG002
     ) -> bool:
-        return self._api_host is not None and request.host.lower() == self._api_host
+        return (
+            self._api_host is not None
+            and request.host.lower() == self._api_host
+            and request.port == self._api_port
+        )
 
     def resolve(self, request: http.Request, ctx: InjectionContext) -> dict[str, str]:
         sandbox_id = ctx.sandbox.sandbox_id

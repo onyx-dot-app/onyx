@@ -54,10 +54,10 @@ def test_claims_then_resolve_round_trips_minted_pat(
 
     monkeypatch.setattr(onyx_pat_mod, "SANDBOX_API_SERVER_URL", f"https://{_API_HOST}")
     resolver = OnyxPatResolver()
-    assert resolver.claims(MagicMock(host=_API_HOST), ctx) is True
-    assert resolver.claims(MagicMock(host="slack.com"), ctx) is False
+    assert resolver.claims(MagicMock(host=_API_HOST, port=443), ctx) is True
+    assert resolver.claims(MagicMock(host="slack.com", port=443), ctx) is False
 
-    headers = resolver.resolve(MagicMock(host=_API_HOST), ctx)
+    headers = resolver.resolve(MagicMock(host=_API_HOST, port=443), ctx)
 
     assert headers[API_KEY_HEADER_NAME] == f"Bearer {raw_token}"
     assert headers[API_KEY_HEADER_ALTERNATIVE_NAME] == f"Bearer {raw_token}"
