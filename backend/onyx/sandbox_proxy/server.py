@@ -27,6 +27,7 @@ from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIPLookup
 from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
+from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_HEALTHZ_PORT
@@ -140,7 +141,7 @@ def build_resolvers() -> list[CredentialResolver]:
     canonical hosts). Order is a safety net against accidental overlap, not a
     designed-in priority.
     """
-    return [ExternalAppResolver()]
+    return [OnyxPatResolver(), ExternalAppResolver()]
 
 
 def _build_cache_factory() -> "Callable[[str], CacheBackend]":

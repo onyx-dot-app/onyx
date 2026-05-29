@@ -59,7 +59,6 @@ def pod() -> client.V1Pod:
     return mgr._create_sandbox_pod(  # type: ignore[attr-defined]
         sandbox_id="abc12345-abcd-abcd-abcd-abcdef123456",
         tenant_id="t-1",
-        onyx_pat="test-pat",
     )
 
 
@@ -161,3 +160,32 @@ def test_share_process_namespace_is_disabled(pod: client.V1Pod) -> None:
     """PID-sharing would expose the sidecar's IRSA env via /proc to the
     agent. Pin explicitly False (not just None / unset)."""
     assert pod.spec.share_process_namespace is False
+
+
+# ---------------------------------------------------------------------------
+# Credential rip-out: the real PAT never lives in the pod
+# ---------------------------------------------------------------------------
+
+
+def test_onyx_pat_env_is_placeholder_not_real(pod: client.V1Pod) -> None:
+    """The pod ships a placeholder; the egress proxy injects the real PAT."""
+    env = {e.name: e.value for e in _container(pod, "sandbox").env}
+    assert env["ONYX_PAT"] == ksm._ONYX_PAT_PLACEHOLDER
+
+
+def test_no_proxy_is_loopback_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only loopback may bypass the proxy; the Onyx API host must route through
+    it so the PAT can be injected on the wire."""
+    monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "sandbox-proxy")
+    env = {e.name: e.value for e in ksm._proxy_main_container_env_vars()}
+    assert set(env["NO_PROXY"].split(",")) == {"127.0.0.1", "localhost"}
+    assert env["no_proxy"] == env["NO_PROXY"]
+
+
+def test_proxy_env_absent_when_proxy_not_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No proxy host means no proxy/NO_PROXY env at all — pinning that the pod
+    can't silently fall back to a direct, un-injected path."""
+    monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "")
+    assert ksm._proxy_main_container_env_vars() == []
