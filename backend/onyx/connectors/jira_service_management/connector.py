@@ -7,7 +7,7 @@ the JSM REST API (servicedeskapi).
 Docs: https://developer.atlassian.com/cloud/jira/service-desk/rest/
 """
 
-import json
+import base64
 from collections.abc import Generator
 from collections.abc import Iterator
 from datetime import datetime
@@ -19,6 +19,7 @@ from typing_extensions import override
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -54,32 +55,87 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             raise ConnectorMissingCredentialError("JiraServiceManagement")
 
         if not self.project_keys:
-            raise ConnectorMissingCredentialError(
-                "JiraServiceManagement", 
-                detail="At least one project key must be specified"
-            )
+            raise ConnectorMissingCredentialError("JiraServiceManagement")
 
         return None
 
     def _get_headers(self) -> dict[str, str]:
+        auth_bytes = f"{self.jira_email}:{self.jira_token}".encode()
         return {
             "Accept": "application/json",
-            "Authorization": f"Basic {base64.b64encode(f'{self.jira_email}:{self.jira_token}'.encode()).decode()}",
+            "Authorization": f"Basic {base64.b64encode(auth_bytes).decode()}",
+        }
+
+    def _list_service_desks(self) -> list[dict[str, Any]]:
+        """Fetch all service desks with pagination."""
+        all_desks: list[dict[str, Any]] = []
+        start = 0
+        while True:
+            url = f"{self.jira_base_url}{_JSM_API_BASE}/servicedesk?start={start}&limit={_PAGE_SIZE}"
+            try:
+                resp = requests.get(url, headers=self._get_headers(), timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
+                all_desks.extend(data.get("values", []))
+                if data.get("isLastPage", True):
+                    break
+                start += _PAGE_SIZE
+            except Exception as e:
+                logger.warning(f"Failed to list service desks at offset {start}: {e}")
+                break
+        return all_desks
+
+    def _sd_request_to_jira_issue(self, item: dict[str, Any]) -> dict[str, Any]:
+        """Convert a JSM Service Desk API request item to a Jira-issue-like dict.
+
+        The Service Desk API returns items with `requestFieldValues`, while
+        `_build_document` expects a Jira issue structure with `fields.summary`,
+        `fields.description`, etc. This normalizes the format.
+        """
+        issue_key = item.get("issueKey", "")
+
+        fields: dict[str, Any] = {}
+
+        # Map requestFieldValues to standard Jira fields
+        for rfv in item.get("requestFieldValues", []):
+            field_id = rfv.get("fieldId", "")
+            value = rfv.get("value")
+            if field_id == "summary":
+                fields["summary"] = str(value) if value else "No summary"
+            elif field_id == "description":
+                fields["description"] = str(value) if value else ""
+            # Store other field values as custom fields
+
+        # Use issueKey as summary fallback
+        if "summary" not in fields:
+            fields["summary"] = f"JSM Request {issue_key}" if issue_key else "No summary"
+
+        # Map currentStatus
+        current_status = item.get("currentStatus", {})
+        if isinstance(current_status, dict):
+            status_name = current_status.get("status", "Unknown")
+            fields["status"] = {"name": status_name}
+            fields["statusCategory"] = current_status.get("statusCategory", "")
+        else:
+            fields["status"] = {"name": str(current_status) if current_status else "Unknown"}
+
+        # Map createdDate
+        created_date = item.get("createdDate", {})
+        if isinstance(created_date, dict):
+            fields["created"] = created_date.get("jira", "")
+        elif isinstance(created_date, str):
+            fields["created"] = created_date
+
+        return {
+            "id": item.get("issueId", ""),
+            "key": issue_key,
+            "fields": fields,
         }
 
     def _fetch_requests(self, project_key: str) -> list[dict[str, Any]]:
         """Fetch customer requests from a JSM project using the Service Desk API."""
         all_requests: list[dict[str, Any]] = []
-        start = 0
-        # First we need the service desk ID for the project
-        sd_url = f"{self.jira_base_url}{_JSM_API_BASE}/servicedesk"
-        try:
-            resp = requests.get(sd_url, headers=self._get_headers(), timeout=30)
-            resp.raise_for_status()
-            desks = resp.json().get("values", [])
-        except Exception as e:
-            logger.warning(f"Failed to list service desks: {e}")
-            return []
+        desks = self._list_service_desks()
 
         # Find the service desk matching our project key
         service_desk_id = None
@@ -93,7 +149,8 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             # Fall back to JQL-based search
             return self._fetch_via_jql(project_key)
 
-        # Fetch requests from the service desk
+        # Fetch requests from the service desk with pagination
+        start = 0
         while True:
             req_url = (
                 f"{self.jira_base_url}{_JSM_API_BASE}/servicedesk/{service_desk_id}/request"
@@ -103,7 +160,9 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
                 resp = requests.get(req_url, headers=self._get_headers(), timeout=30)
                 resp.raise_for_status()
                 data = resp.json()
-                all_requests.extend(data.get("values", []))
+                # Convert SD format to Jira-issue-like format
+                for item in data.get("values", []):
+                    all_requests.append(self._sd_request_to_jira_issue(item))
                 if data.get("isLastPage", True):
                     break
                 start += _PAGE_SIZE
@@ -113,9 +172,19 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
 
         return all_requests
 
-    def _fetch_via_jql(self, project_key: str) -> list[dict[str, Any]]:
-        """Fallback: fetch JSM tickets via Jira JQL (they are still Jira issues)."""
+    def _fetch_via_jql(
+        self,
+        project_key: str,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        """Fetch JSM tickets via Jira JQL, optionally filtered by time range."""
         jql = f'project = "{project_key}" AND issuetype in standardIssueTypes()'
+        if start_time:
+            jql += f' AND updated >= "{start_time.strftime("%Y-%m-%d %H:%M")}"'
+        if end_time:
+            jql += f' AND updated <= "{end_time.strftime("%Y-%m-%d %H:%M")}"'
+
         url = f"{self.jira_base_url}/rest/api/3/search"
         all_issues: list[dict[str, Any]] = []
         start_at = 0
@@ -149,7 +218,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
         key = issue.get("key", "")
         summary = fields.get("summary", "No summary")
         description = fields.get("description", "")
-        
+
         # Extract text from description (could be ADF or plain text)
         desc_text = ""
         if isinstance(description, str):
@@ -157,16 +226,18 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
         elif isinstance(description, dict):
             desc_text = self._extract_adf_text(description)
 
-        status = fields.get("status", {}).get("name", "Unknown") if fields.get("status") else "Unknown"
-        priority = fields.get("priority", {}).get("name", "None") if fields.get("priority") else "None"
+        status = fields.get("status", {})
+        status_name = status.get("name", "Unknown") if isinstance(status, dict) else str(status)
+        priority = fields.get("priority", {})
+        priority_name = priority.get("name", "None") if isinstance(priority, dict) else str(priority)
         created = fields.get("created", "")
         updated = fields.get("updated", "")
 
         # Build document content
         content_parts = [
             f"# {key}: {summary}",
-            f"Status: {status}",
-            f"Priority: {priority}",
+            f"Status: {status_name}",
+            f"Priority: {priority_name}",
             "",
             desc_text,
         ]
@@ -176,24 +247,21 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
         if isinstance(comment_field, dict):
             comments = comment_field.get("comments", [])
             if comments:
-                content_parts.append("
-## Comments")
+                content_parts.append("\n## Comments")
                 for comment in comments:
                     author = comment.get("author", {}).get("displayName", "Unknown")
                     body = comment.get("body", "")
                     if isinstance(body, dict):
                         body = self._extract_adf_text(body)
-                    content_parts.append(f"
-**{author}:** {body}")
+                    content_parts.append(f"\n**{author}:** {body}")
 
-        content = "
-".join(content_parts)
+        content = "\n".join(content_parts)
 
-        metadata = {
+        metadata: dict[str, str] = {
             "key": key,
             "project_key": project_key,
-            "status": status,
-            "priority": priority,
+            "status": status_name,
+            "priority": priority_name,
             "type": "jira_service_management",
         }
 
@@ -223,8 +291,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             for child in node.get("content", []):
                 _extract(child)
             if node.get("type") in ("paragraph", "heading"):
-                texts.append("
-")
+                texts.append("\n")
 
         _extract(adf)
         return "".join(texts).strip()
@@ -252,9 +319,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
-        """Poll for updated documents within a time range."""
-        from datetime import datetime, timezone
-        
+        """Poll for updated documents within a time range using server-side filtering."""
         start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
         end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
 
@@ -263,20 +328,12 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
 
         for project_key in self.project_keys:
             logger.info(f"Polling JSM requests for project: {project_key}")
-            all_requests = self._fetch_requests(project_key)
+            # Use JQL with server-side time filtering instead of fetching all + filtering in Python
+            all_requests = self._fetch_via_jql(project_key, start_time=start_dt, end_time=end_dt)
             batch: list[Document] = []
             for req_data in all_requests:
-                fields = req_data.get("fields", {})
-                updated_str = fields.get("updated", "")
-                if updated_str:
-                    try:
-                        updated_dt = datetime.fromisoformat(updated_str.replace("Z", "+00:00"))
-                        if start_dt <= updated_dt <= end_dt:
-                            doc = self._build_document(req_data, project_key)
-                            batch.append(doc)
-                    except ValueError:
-                        doc = self._build_document(req_data, project_key)
-                        batch.append(doc)
+                doc = self._build_document(req_data, project_key)
+                batch.append(doc)
                 if len(batch) >= 10:
                     yield batch
                     batch = []
