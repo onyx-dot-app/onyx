@@ -159,7 +159,6 @@ anyio==4.11.0 \
     --hash=sha256:0287e96f4d26d4149305414d4e3bc32f0dcd0862365a4bddea19d7a1ec38c4fc \
     --hash=sha256:82a8d0b81e318cc5ce71a5f1f8b5c4e63619620b63141ef8c995fa0db95a57c4
     # via
-    #   claude-agent-sdk
     #   google-genai
     #   httpx
     #   mcp
@@ -604,13 +603,6 @@ chonkie==1.0.10 \
     --hash=sha256:9e0995af48b1d931a7f7de8e4f230a28dcfa0010c2d1911a90e0fab90177f5b5 \
     --hash=sha256:b7f3faf8a29f6804800c7013f047e23d8c78abd7be1f2a5d8bab23269c968672 \
     --hash=sha256:ce0be28214fbd7350e581f8df321e420b49f1d9844f92d24d5935140aad7de46
-claude-agent-sdk==0.1.19 \
-    --hash=sha256:016d0127cf6ef9f5e36dd385bb3a808c9f4ba2a6ed80c676affe4f0801edd311 \
-    --hash=sha256:0b6d820599d1ecf8aad37cf65fcf42e7fd067b732325c4d85e07559584f4bafc \
-    --hash=sha256:0d4ec526de19989dc1d62c3abdf9b71b785f8df851735ec14266fd14d341f34b \
-    --hash=sha256:318c6dbd049bfdb101ed580aece47d63bea32b75a708c86d9e649735e524c736 \
-    --hash=sha256:cff32c935d952b61cc421f9731ad9549df63e871710055446e8abdd4f1d4c5ea
-    # via onyx
 click==8.3.1 \
     --hash=sha256:12ff4785d337a1bb490bb7e9c2b1ee5da3112e94a8622f26a6c77f5d2fc6842a \
     --hash=sha256:981153a64e25f12d547d3426c367a4857371575ee7ad18df2a6183ab0545b2a6
@@ -1847,9 +1839,7 @@ matrix-client==0.3.2 \
 mcp==1.27.0 \
     --hash=sha256:5ce1fa81614958e267b21fb2aa34e0aea8e2c6ede60d52aba45fd47246b4d741 \
     --hash=sha256:d3dc35a7eec0d458c1da4976a48f982097ddaab87e278c5511d5a4a56e852b83
-    # via
-    #   claude-agent-sdk
-    #   fastmcp
+    # via fastmcp
 mdurl==0.1.2 \
     --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8 \
     --hash=sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba
