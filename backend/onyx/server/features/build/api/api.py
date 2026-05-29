@@ -1,5 +1,4 @@
 import re
-from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID
 
@@ -112,8 +111,8 @@ EXCLUDED_HEADERS = {
 # `sec-websocket-protocol`/`sec-websocket-extensions` (can carry bearer tokens).
 #
 # Entries must be lowercase — the filter compares against `key.lower()`.
-# Any header starting with `x-onyx-` is also stripped (see _is_header_excluded)
-# so future Onyx-internal headers don't silently leak.
+# Any header starting with `x-onyx-` is also stripped, so future Onyx-internal
+# headers don't silently leak.
 EXCLUDED_REQUEST_HEADERS = {
     # End-to-end but unsafe to forward verbatim.
     "host",
@@ -151,17 +150,6 @@ EXCLUDED_REQUEST_HEADERS = {
     "x-forwarded-email",
     "x-forwarded-preferred-username",
 }
-
-
-def _is_header_excluded(key: str) -> bool:
-    lowered = key.lower()
-    return lowered in EXCLUDED_REQUEST_HEADERS or lowered.startswith("x-onyx-")
-
-
-def _stream_response(response: httpx.Response) -> Iterator[bytes]:
-    """Stream the response content in chunks."""
-    for chunk in response.iter_bytes(chunk_size=8192):
-        yield chunk
 
 
 def _inject_hmr_fixer(content: bytes, session_id: str) -> bytes:
@@ -314,7 +302,8 @@ def _proxy_request(
     forwarded_headers = {
         key: value
         for key, value in request.headers.items()
-        if not _is_header_excluded(key)
+        if key.lower() not in EXCLUDED_REQUEST_HEADERS
+        and not key.lower().startswith("x-onyx-")
     }
 
     try:
@@ -347,7 +336,7 @@ def _proxy_request(
                 )
 
             return StreamingResponse(
-                content=_stream_response(response),
+                content=response.iter_bytes(chunk_size=8192),
                 status_code=response.status_code,
                 headers=response_headers,
                 media_type=content_type or None,
