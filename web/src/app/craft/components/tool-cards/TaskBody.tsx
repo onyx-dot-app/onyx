@@ -65,18 +65,29 @@ export default function TaskBody({ toolCall }: ToolCardBodyProps) {
           {label}
         </Text>
       </span>
-      {status === "running" && (
-        <SvgLoader className="w-4 h-4 stroke-action-link-05 animate-spin shrink-0" />
-      )}
-      {status === "done" && (
-        <SvgCheckCircle className="w-4 h-4 stroke-status-success-05 shrink-0" />
-      )}
-      {status === "failed" && (
-        <SvgAlertTriangle className="w-4 h-4 stroke-status-error-05 shrink-0" />
-      )}
-      {subagent && (
-        <SvgArrowRight className="w-4 h-4 stroke-text-03 shrink-0 -translate-x-1 opacity-0 transition-all group-hover/task:translate-x-0 group-hover/task:opacity-100" />
-      )}
+      {/* Single right-edge slot (aligns with the tool-card chevron column):
+          status by default, the "open" arrow on hover. */}
+      <span className="relative h-4 w-4 shrink-0">
+        <span
+          className={cn(
+            "absolute inset-0 transition-opacity",
+            subagent && "group-hover/task:opacity-0"
+          )}
+        >
+          {status === "running" && (
+            <SvgLoader className="h-4 w-4 stroke-action-link-05 animate-spin" />
+          )}
+          {status === "done" && (
+            <SvgCheckCircle className="h-4 w-4 stroke-status-success-05" />
+          )}
+          {status === "failed" && (
+            <SvgAlertTriangle className="h-4 w-4 stroke-status-error-05" />
+          )}
+        </span>
+        {subagent && (
+          <SvgArrowRight className="absolute inset-0 h-4 w-4 stroke-text-03 opacity-0 transition-opacity group-hover/task:opacity-100" />
+        )}
+      </span>
     </button>
   );
 }
