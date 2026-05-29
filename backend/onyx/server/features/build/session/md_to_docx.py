@@ -26,7 +26,11 @@ from docx.document import Document as DocxDocument
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.opc.constants import RELATIONSHIP_TYPE
+from docx.opc.package import OpcPackage
+from docx.opc.packuri import PackURI
+from docx.opc.part import XmlPart
 from docx.oxml import OxmlElement
+from docx.oxml import parse_xml
 from docx.oxml.ns import qn
 from docx.shared import Inches
 from docx.shared import Pt
@@ -60,11 +64,27 @@ _BLOCK_TEXT_INDENT = Inches(1 / 3)  # Block Text left/right: 480 twips
 _HEADING_COLOR = RGBColor(0x0F, 0x47, 0x61)
 _HEADING_SIZES = {1: Pt(20), 2: Pt(16), 3: Pt(14), 4: Pt(12), 5: Pt(11), 6: Pt(11)}
 
-# Enable the GFM table/strikethrough/url plugins so the AST covers the Markdown
-# features that appear in these documents.
+# Footnotes are written as a real Word footnotes part (python-docx has no native
+# API for them), so [^n] citations become superscript references that Word links
+# to page-bottom notes. Style ids are the spaceless form of the style names.
+_STYLE_FOOTNOTE_TEXT = "Footnote Text"
+_STYLE_FOOTNOTE_REFERENCE = "Footnote Reference"
+_STYLE_ID_FOOTNOTE_TEXT = "FootnoteText"
+_STYLE_ID_FOOTNOTE_REFERENCE = "FootnoteReference"
+_FOOTNOTES_PARTNAME = "/word/footnotes.xml"
+_FOOTNOTES_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"
+)
+_FOOTNOTES_REL_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes"
+)
+_W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+# Enable the GFM table/strikethrough/url plugins, plus footnotes, so the AST
+# covers the Markdown features that appear in these documents.
 _markdown_parser = mistune.create_markdown(
     renderer=None,
-    plugins=["table", "strikethrough", "url"],
+    plugins=["table", "strikethrough", "url", "footnotes"],
 )
 
 Node = dict[str, Any]
@@ -87,7 +107,15 @@ def markdown_to_docx_bytes(md_text: str) -> bytes:
 
     document = Document()
     _apply_pandoc_styles(document)
-    _render_blocks(document, nodes)
+    footnote_block = next(
+        (node for node in nodes if node.get("type") == "footnotes"), None
+    )
+    footnotes = (
+        _Footnotes(document, footnote_block.get("children", []))
+        if footnote_block is not None
+        else None
+    )
+    _render_blocks(document, nodes, footnotes)
 
     buffer = BytesIO()
     document.save(buffer)
@@ -132,6 +160,13 @@ def _apply_pandoc_styles(document: DocxDocument) -> None:
     caption = ensure(_STYLE_IMAGE_CAPTION, "Caption")
     caption.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
+    ensure(_STYLE_FOOTNOTE_TEXT, "Normal")
+    if _STYLE_FOOTNOTE_REFERENCE not in existing:
+        reference = styles.add_style(
+            _STYLE_FOOTNOTE_REFERENCE, WD_STYLE_TYPE.CHARACTER
+        )
+        reference.font.superscript = True
+
     for level, size in _HEADING_SIZES.items():
         heading = styles[f"Heading {level}"]
         heading.font.size = size
@@ -139,9 +174,119 @@ def _apply_pandoc_styles(document: DocxDocument) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Footnotes
+# --------------------------------------------------------------------------- #
+class _PartParent:
+    """Minimal parent so a Paragraph built in the footnotes part resolves
+    ``paragraph.part`` (used for hyperlink relationships) to that part."""
+
+    def __init__(self, part: XmlPart) -> None:
+        self.part = part
+
+
+class _Footnotes:
+    """Builds a Word footnotes part and wires up references to it.
+
+    Word stores footnotes in a separate ``word/footnotes.xml`` part with two
+    reserved entries (separator + continuation separator) followed by the real
+    notes; the body points at one via ``<w:footnoteReference w:id=...>``.
+
+    Word footnotes are 1:1 with their reference, but Markdown lets one note be
+    cited from several places (``attrs["index"]`` repeats). So, like pandoc, a
+    fresh Word footnote is emitted per *reference* (content duplicated for
+    repeats), in reference order, each with a unique id.
+    """
+
+    def __init__(self, document: DocxDocument, definitions: list[Node]) -> None:
+        self._definitions = {
+            int(item.get("attrs", {}).get("index", 0)): item for item in definitions
+        }
+        self._next_id = 1
+        self._element = parse_xml(f'<w:footnotes xmlns:w="{_W_NS}"/>')
+        self._element.append(_separator_footnote(-1, "separator"))
+        self._element.append(_separator_footnote(0, "continuationSeparator"))
+        package: OpcPackage = document.part.package
+        self._part = XmlPart(
+            PackURI(_FOOTNOTES_PARTNAME),
+            _FOOTNOTES_CONTENT_TYPE,
+            self._element,
+            package,
+        )
+        document.part.relate_to(self._part, _FOOTNOTES_REL_TYPE)
+        self._parent = _PartParent(self._part)
+
+    def add_reference(self, paragraph: Paragraph, index: int) -> None:
+        """Insert a superscript reference and emit its footnote definition."""
+        item = self._definitions.get(index)
+        if item is None:
+            return
+        footnote_id = self._next_id
+        self._next_id += 1
+        paragraph._p.append(_reference_run("w:footnoteReference", footnote_id))
+        self._element.append(self._build_footnote(footnote_id, item))
+
+    def _build_footnote(self, footnote_id: int, item: Node) -> Any:
+        """Render a footnote definition into a ``<w:footnote>`` element.
+
+        Footnotes are almost always a single paragraph; each paragraph-like
+        block becomes a footnote paragraph, with the reference mark + a space
+        leading the first one.
+        """
+        footnote = OxmlElement("w:footnote")
+        footnote.set(qn("w:id"), str(footnote_id))
+        for position, block in enumerate(item.get("children", [])):
+            p_element = OxmlElement("w:p")
+            p_pr = OxmlElement("w:pPr")
+            p_style = OxmlElement("w:pStyle")
+            p_style.set(qn("w:val"), _STYLE_ID_FOOTNOTE_TEXT)
+            p_pr.append(p_style)
+            p_element.append(p_pr)
+            paragraph = Paragraph(p_element, self._parent)
+            if position == 0:
+                p_element.append(_reference_run("w:footnoteRef", None))
+                paragraph.add_run(" ")
+            _add_runs(paragraph, block.get("children", []), _Fmt(), None)
+            footnote.append(p_element)
+        return footnote
+
+
+def _separator_footnote(footnote_id: int, separator_tag: str) -> Any:
+    footnote = OxmlElement("w:footnote")
+    footnote.set(qn("w:type"), separator_tag)
+    footnote.set(qn("w:id"), str(footnote_id))
+    paragraph = OxmlElement("w:p")
+    run = OxmlElement("w:r")
+    run.append(OxmlElement(f"w:{separator_tag}"))
+    paragraph.append(run)
+    footnote.append(paragraph)
+    return footnote
+
+
+def _reference_run(mark_tag: str, footnote_id: int | None) -> Any:
+    """A run carrying the footnote-reference character style and the mark.
+
+    ``mark_tag`` is ``w:footnoteReference`` (body, needs an id) or
+    ``w:footnoteRef`` (the mark inside the note itself).
+    """
+    run = OxmlElement("w:r")
+    run_props = OxmlElement("w:rPr")
+    style = OxmlElement("w:rStyle")
+    style.set(qn("w:val"), _STYLE_ID_FOOTNOTE_REFERENCE)
+    run_props.append(style)
+    run.append(run_props)
+    mark = OxmlElement(mark_tag)
+    if footnote_id is not None:
+        mark.set(qn("w:id"), str(footnote_id))
+    run.append(mark)
+    return run
+
+
+# --------------------------------------------------------------------------- #
 # Block-level rendering
 # --------------------------------------------------------------------------- #
-def _render_blocks(document: DocxDocument, nodes: list[Node]) -> None:
+def _render_blocks(
+    document: DocxDocument, nodes: list[Node], footnotes: "_Footnotes | None"
+) -> None:
     # Like pandoc: the first prose paragraph after any non-paragraph block (a
     # heading, list, table, blockquote, code, or the document start) uses "First
     # Paragraph"; consecutive prose paragraphs use "Body Text".
@@ -149,6 +294,10 @@ def _render_blocks(document: DocxDocument, nodes: list[Node]) -> None:
     for node in nodes:
         node_type = node.get("type")
         if node_type in ("blank_line", "newline"):
+            continue
+        if node_type == "footnotes":
+            # Definitions live in the footnotes part (emitted per reference), not
+            # the body.
             continue
         if node_type in ("paragraph", "block_text"):
             children = node.get("children", [])
@@ -159,30 +308,30 @@ def _render_blocks(document: DocxDocument, nodes: list[Node]) -> None:
             else:
                 style = _STYLE_FIRST_PARAGRAPH if first_para_pending else _STYLE_BODY
                 paragraph = document.add_paragraph(style=style)
-                _add_runs(paragraph, children, _Fmt())
+                _add_runs(paragraph, children, _Fmt(), footnotes)
                 first_para_pending = False
             continue
 
         if node_type == "heading":
             level = min(int(node.get("attrs", {}).get("level", 1)), 6)
             paragraph = document.add_paragraph(style=f"Heading {level}")
-            _add_runs(paragraph, node.get("children", []), _Fmt())
+            _add_runs(paragraph, node.get("children", []), _Fmt(), footnotes)
         elif node_type == "block_code":
             _render_code(document, node)
         elif node_type == "block_quote":
-            _render_quote(document, node)
+            _render_quote(document, node, footnotes)
         elif node_type == "list":
-            _render_list(document, node, level=0)
+            _render_list(document, node, level=0, footnotes=footnotes)
         elif node_type == "thematic_break":
             _render_thematic_break(document)
         elif node_type == "table":
-            _render_table(document, node)
+            _render_table(document, node, footnotes)
             # pandoc styles the paragraph after a table as Body Text, not First.
             first_para_pending = False
             continue
         elif "children" in node:
             # Unknown block wrapper: recurse so its content is not dropped.
-            _render_blocks(document, node["children"])
+            _render_blocks(document, node["children"], footnotes)
         first_para_pending = True
 
 
@@ -197,13 +346,15 @@ def _render_code(document: DocxDocument, node: Node) -> None:
         run.font.size = _CODE_FONT_SIZE
 
 
-def _render_quote(document: DocxDocument, node: Node) -> None:
+def _render_quote(
+    document: DocxDocument, node: Node, footnotes: "_Footnotes | None"
+) -> None:
     for child in node.get("children", []):
         if child.get("type") == "paragraph":
             paragraph = document.add_paragraph(style=_STYLE_BLOCK_TEXT)
-            _add_runs(paragraph, child.get("children", []), _Fmt())
+            _add_runs(paragraph, child.get("children", []), _Fmt(), footnotes)
         else:
-            _render_blocks(document, [child])
+            _render_blocks(document, [child], footnotes)
 
 
 def _is_image_only(children: list[Node]) -> bool:
@@ -229,7 +380,12 @@ def _render_image_caption(document: DocxDocument, children: list[Node]) -> None:
     paragraph.add_run(alt or "image")
 
 
-def _render_list(document: DocxDocument, node: Node, level: int) -> None:
+def _render_list(
+    document: DocxDocument,
+    node: Node,
+    level: int,
+    footnotes: "_Footnotes | None",
+) -> None:
     attrs = node.get("attrs", {})
     ordered = bool(attrs.get("ordered", False))
     # mistune exposes tight/loose as a top-level key on the list node.
@@ -271,12 +427,12 @@ def _render_list(document: DocxDocument, node: Node, level: int) -> None:
                 paragraph = document.add_paragraph(style=paragraph_style)
                 if not has_rendered_marker and num_id is not None:
                     _apply_numbering(paragraph, num_id)
-                _add_runs(paragraph, child.get("children", []), _Fmt())
+                _add_runs(paragraph, child.get("children", []), _Fmt(), footnotes)
                 has_rendered_marker = True
             elif child_type == "list":
-                _render_list(document, child, level + 1)
+                _render_list(document, child, level + 1, footnotes)
             else:
-                _render_blocks(document, [child])
+                _render_blocks(document, [child], footnotes)
 
 
 def _create_list_numbering(
@@ -353,7 +509,9 @@ def _render_thematic_break(document: DocxDocument) -> None:
     p_pr.append(borders)
 
 
-def _render_table(document: DocxDocument, node: Node) -> None:
+def _render_table(
+    document: DocxDocument, node: Node, footnotes: "_Footnotes | None"
+) -> None:
     header_cells: list[Node] = []
     body_rows: list[list[Node]] = []
     for section in node.get("children", []):
@@ -377,22 +535,29 @@ def _render_table(document: DocxDocument, node: Node) -> None:
     if header_cells:
         cells = table.add_row().cells
         for index, cell_node in enumerate(header_cells[:num_cols]):
-            _fill_cell(cells[index], cell_node, bold=True)
+            _fill_cell(cells[index], cell_node, bold=True, footnotes=footnotes)
     for row in body_rows:
         cells = table.add_row().cells
         for index, cell_node in enumerate(row[:num_cols]):
-            _fill_cell(cells[index], cell_node, bold=False)
+            _fill_cell(cells[index], cell_node, bold=False, footnotes=footnotes)
 
 
-def _fill_cell(cell: _Cell, cell_node: Node, bold: bool) -> None:
+def _fill_cell(
+    cell: _Cell, cell_node: Node, bold: bool, footnotes: "_Footnotes | None"
+) -> None:
     paragraph = cell.paragraphs[0]
-    _add_runs(paragraph, cell_node.get("children", []), _Fmt(bold=bold))
+    _add_runs(paragraph, cell_node.get("children", []), _Fmt(bold=bold), footnotes)
 
 
 # --------------------------------------------------------------------------- #
 # Inline rendering
 # --------------------------------------------------------------------------- #
-def _add_runs(paragraph: Paragraph, nodes: list[Node], fmt: _Fmt) -> None:
+def _add_runs(
+    paragraph: Paragraph,
+    nodes: list[Node],
+    fmt: _Fmt,
+    footnotes: "_Footnotes | None",
+) -> None:
     for node in nodes:
         node_type = node.get("type")
         if node_type == "text":
@@ -400,11 +565,17 @@ def _add_runs(paragraph: Paragraph, nodes: list[Node], fmt: _Fmt) -> None:
             # renderer would; code spans below are intentionally left literal.
             _styled_run(paragraph, unescape(str(node.get("raw", ""))), fmt)
         elif node_type == "strong":
-            _add_runs(paragraph, node.get("children", []), replace(fmt, bold=True))
+            _add_runs(
+                paragraph, node.get("children", []), replace(fmt, bold=True), footnotes
+            )
         elif node_type == "emphasis":
-            _add_runs(paragraph, node.get("children", []), replace(fmt, italic=True))
+            _add_runs(
+                paragraph, node.get("children", []), replace(fmt, italic=True), footnotes
+            )
         elif node_type == "strikethrough":
-            _add_runs(paragraph, node.get("children", []), replace(fmt, strike=True))
+            _add_runs(
+                paragraph, node.get("children", []), replace(fmt, strike=True), footnotes
+            )
         elif node_type == "codespan":
             _styled_run(paragraph, str(node.get("raw", "")), replace(fmt, code=True))
         elif node_type == "link":
@@ -412,6 +583,11 @@ def _add_runs(paragraph: Paragraph, nodes: list[Node], fmt: _Fmt) -> None:
         elif node_type == "image":
             alt = _collect_text(node.get("children", []))
             _styled_run(paragraph, f"[image: {alt}]" if alt else "[image]", fmt)
+        elif node_type == "footnote_ref":
+            if footnotes is not None:
+                footnotes.add_reference(
+                    paragraph, int(node.get("attrs", {}).get("index", 0))
+                )
         elif node_type == "softbreak":
             _styled_run(paragraph, " ", fmt)
         elif node_type == "linebreak":
@@ -419,7 +595,7 @@ def _add_runs(paragraph: Paragraph, nodes: list[Node], fmt: _Fmt) -> None:
         elif node_type == "inline_html":
             _add_inline_html(paragraph, str(node.get("raw", "")))
         elif "children" in node:
-            _add_runs(paragraph, node["children"], fmt)
+            _add_runs(paragraph, node["children"], fmt, footnotes)
         elif "raw" in node:
             _styled_run(paragraph, unescape(str(node["raw"])), fmt)
 

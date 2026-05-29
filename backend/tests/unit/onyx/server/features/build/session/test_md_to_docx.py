@@ -1,5 +1,7 @@
 """Unit tests for the Markdown -> DOCX converter."""
 
+import re
+import zipfile
 from io import BytesIO
 
 from docx import Document
@@ -190,6 +192,37 @@ def test_html_entities_in_code_span_are_left_literal() -> None:
     doc = _render("`a &amp; b`")
     runs = [r.text for p in doc.paragraphs for r in p.runs]
     assert "a &amp; b" in runs
+
+
+def _footnote_ids(data: bytes) -> list[str]:
+    archive = zipfile.ZipFile(BytesIO(data))
+    footnotes_xml = archive.read("word/footnotes.xml").decode()
+    return re.findall(r'<w:footnote [^>]*w:id="(-?\d+)"', footnotes_xml)
+
+
+def test_footnotes_become_real_word_footnotes() -> None:
+    data = markdown_to_docx_bytes("A citation.[^1]\n\n[^1]: The note text.\n")
+    archive = zipfile.ZipFile(BytesIO(data))
+    # The body references a real footnote rather than literal "[^1]" text.
+    assert "<w:footnoteReference" in archive.read("word/document.xml").decode()
+    body_text = "\n".join(p.text for p in Document(BytesIO(data)).paragraphs)
+    assert "[^1]" not in body_text
+    # The note content lives in the footnotes part (ids -1/0 are the separators).
+    footnotes_xml = archive.read("word/footnotes.xml").decode()
+    assert "The note text." in footnotes_xml
+    assert _footnote_ids(data) == ["-1", "0", "1"]
+
+
+def test_repeated_footnote_reference_emits_one_note_each() -> None:
+    # Word footnotes are 1:1 with their reference, so a note cited twice produces
+    # two footnotes (matching pandoc), not one shared id.
+    data = markdown_to_docx_bytes("First.[^1] Second.[^1]\n\n[^1]: Shared note.\n")
+    assert _footnote_ids(data) == ["-1", "0", "1", "2"]
+
+
+def test_document_without_footnotes_has_no_footnotes_part() -> None:
+    data = markdown_to_docx_bytes("Just a paragraph.\n")
+    assert "word/footnotes.xml" not in zipfile.ZipFile(BytesIO(data)).namelist()
 
 
 def test_paragraph_style_sequence_matches_pandoc_rules() -> None:
