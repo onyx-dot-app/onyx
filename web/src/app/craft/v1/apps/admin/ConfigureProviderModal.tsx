@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Button, Text } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
@@ -191,24 +191,20 @@ export default function ConfigureProviderModal({
             </div>
 
             {descriptor.required_org_credential_fields.map((field) => {
-              const commonProps = {
-                value: credentialValues[field.key] ?? "",
-                onChange: (e: ChangeEvent<HTMLInputElement>) =>
-                  setCredentialValues((prev) => ({
-                    ...prev,
-                    [field.key]: e.target.value,
-                  })),
-                placeholder: field.label,
-              };
+              const Input = field.secret ? PasswordInputTypeIn : InputTypeIn;
               return (
                 <div key={field.key} className="flex flex-col gap-1">
                   <Text font="main-ui-action">{field.label}</Text>
-                  {field.secret ? (
-                    // Secrets must never be shown in plaintext in the UI.
-                    <PasswordInputTypeIn hideRevealToggle {...commonProps} />
-                  ) : (
-                    <InputTypeIn {...commonProps} />
-                  )}
+                  <Input
+                    value={credentialValues[field.key] ?? ""}
+                    onChange={(e) =>
+                      setCredentialValues((prev) => ({
+                        ...prev,
+                        [field.key]: e.target.value,
+                      }))
+                    }
+                    placeholder={field.label}
+                  />
                   <Text font="secondary-body" color="text-03">
                     {field.description}
                   </Text>
