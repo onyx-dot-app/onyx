@@ -1,4 +1,8 @@
+node_modules/
+# Capacitor regenerates the native projects from capacitor.config.ts via `cap add`.
+ios/
+android/
 build/
-*.xcodeproj
 DerivedData/
 .DS_Store
+*.log

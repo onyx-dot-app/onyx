@@ -1,56 +1,52 @@
-# Onyx iOS
+# Onyx Mobile
 
-Native iOS app for Onyx — a SwiftUI `WKWebView` shell that loads Onyx Cloud
-(`https://cloud.onyx.app`) with native loading, pull-to-refresh, and offline error states.
+Cross-platform Onyx mobile app built with **Capacitor** — one codebase for **iOS +
+Android**. The native shell wraps the Onyx web UI; the goal is to point it at a mobile-first
+build of `web/` (Opal components, matched to the Figma mocks). For now it loads
+`https://cloud.onyx.app` directly (`server.url` in `capacitor.config.json`).
 
-Chosen over Tauri 2 mobile because tauri-cli's iOS build-phase is incompatible with Xcode 26.x
-(see the wiki: `engineering/Onyx iOS App/Project Status.md`). This path uses only Swift + a
-standard Xcode project, so it builds on current Xcode and signs like any normal iOS app.
+App id: `app.onyx.mobile` (iOS bundle id + Android package).
 
 ## Prerequisites
 
-- Xcode 26.x with an iOS Simulator runtime installed (`xcodebuild -downloadPlatform iOS`)
-- `xcodegen` (`brew install xcodegen`) — the `.xcodeproj` is generated, not committed
+- Node + [bun](https://bun.sh) (repo standard)
+- iOS: Xcode 26.x + an iOS Simulator runtime (`xcodebuild -downloadPlatform iOS`)
+- Android: Android Studio / Android SDK + JDK 21
 
-## Build & run (simulator)
+## Setup
+
+The native projects (`ios/`, `android/`) are **generated, not committed** — recreate them:
 
 ```bash
 cd mobile
-xcodegen generate
-xcodebuild -project Onyx.xcodeproj -scheme Onyx -sdk iphonesimulator \
-  -configuration Debug -derivedDataPath build build
-xcrun simctl boot "iPhone 17" 2>/dev/null || true
-xcrun simctl install booted build/Build/Products/Debug-iphonesimulator/Onyx.app
-xcrun simctl launch booted app.onyx.ios
+bun install
+bunx cap add ios
+bunx cap add android
+bunx cap sync
 ```
 
-## Device / App Store
+## Build & run (iOS simulator)
 
-Set automatic signing with the team in `project.yml` (`DEVELOPMENT_TEAM`), then
-`xcodebuild ... -sdk iphoneos -allowProvisioningUpdates`. Bundle id: `app.onyx.ios`.
+```bash
+xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator \
+  -configuration Debug -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+xcrun simctl install booted build/Build/Products/Debug-iphonesimulator/App.app
+xcrun simctl launch booted app.onyx.mobile
+# or, interactively: bunx cap run ios
+```
 
-## CI / release (`.github/workflows/pr-ios-build.yml`)
+Android: `bunx cap run android` (or open `android/` in Android Studio).
 
-Mirrors the desktop build flow (`deployment.yml`):
+## Notes
 
-- **PR / merge_group** touching `mobile/**` → `xcodegen generate` + unsigned
-  `xcodebuild` simulator build (compile check) + `.app` artifact.
-- **Tag `v*.*.*`** (excluding `beta`) → signed device archive + export + **TestFlight
-  upload**. Cutting a release tag ships the iOS build.
-
-Signing secrets are pulled from **AWS Secrets Manager** via OIDC — the same mechanism and
-the same `deploy/apple-*` secrets the desktop release uses (`APPLE_ID`, `APPLE_PASSWORD`,
-`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD`, `APPLE_TEAM_ID`).
-The certificate is imported into a temporary keychain exactly like the desktop job, and the
-build is uploaded to TestFlight with `altool` using the existing `APPLE_ID` /
-`APPLE_PASSWORD` (app-specific password).
-
-iOS App Store distribution additionally needs a provisioning profile, which macOS Developer
-ID signing doesn't — add it to the same secrets store as
-**`deploy/apple-ios-provisioning-profile`** (base64 of the `.mobileprovision`) for an
-`app.onyx.ios` App Store profile. Build number = the workflow run number.
+- **Google SSO**: `capacitor.config.json` sets a mobile Safari/Chrome `overrideUserAgent` so
+  Google's "Use secure browsers" check doesn't block OAuth in the web view.
+- Capacitor 8 uses **Swift Package Manager** for iOS (no CocoaPods).
+- Native UX (push, haptics, status bar, keyboard, safe areas) is added via Capacitor plugins
+  as the mobile UI is built out.
 
 ## Layout
 
-- `project.yml` — XcodeGen spec (bundle id, settings)
-- `Sources/OnyxApp.swift` — app entry + `WKWebView` wrapper
+- `capacitor.config.json` — app id, name, `server.url`, per-platform UA overrides
+- `www/` — placeholder web dir (replaced by the mobile Opal build)
+- `resources/icon.png` — 1024px app icon source (for `@capacitor/assets`)

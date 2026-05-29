@@ -1,0 +1,19 @@
+{
+  "name": "onyx-mobile",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Onyx mobile app (Capacitor — iOS + Android)",
+  "scripts": {
+    "sync": "cap sync",
+    "open:ios": "cap open ios",
+    "open:android": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/ios": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0"
+  }
+}
