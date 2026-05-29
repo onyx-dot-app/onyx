@@ -26,6 +26,7 @@ from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatche
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.craft._test_helpers import action_entry
 
 
 def _seed_build_session(db_session: Session) -> UUID:
@@ -52,7 +53,14 @@ def _seed_action_approval(
     """Insert one action_approval row with optional pre-recorded decision."""
     row = ActionApproval(
         session_id=session_id,
-        action_type="slack.post_message",
+        actions=[
+            action_entry(
+                "slack.messages.write",
+                display_name="Post a message",
+                description="Post a message to a channel or conversation.",
+            )
+        ],
+        app_name="Slack",
         payload={"text": "hi"},
         decision=decision,
         decided_at=(dt.datetime.now(dt.timezone.utc) if decision is not None else None),

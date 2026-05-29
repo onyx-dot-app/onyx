@@ -15,10 +15,12 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.db.enums import ApprovalDecision
+from onyx.db.enums import EndpointPolicy
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.matching.engine import ActionMatch
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.approvals.api import DecisionBody
 from onyx.server.features.build.approvals.api import list_live_approvals
@@ -27,11 +29,10 @@ from onyx.server.features.build.approvals.api import submit_decision
 from onyx.server.features.build.db import action_approval
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import _set_created_at
+from tests.external_dependency_unit.craft._test_helpers import (
+    default_action_entries as _default_actions,
+)
 from tests.external_dependency_unit.craft._test_helpers import make_user
-
-# --------------------------------------------------------------------------- #
-# Helpers
-# --------------------------------------------------------------------------- #
 
 
 def _stub_send_wake_noop(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -63,19 +64,22 @@ def test_list_live_approvals_filter_logic(
     pending = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "ls"},
     )
     decided = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "rm"},
     )
     stale = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "old"},
     )
     result = action_approval.try_record_decision(
@@ -113,7 +117,8 @@ def test_list_live_approvals_non_owner_gets_not_found(
     action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "ls"},
     )
     db_session.commit()
@@ -141,19 +146,22 @@ def test_list_session_approvals_no_filter_returns_all(
     pending = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "pending"},
     )
     approved_row = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "approved"},
     )
     rejected_row = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "rejected"},
     )
     db_session.commit()
@@ -205,19 +213,22 @@ def test_list_session_approvals_decision_filter(
     approved_row = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "approved"},
     )
     rejected_row = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "rejected"},
     )
     action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "still-pending"},
     )
     db_session.commit()
@@ -268,13 +279,15 @@ def test_list_session_approvals_time_filter(
     old_row = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "old"},
     )
     new_row = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "new"},
     )
     db_session.commit()
@@ -331,7 +344,8 @@ def test_submit_decision_happy_path_returns_refreshed_row(
     approval = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "ls"},
     )
     db_session.commit()
@@ -377,7 +391,8 @@ def test_submit_decision_same_decision_retry_is_idempotent(
     approval = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "ls"},
     )
     db_session.commit()
@@ -415,7 +430,8 @@ def test_submit_decision_different_decision_raises_conflict(
     approval = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "ls"},
     )
     db_session.commit()
@@ -456,7 +472,8 @@ def test_submit_decision_not_found(
         approval = action_approval.insert_action_approval(
             db_session,
             session_id=session.id,
-            action_type="shell",
+            actions=_default_actions(),
+            app_name="Shell",
             payload={"cmd": "ls"},
         )
         db_session.commit()
@@ -484,7 +501,8 @@ def test_submit_decision_pushes_wake_on_redis(
     approval = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "ls"},
     )
     db_session.commit()
@@ -520,7 +538,8 @@ def test_submit_decision_swallows_transient_wake_failure(
     approval = action_approval.insert_action_approval(
         db_session,
         session_id=session.id,
-        action_type="shell",
+        actions=_default_actions(),
+        app_name="Shell",
         payload={"cmd": "ls"},
     )
     db_session.commit()
@@ -562,3 +581,53 @@ def test_submit_decision_swallows_transient_wake_failure(
     persisted = action_approval.get_action_approval(db_session, approval.approval_id)
     assert persisted is not None
     assert persisted.decision == ApprovalDecision.APPROVED
+
+
+# --------------------------------------------------------------------------- #
+# ApprovalView shape — multi-action round-trip through the read API
+# --------------------------------------------------------------------------- #
+
+
+def test_list_live_approvals_returns_multi_action_view(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    """A row persisted with multiple matched actions surfaces all of them on
+    ``ApprovalView.actions``, with each entry's policy round-tripped from the
+    JSONB string back to the ``EndpointPolicy`` enum."""
+    user = make_user(db_session, email_prefix="multi_action_view")
+    session = build_session_with_user(user=user)
+
+    # Strictest-first ordering is the API contract surface; ASK > ALWAYS.
+    expected_actions = [
+        ActionMatch(
+            action_type="linear.issues.create",
+            display_name="Create an issue",
+            description="Create a new issue.",
+            policy=EndpointPolicy.ASK,
+        ),
+        ActionMatch(
+            action_type="linear.viewer.read",
+            display_name="Read the connected user",
+            description="Read the authenticated user's profile (viewer).",
+            policy=EndpointPolicy.ALWAYS,
+        ),
+    ]
+    action_approval.insert_action_approval(
+        db_session,
+        session_id=session.id,
+        actions=[a.model_dump(mode="json") for a in expected_actions],
+        app_name="Linear",
+        payload={"query": "mutation { issueCreate { id } }"},
+    )
+    db_session.commit()
+
+    response = list_live_approvals(
+        session_id=session.id, user=user, db_session=db_session
+    )
+    assert len(response.items) == 1
+    view = response.items[0]
+    assert view.app_name == "Linear"
+    assert view.payload == {"query": "mutation { issueCreate { id } }"}
+    assert view.actions == expected_actions

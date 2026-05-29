@@ -6,11 +6,6 @@ import { Button, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 
 interface PayloadViewProps {
-  // Reserved: lets future specialized views (e.g. diffs, rich
-  // previews) branch on action_type. Today every action renders
-  // through the structured auto-renderer below — no per-action FE
-  // work is needed for new integrations.
-  actionType: string;
   payload: Record<string, unknown>;
 }
 
@@ -152,12 +147,6 @@ function StructuredValue({ value }: { value: unknown }) {
  * row. Heuristics by value type — short strings inline, long strings
  * with Show more, primitives as-is, nested objects and arrays of
  * objects fall back to pretty-printed JSON.
- *
- * This is the default renderer for every approval action. Per-action
- * specialization isn't required for new integrations; the only
- * per-action work is the human-readable label in `actionLabels.ts`.
- * Specialized views (diffs, rich previews) can still be added by
- * branching on `actionType` in `PayloadView` below.
  */
 function StructuredPayloadView({
   payload,

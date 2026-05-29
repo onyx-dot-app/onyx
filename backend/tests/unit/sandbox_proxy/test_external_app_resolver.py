@@ -15,13 +15,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.external_apps.matching.engine import ActionMatch
+from onyx.external_apps.matching.engine import RequestMatch
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
 from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.resolvers import external_app as external_app_mod
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
-from tests.unit.sandbox_proxy.conftest import make_action_match
 from tests.unit.sandbox_proxy.conftest import make_flow as _flow
+from tests.unit.sandbox_proxy.conftest import make_request_match
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
 
 
@@ -36,7 +36,7 @@ def _recorder_db_factory(ops: list[str]) -> Any:
 
 def _ctx(
     *,
-    match: ActionMatch | None = None,
+    match: RequestMatch | None = None,
     db_factory: Any = None,
 ) -> InjectionContext:
     return InjectionContext(
@@ -52,7 +52,7 @@ def test_claims_true_iff_match_present() -> None:
     """Host is irrelevant — the matcher has already attributed the request."""
     resolver = ExternalAppResolver()
     req = _flow(host="api.slack.com").request
-    assert resolver.claims(req, _ctx(match=make_action_match())) is True
+    assert resolver.claims(req, _ctx(match=make_request_match())) is True
     assert resolver.claims(req, _ctx(match=None)) is False
 
 
@@ -71,7 +71,7 @@ def test_resolve_forwards_external_app_id_user_id_and_tenant(
 
     monkeypatch.setattr(external_app_mod, "resolve_injection_headers", _fake)
 
-    match = make_action_match(external_app_id=99)
+    match = make_request_match(external_app_id=99)
     ops: list[str] = []
     ctx = _ctx(match=match, db_factory=_recorder_db_factory(ops))
 

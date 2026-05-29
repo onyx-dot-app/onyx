@@ -18,7 +18,7 @@ from typing import Protocol
 
 from mitmproxy import http
 
-from onyx.external_apps.matching.engine import ActionMatch
+from onyx.external_apps.matching.engine import RequestMatch
 from onyx.sandbox_proxy.errors import http_403
 from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import DBSessionFactory
@@ -36,12 +36,13 @@ class CredentialUnavailableError(Exception):
 class InjectionContext:
     """Per-request inputs every resolver receives.
 
-    `match` is `None` on off-catalog forwards. `sandbox.tenant_id` is what
-    resolvers key their per-tenant lookups by.
+    `match` is the request-level match (carrying `external_app_id`), or
+    `None` on off-catalog forwards. `sandbox.tenant_id` is what resolvers
+    key their per-tenant lookups by.
     """
 
     sandbox: ResolvedSandbox
-    match: ActionMatch | None
+    match: RequestMatch | None
     db_session_factory: DBSessionFactory
 
 

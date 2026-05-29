@@ -391,6 +391,16 @@ class EndpointPolicy(str, PyEnum):
     DENY = "DENY"  # block the call outright
 
 
+# Strictness ordering: higher = stricter. When one request matches several
+# actions, the strictest policy governs (sort/`max` with this key); readers
+# of a persisted `actions` list rely on `actions[0]` being the strictest.
+POLICY_SEVERITY: dict[EndpointPolicy, int] = {
+    EndpointPolicy.ALWAYS: 0,
+    EndpointPolicy.ASK: 1,
+    EndpointPolicy.DENY: 2,
+}
+
+
 class PatType(str, PyEnum):
     USER = "USER"
     CRAFT = "CRAFT"

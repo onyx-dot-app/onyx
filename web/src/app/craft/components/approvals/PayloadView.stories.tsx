@@ -27,7 +27,6 @@ type Story = StoryObj<typeof PayloadView>;
 
 export const ShortStrings: Story = {
   args: {
-    actionType: "slack.send_message",
     payload: {
       channel: "#eng-craft",
       text: "Heads up — the docfetching worker is restarting in 5min.",
@@ -40,7 +39,6 @@ export const ShortStrings: Story = {
 // unaffected.
 export const LongStringWithShowMore: Story = {
   args: {
-    actionType: "slack.send_message",
     payload: {
       channel: "#customer-acme-corp",
       text:
@@ -57,7 +55,6 @@ export const LongStringWithShowMore: Story = {
 // values in the value column.
 export const MixedPrimitives: Story = {
   args: {
-    actionType: "linear.create_issue",
     payload: {
       team_id: "ENG",
       title: "Investigate connector retry backoff",
@@ -74,7 +71,6 @@ export const MixedPrimitives: Story = {
 // The InsetBlock's max-height + scroll handles deep nesting.
 export const NestedObject: Story = {
   args: {
-    actionType: "hubspot.update_contact",
     payload: {
       contact_id: "vid:1247-9023-1144",
       properties: {
@@ -92,7 +88,6 @@ export const NestedObject: Story = {
 // Show more / Show less button.
 export const ArrayOfObjects: Story = {
   args: {
-    actionType: "linear.bulk_label",
     payload: {
       issue_id: "ENG-1247",
       labels: [
@@ -107,7 +102,6 @@ export const ArrayOfObjects: Story = {
 // with Show more, just like long string values do.
 export const LongArrayOfPrimitives: Story = {
   args: {
-    actionType: "github.add_assignees",
     payload: {
       repository: "onyx-dot-app/onyx",
       issue_number: 12047,
@@ -124,7 +118,6 @@ export const LongArrayOfPrimitives: Story = {
 // toggle to reveal the full structure.
 export const LargeNestedObject: Story = {
   args: {
-    actionType: "hubspot.update_contact",
     payload: {
       contact_id: "vid:1247-9023-1144",
       properties: Object.fromEntries(
@@ -141,7 +134,6 @@ export const LargeNestedObject: Story = {
 // rows — no ellipsis needed.
 export const WideKeysAllFit: Story = {
   args: {
-    actionType: "github.create_pr",
     payload: {
       repository: "onyx-dot-app/onyx",
       branch: "whuang/feature",
@@ -157,7 +149,6 @@ export const WideKeysAllFit: Story = {
 // hover-for-full).
 export const TruncatedWideKey: Story = {
   args: {
-    actionType: "legacy.update_external_user",
     payload: {
       external_user_reference_id_for_legacy_migration: "usr_abc123",
       lifecycle_stage_at_time_of_record_creation: "qualified_lead",
@@ -171,7 +162,6 @@ export const TruncatedWideKey: Story = {
 // notice rather than an empty inset.
 export const EmptyPayload: Story = {
   args: {
-    actionType: "noop.action",
     payload: {},
   },
 };
