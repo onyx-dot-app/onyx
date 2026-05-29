@@ -39,19 +39,21 @@ def upgrade() -> None:
     )
 
     # Keep app config rows (name, url patterns, policies) but reset their org
-    # credentials; admins re-enter client_id/secret. b"{}" is the empty JSON
-    # object — no secret to protect — and is replaced by an encrypted value on
-    # the next save.
+    # credentials; admins re-enter client_id/secret. The server_default backfills
+    # existing rows with b"{}" (the empty JSON object — no secret to protect) so
+    # the column can be added NOT NULL in one step; drop the default afterwards so
+    # every insert carries an app-encrypted value rather than relying on the DB.
     op.drop_column("external_app", "organization_credentials")
     op.add_column(
         "external_app",
-        sa.Column("organization_credentials", sa.LargeBinary(), nullable=True),
+        sa.Column(
+            "organization_credentials",
+            sa.LargeBinary(),
+            nullable=False,
+            server_default=sa.text(r"'\x7b7d'::bytea"),  # b"{}"
+        ),
     )
-    op.get_bind().execute(
-        sa.text("UPDATE external_app SET organization_credentials = :empty"),
-        {"empty": b"{}"},
-    )
-    op.alter_column("external_app", "organization_credentials", nullable=False)
+    op.alter_column("external_app", "organization_credentials", server_default=None)
 
 
 def downgrade() -> None:
