@@ -27,6 +27,7 @@
     "REDIS_HOST": "cache",
     "S3_ENDPOINT_URL": "http://minio:9000",
     "SSH_AUTH_SOCK": "/tmp/ssh-agent.sock",
+    "UV_LINK_MODE": "copy",
     "VESPA_HOST": "index"
   },
   "remoteUser": "${localEnv:DEVCONTAINER_REMOTE_USER:dev}",
