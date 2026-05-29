@@ -1215,9 +1215,9 @@ class KubernetesSandboxManager(SandboxManager):
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             llm_config: LLM provider configuration
-            onyx_pat: Guards that the per-sandbox PAT was minted and persisted
-                to Sandbox.encrypted_pat before pod startup; the pod ships only a
-                placeholder.
+            onyx_pat: Required by the interface and the Docker backend; on K8s
+                the pod ships a placeholder and the proxy injects the real PAT,
+                so this is only checked as a provisioning precondition.
 
         Returns:
             SandboxInfo with the provisioned sandbox details
