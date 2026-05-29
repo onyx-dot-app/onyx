@@ -325,13 +325,22 @@ four legacy keys.
 
 Security context changes:
 
-- `cap_add=["NET_ADMIN", "SETPCAP"]` only when proxy is enabled.
-  `NET_ADMIN` runs `iptables`; `SETPCAP` authorises the
-  `PR_CAPBSET_DROP` syscall that `capsh --drop=all` uses to clear the
-  bounding set before setuid. Both are dropped from the bounding set
-  by capsh before the agent execve, so the running container ends
+- `cap_add=["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]` only when
+  proxy is enabled. `NET_ADMIN` runs `iptables`; `SETPCAP` authorises
+  the `PR_CAPBSET_DROP` syscall that `setpriv --bounding-set=-all`
+  uses to clear the bounding set; `SETUID`/`SETGID` gate `setpriv`'s
+  `--reuid` / `--regid` / `--init-groups` calls (under `cap_drop=ALL`
+  even root needs them). All four are dropped from the bounding set
+  by setpriv before the agent execve, so the running container ends
   up with no caps at all. With proxy disabled, `cap_drop=ALL` stays
   in effect with no additions.
+
+  Originally specced as just `NET_ADMIN` + `SETPCAP`; the smoke pass
+  discovered that capsh/setpriv's user-switch needs SETUID + SETGID
+  in the effective set even when invoked as UID 0, because
+  cap_drop=ALL strips them from the inherited set Docker would
+  otherwise grant. The bounding set still drops to empty before
+  agent exec.
 - `user` is dropped from the create kwargs when proxy is enabled. The
   container starts as root (uid 0) so `firewall-init.sh` can run
   iptables; the script's final `exec` drops to UID 1000 (see T5.5 for
@@ -363,18 +372,19 @@ a weaker security argument than the K8s init-container model (where
 not to the running sandbox container at all).
 
 Change the script's tail to explicitly clear the Bounding set before
-exec:
+exec, using `setpriv` from `util-linux`:
 
 ```bash
-exec capsh --drop=all --user=sandbox -- "$@"
+exec setpriv --reuid=1000 --regid=1000 --init-groups \
+    --bounding-set=-all -- "$@"
 ```
 
-(`sandbox` is the UID-1000 user the image actually creates -- see the
-Dockerfile's `usermod -l sandbox` step.) `capsh` from the
-`libcap2-bin` package drops every capability from the bounding set,
-then setuid's to `sandbox`, then exec's the entrypoint. The
-subsequent execve has no file capabilities, so the agent process
-ends up with zero caps in any set. After this:
+(`util-linux` ships in the `node:20-slim` base, so no Dockerfile
+dependency change is needed.) `setpriv` drops every capability from
+the bounding set, switches UID/GID to 1000:1000 with the right
+supplementary groups, then `execve`'s the target. The subsequent
+execve has no file capabilities, so the agent process ends up with
+zero caps in any set. After this:
 
 - A process inside the running sandbox cannot acquire `NET_ADMIN` even
   if a setuid-NET_ADMIN binary somehow ended up in its filesystem.
@@ -383,13 +393,36 @@ ends up with zero caps in any set. After this:
 - The security argument matches the K8s posture: "the capability
   existed for the few hundred milliseconds of init, never since."
 
-Dockerfile change: add `libcap2-bin` to the `apt-get install` line in
-`backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile`.
-Keep `gosu` in the image -- non-proxy local dev paths and the K8s
-init container still rely on it.
-
 The K8s init path is unaffected: `initcontainer` mode exits before
-the capability-bound section.
+the privilege-drop section.
+
+**Why setpriv, not capsh.** Originally specced as `capsh --drop=all
+--user=sandbox -- "$@"`. Smoke discovered that `capsh -- args`
+actually invokes `/bin/bash` and treats the rest as
+`script script-args` -- which works for the prod case (the entrypoint
+IS a script) but silently breaks for any binary target and made the
+local-dev smoke fail with "cannot execute binary file" on
+non-script stand-ins. `setpriv`'s `--` directly `execve`'s the
+target with no shell wrapper. Same security posture, cleaner
+semantics, no extra package dependency.
+
+### T5.5b -- mitmproxy confdir path
+
+`server.py` originally hard-coded `/var/run/sandbox-proxy/mitmproxy-confdir`.
+Make it env-tunable so local-dev runs (proxy under the user's venv,
+no root) can point at `/tmp`:
+
+```python
+_MITM_CONFDIR = os.environ.get(
+    "SANDBOX_PROXY_MITM_CONFDIR",
+    "/var/run/sandbox-proxy/mitmproxy-confdir",
+)
+```
+
+`_bootstrap_ca` passes `pem_path=f"{_MITM_CONFDIR}/mitmproxy-ca.pem"`
+explicitly to `CABootstrap` so the CA-bootstrap path tracks the
+confdir override. The default is unchanged for prod (K8s pods run
+the proxy as root with the tmpfs-mounted `/var/run` location).
 
 ### T5.6 -- Single-provider opencode config with plugin support
 
@@ -494,17 +527,17 @@ Notes:
   rebuilds it. No load balancer to flip out of, since there is one
   replica.
 
-### T5.8 -- Sandbox image dependency: `libcap2-bin`
+### T5.8 -- Sandbox image dependencies
 
-`backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile`
-already installs `iptables` and `gosu` for the K8s init container.
-Add `libcap2-bin` to the same `apt-get install` line for `capsh`
-(T5.5).
+No new packages needed. `setpriv` ships in `util-linux` which is in
+the `node:20-slim` base image. The Dockerfile already installs
+`iptables` (egress lockdown) and `ca-certificates` (trust-store
+population); both are required regardless of backend. `gosu` is
+retained for compatibility with any external tooling that still
+expects it.
 
-The image is shared between K8s and docker-compose -- the
-`SANDBOX_CONTAINER_IMAGE` default in `configs.py` points at the same
-`onyxdotapp/sandbox:vX.Y.Z` tag for both. Cost of adding the package:
-trivial (a few MB), no functional change for K8s.
+Originally specced to add `libcap2-bin` for `capsh`; dropped after
+the smoke pass switched to `setpriv` (T5.5's "Why setpriv" note).
 
 ### T5.9 -- Operational posture
 
@@ -632,14 +665,15 @@ approval card in the chat UI.
 
 ## Risks
 
-- **Capability bounding regression.** If `libcap2-bin` is missing
-  from the image (T5.8 reverted, image not rebuilt) the script's
-  `capsh` line fails and `firewall-init.sh` exits non-zero, taking
-  the sandbox down at startup. This is the safe failure mode --
-  noisy, not silent. The earlier alternative ("just `gosu`, trust
-  the kernel to drop caps on `execve`") is the unsafe failure mode:
-  silently runs with `NET_ADMIN` in the bounding set and rests on
-  kernel-transition subtleties for safety. Stick with `capsh`.
+- **Capability bounding regression.** If `setpriv` is removed from
+  the image (e.g. switching to a `-distroless` base that strips
+  `util-linux`), the script's `setpriv` line fails and
+  `firewall-init.sh` exits non-zero, taking the sandbox down at
+  startup. This is the safe failure mode -- noisy, not silent. The
+  earlier alternative ("just `gosu`, trust the kernel to drop caps
+  on `execve`") is the unsafe failure mode: silently runs with
+  `NET_ADMIN` in the bounding set and rests on kernel-transition
+  subtleties for safety. Stick with `setpriv`.
 - **Docker socket privilege.** The proxy mounts the docker socket
   (read-only) to drive its events watcher. This adds a second
   consumer of the socket trust boundary that `api_server` already
@@ -675,7 +709,7 @@ approval card in the chat UI.
   a customer driver.
 - **Multi-host compose proxy HA.** Out of scope. A swarm-mode or
   external-LB story is the right approach if it becomes necessary.
-- **Removing the gosu/capsh layered approach.** A future image cleanup
-  could drop `gosu` once the K8s init container also migrates to
-  `capsh` (the K8s path doesn't need it -- the cap is gone on init
-  exit), unifying the privilege-drop story across backends.
+- **Removing gosu from the image.** Now that the compose entrypoint
+  uses `setpriv` (in util-linux, always present), `gosu` is only
+  retained for tooling compatibility. A follow-up image cleanup could
+  drop it.

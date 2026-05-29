@@ -355,15 +355,20 @@ def test_proxy_kwargs_swap_command_to_firewall_init(
     ]
 
 
-def test_proxy_kwargs_runs_init_as_root_with_net_admin_and_setpcap(
+def test_proxy_kwargs_runs_init_as_root_with_required_caps(
     proxy_kwargs: ContainerCreateKwargs,
 ) -> None:
-    """NET_ADMIN runs iptables; SETPCAP authorises ``capsh --drop=all``.
-    capsh drops both from the bounding set + setuid()s to UID 1000 before
-    the agent exec; the running container ends up with zero caps."""
+    """NET_ADMIN runs iptables; SETPCAP authorises ``capsh --drop=all``;
+    SETUID + SETGID are gating caps for ``capsh --user`` (the setuid +
+    setgroups calls). Without all four the init either fails to lock
+    down egress or fails to drop to UID 1000.
+
+    capsh drops every cap from the bounding set + setuid()s to UID 1000
+    before the agent exec; the running container ends up with zero
+    caps regardless of which ones init held briefly."""
     assert proxy_kwargs["user"] == "0:0"
     assert proxy_kwargs["cap_drop"] == ["ALL"]
-    assert proxy_kwargs["cap_add"] == ["NET_ADMIN", "SETPCAP"]
+    assert proxy_kwargs["cap_add"] == ["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]
     # The other invariants must not regress in proxy mode.
     assert proxy_kwargs["privileged"] is False
     assert "no-new-privileges:true" in proxy_kwargs["security_opt"]

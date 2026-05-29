@@ -495,7 +495,12 @@ def build_container_create_kwargs(
         }
         command = ["/workspace/firewall-init.sh", "/workspace/entrypoint.sh"]
         user = "0:0"
-        cap_add = ["NET_ADMIN", "SETPCAP"]
+        # NET_ADMIN: iptables. SETPCAP: prctl(PR_CAPBSET_DROP) in
+        # capsh --drop. SETUID/SETGID: capsh --user calls setuid() +
+        # setgroups() which are gated on these caps even for UID 0
+        # under cap_drop=ALL. All four are dropped by capsh before the
+        # agent execve so the running container ends up with no caps.
+        cap_add = ["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]
     else:
         command = ["/workspace/entrypoint.sh"]
         user = "1000:1000"

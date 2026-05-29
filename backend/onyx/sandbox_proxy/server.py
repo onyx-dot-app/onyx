@@ -41,8 +41,14 @@ _DRAIN_TIMEOUT_S = 10.0
 # with unbacked identity.
 _LOOKUP_INITIAL_SYNC_TIMEOUT_S = 60.0
 
-# Must be the parent of ca._DEFAULT_CA_PEM_PATH.
-_MITM_CONFDIR = "/var/run/sandbox-proxy/mitmproxy-confdir"
+# Directory mitmproxy reads its keypair + assorted state from. Default is
+# /var/run/... so prod containers (which run as root) get the K8s-standard
+# tmpfs-mounted location; env-tunable so local-dev runs (proxy under
+# user's venv, no root) can point at /tmp.
+_MITM_CONFDIR = os.environ.get(
+    "SANDBOX_PROXY_MITM_CONFDIR",
+    "/var/run/sandbox-proxy/mitmproxy-confdir",
+)
 
 logger = setup_logger()
 
@@ -110,7 +116,14 @@ def _start_healthz_server(readiness: _Readiness, lookup: SandboxIPLookup) -> HTT
 
 
 def _bootstrap_ca() -> MaterializedCA:
-    return CABootstrap(store=build_ca_store()).ensure_ca()
+    # Pass pem_path explicitly so it tracks _MITM_CONFDIR. ca.py's
+    # default points at /var/run/...; we cannot let the two drift, since
+    # mitmproxy auto-loads $confdir/mitmproxy-ca.pem and would otherwise
+    # never see what CABootstrap wrote.
+    return CABootstrap(
+        store=build_ca_store(),
+        pem_path=f"{_MITM_CONFDIR}/mitmproxy-ca.pem",
+    ).ensure_ca()
 
 
 def _build_lookup() -> SandboxIPLookup:

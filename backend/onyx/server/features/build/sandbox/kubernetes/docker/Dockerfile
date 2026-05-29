@@ -13,10 +13,10 @@ ARG ENABLE_SKILLS=true
 ARG OPENCODE_VERSION=1.15.7
 
 # Install system dependencies.
-# firewall-init.sh needs: iptables (egress lockdown), libcap2-bin (capsh to
-# drop CAP_NET_ADMIN/SETPCAP from the bounding set in compose entrypoint
-# mode), gosu (kept for compatibility / future drops), ca-certificates
-# (CA trust-store population).
+# firewall-init.sh needs: iptables (egress lockdown), ca-certificates (CA
+# trust-store population). setpriv (compose entrypoint mode's privilege
+# drop) is in util-linux and ships in the base node:20-slim image.
+# gosu kept for compatibility with any tooling that still expects it.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -28,7 +28,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libc6-dev \
     iptables \
-    libcap2-bin \
     gosu \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
