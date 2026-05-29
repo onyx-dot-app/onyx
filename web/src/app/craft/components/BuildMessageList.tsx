@@ -27,7 +27,7 @@ interface BuildMessageListProps {
    * Scrollable container wrapping this list. Auto-scroll moves it directly
    * rather than via scrollIntoView, which scrolls every ancestor.
    */
-  scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   /**
    * Trailing content attached to the last assistant block — either the
    * in-progress streaming area (if visible) or the last saved assistant
@@ -55,7 +55,7 @@ export default function BuildMessageList({
   trailingAssistantSlot,
 }: BuildMessageListProps) {
   useEffect(() => {
-    const container = scrollContainerRef?.current;
+    const container = scrollContainerRef.current;
     if (autoScrollEnabled && container) {
       container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
     }
