@@ -27,7 +27,7 @@ from redis.exceptions import RedisError
 
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
-from onyx.external_apps.matching.engine import ActionMatch
+from onyx.external_apps.matching.engine import RequestMatch
 from onyx.sandbox_proxy.action_matcher import ActionMatcher
 from onyx.sandbox_proxy.addons import gate as gate_mod
 from onyx.sandbox_proxy.addons.gate import GateAddon
@@ -40,8 +40,8 @@ from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
-from tests.unit.sandbox_proxy.conftest import make_action_match
 from tests.unit.sandbox_proxy.conftest import make_flow as _flow
+from tests.unit.sandbox_proxy.conftest import make_request_match
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
 from tests.unit.sandbox_proxy.conftest import noop_db_factory
 from tests.unit.sandbox_proxy.conftest import RecordingCredentialResolver
@@ -56,7 +56,7 @@ class _StubMatcher(ActionMatcher):
     def __init__(
         self,
         *,
-        result: ActionMatch | None = None,
+        result: RequestMatch | None = None,
         exc: Exception | None = None,
     ) -> None:
         self._result = result
@@ -67,7 +67,7 @@ class _StubMatcher(ActionMatcher):
         self,
         request: http.Request,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
-    ) -> ActionMatch | None:
+    ) -> RequestMatch | None:
         self.calls += 1
         if self._exc is not None:
             raise self._exc
@@ -123,11 +123,11 @@ def _assert_403(flow: http.HTTPFlow, expected_code: SandboxProxyError) -> None:
     assert body == {"error": expected_code.value}
 
 
-_MATCH = make_action_match(payload={"text": "hi"})
-_MATCH_ALWAYS = make_action_match(
+_MATCH = make_request_match(payload={"text": "hi"})
+_MATCH_ALWAYS = make_request_match(
     action_type="slack.channels.read", policy=EndpointPolicy.ALWAYS
 )
-_MATCH_DENY = make_action_match(payload={"text": "hi"}, policy=EndpointPolicy.DENY)
+_MATCH_DENY = make_request_match(payload={"text": "hi"}, policy=EndpointPolicy.DENY)
 
 
 # ---------------------------------------------------------------------------
@@ -327,11 +327,11 @@ def test_resolve_and_match_deny_blocks_with_403() -> None:
 class _PipelineSpy:
     """Records the approval pipeline + dispatcher so a test can read the path."""
 
-    persisted: list[tuple[SessionContext, ActionMatch]]
-    awaited: list[ActionMatch]
+    persisted: list[tuple[SessionContext, RequestMatch]]
+    awaited: list[RequestMatch]
     # (match, sandbox_user_id, sandbox_tenant_id) — captured off the
     # InjectionContext the dispatcher was handed.
-    dispatched: list[tuple[ActionMatch | None, UUID, str]]
+    dispatched: list[tuple[RequestMatch | None, UUID, str]]
 
     @property
     def approval_ran(self) -> bool:
@@ -352,12 +352,12 @@ def _spy_pipeline(
     """
     spy = _PipelineSpy(persisted=[], awaited=[], dispatched=[])
 
-    def _persist(ctx: SessionContext, match: ActionMatch) -> UUID:
+    def _persist(ctx: SessionContext, match: RequestMatch) -> UUID:
         spy.persisted.append((ctx, match))
         return uuid4()
 
     async def _await(
-        _aid: UUID, _ctx: SessionContext, match: ActionMatch
+        _aid: UUID, _ctx: SessionContext, match: RequestMatch
     ) -> ApprovalDecision | None:
         spy.awaited.append(match)
         return decision
@@ -366,7 +366,7 @@ def _spy_pipeline(
         flow: http.HTTPFlow,  # noqa: ARG001
         *,
         sandbox: ResolvedSandbox,
-        match: ActionMatch | None,
+        match: RequestMatch | None,
     ) -> None:
         spy.dispatched.append((match, sandbox.user_id, sandbox.tenant_id))
 
@@ -1047,7 +1047,8 @@ def test_persist_approval_row_commits_announces_notifies(
     assert returned == approval_id
     assert inserted_payload == {
         "session_id": ctx.session_id,
-        "action_type": _MATCH.action_type,
+        "actions": [a.model_dump(mode="json") for a in _MATCH.actions],
+        "app_name": _MATCH.app_name,
         "payload": _MATCH.payload,
     }
 
@@ -1093,10 +1094,10 @@ def test_persist_approval_row_announce_failure_is_swallowed(
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
 
-    notify_calls: list[tuple[UUID, SessionContext, ActionMatch]] = []
+    notify_calls: list[tuple[UUID, SessionContext, RequestMatch]] = []
 
     def _fake_notify(
-        _self: Any, aid: UUID, ctx_arg: SessionContext, match_arg: ActionMatch
+        _self: Any, aid: UUID, ctx_arg: SessionContext, match_arg: RequestMatch
     ) -> None:
         notify_calls.append((aid, ctx_arg, match_arg))
 

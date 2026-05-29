@@ -16,10 +16,10 @@ import {
   postApprovalDecision,
 } from "@/app/craft/services/apiServices";
 import {
+  ApprovalAction,
   ApprovalSubmitDecision,
   ApprovalView,
 } from "@/app/craft/types/approvals";
-import { resolveActionLabel } from "@/app/craft/components/approvals/actionLabels";
 import PayloadView from "@/app/craft/components/approvals/PayloadView";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -28,19 +28,39 @@ interface ApprovalCardProps {
   defaultOpen?: boolean;
 }
 
+// Single-action: name the action; multi-action: just count them. The
+// per-action breakdown (with descriptions) is always shown in the body.
+function approvalHeadline(approval: ApprovalView): string {
+  if (approval.actions.length === 1) {
+    return `${approval.actions[0]!.display_name} in ${approval.app_name}`;
+  }
+  return `${approval.actions.length} actions in ${approval.app_name}`;
+}
+
+function ActionList({ actions }: { actions: ApprovalAction[] }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {actions.map((action) => (
+        <div
+          key={action.action_type}
+          className="flex flex-col gap-0.5 px-3 py-2 rounded-08 bg-background-neutral-01 border-[0.5px] border-border-01"
+        >
+          <Text font="main-ui-action" color="text-05">
+            {action.display_name}
+          </Text>
+          <Text font="secondary-body" color="text-03">
+            {action.description}
+          </Text>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
- * ApprovalCard - one row per pending approval. Mirrors CraftToolCard's
- * shape: spinning loader + label + chevron in a hover-tinted header
- * row, with the structured payload preview in the expandable body.
- * Approve and Reject sit in the header so the user can decide without
- * expanding — the label alone is enough context for most low-stakes
- * actions, and the payload is one click away when verification is
- * needed.
- *
- * Visual treatment: status-info (blue) border on a transparent body.
- * Pairs with the SvgLoader spinner (also status-info) to read as
- * "agent is paused waiting on you" — distinct from the regular tool
- * cards (no border) but not alarming.
+ * One row per pending approval. Approve/Reject sit in the header so the
+ * user can decide without expanding; the body shows the per-action
+ * breakdown (when multi) and the payload.
  */
 export default function ApprovalCard({
   approval,
@@ -60,7 +80,7 @@ export default function ApprovalCard({
     };
   }, []);
 
-  const label = resolveActionLabel(approval.action_type);
+  const headline = approvalHeadline(approval);
   const swrKey = SWR_KEYS.buildSessionLiveApprovals(approval.session_id);
 
   async function decide(decision: ApprovalSubmitDecision) {
@@ -86,9 +106,6 @@ export default function ApprovalCard({
         setIsOpen(true);
       }
     } finally {
-      // Card usually unmounts on the next render once /live drops the
-      // row, but if revalidation lags or the row stays visible we
-      // still need to unstick the buttons.
       if (mountedRef.current) {
         setSubmitting(false);
       }
@@ -99,18 +116,9 @@ export default function ApprovalCard({
     <div className="rounded-08 border border-status-info-03 overflow-hidden bg-background-neutral-00">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         {/*
-         * Header row: shield+label is one trigger, chevron at the far
-         * right is a second trigger (so the chevron sits in the
-         * conventional position, after the action buttons). Action
-         * buttons sit between as siblings — they can't live inside a
-         * trigger (nested <button> is invalid HTML) and we don't want
-         * clicking Approve to also toggle the collapse.
-         *
-         * Hover tint lives on the row container via `has-[...]:` so
-         * it spans across the action buttons when the user hovers
-         * either trigger. Hovering an action button doesn't match the
-         * selector (no `data-approval-trigger` on those), so the row
-         * goes clear and the button's own hover state takes over.
+         * Two triggers (header + chevron) because action buttons can't
+         * nest inside a trigger (invalid HTML) and shouldn't toggle the
+         * collapse. `data-approval-trigger` scopes the row's hover tint.
          */}
         <div
           className={cn(
@@ -121,11 +129,11 @@ export default function ApprovalCard({
           <CollapsibleTrigger asChild>
             <button
               data-approval-trigger
-              className="flex items-center gap-2 min-w-0 flex-1 text-left px-3 py-1.5"
+              className="flex items-center gap-2 min-w-0 flex-1 text-left px-3 py-2"
             >
               <SvgLoader className="size-4 shrink-0 stroke-status-info-05 animate-spin" />
               <Text font="main-ui-muted" color="text-04" nowrap>
-                {label}
+                {headline}
               </Text>
             </button>
           </CollapsibleTrigger>
@@ -162,10 +170,8 @@ export default function ApprovalCard({
         </div>
         <CollapsibleContent>
           <div className="p-2 flex flex-col gap-3">
-            <PayloadView
-              actionType={approval.action_type}
-              payload={approval.payload}
-            />
+            <ActionList actions={approval.actions} />
+            <PayloadView payload={approval.payload} />
             {errorMessage && (
               <div className="text-status-error-05">
                 <Text font="secondary-body" color="inherit">

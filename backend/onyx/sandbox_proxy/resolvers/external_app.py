@@ -36,7 +36,7 @@ class ExternalAppResolver(CredentialResolver):
             # `claims` guarantees this is unreachable; explicit raise so a
             # broken Protocol contract surfaces as a 403, not a NoneType crash.
             raise CredentialUnavailableError(
-                "ExternalAppResolver invoked without an ActionMatch"
+                "ExternalAppResolver invoked without a matched request"
             )
 
         with ctx.db_session_factory(ctx.sandbox.tenant_id) as db:

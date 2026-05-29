@@ -29,6 +29,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from onyx.db.enums import AccountType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import ActionApproval
@@ -45,6 +46,7 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
+from onyx.external_apps.matching.engine import ActionMatch
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 
 
@@ -336,3 +338,32 @@ def default_llm_config(
         api_key=api_key,
         api_base=None,
     )
+
+
+def action_entry(
+    action_type: str,
+    *,
+    display_name: str = "Action",
+    description: str = "An action.",
+    policy: EndpointPolicy = EndpointPolicy.ASK,
+) -> dict[str, Any]:
+    """JSONB-shape dict for one `ActionApproval.actions` entry. Routes
+    through `ActionMatch` so the shape can't drift from the production
+    model."""
+    return ActionMatch(
+        action_type=action_type,
+        display_name=display_name,
+        description=description,
+        policy=policy,
+    ).model_dump(mode="json")
+
+
+def default_action_entries() -> list[dict[str, Any]]:
+    """Single ASK entry for tests that don't care about catalog specifics."""
+    return [
+        action_entry(
+            "shell.exec",
+            display_name="Run command",
+            description="Run a shell command.",
+        )
+    ]

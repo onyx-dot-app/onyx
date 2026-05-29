@@ -1,7 +1,7 @@
 """Shared stubs and factories for sandbox_proxy unit tests.
 
 - `StaticLookup` — `SandboxIPLookup` stub keyed by source IP.
-- `make_resolved_sandbox` / `make_flow` / `make_action_match` — value
+- `make_resolved_sandbox` / `make_flow` / `make_request_match` — value
   + mitmproxy-flow factories.
 - `StubResolver` — identity resolver stub (sandbox + session) for the gate.
 - `RecordingCredentialResolver` — `CredentialResolver` stub recording the
@@ -21,6 +21,7 @@ from mitmproxy import http
 
 from onyx.db.enums import EndpointPolicy
 from onyx.external_apps.matching.engine import ActionMatch
+from onyx.external_apps.matching.engine import RequestMatch
 from onyx.sandbox_proxy.addons.gate import _IdentityResolver
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import InjectionContext
@@ -200,19 +201,29 @@ class RecordingCredentialResolver(CredentialResolver):
         return dict(self._headers)
 
 
-def make_action_match(
+def make_request_match(
     *,
     action_type: str = "slack.messages.write",
+    display_name: str = "Post a message",
+    description: str = "Post a message to a channel or conversation.",
     payload: dict[str, Any] | None = None,
     policy: EndpointPolicy = EndpointPolicy.ASK,
     external_app_id: int = 42,
-) -> ActionMatch:
-    """Factory for `ActionMatch` test rows."""
-    return ActionMatch(
-        action_type=action_type,
-        payload=payload if payload is not None else {},
-        policy=policy,
+    app_name: str = "Slack",
+) -> RequestMatch:
+    """Factory for single-action `RequestMatch` test rows."""
+    return RequestMatch(
+        actions=(
+            ActionMatch(
+                action_type=action_type,
+                display_name=display_name,
+                description=description,
+                policy=policy,
+            ),
+        ),
+        app_name=app_name,
         external_app_id=external_app_id,
+        payload=payload if payload is not None else {},
     )
 
 

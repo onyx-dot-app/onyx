@@ -19,7 +19,7 @@ from onyx.configs.constants import NotificationType
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.db.notification import create_notification
-from onyx.external_apps.matching.engine import ActionMatch
+from onyx.external_apps.matching.engine import RequestMatch
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.action_matcher import ActionMatcher
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
@@ -242,7 +242,7 @@ class GateAddon:
                 ctx.session_id,
                 ctx.tenant_id,
                 approval_id,
-                match.action_type,
+                match.decisive.action_type,
             )
             flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             if approval_id is not None:
@@ -254,7 +254,7 @@ class GateAddon:
 
     def _resolve_and_match(
         self, flow: http.HTTPFlow
-    ) -> tuple[SessionContext, ActionMatch] | None:
+    ) -> tuple[SessionContext, RequestMatch] | None:
         """Identity → matcher → (only if gated) in-band session resolution.
 
         Returns `(ctx, match)` to proceed, or `None` two ways:
@@ -315,8 +315,8 @@ class GateAddon:
             sandbox.sandbox_id,
             self._extract_session_tag(flow),
             flow.request.host,
-            match.action_type if match is not None else "-",
-            match.policy.value if match is not None else "off_catalog",
+            match.decisive.action_type if match is not None else "-",
+            match.decisive.policy.value if match is not None else "off_catalog",
         )
 
         # ALWAYS / DENY / off-catalog terminate here; ASK falls through to the
@@ -325,11 +325,11 @@ class GateAddon:
             self._dispatch_injection_or_block(flow, sandbox=sandbox, match=None)
             return None
 
-        if match.policy is EndpointPolicy.DENY:
+        if match.decisive.policy is EndpointPolicy.DENY:
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
             return None
 
-        if match.policy is EndpointPolicy.ALWAYS:
+        if match.decisive.policy is EndpointPolicy.ALWAYS:
             self._dispatch_injection_or_block(flow, sandbox=sandbox, match=match)
             return None
 
@@ -353,7 +353,7 @@ class GateAddon:
                 sandbox.sandbox_id,
                 sandbox.user_id,
                 sandbox.tenant_id,
-                match.action_type,
+                match.decisive.action_type,
                 flow.request.host,
             )
             flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
@@ -366,22 +366,24 @@ class GateAddon:
             ctx.session_id,
             ctx.tenant_id,
             ctx.sandbox_id,
-            match.action_type,
+            match.decisive.action_type,
             flow.request.host,
         )
         return ctx, match
 
-    def _persist_approval_row(self, ctx: SessionContext, match: ActionMatch) -> UUID:
+    def _persist_approval_row(self, ctx: SessionContext, match: RequestMatch) -> UUID:
         """Commit the row, register it for the drain, announce to the chat.
 
         Announce is best-effort: a miss degrades to the FE surfacing the
         card on the next `/live` refetch, so we don't fail the request.
         """
+        actions_payload = [a.model_dump(mode="json") for a in match.actions]
         with self._db_session_factory(ctx.tenant_id) as db:
             row = action_approval.insert_action_approval(
                 db,
                 session_id=ctx.session_id,
-                action_type=match.action_type,
+                actions=actions_payload,
+                app_name=match.app_name,
                 payload=match.payload,
             )
             approval_id = row.approval_id
@@ -403,13 +405,14 @@ class GateAddon:
 
         logger.info(
             "gate.row_committed approval_id=%s session_id=%s tenant_id=%s "
-            "sandbox_id=%s proxy_instance_id=%s action_type=%s",
+            "sandbox_id=%s proxy_instance_id=%s action_type=%s action_count=%s",
             approval_id,
             ctx.session_id,
             ctx.tenant_id,
             ctx.sandbox_id,
             self._proxy_instance_id,
-            match.action_type,
+            match.decisive.action_type,
+            len(match.actions),
         )
 
         try:
@@ -427,7 +430,7 @@ class GateAddon:
         self,
         approval_id: UUID,
         ctx: SessionContext,
-        match: ActionMatch,
+        match: RequestMatch,
     ) -> ApprovalDecision:
         """Park on the wake channel; claim EXPIRED on timeout / cancel.
 
@@ -454,7 +457,7 @@ class GateAddon:
                 approval_id,
                 ctx.session_id,
                 ctx.tenant_id,
-                match.action_type,
+                match.decisive.action_type,
             )
             resolved = self._claim_expired_or_read_winner(approval_id, ctx.tenant_id)
             if resolved == ApprovalDecision.EXPIRED:
@@ -517,7 +520,7 @@ class GateAddon:
         flow: http.HTTPFlow,
         *,
         sandbox: ResolvedSandbox,
-        match: ActionMatch | None,
+        match: RequestMatch | None,
     ) -> None:
         """Run the credential dispatcher; fail closed with a 403 on BLOCKED."""
         self._credential_dispatcher.apply_or_block(
@@ -617,7 +620,7 @@ class GateAddon:
     # ------------------------------------------------------------------
 
     def _notify_approval_requested(
-        self, approval_id: UUID, ctx: SessionContext, match: ActionMatch
+        self, approval_id: UUID, ctx: SessionContext, match: RequestMatch
     ) -> None:
         """Best-effort APPROVAL_REQUESTED notification dispatch.
 
@@ -633,7 +636,9 @@ class GateAddon:
                 additional_data={
                     "approval_id": str(approval_id),
                     "session_id": str(ctx.session_id),
-                    "action_type": match.action_type,
+                    "action_type": match.decisive.action_type,
+                    "action_count": len(match.actions),
+                    "app_name": match.app_name,
                     "link": _CRAFT_SESSION_LINK_TEMPLATE.format(
                         session_id=ctx.session_id
                     ),
