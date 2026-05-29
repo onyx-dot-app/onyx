@@ -114,8 +114,6 @@ function renderBody(toolCall: ToolCallState) {
       return <ReadBody toolCall={toolCall} />;
     case "search":
       return <SearchBody toolCall={toolCall} />;
-    case "task":
-      return <TaskBody toolCall={toolCall} />;
     case "other":
     default:
       return <GenericBody toolCall={toolCall} />;
@@ -185,6 +183,12 @@ export default function CraftToolCard({
   // there's no normal body content.
   const expandable = hasBodyContent(toolCall) || failed;
   const [isOpen, setIsOpen] = useState(defaultOpen ?? failed);
+
+  // The task tool is its own clickable "Spawning subagent: …" row (no
+  // collapsible body) — it navigates to the spawned subagent's transcript.
+  if (toolCall.kind === "task") {
+    return <TaskBody toolCall={toolCall} />;
+  }
 
   const headerRow = (
     <div className="flex items-center gap-2 min-w-0 w-full">
