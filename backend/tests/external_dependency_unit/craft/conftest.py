@@ -226,16 +226,9 @@ def _isolate_skill_tables(
 def _seed_default_llm_provider() -> Generator[None, None, None]:
     """Seed a default LLM provider so the real provisioning path resolves one.
 
-    No-op (and no teardown) if the DB already has a default, so it never
-    clobbers a dev database. K8s lane only.
+    No-op (and no teardown) if the DB already has a default. The fake key is
+    never invoked — tests forward the resolved config to ``provision()`` only.
     """
-    from onyx.server.features.build.configs import SANDBOX_BACKEND
-    from onyx.server.features.build.configs import SandboxBackend
-
-    if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
-        yield
-        return
-
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
     seeded_name: str | None = None
@@ -1186,9 +1179,8 @@ def session_manager_with_stub(
     Patches both ``session.manager.get_sandbox_manager`` (which
     ``SessionManager.__init__`` captures into ``self._sandbox_manager`` at
     construction time) AND ``sandbox.base._sandbox_manager_instance`` so any
-    deferred lookup also lands on the stub. The LLM provider lookup is
-    short-circuited to ``default_llm_config()`` so tests don't need a real
-    provider configured in the DB.
+    deferred lookup also lands on the stub. The LLM lookup runs for real
+    against the provider from ``_seed_default_llm_provider``.
     """
     monkeypatch.setattr(
         "onyx.server.features.build.session.manager.get_sandbox_manager",
@@ -1199,11 +1191,6 @@ def session_manager_with_stub(
         stub_sandbox_manager,
     )
     sm = SessionManager(db_session)
-    monkeypatch.setattr(
-        sm,
-        "_get_llm_config",
-        lambda *args, **kwargs: default_llm_config(),  # noqa: ARG005
-    )
     # Sanity: SessionManager captured the stub at construction.
     assert sm._sandbox_manager is stub_sandbox_manager
     return sm

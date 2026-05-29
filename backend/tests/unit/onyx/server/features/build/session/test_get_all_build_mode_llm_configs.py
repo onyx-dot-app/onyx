@@ -213,9 +213,10 @@ class TestGetAllBuildModeLlmConfigs:
 
 
 class TestGetLlmConfigFallback:
-    """``SessionManager._get_llm_config(None, None, user)`` resolves to the
-    highest-priority accessible provider of a supported type (anthropic >
-    openai > openrouter), using that provider's first visible model."""
+    """``SessionManager.build_llm_configs(user)[0]`` (the default config)
+    resolves to the highest-priority accessible provider of a supported type
+    (anthropic > openai > openrouter), using that provider's first visible
+    model."""
 
     @staticmethod
     def _manager() -> SessionManager:
@@ -245,7 +246,7 @@ class TestGetLlmConfigFallback:
             api_key="k-anthropic",
         )
         with self._patch_providers([provider]):
-            config = self._manager()._get_llm_config(None, None, self._user())
+            config = self._manager().build_llm_configs(self._user(), None, None)[0]
         assert (config.provider, config.model_name) == (
             "anthropic",
             "claude-opus-4-7",
@@ -263,7 +264,7 @@ class TestGetLlmConfigFallback:
                 ),
             ]
         ):
-            config = self._manager()._get_llm_config(None, None, self._user())
+            config = self._manager().build_llm_configs(self._user(), None, None)[0]
         assert config.provider == "anthropic"
 
     def test_ignores_unsupported_provider_type(self) -> None:
@@ -272,7 +273,7 @@ class TestGetLlmConfigFallback:
             [_provider(name="az", provider="azure", models=[_model("gpt-5.5")])]
         ):
             try:
-                self._manager()._get_llm_config(None, None, self._user())
+                self._manager().build_llm_configs(self._user(), None, None)[0]
             except OnyxError as e:
                 assert e.status_code == 400
             else:
@@ -289,13 +290,13 @@ class TestGetLlmConfigFallback:
                 _provider(name="o", provider="openai", models=[_model("gpt-5.5")]),
             ]
         ):
-            config = self._manager()._get_llm_config(None, None, self._user())
+            config = self._manager().build_llm_configs(self._user(), None, None)[0]
         assert (config.provider, config.model_name) == ("openai", "gpt-5.5")
 
     def test_raises_onyx_error_when_no_supported_provider(self) -> None:
         with self._patch_providers([]):
             try:
-                self._manager()._get_llm_config(None, None, self._user())
+                self._manager().build_llm_configs(self._user(), None, None)[0]
             except OnyxError as e:
                 assert e.status_code == 400
             else:
@@ -311,9 +312,9 @@ class TestGetLlmConfigFallback:
             api_key="k-anthropic",
         )
         with self._patch_providers([provider]):
-            config = self._manager()._get_llm_config(
-                "anthropic", "claude-sonnet-4-6", self._user()
-            )
+            config = self._manager().build_llm_configs(
+                self._user(), "anthropic", "claude-sonnet-4-6"
+            )[0]
         assert (config.provider, config.model_name) == (
             "anthropic",
             "claude-sonnet-4-6",
@@ -329,9 +330,9 @@ class TestGetLlmConfigFallback:
                 )
             ]
         ):
-            config = self._manager()._get_llm_config(
-                "azure", "some-azure-model", self._user()
-            )
+            config = self._manager().build_llm_configs(
+                self._user(), "azure", "some-azure-model"
+            )[0]
         assert (config.provider, config.model_name) == (
             "anthropic",
             "claude-opus-4-7",
