@@ -1,11 +1,12 @@
 """Integration test for runtime-configurable security settings.
 
 Toggles ``user_directory_admin_only`` via PUT /admin/security and verifies
-that a basic user's access to /users flips accordingly. Confirms KV
-persistence is honored across the ~10s cache-propagation window.
+that a basic user's access to /users flips accordingly. The integration
+api_server runs as a single uvicorn worker; ``store_overrides()`` clears
+that worker's local cache synchronously inside the PUT handler, so the
+very next request observes the new effective value without any TTL wait.
 """
 
-import time
 from collections.abc import Generator
 
 import pytest
@@ -16,10 +17,6 @@ from tests.integration.common_utils.test_models import DATestUser
 
 SECURITY_URL = f"{API_SERVER_URL}/admin/security"
 USERS_URL = f"{API_SERVER_URL}/users"
-
-# In-process cache TTL is 10s. Give a small buffer so cross-request reads in
-# the test reliably observe the new value.
-CACHE_PROPAGATION_BUFFER_S = 12.0
 
 
 def _put_security(payload: dict, user: DATestUser) -> dict:
@@ -73,11 +70,11 @@ def test_user_directory_admin_only_toggle_flips_basic_access(
     reset_security_settings: None,  # noqa: ARG001
 ) -> None:
     """Toggling ``user_directory_admin_only`` at runtime must immediately
-    affect a basic user's access to /users (admin write invalidates local
-    cache; cross-process propagation falls within the cache TTL)."""
+    affect a basic user's access to /users. ``store_overrides()`` clears
+    the api_server's local cache as part of the PUT, so the next request
+    sees the new value without waiting on TTL expiry."""
     # Baseline: with the flag off, a basic user can list users.
     _put_security({"user_directory_admin_only": False}, admin_user)
-    time.sleep(CACHE_PROPAGATION_BUFFER_S)
 
     resp_before = client.get(
         USERS_URL,
@@ -92,7 +89,6 @@ def test_user_directory_admin_only_toggle_flips_basic_access(
 
     # Flip the flag on. Basic user should now be rejected.
     _put_security({"user_directory_admin_only": True}, admin_user)
-    time.sleep(CACHE_PROPAGATION_BUFFER_S)
 
     resp_blocked = client.get(
         USERS_URL,
@@ -114,9 +110,8 @@ def test_user_directory_admin_only_toggle_flips_basic_access(
     )
     assert resp_admin.status_code == 200
 
-    # Flip back off. Basic user regains access after propagation.
+    # Flip back off. Basic user regains access immediately.
     _put_security({"user_directory_admin_only": False}, admin_user)
-    time.sleep(CACHE_PROPAGATION_BUFFER_S)
 
     resp_after = client.get(
         USERS_URL,
@@ -146,7 +141,6 @@ def test_get_security_settings_round_trip_persists(
 
     desired = not baseline["track_external_idp_expiry"]
     _put_security({"track_external_idp_expiry": desired}, admin_user)
-    time.sleep(CACHE_PROPAGATION_BUFFER_S)
 
     after = client.get(
         SECURITY_URL,
