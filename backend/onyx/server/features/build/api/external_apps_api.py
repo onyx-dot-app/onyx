@@ -63,7 +63,11 @@ def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
         app_type=app.app_type,
         upstream_url_patterns=list(app.upstream_url_patterns),
         auth_template=app.auth_template,
-        organization_credentials=app.organization_credentials,
+        # Mask secrets (e.g. client_secret) so they're never sent to the client.
+        # The write path restores masked values the form echoes back unchanged.
+        organization_credentials=app.organization_credentials.get_value(
+            apply_mask=True
+        ),
         enabled=app.skill.enabled,
         actions=action_policy_views(app.app_type, stored),
     )
@@ -77,9 +81,13 @@ def _to_user_response(
     those keys (stale keys filtered out).
     """
     required_keys = required_user_credential_keys(
-        app.auth_template, app.organization_credentials
+        app.auth_template, app.organization_credentials.get_value(apply_mask=False)
     )
-    stored = user_cred.user_credentials if user_cred is not None else {}
+    stored = (
+        user_cred.user_credentials.get_value(apply_mask=False)
+        if user_cred is not None
+        else {}
+    )
     credential_values = {key: stored[key] for key in required_keys if key in stored}
     authenticated = all(key in credential_values for key in required_keys)
 

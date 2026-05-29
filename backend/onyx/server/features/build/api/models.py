@@ -320,7 +320,7 @@ class UpsertExternalAppRequest(BaseModel):
     app_type: ExternalAppType
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
-    organization_credentials: dict[str, Any]
+    organization_credentials: dict[str, str]
     # Per-action overrides by catalog action id (built-in apps); validated on
     # upsert. A map full-replaces stored overrides (empty clears); None leaves
     # them untouched, so a partial update can't wipe the admin's choices.
