@@ -10,7 +10,6 @@ import io
 import json
 import mimetypes
 import queue as queue_lib
-import tempfile
 import threading
 import time
 import uuid
@@ -23,7 +22,6 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-import pypandoc
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
@@ -94,6 +92,7 @@ from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
+from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
 from onyx.server.manage.llm.models import LLMProviderView
@@ -2146,7 +2145,7 @@ class SessionManager:
         """
         Export a markdown file as DOCX.
 
-        Reads the markdown file and converts it to DOCX using pypandoc.
+        Reads the markdown file and converts it to DOCX.
 
         Args:
             session_id: The session UUID
@@ -2170,9 +2169,7 @@ class SessionManager:
 
         md_text = content_bytes.decode("utf-8")
 
-        with tempfile.NamedTemporaryFile(suffix=".docx", delete=True) as tmp:
-            pypandoc.convert_text(md_text, "docx", format="md", outputfile=tmp.name)
-            docx_bytes = tmp.read()
+        docx_bytes = markdown_to_docx_bytes(md_text)
 
         docx_filename = filename.rsplit(".", 1)[0] + ".docx"
         return (docx_bytes, docx_filename)
