@@ -7,10 +7,7 @@
       "command": "uv",
       "args": ["run", "--with", "onyx-devtools", "ods", "compose", "dev", "--infra"],
       "options": {
-        "cwd": "${workspaceFolder}",
-        "env": {
-          "UV_LINK_MODE": "copy"
-        }
+        "cwd": "${workspaceFolder}"
       },
       "problemMatcher": []
     },
@@ -20,10 +17,7 @@
       "command": "uv",
       "args": ["run", "--with", "onyx-devtools", "ods", "env"],
       "options": {
-        "cwd": "${workspaceFolder}",
-        "env": {
-          "UV_LINK_MODE": "copy"
-        }
+        "cwd": "${workspaceFolder}"
       },
       "problemMatcher": []
     },
@@ -31,10 +25,7 @@
       "type": "shell",
       "label": "start backend",
       "options": {
-        "cwd": "${workspaceFolder}",
-        "env": {
-          "UV_LINK_MODE": "copy"
-        }
+        "cwd": "${workspaceFolder}"
       },
       "command": "uv",
       "args": ["run", "--with", "onyx-devtools", "ods", "backend", "api"]
@@ -43,10 +34,7 @@
       "type": "shell",
       "label": "start frontend",
       "options": {
-        "cwd": "${workspaceFolder}",
-        "env": {
-          "UV_LINK_MODE": "copy"
-        }
+        "cwd": "${workspaceFolder}"
       },
       "command": "uv",
       "args": ["run", "--with", "onyx-devtools", "ods", "web", "dev"]
@@ -58,8 +46,7 @@
         "cwd": "${workspaceFolder}",
         "env": {
           "INTERNAL_URL": "http://api_server:8080",
-          "PORT": "3001",
-          "UV_LINK_MODE": "copy"
+          "PORT": "3001"
         }
       },
       "command": "uv",
