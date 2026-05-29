@@ -225,6 +225,29 @@ def test_document_without_footnotes_has_no_footnotes_part() -> None:
     assert "word/footnotes.xml" not in zipfile.ZipFile(BytesIO(data)).namelist()
 
 
+def test_default_font_matches_pandoc() -> None:
+    # pandoc's reference uses Aptos 12pt body / Aptos Display headings, not
+    # python-docx's Cambria 11pt default.
+    doc = _render("# Heading\n\nBody.\n")
+    normal = doc.styles["Normal"]
+    assert normal.font.name == "Aptos"
+    assert normal.font.size is not None and normal.font.size.pt == 12
+    assert doc.styles["Heading 1"].font.name == "Aptos Display"
+
+
+def test_page_margins_match_pandoc() -> None:
+    # pandoc renders 1" margins (Word default); python-docx's template uses 1.25"
+    # left/right, so set 1" all round to match.
+    section = _render("Body.\n").sections[0]
+    margins = (
+        section.left_margin,
+        section.right_margin,
+        section.top_margin,
+        section.bottom_margin,
+    )
+    assert all(margin is not None and margin.inches == 1.0 for margin in margins)
+
+
 def test_paragraph_style_sequence_matches_pandoc_rules() -> None:
     """Lock in pandoc's paragraph-style assignment across mixed content.
 

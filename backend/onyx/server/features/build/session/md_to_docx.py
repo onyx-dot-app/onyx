@@ -63,6 +63,14 @@ _BLOCK_TEXT_SPACE = Pt(5)  # Block Text (blockquote): 100 twips
 _BLOCK_TEXT_INDENT = Inches(1 / 3)  # Block Text left/right: 480 twips
 _HEADING_COLOR = RGBColor(0x0F, 0x47, 0x61)
 _HEADING_SIZES = {1: Pt(20), 2: Pt(16), 3: Pt(14), 4: Pt(12), 5: Pt(11), 6: Pt(11)}
+# Document default font/size, matching pandoc's reference (Aptos 12pt body,
+# Aptos Display headings) instead of python-docx's Cambria 11pt default.
+_BODY_FONT = "Aptos"
+_HEADING_FONT = "Aptos Display"
+_BODY_FONT_SIZE = Pt(12)
+# pandoc emits no page margins, so Word renders its 1" default; python-docx's
+# template uses 1.25" left/right. Set 1" all round to match the pandoc look.
+_PAGE_MARGIN = Inches(1)
 
 # Footnotes are written as a real Word footnotes part (python-docx has no native
 # API for them), so [^n] citations become superscript references that Word links
@@ -131,8 +139,18 @@ def _apply_pandoc_styles(document: DocxDocument) -> None:
     into ``Image Caption``. Defining the same styles here lets the renderer
     assign them so the document reads like the pandoc export.
     """
+    for section in document.sections:
+        section.left_margin = _PAGE_MARGIN
+        section.right_margin = _PAGE_MARGIN
+        section.top_margin = _PAGE_MARGIN
+        section.bottom_margin = _PAGE_MARGIN
+
     styles = document.styles
     existing = {style.name for style in styles}
+
+    normal = styles["Normal"]
+    normal.font.name = _BODY_FONT
+    normal.font.size = _BODY_FONT_SIZE
 
     def ensure(name: str, base: str) -> ParagraphStyle:
         if name not in existing:
@@ -169,6 +187,7 @@ def _apply_pandoc_styles(document: DocxDocument) -> None:
 
     for level, size in _HEADING_SIZES.items():
         heading = styles[f"Heading {level}"]
+        heading.font.name = _HEADING_FONT
         heading.font.size = size
         heading.font.color.rgb = _HEADING_COLOR
 
