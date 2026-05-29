@@ -30,6 +30,7 @@ VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG = [
     "claude-opus-4-5@20251101",
     "claude-opus-4-6",
     "claude-opus-4-7",
+    "claude-opus-4-8",
 ]
 
 
@@ -431,6 +432,11 @@ ANTHROPIC_MODELS_OMITTING_SAMPLING_PARAMS = [
     "claude-opus-4.7",
     "claude-4-7-opus",
     "claude-4.7-opus",
+    "claude-opus-4-8",
+    "claude-opus-4-8@20260101",
+    "claude-opus-4.8",
+    "claude-4-8-opus",
+    "claude-4.8-opus",
 ]
 
 
@@ -455,6 +461,37 @@ def test_omits_temperature_for_no_sampling_params_models(model_name: str) -> Non
 
         kwargs = mock_completion.call_args.kwargs
         assert "temperature" not in kwargs
+
+
+@pytest.mark.parametrize("model_name", ["claude-opus-4-7", "claude-opus-4-8"])
+def test_claude_adaptive_thinking_uses_output_config(model_name: str) -> None:
+    # Non-Vertex providers must use the adaptive thinking API for these models
+    # (thinking.type=adaptive + output_config.effort) rather than the legacy
+    # thinking.type.enabled + budget_tokens path, which they reject with a 400.
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.LITELLM_PROXY,
+            model_name=model_name,
+        ),
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["thinking"] == {"type": "adaptive"}
+        assert "output_config" in kwargs
+        assert "budget_tokens" not in kwargs["thinking"]
 
 
 def test_keeps_temperature_for_other_models(default_multi_llm: LitellmLLM) -> None:
