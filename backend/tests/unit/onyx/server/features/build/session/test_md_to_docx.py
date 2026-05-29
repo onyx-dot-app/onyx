@@ -56,6 +56,28 @@ def test_bulleted_and_numbered_and_nested_lists() -> None:
     assert "List Number" in styles
 
 
+def test_loose_list_continuation_paragraphs_are_not_numbered() -> None:
+    doc = _render("1. one\n\n   continuation\n2. two\n")
+    non_empty_paragraphs = [p for p in doc.paragraphs if p.text.strip()]
+    assert [p.text for p in non_empty_paragraphs] == ["one", "continuation", "two"]
+    assert [
+        p.style.name
+        for p in non_empty_paragraphs
+        if p.style is not None and p.style.name is not None
+    ] == [
+        "List Number",
+        "List Continue",
+        "List Number",
+    ]
+
+
+def test_ordered_list_start_value_is_preserved() -> None:
+    doc = _render("3. three\n4. four\n")
+    assert [p.text for p in doc.paragraphs if p.text.strip()] == ["three", "four"]
+    numbering_xml = doc.part.numbering_part.element.xml
+    assert '<w:startOverride w:val="3"/>' in numbering_xml
+
+
 def test_block_quote_uses_quote_style() -> None:
     doc = _render("> quoted line\n")
     assert "Quote" in _paragraph_styles(doc)
@@ -106,3 +128,16 @@ def test_hyperlink_preserves_whitespace_in_text() -> None:
     # Trailing space inside the link text must not be stripped by OOXML.
     doc = _render("a [ spaced ](https://onyx.app) b")
     assert 'xml:space="preserve"' in doc.element.xml
+
+
+def test_inline_html_br_becomes_docx_line_break() -> None:
+    doc = _render("before<br>after")
+    assert [p.text for p in doc.paragraphs] == ["before\nafter"]
+    assert "<w:br/>" in doc.element.xml
+
+
+def test_unsupported_inline_html_tags_are_not_visible_text() -> None:
+    doc = _render("<u>under</u> normal")
+    assert [p.text for p in doc.paragraphs] == ["under normal"]
+    assert "<u>" not in doc.paragraphs[0].text
+    assert "</u>" not in doc.paragraphs[0].text

@@ -119,19 +119,89 @@ def _render_list(document: DocxDocument, node: Node, level: int) -> None:
     base_style = "List Number" if ordered else "List Bullet"
     style_level = min(level + 1, _MAX_LIST_LEVEL)
     style = base_style if style_level == 1 else f"{base_style} {style_level}"
+    continue_style = (
+        "List Continue" if style_level == 1 else f"List Continue {style_level}"
+    )
+    start = int(node.get("attrs", {}).get("start", 1))
+    num_id = (
+        _create_numbering_start_override(document, style, start) if ordered else None
+    )
 
     for item in node.get("children", []):
         if item.get("type") != "list_item":
             continue
+        has_rendered_marker = False
         for child in item.get("children", []):
             child_type = child.get("type")
+            if child_type in ("blank_line", "newline"):
+                continue
             if child_type in ("block_text", "paragraph"):
-                paragraph = document.add_paragraph(style=style)
+                paragraph_style = style if not has_rendered_marker else continue_style
+                paragraph = document.add_paragraph(style=paragraph_style)
+                if not has_rendered_marker and num_id is not None:
+                    _apply_numbering(paragraph, num_id)
                 _add_runs(paragraph, child.get("children", []), _Fmt())
+                has_rendered_marker = True
             elif child_type == "list":
                 _render_list(document, child, level + 1)
             else:
                 _render_blocks(document, [child])
+
+
+def _create_numbering_start_override(
+    document: DocxDocument, style_name: str, start: int
+) -> int | None:
+    """Create a numbering instance when an ordered list starts at a non-1 value."""
+    if start == 1:
+        return None
+
+    style = document.styles[style_name]
+    numbering = document.part.numbering_part.element
+    abstract_num_id = _abstract_num_id_for_style(numbering, style.style_id)
+    if abstract_num_id is None:
+        return None
+
+    num_ids = [
+        int(num.get(qn("w:numId")))
+        for num in numbering.findall(qn("w:num"))
+        if num.get(qn("w:numId")) is not None
+    ]
+    next_num_id = max(num_ids, default=0) + 1
+
+    num = OxmlElement("w:num")
+    num.set(qn("w:numId"), str(next_num_id))
+
+    abstract_num_id_el = OxmlElement("w:abstractNumId")
+    abstract_num_id_el.set(qn("w:val"), abstract_num_id)
+    num.append(abstract_num_id_el)
+
+    lvl_override = OxmlElement("w:lvlOverride")
+    lvl_override.set(qn("w:ilvl"), "0")
+    start_override = OxmlElement("w:startOverride")
+    start_override.set(qn("w:val"), str(start))
+    lvl_override.append(start_override)
+    num.append(lvl_override)
+
+    numbering.append(num)
+    return next_num_id
+
+
+def _abstract_num_id_for_style(numbering: Any, style_id: str) -> str | None:
+    for abstract_num in numbering.findall(qn("w:abstractNum")):
+        for lvl in abstract_num.findall(qn("w:lvl")):
+            p_style = lvl.find(qn("w:pStyle"))
+            if p_style is not None and p_style.get(qn("w:val")) == style_id:
+                return abstract_num.get(qn("w:abstractNumId"))
+    return None
+
+
+def _apply_numbering(paragraph: Paragraph, num_id: int) -> None:
+    p_pr = paragraph._p.get_or_add_pPr()
+    num_pr = p_pr.get_or_add_numPr()
+    ilvl = num_pr.get_or_add_ilvl()
+    ilvl.val = 0
+    num_id_el = num_pr.get_or_add_numId()
+    num_id_el.val = num_id
 
 
 def _render_thematic_break(document: DocxDocument) -> None:
@@ -208,6 +278,8 @@ def _add_runs(paragraph: Paragraph, nodes: list[Node], fmt: _Fmt) -> None:
             _styled_run(paragraph, " ", fmt)
         elif node_type == "linebreak":
             paragraph.add_run().add_break()
+        elif node_type == "inline_html":
+            _add_inline_html(paragraph, str(node.get("raw", "")))
         elif "children" in node:
             _add_runs(paragraph, node["children"], fmt)
         elif "raw" in node:
@@ -265,6 +337,12 @@ def _add_hyperlink(paragraph: Paragraph, node: Node, fmt: _Fmt) -> None:
     run.append(text_el)
     hyperlink.append(run)
     paragraph._p.append(hyperlink)
+
+
+def _add_inline_html(paragraph: Paragraph, raw: str) -> None:
+    normalized = raw.strip().lower()
+    if normalized in ("<br>", "<br/>", "<br />"):
+        paragraph.add_run().add_break()
 
 
 def _collect_text(nodes: list[Node]) -> str:
