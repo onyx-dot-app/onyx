@@ -42,8 +42,9 @@ _REDIS_STATE_TTL_SECONDS = 600
 
 
 def _oauth_client_credentials(app: ExternalApp) -> tuple[str, str]:
-    client_id = app.organization_credentials.get("client_id")
-    client_secret = app.organization_credentials.get("client_secret")
+    org_credentials = app.organization_credentials.get_value(apply_mask=False)
+    client_id = org_credentials.get("client_id")
+    client_secret = org_credentials.get("client_secret")
     if not client_id or not client_secret:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,

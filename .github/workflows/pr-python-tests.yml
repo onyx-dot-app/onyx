@@ -74,4 +74,4 @@ jobs:
 
     - name: Run Tests
       shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
-      run: py.test -o junit_family=xunit2 -v --ff --maxfail=1 -n auto backend/tests/unit
+      run: py.test -o junit_family=xunit2 -v -n auto backend/tests/unit

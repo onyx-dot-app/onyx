@@ -110,7 +110,8 @@ def _read_pod_file(k8s: client.CoreV1Api, pod_name: str, path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Fixtures: k8s_manager and live_pod are provided by conftest.py
+# Fixtures: k8s_manager, pool_session, live_pod, provisioned_sandbox, and
+# k8s_client are provided by conftest.py.
 # ---------------------------------------------------------------------------
 
 
@@ -122,6 +123,7 @@ def _read_pod_file(k8s: client.CoreV1Api, pod_name: str, path: str) -> str:
 def test_provisioned_pod_has_sandbox_image_directories(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """After ``provision()``, the baked-in workspace directories exist.
 
@@ -130,38 +132,29 @@ def test_provisioned_pod_has_sandbox_image_directories(
     answer ``health_check``. Also doubles as the merged ``health_check_returns_true``
     coverage per the plan note.
     """
-    sandbox_id = uuid4()
-    try:
-        _provisioned_sandbox(k8s_manager, sandbox_id)
+    sandbox_id, _, pod_name = pool_session
 
-        pod_name = k8s_manager._get_pod_name(sandbox_id)
-        pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
-        assert pod.status.phase == "Running"
+    pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
+    assert pod.status.phase == "Running"
 
-        for required in (
-            "/workspace/templates",
-            "/workspace/managed",
-            "/workspace/sessions",
-        ):
-            resp = pod_exec(
-                k8s_client,
-                pod_name,
-                SANDBOX_NAMESPACE,
-                f"test -d {required} && echo OK || echo MISSING",
-            )
-            assert "OK" in resp, (
-                f"{required} should exist in the provisioned pod. Got: {resp!r}"
-            )
-
-        # Health-check verification is merged with this provision test.
-        assert k8s_manager.health_check(sandbox_id, timeout=5.0), (
-            "health_check() should return True for a freshly provisioned pod"
+    for required in (
+        "/workspace/templates",
+        "/workspace/managed",
+        "/workspace/sessions",
+    ):
+        resp = pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            f"test -d {required} && echo OK || echo MISSING",
         )
-    finally:
-        k8s_manager.terminate(sandbox_id)
-        wait_for_pod_deletion(
-            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
+        assert "OK" in resp, (
+            f"{required} should exist in the provisioned pod. Got: {resp!r}"
         )
+
+    assert k8s_manager.health_check(sandbox_id, timeout=5.0), (
+        "health_check() should return True for a freshly provisioned pod"
+    )
 
 
 def test_session_workspace_setup_creates_expected_tree(
@@ -382,34 +375,26 @@ def test_health_check_returns_false_for_missing_pod(
 
 
 def test_pod_runs_sandbox_and_sidecar_containers(
-    k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """After provision, the pod has both `sandbox` and `sidecar` containers
     and the sidecar reports ready (its `/health` probe is what gates this).
     """
-    sandbox_id = uuid4()
-    try:
-        _provisioned_sandbox(k8s_manager, sandbox_id)
-        pod_name = k8s_manager._get_pod_name(sandbox_id)
-        pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
+    _, _, pod_name = pool_session
+    pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
 
-        statuses = {c.name: c for c in pod.status.container_statuses or []}
-        assert set(statuses) == {"sandbox", "sidecar"}, (
-            f"pod should have exactly 2 containers, got {set(statuses)}"
-        )
-        assert statuses["sidecar"].ready, "sidecar should be ready via /health probe"
-        assert statuses["sandbox"].ready, "sandbox container should be ready"
-    finally:
-        k8s_manager.terminate(sandbox_id)
-        wait_for_pod_deletion(
-            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
-        )
+    statuses = {c.name: c for c in pod.status.container_statuses or []}
+    assert set(statuses) == {"sandbox", "sidecar"}, (
+        f"pod should have exactly 2 containers, got {set(statuses)}"
+    )
+    assert statuses["sidecar"].ready, "sidecar should be ready via /health probe"
+    assert statuses["sandbox"].ready, "sandbox container should be ready"
 
 
 def test_irsa_credentials_stripped_from_sandbox_container(
-    k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """The sandbox container must never see IRSA credentials.
 
@@ -422,51 +407,41 @@ def test_irsa_credentials_stripped_from_sandbox_container(
     IRSA") depends on the EKS pod-identity webhook plus SA annotations
     that don't exist on a kind cluster, so it lives elsewhere.
     """
-    sandbox_id = uuid4()
-    try:
-        _provisioned_sandbox(k8s_manager, sandbox_id)
-        pod_name = k8s_manager._get_pod_name(sandbox_id)
+    _, _, pod_name = pool_session
 
-        # Check each var independently so partial leakage (one set, one unset)
-        # cannot pass as "all unset". The shell expansion ${VAR:-} substitutes
-        # an empty string when the var is unset OR empty; we then explicitly
-        # report which (if any) is non-empty.
-        sandbox_env = pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            (
-                "for v in AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE; do "
-                '  eval "val=\\${${v}:-}"; '
-                '  if [ -n "$val" ]; then echo "LEAK:$v=$val"; fi; '
-                "done; echo DONE"
-            ),
-            container="sandbox",
-        )
-        assert "LEAK:" not in sandbox_env, (
-            f"sandbox container leaked IRSA env vars: {sandbox_env!r}"
-        )
-        assert "DONE" in sandbox_env, (
-            f"env-leak probe did not run to completion: {sandbox_env!r}"
-        )
+    # Check each var independently so partial leakage (one set, one unset)
+    # cannot pass as "all unset". The shell expansion ${VAR:-} substitutes
+    # an empty string when the var is unset OR empty; we then explicitly
+    # report which (if any) is non-empty.
+    sandbox_env = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        (
+            "for v in AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE; do "
+            '  eval "val=\\${${v}:-}"; '
+            '  if [ -n "$val" ]; then echo "LEAK:$v=$val"; fi; '
+            "done; echo DONE"
+        ),
+        container="sandbox",
+    )
+    assert "LEAK:" not in sandbox_env, (
+        f"sandbox container leaked IRSA env vars: {sandbox_env!r}"
+    )
+    assert "DONE" in sandbox_env, (
+        f"env-leak probe did not run to completion: {sandbox_env!r}"
+    )
 
-        # Belt to the env-var suspenders: confirm the projected token mount
-        # path doesn't exist in the sandbox container.
-        token_mount = pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            "[ -d /var/run/secrets/eks.amazonaws.com ] && echo PRESENT || echo MISSING",
-            container="sandbox",
-        )
-        assert "MISSING" in token_mount, (
-            f"IRSA token mount leaked into sandbox container: {token_mount!r}"
-        )
-    finally:
-        k8s_manager.terminate(sandbox_id)
-        wait_for_pod_deletion(
-            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
-        )
+    token_mount = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        "[ -d /var/run/secrets/eks.amazonaws.com ] && echo PRESENT || echo MISSING",
+        container="sandbox",
+    )
+    assert "MISSING" in token_mount, (
+        f"IRSA token mount leaked into sandbox container: {token_mount!r}"
+    )
 
 
 def test_managed_directory_is_read_only_from_sandbox_container(
@@ -535,33 +510,25 @@ _proxy_required = pytest.mark.skipif(
 
 @_proxy_required
 def test_sandbox_etc_hosts_resolves_proxy_alias(
-    k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """The main container's /etc/hosts must contain the `sandbox-proxy` alias.
 
     kubelet manages /etc/hosts per-container so initContainer writes don't
     propagate; host_aliases on the PodSpec is the only path that works.
     """
-    sandbox_id = uuid4()
-    try:
-        _provisioned_sandbox(k8s_manager, sandbox_id)
-        pod_name = k8s_manager._get_pod_name(sandbox_id)
-        hosts = pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            "cat /etc/hosts",
-            container="sandbox",
-        )
-        assert "sandbox-proxy" in hosts, (
-            f"main container /etc/hosts missing sandbox-proxy alias: {hosts!r}"
-        )
-    finally:
-        k8s_manager.terminate(sandbox_id)
-        wait_for_pod_deletion(
-            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
-        )
+    _, _, pod_name = pool_session
+    hosts = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        "cat /etc/hosts",
+        container="sandbox",
+    )
+    assert "sandbox-proxy" in hosts, (
+        f"main container /etc/hosts missing sandbox-proxy alias: {hosts!r}"
+    )
 
 
 @_proxy_required

@@ -23,15 +23,15 @@ import (
 // Client is the Onyx API client.
 //
 // Three http.Clients are kept so each call site can pick a timeout matched to
-// its expected work: 30s for quick JSON endpoints, 60s for /search (which
+// its expected work: 3min for quick JSON endpoints, 5min for /search (which
 // runs LLM query expansion + relevance selection), and 5min for streaming
 // chat responses and uploads.
 type Client struct {
 	baseURL             string
 	apiKey              string
-	httpClient          *http.Client // 30s
-	searchHTTPClient    *http.Client // 60s
-	streamingHTTPClient *http.Client // 5min
+	httpClient          *http.Client
+	searchHTTPClient    *http.Client
+	streamingHTTPClient *http.Client
 }
 
 // NewClient creates a new API client from config.
@@ -48,11 +48,11 @@ func NewClient(cfg config.OnyxCliConfig) *Client {
 		baseURL: config.APIURL(cfg.ServerURL),
 		apiKey:  cfg.APIKey,
 		httpClient: &http.Client{
-			Timeout:   30 * time.Second,
+			Timeout:   3 * time.Minute,
 			Transport: transport,
 		},
 		searchHTTPClient: &http.Client{
-			Timeout:   60 * time.Second,
+			Timeout:   5 * time.Minute,
 			Transport: transport,
 		},
 		streamingHTTPClient: &http.Client{

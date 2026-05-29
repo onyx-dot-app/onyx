@@ -5,7 +5,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.base import ExternalAppProvider
-from onyx.external_apps.providers.base import OrgCredentialField
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
 from onyx.external_apps.providers.linear import LinearProvider
 from onyx.external_apps.providers.slack import SlackProvider
@@ -65,7 +64,12 @@ def _descriptor_for(
         upstream_url_patterns=list(descriptor.upstream_url_patterns),
         auth_template=dict(descriptor.auth_template),
         required_org_credential_fields=[
-            _to_credential_field_descriptor(f)
+            OrgCredentialFieldDescriptor(
+                key=f.key,
+                label=f.label,
+                description=f.description,
+                secret=f.secret,
+            )
             for f in descriptor.required_org_credential_fields
         ],
         setup_instructions=descriptor.setup_instructions,
@@ -142,17 +146,6 @@ def action_policy_views(
         )
         for endpoint in get_endpoint_catalog(app_type)
     ]
-
-
-def _to_credential_field_descriptor(
-    field: OrgCredentialField,
-) -> OrgCredentialFieldDescriptor:
-    return OrgCredentialFieldDescriptor(
-        key=field.key,
-        label=field.label,
-        description=field.description,
-        secret=field.secret,
-    )
 
 
 def fetch_available_built_in_apps() -> list[BuiltInExternalAppDescriptor]:

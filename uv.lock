@@ -1021,22 +1021,6 @@ wheels = [
 ]
 
 [[package]]
-name = "claude-agent-sdk"
-version = "0.1.19"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "mcp" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/60/b0/73c6f4e09439b4442aa6d5650eb7bf232322d939feb9f15711525fc74a0a/claude_agent_sdk-0.1.19.tar.gz", hash = "sha256:318c6dbd049bfdb101ed580aece47d63bea32b75a708c86d9e649735e524c736", size = 56163, upload-time = "2026-01-08T01:46:39.848Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0d/6d/268c90b53c112f0fb0ed5e8eb5a011be90c77dce13ea35ceb825fd8654eb/claude_agent_sdk-0.1.19-py3-none-macosx_11_0_arm64.whl", hash = "sha256:0d4ec526de19989dc1d62c3abdf9b71b785f8df851735ec14266fd14d341f34b", size = 53580971, upload-time = "2026-01-08T01:46:26.935Z" },
-    { url = "https://files.pythonhosted.org/packages/1a/30/e53cd5888a0e6efd952e1c16709125cab7e91e1468a7180e016844fa69f5/claude_agent_sdk-0.1.19-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:cff32c935d952b61cc421f9731ad9549df63e871710055446e8abdd4f1d4c5ea", size = 67797723, upload-time = "2026-01-08T01:46:29.854Z" },
-    { url = "https://files.pythonhosted.org/packages/7f/f9/86ac9ef3b200fbeb020f6d1c03fb30a15ca97e9c96f0005be17001bcb37a/claude_agent_sdk-0.1.19-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:016d0127cf6ef9f5e36dd385bb3a808c9f4ba2a6ed80c676affe4f0801edd311", size = 69507781, upload-time = "2026-01-08T01:46:33.411Z" },
-    { url = "https://files.pythonhosted.org/packages/73/e0/f2547e461570d6a5a75e35447153fb932ea6b0ccba1a452f5717e2d12148/claude_agent_sdk-0.1.19-py3-none-win_amd64.whl", hash = "sha256:0b6d820599d1ecf8aad37cf65fcf42e7fd067b732325c4d85e07559584f4bafc", size = 71705389, upload-time = "2026-01-08T01:46:36.679Z" },
-]
-
-[[package]]
 name = "click"
 version = "8.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3373,15 +3357,6 @@ wheels = [
 ]
 
 [[package]]
-name = "lazy-imports"
-version = "1.0.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e2/1c/6675601691fd6007021e8e95cfcb83e6d11067de3d7ecde0d0de970324c8/lazy_imports-1.0.1.tar.gz", hash = "sha256:7d3e4b1547cb574ec7ef3c47a074673e2612330b2b50bf7eec939f2c393fc261", size = 24484, upload-time = "2025-08-09T07:15:55.353Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/88/37/c84d7fec58dec38564574dec8f94bb1db788598fe397f116a9d6a86d3055/lazy_imports-1.0.1-py3-none-any.whl", hash = "sha256:eb5accc33bf9987e5197e79476bbeb960b74a2c16619bdf41281b3240f730846", size = 18896, upload-time = "2025-08-09T07:15:53.7Z" },
-]
-
-[[package]]
 name = "ldap3"
 version = "2.9.1"
 source = { registry = "https://pypi.org/simple" }
@@ -4553,12 +4528,9 @@ dependencies = [
     { name = "agent-client-protocol" },
     { name = "aioboto3" },
     { name = "brotli" },
-    { name = "claude-agent-sdk" },
     { name = "cohere" },
-    { name = "discord-py" },
     { name = "fastapi" },
     { name = "google-genai" },
-    { name = "kubernetes" },
     { name = "litellm", extra = ["google"] },
     { name = "openai" },
     { name = "prometheus-client" },
@@ -4581,7 +4553,6 @@ backend = [
     { name = "azure-cognitiveservices-speech" },
     { name = "beautifulsoup4" },
     { name = "boto3" },
-    { name = "boto3-stubs", extra = ["s3"] },
     { name = "braintrust" },
     { name = "celery" },
     { name = "chardet" },
@@ -4598,25 +4569,18 @@ backend = [
     { name = "fastapi-users" },
     { name = "fastapi-users-db-sqlalchemy" },
     { name = "fastmcp" },
-    { name = "filelock" },
     { name = "google-api-python-client" },
-    { name = "google-auth-httplib2" },
     { name = "google-auth-oauthlib" },
     { name = "google-cloud-storage" },
     { name = "graphql-core" },
-    { name = "httpcore" },
     { name = "httpx", extra = ["http2"] },
     { name = "httpx-oauth" },
     { name = "hubspot-api-client" },
-    { name = "inflection" },
     { name = "jira" },
-    { name = "jsonref" },
     { name = "kubernetes" },
     { name = "langchain-core" },
     { name = "langfuse" },
-    { name = "lazy-imports" },
     { name = "lxml" },
-    { name = "mako" },
     { name = "markitdown", extra = ["docx", "pdf", "pptx", "xls", "xlsx"] },
     { name = "mcp", extra = ["cli"] },
     { name = "mistune" },
@@ -4638,16 +4602,11 @@ backend = [
     { name = "pyairtable" },
     { name = "pycryptodome" },
     { name = "pygithub" },
-    { name = "pympler" },
     { name = "pypandoc-binary" },
     { name = "pypdf" },
-    { name = "pytest-mock" },
-    { name = "pytest-playwright" },
     { name = "python-dateutil" },
-    { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "python-gitlab" },
-    { name = "python-multipart" },
     { name = "python-pptx" },
     { name = "python3-saml" },
     { name = "pywikibot" },
@@ -4655,9 +4614,7 @@ backend = [
     { name = "redis" },
     { name = "requests" },
     { name = "requests-oauthlib" },
-    { name = "rfc3986" },
     { name = "sendgrid" },
-    { name = "shapely" },
     { name = "simple-salesforce" },
     { name = "slack-sdk" },
     { name = "sqlalchemy" },
@@ -4667,8 +4624,6 @@ backend = [
     { name = "tiktoken" },
     { name = "timeago" },
     { name = "trafilatura" },
-    { name = "types-docker" },
-    { name = "types-openpyxl" },
     { name = "unstructured" },
     { name = "unstructured-client" },
     { name = "urllib3" },
@@ -4676,6 +4631,7 @@ backend = [
     { name = "zulip" },
 ]
 dev = [
+    { name = "boto3-stubs", extra = ["s3"] },
     { name = "celery-types" },
     { name = "faker" },
     { name = "hatchling" },
@@ -4690,14 +4646,18 @@ dev = [
     { name = "pytest-alembic" },
     { name = "pytest-asyncio" },
     { name = "pytest-dotenv" },
+    { name = "pytest-mock" },
+    { name = "pytest-playwright" },
     { name = "pytest-repeat" },
     { name = "pytest-xdist" },
     { name = "release-tag" },
     { name = "ruff" },
     { name = "ty" },
     { name = "types-beautifulsoup4" },
+    { name = "types-docker" },
     { name = "types-html5lib" },
     { name = "types-oauthlib" },
+    { name = "types-openpyxl" },
     { name = "types-passlib" },
     { name = "types-pillow" },
     { name = "types-psutil" },
@@ -4718,7 +4678,6 @@ model-server = [
     { name = "accelerate" },
     { name = "einops" },
     { name = "numpy" },
-    { name = "safetensors" },
     { name = "sentence-transformers" },
     { name = "sentry-sdk", extra = ["celery", "fastapi", "starlette"] },
     { name = "torch" },
@@ -4733,12 +4692,9 @@ requires-dist = [
     { name = "agent-client-protocol", specifier = ">=0.7.1" },
     { name = "aioboto3", specifier = "==15.1.0" },
     { name = "brotli", specifier = ">=1.2.0" },
-    { name = "claude-agent-sdk", specifier = ">=0.1.19" },
     { name = "cohere", specifier = "==5.6.1" },
-    { name = "discord-py", specifier = "==2.4.0" },
     { name = "fastapi", specifier = "==0.133.1" },
     { name = "google-genai", specifier = "==1.52.0" },
-    { name = "kubernetes", specifier = "==31.0.0" },
     { name = "litellm", extras = ["google"], specifier = "==1.85.1" },
     { name = "openai", specifier = "==2.38.0" },
     { name = "prometheus-client", specifier = ">=0.21.1" },
@@ -4761,7 +4717,6 @@ backend = [
     { name = "azure-cognitiveservices-speech", specifier = "==1.38.0" },
     { name = "beautifulsoup4", specifier = "==4.12.3" },
     { name = "boto3", specifier = "==1.39.11" },
-    { name = "boto3-stubs", extras = ["s3"], specifier = "==1.39.11" },
     { name = "braintrust", specifier = "==0.3.9" },
     { name = "celery", specifier = "==5.5.1" },
     { name = "chardet", specifier = "==5.2.0" },
@@ -4778,25 +4733,18 @@ backend = [
     { name = "fastapi-users", specifier = "==15.0.4" },
     { name = "fastapi-users-db-sqlalchemy", specifier = "==7.0.0" },
     { name = "fastmcp", specifier = "==3.2.0" },
-    { name = "filelock", specifier = "==3.20.3" },
     { name = "google-api-python-client", specifier = "==2.86.0" },
-    { name = "google-auth-httplib2", specifier = "==0.1.0" },
     { name = "google-auth-oauthlib", specifier = "==1.0.0" },
     { name = "google-cloud-storage", specifier = ">=3.0.0,<4.0.0" },
     { name = "graphql-core", specifier = "==3.2.8" },
-    { name = "httpcore", specifier = "==1.0.9" },
     { name = "httpx", extras = ["http2"], specifier = "==0.28.1" },
     { name = "httpx-oauth", specifier = "==0.15.1" },
     { name = "hubspot-api-client", specifier = "==11.1.0" },
-    { name = "inflection", specifier = "==0.5.1" },
     { name = "jira", specifier = "==3.10.5" },
-    { name = "jsonref", specifier = "==1.1.0" },
     { name = "kubernetes", specifier = "==31.0.0" },
     { name = "langchain-core", specifier = "==1.3.3" },
     { name = "langfuse", specifier = "==3.10.0" },
-    { name = "lazy-imports", specifier = "==1.0.1" },
     { name = "lxml", specifier = "==6.1.0" },
-    { name = "mako", specifier = "==1.3.12" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx", "xls"], specifier = "==0.1.2" },
     { name = "mcp", extras = ["cli"], specifier = "==1.27.0" },
     { name = "mistune", specifier = "==3.2.1" },
@@ -4818,16 +4766,11 @@ backend = [
     { name = "pyairtable", specifier = "==3.0.1" },
     { name = "pycryptodome", specifier = "==3.19.1" },
     { name = "pygithub", specifier = "==2.5.0" },
-    { name = "pympler", specifier = "==1.1" },
     { name = "pypandoc-binary", specifier = "==1.16.2" },
     { name = "pypdf", specifier = "==6.10.2" },
-    { name = "pytest-mock", specifier = "==3.12.0" },
-    { name = "pytest-playwright", specifier = "==0.7.2" },
     { name = "python-dateutil", specifier = "==2.9.0.post0" },
-    { name = "python-docx", specifier = "==1.1.2" },
     { name = "python-dotenv", specifier = "==1.2.2" },
     { name = "python-gitlab", specifier = "==5.6.0" },
-    { name = "python-multipart", specifier = "==0.0.27" },
     { name = "python-pptx", specifier = "==0.6.23" },
     { name = "python3-saml", specifier = "==1.15.0" },
     { name = "pywikibot", specifier = "==9.0.0" },
@@ -4835,9 +4778,7 @@ backend = [
     { name = "redis", specifier = "==5.0.8" },
     { name = "requests", specifier = "==2.33.0" },
     { name = "requests-oauthlib", specifier = "==1.3.1" },
-    { name = "rfc3986", specifier = "==1.5.0" },
     { name = "sendgrid", specifier = "==6.12.5" },
-    { name = "shapely", specifier = "==2.0.6" },
     { name = "simple-salesforce", specifier = "==1.12.6" },
     { name = "slack-sdk", specifier = "==3.20.2" },
     { name = "sqlalchemy", specifier = "==2.0.15" },
@@ -4847,8 +4788,6 @@ backend = [
     { name = "tiktoken", specifier = "==0.13.0" },
     { name = "timeago", specifier = "==1.0.16" },
     { name = "trafilatura", specifier = "==1.12.2" },
-    { name = "types-docker", specifier = "==7.1.0.20260518" },
-    { name = "types-openpyxl", specifier = "==3.0.4.7" },
     { name = "unstructured", specifier = "==0.18.27" },
     { name = "unstructured-client", specifier = "==0.42.6" },
     { name = "urllib3", specifier = "==2.7.0" },
@@ -4856,6 +4795,7 @@ backend = [
     { name = "zulip", specifier = "==0.8.2" },
 ]
 dev = [
+    { name = "boto3-stubs", extras = ["s3"], specifier = "==1.39.11" },
     { name = "celery-types", specifier = "==0.19.0" },
     { name = "faker", specifier = "==40.1.2" },
     { name = "hatchling", specifier = "==1.28.0" },
@@ -4870,14 +4810,18 @@ dev = [
     { name = "pytest-alembic", specifier = "==0.12.1" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
     { name = "pytest-dotenv", specifier = "==0.5.2" },
+    { name = "pytest-mock", specifier = "==3.12.0" },
+    { name = "pytest-playwright", specifier = "==0.7.2" },
     { name = "pytest-repeat", specifier = "==0.9.4" },
     { name = "pytest-xdist", specifier = "==3.8.0" },
     { name = "release-tag", specifier = "==0.5.2" },
     { name = "ruff", specifier = "==0.12.0" },
     { name = "ty", specifier = "==0.0.31" },
     { name = "types-beautifulsoup4", specifier = "==4.12.0.3" },
+    { name = "types-docker", specifier = "==7.1.0.20260518" },
     { name = "types-html5lib", specifier = "==1.1.11.13" },
     { name = "types-oauthlib", specifier = "==3.2.0.9" },
+    { name = "types-openpyxl", specifier = "==3.0.4.7" },
     { name = "types-passlib", specifier = "==1.7.7.20240106" },
     { name = "types-pillow", specifier = "==10.2.0.20240822" },
     { name = "types-psutil", specifier = "==7.1.3.20251125" },
@@ -4896,7 +4840,6 @@ model-server = [
     { name = "accelerate", specifier = "==1.6.0" },
     { name = "einops", specifier = "==0.8.1" },
     { name = "numpy", specifier = "==2.4.1" },
-    { name = "safetensors", specifier = "==0.5.3" },
     { name = "sentence-transformers", specifier = "==5.4.1" },
     { name = "sentry-sdk", extras = ["fastapi", "celery", "starlette"], specifier = "==2.14.0" },
     { name = "torch", specifier = "==2.9.1" },
@@ -6036,18 +5979,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pympler"
-version = "1.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pywin32", marker = "sys_platform == 'win32'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/dd/37/c384631908029676d8e7213dd956bb686af303a80db7afbc9be36bc49495/pympler-1.1.tar.gz", hash = "sha256:1eaa867cb8992c218430f1708fdaccda53df064144d1c5656b1e6f1ee6000424", size = 179954, upload-time = "2024-06-28T19:56:06.563Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/79/4f/a6a2e2b202d7fd97eadfe90979845b8706676b41cbd3b42ba75adf329d1f/Pympler-1.1-py3-none-any.whl", hash = "sha256:5b223d6027d0619584116a0cbc28e8d2e378f7a79c1e5e024f9ff3b673c58506", size = 165766, upload-time = "2024-06-28T19:56:05.087Z" },
-]
-
-[[package]]
 name = "pynacl"
 version = "1.6.2"
 source = { registry = "https://pypi.org/simple" }
@@ -6272,19 +6203,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
-]
-
-[[package]]
-name = "python-docx"
-version = "1.1.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "lxml" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/35/e4/386c514c53684772885009c12b67a7edd526c15157778ac1b138bc75063e/python_docx-1.1.2.tar.gz", hash = "sha256:0cf1f22e95b9002addca7948e16f2cd7acdfd498047f1941ca5d293db7762efd", size = 5656581, upload-time = "2024-05-01T19:41:57.772Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/3d/330d9efbdb816d3f60bf2ad92f05e1708e4a1b9abe80461ac3444c83f749/python_docx-1.1.2-py3-none-any.whl", hash = "sha256:08c20d6058916fb19853fcf080f7f42b6270d89eac9fa5f8c15f691c0017fabe", size = 244315, upload-time = "2024-05-01T19:41:47.006Z" },
 ]
 
 [[package]]
@@ -6849,15 +6767,6 @@ wheels = [
 ]
 
 [[package]]
-name = "rfc3986"
-version = "1.5.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/79/30/5b1b6c28c105629cc12b33bdcbb0b11b5bb1880c6cfbd955f9e792921aa8/rfc3986-1.5.0.tar.gz", hash = "sha256:270aaf10d87d0d4e095063c65bf3ddbc6ee3d0b226328ce21e036f946e421835", size = 49378, upload-time = "2021-05-07T23:29:27.183Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c4/e5/63ca2c4edf4e00657584608bee1001302bbf8c5f569340b78304f2f446cb/rfc3986-1.5.0-py2.py3-none-any.whl", hash = "sha256:a86d6e1f5b1dc238b218b012df0aa79409667bb209e58da56d0b94704e712a97", size = 31976, upload-time = "2021-05-07T23:29:25.611Z" },
-]
-
-[[package]]
 name = "rich"
 version = "14.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -7324,35 +7233,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/18/5d/3bf57dcd21979b887f014ea83c24ae194cfcd12b9e0fda66b957c69d1fca/setuptools-80.9.0.tar.gz", hash = "sha256:f36b47402ecde768dbfafc46e8e4207b4360c654f1f3bb84475f0a28628fb19c", size = 1319958, upload-time = "2025-05-27T00:56:51.443Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl", hash = "sha256:062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922", size = 1201486, upload-time = "2025-05-27T00:56:49.664Z" },
-]
-
-[[package]]
-name = "shapely"
-version = "2.0.6"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4a/89/0d20bac88016be35ff7d3c0c2ae64b477908f1b1dfa540c5d69ac7af07fe/shapely-2.0.6.tar.gz", hash = "sha256:997f6159b1484059ec239cacaa53467fd8b5564dabe186cd84ac2944663b0bf6", size = 282361, upload-time = "2024-08-19T21:57:22.303Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/37/15/269d8e1f7f658a37e61f7028683c546f520e4e7cedba1e32c77ff9d3a3c7/shapely-2.0.6-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:5aeb0f51a9db176da9a30cb2f4329b6fbd1e26d359012bb0ac3d3c7781667a9e", size = 1449578, upload-time = "2024-08-19T21:56:24.058Z" },
-    { url = "https://files.pythonhosted.org/packages/37/63/e182e43081fffa0a2d970c480f2ef91647a6ab94098f61748c23c2a485f2/shapely-2.0.6-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:9a7a78b0d51257a367ee115f4d41ca4d46edbd0dd280f697a8092dd3989867b2", size = 1296792, upload-time = "2024-08-19T21:56:26.044Z" },
-    { url = "https://files.pythonhosted.org/packages/6e/5a/d019f69449329dcd517355444fdb9ddd58bec5e080b8bdba007e8e4c546d/shapely-2.0.6-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:f32c23d2f43d54029f986479f7c1f6e09c6b3a19353a3833c2ffb226fb63a855", size = 2443997, upload-time = "2024-08-19T22:00:54.836Z" },
-    { url = "https://files.pythonhosted.org/packages/25/aa/53f145e5a610a49af9ac49f2f1be1ec8659ebd5c393d66ac94e57c83b00e/shapely-2.0.6-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:b3dc9fb0eb56498912025f5eb352b5126f04801ed0e8bdbd867d21bdbfd7cbd0", size = 2528334, upload-time = "2024-08-19T21:56:27.53Z" },
-    { url = "https://files.pythonhosted.org/packages/64/64/0c7b0a22b416d36f6296b92bb4219d82b53d0a7c47e16fd0a4c85f2f117c/shapely-2.0.6-cp311-cp311-win32.whl", hash = "sha256:d93b7e0e71c9f095e09454bf18dad5ea716fb6ced5df3cb044564a00723f339d", size = 1294669, upload-time = "2024-08-19T21:56:29.509Z" },
-    { url = "https://files.pythonhosted.org/packages/b1/5a/6a67d929c467a1973b6bb9f0b00159cc343b02bf9a8d26db1abd2f87aa23/shapely-2.0.6-cp311-cp311-win_amd64.whl", hash = "sha256:c02eb6bf4cfb9fe6568502e85bb2647921ee49171bcd2d4116c7b3109724ef9b", size = 1442032, upload-time = "2024-08-19T21:56:31.158Z" },
-    { url = "https://files.pythonhosted.org/packages/46/77/efd9f9d4b6a762f976f8b082f54c9be16f63050389500fb52e4f6cc07c1a/shapely-2.0.6-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:cec9193519940e9d1b86a3b4f5af9eb6910197d24af02f247afbfb47bcb3fab0", size = 1450326, upload-time = "2024-08-19T21:56:33.166Z" },
-    { url = "https://files.pythonhosted.org/packages/68/53/5efa6e7a4036a94fe6276cf7bbb298afded51ca3396b03981ad680c8cc7d/shapely-2.0.6-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:83b94a44ab04a90e88be69e7ddcc6f332da7c0a0ebb1156e1c4f568bbec983c3", size = 1298480, upload-time = "2024-08-19T21:56:35.317Z" },
-    { url = "https://files.pythonhosted.org/packages/88/a2/1be1db4fc262e536465a52d4f19d85834724fedf2299a1b9836bc82fe8fa/shapely-2.0.6-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:537c4b2716d22c92036d00b34aac9d3775e3691f80c7aa517c2c290351f42cd8", size = 2439311, upload-time = "2024-08-19T22:01:00.611Z" },
-    { url = "https://files.pythonhosted.org/packages/d5/7d/9a57e187cbf2fbbbdfd4044a4f9ce141c8d221f9963750d3b001f0ec080d/shapely-2.0.6-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:98fea108334be345c283ce74bf064fa00cfdd718048a8af7343c59eb40f59726", size = 2524835, upload-time = "2024-08-19T21:56:36.87Z" },
-    { url = "https://files.pythonhosted.org/packages/6d/0a/f407509ab56825f39bf8cfce1fb410238da96cf096809c3e404e5bc71ea1/shapely-2.0.6-cp312-cp312-win32.whl", hash = "sha256:42fd4cd4834747e4990227e4cbafb02242c0cffe9ce7ef9971f53ac52d80d55f", size = 1295613, upload-time = "2024-08-19T21:56:38.962Z" },
-    { url = "https://files.pythonhosted.org/packages/7b/b3/857afd9dfbfc554f10d683ac412eac6fa260d1f4cd2967ecb655c57e831a/shapely-2.0.6-cp312-cp312-win_amd64.whl", hash = "sha256:665990c84aece05efb68a21b3523a6b2057e84a1afbef426ad287f0796ef8a48", size = 1442539, upload-time = "2024-08-19T21:56:40.686Z" },
-    { url = "https://files.pythonhosted.org/packages/34/e8/d164ef5b0eab86088cde06dee8415519ffd5bb0dd1bd9d021e640e64237c/shapely-2.0.6-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:42805ef90783ce689a4dde2b6b2f261e2c52609226a0438d882e3ced40bb3013", size = 1445344, upload-time = "2024-08-19T21:56:42.714Z" },
-    { url = "https://files.pythonhosted.org/packages/ce/e2/9fba7ac142f7831757a10852bfa465683724eadbc93d2d46f74a16f9af04/shapely-2.0.6-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:6d2cb146191a47bd0cee8ff5f90b47547b82b6345c0d02dd8b25b88b68af62d7", size = 1296182, upload-time = "2024-08-19T21:56:44.64Z" },
-    { url = "https://files.pythonhosted.org/packages/cf/dc/790d4bda27d196cd56ec66975eaae3351c65614cafd0e16ddde39ec9fb92/shapely-2.0.6-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e3fdef0a1794a8fe70dc1f514440aa34426cc0ae98d9a1027fb299d45741c381", size = 2423426, upload-time = "2024-08-19T22:01:05.167Z" },
-    { url = "https://files.pythonhosted.org/packages/af/b0/f8169f77eac7392d41e231911e0095eb1148b4d40c50ea9e34d999c89a7e/shapely-2.0.6-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2c665a0301c645615a107ff7f52adafa2153beab51daf34587170d85e8ba6805", size = 2513249, upload-time = "2024-08-19T21:56:47.1Z" },
-    { url = "https://files.pythonhosted.org/packages/f6/1d/a8c0e9ab49ff2f8e4dedd71b0122eafb22a18ad7e9d256025e1f10c84704/shapely-2.0.6-cp313-cp313-win32.whl", hash = "sha256:0334bd51828f68cd54b87d80b3e7cee93f249d82ae55a0faf3ea21c9be7b323a", size = 1294848, upload-time = "2024-08-19T21:56:48.914Z" },
-    { url = "https://files.pythonhosted.org/packages/23/38/2bc32dd1e7e67a471d4c60971e66df0bdace88656c47a9a728ace0091075/shapely-2.0.6-cp313-cp313-win_amd64.whl", hash = "sha256:d37d070da9e0e0f0a530a621e17c0b8c3c9d04105655132a87cfff8bd77cc4c2", size = 1441371, upload-time = "2024-08-19T21:56:51.108Z" },
 ]
 
 [[package]]

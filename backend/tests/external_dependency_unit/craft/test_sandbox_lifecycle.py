@@ -213,11 +213,6 @@ class TestHealthCheckFailureRecovery:
             "onyx.server.features.build.api.sessions_api.get_sandbox_manager",
             lambda: stub_sandbox_manager,
         )
-        # Bypass LLM provider lookup (no real provider in ext-dep CI).
-        monkeypatch.setattr(
-            "onyx.server.features.build.session.manager.SessionManager._get_llm_config",
-            lambda _self, *_a, **_kw: default_llm_config(),
-        )
 
         restore_session(
             session_id=session_id,

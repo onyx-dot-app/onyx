@@ -1,66 +1,75 @@
 """Composes recognition + policy resolution into a single verdict for an
 outbound request."""
 
-from dataclasses import dataclass
-from dataclasses import field
 from typing import Any
 
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
+from pydantic import model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import POLICY_SEVERITY
 from onyx.db.external_app import get_policies
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.request import MatchContext
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.providers.registry import get_endpoint_catalog
-
-# DENY is the most restrictive verdict, ALWAYS the least; when several catalog
-# actions match one request (e.g. a batched GraphQL body) the strictest wins.
-# Higher integer means stricter, so `max(...)` is the right reducer.
-_POLICY_SEVERITY: dict[EndpointPolicy, int] = {
-    EndpointPolicy.ALWAYS: 0,
-    EndpointPolicy.ASK: 1,
-    EndpointPolicy.DENY: 2,
-}
+from onyx.external_apps.providers.registry import get_provider_for_app
 
 
-@dataclass(frozen=True)
-class ActionMatch:
-    """The canonical "this request matched a catalog action" record.
+class ActionMatch(BaseModel):
+    """One catalog action a request invoked, with the display strings the
+    FE renders. Carried verbatim from matcher through DB JSONB to API."""
 
-    Returned by ``match_action`` (with ``payload`` empty) and finalized by
-    ``ExternalAppActionMatcher`` (which decodes the request body and fills
-    ``payload`` via ``dataclasses.replace``). Consumed by ``GateAddon`` to
-    decide approval flow + credential injection.
-
-    ``action_type`` is the per-endpoint catalog id (e.g.
-    ``"slack.messages.write"``), not the owning app's all-caps type — the
-    frontend's label map keys off this. ``external_app_id`` is the gate's
-    seam to the connected app row for credential lookup.
-    """
+    model_config = ConfigDict(frozen=True)
 
     action_type: str
+    display_name: str
+    description: str
     policy: EndpointPolicy
+
+
+class RequestMatch(BaseModel):
+    """Every catalog action the request matched within the resolved app.
+
+    ``actions`` is sorted strictest-policy-first; ``decisive`` returns the
+    head, whose policy drives the gate's verdict. A batched GraphQL POST is
+    the canonical multi-action case.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    actions: tuple[ActionMatch, ...]
+    app_name: str
     external_app_id: int
-    payload: dict[str, Any] = field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _non_empty(self) -> "RequestMatch":
+        if not self.actions:
+            raise ValueError("RequestMatch.actions must be non-empty")
+        return self
+
+    @property
+    def decisive(self) -> ActionMatch:
+        """The action whose policy drove the verdict (head of the sorted list)."""
+        return self.actions[0]
 
 
 def match_action(
     db_session: Session,
     app: ExternalApp,
     request: ProxiedRequest,
-) -> ActionMatch | None:
-    """Resolve the matched catalog action and its policy verdict for ``request``.
+) -> RequestMatch | None:
+    """Resolve every catalog action ``request`` invoked within ``app``.
 
-    Stored rows are the source of truth: only catalog actions with a row for this
-    app are gated (the catalog supplies recognition rules; an action with no row
-    is un-gated, not defaulted to ASK). Returns the most restrictive matched
-    action, or ``None`` when nothing matches.
-
-    ``payload`` is left empty here — body decoding is the caller's
-    responsibility (it owns the raw content + content-type). The caller
-    finalizes via ``dataclasses.replace(match, payload=decoded)``.
+    Stored policy rows are the source of truth: a catalog action without a
+    row is un-gated. ``actions`` is sorted strictest-first so callers can
+    treat ``decisive`` as the verdict-driving action. Body decoding is the
+    caller's job — ``payload`` is empty here; refill via ``model_copy``.
     """
     context = MatchContext(request)
     stored = get_policies(db_session, app.id)
@@ -68,8 +77,9 @@ def match_action(
     matched = [
         ActionMatch(
             action_type=endpoint.id,
+            display_name=endpoint.normalised_name,
+            description=endpoint.description,
             policy=stored[endpoint.id],
-            external_app_id=app.id,
         )
         for endpoint in catalog
         if endpoint.id in stored
@@ -77,6 +87,12 @@ def match_action(
     ]
     if not matched:
         return None
-    # Tie-break: most restrictive policy wins. `_POLICY_SEVERITY` is
-    # kept local to this module — callers don't need it.
-    return max(matched, key=lambda m: _POLICY_SEVERITY[m.policy])
+    matched.sort(key=lambda a: POLICY_SEVERITY[a.policy], reverse=True)
+
+    provider = get_provider_for_app(app)
+    app_name = provider.spec.app_name if provider is not None else app.app_type.value
+    return RequestMatch(
+        actions=tuple(matched),
+        app_name=app_name,
+        external_app_id=app.id,
+    )

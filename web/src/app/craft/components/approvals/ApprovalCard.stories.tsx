@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import ApprovalCard from "@/app/craft/components/approvals/ApprovalCard";
-import type { ApprovalView } from "@/app/craft/types/approvals";
+import type { ApprovalAction, ApprovalView } from "@/app/craft/types/approvals";
 
 const meta: Meta<typeof ApprovalCard> = {
   title: "Apps/Craft/Approvals/Approval Card",
@@ -18,11 +18,33 @@ const meta: Meta<typeof ApprovalCard> = {
 export default meta;
 type Story = StoryObj<typeof ApprovalCard>;
 
+const SLACK_POST_MESSAGE: ApprovalAction = {
+  action_type: "slack.messages.write",
+  display_name: "Post a message",
+  description: "Post a message to a channel or conversation.",
+  policy: "ASK",
+};
+
+const LINEAR_VIEWER_READ: ApprovalAction = {
+  action_type: "linear.viewer.read",
+  display_name: "Read the connected user",
+  description: "Read the authenticated user's profile (viewer).",
+  policy: "ALWAYS",
+};
+
+const LINEAR_ISSUE_CREATE: ApprovalAction = {
+  action_type: "linear.issues.create",
+  display_name: "Create an issue",
+  description: "Create a new issue in a Linear team.",
+  policy: "ASK",
+};
+
 function approval(overrides: Partial<ApprovalView>): ApprovalView {
   return {
     approval_id: "appr-01HX3K9M4Q7W2",
     session_id: "sess-01HX3K9M4Q7W2",
-    action_type: "slack.send_message",
+    actions: [SLACK_POST_MESSAGE],
+    app_name: "Slack",
     payload: {},
     created_at: "2026-05-28T15:42:11Z",
     decision: null,
@@ -32,17 +54,9 @@ function approval(overrides: Partial<ApprovalView>): ApprovalView {
   };
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// Collapsed — the real-world default. Single header row: shield icon,
-// label, chevron, and the Approve / Reject buttons inline. The user can
-// decide without expanding; the payload is one click away when they
-// want to verify.
-// ──────────────────────────────────────────────────────────────────────────
-
 export const Collapsed: Story = {
   args: {
     approval: approval({
-      action_type: "slack.send_message",
       payload: {
         channel: "#eng-craft",
         text: "Heads up — the docfetching worker is restarting in 5min for the new tracing flag rollout.",
@@ -51,19 +65,10 @@ export const Collapsed: Story = {
   },
 };
 
-// ──────────────────────────────────────────────────────────────────────────
-// Expanded states. Each story passes defaultOpen so the body is
-// visible without a click. These pin the card-level chrome (header,
-// border, buttons + auto-rendered payload inset); the payload variants
-// themselves are covered in PayloadView's own stories.
-// ──────────────────────────────────────────────────────────────────────────
-
-// Short string values fit inline in the payload's value column.
 export const SlackShortMessage: Story = {
   args: {
     defaultOpen: true,
     approval: approval({
-      action_type: "slack.send_message",
       payload: {
         channel: "#eng-craft",
         text: "Heads up — the docfetching worker is restarting in 5min for the new tracing flag rollout.",
@@ -72,13 +77,10 @@ export const SlackShortMessage: Story = {
   },
 };
 
-// Long string values trigger the Show more / Show less toggle on
-// their row.
 export const SlackLongMessageTruncated: Story = {
   args: {
     defaultOpen: true,
     approval: approval({
-      action_type: "slack.send_message",
       payload: {
         channel: "#customer-acme-corp",
         text:
@@ -92,13 +94,10 @@ export const SlackLongMessageTruncated: Story = {
   },
 };
 
-// Mixed-type payload: an array of objects value falls through to
-// pretty-printed JSON in its row's value column.
 export const SlackWithAttachments: Story = {
   args: {
     defaultOpen: true,
     approval: approval({
-      action_type: "slack.send_message",
       payload: {
         channel: "#eng-craft",
         attachments: [{ fallback: "Build failed", color: "danger" }],
@@ -107,21 +106,18 @@ export const SlackWithAttachments: Story = {
   },
 };
 
-// New integration where the action_type isn't in actionLabels yet —
-// the header label falls back to the raw action_type string. The
-// payload still renders structurally; no per-integration FE work was
-// needed.
-export const UnknownActionTypeLabel: Story = {
+// Batched GraphQL POST that invoked two operations under one
+// approval. The collapsed header collapses to "N actions"; the
+// expanded body lists each one with its description.
+export const BatchedGraphQLMultiAction: Story = {
   args: {
     defaultOpen: true,
     approval: approval({
-      action_type: "linear.create_issue",
+      app_name: "Linear",
+      actions: [LINEAR_VIEWER_READ, LINEAR_ISSUE_CREATE],
       payload: {
-        team_id: "ENG",
-        title: "Investigate connector retry backoff",
-        description: "Customer reported gaps after rate-limit storms.",
-        priority: 2,
-        labels: ["bug", "reliability"],
+        query:
+          "query { viewer { id } }\nmutation { issueCreate(input: $i) { issue { id } } }",
       },
     }),
   },

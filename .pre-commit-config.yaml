@@ -185,3 +185,17 @@ repos:
         language: system
         pass_filenames: false
         files: ^web/.*\.(ts|tsx)$
+
+      - id: widget-typescript-check
+        name: widget TypeScript type check
+        entry: bash -c 'cd widget && bunx tsgo --noEmit'
+        language: system
+        pass_filenames: false
+        files: ^(bun\.lock|widget/(.*\.(ts|tsx)|package\.json|tsconfig\.json))$
+
+      - id: examples-widget-typescript-check
+        name: examples/widget TypeScript type check
+        entry: bash -c 'cd examples/widget && bunx tsgo --noEmit'
+        language: system
+        pass_filenames: false
+        files: ^(bun\.lock|examples/widget/(.*\.(ts|tsx)|package\.json|tsconfig\.json))$

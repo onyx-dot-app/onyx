@@ -13,6 +13,8 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecision
+from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import POLICY_SEVERITY
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
 from onyx.utils.logger import setup_logger
@@ -24,12 +26,24 @@ def insert_action_approval(
     db_session: Session,
     *,
     session_id: UUID,
-    action_type: str,
+    actions: list[dict[str, Any]],
+    app_name: str,
     payload: dict[str, Any],
 ) -> ActionApproval:
+    """Commit a pending approval. ``actions`` is the JSONB list of
+    ``ActionMatch``-shaped dicts; must be non-empty. Re-sorted
+    strictest-policy-first so every reader can rely on ``actions[0]``."""
+    if not actions:
+        raise ValueError("actions must be non-empty")
+    sorted_actions = sorted(
+        actions,
+        key=lambda a: POLICY_SEVERITY[EndpointPolicy(a["policy"])],
+        reverse=True,
+    )
     row = ActionApproval(
         session_id=session_id,
-        action_type=action_type,
+        actions=sorted_actions,
+        app_name=app_name,
         payload=payload,
     )
     db_session.add(row)
