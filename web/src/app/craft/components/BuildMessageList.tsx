@@ -17,6 +17,15 @@ import {
   TodoListState,
 } from "@/app/craft/types/displayTypes";
 
+/**
+ * A render unit: a run of consecutive non-task tool calls (the "Working" block),
+ * or a single non-tool item. Task calls become their own one-tool block so they
+ * render as standalone, non-collapsible rows.
+ */
+type RenderBlock =
+  | { kind: "tools"; tools: ToolCallState[] }
+  | { kind: "item"; item: Exclude<StreamItem, { type: "tool_call" }> };
+
 interface BuildMessageListProps {
   messages: BuildMessage[];
   streamItems: StreamItem[];
@@ -76,12 +85,9 @@ export default function BuildMessageList({
     rawItems: StreamItem[],
     opts: { isCurrentStream: boolean; extractLatestTodo: boolean }
   ): { nodes: React.ReactNode[]; pinnedTodo: TodoListState | null } => {
-    // Render items in the order they streamed: tool calls, text, and thinking
-    // appear interleaved instead of all tools first / all text at the bottom.
-    // Consecutive tool calls (with no non-tool item between them) are still
-    // rolled into a single "Working" CraftToolGroup.
+    // Render items in stream order (tools, text, thinking interleaved).
     //
-    // Filtering rules that still apply:
+    // Filtering rules that apply first:
     // - Only the LATEST todo_list is kept (either pinned via extractLatestTodo
     //   or rendered inline at its original position).
     // - Thinking is ephemeral: the card shows only while the model is actively
@@ -116,55 +122,54 @@ export default function BuildMessageList({
           ).todoList
         : null;
 
-    const nodes: React.ReactNode[] = [];
-    let i = 0;
-    while (i < items.length) {
-      const item = items[i]!;
-
-      if (item.type === "tool_call") {
-        // Roll consecutive tool_calls into a single "Working" group. A run of
-        // one renders as a plain card. Multi-call groups are keyed by their
-        // FIRST call's id so the group is stable as later calls stream in —
-        // appends never remount the group or its sibling cards, and the group
-        // is open-by-default while active so nothing visually collapses.
-        const groupTools: ToolCallState[] = [item.toolCall];
-        let j = i + 1;
-        while (j < items.length && items[j]!.type === "tool_call") {
-          groupTools.push(
-            (items[j]! as Extract<StreamItem, { type: "tool_call" }>).toolCall
-          );
-          j++;
-        }
-        if (groupTools.length === 1) {
-          nodes.push(
-            <CraftToolCard key={item.toolCall.id} toolCall={item.toolCall} />
-          );
-        } else {
-          const followedByMessage = items
-            .slice(j)
-            .some((it) => it.type === "text");
-          nodes.push(
-            <CraftToolGroup
-              key={`group-${groupTools[0]!.id}`}
-              toolCalls={groupTools}
-              autoCollapse={followedByMessage}
-            />
-          );
-        }
-        i = j;
+    // Group the flat items into render blocks: consecutive non-task tool calls
+    // merge into one "Working" block; task calls and non-tool items each stand
+    // alone.
+    const blocks: RenderBlock[] = [];
+    for (const it of items) {
+      if (it.type !== "tool_call") {
+        blocks.push({ kind: "item", item: it });
         continue;
       }
+      const tool = it.toolCall;
+      const last = blocks[blocks.length - 1];
+      if (
+        tool.kind !== "task" &&
+        last?.kind === "tools" &&
+        last.tools[0]!.kind !== "task"
+      ) {
+        last.tools.push(tool);
+      } else {
+        blocks.push({ kind: "tools", tools: [tool] });
+      }
+    }
 
-      // Non-tool items render inline in stream order. Add a small top margin
-      // when the previous rendered node was a tool group to give the
-      // assistant text some breathing room.
-      const prev = items[i - 1];
-      const followsTool = prev?.type === "tool_call";
-      const topMargin = followsTool ? "mt-3" : "";
+    const nodes = blocks.map((block, idx) => {
+      if (block.kind === "tools") {
+        const { tools } = block;
+        // A single tool (incl. every task) is a plain, non-collapsible card.
+        if (tools.length === 1) {
+          return <CraftToolCard key={tools[0]!.id} toolCall={tools[0]!} />;
+        }
+        // The group folds closed once an assistant message follows it.
+        const followedByMessage = blocks
+          .slice(idx + 1)
+          .some((b) => b.kind === "item" && b.item.type === "text");
+        return (
+          <CraftToolGroup
+            key={`group-${tools[0]!.id}`}
+            toolCalls={tools}
+            autoCollapse={followedByMessage}
+          />
+        );
+      }
 
+      // Inline item — small top margin when it follows a tool block.
+      const topMargin = blocks[idx - 1]?.kind === "tools" ? "mt-3" : "";
+      const { item } = block;
       switch (item.type) {
         case "text":
-          nodes.push(
+          return (
             <div key={item.id} className={cn(topMargin)}>
               <TextChunk
                 content={item.content}
@@ -172,9 +177,8 @@ export default function BuildMessageList({
               />
             </div>
           );
-          break;
         case "thinking":
-          nodes.push(
+          return (
             <div key={item.id} className={cn(topMargin)}>
               <ThinkingCard
                 content={item.content}
@@ -182,9 +186,8 @@ export default function BuildMessageList({
               />
             </div>
           );
-          break;
         case "todo_list":
-          nodes.push(
+          return (
             <div key={item.id} className={cn(topMargin)}>
               <TodoListCard
                 todoList={item.todoList}
@@ -192,10 +195,10 @@ export default function BuildMessageList({
               />
             </div>
           );
-          break;
+        default:
+          return null;
       }
-      i++;
-    }
+    });
 
     return { nodes, pinnedTodo };
   };
