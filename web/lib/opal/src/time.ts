@@ -211,55 +211,50 @@ export function formatDurationMs(ms: number): string {
 }
 
 /**
- * Returns the number of seconds until the user's session expires, taking the
- * minimum of the token expiry and OIDC expiry when both are present. Returns
- * `null` if no expiry information is available. Never returns a negative number
- * — clamps to `0` once the session has already expired.
+ * Returns the number of seconds until the nearest of two optional expiry
+ * boundaries. When both are provided, returns the smaller value. Returns
+ * `null` if neither boundary is available. Never returns a negative number
+ * — clamps to `0` once the deadline has already passed.
  *
- * Accepts the raw expiry fields from a user record directly so that callers
- * can destructure and pass them without importing any user-specific types.
+ * `expiryA` is an absolute expiry `Date`. `expiryB` is expressed as a
+ * creation time plus a duration in seconds, and is resolved to an absolute
+ * date internally.
  *
  * @example
  * getSecondsUntilExpiration(undefined, undefined, undefined) // null
  * getSecondsUntilExpiration(new Date(Date.now() + 300_000), undefined, undefined) // ~300
  */
 export function getSecondsUntilExpiration(
-  oidcExpiry: Date | undefined,
-  tokenCreatedAt: Date | undefined,
-  tokenExpiryLength: number | undefined
+  expiryA: Date | undefined,
+  expiryBCreatedAt: Date | undefined,
+  expiryBDurationSeconds: number | undefined
 ): number | null {
   const now = new Date();
 
-  let secondsUntilTokenExpiration: number | null = null;
-  let secondsUntilOIDCExpiration: number | null = null;
+  let secondsUntilExpiryA: number | null = null;
+  let secondsUntilExpiryB: number | null = null;
 
-  if (tokenCreatedAt && tokenExpiryLength !== undefined) {
+  if (expiryBCreatedAt && expiryBDurationSeconds !== undefined) {
     const expiresAt = new Date(
-      tokenCreatedAt.getTime() + tokenExpiryLength * 1000
+      expiryBCreatedAt.getTime() + expiryBDurationSeconds * 1000
     );
-    secondsUntilTokenExpiration = Math.floor(
+    secondsUntilExpiryB = Math.floor(
       (expiresAt.getTime() - now.getTime()) / 1000
     );
   }
 
-  if (oidcExpiry) {
-    secondsUntilOIDCExpiration = Math.floor(
-      (oidcExpiry.getTime() - now.getTime()) / 1000
+  if (expiryA) {
+    secondsUntilExpiryA = Math.floor(
+      (expiryA.getTime() - now.getTime()) / 1000
     );
   }
 
-  if (
-    secondsUntilTokenExpiration === null &&
-    secondsUntilOIDCExpiration === null
-  ) {
+  if (secondsUntilExpiryA === null && secondsUntilExpiryB === null) {
     return null;
   }
 
   return Math.max(
     0,
-    Math.min(
-      secondsUntilTokenExpiration ?? Infinity,
-      secondsUntilOIDCExpiration ?? Infinity
-    )
+    Math.min(secondsUntilExpiryA ?? Infinity, secondsUntilExpiryB ?? Infinity)
   );
 }
