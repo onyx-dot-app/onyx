@@ -22,7 +22,7 @@ export const timeAgo = (
 
   const minutesDiff = Math.floor(secondsDiff / 60);
   if (minutesDiff < 60) {
-    return `${minutesDiff} ${conditionallyAddPlural("minute", secondsDiff)} ago`;
+    return `${minutesDiff} ${conditionallyAddPlural("minute", minutesDiff)} ago`;
   }
 
   const hoursDiff = Math.floor(minutesDiff / 60);
@@ -49,7 +49,7 @@ export const timeAgo = (
   return `${yearsDiff} ${conditionallyAddPlural("year", yearsDiff)} ago`;
 };
 
-export function localizeAndPrettify(dateString: string) {
+export function localizeAndPrettify(dateString: string): string {
   const date = new Date(dateString);
   return date.toLocaleString();
 }
