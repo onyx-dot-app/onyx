@@ -1,13 +1,11 @@
-const conditionallyAddPlural = (noun: string, cnt: number) => {
+function conditionallyAddPlural(noun: string, cnt: number): string {
   if (cnt > 1) {
     return `${noun}s`;
   }
   return noun;
-};
+}
 
-export const timeAgo = (
-  dateString: string | undefined | null
-): string | null => {
+export function timeAgo(dateString: string | undefined | null): string | null {
   if (!dateString) {
     return null;
   }
@@ -47,7 +45,7 @@ export const timeAgo = (
 
   const yearsDiff = Math.floor(monthsDiff / 12);
   return `${yearsDiff} ${conditionallyAddPlural("year", yearsDiff)} ago`;
-};
+}
 
 export function localizeAndPrettify(dateString: string): string {
   const date = new Date(dateString);
