@@ -41,8 +41,7 @@ export interface OnboardingModalController {
   // State
   isAdmin: boolean;
   hasUserInfo: boolean; // User has completed user-info (workArea set)
-  allProvidersConfigured: boolean; // All 3 providers (anthropic, openai, openrouter) are configured
-  hasAnyProvider: boolean; // At least 1 provider is configured (allows skipping)
+  hasAnyProvider: boolean; // A configured provider exposes a supported model
   isLoading: boolean; // True while LLM providers are loading
 
   // Callbacks
