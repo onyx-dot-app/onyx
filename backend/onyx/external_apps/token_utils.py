@@ -12,11 +12,6 @@ from typing import Any
 DEFAULT_REFRESH_SKEW_SECONDS = 120
 
 
-def utcnow() -> datetime:
-    """Timezone-aware UTC now. Single source so tests can monkeypatch one symbol."""
-    return datetime.now(timezone.utc)
-
-
 def stamp_expires_at(credentials: dict[str, Any], now: datetime) -> dict[str, Any]:
     """Return a *new* creds dict with an absolute ``expires_at`` derived from the
     response's relative ``expires_in`` (unchanged if no ``expires_in`` — "no

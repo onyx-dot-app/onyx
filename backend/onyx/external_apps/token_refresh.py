@@ -6,6 +6,8 @@ behind :func:`ensure_fresh_credentials`. Each step takes its own short session, 
 no connection is held across the lock wait or the POST.
 """
 
+from datetime import datetime
+from datetime import timezone
 from typing import Any
 from uuid import UUID
 
@@ -23,7 +25,6 @@ from onyx.external_apps.providers.base import TokenRefreshTransientError
 from onyx.external_apps.providers.registry import get_provider_for_app
 from onyx.external_apps.token_utils import needs_refresh
 from onyx.external_apps.token_utils import stamp_expires_at
-from onyx.external_apps.token_utils import utcnow
 from onyx.redis.lock_context import redis_shared_lock
 from onyx.redis.lock_context import RedisSharedLockAcquisitionError
 from onyx.utils.logger import setup_logger
@@ -53,9 +54,12 @@ def ensure_fresh_credentials(
     (app reads disconnected), a transient failure keeps the existing token, and
     lock contention yields to the concurrent refresher.
     """
+    # Cheap pre-check: just the staleness decision (one cred read), no provider
+    # or client-cred resolution — those happen under the lock, only when stale.
     with db_session_factory(tenant_id) as db:
-        if _load_refresh_inputs(db, external_app_id, user_id) is None:
-            return  # fresh / non-OAuth / no creds → nothing to do
+        stored = _read_stored_credentials(db, external_app_id, user_id)
+    if stored is None or not needs_refresh(stored, datetime.now(timezone.utc)):
+        return
 
     lock_name = f"ea_token_refresh:{tenant_id}:{external_app_id}:{user_id}"
     try:
@@ -118,7 +122,7 @@ def _refresh_under_lock(
             db,
             external_app_id=external_app_id,
             user_id=user_id,
-            user_credentials=stamp_expires_at(refreshed, utcnow()),
+            user_credentials=stamp_expires_at(refreshed, datetime.now(timezone.utc)),
         )
     logger.info(
         "ea_token_refresh.refreshed external_app_id=%s user_id=%s",
@@ -139,13 +143,8 @@ def _load_refresh_inputs(
     if not isinstance(provider, OAuthExternalAppProvider):
         return None
 
-    user_cred = get_external_app_user_credential(
-        db, external_app_id=external_app_id, user_id=user_id
-    )
-    if user_cred is None:
-        return None
-    stored = user_cred.user_credentials.get_value(apply_mask=False)
-    if not needs_refresh(stored, utcnow()):
+    stored = _read_stored_credentials(db, external_app_id, user_id)
+    if stored is None or not needs_refresh(stored, datetime.now(timezone.utc)):
         return None
 
     client = _client_credentials(app)
@@ -156,6 +155,18 @@ def _load_refresh_inputs(
         return None
     client_id, client_secret = client
     return provider, stored, client_id, client_secret
+
+
+def _read_stored_credentials(
+    db: Session, external_app_id: int, user_id: UUID
+) -> dict[str, Any] | None:
+    """The user's stored credential dict for an app, or None if unset."""
+    user_cred = get_external_app_user_credential(
+        db, external_app_id=external_app_id, user_id=user_id
+    )
+    if user_cred is None:
+        return None
+    return user_cred.user_credentials.get_value(apply_mask=False)
 
 
 def _client_credentials(app: ExternalApp) -> tuple[str, str] | None:

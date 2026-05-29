@@ -208,10 +208,22 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
                 raise TokenRefreshTerminalError(error)
             raise TokenRefreshTransientError(error)
 
-        refreshed = self.extract_credentials(body)
-        # Carry the existing refresh token forward when the provider didn't rotate.
-        refreshed.setdefault("refresh_token", refresh_token)
-        return refreshed
+        try:
+            mapped = self.extract_credentials(body)
+        except TokenRefreshError:
+            raise
+        except Exception as exc:
+            # A 2xx body we can't map (unexpected shape) isn't a dead grant —
+            # transient, so the caller keeps the existing token, not clears it.
+            # Keeps this method's contract: it raises only TokenRefreshError.
+            raise TokenRefreshTransientError(
+                f"could not map refresh response: {exc}"
+            ) from exc
+
+        # Merge onto the stored creds (response wins) rather than replace, so
+        # connect-time-only fields (Slack's team_id, a prior id_token, …) and the
+        # refresh token survive a refresh that returns only the rotated subset.
+        return {**stored, **mapped}
 
     def build_refresh_request(
         self, refresh_token: str, client_id: str, client_secret: str

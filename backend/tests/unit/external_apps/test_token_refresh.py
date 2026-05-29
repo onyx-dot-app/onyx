@@ -62,6 +62,21 @@ def test_refresh_uses_rotated_refresh_token(monkeypatch: pytest.MonkeyPatch) -> 
     assert result["refresh_token"] == "rt2"
 
 
+def test_refresh_preserves_connect_time_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A refresh returning only the rotated subset keeps connect-time-only fields
+    (e.g. team_id) by merging onto the stored creds — response wins on conflicts."""
+    _patch_post(
+        monkeypatch, _response(200, {"access_token": "new", "expires_in": 3600})
+    )
+    stored = {"access_token": "old", "refresh_token": "rt", "team_id": "T1"}
+    result = GoogleCalendarProvider().refresh_credentials(stored, "cid", "secret")
+    assert result["access_token"] == "new"  # response wins
+    assert result["team_id"] == "T1"  # connect-time-only field preserved
+    assert result["refresh_token"] == "rt"  # carried forward via the merge
+
+
 def test_refresh_missing_refresh_token_is_terminal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -277,10 +292,10 @@ def test_ensure_fresh_transient_keeps_existing_token(
 
 
 def test_ensure_fresh_noop_for_non_oauth_app(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(tr, "redis_shared_lock", _noop_cm)
-    monkeypatch.setattr(tr, "get_external_app_by_id", lambda *_a, **_k: MagicMock())
+    # Stale creds pass the pre-check, but a non-OAuth provider has no refresh
+    # flow → bail under the lock, no refresh/upsert.
+    spies = _setup(monkeypatch, creds_sequence=[_stale_creds(), _stale_creds()])
     monkeypatch.setattr(tr, "get_provider_for_app", lambda *_a, **_k: None)
-    cred_reader = MagicMock()
-    monkeypatch.setattr(tr, "get_external_app_user_credential", cred_reader)
     _run()
-    cred_reader.assert_not_called()  # bailed before reading credentials
+    spies["refresh"].assert_not_called()
+    spies["upsert"].assert_not_called()

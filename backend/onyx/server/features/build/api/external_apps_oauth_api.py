@@ -1,5 +1,7 @@
 import base64
 import uuid
+from datetime import datetime
+from datetime import timezone
 from urllib.parse import urlencode
 
 import requests
@@ -22,7 +24,6 @@ from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.base import token_response_error
 from onyx.external_apps.providers.registry import get_provider_or_raise
 from onyx.external_apps.token_utils import stamp_expires_at
-from onyx.external_apps.token_utils import utcnow
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import OAuthCallbackRequest
 from onyx.server.features.build.api.models import OAuthCallbackResponse
@@ -226,7 +227,7 @@ def handle_external_app_oauth_callback(
     # Stamp an absolute `expires_at` now so the lazy-refresh path can later
     # decide staleness without "when was this written" bookkeeping.
     stored_credentials = stamp_expires_at(
-        provider.extract_credentials(response_data), utcnow()
+        provider.extract_credentials(response_data), datetime.now(timezone.utc)
     )
 
     upsert_external_app_user_credential(

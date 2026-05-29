@@ -85,8 +85,10 @@ loop), the Redis lock is the real in-process single-flight, not redundant.
   provider class (not in free functions) and a divergent provider overrides only
   the piece that differs — it never re-implements the POST + error boilerplate:
   - **`refresh_credentials(stored, client_id, client_secret)`** — the template:
-    read the refresh token → build request → POST → classify error → map + carry
-    the refresh token forward. Clockless (caller stamps `expires_at`).
+    read the refresh token → build request → POST → classify error → map, then
+    **merge onto the stored creds** (`{**stored, **mapped}`) so connect-time-only
+    fields and the (un-rotated) refresh token survive. Clockless (caller stamps
+    `expires_at`).
   - **Class properties** (override per provider): `refresh_http_timeout_seconds`,
     `terminal_refresh_errors` (which OAuth error codes are fatal vs. retryable).
   - **Hooks** (override per provider): `build_refresh_request(...) -> dict` (the
@@ -104,16 +106,18 @@ loop), the Redis lock is the real in-process single-flight, not redundant.
   ```
   ensure_fresh_credentials(db_session_factory, tenant_id, external_app_id, user_id) -> None
   ```
-  - **Pre-check** (own short session, then closed): resolve app + provider; bail
-    if non-OAuth; read creds; `needs_refresh(stored, now)`? If not → return (the
-    common path — no lock, no network, connection released).
+  - **Pre-check** (own short session, then closed): read creds, `needs_refresh`?
+    If not → return (the common path — just one cred read, no lock, no network,
+    no provider/client-cred resolution).
   - Acquire `redis_shared_lock("ea_token_refresh:{tenant}:{app}:{user}", …)`.
-  - **Re-read** (own short session, then closed): a fresh session sees a
-    concurrent winner's committed refresh (read-committed); if no longer stale,
-    return. Otherwise gather the POST inputs (provider, stored creds,
-    `client_id`/`client_secret`) and close the session.
+  - **Re-read + gather** (own short session, then closed): a fresh session sees a
+    concurrent winner's committed refresh (read-committed); bail if no longer
+    stale, non-OAuth, or missing client creds. Otherwise gather the POST inputs
+    (provider, stored creds, `client_id`/`client_secret`) and close the session.
   - `provider.refresh_credentials(...)` — the token POST runs with **no DB
-    connection held**.
+    connection held**. `refresh_credentials` raises **only `TokenRefreshError`**
+    (a 2xx body it can't map is reclassified transient), so a refresh outcome
+    never escapes the helper.
   - **Persist** (own short session): `upsert_external_app_user_credential` with
     the `stamp_expires_at`-stamped creds.
   - **Never raises for a refresh outcome:** transient → log + return (keep the
@@ -180,8 +184,9 @@ exception:
   - `needs_refresh`: fresh → no-op; within-skew / expired → refresh; no
     `expires_at` → no-op. (`test_token_utils.py`)
   - `refresh_credentials` mapping: success maps fields; rotation persists a new
-    `refresh_token`; no-rotation carries the old one forward; `invalid_grant` →
-    terminal; 5xx / network → transient. (`test_token_refresh.py`)
+    `refresh_token`; no-rotation carries the old one forward; the merge preserves
+    connect-time-only fields (e.g. `team_id`); `invalid_grant` → terminal; 5xx /
+    network → transient. (`test_token_refresh.py`)
   - Template-method extensibility: a subclass overriding one hook
     (`build_refresh_request`, `terminal_refresh_errors`) changes only that
     behavior and inherits the rest. (`test_token_refresh.py`)
