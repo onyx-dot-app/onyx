@@ -11,14 +11,14 @@ function conditionallyAddPlural(noun: string, cnt: number): string {
  * minutes → hours → days → weeks → months → years.
  *
  * @example
- * timeAgo("2025-01-15T10:00:00Z") // "3 seconds ago"
- * timeAgo("2025-01-15T10:00:00Z") // "42 minutes ago"
- * timeAgo("2025-01-15T10:00:00Z") // "5 hours ago"
- * timeAgo("2025-01-15T10:00:00Z") // "12 days ago"
- * timeAgo("2025-01-15T10:00:00Z") // "2 weeks ago"
- * timeAgo("2025-01-15T10:00:00Z") // "8 months ago"
- * timeAgo("2025-01-15T10:00:00Z") // "3 years ago"
- * timeAgo(null)                   // null
+ * timeAgo(new Date(Date.now() - 3_000).toISOString())                    // "3 seconds ago"
+ * timeAgo(new Date(Date.now() - 42 * 60_000).toISOString())              // "42 minutes ago"
+ * timeAgo(new Date(Date.now() - 5 * 3_600_000).toISOString())            // "5 hours ago"
+ * timeAgo(new Date(Date.now() - 12 * 86_400_000).toISOString())          // "12 days ago"
+ * timeAgo(new Date(Date.now() - 14 * 86_400_000).toISOString())          // "2 weeks ago"
+ * timeAgo(new Date(Date.now() - 240 * 86_400_000).toISOString())         // "8 months ago"
+ * timeAgo(new Date(Date.now() - 3 * 365 * 86_400_000).toISOString())     // "3 years ago"
+ * timeAgo(null)                                                           // null
  */
 export function timeAgo(dateString: string | undefined | null): string | null {
   if (!dateString) {
