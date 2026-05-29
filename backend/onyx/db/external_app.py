@@ -77,16 +77,16 @@ def validate_auth_template(
 
 
 def resolve_masked_credentials(
-    incoming: dict[str, Any],
+    incoming: dict[str, str],
     existing: SensitiveValue[dict[str, Any]] | None,
-) -> dict[str, Any]:
+) -> dict[str, str]:
     """Restore real secret values when the caller submits masked placeholders."""
     existing_values = (
         existing.get_value(apply_mask=False) if existing is not None else {}
     )
-    resolved: dict[str, Any] = {}
+    resolved: dict[str, str] = {}
     for key, value in incoming.items():
-        if isinstance(value, str) and is_masked_credential(value):
+        if is_masked_credential(value):
             if key not in existing_values:
                 raise OnyxError(
                     OnyxErrorCode.INVALID_INPUT,
@@ -182,7 +182,7 @@ def create_external_app(
     app_type: ExternalAppType,
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
-    organization_credentials: dict[str, Any],
+    organization_credentials: dict[str, str],
     enabled: bool = True,
     is_public: bool = False,
     author_user_id: UUID | None = None,
@@ -260,7 +260,7 @@ def update_external_app(
     app_type: ExternalAppType,
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
-    organization_credentials: dict[str, Any],
+    organization_credentials: dict[str, str],
     new_bundle_file_id: str | None = None,
     new_bundle_sha256: str | None = None,
     action_policies: dict[str, EndpointPolicy] | None = None,
