@@ -49,7 +49,6 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from urllib.parse import urlparse
 from uuid import UUID
 from uuid import uuid4
 
@@ -183,11 +182,20 @@ def _resolve_proxy_ip() -> str:
     )
 
 
+# Loopback only: the firewall permits nothing else to bypass the proxy, and the
+# Onyx API host must transit the proxy so the PAT can be injected on the wire.
+_NO_PROXY = "127.0.0.1,localhost"
+
+# Placeholder shipped in ONYX_PAT; the egress proxy injects the real PAT on the
+# wire (the pod never holds the token).
+_ONYX_PAT_PLACEHOLDER = "onyx_pat_placeholder_replaced_by_proxy"
+
+
 def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
     if not SANDBOX_PROXY_HOST:
         return []
     proxy_url = f"http://{_PROXY_ALIAS}:{SANDBOX_PROXY_PORT}"
-    no_proxy = _compute_no_proxy_list()
+    no_proxy = _NO_PROXY
     return [
         client.V1EnvVar(name="HTTPS_PROXY", value=proxy_url),
         client.V1EnvVar(name="HTTP_PROXY", value=proxy_url),
@@ -203,15 +211,6 @@ def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
         client.V1EnvVar(name="CURL_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
         client.V1EnvVar(name="GIT_SSL_CAINFO", value=_PROXY_CA_BUNDLE_FILE),
     ]
-
-
-def _compute_no_proxy_list() -> str:
-    entries = ["127.0.0.1", "localhost"]
-    if SANDBOX_API_SERVER_URL:
-        parsed = urlparse(SANDBOX_API_SERVER_URL)
-        if parsed.hostname:
-            entries.append(parsed.hostname)
-    return ",".join(entries)
 
 
 def _proxy_init_container() -> client.V1Container:
@@ -576,7 +575,6 @@ class KubernetesSandboxManager(SandboxManager):
         self,
         sandbox_id: str,
         tenant_id: str,
-        onyx_pat: str,
     ) -> client.V1Pod:
         """Create Pod specification for sandbox (user-level).
 
@@ -604,7 +602,7 @@ class KubernetesSandboxManager(SandboxManager):
             command=["/workspace/entrypoint.sh"],
             ports=sandbox_ports,
             env=[
-                client.V1EnvVar(name="ONYX_PAT", value=onyx_pat),
+                client.V1EnvVar(name="ONYX_PAT", value=_ONYX_PAT_PLACEHOLDER),
                 client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
                 client.V1EnvVar(
                     name=OPENCODE_SERVER_PASSWORD,
@@ -1217,7 +1215,9 @@ class KubernetesSandboxManager(SandboxManager):
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             llm_config: LLM provider configuration
-            onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the pod
+            onyx_pat: Required by the interface and the Docker backend; on K8s
+                the pod ships a placeholder and the proxy injects the real PAT,
+                so this is only checked as a provisioning precondition.
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -1304,7 +1304,6 @@ class KubernetesSandboxManager(SandboxManager):
             pod = self._create_sandbox_pod(
                 sandbox_id=str(sandbox_id),
                 tenant_id=tenant_id,
-                onyx_pat=onyx_pat,
             )
             try:
                 self._core_api.create_namespaced_pod(

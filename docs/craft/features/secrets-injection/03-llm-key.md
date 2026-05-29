@@ -41,7 +41,7 @@ the real provider host — traffic already MITMs through the proxy, so host-matc
 **Streaming-safe, fail-closed.** Per Plan 1, injection runs at header time without touching the
 body or response, so SSE and long-running streams pass through untouched. A missing row,
 unrenderable header, or undecryptable key raises `CredentialUnavailableError`; the dispatcher
-serves `_http_403(_CODE_CREDENTIAL_ERROR)`.
+serves `http_403(SandboxProxyError.CREDENTIAL_ERROR)`.
 
 **No hot-reload in the pod.** `opencode serve` reads `OPENCODE_CONFIG_CONTENT` once at startup
 (sst/opencode#22213) and does not reload. The placeholder swap is a provisioning-time concern;
