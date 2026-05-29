@@ -426,12 +426,10 @@ def _render_list(
         num_id = _create_list_numbering(document, list_style, start)
         item_style = _STYLE_COMPACT if num_id is not None else list_style
     else:
+        # Ordered lists get their own numbering instance so each restarts at its
+        # start value; bullets can rely on the built-in style.
         item_style = list_style
-        num_id = (
-            _create_list_numbering(document, list_style, start)
-            if ordered and start != 1
-            else None
-        )
+        num_id = _create_list_numbering(document, list_style, start) if ordered else None
 
     for item in node.get("children", []):
         if item.get("type") != "list_item":
@@ -460,10 +458,11 @@ def _create_list_numbering(
     """Create a fresh numbering instance bound to a built-in list style.
 
     Returning a dedicated ``numId`` lets a paragraph in a non-list style (e.g.
-    ``Compact``) still render list markers + indentation, and gives each list an
-    independent counter so ordered lists restart. ``start`` adds a
-    ``startOverride`` when the list does not begin at 1. Returns None if the
-    style has no numbering definition (caller falls back to the list style).
+    ``Compact``) still render list markers + indentation. A ``startOverride`` is
+    always emitted (even for ``start == 1``): without it, multiple instances of
+    the same abstract numbering continue one shared counter instead of each list
+    restarting. Returns None if the style has no numbering definition (caller
+    falls back to the list style).
     """
     style = document.styles[list_style_name]
     numbering = document.part.numbering_part.element
@@ -485,13 +484,12 @@ def _create_list_numbering(
     abstract_num_id_el.set(qn("w:val"), abstract_num_id)
     num.append(abstract_num_id_el)
 
-    if start != 1:
-        lvl_override = OxmlElement("w:lvlOverride")
-        lvl_override.set(qn("w:ilvl"), "0")
-        start_override = OxmlElement("w:startOverride")
-        start_override.set(qn("w:val"), str(start))
-        lvl_override.append(start_override)
-        num.append(lvl_override)
+    lvl_override = OxmlElement("w:lvlOverride")
+    lvl_override.set(qn("w:ilvl"), "0")
+    start_override = OxmlElement("w:startOverride")
+    start_override.set(qn("w:val"), str(start))
+    lvl_override.append(start_override)
+    num.append(lvl_override)
 
     numbering.append(num)
     return next_num_id

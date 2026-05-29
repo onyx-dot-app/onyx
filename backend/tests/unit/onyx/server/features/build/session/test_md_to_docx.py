@@ -91,6 +91,28 @@ def test_ordered_list_start_value_is_preserved() -> None:
     assert '<w:startOverride w:val="3"/>' in numbering_xml
 
 
+def test_consecutive_ordered_lists_each_restart() -> None:
+    # Each ordered list needs its own numbering instance with a startOverride, or
+    # Word continues one shared counter (1,2,3,4...) across separate lists.
+    doc = _render("1. a\n2. b\n\nText.\n\n1. c\n2. d\n")
+    num_ids = {
+        num_pr.find(qn("w:numId")).get(qn("w:val"))
+        for paragraph in doc.paragraphs
+        if (num_pr := paragraph._p.find(".//" + qn("w:numPr"))) is not None
+    }
+    assert len(num_ids) == 2  # the two lists reference different instances
+    numbering = doc.part.numbering_part.element
+    overrides = [
+        num.find(".//" + qn("w:startOverride"))
+        for num in numbering.findall(qn("w:num"))
+        if num.get(qn("w:numId")) in num_ids
+    ]
+    assert all(
+        override is not None and override.get(qn("w:val")) == "1"
+        for override in overrides
+    )
+
+
 def test_block_quote_uses_block_text_style() -> None:
     # Matches pandoc, which puts blockquotes in the indented "Block Text" style.
     doc = _render("> quoted line\n")
