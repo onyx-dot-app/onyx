@@ -104,7 +104,6 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
                 fields["summary"] = str(value) if value else "No summary"
             elif field_id == "description":
                 fields["description"] = str(value) if value else ""
-            # Store other field values as custom fields
 
         # Use issueKey as summary fallback
         if "summary" not in fields:
@@ -132,12 +131,11 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             "fields": fields,
         }
 
-    def _fetch_requests(self, project_key: str) -> list[dict[str, Any]]:
-        """Fetch customer requests from a JSM project using the Service Desk API."""
+    def _fetch_sd_requests(self, project_key: str) -> list[dict[str, Any]]:
+        """Fetch customer requests from JSM using the Service Desk API (full load)."""
         all_requests: list[dict[str, Any]] = []
         desks = self._list_service_desks()
 
-        # Find the service desk matching our project key
         service_desk_id = None
         for desk in desks:
             if desk.get("projectKey") == project_key:
@@ -146,10 +144,8 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
 
         if not service_desk_id:
             logger.warning(f"No service desk found for project {project_key}")
-            # Fall back to JQL-based search
-            return self._fetch_via_jql(project_key)
+            return []
 
-        # Fetch requests from the service desk with pagination
         start = 0
         while True:
             req_url = (
@@ -160,7 +156,6 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
                 resp = requests.get(req_url, headers=self._get_headers(), timeout=30)
                 resp.raise_for_status()
                 data = resp.json()
-                # Convert SD format to Jira-issue-like format
                 for item in data.get("values", []):
                     all_requests.append(self._sd_request_to_jira_issue(item))
                 if data.get("isLastPage", True):
@@ -211,6 +206,28 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
                 break
 
         return all_issues
+
+    def _fetch_requests(
+        self,
+        project_key: str,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        """Fetch requests for a project, trying Service Desk API first, falling back to JQL.
+
+        When a time range is provided, always uses JQL (server-side filtering)
+        since the Service Desk API doesn't natively support time-based filtering
+        on its request endpoint.
+        """
+        # For time-filtered queries (poll), use JQL directly for efficiency
+        if start_time or end_time:
+            return self._fetch_via_jql(project_key, start_time=start_time, end_time=end_time)
+
+        # For full loads (load_from_state), try SD API first, fall back to JQL
+        result = self._fetch_sd_requests(project_key)
+        if result:
+            return result
+        return self._fetch_via_jql(project_key)
 
     def _build_document(self, issue: dict[str, Any], project_key: str) -> Document:
         """Convert a JSM request/issue into an Onyx Document."""
@@ -328,8 +345,9 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
 
         for project_key in self.project_keys:
             logger.info(f"Polling JSM requests for project: {project_key}")
-            # Use JQL with server-side time filtering instead of fetching all + filtering in Python
-            all_requests = self._fetch_via_jql(project_key, start_time=start_dt, end_time=end_dt)
+            # Both paths (SD API and JQL) go through _fetch_requests now, keeping
+            # load/poll scope consistent. Time-filtered calls use JQL for efficiency.
+            all_requests = self._fetch_requests(project_key, start_time=start_dt, end_time=end_dt)
             batch: list[Document] = []
             for req_data in all_requests:
                 doc = self._build_document(req_data, project_key)
