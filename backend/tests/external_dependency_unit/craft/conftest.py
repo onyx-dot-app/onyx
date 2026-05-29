@@ -82,9 +82,19 @@ from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 _DEV_PUSH_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
 
-@pytest.fixture(autouse=True)
-def _sandbox_push_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+@pytest.fixture(scope="module", autouse=True)
+def _sandbox_push_key() -> Generator[None, None, None]:
+    # Module-scoped so it's set before ``_pool_pod`` (also module-scoped)
+    # provisions its pod — the K8s manager reads the env var at pod-spec
+    # build time. Function-scoped ``monkeypatch`` runs *after* higher-scoped
+    # fixtures, which is what triggered the CI breakage when the first
+    # test in the file moved onto ``pool_session``.
+    mp = pytest.MonkeyPatch()
+    mp.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+    try:
+        yield
+    finally:
+        mp.undo()
 
 
 # ---------------------------------------------------------------------------
@@ -690,10 +700,19 @@ class SandboxHandle:
                 sandbox_ids[user] = sandbox_id
                 self._register_extra(sandbox_id)
 
+        # Apply the requested status to every pod that came up — including
+        # on partial failure — so teardown sees consistent DB state before
+        # the error propagates.
+        self._db_session.expire_all()
+        if status != SandboxStatus.RUNNING and sandbox_ids:
+            for sandbox_id in sandbox_ids.values():
+                row = self._db_session.get(Sandbox, sandbox_id)
+                assert row is not None
+                row.status = status
+            self._db_session.commit()
+
         if worker_error is not None:
             raise worker_error
-
-        self._db_session.expire_all()
 
         results: list[tuple[Sandbox, WorkspaceProxy]] = []
         for user in users:
@@ -701,18 +720,12 @@ class SandboxHandle:
             sandbox_row = self._db_session.get(Sandbox, sandbox_id)
             assert sandbox_row is not None
 
-            if status != SandboxStatus.RUNNING:
-                sandbox_row.status = status
-
             workspace = WorkspaceProxy(
                 _k8s_client=self._k8s_client,
                 _pod_name=self.manager._get_pod_name(sandbox_id),
                 _sandbox_id=sandbox_id,
             )
             results.append((sandbox_row, workspace))
-
-        if status != SandboxStatus.RUNNING:
-            self._db_session.commit()
 
         return results
 
