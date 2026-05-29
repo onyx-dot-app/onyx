@@ -337,7 +337,7 @@ jobs:
 
       - name: Install playwright browsers
         working-directory: ./web
-        run: bunx playwright install --with-deps
+        run: bunx playwright install chromium
 
       - name: Setup test license
         uses: ./.github/actions/setup-test-license
@@ -582,7 +582,7 @@ jobs:
 
       - name: Install playwright browsers
         working-directory: ./web
-        run: bunx playwright install --with-deps
+        run: bunx playwright install chromium
 
       - name: Setup test license
         uses: ./.github/actions/setup-test-license
