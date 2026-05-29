@@ -136,7 +136,9 @@ class IdentityResolver:
             return None
 
         with self._session_factory(identity.tenant_id) as db:
-            user_id = self._fetch_sandbox_user(db, identity.sandbox_id)
+            user_id = db.scalar(
+                select(Sandbox.user_id).where(Sandbox.id == identity.sandbox_id)
+            )
             if user_id is None:
                 return None
 
@@ -169,7 +171,3 @@ class IdentityResolver:
                 .where(BuildSession.user_id == user_id)
             )
             return db.scalar(stmt)
-
-    def _fetch_sandbox_user(self, db: Session, sandbox_id: UUID) -> UUID | None:
-        stmt = select(Sandbox.user_id).where(Sandbox.id == sandbox_id)
-        return db.scalar(stmt)
