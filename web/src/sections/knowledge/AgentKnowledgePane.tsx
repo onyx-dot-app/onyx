@@ -31,7 +31,7 @@ import useCCPairs from "@/hooks/useCCPairs";
 import { ConnectedSource } from "@/lib/hierarchy/interfaces";
 import { ProjectFile } from "@/app/app/projects/projectsService";
 import { AgentAttachedDocument, AgentHierarchyNode } from "@/lib/agents/types";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import { Spacer } from "@opal/components";
 import { Disabled } from "@opal/core";
 import SourceHierarchyBrowser from "./SourceHierarchyBrowser";

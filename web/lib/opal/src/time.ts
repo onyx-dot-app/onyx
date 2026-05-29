@@ -1,5 +1,3 @@
-import { User } from "@/lib/types";
-
 const conditionallyAddPlural = (noun: string, cnt: number) => {
   if (cnt > 1) {
     return `${noun}s`;
@@ -19,18 +17,12 @@ export const timeAgo = (
   const secondsDiff = Math.floor((now.getTime() - date.getTime()) / 1000);
 
   if (secondsDiff < 60) {
-    return `${secondsDiff} ${conditionallyAddPlural(
-      "second",
-      secondsDiff
-    )} ago`;
+    return `${secondsDiff} ${conditionallyAddPlural("second", secondsDiff)} ago`;
   }
 
   const minutesDiff = Math.floor(secondsDiff / 60);
   if (minutesDiff < 60) {
-    return `${minutesDiff} ${conditionallyAddPlural(
-      "minute",
-      secondsDiff
-    )} ago`;
+    return `${minutesDiff} ${conditionallyAddPlural("minute", secondsDiff)} ago`;
   }
 
   const hoursDiff = Math.floor(minutesDiff / 60);
@@ -63,18 +55,12 @@ export function localizeAndPrettify(dateString: string) {
 }
 
 export function humanReadableFormat(dateString: string): string {
-  // Create a Date object from the dateString
   const date = new Date(dateString);
-
-  // Use Intl.DateTimeFormat to format the date
-  // Specify the locale as 'en-US' and options for month, day, and year
   const formatter = new Intl.DateTimeFormat("en-US", {
-    month: "long", // full month name
-    day: "numeric", // numeric day
-    year: "numeric", // numeric year
+    month: "long",
+    day: "numeric",
+    year: "numeric",
   });
-
-  // Format the date and return it
   return formatter.format(date);
 }
 
@@ -93,68 +79,15 @@ export function humanReadableFormatShort(date: string | Date | null): string {
 }
 
 export function humanReadableFormatWithTime(datetimeString: string): string {
-  // Create a Date object from the dateString
   const date = new Date(datetimeString);
-
-  // Use Intl.DateTimeFormat to format the date
-  // Specify the locale as 'en-US' and options for month, day, and year
   const formatter = new Intl.DateTimeFormat("en-US", {
-    month: "long", // full month name
-    day: "numeric", // numeric day
-    year: "numeric", // numeric year
+    month: "long",
+    day: "numeric",
+    year: "numeric",
     hour: "numeric",
     minute: "numeric",
   });
-  // Format the date and return it
   return formatter.format(date);
-}
-
-export function getSecondsUntilExpiration(
-  userInfo: User | null
-): number | null {
-  if (!userInfo) {
-    return null;
-  }
-
-  const { oidc_expiry, current_token_created_at, current_token_expiry_length } =
-    userInfo;
-
-  const now = new Date();
-
-  let secondsUntilTokenExpiration: number | null = null;
-  let secondsUntilOIDCExpiration: number | null = null;
-
-  if (current_token_created_at && current_token_expiry_length !== undefined) {
-    const createdAt = new Date(current_token_created_at);
-    const expiresAt = new Date(
-      createdAt.getTime() + current_token_expiry_length * 1000
-    );
-    secondsUntilTokenExpiration = Math.floor(
-      (expiresAt.getTime() - now.getTime()) / 1000
-    );
-  }
-
-  if (oidc_expiry) {
-    const expiresAtFromOIDC = new Date(oidc_expiry);
-    secondsUntilOIDCExpiration = Math.floor(
-      (expiresAtFromOIDC.getTime() - now.getTime()) / 1000
-    );
-  }
-
-  if (
-    secondsUntilTokenExpiration === null &&
-    secondsUntilOIDCExpiration === null
-  ) {
-    return null;
-  }
-
-  return Math.max(
-    0,
-    Math.min(
-      secondsUntilTokenExpiration ?? Infinity,
-      secondsUntilOIDCExpiration ?? Infinity
-    )
-  );
 }
 
 export type TimeFilter = "day" | "week" | "month" | "year";
@@ -185,9 +118,6 @@ export function formatDurationSeconds(seconds: number): string {
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
 
-// Pretty-print a millisecond duration, picking a unit appropriate to the
-// magnitude. Used by the index-attempt stage metrics UI where a single view
-// can mix tiny (sub-millisecond) and large (multi-minute) durations.
 export function formatDurationMs(ms: number): string {
   if (!Number.isFinite(ms)) return "—";
   if (ms < 1) return "<1 ms";

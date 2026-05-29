@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import Modal from "@/refresh-components/Modal";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getSecondsUntilExpiration } from "@/lib/time";
+import { getSecondsUntilExpiration } from "@/lib/user";
 import { refreshToken } from "@/lib/user";
 import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
 import { Button } from "@opal/components";

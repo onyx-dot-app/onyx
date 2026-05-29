@@ -35,7 +35,7 @@ import {
   refreshLicenseCache,
 } from "@/lib/billing/svc";
 import { formatDateShort } from "@/lib/dateUtils";
-import { humanReadableFormatShort } from "@/lib/time";
+import { humanReadableFormatShort } from "@opal/time";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Tier } from "@/interfaces/settings";

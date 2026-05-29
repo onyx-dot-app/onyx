@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Table, Text, createTableColumns } from "@opal/components";
 import { IndexAttemptStageMetric } from "@/lib/types";
-import { formatDurationMs } from "@/lib/time";
+import { formatDurationMs } from "@opal/time";
 import { SortMode } from "./interfaces";
 import { sortPerBatchStages } from "./utils";
 import StageLabelCell from "./StageLabelCell";
