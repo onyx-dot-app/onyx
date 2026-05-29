@@ -17,6 +17,9 @@ import zipfile
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
+from collections.abc import Sequence
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
 from dataclasses import field
@@ -79,9 +82,19 @@ from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 _DEV_PUSH_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
 
-@pytest.fixture(autouse=True)
-def _sandbox_push_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+@pytest.fixture(scope="module", autouse=True)
+def _sandbox_push_key() -> Generator[None, None, None]:
+    # Module-scoped so it's set before ``_pool_pod`` (also module-scoped)
+    # provisions its pod — the K8s manager reads the env var at pod-spec
+    # build time. Function-scoped ``monkeypatch`` runs *after* higher-scoped
+    # fixtures, which is what triggered the CI breakage when the first
+    # test in the file moved onto ``pool_session``.
+    mp = pytest.MonkeyPatch()
+    mp.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+    try:
+        yield
+    finally:
+        mp.undo()
 
 
 # ---------------------------------------------------------------------------
@@ -647,6 +660,74 @@ class SandboxHandle:
             _sandbox_id=sandbox_id,
         )
         return sandbox_row, workspace
+
+    def provision_for_many(
+        self,
+        users: Sequence[User],
+        status: SandboxStatus = SandboxStatus.RUNNING,
+    ) -> list[tuple[Sandbox, WorkspaceProxy]]:
+        """Parallel ``provision_for``; preserves input order.
+
+        ContextVars don't propagate to ThreadPoolExecutor workers, so each
+        worker re-pins the tenant id before touching the DB. Each
+        successfully-provisioned pod is registered for teardown
+        immediately so a partial failure still cleans up.
+        """
+        if not users:
+            return []
+
+        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+
+        def _worker(user: User) -> UUID:
+            token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+            try:
+                return _provision_sandbox_via_app(user.id)
+            finally:
+                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+        sandbox_ids: dict[User, UUID] = {}
+        worker_error: Exception | None = None
+        with ThreadPoolExecutor(max_workers=min(len(users), 8)) as pool:
+            futures = {pool.submit(_worker, user): user for user in users}
+            for fut in as_completed(futures):
+                user = futures[fut]
+                try:
+                    sandbox_id = fut.result()
+                except Exception as e:
+                    if worker_error is None:
+                        worker_error = e
+                    continue
+                sandbox_ids[user] = sandbox_id
+                self._register_extra(sandbox_id)
+
+        # Apply the requested status to every pod that came up — including
+        # on partial failure — so teardown sees consistent DB state before
+        # the error propagates.
+        self._db_session.expire_all()
+        if status != SandboxStatus.RUNNING and sandbox_ids:
+            for sandbox_id in sandbox_ids.values():
+                row = self._db_session.get(Sandbox, sandbox_id)
+                assert row is not None
+                row.status = status
+            self._db_session.commit()
+
+        if worker_error is not None:
+            raise worker_error
+
+        results: list[tuple[Sandbox, WorkspaceProxy]] = []
+        for user in users:
+            sandbox_id = sandbox_ids[user]
+            sandbox_row = self._db_session.get(Sandbox, sandbox_id)
+            assert sandbox_row is not None
+
+            workspace = WorkspaceProxy(
+                _k8s_client=self._k8s_client,
+                _pod_name=self.manager._get_pod_name(sandbox_id),
+                _sandbox_id=sandbox_id,
+            )
+            results.append((sandbox_row, workspace))
+
+        return results
 
 
 def _create_committed_craft_user() -> UUID:
