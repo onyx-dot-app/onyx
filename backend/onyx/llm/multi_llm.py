@@ -69,11 +69,15 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
     "claude-opus-4-5",
     "claude-opus-4-6",
     "claude-opus-4-7",
+    "claude-opus-4-8",
 )
 
 # Anthropic models that require the adaptive thinking API (thinking.type.adaptive
 # + output_config.effort) instead of the legacy thinking.type.enabled + budget_tokens.
-_ANTHROPIC_ADAPTIVE_THINKING_MODELS = ("claude-opus-4-7",)
+_ANTHROPIC_ADAPTIVE_THINKING_MODELS = (
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+)
 
 # Anthropic models that reject any non-default sampling parameter (temperature,
 # top_p, top_k). For these models we must omit these params entirely from the
@@ -86,6 +90,10 @@ _ANTHROPIC_NO_SAMPLING_PARAMS_MODELS = (
     "claude-opus-4.7",
     "claude-4-7-opus",
     "claude-4.7-opus",
+    "claude-opus-4-8",
+    "claude-opus-4.8",
+    "claude-4-8-opus",
+    "claude-4.8-opus",
 )
 
 
@@ -521,8 +529,8 @@ class LitellmLLM(LLM):
 
         # Temperature
         # Some models reject any non-default sampling parameter (e.g. Claude
-        # Opus 4.7 returns a 400 invalid_request_error if temperature is set to
-        # anything). For those models we must omit the param entirely —
+        # Opus 4.7/4.8 return a 400 invalid_request_error if temperature is set
+        # to anything). For those models we must omit the param entirely —
         # LiteLLM's drop_params is not reliable here because the upstream
         # provider config can still claim the param is supported.
         # https://github.com/BerriAI/litellm/issues/26444
