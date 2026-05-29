@@ -71,6 +71,16 @@ class SessionContext:
     sandbox_name: str
     sandbox_ip: str
 
+    def without_session(self) -> ResolvedSandbox:
+        """Inverse of `ResolvedSandbox.with_session(...)` — drops the session id."""
+        return ResolvedSandbox(
+            sandbox_id=self.sandbox_id,
+            user_id=self.user_id,
+            tenant_id=self.tenant_id,
+            sandbox_name=self.sandbox_name,
+            sandbox_ip=self.sandbox_ip,
+        )
+
 
 class SandboxIPLookup(Protocol):
     """Backend-specific IP → SandboxIdentity resolver.

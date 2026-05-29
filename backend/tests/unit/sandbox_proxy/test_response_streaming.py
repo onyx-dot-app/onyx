@@ -32,7 +32,10 @@ from mitmproxy import http as mitm_http
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
+from onyx.sandbox_proxy.action_matcher import ActionMatcher
+from onyx.sandbox_proxy.addons.gate import _IdentityResolver
 from onyx.sandbox_proxy.addons.gate import GateAddon
+from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 
 # Inter-chunk delay on the upstream. The whole stream takes
@@ -89,7 +92,7 @@ class _UpstreamHandler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
 
-class _StubResolver:
+class _StubResolver(_IdentityResolver):
     """Resolves any source IP to one sandbox so the request is forwarded."""
 
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox:  # noqa: ARG002
@@ -110,7 +113,7 @@ class _StubResolver:
         return None
 
 
-class _NonGatingMatcher:
+class _NonGatingMatcher(ActionMatcher):
     """Never matches, so every request fails open and is forwarded."""
 
     def match(self, request: mitm_http.Request, tenant_id: str) -> None:  # noqa: ARG002
@@ -166,6 +169,7 @@ def _start_proxy(
         db_session_factory=_unused_factory,
         cache_factory=_unused_factory,
         proxy_instance_id="proxy-test",
+        credential_dispatcher=CredentialInjectionDispatcher([]),
         stream_responses=stream_responses,
     )
 

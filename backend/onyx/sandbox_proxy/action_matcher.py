@@ -56,7 +56,7 @@ def resolve_app_for_url(
     return None
 
 
-class ExternalAppActionMatcher:
+class ExternalAppActionMatcher(ActionMatcher):
     """Matches a request against the tenant's connected external apps.
 
     Opens its own short tenant-scoped DB session (mirrors ``IdentityResolver``):
