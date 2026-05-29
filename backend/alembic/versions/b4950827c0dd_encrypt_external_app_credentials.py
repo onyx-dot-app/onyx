@@ -4,23 +4,22 @@ Revision ID: b4950827c0dd
 Revises: 39287906b97a
 Create Date: 2026-05-28 13:29:23.568531
 
-Encrypts the credential value columns for external apps at rest:
+Moves the external-app credential columns from JSONB to encrypted ``LargeBinary``,
+matching ``credential.credential_json`` (revision ``0a98909f2757``):
 - ``external_app.organization_credentials``
 - ``external_app_user_credential.user_credentials``
 
-Both move from JSONB to ``LargeBinary`` storing the encrypted JSON, matching
-the pattern used for ``credential.credential_json`` (see revision
-``0a98909f2757``). When ``ENCRYPTION_KEY_SECRET`` is unset the MIT encryption
-is a no-op encode, so this is safe to run in either edition.
+The feature is not yet in production, so existing (staging) credential data is
+dropped rather than migrated. This keeps every value flowing through the
+encrypted write path from the start, with no plaintext rows left at rest and no
+dependency on application encryption code. Per-user credential rows are deleted
+(users reconnect); app config rows are kept but their org credentials are reset
+to empty (admins re-enter client secrets).
 """
-
-import json
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.sql import column
-from sqlalchemy.sql import table
 
 # revision identifiers, used by Alembic.
 revision = "b4950827c0dd"
@@ -29,49 +28,35 @@ branch_labels = None
 depends_on = None
 
 
-def _encrypt_jsonb_column(table_name: str, column_name: str) -> None:
-    """Convert a non-null JSONB credential column to encrypted LargeBinary.
-
-    Adds a temporary binary column, encrypts every existing row's JSON into it,
-    then swaps it in for the original column (keeping NOT NULL).
-    """
-    connection = op.get_bind()
-
-    op.add_column(table_name, sa.Column("temp_column", sa.LargeBinary()))
-
-    target = table(
-        table_name,
-        column("id", sa.Integer()),
-        column(column_name, postgresql.JSONB(astext_type=sa.Text())),
-        column("temp_column", sa.LargeBinary()),
+def upgrade() -> None:
+    # Per-user credential rows are nothing but credentials — drop them; users
+    # reconnect. With no rows left, the new NOT NULL column needs no backfill.
+    op.execute("DELETE FROM external_app_user_credential")
+    op.drop_column("external_app_user_credential", "user_credentials")
+    op.add_column(
+        "external_app_user_credential",
+        sa.Column("user_credentials", sa.LargeBinary(), nullable=False),
     )
 
-    # Inline the encryption rather than depend on application code, which can
-    # change or be removed and break this migration on replay. Alembic does not
-    # run in an EE context, so the versioned encryption resolves to the MIT
-    # implementation — a plain UTF-8 encode (no real encryption). Existing rows
-    # are therefore stored as encoded JSON; the app encrypts subsequent writes
-    # at runtime. This matches revision 0a98909f2757.
-    for row_id, creds, _ in connection.execute(sa.select(target)):
-        encoded = json.dumps(creds if creds is not None else {}).encode("utf-8")
-        connection.execute(
-            target.update().where(target.c.id == row_id).values(temp_column=encoded)
-        )
-
-    op.drop_column(table_name, column_name)
-    op.alter_column(table_name, "temp_column", new_column_name=column_name)
-    op.alter_column(table_name, column_name, nullable=False)
-
-
-def upgrade() -> None:
-    _encrypt_jsonb_column("external_app", "organization_credentials")
-    _encrypt_jsonb_column("external_app_user_credential", "user_credentials")
+    # Keep app config rows (name, url patterns, policies) but reset their org
+    # credentials; admins re-enter client_id/secret. b"{}" is the empty JSON
+    # object — no secret to protect — and is replaced by an encrypted value on
+    # the next save.
+    op.drop_column("external_app", "organization_credentials")
+    op.add_column(
+        "external_app",
+        sa.Column("organization_credentials", sa.LargeBinary(), nullable=True),
+    )
+    op.get_bind().execute(
+        sa.text("UPDATE external_app SET organization_credentials = :empty"),
+        {"empty": b"{}"},
+    )
+    op.alter_column("external_app", "organization_credentials", nullable=False)
 
 
 def downgrade() -> None:
-    # Drop the encrypted columns and recreate empty JSONB columns. We do not
-    # decrypt on downgrade (mirrors revision 0a98909f2757); stored credential
-    # values are lost and must be re-entered.
+    # Drop the encrypted columns and recreate empty JSONB columns. Credential
+    # values are not restored (mirrors revision 0a98909f2757).
     op.drop_column("external_app_user_credential", "user_credentials")
     op.add_column(
         "external_app_user_credential",
