@@ -176,7 +176,11 @@ jobs:
               uv pip install --system --no-deps --require-hashes \
                 -r backend/requirements/default.txt \
                 -r backend/requirements/dev.txt
-              py.test \
+              # --no-project: don't discover/sync the workspace uv project (the
+              # prod image has no .venv and is stripped of build tools). uv runs
+              # against the system interpreter, where the deps above were
+              # installed via `uv pip install --system`.
+              uv run --no-project python -m pytest \
                 -n 8 \
                 --dist loadfile \
                 --durations=8 \
