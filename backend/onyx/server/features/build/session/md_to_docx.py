@@ -561,10 +561,23 @@ def _render_table(
             _fill_cell(cells[index], cell_node, bold=False, footnotes=footnotes)
 
 
+_TABLE_CELL_ALIGN = {
+    "center": WD_ALIGN_PARAGRAPH.CENTER,
+    "right": WD_ALIGN_PARAGRAPH.RIGHT,
+    "left": WD_ALIGN_PARAGRAPH.LEFT,
+}
+
+
 def _fill_cell(
     cell: _Cell, cell_node: Node, bold: bool, footnotes: "_Footnotes | None"
 ) -> None:
     paragraph = cell.paragraphs[0]
+    # pandoc uses the tight "Compact" style in cells and honours the column
+    # alignment from the Markdown separator row (e.g. ``:--:`` -> centered).
+    paragraph.style = _STYLE_COMPACT
+    alignment = _TABLE_CELL_ALIGN.get(str(cell_node.get("attrs", {}).get("align")))
+    if alignment is not None:
+        paragraph.alignment = alignment
     _add_runs(paragraph, cell_node.get("children", []), _Fmt(bold=bold), footnotes)
 
 
