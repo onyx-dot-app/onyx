@@ -211,50 +211,18 @@ export function formatDurationMs(ms: number): string {
 }
 
 /**
- * Returns the number of seconds until the nearest of two optional expiry
- * boundaries. When both are provided, returns the smaller value. Returns
- * `null` if neither boundary is available. Never returns a negative number
- * — clamps to `0` once the deadline has already passed.
- *
- * `expiryA` is an absolute expiry `Date`. `expiryB` is expressed as a
- * creation time plus a duration in seconds, and is resolved to an absolute
- * date internally.
+ * Returns the number of seconds remaining between now and the expiry derived
+ * from `createdAt + durationSeconds`. Clamps to `0` if the deadline has
+ * already passed.
  *
  * @example
- * getSecondsUntilExpiration(undefined, undefined, undefined) // null
- * getSecondsUntilExpiration(new Date(Date.now() + 300_000), undefined, undefined) // ~300
+ * getSecondsUntilExpiration(new Date(Date.now() - 60_000), 300) // ~240
+ * getSecondsUntilExpiration(new Date(Date.now() - 400_000), 300) // 0
  */
 export function getSecondsUntilExpiration(
-  expiryA: Date | undefined,
-  expiryBCreatedAt: Date | undefined,
-  expiryBDurationSeconds: number | undefined
-): number | null {
-  const now = new Date();
-
-  let secondsUntilExpiryA: number | null = null;
-  let secondsUntilExpiryB: number | null = null;
-
-  if (expiryBCreatedAt && expiryBDurationSeconds !== undefined) {
-    const expiresAt = new Date(
-      expiryBCreatedAt.getTime() + expiryBDurationSeconds * 1000
-    );
-    secondsUntilExpiryB = Math.floor(
-      (expiresAt.getTime() - now.getTime()) / 1000
-    );
-  }
-
-  if (expiryA) {
-    secondsUntilExpiryA = Math.floor(
-      (expiryA.getTime() - now.getTime()) / 1000
-    );
-  }
-
-  if (secondsUntilExpiryA === null && secondsUntilExpiryB === null) {
-    return null;
-  }
-
-  return Math.max(
-    0,
-    Math.min(secondsUntilExpiryA ?? Infinity, secondsUntilExpiryB ?? Infinity)
-  );
+  createdAt: Date,
+  durationSeconds: number
+): number {
+  const expiresAt = new Date(createdAt.getTime() + durationSeconds * 1000);
+  return Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
 }

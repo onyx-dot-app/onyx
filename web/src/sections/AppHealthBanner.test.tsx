@@ -30,11 +30,6 @@ jest.mock("@/lib/user", () => ({
   refreshToken: jest.fn(),
 }));
 
-jest.mock("@opal/time", () => ({
-  ...jest.requireActual("@opal/time"),
-  getSecondsUntilExpiration: () => null,
-}));
-
 describe("AppHealthBanner logout handling", () => {
   beforeEach(() => {
     jest.clearAllMocks();
