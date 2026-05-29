@@ -1697,6 +1697,7 @@ lxml==6.1.0 \
     #   justext
     #   lxml-html-clean
     #   markitdown
+    #   python-docx
     #   python-pptx
     #   python3-saml
     #   trafilatura
@@ -2862,14 +2863,6 @@ pyopenssl==24.3.0 \
     # via
     #   aioquic
     #   mitmproxy
-pypandoc-binary==1.16.2 \
-    --hash=sha256:1d9d4e14bbf973578ba635d18730131f76d11cf6926e4be977b39fad0bf330a8 \
-    --hash=sha256:49a2bea5a79b20eca546b67d466f41d97cecf10e2efb366a7bef7cc3d4edef15 \
-    --hash=sha256:9005c32c9d62152cbdd00e5e38579e17c0e708789ef554852367e24fb0cc6cf3 \
-    --hash=sha256:a240d645963266be5d68c2b5a0fb9703dfa5bb5e6a8367e36060e2584236b457 \
-    --hash=sha256:a7e03052c7e526188e970aa782245e10be815a292c74b14d350d81c19fdeeafb \
-    --hash=sha256:dc71533dcce1cb112994e44f95a21c042c02e4fd4b4815442d8cbf7fe0159a88 \
-    --hash=sha256:f6108d0661298f97def07695527b73f8499e7c425c8386ae0de2e8bf95d5799c
 pyparsing==3.2.0 \
     --hash=sha256:93d9577b88da0bbea8cc8334ee8b918ed014968fd2ec383e868fb8afb1ccef84 \
     --hash=sha256:cbf74e27246d595d9a74b186b810f6fbb86726dbf3b9532efb343f6d7294fe9c
@@ -2905,6 +2898,9 @@ python-dateutil==2.9.0.post0 \
     #   kubernetes
     #   opensearch-py
     #   pandas
+python-docx==1.1.2 \
+    --hash=sha256:08c20d6058916fb19853fcf080f7f42b6270d89eac9fa5f8c15f691c0017fabe \
+    --hash=sha256:0cf1f22e95b9002addca7948e16f2cd7acdfd498047f1941ca5d293db7762efd
 python-dotenv==1.2.2 \
     --hash=sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a \
     --hash=sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3
@@ -3721,6 +3717,7 @@ typing-extensions==4.15.0 \
     #   pydantic-core
     #   pyee
     #   pygithub
+    #   python-docx
     #   python-oxmsg
     #   referencing
     #   simple-salesforce
