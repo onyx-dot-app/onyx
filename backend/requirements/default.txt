@@ -776,7 +776,6 @@ deprecated==1.3.1 \
 discord-py==2.4.0 \
     --hash=sha256:b8af6711c70f7e62160bfbecb55be699b5cb69d007426759ab8ab06b1bd77d1d \
     --hash=sha256:d07cb2a223a185873a1d0ee78b9faa9597e45b3f6186df21a95cec1e9bcdc9a5
-    # via onyx
 distributed==2026.1.1 \
     --hash=sha256:3d2709a43912797df3c345af3bb333bbf1a386ec1e9e6a134e5f050521373dbd \
     --hash=sha256:506759b1ed88e45e12ba65e2a429de9911862db55d27dd8bb293c6268430374e
@@ -1587,7 +1586,6 @@ kombu==5.5.4 \
 kubernetes==31.0.0 \
     --hash=sha256:28945de906c8c259c1ebe62703b56a03b714049372196f854105afe4e6d014c0 \
     --hash=sha256:bf141e2d380c8520eada8b351f4e319ffee9636328c137aa432bc486ca1200e1
-    # via onyx
 langchain-core==1.3.3 \
     --hash=sha256:18aae8506f37da7f74398492279a7d6efcee4f8e23c4c41c7af080eeb7ef7bd1 \
     --hash=sha256:fa510a5db8efdc0c6ff41c0939fb5c00a0183c11f6b84233e892e3227ff69182
