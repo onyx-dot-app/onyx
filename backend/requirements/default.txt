@@ -323,9 +323,9 @@ beartype==0.22.6 \
     --hash=sha256:0584bc46a2ea2a871509679278cda992eadde676c01356ab0ac77421f3c9a093 \
     --hash=sha256:97fbda69c20b48c5780ac2ca60ce3c1bb9af29b3a1a0216898ffabdd523e48f4
     # via py-key-value-aio
-beautifulsoup4==4.12.3 \
-    --hash=sha256:74e3d1928edc070d21748185c46e3fb33490f22f52a3addee9aee0f4f7781051 \
-    --hash=sha256:b80878c9f40111313e55da8ba20bdba06d8fa3969fc68304167741bbf9e082ed
+beautifulsoup4==4.14.3 \
+    --hash=sha256:0918bfe44902e6ad8d57732ba310582e98da931428d231a5ecb9e7c703a735bb \
+    --hash=sha256:6292b1c5186d356bba669ef9f7f051757099565ad9ada5dd630bd9de5fa7fb86
     # via
     #   atlassian-python-api
     #   markdownify
