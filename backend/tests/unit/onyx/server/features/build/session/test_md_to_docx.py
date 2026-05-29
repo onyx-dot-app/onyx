@@ -4,6 +4,7 @@ from io import BytesIO
 
 from docx import Document
 from docx.document import Document as DocxDocument
+from docx.oxml.ns import qn
 
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 
@@ -47,13 +48,21 @@ def test_inline_formatting_sets_run_properties() -> None:
     assert any(r.text == "code" and r.font.name == "Courier New" for r in runs)
 
 
-def test_bulleted_and_numbered_and_nested_lists() -> None:
+def test_tight_lists_use_compact_style_with_numbering() -> None:
+    # Tight lists match pandoc's "Compact" style; markers come from direct
+    # numbering (numPr) rather than a list paragraph style.
     md = "- a\n- b\n  - nested\n\n1. one\n2. two\n"
     doc = _render(md)
-    styles = _paragraph_styles(doc)
-    assert "List Bullet" in styles
-    assert "List Bullet 2" in styles  # nested level
-    assert "List Number" in styles
+    assert set(_paragraph_styles(doc)) == {"Compact"}
+    list_paragraphs = [p for p in doc.paragraphs if p.text.strip()]
+    assert all(p._p.find(".//" + qn("w:numPr")) is not None for p in list_paragraphs)
+
+
+def test_loose_lists_keep_list_paragraph_styles() -> None:
+    # A blank line between items makes the list loose; pandoc keeps the built-in
+    # numbered/bulleted list paragraph styles there.
+    doc = _render("1. one\n\n2. two\n")
+    assert "List Number" in _paragraph_styles(doc)
 
 
 def test_loose_list_continuation_paragraphs_are_not_numbered() -> None:
@@ -78,9 +87,28 @@ def test_ordered_list_start_value_is_preserved() -> None:
     assert '<w:startOverride w:val="3"/>' in numbering_xml
 
 
-def test_block_quote_uses_quote_style() -> None:
+def test_block_quote_uses_block_text_style() -> None:
+    # Matches pandoc, which puts blockquotes in the indented "Block Text" style.
     doc = _render("> quoted line\n")
-    assert "Quote" in _paragraph_styles(doc)
+    assert "Block Text" in _paragraph_styles(doc)
+
+
+def test_prose_uses_body_text_and_first_paragraph_styles() -> None:
+    # The first paragraph after a heading is "First Paragraph"; the next is
+    # "Body Text" (pandoc's convention), and neither falls back to "Normal".
+    doc = _render("# Title\n\nFirst para.\n\nSecond para.\n")
+    styles = _paragraph_styles(doc)
+    assert styles == ["Heading 1", "First Paragraph", "Body Text"]
+
+
+def test_standalone_image_becomes_image_caption() -> None:
+    doc = _render("![Asimov portrait](https://example.com/a.png)\n")
+    captions = [
+        p.text for p in doc.paragraphs if p.style and p.style.name == "Image Caption"
+    ]
+    # Alt text is shown (not embedded), with no "[image: ...]" wrapper.
+    assert captions == ["Asimov portrait"]
+    assert "[image" not in doc.paragraphs[0].text
 
 
 def test_fenced_code_block_is_monospace() -> None:
@@ -162,3 +190,36 @@ def test_html_entities_in_code_span_are_left_literal() -> None:
     doc = _render("`a &amp; b`")
     runs = [r.text for p in doc.paragraphs for r in p.runs]
     assert "a &amp; b" in runs
+
+
+def test_paragraph_style_sequence_matches_pandoc_rules() -> None:
+    """Lock in pandoc's paragraph-style assignment across mixed content.
+
+    The expected styles below were verified against pandoc's own DOCX output:
+    the first prose paragraph after any non-paragraph block uses "First
+    Paragraph" -- except after a table, where it is "Body Text".
+    """
+    md = (
+        "# Heading\n\n"
+        "First body paragraph.\n\n"
+        "Second body paragraph.\n\n"
+        "- bullet one\n"
+        "- bullet two\n\n"
+        "Paragraph after list.\n\n"
+        "> A blockquote.\n\n"
+        "Paragraph after quote.\n\n"
+        "| A | B |\n|---|---|\n| 1 | 2 |\n\n"
+        "Paragraph after table.\n"
+    )
+    doc = _render(md)
+    assert _paragraph_styles(doc) == [
+        "Heading 1",
+        "First Paragraph",  # first prose after a heading
+        "Body Text",  # consecutive prose
+        "Compact",  # tight list item
+        "Compact",
+        "First Paragraph",  # first prose after a list
+        "Block Text",  # blockquote
+        "First Paragraph",  # first prose after a blockquote
+        "Body Text",  # prose after a table (the exception)
+    ]

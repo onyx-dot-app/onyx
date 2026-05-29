@@ -18,14 +18,20 @@ from dataclasses import replace
 from html import unescape
 from io import BytesIO
 from typing import Any
+from typing import cast
 
 import mistune
 from docx import Document
 from docx.document import Document as DocxDocument
+from docx.enum.style import WD_STYLE_TYPE
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.opc.constants import RELATIONSHIP_TYPE
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from docx.shared import Inches
 from docx.shared import Pt
+from docx.shared import RGBColor
+from docx.styles.style import ParagraphStyle
 from docx.table import _Cell
 from docx.text.paragraph import Paragraph
 
@@ -36,6 +42,23 @@ _LINK_COLOR = "0563C1"
 # variants up to level 3 ("List Bullet 2", "List Bullet 3", ...). Deeper nesting
 # reuses the level-3 style.
 _MAX_LIST_LEVEL = 3
+
+# Paragraph styles, mirroring how pandoc's default reference.docx names and
+# spaces its prose so the output reads like the previous pandoc export. The
+# spacing/indent/heading values below are reproduced from that reference (plain
+# measurements, not the file itself, which stays out of the repo for licensing).
+_STYLE_BODY = "Body Text"
+_STYLE_FIRST_PARAGRAPH = "First Paragraph"
+_STYLE_COMPACT = "Compact"
+_STYLE_IMAGE_CAPTION = "Image Caption"
+_STYLE_BLOCK_TEXT = "Block Text"
+
+_BODY_SPACE = Pt(9)  # Body Text: 180 twips before/after
+_COMPACT_SPACE = Pt(1.8)  # Compact (tight lists): 36 twips
+_BLOCK_TEXT_SPACE = Pt(5)  # Block Text (blockquote): 100 twips
+_BLOCK_TEXT_INDENT = Inches(1 / 3)  # Block Text left/right: 480 twips
+_HEADING_COLOR = RGBColor(0x0F, 0x47, 0x61)
+_HEADING_SIZES = {1: Pt(20), 2: Pt(16), 3: Pt(14), 4: Pt(12), 5: Pt(11), 6: Pt(11)}
 
 # Enable the GFM table/strikethrough/url plugins so the AST covers the Markdown
 # features that appear in these documents.
@@ -63,6 +86,7 @@ def markdown_to_docx_bytes(md_text: str) -> bytes:
     nodes: list[Node] = tokens if isinstance(tokens, list) else []
 
     document = Document()
+    _apply_pandoc_styles(document)
     _render_blocks(document, nodes)
 
     buffer = BytesIO()
@@ -70,20 +94,78 @@ def markdown_to_docx_bytes(md_text: str) -> bytes:
     return buffer.getvalue()
 
 
+def _apply_pandoc_styles(document: DocxDocument) -> None:
+    """Add/configure the prose styles, approximating pandoc's reference.docx.
+
+    python-docx's bare default template puts everything in ``Normal``; pandoc
+    instead distributes prose across ``Body Text``/``First Paragraph``, tight
+    lists into ``Compact``, blockquotes into ``Block Text``, and image captions
+    into ``Image Caption``. Defining the same styles here lets the renderer
+    assign them so the document reads like the pandoc export.
+    """
+    styles = document.styles
+    existing = {style.name for style in styles}
+
+    def ensure(name: str, base: str) -> ParagraphStyle:
+        if name not in existing:
+            style = styles.add_style(name, WD_STYLE_TYPE.PARAGRAPH)
+            style.base_style = styles[base]
+            existing.add(name)
+        return cast(ParagraphStyle, styles[name])
+
+    body = cast(ParagraphStyle, styles[_STYLE_BODY])  # ships in the default template
+    body.paragraph_format.space_before = _BODY_SPACE
+    body.paragraph_format.space_after = _BODY_SPACE
+
+    ensure(_STYLE_FIRST_PARAGRAPH, _STYLE_BODY)
+
+    compact = ensure(_STYLE_COMPACT, _STYLE_BODY)
+    compact.paragraph_format.space_before = _COMPACT_SPACE
+    compact.paragraph_format.space_after = _COMPACT_SPACE
+
+    block_text = ensure(_STYLE_BLOCK_TEXT, _STYLE_BODY)
+    block_text.paragraph_format.space_before = _BLOCK_TEXT_SPACE
+    block_text.paragraph_format.space_after = _BLOCK_TEXT_SPACE
+    block_text.paragraph_format.left_indent = _BLOCK_TEXT_INDENT
+    block_text.paragraph_format.right_indent = _BLOCK_TEXT_INDENT
+
+    caption = ensure(_STYLE_IMAGE_CAPTION, "Caption")
+    caption.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    for level, size in _HEADING_SIZES.items():
+        heading = styles[f"Heading {level}"]
+        heading.font.size = size
+        heading.font.color.rgb = _HEADING_COLOR
+
+
 # --------------------------------------------------------------------------- #
 # Block-level rendering
 # --------------------------------------------------------------------------- #
 def _render_blocks(document: DocxDocument, nodes: list[Node]) -> None:
+    # Like pandoc: the first prose paragraph after any non-paragraph block (a
+    # heading, list, table, blockquote, code, or the document start) uses "First
+    # Paragraph"; consecutive prose paragraphs use "Body Text".
+    first_para_pending = True
     for node in nodes:
         node_type = node.get("type")
         if node_type in ("blank_line", "newline"):
             continue
+        if node_type in ("paragraph", "block_text"):
+            children = node.get("children", [])
+            if _is_image_only(children):
+                # An image renders as a caption; pandoc follows it with Body Text.
+                _render_image_caption(document, children)
+                first_para_pending = False
+            else:
+                style = _STYLE_FIRST_PARAGRAPH if first_para_pending else _STYLE_BODY
+                paragraph = document.add_paragraph(style=style)
+                _add_runs(paragraph, children, _Fmt())
+                first_para_pending = False
+            continue
+
         if node_type == "heading":
             level = min(int(node.get("attrs", {}).get("level", 1)), 6)
             paragraph = document.add_paragraph(style=f"Heading {level}")
-            _add_runs(paragraph, node.get("children", []), _Fmt())
-        elif node_type in ("paragraph", "block_text"):
-            paragraph = document.add_paragraph()
             _add_runs(paragraph, node.get("children", []), _Fmt())
         elif node_type == "block_code":
             _render_code(document, node)
@@ -95,9 +177,13 @@ def _render_blocks(document: DocxDocument, nodes: list[Node]) -> None:
             _render_thematic_break(document)
         elif node_type == "table":
             _render_table(document, node)
+            # pandoc styles the paragraph after a table as Body Text, not First.
+            first_para_pending = False
+            continue
         elif "children" in node:
             # Unknown block wrapper: recurse so its content is not dropped.
             _render_blocks(document, node["children"])
+        first_para_pending = True
 
 
 def _render_code(document: DocxDocument, node: Node) -> None:
@@ -114,24 +200,63 @@ def _render_code(document: DocxDocument, node: Node) -> None:
 def _render_quote(document: DocxDocument, node: Node) -> None:
     for child in node.get("children", []):
         if child.get("type") == "paragraph":
-            paragraph = document.add_paragraph(style="Quote")
+            paragraph = document.add_paragraph(style=_STYLE_BLOCK_TEXT)
             _add_runs(paragraph, child.get("children", []), _Fmt())
         else:
             _render_blocks(document, [child])
 
 
+def _is_image_only(children: list[Node]) -> bool:
+    """True if the inline content is a single image (a standalone figure)."""
+    meaningful = [
+        child
+        for child in children
+        if child.get("type") not in ("softbreak", "linebreak")
+        and not (child.get("type") == "text" and not str(child.get("raw", "")).strip())
+    ]
+    return len(meaningful) == 1 and meaningful[0].get("type") == "image"
+
+
+def _render_image_caption(document: DocxDocument, children: list[Node]) -> None:
+    """Render a standalone image as its alt text in the Image Caption style.
+
+    Remote images are not fetched/embedded (pandoc does not either); the alt
+    text is what reads in the document.
+    """
+    image = next(child for child in children if child.get("type") == "image")
+    alt = _collect_text(image.get("children", []))
+    paragraph = document.add_paragraph(style=_STYLE_IMAGE_CAPTION)
+    paragraph.add_run(alt or "image")
+
+
 def _render_list(document: DocxDocument, node: Node, level: int) -> None:
-    ordered = bool(node.get("attrs", {}).get("ordered", False))
-    base_style = "List Number" if ordered else "List Bullet"
+    attrs = node.get("attrs", {})
+    ordered = bool(attrs.get("ordered", False))
+    # mistune exposes tight/loose as a top-level key on the list node.
+    tight = bool(node.get("tight", True))
     style_level = min(level + 1, _MAX_LIST_LEVEL)
-    style = base_style if style_level == 1 else f"{base_style} {style_level}"
+    list_style = "List Number" if ordered else "List Bullet"
+    if style_level > 1:
+        list_style = f"{list_style} {style_level}"
     continue_style = (
         "List Continue" if style_level == 1 else f"List Continue {style_level}"
     )
-    start = int(node.get("attrs", {}).get("start", 1))
-    num_id = (
-        _create_numbering_start_override(document, style, start) if ordered else None
-    )
+    start = int(attrs.get("start", 1))
+
+    # Tight lists match pandoc's "Compact" style. Compact carries no list marker,
+    # so numbering is applied directly from the built-in list style's definition
+    # (which also supplies the indentation); each list gets its own instance so
+    # ordered lists restart correctly. Loose lists keep the built-in list style.
+    if tight:
+        num_id = _create_list_numbering(document, list_style, start)
+        item_style = _STYLE_COMPACT if num_id is not None else list_style
+    else:
+        item_style = list_style
+        num_id = (
+            _create_list_numbering(document, list_style, start)
+            if ordered and start != 1
+            else None
+        )
 
     for item in node.get("children", []):
         if item.get("type") != "list_item":
@@ -142,7 +267,7 @@ def _render_list(document: DocxDocument, node: Node, level: int) -> None:
             if child_type in ("blank_line", "newline"):
                 continue
             if child_type in ("block_text", "paragraph"):
-                paragraph_style = style if not has_rendered_marker else continue_style
+                paragraph_style = item_style if not has_rendered_marker else continue_style
                 paragraph = document.add_paragraph(style=paragraph_style)
                 if not has_rendered_marker and num_id is not None:
                     _apply_numbering(paragraph, num_id)
@@ -154,14 +279,18 @@ def _render_list(document: DocxDocument, node: Node, level: int) -> None:
                 _render_blocks(document, [child])
 
 
-def _create_numbering_start_override(
-    document: DocxDocument, style_name: str, start: int
+def _create_list_numbering(
+    document: DocxDocument, list_style_name: str, start: int
 ) -> int | None:
-    """Create a numbering instance when an ordered list starts at a non-1 value."""
-    if start == 1:
-        return None
+    """Create a fresh numbering instance bound to a built-in list style.
 
-    style = document.styles[style_name]
+    Returning a dedicated ``numId`` lets a paragraph in a non-list style (e.g.
+    ``Compact``) still render list markers + indentation, and gives each list an
+    independent counter so ordered lists restart. ``start`` adds a
+    ``startOverride`` when the list does not begin at 1. Returns None if the
+    style has no numbering definition (caller falls back to the list style).
+    """
+    style = document.styles[list_style_name]
     numbering = document.part.numbering_part.element
     abstract_num_id = _abstract_num_id_for_style(numbering, style.style_id)
     if abstract_num_id is None:
@@ -181,12 +310,13 @@ def _create_numbering_start_override(
     abstract_num_id_el.set(qn("w:val"), abstract_num_id)
     num.append(abstract_num_id_el)
 
-    lvl_override = OxmlElement("w:lvlOverride")
-    lvl_override.set(qn("w:ilvl"), "0")
-    start_override = OxmlElement("w:startOverride")
-    start_override.set(qn("w:val"), str(start))
-    lvl_override.append(start_override)
-    num.append(lvl_override)
+    if start != 1:
+        lvl_override = OxmlElement("w:lvlOverride")
+        lvl_override.set(qn("w:ilvl"), "0")
+        start_override = OxmlElement("w:startOverride")
+        start_override.set(qn("w:val"), str(start))
+        lvl_override.append(start_override)
+        num.append(lvl_override)
 
     numbering.append(num)
     return next_num_id
