@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { cn } from "@opal/utils";
 import Logo from "@/refresh-components/Logo";
 import TextChunk from "@/app/craft/components/TextChunk";
@@ -23,8 +23,11 @@ interface BuildMessageListProps {
   isStreaming?: boolean;
   /** Whether auto-scroll is enabled (user is at bottom) */
   autoScrollEnabled?: boolean;
-  /** Ref to the end marker div for scroll detection */
-  messagesEndRef?: React.RefObject<HTMLDivElement>;
+  /**
+   * Scrollable container wrapping this list. Auto-scroll moves it directly
+   * rather than via scrollIntoView, which scrolls every ancestor.
+   */
+  scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
   /**
    * Trailing content attached to the last assistant block — either the
    * in-progress streaming area (if visible) or the last saved assistant
@@ -48,17 +51,20 @@ export default function BuildMessageList({
   streamItems,
   isStreaming = false,
   autoScrollEnabled = true,
-  messagesEndRef: externalMessagesEndRef,
+  scrollContainerRef,
   trailingAssistantSlot,
 }: BuildMessageListProps) {
-  const internalMessagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = externalMessagesEndRef ?? internalMessagesEndRef;
-
   useEffect(() => {
-    if (autoScrollEnabled && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    const container = scrollContainerRef?.current;
+    if (autoScrollEnabled && container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
     }
-  }, [messages.length, streamItems.length, autoScrollEnabled, messagesEndRef]);
+  }, [
+    messages.length,
+    streamItems.length,
+    autoScrollEnabled,
+    scrollContainerRef,
+  ]);
 
   const hasStreamItems = streamItems.length > 0;
   const lastMessage = messages[messages.length - 1];
@@ -295,8 +301,6 @@ export default function BuildMessageList({
             </div>
           </div>
         )}
-
-        <div ref={messagesEndRef} />
       </div>
     </div>
   );
