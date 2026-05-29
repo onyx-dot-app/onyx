@@ -174,7 +174,7 @@ def test_share_process_namespace_is_disabled(pod: client.V1Pod) -> None:
 def test_onyx_pat_env_is_placeholder_not_real(pod: client.V1Pod) -> None:
     """The pod ships a placeholder; the egress proxy injects the real PAT."""
     env = {e.name: e.value for e in _container(pod, "sandbox").env}
-    assert env["ONYX_PAT"] == ksm._ONYX_PAT_PLACEHOLDER
+    assert env["ONYX_PAT"] == ksm._PROXY_INJECTED_PLACEHOLDER
 
 
 def test_no_proxy_is_loopback_only(monkeypatch: pytest.MonkeyPatch) -> None:
