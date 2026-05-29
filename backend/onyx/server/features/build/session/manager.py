@@ -383,17 +383,6 @@ class SessionManager:
         )
         return default, get_all_build_mode_llm_configs(providers, default)
 
-    def _get_llm_config(
-        self,
-        requested_provider_type: str | None,
-        requested_model_name: str | None,
-        user: User,
-    ) -> LLMProviderConfig:
-        """The default Craft LLM config only (see ``build_llm_configs``)."""
-        return self.build_llm_configs(
-            user, requested_provider_type, requested_model_name
-        )[0]
-
     @staticmethod
     def _select_default_llm_config(
         providers: list[LLMProviderView],
