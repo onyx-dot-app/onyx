@@ -2183,6 +2183,114 @@ class SearchSettings(Base):
         )
 
 
+class TargetedReindexJob(Base):
+    """
+    One row per user-initiated reindex request. Gives the FE a stable handle
+    to poll for aggregate status across a request that may span multiple
+    `(cc_pair, search_settings)` tuples. The per-doc work list lives in
+    `targeted_reindex_job_target`.
+    """
+
+    __tablename__ = "targeted_reindex_job"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    requested_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    requested_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[IndexingStatus] = mapped_column(
+        Enum(IndexingStatus, native_enum=False),
+        nullable=False,
+        default=IndexingStatus.NOT_STARTED,
+        index=True,
+    )
+    # Pre-allocated celery task UUID. Written before `apply_async` so the
+    # orphan-detector can clean up if enqueue fails after INSERT, and so
+    # cancellation has a handle to revoke.
+    celery_task_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    resolved_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    still_failing_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    skipped_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+
+    # Snapshot of resolved error rows captured at completion. Outlives later
+    # cleanup of the underlying `index_attempt_errors` rows.
+    resolved_summary: Mapped[list[dict[str, Any]]] = mapped_column(
+        PGJSONB, nullable=False, default=list, server_default="[]"
+    )
+
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    targets: Mapped[list["TargetedReindexJobTarget"]] = relationship(
+        "TargetedReindexJobTarget",
+        back_populates="job",
+        cascade="all, delete-orphan",
+    )
+    index_attempts: Mapped[list["IndexAttempt"]] = relationship(
+        "IndexAttempt",
+        back_populates="targeted_reindex_job",
+        primaryjoin="TargetedReindexJob.id == IndexAttempt.targeted_reindex_job_id",
+    )
+
+
+class TargetedReindexJobTarget(Base):
+    """
+    One row per doc a reindex job will touch. Separate table (not JSONB on
+    the job) so each row can FK to its source `IndexAttemptError` for clean
+    resolution tracking and FK to its `cc_pair` for cascade cleanup. NULL
+    `source_error_id` means an arbitrary reindex with no failure context.
+    """
+
+    __tablename__ = "targeted_reindex_job_target"
+
+    targeted_reindex_job_id: Mapped[int] = mapped_column(
+        ForeignKey("targeted_reindex_job.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    document_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    source_error_id: Mapped[int | None] = mapped_column(
+        ForeignKey("index_attempt_errors.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_targeted_reindex_job_target_cc_pair_doc",
+            "cc_pair_id",
+            "document_id",
+        ),
+    )
+
+    job: Mapped["TargetedReindexJob"] = relationship(
+        "TargetedReindexJob", back_populates="targets"
+    )
+    source_error: Mapped["IndexAttemptError | None"] = relationship(
+        "IndexAttemptError",
+        primaryjoin="TargetedReindexJobTarget.source_error_id == IndexAttemptError.id",
+    )
+
+
 class IndexAttempt(Base):
     """
     Represents an attempt to index a group of 0 or more documents from a
@@ -2204,6 +2312,20 @@ class IndexAttempt(Base):
     # This is only for attempts that are explicitly marked as from the start via
     # the run once API
     from_beginning: Mapped[bool] = mapped_column(Boolean)
+    # NULL on full-run attempts. Set on synthetic attempts spawned by a
+    # targeted reindex; links back to the `targeted_reindex_job` row.
+    # Consumer query sites that only care about full runs filter
+    # `WHERE targeted_reindex_job_id IS NULL`.
+    targeted_reindex_job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("targeted_reindex_job.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    targeted_reindex_job: Mapped["TargetedReindexJob | None"] = relationship(
+        "TargetedReindexJob",
+        back_populates="index_attempts",
+        primaryjoin="IndexAttempt.targeted_reindex_job_id == TargetedReindexJob.id",
+    )
     status: Mapped[IndexingStatus] = mapped_column(
         Enum(IndexingStatus, native_enum=False, index=True)
     )
