@@ -16,6 +16,7 @@ from mitmproxy import http
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import NotificationType
+from onyx.db.engine.sql_engine import DBSessionFactory
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.db.notification import create_notification
@@ -26,7 +27,6 @@ from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatche
 from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.errors import http_403
 from onyx.sandbox_proxy.errors import SandboxProxyError
-from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
@@ -217,7 +217,7 @@ class GateAddon:
             # Already validated in `requestheaders`; body is streaming.
             return
 
-        gate_target = self._resolve_and_match(flow)
+        gate_target = await self._resolve_and_match(flow)
         # Strip the in-band session tag so it never reaches the origin
         flow.request.headers.pop("Proxy-Authorization", None)
         if gate_target is None:
@@ -232,8 +232,15 @@ class GateAddon:
             decision = await self._await_decision(approval_id, ctx, match)
             self._write_response_for_decision(flow, decision)
             if decision == ApprovalDecision.APPROVED:
-                self._dispatch_injection_or_block(
-                    flow, sandbox=ctx.without_session(), match=match
+                # Off-thread: the external-app resolver may refresh an expiring
+                # OAuth token (token POST + Redis lock) before rendering headers;
+                # keep that off the proxy event loop so a slow token endpoint
+                # stalls only this request, not every in-flight flow.
+                await asyncio.to_thread(
+                    self._dispatch_injection_or_block,
+                    flow,
+                    sandbox=ctx.without_session(),
+                    match=match,
                 )
         except Exception:
             logger.exception(
@@ -252,7 +259,7 @@ class GateAddon:
     # request() helpers
     # ------------------------------------------------------------------
 
-    def _resolve_and_match(
+    async def _resolve_and_match(
         self, flow: http.HTTPFlow
     ) -> tuple[SessionContext, RequestMatch] | None:
         """Identity → matcher → (only if gated) in-band session resolution.
@@ -330,7 +337,11 @@ class GateAddon:
             return None
 
         if match.decisive.policy is EndpointPolicy.ALWAYS:
-            self._dispatch_injection_or_block(flow, sandbox=sandbox, match=match)
+            # Off-thread: see the ASK path in `request` — the resolver may refresh
+            # an expiring OAuth token before injecting on this auto-approved call.
+            await asyncio.to_thread(
+                self._dispatch_injection_or_block, flow, sandbox=sandbox, match=match
+            )
             return None
 
         # ASK: resolve the originating session before prompting. An

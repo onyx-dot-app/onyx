@@ -1,6 +1,7 @@
 import base64
 import uuid
-from typing import Any
+from datetime import datetime
+from datetime import timezone
 from urllib.parse import urlencode
 
 import requests
@@ -20,7 +21,9 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
+from onyx.external_apps.providers.base import token_response_error
 from onyx.external_apps.providers.registry import get_provider_or_raise
+from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import OAuthCallbackRequest
 from onyx.server.features.build.api.models import OAuthCallbackResponse
@@ -68,18 +71,6 @@ def _oauth_provider_or_raise(app: ExternalApp) -> OAuthExternalAppProvider:
             f"App '{app.skill.name}' does not use an OAuth flow.",
         )
     return provider
-
-
-def _token_response_is_error(
-    http_response: requests.Response, body: dict[str, Any]
-) -> str | None:
-    """Slack returns 200 + `{"ok": false}` on failure; everyone else
-    uses non-2xx. Returns the error string or None on success."""
-    if http_response.status_code >= 400:
-        return body.get("error_description") or body.get("error") or "unknown"
-    if body.get("ok") is False:
-        return body.get("error") or "unknown"
-    return None
 
 
 class _OAuthStateRecord(BaseModel):
@@ -219,7 +210,7 @@ def handle_external_app_oauth_callback(
             status_code_override=response.status_code,
         )
 
-    error = _token_response_is_error(response, response_data)
+    error = token_response_error(response, response_data)
     if error:
         logger.warning(
             "%s OAuth token exchange failed for user %s, app %d: %s",
@@ -233,7 +224,11 @@ def handle_external_app_oauth_callback(
             f"{app.skill.name} OAuth failed: {error}",
         )
 
-    stored_credentials = provider.extract_credentials(response_data)
+    # Stamp an absolute `expires_at` now so the lazy-refresh path can later
+    # decide staleness without "when was this written" bookkeeping.
+    stored_credentials = stamp_expires_at(
+        provider.extract_credentials(response_data), datetime.now(timezone.utc)
+    )
 
     upsert_external_app_user_credential(
         db_session,
