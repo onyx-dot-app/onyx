@@ -45,6 +45,28 @@ Android: `bunx cap run android` (or open `android/` in Android Studio).
 - Native UX (push, haptics, status bar, keyboard, safe areas) is added via Capacitor plugins
   as the mobile UI is built out.
 
+## CI / release (`.github/workflows/pr-mobile-build.yml`)
+
+- **PR / merge_group** on `mobile/**` → `cap add` + unsigned **iOS simulator build** and
+  **Android debug assemble** (compile checks, both platforms).
+- **Tag `v*.*.*`** (excluding `beta`) → signed iOS archive → **TestFlight upload**.
+
+iOS release uses an **App Store Connect API key** for automatic signing — `xcodebuild`
+creates/manages the distribution cert + provisioning profile itself
+(`-allowProvisioningUpdates`), so nothing to import or store by hand. The key is pulled
+from **AWS Secrets Manager** (`us-east-2`, same store as the desktop release) via OIDC.
+Add these (the release job is inert until they exist):
+
+| Secret                       | What                            |
+| ---------------------------- | ------------------------------- |
+| `deploy/apple-team-id`       | (already exists — reused)       |
+| `deploy/apple-asc-key-id`    | App Store Connect API key id    |
+| `deploy/apple-asc-issuer-id` | App Store Connect API issuer id |
+| `deploy/apple-asc-key-p8`    | base64 of the `.p8` API key     |
+
+Android release (Play Console signing + upload) is a follow-up — needs a Play service
+account + upload keystore.
+
 ## Layout
 
 - `capacitor.config.json` — app id, name, `server.url`, per-platform UA overrides
