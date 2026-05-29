@@ -99,28 +99,25 @@ export default function AppHealthBanner() {
   useEffect(() => {
     if (!user) return;
 
-    const candidates: number[] = [];
+    const expiries: Date[] = [];
     if (
       user.current_token_created_at !== undefined &&
       user.current_token_expiry_length !== undefined
     ) {
-      candidates.push(
-        getSecondsUntilExpiration(
-          user.current_token_created_at,
-          user.current_token_expiry_length
+      expiries.push(
+        new Date(
+          user.current_token_created_at.getTime() +
+            user.current_token_expiry_length * 1000
         )
       );
     }
     if (user.oidc_expiry !== undefined) {
-      candidates.push(
-        Math.max(
-          0,
-          Math.floor((user.oidc_expiry.getTime() - Date.now()) / 1000)
-        )
-      );
+      expiries.push(user.oidc_expiry);
     }
-    if (candidates.length === 0) return;
-    const secondsUntilExpiration = Math.min(...candidates);
+    if (expiries.length === 0) return;
+    const secondsUntilExpiration = Math.min(
+      ...expiries.map(getSecondsUntilExpiration)
+    );
 
     // Set up expiration timeout based on current user data
     setupExpirationTimeout(secondsUntilExpiration);
@@ -161,30 +158,25 @@ export default function AppHealthBanner() {
 
             if (updatedUser) {
               // Reset expiration timeout with new expiration time
-              const newCandidates: number[] = [];
+              const newExpiries: Date[] = [];
               if (
                 updatedUser.current_token_created_at !== undefined &&
                 updatedUser.current_token_expiry_length !== undefined
               ) {
-                newCandidates.push(
-                  getSecondsUntilExpiration(
-                    updatedUser.current_token_created_at,
-                    updatedUser.current_token_expiry_length
+                newExpiries.push(
+                  new Date(
+                    updatedUser.current_token_created_at.getTime() +
+                      updatedUser.current_token_expiry_length * 1000
                   )
                 );
               }
               if (updatedUser.oidc_expiry !== undefined) {
-                newCandidates.push(
-                  Math.max(
-                    0,
-                    Math.floor(
-                      (updatedUser.oidc_expiry.getTime() - Date.now()) / 1000
-                    )
-                  )
-                );
+                newExpiries.push(updatedUser.oidc_expiry);
               }
-              if (newCandidates.length > 0) {
-                const newSecondsUntilExpiration = Math.min(...newCandidates);
+              if (newExpiries.length > 0) {
+                const newSecondsUntilExpiration = Math.min(
+                  ...newExpiries.map(getSecondsUntilExpiration)
+                );
                 setupExpirationTimeout(newSecondsUntilExpiration);
                 console.debug(
                   `Token refreshed, new expiration in ${newSecondsUntilExpiration} seconds`

@@ -211,18 +211,13 @@ export function formatDurationMs(ms: number): string {
 }
 
 /**
- * Returns the number of seconds remaining between now and the expiry derived
- * from `createdAt + durationSeconds`. Clamps to `0` if the deadline has
- * already passed.
+ * Returns the number of seconds remaining until the given expiry `Date`.
+ * Clamps to `0` if the deadline has already passed.
  *
  * @example
- * getSecondsUntilExpiration(new Date(Date.now() - 60_000), 300) // ~240
- * getSecondsUntilExpiration(new Date(Date.now() - 400_000), 300) // 0
+ * getSecondsUntilExpiration(new Date(Date.now() + 240_000)) // ~240
+ * getSecondsUntilExpiration(new Date(Date.now() - 1_000))   // 0
  */
-export function getSecondsUntilExpiration(
-  createdAt: Date,
-  durationSeconds: number
-): number {
-  const expiresAt = new Date(createdAt.getTime() + durationSeconds * 1000);
-  return Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
+export function getSecondsUntilExpiration(expiry: Date): number {
+  return Math.max(0, Math.floor((expiry.getTime() - Date.now()) / 1000));
 }
