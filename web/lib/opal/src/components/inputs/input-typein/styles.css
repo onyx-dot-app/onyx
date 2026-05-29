@@ -21,6 +21,5 @@
 }
 
 .opal-input-field::placeholder {
-  @apply !font-main-ui-muted;
-  color: var(--text-02);
+  @apply font-main-ui-muted text-text-02;
 }
