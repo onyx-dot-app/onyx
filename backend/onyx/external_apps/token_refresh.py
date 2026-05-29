@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from redis.exceptions import RedisError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import DBSessionFactory
@@ -55,15 +56,15 @@ def ensure_fresh_credentials(
     (app reads disconnected), a transient failure keeps the existing token, and
     lock contention yields to the concurrent refresher.
     """
-    # Cheap pre-check: just the staleness decision (one cred read), no provider
-    # or client-cred resolution — those happen under the lock, only when stale.
-    with db_session_factory(tenant_id) as db:
-        stored = _read_stored_credentials(db, external_app_id, user_id)
-    if stored is None or not needs_refresh(stored, datetime.now(timezone.utc)):
-        return
-
     lock_name = f"ea_token_refresh:{tenant_id}:{external_app_id}:{user_id}"
     try:
+        # Cheap pre-check: just the staleness decision (one cred read), no provider
+        # or client-cred resolution — those happen under the lock, only when stale.
+        with db_session_factory(tenant_id) as db:
+            stored = _read_stored_credentials(db, external_app_id, user_id)
+        if stored is None or not needs_refresh(stored, datetime.now(timezone.utc)):
+            return
+
         with redis_shared_lock(
             lock_name,
             max_time_lock_held_s=_LOCK_HELD_S,
@@ -78,13 +79,10 @@ def ensure_fresh_credentials(
             external_app_id,
             user_id,
         )
-    except RedisError as exc:
-        # Redis unreachable (outage, or lite deployments where it's disabled):
-        # a transient infra failure, not a refresh outcome. Keep the existing
-        # token and let the request proceed rather than hard-blocking it (matches
-        # this function's "never raises for a refresh outcome" contract).
+    except (RedisError, SQLAlchemyError) as exc:
+        # Transient infra failure — Keep existing tokens and let requests through
         logger.warning(
-            "ea_token_refresh.redis_unavailable external_app_id=%s user_id=%s error=%s",
+            "ea_token_refresh.infra_unavailable external_app_id=%s user_id=%s error=%s",
             external_app_id,
             user_id,
             exc,
@@ -116,16 +114,17 @@ def _refresh_under_lock(
             exc,
         )
         return
-    except TokenRefreshTerminalError:
+    except TokenRefreshTerminalError as exc:
         # Dead grant: drop the credential so the app reads as disconnected.
         with db_session_factory(tenant_id) as db:
             delete_external_app_user_credential(
                 db, external_app_id=external_app_id, user_id=user_id
             )
         logger.warning(
-            "ea_token_refresh.terminal_cleared external_app_id=%s user_id=%s",
+            "ea_token_refresh.terminal_cleared external_app_id=%s user_id=%s error=%s",
             external_app_id,
             user_id,
+            exc,
         )
         return
 

@@ -160,10 +160,9 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
     # Bounded so a slow token endpoint can't pin the refresh (and the gate).
     refresh_http_timeout_seconds: ClassVar[float] = 20.0
 
-    # Error codes meaning the grant is dead (reconnect). Else: transient.
-    terminal_refresh_errors: ClassVar[frozenset[str]] = frozenset(
-        {"invalid_grant", "invalid_client", "unauthorized_client", "invalid_request"}
-    )
+    # Error codes meaning the grant itself is dead, so the user must reconnect
+    # (RFC 6749 §5.2).
+    terminal_refresh_errors: ClassVar[frozenset[str]] = frozenset({"invalid_grant"})
 
     @abstractmethod
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:

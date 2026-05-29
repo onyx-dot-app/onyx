@@ -32,9 +32,12 @@ def test_stamp_expires_at_does_not_mutate_input() -> None:
     assert "expires_at" not in creds  # built a new dict
 
 
-def test_stamp_expires_at_bad_expires_in_is_passthrough() -> None:
+def test_stamp_expires_at_bad_expires_in_stamps_already_expired() -> None:
+    # A corrupt expiry must not read as a non-expiring token: stamp it as
+    # already-expired so the refresh path heals it on next use.
     stamped = stamp_expires_at({"access_token": "a", "expires_in": "soon"}, _NOW)
-    assert "expires_at" not in stamped
+    assert stamped["expires_at"] == _NOW.isoformat()
+    assert needs_refresh(stamped, _NOW) is True
 
 
 # ---------------------------------------------------------------------------

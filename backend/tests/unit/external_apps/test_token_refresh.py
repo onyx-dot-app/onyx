@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 import requests
 from redis.exceptions import ConnectionError as RedisConnectionError
+from sqlalchemy.exc import SQLAlchemyError
 
 from onyx.external_apps import token_refresh as tr
 from onyx.external_apps.providers.base import TokenRefreshTerminalError
@@ -91,6 +92,21 @@ def test_refresh_missing_refresh_token_is_terminal(
 def test_refresh_invalid_grant_is_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_post(monkeypatch, _response(400, {"error": "invalid_grant"}))
     with pytest.raises(TokenRefreshTerminalError):
+        GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+
+
+@pytest.mark.parametrize(
+    "error_code", ["invalid_client", "unauthorized_client", "invalid_request"]
+)
+def test_refresh_client_and_request_errors_are_transient(
+    monkeypatch: pytest.MonkeyPatch, error_code: str
+) -> None:
+    """Client-config (`invalid_client`/`unauthorized_client`) and malformed-request
+    (`invalid_request`) errors are NOT a dead user grant: they must stay transient
+    so the existing credential is kept, not cleared — re-auth can't fix a
+    misconfigured client, and clearing would force every affected user to reconnect."""
+    _patch_post(monkeypatch, _response(400, {"error": error_code}))
+    with pytest.raises(TokenRefreshTransientError):
         GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
 
 
@@ -346,6 +362,25 @@ def test_ensure_fresh_redis_unavailable_keeps_existing_token(
         raise RedisConnectionError("Error connecting to Redis.")
 
     monkeypatch.setattr(tr, "redis_shared_lock", _boom)
+    _run()  # must not raise
+    spies["refresh"].assert_not_called()
+    spies["upsert"].assert_not_called()
+    spies["delete"].assert_not_called()
+
+
+def test_ensure_fresh_db_error_keeps_existing_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A DB blip during refresh (here, the pre-check read) is a transient infra
+    failure, not a refresh outcome: keep the existing token and return, never
+    raise — a raised error would hard-block the request as a 403 at the
+    credential dispatcher instead of proceeding with the current credential."""
+    spies = _setup(monkeypatch, creds_sequence=[_stale_creds()])
+
+    def _boom(*_a: Any, **_k: Any) -> Any:
+        raise SQLAlchemyError("db connection reset")
+
+    monkeypatch.setattr(tr, "_read_stored_credentials", _boom)
     _run()  # must not raise
     spies["refresh"].assert_not_called()
     spies["upsert"].assert_not_called()

@@ -14,8 +14,14 @@ DEFAULT_REFRESH_SKEW_SECONDS = 120
 
 def stamp_expires_at(credentials: dict[str, Any], now: datetime) -> dict[str, Any]:
     """Return a *new* creds dict with an absolute ``expires_at`` derived from the
-    response's relative ``expires_in`` (unchanged if no ``expires_in`` — "no
-    ``expires_at``" means "never expires").
+    response's relative ``expires_in``.
+
+    A *missing* ``expires_in`` is left unstamped — "no ``expires_at``" means a
+    non-expiring token (e.g. Slack/Linear). A *present-but-unparseable*
+    ``expires_in`` is a corrupt value, not a non-expiring token, so it's stamped
+    as already-expired (``now``): ``needs_refresh`` then treats it as stale and the
+    refresh path heals it, rather than silently never refreshing a token that the
+    provider said *does* expire.
 
     New dict, not a mutation — the input may be a ``SensitiveValue`` cache.
     """
@@ -25,7 +31,9 @@ def stamp_expires_at(credentials: dict[str, Any], now: datetime) -> dict[str, An
     try:
         seconds = int(expires_in)
     except (TypeError, ValueError):
-        return dict(credentials)
+        # Corrupt expiry → stamp as already-expired so it refreshes, rather than
+        # dropping it (which would read downstream as a non-expiring token).
+        seconds = 0
 
     stamped = dict(credentials)
     stamped["expires_at"] = (now + timedelta(seconds=seconds)).isoformat()
