@@ -71,7 +71,10 @@ func TestFindAvailable_errorWhenAllOccupied(t *testing.T) {
 	for i := 0; i < maxRange; i++ {
 		ln, err := net.Listen("tcp", ":"+strconv.Itoa(base+i))
 		if err != nil {
-			t.Fatalf("failed to occupy port %d: %v", base+i, err)
+			// The port is already held by another process. That still
+			// counts as occupied for the purposes of this test, so leave
+			// it be rather than failing.
+			continue
 		}
 		listeners = append(listeners, ln)
 	}
