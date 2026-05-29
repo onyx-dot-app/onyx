@@ -18,14 +18,10 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import type { SubagentState } from "@/app/craft/types/displayTypes";
 
-/** Small live-status glyph + step count shown on the right of a menu row. */
+/** Live-status glyph shown on the right of a menu row. */
 function SubagentStatus({ subagent }: { subagent: SubagentState }) {
-  const stepCount = subagent.turns.reduce(
-    (sum, turn) => sum + turn.toolCalls.length,
-    0
-  );
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center">
       {subagent.status === "running" && (
         <span
           aria-hidden
@@ -38,9 +34,6 @@ function SubagentStatus({ subagent }: { subagent: SubagentState }) {
       {subagent.status === "failed" && (
         <SvgAlertTriangle className="w-3.5 h-3.5 stroke-status-error-05 shrink-0" />
       )}
-      <Text font="figure-small-value" color="text-02" nowrap>
-        {`${stepCount}`}
-      </Text>
     </div>
   );
 }
