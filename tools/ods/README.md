@@ -6,6 +6,10 @@
 `ods` is [onyx.app](https://github.com/onyx-dot-app/onyx)'s devtools utility script.
 It is packaged as a python [wheel](https://packaging.python.org/en/latest/discussions/package-formats/) and available from [PyPI](https://pypi.org/project/onyx-devtools/).
 
+> Looking for task-oriented walkthroughs ("how do I run the backend on the host?",
+> "how do I cherry-pick to a release?") rather than per-command reference? See the
+> [**Cookbook**](./COOKBOOK.md).
+
 ## Installation
 
 A stable version of `ods` is provided in the default [python venv](https://github.com/onyx-dot-app/onyx/blob/main/CONTRIBUTING.md#backend-python-requirements)
