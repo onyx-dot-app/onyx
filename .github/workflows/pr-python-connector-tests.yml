@@ -194,9 +194,14 @@ jobs:
             -e SHAREPOINT_SITE \
             -e BITBUCKET_EMAIL \
             "${PROD_IMAGE}" sleep infinity
+          # --no-config: ignore the workspace pyproject.toml / uv.toml. Running
+          # from /workspace, uv would otherwise pick up [tool.uv]
+          # override-dependencies (unpinned ranges like brotli>=1.2.0,<2.0),
+          # which conflict with --require-hashes. The prod Dockerfile's
+          # identical install avoids this only by running from /tmp.
           docker exec onyx-connector-tests bash -c '
             set -euo pipefail
-            uv pip install --system --no-deps --require-hashes \
+            uv pip install --system --no-config --no-deps --require-hashes \
               -r backend/requirements/default.txt \
               -r backend/requirements/dev.txt
           '
@@ -208,7 +213,7 @@ jobs:
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           docker exec onyx-connector-tests bash -c '
-            uv run --no-project python -m pytest \
+            uv run --no-config --no-project python -m pytest \
               -n 8 \
               --dist loadfile \
               --durations=8 \
@@ -227,7 +232,7 @@ jobs:
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           docker exec onyx-connector-tests bash -c '
-            uv run --no-project python -m pytest \
+            uv run --no-config --no-project python -m pytest \
               -n 8 \
               --dist loadfile \
               --durations=8 \
@@ -242,7 +247,7 @@ jobs:
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           docker exec onyx-connector-tests bash -c '
-            uv run --no-project python -m pytest \
+            uv run --no-config --no-project python -m pytest \
               -n 8 \
               --dist loadfile \
               --durations=8 \
@@ -257,7 +262,7 @@ jobs:
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           docker exec onyx-connector-tests bash -c '
-            uv run --no-project python -m pytest \
+            uv run --no-config --no-project python -m pytest \
               -n 8 \
               --dist loadfile \
               --durations=8 \
