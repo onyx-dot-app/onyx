@@ -25,7 +25,7 @@ import {
   UploadFileStatus,
 } from "@/app/craft/contexts/UploadFilesContext";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Button, Tooltip } from "@opal/components";
+import { Button, Text, Tooltip } from "@opal/components";
 import {
   SvgArrowUp,
   SvgClock,
@@ -103,20 +103,19 @@ function BuildFileCard({
       ) : (
         <SvgFileText className="h-4 w-4 text-text-03" />
       )}
-      <span
-        className={cn(
-          "max-w-[120px] truncate",
-          isFailed && "text-status-error-02"
-        )}
-      >
-        {file.name}
+      <span className="max-w-[120px] truncate">
+        <Text font="main-ui-body" color="text-04" nowrap>
+          {file.name}
+        </Text>
       </span>
-      <button
+      <Button
+        variant="default"
+        prominence="tertiary"
+        size="2xs"
+        icon={SvgX}
         onClick={() => onRemove(file.id)}
-        className="ml-1 p-0.5 hover:bg-background-neutral-02 rounded-sm"
-      >
-        <SvgX className="h-3 w-3 text-text-03" />
-      </button>
+        aria-label={`Remove ${file.name}`}
+      />
     </div>
   );
 

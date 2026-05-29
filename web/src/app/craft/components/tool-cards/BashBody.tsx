@@ -1,55 +1,60 @@
 "use client";
 
-import { useMemo } from "react";
-import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
-import { highlightLineHtml } from "@/app/craft/components/RawOutputBlock";
+import { useCodeHighlighter } from "@/app/craft/hooks/useCodeHighlighter";
+import ToolCardSurface, {
+  ToolCardSection,
+  MONO_STYLE,
+} from "@/app/craft/components/tool-cards/ToolCardSurface";
 import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interfaces";
 
 /**
- * BashBody - command + stdout/stderr, rendered as a code-block surface.
- * The command sits at the top with a "$ " prefix and bash syntax
- * highlighting; the output (if any) sits below in plain text.
+ * BashBody - command + stdout/stderr. The command sits in its own section with
+ * a "$ " prefix and bash highlighting; the output sits in a divided, tinted
+ * section below so the two read as distinct bands. Both use the same 12px
+ * monospace size so the result never looks larger than the command.
  */
 export default function BashBody({ toolCall }: ToolCardBodyProps) {
   const command = toolCall.command;
   const output = toolCall.rawOutput;
-  const commandHtml = useMemo(
-    () => (command ? highlightLineHtml(command, "bash") : null),
-    [command]
-  );
+  const highlight = useCodeHighlighter(!!command);
+  const commandHtml = command && highlight ? highlight(command, "bash") : null;
 
   return (
-    <div
-      className={cn(
-        "rounded-08 border-[0.5px] overflow-hidden px-3 py-2 max-h-[18rem] overflow-y-auto",
-        "bg-background-neutral-01 border-border-01",
-        "whitespace-pre-wrap wrap-break-word hljs"
-      )}
-    >
+    <ToolCardSurface>
       {command && (
-        <p
-          style={{ fontFamily: "var(--font-dm-mono)", fontSize: "12px" }}
-          className="text-text-04"
-        >
-          <span className="select-none text-text-02">{"$ "}</span>
-          {commandHtml ? (
-            <span dangerouslySetInnerHTML={{ __html: commandHtml }} />
-          ) : (
-            command
-          )}
-        </p>
+        <ToolCardSection>
+          <p
+            style={MONO_STYLE}
+            className="text-text-04 whitespace-pre-wrap wrap-break-word hljs"
+          >
+            <span className="select-none text-text-02">{"$ "}</span>
+            {commandHtml ? (
+              <span dangerouslySetInnerHTML={{ __html: commandHtml }} />
+            ) : (
+              command
+            )}
+          </p>
+        </ToolCardSection>
       )}
       {output && (
-        <Text as="p" font="secondary-mono" color="text-03">
-          {output}
-        </Text>
+        <ToolCardSection
+          divider={!!command}
+          tinted={!!command}
+          className="whitespace-pre-wrap wrap-break-word"
+        >
+          <Text as="p" font="secondary-mono" color="text-03">
+            {output}
+          </Text>
+        </ToolCardSection>
       )}
       {!command && !output && (
-        <Text as="p" font="secondary-mono" color="text-03">
-          No output
-        </Text>
+        <ToolCardSection>
+          <Text font="secondary-mono" color="text-03">
+            No output
+          </Text>
+        </ToolCardSection>
       )}
-    </div>
+    </ToolCardSurface>
   );
 }

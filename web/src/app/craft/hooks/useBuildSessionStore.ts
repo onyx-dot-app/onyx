@@ -146,12 +146,19 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
             toolCall: {
               id: packet.toolCallId,
               kind: packet.kind,
+              // toolName/skillName/taskOutput must be carried through here too
+              // (not just the live-stream path) or reloaded sessions lose them:
+              // e.g. a skill card would fall back to "Running skill" and
+              // websearch/webfetch would render as GenericBody.
+              toolName: packet.toolName,
               title: packet.title,
               description: packet.description,
               command: packet.command,
               status: packet.status,
               rawOutput: packet.rawOutput,
               subagentType: packet.subagentType ?? undefined,
+              skillName: packet.skillName ?? undefined,
+              taskOutput: packet.taskOutput ?? undefined,
               isNewFile: packet.isNewFile,
               oldContent: packet.oldContent,
               newContent: packet.newContent,
@@ -480,6 +487,11 @@ export interface BuildSessionData {
   panelTabs: PanelTab[];
   /** Subagents spawned in this session, keyed by child opencode session id. */
   subagents: Map<string, SubagentState>;
+  /**
+   * When non-null, the main (left) column shows this subagent's transcript
+   * in place of the chat. `null` = normal chat view.
+   */
+  viewedSubagentSessionId: string | null;
   /** Active pinned tab in output panel */
   activeOutputTab: OutputTabType;
   /** Active transient panel tab ID (when set, takes precedence over pinned tab) */
@@ -640,8 +652,10 @@ interface BuildSessionStore {
   ) => void;
 
   // Subagent Actions
-  /** Open (or focus) a subagent transcript tab in the output panel. */
-  openSubagentInPanel: (subagentSessionId: string) => void;
+  /** Swap the main column to show a subagent's transcript in place of the chat. */
+  viewSubagent: (sessionId: string, subagentSessionId: string) => void;
+  /** Return the main column to the normal chat (main-agent) view. */
+  returnToMainAgent: (sessionId: string) => void;
   /** Upsert a subagent + one of its tool calls (creates the subagent if absent). */
   recordSubagentToolCall: (
     sessionId: string,
@@ -673,15 +687,6 @@ interface BuildSessionStore {
     subagentSessionId: string,
     status: SubagentStatus,
     response?: string | null
-  ) => void;
-  /**
-   * Start a new follow-up turn: push a fresh turn with the given prompt and
-   * set the subagent's status back to "running".
-   */
-  startSubagentFollowupTurn: (
-    sessionId: string,
-    subagentSessionId: string,
-    prompt: string
   ) => void;
   /** Append streamed response text to the LAST turn's response. */
   appendSubagentResponseChunk: (
@@ -721,6 +726,7 @@ const createInitialSessionData = (
   filesNeedsRefresh: 0,
   panelTabs: [],
   subagents: new Map(),
+  viewedSubagentSessionId: null,
   activeOutputTab: "preview",
   activePanelTabId: null,
   filesTabState: { expandedPaths: [], scrollTop: 0, directoryCache: {} },
@@ -2136,45 +2142,33 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // Subagent Actions
   // ===========================================================================
 
-  openSubagentInPanel: (subagentSessionId: string) => {
+  viewSubagent: (sessionId: string, subagentSessionId: string) => {
     set((state) => {
-      const sessionId = state.currentSessionId;
-      if (!sessionId) return state;
       const session = state.sessions.get(sessionId);
       if (!session) return state;
-
-      const newTab: PanelTab = { kind: "subagent", subagentSessionId };
-      const tabId = panelTabId(newTab);
-
-      // Only ever one subagent tab — clicking a different subagent overwrites
-      // it in place rather than opening a second tab.
-      const existingIdx = session.panelTabs.findIndex(
-        (t) => t.kind === "subagent"
-      );
-      let panelTabs: PanelTab[];
-      if (existingIdx === -1) {
-        panelTabs = [...session.panelTabs, newTab];
-      } else {
-        panelTabs = [...session.panelTabs];
-        panelTabs[existingIdx] = newTab;
-      }
-
-      const { tabHistory } = session;
-      const newEntry: TabHistoryEntry = { type: "panel-tab", tabId };
-      const newEntries = [
-        ...tabHistory.entries.slice(0, tabHistory.currentIndex + 1),
-        newEntry,
-      ];
+      // Guard against viewing a subagent that doesn't exist in this session.
+      if (!session.subagents.has(subagentSessionId)) return state;
 
       const updatedSession: BuildSessionData = {
         ...session,
-        outputPanelOpen: true,
-        panelTabs,
-        activePanelTabId: tabId,
-        tabHistory: {
-          entries: newEntries,
-          currentIndex: newEntries.length - 1,
-        },
+        viewedSubagentSessionId: subagentSessionId,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  returnToMainAgent: (sessionId: string) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+      if (session.viewedSubagentSessionId === null) return state;
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        viewedSubagentSessionId: null,
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -2320,37 +2314,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         status,
         completedAt: Date.now(),
         turns,
-      });
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        subagents,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  startSubagentFollowupTurn: (
-    sessionId: string,
-    subagentSessionId: string,
-    prompt: string
-  ) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const existing = session.subagents.get(subagentSessionId);
-      if (!existing) return state;
-
-      const subagents = new Map(session.subagents);
-      subagents.set(subagentSessionId, {
-        ...existing,
-        status: "running",
-        completedAt: null,
-        turns: [...existing.turns, emptyTurn(prompt)],
       });
 
       const updatedSession: BuildSessionData = {
@@ -2698,5 +2661,30 @@ export const useSubagent = (
     if (!currentSessionId) return null;
     return (
       sessions.get(currentSessionId)?.subagents.get(subagentSessionId) ?? null
+    );
+  });
+
+/**
+ * Subagent currently shown in the main column, or `null` for the normal chat
+ * view. Returns `null` if the referenced subagent no longer exists.
+ */
+export const useViewedSubagentSessionId = (): string | null =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return null;
+    const session = sessions.get(currentSessionId);
+    if (!session) return null;
+    const id = session.viewedSubagentSessionId;
+    if (id === null || !session.subagents.has(id)) return null;
+    return id;
+  });
+
+/** Title of the current session, derived from `sessionHistory`. */
+export const useCurrentSessionTitle = (): string | null =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessionHistory } = state;
+    if (!currentSessionId) return null;
+    return (
+      sessionHistory.find((item) => item.id === currentSessionId)?.title ?? null
     );
   });

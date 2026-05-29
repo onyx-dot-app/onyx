@@ -1,12 +1,14 @@
 "use client";
 
 import { Text } from "@opal/components";
-import { SvgBubbleText, SvgArrowRight } from "@opal/icons";
-import { cn } from "@opal/utils";
+import { SvgCpu, SvgArrowRight } from "@opal/icons";
 import {
   useSubagents,
   useBuildSessionStore,
 } from "@/app/craft/hooks/useBuildSessionStore";
+import ToolCardSurface, {
+  ToolCardSection,
+} from "@/app/craft/components/tool-cards/ToolCardSurface";
 import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interfaces";
 
 /**
@@ -18,9 +20,7 @@ import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interf
  */
 export default function TaskBody({ toolCall }: ToolCardBodyProps) {
   const subagents = useSubagents();
-  const openSubagentInPanel = useBuildSessionStore(
-    (s) => s.openSubagentInPanel
-  );
+  const viewSubagent = useBuildSessionStore((s) => s.viewSubagent);
 
   const subagent =
     Array.from(subagents.values()).find(
@@ -42,7 +42,7 @@ export default function TaskBody({ toolCall }: ToolCardBodyProps) {
   const content = (
     <>
       <div className="flex items-center gap-2">
-        <SvgBubbleText className="w-3.5 h-3.5 stroke-text-03 shrink-0" />
+        <SvgCpu className="w-3.5 h-3.5 stroke-text-03 shrink-0" />
         {label && (
           <Text font="main-ui-action" color="text-04" nowrap>
             {label}
@@ -69,19 +69,29 @@ export default function TaskBody({ toolCall }: ToolCardBodyProps) {
 
   if (subagent) {
     return (
-      <button
-        type="button"
-        onClick={() => openSubagentInPanel(subagent.sessionId)}
-        aria-label="View subagent transcript"
-        className={cn(
-          "px-3 py-1 flex flex-col gap-1 w-full text-left rounded-08",
-          "transition-colors hover:bg-background-tint-01"
-        )}
-      >
-        {content}
-      </button>
+      <ToolCardSurface scroll={false}>
+        <button
+          type="button"
+          onClick={() => {
+            const sessionId = useBuildSessionStore.getState().currentSessionId;
+            if (sessionId) viewSubagent(sessionId, subagent.sessionId);
+          }}
+          aria-label="View subagent transcript"
+          className="w-full text-left transition-colors hover:bg-background-tint-01"
+        >
+          <ToolCardSection className="flex flex-col gap-1">
+            {content}
+          </ToolCardSection>
+        </button>
+      </ToolCardSurface>
     );
   }
 
-  return <div className="px-3 py-1 flex flex-col gap-1">{content}</div>;
+  return (
+    <ToolCardSurface scroll={false}>
+      <ToolCardSection className="flex flex-col gap-1">
+        {content}
+      </ToolCardSection>
+    </ToolCardSurface>
+  );
 }

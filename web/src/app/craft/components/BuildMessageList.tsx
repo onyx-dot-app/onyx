@@ -84,19 +84,16 @@ export default function BuildMessageList({
     // Filtering rules that still apply:
     // - Only the LATEST todo_list is kept (either pinned via extractLatestTodo
     //   or rendered inline at its original position).
-    // - Settled thinking blocks that occur before a later tool_call are dropped
-    //   as pre-tool narration. (Streaming thinkings always pass through.)
-    let lastToolIdx = -1;
+    // - Thinking is ephemeral: the card shows only while the model is actively
+    //   thinking and disappears once that block settles.
     let latestTodoIdx = -1;
     rawItems.forEach((it, idx) => {
-      if (it.type === "tool_call") lastToolIdx = idx;
       if (it.type === "todo_list") latestTodoIdx = idx;
     });
 
     const items = rawItems.filter((it, idx) => {
-      // Drop settled thinking that's followed by a later tool_call (pre-tool
-      // narration that the model has already moved past).
-      if (it.type === "thinking" && !it.isStreaming && lastToolIdx > idx) {
+      // Drop settled thinking entirely — it's only shown live, in progress.
+      if (it.type === "thinking" && !it.isStreaming) {
         return false;
       }
       // Collapse to one todo_list per turn.
@@ -125,7 +122,11 @@ export default function BuildMessageList({
       const item = items[i]!;
 
       if (item.type === "tool_call") {
-        // Roll consecutive tool_calls into a single group.
+        // Roll consecutive tool_calls into a single "Working" group. A run of
+        // one renders as a plain card. Multi-call groups are keyed by their
+        // FIRST call's id so the group is stable as later calls stream in —
+        // appends never remount the group or its sibling cards, and the group
+        // is open-by-default while active so nothing visually collapses.
         const groupTools: ToolCallState[] = [item.toolCall];
         let j = i + 1;
         while (j < items.length && items[j]!.type === "tool_call") {
@@ -135,10 +136,19 @@ export default function BuildMessageList({
           j++;
         }
         if (groupTools.length === 1) {
-          nodes.push(<CraftToolCard key={item.id} toolCall={item.toolCall} />);
-        } else {
           nodes.push(
-            <CraftToolGroup key={`group-${item.id}`} toolCalls={groupTools} />
+            <CraftToolCard key={item.toolCall.id} toolCall={item.toolCall} />
+          );
+        } else {
+          const followedByMessage = items
+            .slice(j)
+            .some((it) => it.type === "text");
+          nodes.push(
+            <CraftToolGroup
+              key={`group-${groupTools[0]!.id}`}
+              toolCalls={groupTools}
+              autoCollapse={followedByMessage}
+            />
           );
         }
         i = j;
@@ -252,7 +262,7 @@ export default function BuildMessageList({
 
   return (
     <div className="flex flex-col items-center px-4 pb-4">
-      <div className="w-full max-w-2xl rounded-16 p-4">
+      <div className="w-full max-w-[720px] rounded-16 p-4">
         {messages.map((message, idx) => {
           if (message.type === "user") {
             return <UserMessage key={message.id} content={message.content} />;

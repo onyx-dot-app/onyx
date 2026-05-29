@@ -347,6 +347,9 @@ const MemoizedBuildSidebarInner = memo(
     const refreshSessionHistory = useBuildSessionStore(
       (state) => state.refreshSessionHistory
     );
+    const returnToMainAgent = useBuildSessionStore(
+      (state) => state.returnToMainAgent
+    );
     const { limits, isEnabled } = useUsageLimits();
 
     // Fetch session history on mount
@@ -370,11 +373,14 @@ const MemoizedBuildSidebarInner = memo(
 
     const handleLoadSession = useCallback(
       (sessionId: string) => {
+        // Clicking a session in the sidebar always lands on the main-agent view
+        // (one click back from any subagent transcript you were viewing).
+        returnToMainAgent(sessionId);
         router.push(
           `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${sessionId}`
         );
       },
-      [router]
+      [router, returnToMainAgent]
     );
 
     const newBuildButton = useMemo(

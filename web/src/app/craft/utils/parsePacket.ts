@@ -278,9 +278,11 @@ function buildDescription(
   ri: Record<string, unknown> | null,
   rawDescription: string
 ): string {
-  // Task tool: use description from rawInput
+  // Task tool: spawns a subagent. Read as "Spawning subagent: <description>".
   if (toolName === "task") {
-    return rawDescription || "Running subagent";
+    return rawDescription
+      ? `Spawning subagent: ${rawDescription}`
+      : "Spawning subagent";
   }
   // Read/edit: show file path. For new-file writes, append a line count
   // so the row reads "Writing  src/app/page.tsx (42 lines)" — useful when
@@ -593,9 +595,14 @@ function parseToolCallProgress(
     | null;
 
   // ── Skill detection ───────────────────────────────────────────
-  // Skill-namespaced tool calls arrive with raw names like
-  // "skills.brainstorming" or "superpowers:test-driven-development".
-  const skillName = detectSkillName(p, toolName);
+  // Two shapes: (1) skill-namespaced tool calls with raw names like
+  // "skills.brainstorming" (toolName "unknown"); (2) the dedicated "skill"
+  // tool, whose invoked skill is in rawInput.name (e.g. "company-search").
+  const skillName =
+    detectSkillName(p, toolName) ??
+    (toolName === "skill" && typeof ri?.name === "string"
+      ? (ri.name as string)
+      : null);
   const taskOutput =
     toolName === "task" && status === "completed"
       ? extractTaskOutput(ro)

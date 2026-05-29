@@ -13,7 +13,6 @@ import {
   usePreProvisionedSessionId,
   useIsPreProvisioning,
   useTabHistory,
-  useSubagents,
   OutputTabType,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { type PanelTab, panelTabId } from "@/app/craft/types/displayTypes";
@@ -25,23 +24,37 @@ import {
 import { getFileIcon } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
-import {
-  SvgGlobe,
-  SvgHardDrive,
-  SvgFiles,
-  SvgX,
-  SvgBubbleText,
-} from "@opal/icons";
+import { SvgGlobe, SvgHardDrive, SvgFiles, SvgX } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import CraftingLoader from "@/app/craft/components/CraftingLoader";
 
-// Output panel sub-components
+// Output panel sub-components. UrlBar is the always-visible chrome and stays
+// static; the heavy tab bodies (preview iframe, file browser, artifact list,
+// and the file preview → markdown/pdf/pptx viewers) are dynamically imported
+// so they're split out of the first-load bundle and only fetched when the
+// panel opens.
+import dynamic from "next/dynamic";
 import UrlBar from "@/app/craft/components/output-panel/UrlBar";
-import PreviewTab from "@/app/craft/components/output-panel/PreviewTab";
-import { FilePreviewContent } from "@/app/craft/components/output-panel/FilePreviewContent";
-import FilesTab from "@/app/craft/components/output-panel/FilesTab";
-import ArtifactsTab from "@/app/craft/components/output-panel/ArtifactsTab";
-import SubagentTab from "@/app/craft/components/output-panel/SubagentTab";
+
+const PreviewTab = dynamic(
+  () => import("@/app/craft/components/output-panel/PreviewTab"),
+  { ssr: false }
+);
+const FilesTab = dynamic(
+  () => import("@/app/craft/components/output-panel/FilesTab"),
+  { ssr: false }
+);
+const ArtifactsTab = dynamic(
+  () => import("@/app/craft/components/output-panel/ArtifactsTab"),
+  { ssr: false }
+);
+const FilePreviewContent = dynamic(
+  () =>
+    import("@/app/craft/components/output-panel/FilePreviewContent").then(
+      (m) => m.FilePreviewContent
+    ),
+  { ssr: false }
+);
 
 type TabValue = OutputTabType;
 
@@ -74,7 +87,6 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   const activeOutputTab = useActiveOutputTab();
   const activePanelTabId = useActivePanelTabId();
   const panelTabs = usePanelTabs();
-  const subagents = useSubagents();
 
   // Store actions
   const setActiveOutputTab = useBuildSessionStore(
@@ -518,66 +530,6 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                     </button>
                   );
                 }
-                case "subagent": {
-                  const subagent = subagents.get(tab.subagentSessionId);
-                  const name = subagent?.name || "subagent";
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => handlePanelTabClick(id)}
-                      className={cn(
-                        "group relative inline-flex items-center justify-center gap-1.5 px-3 pr-2 py-1.5 rounded-t-lg",
-                        "max-w-[150px] min-w-fit",
-                        isActive
-                          ? "bg-background-neutral-00 text-text-04 z-10"
-                          : "text-text-03 bg-transparent hover:bg-background-tint-02"
-                      )}
-                    >
-                      {isActive && (
-                        <div
-                          className="absolute -left-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
-                          style={{
-                            maskImage:
-                              "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
-                            WebkitMaskImage:
-                              "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
-                          }}
-                        />
-                      )}
-                      <SvgBubbleText
-                        size={14}
-                        className={cn(
-                          "stroke-current shrink-0",
-                          isActive ? "stroke-text-04" : "stroke-text-03"
-                        )}
-                      />
-                      <Text className="truncate text-sm">{name}</Text>
-                      <button
-                        onClick={(e) => handlePanelTabClose(e, tab)}
-                        className={cn(
-                          "shrink-0 p-0.5 rounded-sm hover:bg-background-tint-03 transition-colors",
-                          isActive
-                            ? "opacity-100"
-                            : "opacity-0 group-hover:opacity-100"
-                        )}
-                        aria-label={`Close ${name}`}
-                      >
-                        <SvgX size={12} className="stroke-text-03" />
-                      </button>
-                      {isActive && (
-                        <div
-                          className="absolute -right-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
-                          style={{
-                            maskImage:
-                              "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
-                            WebkitMaskImage:
-                              "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
-                          }}
-                        />
-                      )}
-                    </button>
-                  );
-                }
               }
             })}
           </div>
@@ -589,23 +541,21 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
       {/* URL Bar - Chrome-style */}
       <UrlBar
         displayUrl={
-          activePanel?.kind === "subagent"
-            ? "subagents://"
-            : isFilePreviewActive && activeFilePath
-              ? `sandbox://${activeFilePath}`
-              : activeOutputTab === "preview"
+          isFilePreviewActive && activeFilePath
+            ? `sandbox://${activeFilePath}`
+            : activeOutputTab === "preview"
+              ? session
+                ? displayUrl || "Loading..."
+                : "no-active-sandbox://"
+              : activeOutputTab === "files"
                 ? session
-                  ? displayUrl || "Loading..."
-                  : "no-active-sandbox://"
-                : activeOutputTab === "files"
-                  ? session
-                    ? "sandbox://"
-                    : preProvisionedSessionId
-                      ? "pre-provisioned-sandbox://"
-                      : isPreProvisioning
-                        ? "provisioning-sandbox://..."
-                        : "no-sandbox://"
-                  : "artifacts://"
+                  ? "sandbox://"
+                  : preProvisionedSessionId
+                    ? "pre-provisioned-sandbox://"
+                    : isPreProvisioning
+                      ? "provisioning-sandbox://..."
+                      : "no-sandbox://"
+                : "artifacts://"
         }
         showNavigation={true}
         canGoBack={canGoBack}
@@ -656,9 +606,6 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             filePath={activePanel.path}
             refreshKey={filePreviewRefreshKey}
           />
-        )}
-        {isFilePreviewActive && activePanel?.kind === "subagent" && (
-          <SubagentTab subagentSessionId={activePanel.subagentSessionId} />
         )}
         {/* Pinned tab content - only show when no file preview is active */}
         {!isFilePreviewActive && (

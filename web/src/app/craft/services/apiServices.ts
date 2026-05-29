@@ -346,37 +346,6 @@ export async function sendMessageStream(
   return res;
 }
 
-/**
- * Send a follow-up message to a subagent and return the streaming response.
- * Resumes the subagent's child opencode session. The caller is responsible for
- * processing the SSE stream.
- */
-export async function sendSubagentMessageStream(
-  sessionId: string,
-  subagentSessionId: string,
-  content: string,
-  signal?: AbortSignal
-): Promise<Response> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/subagents/${subagentSessionId}/send-message`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
-      signal,
-    }
-  );
-
-  if (!res.ok) {
-    if (res.status === 429) {
-      throw new RateLimitError();
-    }
-    throw new Error(`Failed to send subagent message: ${res.status}`);
-  }
-
-  return res;
-}
-
 // =============================================================================
 // Artifacts API
 // =============================================================================

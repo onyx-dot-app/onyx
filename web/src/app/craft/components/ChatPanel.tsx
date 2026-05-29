@@ -15,6 +15,7 @@ import {
   useIsPreProvisioningFailed,
   usePreProvisionedSessionId,
   useQueuedMessages,
+  useViewedSubagentSessionId,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
@@ -32,7 +33,8 @@ import ScheduledRunBanner from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsRegion";
-import AgentStrip from "@/app/craft/components/AgentStrip";
+import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
+import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -69,6 +71,10 @@ export default function BuildChatPanel({
   const { setLeftSidebarFolded, leftSidebarFolded } = useBuildContext();
   const { isMobile } = useScreenSize();
   const toggleOutputPanel = useToggleOutputPanel();
+
+  // Main-column view mode: chat (main agent) vs a subagent transcript.
+  const viewedSubagentSessionId = useViewedSubagentSessionId();
+  const isViewingSubagent = viewedSubagentSessionId !== null;
 
   const { limits, refreshLimits } = useUsageLimits();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -426,28 +432,34 @@ export default function BuildChatPanel({
                 size="sm"
               />
             )}
-            <SandboxStatusIndicator />
+            <AgentSwitcher />
             <ScheduledRunBanner
               sessionId={sessionId ?? existingSessionId ?? null}
             />
           </div>
-          {/* Output panel toggle — same icon for open and close */}
-          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-          <IconButton
-            icon={SvgSidebar}
-            onClick={toggleOutputPanel}
-            tooltip={
-              outputPanelOpen ? "Close output panel" : "Open output panel"
-            }
-            tertiary
-            className={cn(
-              "border rounded-full p-2.5!",
-              outputPanelOpen
-                ? "bg-background-tint-02!"
-                : "bg-background-tint-00!"
-            )}
-            iconClassName="stroke-text-04! h-5! w-5!"
-          />
+          {/* Right cluster: sandbox status sits left of the panel toggle. The
+              toggle stays pinned to the right edge, so the status chip's width
+              changes grow leftward into empty space without shifting anything. */}
+          <div className="flex flex-row items-center gap-2 shrink-0">
+            <SandboxStatusIndicator />
+            {/* Output panel toggle — same icon for open and close */}
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
+            <IconButton
+              icon={SvgSidebar}
+              onClick={toggleOutputPanel}
+              tooltip={
+                outputPanelOpen ? "Close output panel" : "Open output panel"
+              }
+              tertiary
+              className={cn(
+                "border rounded-full p-2.5!",
+                outputPanelOpen
+                  ? "bg-background-tint-02!"
+                  : "bg-background-tint-00!"
+              )}
+              iconClassName="stroke-text-04! h-5! w-5!"
+            />
+          </div>
           {/* Soft fade border at bottom */}
           <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
         </div>
@@ -460,7 +472,9 @@ export default function BuildChatPanel({
           // the column past the page bounds.
           className="flex-1 min-h-0 overflow-auto"
         >
-          {!hasSession && !existingSessionId ? (
+          {isViewingSubagent && viewedSubagentSessionId ? (
+            <SubagentView subagentSessionId={viewedSubagentSessionId} />
+          ) : !hasSession && !existingSessionId ? (
             <BuildWelcome
               onSubmit={handleSubmit}
               isRunning={isRunning}
@@ -487,7 +501,7 @@ export default function BuildChatPanel({
           <div className="px-4 pb-8 pt-4 relative">
             {/* Soft fade border at top */}
             <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
-            <div className="max-w-2xl mx-auto">
+            <div className="max-w-[720px] mx-auto">
               {/* Scroll to bottom button - shown when user has scrolled away */}
               {showScrollButton && (
                 <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
@@ -512,12 +526,18 @@ export default function BuildChatPanel({
                   </Tooltip>
                 </div>
               )}
-              <AgentStrip />
+              {/* The composer stays in view for subagents (layout consistency)
+                  but is disabled — replying to subagents is not supported. */}
               <InputBar
                 ref={inputBarRef}
                 onSubmit={handleSubmit}
                 isRunning={isRunning}
-                placeholder="Continue the conversation..."
+                disabled={isViewingSubagent}
+                placeholder={
+                  isViewingSubagent
+                    ? "Switch to the main agent to send a message"
+                    : "Continue the conversation..."
+                }
                 queuedMessages={queuedMessages}
                 onQueueMessage={handleQueueMessage}
                 onRemoveQueuedMessage={handleRemoveQueuedMessage}

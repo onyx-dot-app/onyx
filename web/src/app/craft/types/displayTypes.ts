@@ -102,15 +102,14 @@ export type StreamItem =
  *
  * Pinned tabs (Preview, Files, Artifacts) are handled separately via the
  * existing `OutputTabType` — they are not represented in `PanelTab`. Only
- * tabs that the user opens and closes dynamically (file viewers, subagent
- * transcripts, etc.) live here.
+ * tabs that the user opens and closes dynamically (file viewers, etc.) live
+ * here. Subagent transcripts are NOT panel tabs — they swap the main chat
+ * column in place (see `viewedSubagentSessionId` in the store).
  *
  * Future view kinds: add a new variant here, render its chrome in
  * `OutputPanel.tsx`'s tab-row map, and its body in the panel body switch.
  */
-export type PanelTab =
-  | { kind: "file"; path: string; fileName: string }
-  | { kind: "subagent"; subagentSessionId: string };
+export type PanelTab = { kind: "file"; path: string; fileName: string };
 
 /**
  * Stable string ID for a `PanelTab`, namespaced by kind. Used as the value
@@ -122,10 +121,8 @@ export function panelTabId(tab: PanelTab): string {
   switch (tab.kind) {
     case "file":
       return `file:${tab.path}`;
-    case "subagent":
-      return `subagent:${tab.subagentSessionId}`;
     default: {
-      const _exhaustive: never = tab;
+      const _exhaustive: never = tab.kind;
       throw new Error(`Unknown PanelTab kind: ${String(_exhaustive)}`);
     }
   }
