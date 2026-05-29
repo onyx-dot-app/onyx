@@ -114,7 +114,7 @@ def create_pat(
         pat_type=pat_type,
     )
     db_session.add(pat)
-    db_session.flush()
+    db_session.commit()  # Add this line to commit the session
 
     return pat, raw_token
 
