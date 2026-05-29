@@ -44,6 +44,7 @@ import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
 import { Tooltip } from "@opal/components";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
@@ -75,6 +76,7 @@ export default function BuildChatPanel({
   // Main-column view mode: chat (main agent) vs a subagent transcript.
   const viewedSubagentSessionId = useViewedSubagentSessionId();
   const isViewingSubagent = viewedSubagentSessionId !== null;
+  const reduceMotion = useReducedMotion();
 
   const { limits, refreshLimits } = useUsageLimits();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -464,7 +466,8 @@ export default function BuildChatPanel({
           <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
         </div>
 
-        {/* Main content area */}
+        {/* Main content area — cross-fades when switching between the main
+            agent and a subagent (keyed by the viewed agent). */}
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
@@ -472,28 +475,38 @@ export default function BuildChatPanel({
           // the column past the page bounds.
           className="flex-1 min-h-0 overflow-auto"
         >
-          {isViewingSubagent && viewedSubagentSessionId ? (
-            <SubagentView subagentSessionId={viewedSubagentSessionId} />
-          ) : !hasSession && !existingSessionId ? (
-            <BuildWelcome
-              onSubmit={handleSubmit}
-              isRunning={isRunning}
-              sandboxInitializing={sandboxNotReady}
-            />
-          ) : (
-            <BuildMessageList
-              messages={session?.messages ?? []}
-              streamItems={session?.streamItems ?? []}
-              isStreaming={isRunning}
-              autoScrollEnabled={isAtBottom}
-              scrollContainerRef={scrollContainerRef}
-              trailingAssistantSlot={
-                <LiveApprovalsRegion
-                  sessionId={sessionId ?? existingSessionId ?? null}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={viewedSubagentSessionId ?? "main"}
+              initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
+              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {isViewingSubagent && viewedSubagentSessionId ? (
+                <SubagentView subagentSessionId={viewedSubagentSessionId} />
+              ) : !hasSession && !existingSessionId ? (
+                <BuildWelcome
+                  onSubmit={handleSubmit}
+                  isRunning={isRunning}
+                  sandboxInitializing={sandboxNotReady}
                 />
-              }
-            />
-          )}
+              ) : (
+                <BuildMessageList
+                  messages={session?.messages ?? []}
+                  streamItems={session?.streamItems ?? []}
+                  isStreaming={isRunning}
+                  autoScrollEnabled={isAtBottom}
+                  scrollContainerRef={scrollContainerRef}
+                  trailingAssistantSlot={
+                    <LiveApprovalsRegion
+                      sessionId={sessionId ?? existingSessionId ?? null}
+                    />
+                  }
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
         {/* Input bar at bottom when session exists. */}

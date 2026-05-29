@@ -52,12 +52,13 @@ export default function TaskBody({ toolCall }: ToolCardBodyProps) {
       aria-label={subagent ? `View subagent: ${label}` : label}
       className={cn(
         "group/task flex w-full items-center gap-2 rounded-08 px-3 py-2 text-left",
-        "border border-action-link-02 bg-action-link-01",
         subagent
-          ? "cursor-pointer transition-colors hover:bg-action-link-02"
+          ? "cursor-pointer transition-colors hover:bg-background-tint-02"
           : "cursor-default"
       )}
     >
+      {/* The accent cpu icon is the one spot of color — it marks this row as a
+          delegated subagent you can open, without washing the whole surface. */}
       <SvgCpu className="w-4 h-4 stroke-action-link-05 shrink-0" />
       <span className="min-w-0 flex-1 truncate">
         <Text font="main-ui-action" color="text-04" nowrap>
@@ -74,7 +75,7 @@ export default function TaskBody({ toolCall }: ToolCardBodyProps) {
         <SvgAlertTriangle className="w-4 h-4 stroke-status-error-05 shrink-0" />
       )}
       {subagent && (
-        <SvgArrowRight className="w-4 h-4 stroke-action-link-05 shrink-0 opacity-0 transition-opacity group-hover/task:opacity-100" />
+        <SvgArrowRight className="w-4 h-4 stroke-text-03 shrink-0 -translate-x-1 opacity-0 transition-all group-hover/task:translate-x-0 group-hover/task:opacity-100" />
       )}
     </button>
   );
