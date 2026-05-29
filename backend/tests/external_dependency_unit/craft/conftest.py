@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from kubernetes import client as k8s_client_module
 from redis import Redis
 from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.orm import class_mapper
 from sqlalchemy.orm import Session
 
@@ -169,6 +170,9 @@ def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
         try:
             with get_session_with_current_tenant() as session:
+                # Fail fast instead of hanging if another (uncommitted) test
+                # session still holds locks on these rows.
+                session.execute(text("SET lock_timeout = '10s'"))
                 for row_id in ids:
                     row = session.get(model, row_id)
                     if row is not None:
@@ -189,6 +193,7 @@ def _best_effort_delete_memberships(group_ids: list[int]) -> None:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
         try:
             with get_session_with_current_tenant() as session:
+                session.execute(text("SET lock_timeout = '10s'"))
                 session.query(User__UserGroup).filter(
                     User__UserGroup.user_group_id.in_(group_ids)
                 ).delete(synchronize_session=False)
@@ -246,7 +251,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                         api_key_changed=True,
                         model_configurations=[
                             ModelConfigurationUpsertRequest(
-                                name="gpt-4o-mini", is_visible=True
+                                name="gpt-5-mini", is_visible=True
                             )
                         ],
                     ),
@@ -254,7 +259,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                 )
                 update_default_provider(
                     provider_id=provider.id,
-                    model_name="gpt-4o-mini",
+                    model_name="gpt-5-mini",
                     db_session=session,
                 )
                 session.commit()
@@ -311,6 +316,11 @@ def test_user(
     db_session.commit()
     db_session.refresh(user)
     yield user
+    # Release any uncommitted locks the test left on this session (e.g. an
+    # ensure_sandbox_pat flush without commit) before the separate-session
+    # delete below — otherwise its DELETE deadlocks on rows that cascade from
+    # this user, since db_session (the lock holder) only tears down later (LIFO).
+    db_session.rollback()
     _best_effort_delete(User, [user.id])
 
 

@@ -136,6 +136,10 @@ class StubSandboxManager(SandboxManager):
         self.get_upload_stats_returns: tuple[int, int] | None = None
         self.get_webapp_url_returns: str | None = None
         self.generate_pptx_preview_returns: tuple[list[str], bool] | None = None
+        # Preflight session id. Defaulted (not _not_configured) so send_message
+        # tests don't each have to wire it; the real _ServeMixin override POSTs
+        # /session over HTTP, which has no pod to reach under the stub.
+        self.ensure_opencode_session_returns: str | None = "stub-opencode-session"
 
         # Silent no-op opt-ins for methods that legitimately return None.
         self.terminate_silent: bool = False
@@ -164,6 +168,8 @@ class StubSandboxManager(SandboxManager):
         self.list_session_workspaces_returns: list[UUID] | None = None
         self.last_list_session_workspaces_payload: dict[str, Any] | None = None
         self.health_check_count: int = 0
+        self.ensure_opencode_session_count: int = 0
+        self.last_ensure_opencode_session_payload: dict[str, Any] | None = None
         self.send_message_count: int = 0
         self.list_directory_count: int = 0
         self.read_file_count: int = 0
@@ -346,6 +352,20 @@ class StubSandboxManager(SandboxManager):
         if self.health_check_returns is None:
             raise _not_configured("health_check")
         return self.health_check_returns
+
+    def ensure_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> str | None:
+        # Override the real _ServeMixin preflight (which POSTs /session over
+        # HTTP to a pod) so send_message tests run fully in-memory.
+        self.ensure_opencode_session_count += 1
+        self.last_ensure_opencode_session_payload = {
+            "sandbox_id": sandbox_id,
+            "session_id": session_id,
+        }
+        return self.ensure_opencode_session_returns
 
     def send_message(
         self,

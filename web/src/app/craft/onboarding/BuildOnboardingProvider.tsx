@@ -41,20 +41,18 @@ export function BuildOnboardingProvider({
     );
   }
 
-  // Non-admin users with no LLM providers cannot use Craft
-  // Don't show modal while loading to prevent flash
+  // Non-admins can't configure providers, so block them when none of the
+  // supported providers is accessible.
   const showNoProvidersModal =
     !controller.isLoading && !controller.isAdmin && !controller.hasAnyProvider;
 
   return (
     <OnboardingContext.Provider value={controller}>
-      {/* Block non-admin users when no LLM providers are configured */}
       <NoLlmProvidersModal
         open={showNoProvidersModal}
         onClose={() => router.push("/app")}
       />
 
-      {/* Unified onboarding modal - only show if not blocked by no providers */}
       {!showNoProvidersModal && (
         <BuildOnboardingModal
           mode={controller.mode}
@@ -62,7 +60,6 @@ export function BuildOnboardingProvider({
           initialValues={controller.initialValues}
           isAdmin={controller.isAdmin}
           hasUserInfo={controller.hasUserInfo}
-          allProvidersConfigured={controller.allProvidersConfigured}
           hasAnyProvider={controller.hasAnyProvider}
           onComplete={controller.completeUserInfo}
           onLlmComplete={controller.completeLlmSetup}
@@ -70,7 +67,6 @@ export function BuildOnboardingProvider({
         />
       )}
 
-      {/* Build content - always rendered, modals overlay it */}
       {children}
     </OnboardingContext.Provider>
   );

@@ -16,10 +16,15 @@ import {
   Button,
   Card,
   Divider,
+  InputTypeIn,
   LinkButton,
   MessageCard,
   OpenButton,
+  Popover,
   SelectCard,
+  Spacer,
+  Switch,
+  Tabs,
   Text,
 } from "@opal/components";
 import {
@@ -38,9 +43,7 @@ import {
   SvgUnplug,
   SvgVector,
 } from "@opal/icons";
-import { Switch } from "@opal/components";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -63,7 +66,6 @@ import {
   MAX_IMAGE_SIZE_OPTIONS,
   resolveProviderName,
 } from "@/lib/indexing";
-import Tabs from "@/refresh-components/Tabs";
 import {
   saveAdminSettings,
   cancelNewEmbedding,
@@ -83,9 +85,7 @@ import {
   useSecondarySearchSettings,
 } from "@/hooks/useSearchSettings";
 import { useLlmDefaults } from "@/hooks/useLanguageModels";
-import { Spacer } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
-import { Popover } from "@opal/components";
 import ModelListContent from "@/refresh-components/popovers/ModelListContent";
 import type { LLMOption } from "@/refresh-components/popovers/interfaces";
 import type { RichStr } from "@opal/types";
@@ -1128,6 +1128,7 @@ export default function IndexSettingsPage() {
                           <Tabs
                             value={activeModelTab}
                             onValueChange={setActiveModelTab}
+                            variant="underline"
                           >
                             <Card
                               expandable

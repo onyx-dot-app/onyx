@@ -7,11 +7,16 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { InputTypeIn } from "@opal/components";
+import {
+  Button,
+  CopyButton,
+  Divider,
+  InputTypeIn,
+  MessageCard,
+  Tabs,
+} from "@opal/components";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { Button, Divider, MessageCard } from "@opal/components";
 import { markdown } from "@opal/utils";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
@@ -24,7 +29,6 @@ import {
   MCPServer,
   MCPServersResponse,
 } from "@/lib/tools/interfaces";
-import Tabs from "@/refresh-components/Tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import { toast } from "@/hooks/useToast";
@@ -570,7 +574,7 @@ export default function MCPAuthenticationModal({
                           >
                             {redirectUri}
                           </Text>
-                          <CopyIconButton
+                          <CopyButton
                             getCopyText={() => redirectUri}
                             tooltip="Copy redirect URI"
                             prominence="tertiary"

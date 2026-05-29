@@ -68,7 +68,7 @@ class TestProvisionTransitions:
             user=test_user,
             user_id=test_user.id,
             tenant_id=TEST_TENANT_ID,
-            llm_config=default_llm_config(),
+            all_llm_configs=[default_llm_config()],
         )
         db_session.commit()
         db_session.refresh(sandbox)
@@ -100,7 +100,7 @@ class TestProvisionFailureRollback:
                 user=test_user,
                 user_id=test_user.id,
                 tenant_id=TEST_TENANT_ID,
-                llm_config=default_llm_config(),
+                all_llm_configs=[default_llm_config()],
             )
 
         # The endpoint's exception handler rolls back. Simulate that here.

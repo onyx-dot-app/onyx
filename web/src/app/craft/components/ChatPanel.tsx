@@ -30,6 +30,7 @@ import InputBar, { InputBarHandle } from "@/app/craft/components/InputBar";
 import ScheduledRunBanner from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
+import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsRegion";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -403,6 +404,11 @@ export default function BuildChatPanel({
               streamItems={session?.streamItems ?? []}
               isStreaming={isRunning}
               autoScrollEnabled={isAtBottom}
+              trailingAssistantSlot={
+                <LiveApprovalsRegion
+                  sessionId={sessionId ?? existingSessionId ?? null}
+                />
+              }
             />
           )}
         </div>

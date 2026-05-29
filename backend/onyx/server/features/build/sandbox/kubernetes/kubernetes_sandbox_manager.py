@@ -2077,6 +2077,17 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             password=self._read_opencode_password(sandbox_id),
         )
 
+    def _serve_health_check_base_url(self, sandbox_id: UUID) -> str | None:
+        """Probe the pod IP, not the Service FQDN ``base_url`` — an
+        out-of-cluster caller (CI test process) can't resolve cluster DNS.
+        ``None`` falls back to ``base_url`` until the IP is assigned."""
+        pod_name = self._get_pod_name(str(sandbox_id))
+        try:
+            pod_ip = self._get_pod_ip(pod_name)
+        except (FatalWriteError, RetriableWriteError):
+            return None
+        return f"http://{pod_ip}:{OPENCODE_SERVE_PORT}"
+
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
     ) -> list[FilesystemEntry]:

@@ -5,45 +5,6 @@
 import { formatDistanceToNowStrict, formatRelative } from "date-fns";
 import type { ScheduledRunSummary } from "@/app/craft/v1/tasks/interfaces";
 
-export function getBrowserTimezone(): string {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return tz || "UTC";
-  } catch {
-    return "UTC";
-  }
-}
-
-export function getCommonTimezones(): string[] {
-  // Use ``supportedValuesOf`` when available; fall back to a curated list.
-  type ExtendedIntl = typeof Intl & {
-    supportedValuesOf?: (key: string) => string[];
-  };
-  const ext = Intl as ExtendedIntl;
-  if (typeof ext.supportedValuesOf === "function") {
-    try {
-      const all = ext.supportedValuesOf("timeZone");
-      if (Array.isArray(all) && all.length > 0) return all;
-    } catch {
-      // fall through
-    }
-  }
-  return [
-    "UTC",
-    "America/Los_Angeles",
-    "America/Denver",
-    "America/Chicago",
-    "America/New_York",
-    "Europe/London",
-    "Europe/Berlin",
-    "Europe/Paris",
-    "Asia/Kolkata",
-    "Asia/Singapore",
-    "Asia/Tokyo",
-    "Australia/Sydney",
-  ];
-}
-
 export function formatRelativeShort(isoOrDate: string | Date | null): string {
   if (!isoOrDate) return "—";
   const date = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;

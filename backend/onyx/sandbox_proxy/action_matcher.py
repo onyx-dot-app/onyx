@@ -5,34 +5,25 @@ The gate addon treats both a `None` return and any matcher exception as
 lockdown, not this heuristic.
 """
 
+import dataclasses
 import json
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
 from typing import Any
 from typing import Protocol
 from urllib.parse import parse_qs
 
 from mitmproxy import http
 
-from onyx.db.enums import EndpointPolicy
 from onyx.db.external_app import get_external_apps
 from onyx.db.models import ExternalApp
+from onyx.external_apps.matching.engine import ActionMatch
 from onyx.external_apps.matching.engine import match_action
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-@dataclass(frozen=True)
-class ActionMatch:
-    action_type: str
-    payload: dict[str, Any]
-    policy: EndpointPolicy
-    # The connected app the request resolved to — for the gate's credential seam.
-    external_app_id: int
 
 
 class ActionMatcher(Protocol):
@@ -90,26 +81,22 @@ class ExternalAppActionMatcher:
                 path=(request.path or "").split("?", 1)[0],
                 body=request.raw_content,
             )
-            policy = match_action(db, app, proxied)
-            if policy is None:
+            matched = match_action(db, app, proxied)
+            if matched is None:
                 return None
+            # Hold a reference so the dataclasses.replace below can run
+            # outside the session; ActionMatch is frozen + the loaded
+            # fields (action_type, policy, external_app_id) are all
+            # session-detached primitives.
 
-            # `match_action` returns only the verdict, so the recorded action is
-            # the owning app (its app_type). Read the loaded columns inside the
-            # session so they're safe to use after it closes.
-            action_type = app.app_type.value
-            external_app_id = app.id
-
+        # Engine returns ActionMatch with empty payload — body decoding
+        # is the caller's job because it owns the raw content +
+        # content-type pair. Replace once we've decoded.
         payload = _decode_body(
             request.raw_content or b"",
             (request.headers.get("content-type") or "").lower(),
         )
-        return ActionMatch(
-            action_type=action_type,
-            external_app_id=external_app_id,
-            payload=payload or {},
-            policy=policy,
-        )
+        return dataclasses.replace(matched, payload=payload or {})
 
 
 def _decode_body(body: bytes, content_type: str) -> dict[str, Any] | None:

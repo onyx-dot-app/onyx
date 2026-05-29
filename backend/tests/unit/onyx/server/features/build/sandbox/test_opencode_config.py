@@ -125,13 +125,13 @@ def test_api_base_propagates() -> None:
         providers=[
             _cfg(
                 "openai",
-                "gpt-4o",
+                "gpt-5-mini",
                 api_key="sk-x",
                 api_base="https://my-azure-mirror.example.com/v1",
             )
         ],
         default_provider="openai",
-        default_model="gpt-4o",
+        default_model="gpt-5-mini",
     )
     assert (
         config["provider"]["openai"]["api"] == "https://my-azure-mirror.example.com/v1"
@@ -183,6 +183,21 @@ def test_disabled_tools_become_deny_entries() -> None:
     )
     assert config["permission"]["question"] == "deny"
     assert config["permission"]["webfetch"] == "deny"
+
+
+def test_skill_permission_denies_builtin_customize_opencode() -> None:
+    """The built-in customize-opencode skill must be denied by name, with
+    "*" before the deny since opencode evaluates skill rules via findLast()."""
+    config = build_multi_provider_opencode_config(
+        providers=[_cfg("anthropic", "claude-opus-4-7")],
+        default_provider="anthropic",
+        default_model="claude-opus-4-7",
+    )
+    skill_perm = config["permission"]["skill"]
+    assert skill_perm["customize-opencode"] == "deny"
+    assert skill_perm["*"] == "allow"
+    keys = list(skill_perm.keys())
+    assert keys.index("*") < keys.index("customize-opencode")
 
 
 def test_plugins_omitted_by_default() -> None:
