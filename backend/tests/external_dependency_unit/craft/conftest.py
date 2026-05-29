@@ -17,6 +17,9 @@ import zipfile
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
+from collections.abc import Sequence
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
 from dataclasses import field
@@ -647,6 +650,71 @@ class SandboxHandle:
             _sandbox_id=sandbox_id,
         )
         return sandbox_row, workspace
+
+    def provision_for_many(
+        self,
+        users: Sequence[User],
+        status: SandboxStatus = SandboxStatus.RUNNING,
+    ) -> list[tuple[Sandbox, WorkspaceProxy]]:
+        """Parallel ``provision_for``; preserves input order.
+
+        ContextVars don't propagate to ThreadPoolExecutor workers, so each
+        worker re-pins the tenant id before touching the DB. Each
+        successfully-provisioned pod is registered for teardown
+        immediately so a partial failure still cleans up.
+        """
+        if not users:
+            return []
+
+        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+
+        def _worker(user: User) -> UUID:
+            token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+            try:
+                return _provision_sandbox_via_app(user.id)
+            finally:
+                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+        sandbox_ids: dict[User, UUID] = {}
+        worker_error: Exception | None = None
+        with ThreadPoolExecutor(max_workers=min(len(users), 8)) as pool:
+            futures = {pool.submit(_worker, user): user for user in users}
+            for fut in as_completed(futures):
+                user = futures[fut]
+                try:
+                    sandbox_id = fut.result()
+                except Exception as e:
+                    if worker_error is None:
+                        worker_error = e
+                    continue
+                sandbox_ids[user] = sandbox_id
+                self._register_extra(sandbox_id)
+
+        if worker_error is not None:
+            raise worker_error
+
+        self._db_session.expire_all()
+
+        results: list[tuple[Sandbox, WorkspaceProxy]] = []
+        for user in users:
+            sandbox_id = sandbox_ids[user]
+            sandbox_row = self._db_session.get(Sandbox, sandbox_id)
+            assert sandbox_row is not None
+
+            if status != SandboxStatus.RUNNING:
+                sandbox_row.status = status
+
+            workspace = WorkspaceProxy(
+                _k8s_client=self._k8s_client,
+                _pod_name=self.manager._get_pod_name(sandbox_id),
+                _sandbox_id=sandbox_id,
+            )
+            results.append((sandbox_row, workspace))
+
+        if status != SandboxStatus.RUNNING:
+            self._db_session.commit()
+
+        return results
 
 
 def _create_committed_craft_user() -> UUID:
