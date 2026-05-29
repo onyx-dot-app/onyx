@@ -32,6 +32,7 @@ import ScheduledRunBanner from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsRegion";
+import AgentStrip from "@/app/craft/components/AgentStrip";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -69,11 +70,6 @@ export default function BuildChatPanel({
   const { isMobile } = useScreenSize();
   const toggleOutputPanel = useToggleOutputPanel();
 
-  // Track when output panel is fully closed (after animation completes)
-  // This prevents the "open panel" button from appearing during the close animation
-  const [isOutputPanelFullyClosed, setIsOutputPanelFullyClosed] =
-    useState(!outputPanelOpen);
-
   const { limits, refreshLimits } = useUsageLimits();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const setCurrentError = useBuildSessionStore(
@@ -87,17 +83,6 @@ export default function BuildChatPanel({
       refreshLimits();
     }
   }, [session?.error, refreshLimits, setCurrentError]);
-
-  useEffect(() => {
-    if (outputPanelOpen) {
-      // Panel opening - immediately mark as not fully closed
-      setIsOutputPanelFullyClosed(false);
-    } else {
-      // Panel closing - wait for 300ms animation to complete
-      const timer = setTimeout(() => setIsOutputPanelFullyClosed(true), 300);
-      return () => clearTimeout(timer);
-    }
-  }, [outputPanelOpen]);
 
   // Access actions directly like chat does - these don't cause re-renders
   const consumePreProvisionedSession = useBuildSessionStore(
@@ -140,6 +125,21 @@ export default function BuildChatPanel({
     const activeSession = existingSessionId ?? preProvisionedSessionId ?? null;
     setActiveSession(activeSession);
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
+
+  const maybeAutoOpenPanelForPreview = useBuildSessionStore(
+    (s) => s.maybeAutoOpenPanelForPreview
+  );
+
+  // Auto-open the panel the first time webappUrl becomes non-null this session.
+  const prevWebappUrlRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevWebappUrlRef.current;
+    const current = session?.webappUrl ?? null;
+    if (prev === null && current !== null && sessionId) {
+      maybeAutoOpenPanelForPreview(sessionId);
+    }
+    prevWebappUrlRef.current = current;
+  }, [session?.webappUrl, sessionId, maybeAutoOpenPanelForPreview]);
 
   // Ref to access InputBar methods
   const inputBarRef = useRef<InputBarHandle>(null);
@@ -431,18 +431,23 @@ export default function BuildChatPanel({
               sessionId={sessionId ?? existingSessionId ?? null}
             />
           </div>
-          {/* Output panel toggle - only show when panel is fully closed (after animation) */}
-          {isOutputPanelFullyClosed && (
-            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-            <IconButton
-              icon={SvgSidebar}
-              onClick={toggleOutputPanel}
-              tooltip="Open output panel"
-              tertiary
-              className="bg-background-tint-00! border rounded-full"
-              iconClassName="stroke-text-04!"
-            />
-          )}
+          {/* Output panel toggle — same icon for open and close */}
+          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
+          <IconButton
+            icon={SvgSidebar}
+            onClick={toggleOutputPanel}
+            tooltip={
+              outputPanelOpen ? "Close output panel" : "Open output panel"
+            }
+            tertiary
+            className={cn(
+              "border rounded-full p-2.5!",
+              outputPanelOpen
+                ? "bg-background-tint-02!"
+                : "bg-background-tint-00!"
+            )}
+            iconClassName="stroke-text-04! h-5! w-5!"
+          />
           {/* Soft fade border at bottom */}
           <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
         </div>
@@ -507,6 +512,7 @@ export default function BuildChatPanel({
                   </Tooltip>
                 </div>
               )}
+              <AgentStrip />
               <InputBar
                 ref={inputBarRef}
                 onSubmit={handleSubmit}

@@ -495,6 +495,7 @@ function parseToolCallStart(p: Record<string, unknown>): ParsedToolCallStart {
   const toolName = resolveToolName(p);
   const rawKind = p.kind as string | null;
   const kind = resolveKind(toolName, rawKind);
+  const meta = (p._meta as Record<string, unknown> | undefined) ?? {};
   return {
     type: "tool_call_start",
     toolCallId: getToolCallId(p),
@@ -502,6 +503,9 @@ function parseToolCallStart(p: Record<string, unknown>): ParsedToolCallStart {
     kind,
     isTodo: toolName === "todowrite",
     title: buildTitle(toolName, kind, true),
+    sessionId: (meta.sessionId as string | undefined) ?? null,
+    parentSessionId: (meta.parentSessionId as string | undefined) ?? null,
+    subagentSessionId: (meta.subagentSessionId as string | undefined) ?? null,
   };
 }
 
@@ -554,7 +558,10 @@ function parseToolCallProgress(
   }
 
   // ── Command (freeform → sanitizePathsInText) ──────────────────
-  const rawCommand = (ri?.command ?? "") as string;
+  // The task tool carries its subagent prompt in `prompt`, not `command`.
+  const rawCommand = (ri?.command ??
+    (toolName === "task" ? ri?.prompt : undefined) ??
+    "") as string;
   const command = sanitizePathsInText(rawCommand);
 
   // ── Description ───────────────────────────────────────────────
@@ -594,6 +601,13 @@ function parseToolCallProgress(
       ? extractTaskOutput(ro)
       : null;
 
+  // ── Subagent routing (from ACP _meta) ─────────────────────────
+  const meta = (p._meta as Record<string, unknown> | undefined) ?? {};
+  const sessionId = (meta.sessionId as string | undefined) ?? null;
+  const parentSessionId = (meta.parentSessionId as string | undefined) ?? null;
+  const subagentSessionId =
+    (meta.subagentSessionId as string | undefined) ?? null;
+
   return {
     type: "tool_call_progress",
     toolCallId: getToolCallId(p),
@@ -616,5 +630,8 @@ function parseToolCallProgress(
     newContent: diffData.newText,
     todos,
     taskOutput,
+    sessionId,
+    parentSessionId,
+    subagentSessionId,
   };
 }

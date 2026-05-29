@@ -139,3 +139,73 @@ def send_message(
             "X-Accel-Buffering": "no",  # Disable nginx buffering
         },
     )
+
+
+@router.post(
+    "/sessions/{session_id}/subagents/{subagent_session_id}/send-message",
+    tags=PUBLIC_API_TAGS,
+)
+def send_subagent_message(
+    session_id: UUID,
+    subagent_session_id: str,
+    request: MessageRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _rate_limit_check: None = Depends(check_build_rate_limits),
+) -> StreamingResponse:
+    """
+    Send a follow-up message to a subagent's child opencode session and
+    stream the response.
+
+    The subagent session must be a child opencode session spawned under this
+    build session; a bogus id surfaces as an upstream error event in the SSE
+    stream. Returns a Server-Sent Events (SSE) stream, mirroring
+    /sessions/{session_id}/send-message.
+    """
+
+    def stream_generator() -> Generator[str, None, None]:
+        # Capture values needed for streaming before the endpoint returns and
+        # FastAPI tears down the dependency-injected db_session.
+        user_id = user.id
+        message_content = request.content
+        events_yielded = 0
+
+        try:
+            with get_session_with_current_tenant() as db_session:
+                sandbox = get_sandbox_by_user_id(db_session, user.id)
+                if sandbox and sandbox.status.is_active():
+                    update_sandbox_heartbeat(db_session, sandbox.id)
+
+                session_manager = SessionManager(db_session)
+                for chunk in session_manager.send_subagent_message(
+                    session_id,
+                    user_id,
+                    subagent_session_id,
+                    message_content,
+                ):
+                    events_yielded += 1
+                    yield chunk
+        except GeneratorExit:
+            logger.warning(
+                "Subagent stream disconnected for session %s subagent %s after "
+                "%d events (client likely closed connection)",
+                session_id,
+                subagent_session_id,
+                events_yielded,
+            )
+        except Exception:
+            logger.exception(
+                "Subagent stream error for session %s subagent %s after %d events",
+                session_id,
+                subagent_session_id,
+                events_yielded,
+            )
+
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )

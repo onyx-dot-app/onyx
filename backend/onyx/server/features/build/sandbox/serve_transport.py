@@ -485,6 +485,80 @@ class _ServeMixin:
             events_count=events_count,
         )
 
+    def send_subagent_message_via_serve(
+        self,
+        sandbox_id: UUID,
+        parent_session_id: UUID,
+        subagent_opencode_session_id: str,
+        message: str,
+        agent_provider: str | None = None,
+        agent_model: str | None = None,
+    ) -> Generator[SandboxEvent, None, None]:
+        """Stream a follow-up turn against an existing subagent (child)
+        opencode session.
+
+        The child session runs in the SAME directory as its parent build
+        session, so we anchor the serve client at the parent's session
+        directory. Unlike :meth:`_send_message_via_serve` this does NOT call
+        ``ensure_session`` (the child id is supplied and already exists). It
+        passes the parent session's ``agent_provider``/``agent_model`` so the
+        follow-up uses the same model as the parent (not the child session's
+        own default).
+        """
+        packet_logger = get_packet_logger()
+        session_path = self._session_directory(parent_session_id)
+        client = self._build_serve_client(sandbox_id, session_path)
+        try:
+            logger.info(
+                "[SANDBOX-SERVE] send_subagent_message: parent_build_session=%s "
+                "subagent_opencode_session=%s api_pod=%s",
+                parent_session_id,
+                subagent_opencode_session_id,
+                _API_SERVER_HOSTNAME,
+            )
+            packet_logger.log_session_start(parent_session_id, sandbox_id, message)
+
+            events_count = 0
+            try:
+                for event in client.send_message(
+                    subagent_opencode_session_id,
+                    message,
+                    directory=session_path,
+                    model_provider=agent_provider,
+                    model_id=agent_model,
+                ):
+                    events_count += 1
+                    yield event
+                packet_logger.log_session_end(
+                    parent_session_id, success=True, events_count=events_count
+                )
+            except GeneratorExit:
+                self._abort_and_log_turn_failure(
+                    client=client,
+                    session_id=parent_session_id,
+                    resolved_session_id=subagent_opencode_session_id,
+                    session_path=session_path,
+                    events_count=events_count,
+                    packet_logger=packet_logger,
+                    error="GeneratorExit",
+                    log_level=logging.WARNING,
+                )
+                raise
+            except Exception as e:
+                self._abort_and_log_turn_failure(
+                    client=client,
+                    session_id=parent_session_id,
+                    resolved_session_id=subagent_opencode_session_id,
+                    session_path=session_path,
+                    events_count=events_count,
+                    packet_logger=packet_logger,
+                    error=f"Exception: {e}",
+                    log_level=logging.ERROR,
+                )
+                raise
+        finally:
+            client.close()
+
     def subscribe_to_opencode_session(
         self,
         sandbox_id: UUID,

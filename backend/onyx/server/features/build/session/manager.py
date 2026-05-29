@@ -90,6 +90,7 @@ from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
@@ -207,8 +208,13 @@ class BuildStreamingState:
         self.thought_chunks.append(text)
         self._last_chunk_type = "thought"
 
-    def finalize_message_chunks(self) -> dict[str, Any] | None:
+    def finalize_message_chunks(
+        self, routing_meta: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
         """Build a synthetic packet with accumulated message text.
+
+        ``routing_meta`` (when set) is merged into the packet's ACP ``_meta``
+        field so a persisted subagent follow-up reloads under its subagent.
 
         Returns:
             A synthetic agent_message packet or None if no chunks accumulated
@@ -217,16 +223,23 @@ class BuildStreamingState:
             return None
 
         full_text = "".join(self.message_chunks)
-        result = {
+        result: dict[str, Any] = {
             "type": "agent_message",
             "content": {"type": "text", "text": full_text},
             "sessionUpdate": "agent_message",
         }
+        if routing_meta:
+            result["_meta"] = dict(routing_meta)
         self.message_chunks.clear()
         return result
 
-    def finalize_thought_chunks(self) -> dict[str, Any] | None:
+    def finalize_thought_chunks(
+        self, routing_meta: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
         """Build a synthetic packet with accumulated thought text.
+
+        ``routing_meta`` (when set) is merged into the packet's ACP ``_meta``
+        field.
 
         Returns:
             A synthetic agent_thought packet or None if no chunks accumulated
@@ -235,11 +248,13 @@ class BuildStreamingState:
             return None
 
         full_text = "".join(self.thought_chunks)
-        result = {
+        result: dict[str, Any] = {
             "type": "agent_thought",
             "content": {"type": "text", "text": full_text},
             "sessionUpdate": "agent_thought",
         }
+        if routing_meta:
+            result["_meta"] = dict(routing_meta)
         self.thought_chunks.clear()
         return result
 
@@ -1224,6 +1239,194 @@ class SessionManager:
         """
         yield from self._stream_cli_agent_response(session_id, content, user_id)
 
+    def send_subagent_message(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        subagent_opencode_session_id: str,
+        content: str,
+    ) -> Generator[str, None, None]:
+        """Send a follow-up message to a subagent's child opencode session
+        and stream its response as SSE events.
+
+        Mirrors the SSE-yielding behavior of :meth:`_stream_cli_agent_response`
+        but targets an existing child opencode session (the subagent) that was
+        spawned under this build session. The child runs in the parent build
+        session's directory, so we anchor the turn there and resolve the
+        sandbox + parent opencode session from the build session.
+
+        Every tool + agent-message event is tagged with routing ``_meta``
+        (``{"sessionId": <child>, "parentSessionId": <parent>}``) so the
+        frontend routes them to the subagent, and the persisted assistant
+        message carries the same ``_meta`` so reloads reconstruct the
+        follow-up under the subagent.
+        """
+        yield from self._stream_subagent_response(
+            session_id, subagent_opencode_session_id, content, user_id
+        )
+
+    def _stream_subagent_response(
+        self,
+        session_id: UUID,
+        subagent_opencode_session_id: str,
+        content: str,
+        user_id: UUID,
+    ) -> Generator[str, None, None]:
+        """SSE stream of a follow-up turn against a subagent child session.
+
+        Focused parallel of :meth:`_stream_cli_agent_response`: it reuses the
+        same persistence (`_persist_sandbox_event`) and SSE serialization
+        (`_serialize_sandbox_event`) helpers, but drives the child session via
+        ``sandbox_manager.send_subagent_message`` and tags routing ``_meta``.
+        It does not re-run the parent's first-turn opencode-session preflight
+        or model selection (the child session already exists with its own
+        default model).
+        """
+        packet_logger = get_packet_logger()
+        events_emitted = 0
+        state = BuildStreamingState(turn_index=0)
+        prompt_slot_cm: contextlib.AbstractContextManager[bool] | None = None
+        # parentSessionId is filled in once we resolve the build session.
+        routing_meta: dict[str, Any] = {"sessionId": subagent_opencode_session_id}
+
+        try:
+            session = get_build_session(session_id, user_id, self._db_session)
+            if session is None:
+                error_packet = ErrorPacket(message="Session not found")
+                yield self._format_packet_event(error_packet)
+                return
+
+            parent_opencode_session_id = session.opencode_session_id
+            if not parent_opencode_session_id:
+                error_packet = ErrorPacket(
+                    message="Parent session has no opencode session yet."
+                )
+                yield self._format_packet_event(error_packet)
+                return
+
+            sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+            if not sandbox or sandbox.status != SandboxStatus.RUNNING:
+                error_packet = ErrorPacket(
+                    message="Sandbox is not running. Please wait for it to start."
+                )
+                yield self._format_packet_event(error_packet)
+                return
+
+            sandbox_id = sandbox.id
+            update_session_activity(session_id, self._db_session)
+
+            # Serialize against concurrent turns on the same build session
+            # (the parent turn and a subagent follow-up share the same pod
+            # directory + event bus).
+            candidate_cm = self._sandbox_manager.prompt_slot(sandbox_id, session_id)
+            if not candidate_cm.__enter__():
+                candidate_cm.__exit__(None, None, None)
+                error_packet = ErrorPacket(
+                    message=(
+                        "This session is busy with a previous turn. "
+                        "Please wait for it to finish before sending "
+                        "another message."
+                    )
+                )
+                yield self._format_packet_event(error_packet)
+                return
+            prompt_slot_cm = candidate_cm
+
+            # Routing metadata merged into every forwarded subagent event and
+            # the persisted assistant message.
+            routing_meta["parentSessionId"] = parent_opencode_session_id
+
+            state = BuildStreamingState(turn_index=0)
+
+            # Use the parent session's model so the subagent follow-up runs on
+            # the same model as the parent (not the child session's default).
+            agent_provider, agent_model = self._get_session_agent_selection(session_id)
+
+            for sandbox_event in self._sandbox_manager.send_subagent_message(
+                sandbox_id,
+                session_id,
+                subagent_opencode_session_id,
+                content,
+                agent_provider=agent_provider,
+                agent_model=agent_model,
+            ):
+                # Keepalives + terminators pass through untagged.
+                if isinstance(sandbox_event, SSEKeepalive):
+                    yield ": keepalive\n\n"
+                    continue
+
+                # Tag tool + agent-message events with routing _meta BEFORE
+                # persistence so model_dump(by_alias=True) lands _meta in the
+                # persisted row and the SSE frame.
+                if isinstance(
+                    sandbox_event,
+                    (
+                        ToolCallStart,
+                        ToolCallProgress,
+                        AgentMessageChunk,
+                        AgentThoughtChunk,
+                    ),
+                ):
+                    _merge_field_meta(sandbox_event, routing_meta)
+
+                self._persist_sandbox_event(
+                    session_id, state, sandbox_event, routing_meta
+                )
+                events_emitted += 1
+
+                if isinstance(sandbox_event, AgentMessageChunk):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "agent_message_chunk"
+                    )
+                elif isinstance(sandbox_event, AgentThoughtChunk):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "agent_thought_chunk"
+                    )
+                elif isinstance(sandbox_event, ToolCallStart):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "tool_call_start"
+                    )
+                elif isinstance(sandbox_event, ToolCallProgress):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "tool_call_progress"
+                    )
+                elif isinstance(sandbox_event, AgentPlanUpdate):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "agent_plan_update"
+                    )
+                elif isinstance(sandbox_event, CurrentModeUpdate):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "current_mode_update"
+                    )
+                elif isinstance(sandbox_event, PromptResponse):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "prompt_response"
+                    )
+                elif isinstance(sandbox_event, SandboxError):
+                    yield self._serialize_sandbox_event(sandbox_event, "error")
+
+            # Flush the accumulated assistant message tagged with routing _meta.
+            self._finalize_persist(session_id, state, routing_meta)
+            update_sandbox_heartbeat(self._db_session, sandbox_id)
+
+        except GeneratorExit:
+            logger.warning(
+                "Subagent stream closed for session %s after %d events "
+                "(client disconnected mid-stream)",
+                session_id,
+                events_emitted,
+            )
+            self._finalize_persist(session_id, state, routing_meta)
+            return
+        except Exception as e:
+            error_packet = ErrorPacket(message=str(e))
+            packet_logger.log("error", error_packet.model_dump())
+            logger.exception("Error in subagent message streaming")
+            yield self._format_packet_event(error_packet)
+        finally:
+            if prompt_slot_cm is not None:
+                prompt_slot_cm.__exit__(None, None, None)
+
     # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
     #
     # `_yield_sandbox_events` is a thin wrapper around the sandbox manager that drives
@@ -1337,13 +1540,17 @@ class SessionManager:
         self,
         session_id: UUID,
         state: BuildStreamingState,
+        routing_meta: dict[str, Any] | None = None,
     ) -> None:
         """Flush any pending accumulated message/thought chunks to the DB.
 
         Called when the next sandbox event is of a different type than the chunks
         currently being accumulated, and once more at end of stream.
+
+        ``routing_meta`` tags the persisted packets' ACP ``_meta`` so subagent
+        follow-up turns reload under their subagent (None for the parent path).
         """
-        message_packet = state.finalize_message_chunks()
+        message_packet = state.finalize_message_chunks(routing_meta)
         if message_packet:
             create_message(
                 session_id=session_id,
@@ -1353,7 +1560,7 @@ class SessionManager:
                 db_session=self._db_session,
             )
 
-        thought_packet = state.finalize_thought_chunks()
+        thought_packet = state.finalize_thought_chunks(routing_meta)
         if thought_packet:
             create_message(
                 session_id=session_id,
@@ -1511,6 +1718,7 @@ class SessionManager:
         session_id: UUID,
         state: BuildStreamingState,
         sandbox_event: Any,
+        routing_meta: dict[str, Any] | None = None,
     ) -> None:
         """Apply persistence side effects for a single sandbox event.
 
@@ -1539,7 +1747,7 @@ class SessionManager:
         # Flush any pending chunks if the event type changed.
         event_type = self._get_event_type(sandbox_event)
         if state.should_finalize_chunks(event_type):
-            self._save_pending_chunks(session_id, state)
+            self._save_pending_chunks(session_id, state, routing_meta)
 
         if isinstance(sandbox_event, AgentMessageChunk):
             text = self._extract_text_from_content(sandbox_event.content)
@@ -1631,9 +1839,10 @@ class SessionManager:
         self,
         session_id: UUID,
         state: BuildStreamingState,
+        routing_meta: dict[str, Any] | None = None,
     ) -> None:
         """End-of-stream persistence hook. Flushes any pending chunks."""
-        self._save_pending_chunks(session_id, state)
+        self._save_pending_chunks(session_id, state, routing_meta)
 
     def _stream_cli_agent_response(
         self,

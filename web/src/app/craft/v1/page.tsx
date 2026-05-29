@@ -33,7 +33,7 @@ export default function BuildV1Page() {
       {/* Chat panel - always full width for background */}
       <BuildChatPanel existingSessionId={sessionId} />
 
-      {/* Output panel - floats over as a card */}
+      {/* Output panel - slides in from the right edge, full viewport height */}
       <BuildOutputPanel onClose={toggleOutputPanel} isOpen={outputPanelOpen} />
     </div>
   );
