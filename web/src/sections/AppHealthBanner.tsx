@@ -5,7 +5,8 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import Modal from "@/refresh-components/Modal";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getSecondsUntilExpiration, logout, refreshToken } from "@/lib/user";
+import { logout, refreshToken } from "@/lib/user";
+import { getSecondsUntilExpiration } from "@opal/time";
 import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
 import { Button } from "@opal/components";
 import { usePathname, useRouter } from "next/navigation";
@@ -98,7 +99,11 @@ export default function AppHealthBanner() {
   useEffect(() => {
     if (!user) return;
 
-    const secondsUntilExpiration = getSecondsUntilExpiration(user);
+    const secondsUntilExpiration = getSecondsUntilExpiration(
+      user.oidc_expiry,
+      user.current_token_created_at,
+      user.current_token_expiry_length
+    );
     if (secondsUntilExpiration === null) return;
 
     // Set up expiration timeout based on current user data
@@ -140,8 +145,11 @@ export default function AppHealthBanner() {
 
             if (updatedUser) {
               // Reset expiration timeout with new expiration time
-              const newSecondsUntilExpiration =
-                getSecondsUntilExpiration(updatedUser);
+              const newSecondsUntilExpiration = getSecondsUntilExpiration(
+                updatedUser.oidc_expiry,
+                updatedUser.current_token_created_at,
+                updatedUser.current_token_expiry_length
+              );
               if (newSecondsUntilExpiration !== null) {
                 setupExpirationTimeout(newSecondsUntilExpiration);
                 console.debug(

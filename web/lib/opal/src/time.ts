@@ -209,3 +209,57 @@ export function formatDurationMs(ms: number): string {
   const remMinutes = minutes % 60;
   return remMinutes > 0 ? `${hours}h ${remMinutes}m` : `${hours}h`;
 }
+
+/**
+ * Returns the number of seconds until the user's session expires, taking the
+ * minimum of the token expiry and OIDC expiry when both are present. Returns
+ * `null` if no expiry information is available. Never returns a negative number
+ * — clamps to `0` once the session has already expired.
+ *
+ * Accepts the raw expiry fields from a user record directly so that callers
+ * can destructure and pass them without importing any user-specific types.
+ *
+ * @example
+ * getSecondsUntilExpiration(undefined, undefined, undefined) // null
+ * getSecondsUntilExpiration(new Date(Date.now() + 300_000), undefined, undefined) // ~300
+ */
+export function getSecondsUntilExpiration(
+  oidcExpiry: Date | undefined,
+  tokenCreatedAt: Date | undefined,
+  tokenExpiryLength: number | undefined
+): number | null {
+  const now = new Date();
+
+  let secondsUntilTokenExpiration: number | null = null;
+  let secondsUntilOIDCExpiration: number | null = null;
+
+  if (tokenCreatedAt && tokenExpiryLength !== undefined) {
+    const expiresAt = new Date(
+      tokenCreatedAt.getTime() + tokenExpiryLength * 1000
+    );
+    secondsUntilTokenExpiration = Math.floor(
+      (expiresAt.getTime() - now.getTime()) / 1000
+    );
+  }
+
+  if (oidcExpiry) {
+    secondsUntilOIDCExpiration = Math.floor(
+      (oidcExpiry.getTime() - now.getTime()) / 1000
+    );
+  }
+
+  if (
+    secondsUntilTokenExpiration === null &&
+    secondsUntilOIDCExpiration === null
+  ) {
+    return null;
+  }
+
+  return Math.max(
+    0,
+    Math.min(
+      secondsUntilTokenExpiration ?? Infinity,
+      secondsUntilOIDCExpiration ?? Infinity
+    )
+  );
+}
