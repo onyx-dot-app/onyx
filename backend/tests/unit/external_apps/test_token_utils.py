@@ -63,8 +63,15 @@ def test_needs_refresh_missing_expires_at_is_false() -> None:
     assert needs_refresh({"access_token": "a"}, _NOW) is False
 
 
-def test_needs_refresh_unparseable_expires_at_is_false() -> None:
-    assert needs_refresh({"expires_at": "not-a-date"}, _NOW) is False
+def test_needs_refresh_unparseable_expires_at_is_true() -> None:
+    # A present-but-corrupt expiry isn't a non-expiring token: refresh (heal it)
+    # rather than silently keep a token of unknown validity in use.
+    assert needs_refresh({"expires_at": "not-a-date"}, _NOW) is True
+
+
+def test_needs_refresh_non_string_expires_at_is_true() -> None:
+    # A truthy non-string value also fails parsing → treat as needing refresh.
+    assert needs_refresh({"expires_at": 1234567890}, _NOW) is True
 
 
 def test_needs_refresh_naive_expires_at_treated_as_utc() -> None:

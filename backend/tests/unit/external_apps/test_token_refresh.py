@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 import requests
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from onyx.external_apps import token_refresh as tr
 from onyx.external_apps.providers.base import TokenRefreshTerminalError
@@ -93,6 +94,26 @@ def test_refresh_invalid_grant_is_terminal(monkeypatch: pytest.MonkeyPatch) -> N
         GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
 
 
+def test_refresh_invalid_grant_with_description_is_terminal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dead grant must classify on the `error` code even when a human-readable
+    `error_description` is also present — preferring the prose would misclassify
+    it as transient and never clear the credential / prompt a reconnect."""
+    _patch_post(
+        monkeypatch,
+        _response(
+            400,
+            {
+                "error": "invalid_grant",
+                "error_description": "Token has been expired or revoked.",
+            },
+        ),
+    )
+    with pytest.raises(TokenRefreshTerminalError):
+        GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+
+
 def test_refresh_5xx_is_transient(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_post(monkeypatch, _response(503, {"error": "server_error"}))
     with pytest.raises(TokenRefreshTransientError):
@@ -104,6 +125,27 @@ def test_refresh_network_error_is_transient(monkeypatch: pytest.MonkeyPatch) -> 
         raise requests.RequestException("connection reset")
 
     monkeypatch.setattr("onyx.external_apps.providers.base.requests.post", _boom)
+    with pytest.raises(TokenRefreshTransientError):
+        GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+
+
+def _raw_response(status_code: int, raw_body: Any) -> requests.Response:
+    """A `requests.Response` whose `.json()` returns a possibly-non-object body,
+    e.g. a gateway error page encoded as a JSON array / string."""
+    response = requests.Response()
+    response.status_code = status_code
+    response._content = json.dumps(raw_body).encode()
+    return response
+
+
+@pytest.mark.parametrize("raw_body", [["err"], "bad gateway", 500, None])
+def test_refresh_non_object_error_body_is_transient(
+    monkeypatch: pytest.MonkeyPatch, raw_body: Any
+) -> None:
+    """A non-2xx with a non-object JSON body must surface as a clean transient
+    error, not an unguarded `.get()` `AttributeError` that escapes the
+    terminal/transient handling."""
+    _patch_post(monkeypatch, _raw_response(502, raw_body))
     with pytest.raises(TokenRefreshTransientError):
         GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
 
@@ -287,6 +329,25 @@ def test_ensure_fresh_transient_keeps_existing_token(
     spies = _setup(monkeypatch, creds_sequence=[_stale_creds(), _stale_creds()])
     spies["refresh"].side_effect = TokenRefreshTransientError("503")
     _run()  # does not raise
+    spies["upsert"].assert_not_called()
+    spies["delete"].assert_not_called()
+
+
+def test_ensure_fresh_redis_unavailable_keeps_existing_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Redis unreachable (outage / lite deployments where it's disabled) is a
+    transient infra failure, not a refresh outcome: keep the existing token and
+    return, never raise — a raised error would hard-block the request as a 403 at
+    the credential dispatcher instead of proceeding with the current credential."""
+    spies = _setup(monkeypatch, creds_sequence=[_stale_creds()])
+
+    def _boom(*_a: Any, **_k: Any) -> Any:
+        raise RedisConnectionError("Error connecting to Redis.")
+
+    monkeypatch.setattr(tr, "redis_shared_lock", _boom)
+    _run()  # must not raise
+    spies["refresh"].assert_not_called()
     spies["upsert"].assert_not_called()
     spies["delete"].assert_not_called()
 

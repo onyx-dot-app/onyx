@@ -11,6 +11,7 @@ from datetime import timezone
 from typing import Any
 from uuid import UUID
 
+from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import DBSessionFactory
@@ -76,6 +77,17 @@ def ensure_fresh_credentials(
             "ea_token_refresh.lock_contended external_app_id=%s user_id=%s",
             external_app_id,
             user_id,
+        )
+    except RedisError as exc:
+        # Redis unreachable (outage, or lite deployments where it's disabled):
+        # a transient infra failure, not a refresh outcome. Keep the existing
+        # token and let the request proceed rather than hard-blocking it (matches
+        # this function's "never raises for a refresh outcome" contract).
+        logger.warning(
+            "ea_token_refresh.redis_unavailable external_app_id=%s user_id=%s error=%s",
+            external_app_id,
+            user_id,
+            exc,
         )
 
 
