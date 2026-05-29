@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { Popover, PopoverMenu, Text } from "@opal/components";
 import {
   SvgChevronDown,
-  SvgSparkle,
   SvgCpu,
   SvgCheckCircle,
   SvgAlertTriangle,
@@ -139,7 +138,6 @@ export default function AgentSwitcher() {
           {[
             <LineItem
               key="main"
-              icon={SvgSparkle}
               selected={!isViewingSubagent}
               onClick={selectMainAgent}
             >
