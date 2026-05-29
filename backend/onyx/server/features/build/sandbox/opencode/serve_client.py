@@ -113,6 +113,8 @@ class _TurnState:
     # or fetch failed). Kept so subsequent deltas short-circuit without
     # re-issuing the REST hydrate.
     user_message_ids: set[str] = field(default_factory=set)
+    # `task` callID → claimed child session (parallel tasks get distinct children).
+    task_child_by_call: dict[str, str] = field(default_factory=dict)
     # Last LLM finish reason seen on any assistant message.updated. Only the
     # terminator (fired from session.idle/status) consumes it — message.updated
     # itself is per-step and can't terminate the turn.
@@ -499,13 +501,21 @@ def translate_opencode_event(
             # spawned so the frontend can link the call to its child stream.
             subagent_sid: str | None = None
             if part.get("tool") == "task" and children_resolver is not None:
-                children = children_resolver(state.session_id)
-                # NOTE: with multiple parallel task calls we can't correlate a
-                # specific child to a specific task part (opencode doesn't expose
-                # the link), so we pick the most-recently-spawned child. The
-                # frontend has a fallback for this ambiguous case.
-                if children:
-                    subagent_sid = children[-1]
+                # Each task callID claims the most-recent not-yet-claimed child.
+                call_id = part.get("callID")
+                if call_id is not None and call_id in state.task_child_by_call:
+                    subagent_sid = state.task_child_by_call[call_id]
+                else:
+                    claimed = set(state.task_child_by_call.values())
+                    unclaimed = [
+                        c
+                        for c in children_resolver(state.session_id)
+                        if c not in claimed
+                    ]
+                    if unclaimed:
+                        subagent_sid = unclaimed[-1]
+                        if call_id is not None:
+                            state.task_child_by_call[call_id] = subagent_sid
             for event in _emit_tool_events(part, state):
                 if subagent_sid is not None:
                     _merge_field_meta(event, {"subagentSessionId": subagent_sid})
