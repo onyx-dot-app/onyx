@@ -182,6 +182,15 @@ def _resolve_proxy_ip() -> str:
     )
 
 
+# Loopback only: the firewall permits nothing else to bypass the proxy, and the
+# Onyx API host must transit the proxy so the PAT can be injected on the wire.
+_NO_PROXY = "127.0.0.1,localhost"
+
+# Placeholder shipped in ONYX_PAT; the egress proxy injects the real PAT on the
+# wire (the pod never holds the token).
+_ONYX_PAT_PLACEHOLDER = "onyx_pat_placeholder_replaced_by_proxy"
+
+
 def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
     if not SANDBOX_PROXY_HOST:
         return []
@@ -202,15 +211,6 @@ def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
         client.V1EnvVar(name="CURL_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
         client.V1EnvVar(name="GIT_SSL_CAINFO", value=_PROXY_CA_BUNDLE_FILE),
     ]
-
-
-# Loopback only: the firewall permits nothing else to bypass the proxy, and the
-# Onyx API host must transit the proxy so the PAT can be injected on the wire.
-_NO_PROXY = "127.0.0.1,localhost"
-
-# Placeholder shipped in ONYX_PAT; the egress proxy injects the real PAT on the
-# wire (the pod never holds the token).
-_ONYX_PAT_PLACEHOLDER = "onyx_pat_placeholder_replaced_by_proxy"
 
 
 def _proxy_init_container() -> client.V1Container:
