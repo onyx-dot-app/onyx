@@ -9,12 +9,13 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
-from onyx.sandbox_proxy.credential_injection import CODE_CREDENTIAL_ERROR
+from onyx.external_apps.matching.engine import ActionMatch
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
 from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.credential_injection import InjectionOutcome
+from onyx.sandbox_proxy.errors import SandboxProxyError
 from tests.unit.sandbox_proxy.conftest import make_action_match
 from tests.unit.sandbox_proxy.conftest import make_flow as _flow
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
@@ -22,7 +23,7 @@ from tests.unit.sandbox_proxy.conftest import noop_db_factory
 from tests.unit.sandbox_proxy.conftest import RecordingCredentialResolver
 
 
-def _ctx(*, match=None) -> InjectionContext:  # type: ignore[no-untyped-def]
+def _ctx(*, match: ActionMatch | None = None) -> InjectionContext:
     return InjectionContext(
         sandbox=_sandbox(), match=match, db_session_factory=noop_db_factory
     )
@@ -143,7 +144,7 @@ def test_apply_or_block_writes_403_on_blocked() -> None:
     assert flow.response.status_code == 403
     content = flow.response.content
     assert content is not None
-    assert json.loads(content) == {"error": CODE_CREDENTIAL_ERROR}
+    assert json.loads(content) == {"error": SandboxProxyError.CREDENTIAL_ERROR.value}
 
 
 def test_apply_or_block_leaves_response_unset_on_inject_or_pass_through() -> None:

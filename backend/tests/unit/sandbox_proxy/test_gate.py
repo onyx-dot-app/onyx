@@ -1,6 +1,6 @@
 """Unit tests for the GateAddon mitmproxy addon.
 
-External dependencies (`_IdentityResolverProto`, `ActionMatcher`, `CacheFactory`,
+External dependencies (`_IdentityResolver`, `ActionMatcher`, `CacheFactory`,
 `DBSessionFactory`) are stubbed via small Protocol implementations.
 
 The race arbiter (`_claim_expired_or_read_winner`) is covered against a
@@ -28,7 +28,7 @@ from redis.exceptions import RedisError
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.external_apps.matching.engine import ActionMatch
-from onyx.sandbox_proxy import credential_injection as credential_injection_mod
+from onyx.sandbox_proxy.action_matcher import ActionMatcher
 from onyx.sandbox_proxy.addons import gate as gate_mod
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.addons.gate import ParkedApprovals
@@ -36,6 +36,7 @@ from onyx.sandbox_proxy.addons.gate import PARSER_MAX_BODY_BYTES
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
+from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
@@ -51,7 +52,7 @@ from tests.unit.sandbox_proxy.conftest import StubResolver as _StubResolver
 # ---------------------------------------------------------------------------
 
 
-class _StubMatcher:
+class _StubMatcher(ActionMatcher):
     def __init__(
         self,
         *,
@@ -103,7 +104,7 @@ def _build(
 ) -> GateAddon:
     return GateAddon(
         identity=resolver,
-        action_matcher=matcher,  # type: ignore[arg-type]
+        action_matcher=matcher,
         db_session_factory=db_factory,
         cache_factory=cache_factory,
         proxy_instance_id="proxy-test",
@@ -113,13 +114,13 @@ def _build(
     )
 
 
-def _assert_403(flow: http.HTTPFlow, expected_code: str) -> None:
+def _assert_403(flow: http.HTTPFlow, expected_code: SandboxProxyError) -> None:
     assert flow.response is not None
     assert flow.response.status_code == 403
     content = flow.response.content
     assert content is not None
     body = json.loads(content)
-    assert body == {"error": expected_code}
+    assert body == {"error": expected_code.value}
 
 
 _MATCH = make_action_match(payload={"text": "hi"})
@@ -143,7 +144,7 @@ def test_resolve_and_match_no_source_ip_fails_closed() -> None:
     result = addon._resolve_and_match(flow)
 
     assert result is None
-    _assert_403(flow, gate_mod._CODE_UNIDENTIFIED_SANDBOX)
+    _assert_403(flow, SandboxProxyError.UNIDENTIFIED_SANDBOX)
     # Short-circuited before resolver / matcher ran.
     assert resolver.resolve_sandbox_calls == 0
     assert matcher.calls == 0
@@ -169,7 +170,7 @@ def test_resolve_and_match_sandbox_resolution_fails_closed(
     result = addon._resolve_and_match(flow)
 
     assert result is None
-    _assert_403(flow, gate_mod._CODE_UNIDENTIFIED_SANDBOX)
+    _assert_403(flow, SandboxProxyError.UNIDENTIFIED_SANDBOX)
     assert matcher.calls == 0
 
 
@@ -195,7 +196,7 @@ def test_resolve_and_match_body_too_large_fails_closed(
     result = addon._resolve_and_match(flow)
 
     assert result is None
-    _assert_403(flow, gate_mod._CODE_BODY_TOO_LARGE)
+    _assert_403(flow, SandboxProxyError.BODY_TOO_LARGE)
     assert matcher.calls == 0
 
 
@@ -215,7 +216,7 @@ def test_resolve_and_match_no_tag_fails_closed() -> None:
     result = addon._resolve_and_match(flow)
 
     assert result is None
-    _assert_403(flow, gate_mod._CODE_NO_ACTIVE_SESSION)
+    _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
     assert resolver.resolve_session_by_id_calls == []
 
 
@@ -226,8 +227,8 @@ def test_resolve_and_match_no_tag_fails_closed() -> None:
 
 def test_resolve_and_match_matcher_returns_none_fails_open() -> None:
     """Non-gated traffic: matcher returns None → forwarded; the off-catalog
-    dispatcher invocation runs with `match=None` so host-only resolvers
-    (Onyx PAT, LLM keys from plans 2/3) can still claim by host."""
+    dispatcher invocation runs with `match=None` so host-only resolvers can
+    still claim by host."""
     sandbox = _sandbox()
     resolver = _StubResolver(sandbox=sandbox)
     matcher = _StubMatcher(result=None)
@@ -250,7 +251,7 @@ def test_resolve_and_match_matcher_returns_none_fails_open() -> None:
 def test_resolve_and_match_matcher_raises_falls_through_as_off_catalog() -> None:
     """Matcher exception falls through to off-catalog dispatch — otherwise
     the request would forward with placeholder credentials, surfacing as a
-    fingerprintable upstream 401 once Plans 2/3 add host-only resolvers."""
+    fingerprintable upstream 401 once host-only resolvers exist."""
     resolver = _StubResolver(sandbox=_sandbox())
     matcher = _StubMatcher(exc=RuntimeError("matcher boom"))
     spy = RecordingCredentialResolver(claims_result=False)
@@ -303,7 +304,7 @@ def test_resolve_and_match_deny_blocks_with_403() -> None:
     result = addon._resolve_and_match(flow)
 
     assert result is None
-    _assert_403(flow, gate_mod._CODE_POLICY_DENIED)
+    _assert_403(flow, SandboxProxyError.POLICY_DENIED)
     assert resolver.resolve_session_by_id_calls == []
 
 
@@ -405,7 +406,7 @@ async def test_deny_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
 
     await addon.request(flow)
 
-    _assert_403(flow, gate_mod._CODE_POLICY_DENIED)
+    _assert_403(flow, SandboxProxyError.POLICY_DENIED)
     assert not spy.approval_ran
     assert spy.dispatched == []
 
@@ -434,14 +435,14 @@ async def test_ask_approved_forwards_after_approval(
 @pytest.mark.parametrize(
     "decision, expected_code",
     [
-        (ApprovalDecision.REJECTED, gate_mod._CODE_USER_REJECTED),
-        (ApprovalDecision.EXPIRED, gate_mod._CODE_NOT_AUTHORIZED),
+        (ApprovalDecision.REJECTED, SandboxProxyError.USER_REJECTED),
+        (ApprovalDecision.EXPIRED, SandboxProxyError.NOT_AUTHORIZED),
     ],
 )
 async def test_ask_denied_blocks(
     monkeypatch: pytest.MonkeyPatch,
     decision: ApprovalDecision,
-    expected_code: str,
+    expected_code: SandboxProxyError,
 ) -> None:
     """ASK: runs the approval pipeline; on REJECTED/EXPIRED blocks, no dispatch."""
     resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
@@ -590,7 +591,7 @@ def test_resolve_and_match_unverified_tag_fails_closed() -> None:
     result = addon._resolve_and_match(flow)
 
     assert result is None
-    _assert_403(flow, gate_mod._CODE_NO_ACTIVE_SESSION)
+    _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
     assert len(resolver.resolve_session_by_id_calls) == 1
 
 
@@ -603,7 +604,7 @@ def test_resolve_and_match_malformed_tag_fails_closed() -> None:
     result = addon._resolve_and_match(flow)
 
     assert result is None
-    _assert_403(flow, gate_mod._CODE_NO_ACTIVE_SESSION)
+    _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
     assert resolver.resolve_session_by_id_calls == []
 
 
@@ -618,7 +619,7 @@ def test_resolve_and_match_session_by_id_db_error_fails_closed() -> None:
     result = addon._resolve_and_match(flow)
 
     assert result is None
-    _assert_403(flow, gate_mod._CODE_NO_ACTIVE_SESSION)
+    _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
     assert len(resolver.resolve_session_by_id_calls) == 1
 
 
@@ -717,7 +718,7 @@ async def test_requestheaders_rejects_cross_tenant_prefix() -> None:
     # Unmarked oversize flow now hits the fail-closed cap.
     result = addon._resolve_and_match(flow)
     assert result is None
-    _assert_403(flow, gate_mod._CODE_BODY_TOO_LARGE)
+    _assert_403(flow, SandboxProxyError.BODY_TOO_LARGE)
 
 
 @pytest.mark.asyncio
@@ -844,7 +845,7 @@ def test_dispatch_injection_credential_unavailable_blocks_with_403() -> None:
 
     addon._dispatch_injection_or_block(flow, sandbox=_sandbox(), match=_MATCH_ALWAYS)
 
-    _assert_403(flow, credential_injection_mod.CODE_CREDENTIAL_ERROR)
+    _assert_403(flow, SandboxProxyError.CREDENTIAL_ERROR)
 
 
 def test_dispatch_injection_resolver_exception_blocks_with_403() -> None:
@@ -860,7 +861,7 @@ def test_dispatch_injection_resolver_exception_blocks_with_403() -> None:
 
     addon._dispatch_injection_or_block(flow, sandbox=_sandbox(), match=_MATCH_ALWAYS)
 
-    _assert_403(flow, credential_injection_mod.CODE_CREDENTIAL_ERROR)
+    _assert_403(flow, SandboxProxyError.CREDENTIAL_ERROR)
 
 
 # ---------------------------------------------------------------------------
@@ -883,7 +884,7 @@ def test_write_response_rejected_sets_user_rejected_403() -> None:
 
     addon._write_response_for_decision(flow, ApprovalDecision.REJECTED)
 
-    _assert_403(flow, gate_mod._CODE_USER_REJECTED)
+    _assert_403(flow, SandboxProxyError.USER_REJECTED)
 
 
 def test_write_response_expired_sets_not_authorized_403() -> None:
@@ -892,7 +893,7 @@ def test_write_response_expired_sets_not_authorized_403() -> None:
 
     addon._write_response_for_decision(flow, ApprovalDecision.EXPIRED)
 
-    _assert_403(flow, gate_mod._CODE_NOT_AUTHORIZED)
+    _assert_403(flow, SandboxProxyError.NOT_AUTHORIZED)
 
 
 # ---------------------------------------------------------------------------

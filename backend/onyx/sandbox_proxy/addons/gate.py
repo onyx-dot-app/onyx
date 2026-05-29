@@ -7,7 +7,6 @@ Fail-open: `ActionMatcher` exceptions and non-matching action types.
 import asyncio
 import base64
 import binascii
-import json
 from collections.abc import Callable
 from typing import Protocol
 from uuid import UUID
@@ -25,6 +24,8 @@ from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.action_matcher import ActionMatcher
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.sandbox_proxy.errors import http_403
+from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
@@ -42,7 +43,7 @@ PARSER_MAX_BODY_BYTES = 1_048_576
 _SNAPSHOT_STREAM_FLAG = "onyx_snapshot_stream"
 
 
-class _IdentityResolverProto(Protocol):
+class _IdentityResolver(Protocol):
     """Subset of `IdentityResolver` the gate uses."""
 
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None: ...
@@ -54,16 +55,6 @@ class _IdentityResolverProto(Protocol):
 
 CacheFactory = Callable[[str], CacheBackend]
 
-
-# 403 codes exposed to the sandbox-side caller (distinct from `OnyxError`).
-# `credential_error` lives on `CredentialInjectionDispatcher` as `CODE_CREDENTIAL_ERROR`.
-_CODE_UNIDENTIFIED_SANDBOX = "unidentified_sandbox"
-_CODE_NO_ACTIVE_SESSION = "no_active_session"
-_CODE_BODY_TOO_LARGE = "body_too_large"
-_CODE_USER_REJECTED = "user_rejected"
-_CODE_NOT_AUTHORIZED = "not_authorized"
-_CODE_INTERNAL_ERROR = "internal_error"
-_CODE_POLICY_DENIED = "policy_denied"
 
 # Relative deep link routed through the Next router by NotificationsPopover.tsx;
 # must mirror the frontend's CRAFT_PATH + sessionId search param.
@@ -101,7 +92,7 @@ class GateAddon:
 
     def __init__(
         self,
-        identity: _IdentityResolverProto,
+        identity: _IdentityResolver,
         action_matcher: ActionMatcher,
         db_session_factory: DBSessionFactory,
         cache_factory: CacheFactory,
@@ -227,11 +218,7 @@ class GateAddon:
             return
 
         gate_target = self._resolve_and_match(flow)
-        # Strip the in-band session tag so it never reaches the origin (it
-        # carries the BuildSession id). mitmproxy does NOT strip
-        # `Proxy-Authorization` from plain-HTTP requests in regular mode (and
-        # for HTTPS the tag rides on the already-consumed CONNECT). The single
-        # strip point: `_resolve_and_match` has read whatever it needs by now.
+        # Strip the in-band session tag so it never reaches the origin
         flow.request.headers.pop("Proxy-Authorization", None)
         if gate_target is None:
             return
@@ -257,7 +244,7 @@ class GateAddon:
                 approval_id,
                 match.action_type,
             )
-            flow.response = _http_403(_CODE_INTERNAL_ERROR)
+            flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             if approval_id is not None:
                 self._terminalize_after_unhandled_error(approval_id, ctx.tenant_id)
 
@@ -281,7 +268,7 @@ class GateAddon:
         """
         src_ip = self._extract_src_ip(flow)
         if src_ip is None:
-            flow.response = _http_403(_CODE_UNIDENTIFIED_SANDBOX)
+            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
             return None
 
         try:
@@ -293,25 +280,25 @@ class GateAddon:
                 src_ip,
                 flow.request.host,
             )
-            flow.response = _http_403(_CODE_UNIDENTIFIED_SANDBOX)
+            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
             return None
         if sandbox is None:
-            flow.response = _http_403(_CODE_UNIDENTIFIED_SANDBOX)
+            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
             return None
 
         # raw_content is None for streamed bodies; treat None as oversize so a
         # future stream opt-in can't silently bypass the cap.
         raw = flow.request.raw_content
         if raw is None or len(raw) > PARSER_MAX_BODY_BYTES:
-            flow.response = _http_403(_CODE_BODY_TOO_LARGE)
+            flow.response = http_403(SandboxProxyError.BODY_TOO_LARGE)
             return None
 
         try:
             match = self._action_matcher.match(flow.request, sandbox.tenant_id)
         except Exception as e:
             # Matcher crash falls through as off-catalog: host-only resolvers
-            # (Plans 2/3) still get a chance to inject so the request doesn't
-            # forward with a placeholder credential.
+            # still get a chance to inject so the request doesn't forward with
+            # a placeholder credential.
             logger.exception(
                 "gate.matcher_error host=%s error=%s",
                 flow.request.host,
@@ -339,7 +326,7 @@ class GateAddon:
             return None
 
         if match.policy is EndpointPolicy.DENY:
-            flow.response = _http_403(_CODE_POLICY_DENIED)
+            flow.response = http_403(SandboxProxyError.POLICY_DENIED)
             return None
 
         if match.policy is EndpointPolicy.ALWAYS:
@@ -357,7 +344,7 @@ class GateAddon:
                 sandbox.user_id,
                 flow.request.host,
             )
-            flow.response = _http_403(_CODE_NO_ACTIVE_SESSION)
+            flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
             return None
         if session_id is None:
             logger.info(
@@ -369,7 +356,7 @@ class GateAddon:
                 match.action_type,
                 flow.request.host,
             )
-            flow.response = _http_403(_CODE_NO_ACTIVE_SESSION)
+            flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
             return None
 
         ctx = sandbox.with_session(session_id)
@@ -519,11 +506,11 @@ class GateAddon:
         if decision == ApprovalDecision.APPROVED:
             return
         code = (
-            _CODE_USER_REJECTED
+            SandboxProxyError.USER_REJECTED
             if decision == ApprovalDecision.REJECTED
-            else _CODE_NOT_AUTHORIZED
+            else SandboxProxyError.NOT_AUTHORIZED
         )
-        flow.response = _http_403(code)
+        flow.response = http_403(code)
 
     def _dispatch_injection_or_block(
         self,
@@ -765,21 +752,3 @@ def _parse_proxy_auth_username(header_value: str | None) -> str | None:
         return None
     username = decoded.split(":", 1)[0]
     return username or None
-
-
-# -----------------------------------------------------------------------
-# Sandbox-facing 403 helper
-# -----------------------------------------------------------------------
-
-
-def _http_403(code: str) -> http.Response:
-    """Build a 403 response visible to the sandbox.
-
-    `code` is a stable string the SDK / curl wrapper matches on.
-    """
-    body = json.dumps({"error": code}).encode()
-    return http.Response.make(
-        403,
-        content=body,
-        headers={"content-type": "application/json"},
-    )

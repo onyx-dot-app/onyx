@@ -12,7 +12,6 @@ to inspect the outcome directly.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol
@@ -20,16 +19,13 @@ from typing import Protocol
 from mitmproxy import http
 
 from onyx.external_apps.matching.engine import ActionMatch
+from onyx.sandbox_proxy.errors import http_403
+from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-# Sandbox-visible 403 code emitted on `BLOCKED`. Exported so the gate's test
-# suite can pin the value end-to-end.
-CODE_CREDENTIAL_ERROR = "credential_error"
 
 
 class CredentialUnavailableError(Exception):
@@ -122,11 +118,7 @@ class CredentialInjectionDispatcher:
         outcome directly call `apply` instead.
         """
         if self.apply(flow, ctx) is InjectionOutcome.BLOCKED:
-            flow.response = http.Response.make(
-                403,
-                content=json.dumps({"error": CODE_CREDENTIAL_ERROR}).encode(),
-                headers={"content-type": "application/json"},
-            )
+            flow.response = http_403(SandboxProxyError.CREDENTIAL_ERROR)
 
     def _pick(
         self, request: http.Request, ctx: InjectionContext

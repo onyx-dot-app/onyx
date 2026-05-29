@@ -19,6 +19,8 @@ from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
+from onyx.sandbox_proxy.action_matcher import ActionMatcher
+from onyx.sandbox_proxy.addons.gate import _IdentityResolver
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.identity import ResolvedSandbox
@@ -61,7 +63,7 @@ def _seed_action_approval(
     return row
 
 
-class _UnusedResolver:
+class _UnusedResolver(_IdentityResolver):
     """Obvious-fail stub for the arbiter tests; none of these are called."""
 
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None:  # noqa: ARG002
@@ -76,7 +78,7 @@ class _UnusedResolver:
         raise AssertionError("identity.resolve_session_by_id unexpectedly used")
 
 
-class _UnusedMatcher:
+class _UnusedMatcher(ActionMatcher):
     def match(self, request: Any, tenant_id: str) -> Any:  # noqa: ARG002
         raise AssertionError("action_matcher.match unexpectedly used")
 

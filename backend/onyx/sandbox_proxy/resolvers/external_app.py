@@ -11,6 +11,7 @@ from __future__ import annotations
 from mitmproxy import http
 
 from onyx.external_apps.credentials import resolve_injection_headers
+from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
 from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.utils.logger import setup_logger
@@ -18,7 +19,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-class ExternalAppResolver:
+class ExternalAppResolver(CredentialResolver):
     """`CredentialResolver` for matcher-attributed external-app requests."""
 
     def claims(

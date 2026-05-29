@@ -21,6 +21,8 @@ from mitmproxy import http
 
 from onyx.db.enums import EndpointPolicy
 from onyx.external_apps.matching.engine import ActionMatch
+from onyx.sandbox_proxy.addons.gate import _IdentityResolver
+from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SandboxIdentity
@@ -124,8 +126,8 @@ def make_flow(
     return flow
 
 
-class StubResolver:
-    """`SessionResolver` stub with canned returns (resolves sandbox + session)."""
+class StubResolver(_IdentityResolver):
+    """`_IdentityResolver` stub with canned returns (resolves sandbox + session)."""
 
     def __init__(
         self,
@@ -163,7 +165,7 @@ class StubResolver:
         return self._session_by_id
 
 
-class RecordingCredentialResolver:
+class RecordingCredentialResolver(CredentialResolver):
     """`CredentialResolver` stub: configurable claim + canned headers/exception.
 
     Records every `(request, ctx)` claim probe and every `ctx` it was asked to

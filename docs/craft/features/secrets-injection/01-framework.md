@@ -32,7 +32,7 @@ class CredentialUnavailableError(Exception):
 
 
 class CredentialResolver(Protocol):
-    def claims(self, host: str, match: ActionMatch | None) -> bool:
+    def claims(self, request: http.Request, ctx: InjectionContext) -> bool:
         """Cheap, no-DB: does this resolver own this request? First claim wins."""
         ...
 
@@ -42,7 +42,7 @@ class CredentialResolver(Protocol):
 ```
 
 `CredentialInjectionDispatcher.apply(flow, ctx)` iterates resolvers in registered order, calls the
-first whose `claims(host, match)` returns True, and sets the returned headers on `flow.request`
+first whose `claims(request, ctx)` returns True, and sets the returned headers on `flow.request`
 (set/replace, never append). The dispatcher never raises:
 
 - No resolver claims → `PASS_THROUGH`.

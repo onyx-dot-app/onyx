@@ -134,10 +134,10 @@ def _build_lookup() -> K8sInformerLookup:
 def build_resolvers() -> list[CredentialResolver]:
     """The registered credential resolvers, in first-claim-wins order.
 
-    Host-claim sets are designed to be disjoint (external-app hosts come from
-    the matcher; the Onyx PAT and LLM-key resolvers from Plans 2/3 will claim
-    their own canonical hosts). Order is a safety net against accidental
-    overlap, not a designed-in priority.
+    Host-claim sets are designed to be disjoint (external-app requests are
+    attributed by the matcher; host-only resolvers added later claim their own
+    canonical hosts). Order is a safety net against accidental overlap, not a
+    designed-in priority.
     """
     return [ExternalAppResolver()]
 

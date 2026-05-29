@@ -115,8 +115,8 @@ def test_resolve_session_by_id_propagates_scalar() -> None:
 
 
 def test_with_session_then_without_session_round_trips() -> None:
-    """A regression that drops any field would silently break the ASK→APPROVED
-    credential injection — `OnyxPatResolver` (plan 2) reads `sandbox_id`."""
+    """A regression that drops any field would silently break ASK→APPROVED
+    credential injection, where resolvers key off `sandbox_id` and `user_id`."""
     sandbox = ResolvedSandbox(
         sandbox_id=uuid4(),
         user_id=uuid4(),
