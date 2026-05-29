@@ -47,16 +47,16 @@ def needs_refresh(
 ) -> bool:
     """True iff the stored token is expired or within the skew window.
 
-    A *missing* ``expires_at`` → ``False``: a legitimately non-expiring token
-    (e.g. Slack/Linear), never refreshed. A *present-but-unparseable*
-    ``expires_at`` is instead a corrupt value (the only writer, ``stamp_expires_at``,
-    always emits a valid ISO instant) → ``True``, so the refresh path heals it
-    rather than silently keeping a token of unknown — likely expired — validity."""
-    raw = credentials.get("expires_at")
-    if not raw:
+    A *missing* ``expires_at`` key → ``False``: a legitimately non-expiring token
+    (e.g. Slack/Linear), never refreshed. A *present* ``expires_at`` that is empty,
+    the wrong type, or otherwise unparseable is a corrupt value, not a non-expiring
+    token (the only writer, ``stamp_expires_at``, always emits a valid ISO instant)
+    → ``True``, so the refresh path heals it rather than silently keeping a token of
+    unknown — likely expired — validity."""
+    if "expires_at" not in credentials:
         return False
     try:
-        expires_at = datetime.fromisoformat(raw)
+        expires_at = datetime.fromisoformat(credentials["expires_at"])
     except (TypeError, ValueError):
         return True
     if expires_at.tzinfo is None:

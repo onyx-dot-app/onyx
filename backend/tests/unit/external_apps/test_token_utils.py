@@ -62,8 +62,16 @@ def test_needs_refresh_within_skew_is_true() -> None:
 
 
 def test_needs_refresh_missing_expires_at_is_false() -> None:
-    # Slack / Linear / static-credential apps never expire.
+    # Slack / Linear / static-credential apps never expire (key absent).
     assert needs_refresh({"access_token": "a"}, _NOW) is False
+
+
+def test_needs_refresh_present_but_falsy_expires_at_is_true() -> None:
+    # A present-but-empty/null value is corrupt, NOT a non-expiring token: it must
+    # be distinguished from the missing key and routed to refresh, not treated as
+    # never-expiring (which would leave an invalid token un-refreshed forever).
+    assert needs_refresh({"expires_at": ""}, _NOW) is True
+    assert needs_refresh({"expires_at": None}, _NOW) is True
 
 
 def test_needs_refresh_unparseable_expires_at_is_true() -> None:
