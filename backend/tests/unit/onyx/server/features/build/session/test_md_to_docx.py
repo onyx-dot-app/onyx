@@ -8,6 +8,7 @@ from docx import Document
 from docx.document import Document as DocxDocument
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
+from docx.table import _Cell
 
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 
@@ -130,6 +131,23 @@ def test_table_is_rendered_with_header_and_rows() -> None:
     assert (len(table.rows), len(table.columns)) == (3, 2)
     assert [c.text for c in table.rows[0].cells] == ["Name", "Value"]
     assert [c.text for c in table.rows[1].cells] == ["a", "1"]
+
+
+def test_table_is_borderless_with_header_rule_only() -> None:
+    # pandoc renders tables with no grid, just a rule under the header row.
+    doc = _render("| Name | Value |\n|------|-------|\n| a | 1 |\n| b | 2 |\n")
+    table = doc.tables[0]
+    assert table.style is not None and table.style.name == "Normal Table"
+
+    def has_bottom_border(cell: _Cell) -> bool:
+        tc_pr = cell._tc.tcPr
+        if tc_pr is None:
+            return False
+        borders = tc_pr.find(qn("w:tcBorders"))
+        return borders is not None and borders.find(qn("w:bottom")) is not None
+
+    assert all(has_bottom_border(cell) for cell in table.rows[0].cells)
+    assert not any(has_bottom_border(cell) for cell in table.rows[1].cells)
 
 
 def test_table_cell_alignment_follows_column_spec() -> None:

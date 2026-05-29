@@ -545,20 +545,44 @@ def _render_table(
     if num_cols == 0:
         return
 
+    # pandoc renders a borderless table (python-docx's default "Normal Table")
+    # with only a rule under the header row, and small left/right cell padding.
     table = document.add_table(rows=0, cols=num_cols)
-    try:
-        table.style = "Table Grid"
-    except KeyError:
-        pass
+    _set_table_cell_margins(table)
 
     if header_cells:
         cells = table.add_row().cells
         for index, cell_node in enumerate(header_cells[:num_cols]):
             _fill_cell(cells[index], cell_node, bold=True, footnotes=footnotes)
+        _underline_header_cells(cells)
     for row in body_rows:
         cells = table.add_row().cells
         for index, cell_node in enumerate(row[:num_cols]):
             _fill_cell(cells[index], cell_node, bold=False, footnotes=footnotes)
+
+
+def _set_table_cell_margins(table: Any) -> None:
+    """Apply pandoc's table cell padding (108 twips left/right, 0 top/bottom)."""
+    margins = OxmlElement("w:tblCellMar")
+    for edge, width in (("top", 0), ("left", 108), ("bottom", 0), ("right", 108)):
+        element = OxmlElement(f"w:{edge}")
+        element.set(qn("w:w"), str(width))
+        element.set(qn("w:type"), "dxa")
+        margins.append(element)
+    table._tbl.tblPr.append(margins)
+
+
+def _underline_header_cells(cells: Any) -> None:
+    """Draw a single bottom rule under each header cell, like pandoc."""
+    for cell in cells:
+        borders = OxmlElement("w:tcBorders")
+        bottom = OxmlElement("w:bottom")
+        bottom.set(qn("w:val"), "single")
+        bottom.set(qn("w:sz"), "4")
+        bottom.set(qn("w:space"), "0")
+        bottom.set(qn("w:color"), "auto")
+        borders.append(bottom)
+        cell._tc.get_or_add_tcPr().append(borders)
 
 
 _TABLE_CELL_ALIGN = {
