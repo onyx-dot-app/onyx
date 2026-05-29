@@ -350,6 +350,7 @@ def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Me
                 .filter(
                     IndexAttempt.connector_credential_pair_id == cc_pair.id,
                     IndexAttempt.search_settings_id == search_settings.id,
+                    IndexAttempt.targeted_reindex_job_id.is_(None),
                 )
                 .order_by(IndexAttempt.time_created.desc())
                 .limit(2)
