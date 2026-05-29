@@ -1,15 +1,18 @@
 """Unit tests for webapp proxy path rewriting/injection."""
 
+from collections.abc import AsyncGenerator
+from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from typing import cast
-from typing import Literal
 from uuid import UUID
 
 import httpx
 import pytest
+from fastapi import HTTPException
 from fastapi import Request
-from sqlalchemy.orm import Session
+from starlette.responses import StreamingResponse
 
+from onyx.db.enums import SharingScope
 from onyx.server.features.build.api import api
 from onyx.server.features.build.api.api import _inject_hmr_fixer
 from onyx.server.features.build.api.api import _rewrite_asset_paths
@@ -155,80 +158,101 @@ class TestProxyHeaderRewriting:
         assert f"<{BASE}/_next/static/media/font.woff2>" in result["link"]
 
 
+class _FakeUpstream:
+    """Stand-in for httpx's streaming response in the async proxy path."""
+
+    def __init__(
+        self, status_code: int, headers: dict[str, str], content: bytes
+    ) -> None:
+        self.status_code = status_code
+        self.headers = httpx.Headers(headers)
+        self._content = content
+        self.close_count = 0
+
+    async def aread(self) -> bytes:
+        return self._content
+
+    async def aclose(self) -> None:
+        self.close_count += 1
+
+    async def aiter_bytes(self, **_kwargs: object) -> AsyncIterator[bytes]:
+        for i in range(0, len(self._content), 4):
+            yield self._content[i : i + 4]
+
+
+class _FakeAsyncClient:
+    """Captures the forwarded request headers and returns a canned upstream."""
+
+    def __init__(
+        self, upstream: _FakeUpstream, captured: dict[str, str] | None = None
+    ) -> None:
+        self._upstream = upstream
+        self._captured = captured
+
+    def build_request(
+        self, method: str, url: str, headers: dict[str, str]
+    ) -> SimpleNamespace:
+        if self._captured is not None:
+            self._captured.update(headers)
+        return SimpleNamespace(method=method, url=url, headers=headers)
+
+    async def send(self, _request: object, **_kwargs: object) -> _FakeUpstream:
+        return self._upstream
+
+
+async def _fake_sandbox_url(_session_id: UUID) -> str:
+    return "http://sandbox"
+
+
+class _FakeACM:
+    """No-op async context manager standing in for an async DB session."""
+
+    async def __aenter__(self) -> None:
+        return None
+
+    async def __aexit__(self, *_args: object) -> bool:
+        return False
+
+
 class TestProxyRequestWiring:
-    def test_proxy_request_rewrites_link_header_on_html_response(
+    @pytest.mark.asyncio
+    async def test_proxy_request_rewrites_link_header_on_html_response(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        html = b"<html><head></head><body>ok</body></html>"
-        upstream = httpx.Response(
+        upstream = _FakeUpstream(
             200,
-            headers={
+            {
                 "content-type": "text/html; charset=utf-8",
                 "link": '</_next/static/media/font.woff2>; rel=preload; as="font"',
             },
-            content=html,
+            b"<html><head></head><body>ok</body></html>",
         )
-
-        monkeypatch.setattr(api, "_get_sandbox_url", lambda *_args: "http://sandbox")
-
-        class FakeClient:
-            def __init__(self, *_args: object, **_kwargs: object) -> None:
-                pass
-
-            def __enter__(self) -> "FakeClient":
-                return self
-
-            def __exit__(self, *_args: object) -> Literal[False]:
-                return False
-
-            def get(self, _url: str, headers: dict[str, str]) -> httpx.Response:
-                assert "host" not in {key.lower() for key in headers}
-                return upstream
-
-        monkeypatch.setattr(api.httpx, "Client", FakeClient)
+        monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
+        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
 
         request = cast(Request, SimpleNamespace(headers={}, query_params=""))
 
-        response = api._proxy_request(
-            "", request, UUID(SESSION_ID), cast(Session, SimpleNamespace())
-        )
+        response = await api._proxy_request("", request, UUID(SESSION_ID))
 
         assert response.headers["link"] == (
             f'<{BASE}/_next/static/media/font.woff2>; rel=preload; as="font"'
         )
 
-    def test_proxy_request_injects_hmr_fixer_for_html_response(
+    @pytest.mark.asyncio
+    async def test_proxy_request_injects_hmr_fixer_for_html_response(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        upstream = httpx.Response(
+        upstream = _FakeUpstream(
             200,
-            headers={"content-type": "text/html; charset=utf-8"},
-            content=b"<html><head><title>x</title></head><body></body></html>",
+            {"content-type": "text/html; charset=utf-8"},
+            b"<html><head><title>x</title></head><body></body></html>",
         )
-
-        monkeypatch.setattr(api, "_get_sandbox_url", lambda *_args: "http://sandbox")
-
-        class FakeClient:
-            def __init__(self, *_args: object, **_kwargs: object) -> None:
-                pass
-
-            def __enter__(self) -> "FakeClient":
-                return self
-
-            def __exit__(self, *_args: object) -> Literal[False]:
-                return False
-
-            def get(self, _url: str, headers: dict[str, str]) -> httpx.Response:
-                assert "host" not in {key.lower() for key in headers}
-                return upstream
-
-        monkeypatch.setattr(api.httpx, "Client", FakeClient)
+        monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
+        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
 
         request = cast(Request, SimpleNamespace(headers={}, query_params=""))
 
-        response = api._proxy_request(
-            "", request, UUID(SESSION_ID), cast(Session, SimpleNamespace())
-        )
+        response = await api._proxy_request("", request, UUID(SESSION_ID))
         body = cast(bytes, response.body).decode("utf-8")
 
         assert "window.WebSocket = function (url, protocols)" in body
@@ -236,32 +260,18 @@ class TestProxyRequestWiring:
             "<title>x</title>"
         )
 
-    def test_proxy_request_strips_sensitive_viewer_headers(
+    @pytest.mark.asyncio
+    async def test_proxy_request_strips_sensitive_viewer_headers(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Credential, CSRF, and forwarded-identity headers must not reach the sandbox."""
-        upstream = httpx.Response(
-            200, headers={"content-type": "text/plain"}, content=b"ok"
-        )
+        upstream = _FakeUpstream(200, {"content-type": "text/plain"}, b"ok")
         forwarded_headers: dict[str, str] = {}
 
-        monkeypatch.setattr(api, "_get_sandbox_url", lambda *_args: "http://sandbox")
-
-        class FakeClient:
-            def __init__(self, *_args: object, **_kwargs: object) -> None:
-                pass
-
-            def __enter__(self) -> "FakeClient":
-                return self
-
-            def __exit__(self, *_args: object) -> Literal[False]:
-                return False
-
-            def get(self, _url: str, headers: dict[str, str]) -> httpx.Response:
-                forwarded_headers.update(headers)
-                return upstream
-
-        monkeypatch.setattr(api.httpx, "Client", FakeClient)
+        monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
+        monkeypatch.setattr(
+            api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream, forwarded_headers)
+        )
 
         # Security spec: every header here must never reach the sandbox,
         # regardless of how EXCLUDED_REQUEST_HEADERS evolves. Removing a key
@@ -322,9 +332,7 @@ class TestProxyRequestWiring:
             ),
         )
 
-        api._proxy_request(
-            "", request, UUID(SESSION_ID), cast(Session, SimpleNamespace())
-        )
+        await api._proxy_request("", request, UUID(SESSION_ID))
 
         lower = {key.lower(): value for key, value in forwarded_headers.items()}
         # Exact match: no sensitive header survives, no extra header leaks
@@ -342,3 +350,160 @@ class TestProxyRequestWiring:
         result = _rewrite_proxy_response_headers(headers, SESSION_ID)
 
         assert f"<{BASE}/_next/static/media/font.woff2>" in result["link"]
+
+    @pytest.mark.asyncio
+    async def test_proxy_sets_immutable_cache_control_on_next_static(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Hashed /_next/static/ assets get a long immutable cache, overriding
+        the dev server's no-store so the browser skips re-proxying on reload."""
+        upstream = _FakeUpstream(
+            200,
+            {
+                "content-type": "application/javascript",
+                "cache-control": "no-store, must-revalidate",
+                "pragma": "no-cache",
+            },
+            b"console.log(1)",
+        )
+        monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
+        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
+        request = cast(Request, SimpleNamespace(headers={}, query_params=""))
+
+        response = await api._proxy_request(
+            "_next/static/chunks/main.js", request, UUID(SESSION_ID)
+        )
+
+        assert (
+            response.headers["cache-control"] == "public, max-age=31536000, immutable"
+        )
+        assert "pragma" not in response.headers
+
+    @pytest.mark.asyncio
+    async def test_proxy_passes_js_through_unrewritten(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """JS bundles pass through unrewritten; the sandbox emits assetPrefix URLs."""
+        js = b'fetch("/_next/static/chunks/x.js")'
+        upstream = _FakeUpstream(200, {"content-type": "application/javascript"}, js)
+        monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
+        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
+        request = cast(Request, SimpleNamespace(headers={}, query_params=""))
+
+        response = await api._proxy_request(
+            "_next/static/chunks/x.js", request, UUID(SESSION_ID)
+        )
+
+        assert cast(bytes, response.body) == js
+
+    @pytest.mark.asyncio
+    async def test_proxy_streams_binary_assets(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Non-rewritable assets stream straight through, byte-for-byte."""
+        body = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+        upstream = _FakeUpstream(200, {"content-type": "image/png"}, body)
+        monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
+        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
+        request = cast(Request, SimpleNamespace(headers={}, query_params=""))
+
+        response = await api._proxy_request("logo.png", request, UUID(SESSION_ID))
+
+        assert isinstance(response, StreamingResponse)
+        chunks = [chunk async for chunk in response.body_iterator]
+        assert b"".join(cast(list[bytes], chunks)) == body
+        assert upstream.close_count == 1  # released after full drain
+
+    @pytest.mark.asyncio
+    async def test_streaming_closes_upstream_on_early_disconnect(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If the client disconnects mid-stream, the pooled connection is still
+        released (the generator's finally runs on GeneratorExit)."""
+        upstream = _FakeUpstream(200, {"content-type": "image/png"}, b"abcdefghijkl")
+        monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
+        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
+        request = cast(Request, SimpleNamespace(headers={}, query_params=""))
+
+        response = await api._proxy_request("logo.png", request, UUID(SESSION_ID))
+        assert isinstance(response, StreamingResponse)
+
+        body_iter = cast(AsyncGenerator[bytes, None], response.body_iterator)
+        first = await body_iter.__anext__()
+        assert first == b"abcd"
+        await body_iter.aclose()
+
+        assert upstream.close_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_buffered_response_closes_upstream(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The buffer-and-rewrite branch releases the upstream after reading."""
+        upstream = _FakeUpstream(
+            200, {"content-type": "text/html"}, b"<html><head></head></html>"
+        )
+        monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
+        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
+        request = cast(Request, SimpleNamespace(headers={}, query_params=""))
+
+        await api._proxy_request("", request, UUID(SESSION_ID))
+
+        assert upstream.close_count == 1
+
+
+class TestWebappAccessCache:
+    @pytest.mark.asyncio
+    async def test_grant_is_cached_skipping_db_on_repeat(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A granted (session, viewer) pair skips the DB on subsequent assets."""
+        api._WEBAPP_ACCESS_CACHE.clear()
+        viewer = SimpleNamespace(id=UUID("11111111-1111-1111-1111-111111111111"))
+        calls = {"n": 0}
+
+        async def fake_access(
+            _db: object, _sid: UUID
+        ) -> tuple[SharingScope, UUID] | None:
+            calls["n"] += 1
+            # Owner == viewer, so a PRIVATE session is granted.
+            return (SharingScope.PRIVATE, viewer.id)
+
+        monkeypatch.setattr(api, "get_webapp_access_async", fake_access)
+        monkeypatch.setattr(
+            api, "get_async_session_context_manager", lambda: _FakeACM()
+        )
+
+        await api._check_webapp_access(UUID(SESSION_ID), cast(api.User, viewer))
+        await api._check_webapp_access(UUID(SESSION_ID), cast(api.User, viewer))
+
+        assert calls["n"] == 1  # second call served from cache
+
+    @pytest.mark.asyncio
+    async def test_private_session_denies_non_owner_and_is_not_cached(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Non-owner gets 404 on a private session, and the denial is re-queried
+        (denials are never cached, so re-sharing takes effect immediately)."""
+        api._WEBAPP_ACCESS_CACHE.clear()
+        owner_id = UUID("22222222-2222-2222-2222-222222222222")
+        viewer = SimpleNamespace(id=UUID("33333333-3333-3333-3333-333333333333"))
+        calls = {"n": 0}
+
+        async def fake_access(
+            _db: object, _sid: UUID
+        ) -> tuple[SharingScope, UUID] | None:
+            calls["n"] += 1
+            return (SharingScope.PRIVATE, owner_id)
+
+        monkeypatch.setattr(api, "get_webapp_access_async", fake_access)
+        monkeypatch.setattr(
+            api, "get_async_session_context_manager", lambda: _FakeACM()
+        )
+
+        for _ in range(2):
+            with pytest.raises(HTTPException) as exc:
+                await api._check_webapp_access(UUID(SESSION_ID), cast(api.User, viewer))
+            assert exc.value.status_code == 404
+
+        assert calls["n"] == 2  # denial hit the DB both times
