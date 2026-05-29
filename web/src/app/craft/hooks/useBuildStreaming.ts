@@ -289,6 +289,15 @@ export function useBuildStreaming() {
                   null,
                   ""
                 );
+                // Subagent edits hit the same sandbox — refresh preview/files.
+                if (parsed.filePath && parsed.kind) {
+                  for (const detector of OUTPUT_FILE_DETECTORS) {
+                    if (detector.match(parsed.filePath, parsed.kind)) {
+                      detector.onDetect(sessionId, parsed.filePath);
+                      break;
+                    }
+                  }
+                }
                 break;
               }
 
