@@ -122,7 +122,7 @@ credentials via env vars. Every pod-side placeholder swap below is scoped to the
    The docker manager continues to inject real credentials in both cases.
 
 5. **Wire in `server.py`.** `build_resolvers()` returns
-   `[OnyxPatResolver(), ExternalAppResolver()]` (the LLM resolver joins per Plan 3). The dispatcher
+   `[OnyxPatResolver(), LLMProviderKeyResolver(), ExternalAppResolver()]`. The dispatcher
    is constructed once at startup and passed into `GateAddon`.
 
 ## Tests
