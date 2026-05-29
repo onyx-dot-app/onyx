@@ -135,13 +135,14 @@ _MATCH_DENY = make_request_match(payload={"text": "hi"}, policy=EndpointPolicy.D
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_and_match_no_source_ip_fails_closed() -> None:
+@pytest.mark.asyncio
+async def test_resolve_and_match_no_source_ip_fails_closed() -> None:
     resolver = _StubResolver()
     matcher = _StubMatcher(result=_MATCH)
     addon = _build(resolver=resolver, matcher=matcher)
     flow = _flow(peername=None)
 
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
 
     assert result is None
     _assert_403(flow, SandboxProxyError.UNIDENTIFIED_SANDBOX)
@@ -158,7 +159,8 @@ def test_resolve_and_match_no_source_ip_fails_closed() -> None:
     ],
     ids=["returns_none", "raises"],
 )
-def test_resolve_and_match_sandbox_resolution_fails_closed(
+@pytest.mark.asyncio
+async def test_resolve_and_match_sandbox_resolution_fails_closed(
     resolver_kwargs: dict[str, Any],
 ) -> None:
     """Absent pod and DB blip during resolution both fail closed."""
@@ -167,7 +169,7 @@ def test_resolve_and_match_sandbox_resolution_fails_closed(
     addon = _build(resolver=resolver, matcher=matcher)
     flow = _flow()
 
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
 
     assert result is None
     _assert_403(flow, SandboxProxyError.UNIDENTIFIED_SANDBOX)
@@ -184,7 +186,8 @@ _OVERSIZE_BODY = b"\x00" * 1_048_577
     [None, _OVERSIZE_BODY],
     ids=["streamed", "oversize"],
 )
-def test_resolve_and_match_body_too_large_fails_closed(
+@pytest.mark.asyncio
+async def test_resolve_and_match_body_too_large_fails_closed(
     raw_content: bytes | None,
 ) -> None:
     """Streamed (None) and oversize bodies both fail closed."""
@@ -193,7 +196,7 @@ def test_resolve_and_match_body_too_large_fails_closed(
     addon = _build(resolver=resolver, matcher=matcher)
     flow = _flow(raw_content=raw_content)
 
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
 
     assert result is None
     _assert_403(flow, SandboxProxyError.BODY_TOO_LARGE)
@@ -205,7 +208,8 @@ def test_parser_max_body_bytes_constant_matches_spec() -> None:
     assert PARSER_MAX_BODY_BYTES == 1_048_576
 
 
-def test_resolve_and_match_no_tag_fails_closed() -> None:
+@pytest.mark.asyncio
+async def test_resolve_and_match_no_tag_fails_closed() -> None:
     """Identified pod, no session tag: fail closed with no fallback, so
     the session lookup is never attempted."""
     resolver = _StubResolver(sandbox=_sandbox())
@@ -213,7 +217,7 @@ def test_resolve_and_match_no_tag_fails_closed() -> None:
     addon = _build(resolver=resolver, matcher=matcher)
     flow = _flow()  # no proxy_auth
 
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
 
     assert result is None
     _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
@@ -225,7 +229,8 @@ def test_resolve_and_match_no_tag_fails_closed() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_and_match_matcher_returns_none_fails_open() -> None:
+@pytest.mark.asyncio
+async def test_resolve_and_match_matcher_returns_none_fails_open() -> None:
     """Non-gated traffic: matcher returns None → forwarded; the off-catalog
     dispatcher invocation runs with `match=None` so host-only resolvers can
     still claim by host."""
@@ -236,7 +241,7 @@ def test_resolve_and_match_matcher_returns_none_fails_open() -> None:
     addon = _build(resolver=resolver, matcher=matcher, credential_resolvers=[spy])
     flow = _flow()
 
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
 
     assert result is None
     assert flow.response is None  # forwarded
@@ -248,7 +253,8 @@ def test_resolve_and_match_matcher_returns_none_fails_open() -> None:
     assert ctx.sandbox is sandbox
 
 
-def test_resolve_and_match_matcher_raises_falls_through_as_off_catalog() -> None:
+@pytest.mark.asyncio
+async def test_resolve_and_match_matcher_raises_falls_through_as_off_catalog() -> None:
     """Matcher exception falls through to off-catalog dispatch — otherwise
     the request would forward with placeholder credentials, surfacing as a
     fingerprintable upstream 401 once host-only resolvers exist."""
@@ -258,7 +264,7 @@ def test_resolve_and_match_matcher_raises_falls_through_as_off_catalog() -> None
     addon = _build(resolver=resolver, matcher=matcher, credential_resolvers=[spy])
     flow = _flow()
 
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
 
     assert result is None
     assert flow.response is None  # forwarded
@@ -273,7 +279,8 @@ def test_resolve_and_match_matcher_raises_falls_through_as_off_catalog() -> None
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_and_match_always_forwards_without_session() -> None:
+@pytest.mark.asyncio
+async def test_resolve_and_match_always_forwards_without_session() -> None:
     """ALWAYS auto-approves: forward (with credentials injected), no approval
     row, and (since it's not gated) no session lookup — even when a tag is
     present."""
@@ -288,20 +295,21 @@ def test_resolve_and_match_always_forwards_without_session() -> None:
     )
     flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
 
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
 
     assert result is None  # forwarded, not promoted to an approval
     assert flow.response is None
     assert resolver.resolve_session_by_id_calls == []
 
 
-def test_resolve_and_match_deny_blocks_with_403() -> None:
+@pytest.mark.asyncio
+async def test_resolve_and_match_deny_blocks_with_403() -> None:
     """DENY blocks outright with a policy_denied 403, no session needed."""
     resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH_DENY))
     flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
 
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
 
     assert result is None
     _assert_403(flow, SandboxProxyError.POLICY_DENIED)
@@ -462,7 +470,8 @@ async def test_ask_denied_blocks(
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_and_match_happy_path_promotes_session() -> None:
+@pytest.mark.asyncio
+async def test_resolve_and_match_happy_path_promotes_session() -> None:
     user_id = uuid4()
     session_id = UUID(_TAG_UUID)
     sandbox = _sandbox(user_id=user_id)
@@ -471,7 +480,7 @@ def test_resolve_and_match_happy_path_promotes_session() -> None:
     addon = _build(resolver=resolver, matcher=matcher)
     flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
 
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
 
     assert result is not None
     ctx, match = result
@@ -539,7 +548,8 @@ def test_http_connect_ignores_missing_or_garbled_header() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_and_match_exact_tag_on_http_request() -> None:
+@pytest.mark.asyncio
+async def test_resolve_and_match_exact_tag_on_http_request() -> None:
     """Plain-HTTP: Proxy-Authorization rides on the request; a verified
     tag routes to that exact session."""
     user_id = uuid4()
@@ -549,7 +559,7 @@ def test_resolve_and_match_exact_tag_on_http_request() -> None:
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
     flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
 
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
 
     assert result is not None
     ctx, _match = result
@@ -559,7 +569,8 @@ def test_resolve_and_match_exact_tag_on_http_request() -> None:
     ]
 
 
-def test_resolve_and_match_exact_tag_on_https_connect() -> None:
+@pytest.mark.asyncio
+async def test_resolve_and_match_exact_tag_on_https_connect() -> None:
     """HTTPS: the tag rode on the CONNECT (captured via http_connect)
     and is read back off the connection, not the MITM'd request."""
     user_id = uuid4()
@@ -573,14 +584,15 @@ def test_resolve_and_match_exact_tag_on_https_connect() -> None:
     # Decrypted request has no Proxy-Authorization of its own.
     request_flow = _flow(conn_id="conn-1")
 
-    result = addon._resolve_and_match(request_flow)
+    result = await addon._resolve_and_match(request_flow)
 
     assert result is not None
     ctx, _match = result
     assert ctx.session_id == tagged_id
 
 
-def test_resolve_and_match_unverified_tag_fails_closed() -> None:
+@pytest.mark.asyncio
+async def test_resolve_and_match_unverified_tag_fails_closed() -> None:
     """Tag doesn't resolve to one of this user's sessions (stale /
     foreign / tampered): fail closed, no fallback."""
     sandbox = _sandbox()
@@ -588,27 +600,29 @@ def test_resolve_and_match_unverified_tag_fails_closed() -> None:
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
     flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
 
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
 
     assert result is None
     _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
     assert len(resolver.resolve_session_by_id_calls) == 1
 
 
-def test_resolve_and_match_malformed_tag_fails_closed() -> None:
+@pytest.mark.asyncio
+async def test_resolve_and_match_malformed_tag_fails_closed() -> None:
     """A non-UUID username fails closed without hitting the DB."""
     resolver = _StubResolver(sandbox=_sandbox())
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
     flow = _flow(proxy_auth=_basic_auth("not-a-uuid"))
 
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
 
     assert result is None
     _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
     assert resolver.resolve_session_by_id_calls == []
 
 
-def test_resolve_and_match_session_by_id_db_error_fails_closed() -> None:
+@pytest.mark.asyncio
+async def test_resolve_and_match_session_by_id_db_error_fails_closed() -> None:
     """A DB blip validating the tag fails closed, not silently forward."""
     resolver = _StubResolver(
         sandbox=_sandbox(), session_by_id_exc=RuntimeError("db down")
@@ -616,7 +630,7 @@ def test_resolve_and_match_session_by_id_db_error_fails_closed() -> None:
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
     flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
 
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
 
     assert result is None
     _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
@@ -716,7 +730,7 @@ async def test_requestheaders_rejects_cross_tenant_prefix() -> None:
     assert gate_mod._SNAPSHOT_STREAM_FLAG not in flow.metadata
 
     # Unmarked oversize flow now hits the fail-closed cap.
-    result = addon._resolve_and_match(flow)
+    result = await addon._resolve_and_match(flow)
     assert result is None
     _assert_403(flow, SandboxProxyError.BODY_TOO_LARGE)
 

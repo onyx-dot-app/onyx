@@ -51,7 +51,8 @@ expiry.
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Trigger | Lazy, at the injection seam (`GateAddon._inject_credentials`) | Two calls — `ensure_fresh_credentials(...)` then `resolve_injection_headers(...)`. |
+| Trigger | Lazy, at the injection seam (`GateAddon._inject_credentials`) | Two steps — refresh (`ensure_fresh_credentials`) then render (`resolve_injection_headers`). |
+| Event-loop safety | The refresh runs via `await asyncio.to_thread(...)` | It can block (token POST + Redis lock); off-thread it stalls only the triggering request, not the whole proxy loop. The injection seam and `_resolve_and_match` are `async` so both verdict paths await the refresh inline (no `flow.metadata` side channel). |
 | Interface boundary | The seam passes the **session factory + ids**; the helper abstracts read + refresh + store entirely | The gate stays ignorant of refresh mechanics (no DB calls, no lock, no token POST, no session handling at the seam). |
 | `ensure_fresh_credentials` shape | `(db_session_factory, tenant_id, external_app_id, user_id) -> None` | Self-contained: opens its own short sessions, single-flights, persists. Returns nothing — the caller just renders next. |
 | Single-flight | Fleet-wide Redis lock (`redis_shared_lock`) with double-checked re-read | Dedupes a stampede across processes/pods and is safe for token-rotating providers; fully hidden inside the helper. |
@@ -61,12 +62,13 @@ expiry.
 | `expires_at` stamping | At the callback and inside the refresh helper, not the provider | `extract_credentials` / `refresh_credentials` stay clockless and trivially testable. |
 | Refresh-token-only rows backfill | Self-heal (treat missing `expires_at` as never-expire) | The pre-change population is tiny and transient; one extra 401 then a reconnect. |
 
-**Event-loop note.** The refresh runs synchronously on the proxy event loop
-(matching the sync DB I/O already there); it is rare (once per token lifetime per
-user), single-flighted, and the token POST is tightly timed out. If a slow token
-endpoint blocking the loop becomes a problem, the seam can wrap the one
-`ensure_fresh_credentials(...)` call in `asyncio.to_thread` — its internals don't
-change.
+**Event-loop note.** `gate.request` runs on the mitmproxy event loop, which
+multiplexes egress for many sessions/tenants. The refresh's blocking work (token
+POST up to `refresh_http_timeout_seconds`, Redis-lock wait up to `_LOCK_WAIT_S`)
+therefore runs in a worker thread via `await asyncio.to_thread(...)`, so a slow
+or hung token endpoint stalls only the triggering request — not every concurrent
+proxied flow. Because refreshes now run on threads (no longer serialized by the
+loop), the Redis lock is the real in-process single-flight, not redundant.
 
 ## Changes (file-by-file — the PR review map)
 
@@ -123,19 +125,23 @@ change.
     in (not a live session); **persistence stays in `db/external_app.py`**.
 
 ### 4. Wire into the egress seam
-- **`backend/onyx/sandbox_proxy/addons/gate.py`** — `_inject_credentials` makes
-  two calls inside its existing `try`/`except`:
+- **`backend/onyx/sandbox_proxy/addons/gate.py`** — `_inject_credentials` (now
+  `async`) refreshes off the event loop, then renders:
   ```python
-  ensure_fresh_credentials(self._db_session_factory, tenant_id, app_id, user_id)
+  await asyncio.to_thread(
+      ensure_fresh_credentials, self._db_session_factory, tenant_id, app_id, user_id
+  )
   with self._db_session_factory(tenant_id) as db:
       headers = resolve_injection_headers(db, app_id, user_id)
   ```
   The gate imports only `ensure_fresh_credentials` + `resolve_injection_headers`
-  — no DB functions, no lock, no refresh exceptions. A revoked grant is cleared
-  inside the helper, so the render finds no creds and forwards unauthenticated
-  (upstream 401), the same as a never-connected app. Unexpected errors hit the
-  existing broad `except` → `False` (fail closed). Both ALWAYS and ASK-approved
-  go through `_inject_credentials_or_block` → `_inject_credentials` unchanged.
+  — no DB functions, no lock, no refresh exceptions. `_inject_credentials_or_block`
+  → `_inject_credentials` and `_resolve_and_match` are all `async`, so both verdict
+  paths await injection inline: the ALWAYS path in `_resolve_and_match`, the
+  ASK-approved path in `request` (no `flow.metadata` hand-off). A revoked grant is
+  cleared inside the helper → render finds no creds → forwards unauthenticated
+  (upstream 401), same as a never-connected app. Unexpected errors hit the broad
+  `except` → `False` (fail closed).
 
 ## Failure handling
 
@@ -196,8 +202,11 @@ exception:
 - [ ] Refresh format lives on `OAuthExternalAppProvider` as overridable
       properties/hooks (template method), not in free functions/constants — a new
       provider's divergence is a one-method override, not a reimplementation.
-- [ ] The gate seam is two calls and imports only `ensure_fresh_credentials` +
+- [ ] The gate seam imports only `ensure_fresh_credentials` +
       `resolve_injection_headers` — no DB functions, lock, or refresh exceptions.
+- [ ] The (blocking) refresh runs via `await asyncio.to_thread(...)` — never
+      synchronously on the mitmproxy event loop. `_LOCK_WAIT_S` is bounded so a
+      waiter doesn't hold a worker thread long.
 - [ ] `ensure_fresh_credentials` takes the session **factory** (not a live
       session); each step's session is short — none spans the lock wait or POST.
 - [ ] `stamp_expires_at` builds a new dict — the `get_value(apply_mask=False)`

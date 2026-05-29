@@ -30,10 +30,10 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Held long enough for the POST + DB steps; short wait so a request never blocks
-# long (a timed-out waiter proceeds while the lock winner refreshes).
+# Held long enough for the POST + DB steps; short wait so a waiter doesn't hold a
+# worker thread for long (a timed-out waiter proceeds while the winner refreshes).
 _LOCK_HELD_S = 30.0
-_LOCK_WAIT_S = 8.0
+_LOCK_WAIT_S = 5.0
 
 # Gathered inside a session for the POST: provider, stored creds, client id/secret.
 _RefreshInputs = tuple[OAuthExternalAppProvider, dict[str, Any], str, str]
