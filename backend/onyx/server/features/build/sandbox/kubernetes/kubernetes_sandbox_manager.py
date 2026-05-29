@@ -186,9 +186,22 @@ def _resolve_proxy_ip() -> str:
 # Onyx API host must transit the proxy so the PAT can be injected on the wire.
 _NO_PROXY = "127.0.0.1,localhost"
 
-# Placeholder shipped in ONYX_PAT; the egress proxy injects the real PAT on the
-# wire (the pod never holds the token).
-_ONYX_PAT_PLACEHOLDER = "onyx_pat_placeholder_replaced_by_proxy"
+# Non-empty sentinel for every proxy-injected credential (ONYX_PAT + each
+# opencode apiKey); the proxy overwrites the real value on the wire.
+_PROXY_INJECTED_PLACEHOLDER = "replaced_by_egress_proxy"
+
+
+def _placeholder_llm_configs(
+    configs: list[LLMProviderConfig],
+) -> list[LLMProviderConfig]:
+    """Swap real LLM keys for the proxy placeholder before the opencode config
+    reaches the pod; provider/model/api_base stay so routing is unchanged."""
+    return [
+        c.model_copy(update={"api_key": _PROXY_INJECTED_PLACEHOLDER})
+        if c.api_key
+        else c
+        for c in configs
+    ]
 
 
 def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
@@ -602,7 +615,7 @@ class KubernetesSandboxManager(SandboxManager):
             command=["/workspace/entrypoint.sh"],
             ports=sandbox_ports,
             env=[
-                client.V1EnvVar(name="ONYX_PAT", value=_ONYX_PAT_PLACEHOLDER),
+                client.V1EnvVar(name="ONYX_PAT", value=_PROXY_INJECTED_PLACEHOLDER),
                 client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
                 client.V1EnvVar(
                     name=OPENCODE_SERVER_PASSWORD,
@@ -1278,11 +1291,10 @@ class KubernetesSandboxManager(SandboxManager):
                 self._terminated_sandboxes.discard(sandbox_id)
             self._invalidate_serve_connection_info(sandbox_id)
 
-            # Secret must exist before the Pod (env references it via
-            # secretKeyRef). Pre-load every configured provider so
-            # cross-provider per-prompt model overrides work without a
-            # pod restart.
-            providers = all_llm_configs or [llm_config]
+            # Secret must exist before the Pod (secretKeyRef). Pre-load every
+            # provider for cross-provider model overrides; keys are swapped for
+            # the proxy placeholder so the pod never holds them.
+            providers = _placeholder_llm_configs(all_llm_configs or [llm_config])
             # Only register the egress-tagging plugin when the proxy is
             # deployed; otherwise it would no-op (no HTTP(S)_PROXY to re-tag).
             session_tag_plugins = (

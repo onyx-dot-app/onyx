@@ -23,7 +23,7 @@ This plan generalises that single call site into a dispatcher with a uniform con
 @dataclass(frozen=True)
 class InjectionContext:
     sandbox: ResolvedSandbox
-    match: ActionMatch | None      # None on off-catalog flows
+    match: RequestMatch | None     # None on off-catalog flows
     db_session_factory: DBSessionFactory
 
 
@@ -63,9 +63,9 @@ placeholder can't be rendered — that's correct for user-in-the-loop apps where
 surfaces to the user. The dispatcher's outer `BLOCKED` and the renderer's per-header drop coexist.
 
 **Claim disjointness.** External-app hosts come from `ExternalApp.upstream_url_patterns`; the Onyx
-API host is `SANDBOX_API_SERVER_URL`; LLM hosts are the canonical provider hosts plus each tenant's
-`LLMProvider.api_base`. These sets are disjoint by construction. The dispatcher's unit test fails
-the build on overlap, and startup logs any predicate collision.
+API host is `SANDBOX_API_SERVER_URL`; LLM hosts are the canonical provider hosts. These sets are
+disjoint by construction. The dispatcher's unit test fails the build on overlap, and startup logs
+any predicate collision.
 
 **Placeholder / overwrite contract.** The pod ships a non-empty placeholder for each credential
 header — opencode's AI SDK throws on unset keys and onyx-cli treats empty as unconfigured. The
@@ -79,8 +79,8 @@ proxy overwrites only the named header. The real secret never leaves the proxy.
   Behaviour identical to the current `_inject_credentials`.
 - **`OnyxPatResolver`** — claims the `SANDBOX_API_SERVER_URL` host; reads `Sandbox.encrypted_pat`.
   See [Plan 2](./02-onyx-pat.md).
-- **`LLMProviderKeyResolver`** — claims canonical LLM provider hosts plus each tenant's `api_base`;
-  reads `llm_provider` rows. See [Plan 3](./03-llm-key.md).
+- **`LLMProviderKeyResolver`** — claims the canonical LLM provider hosts (custom `api_base` out of
+  scope); reads `llm_provider` rows. See [Plan 3](./03-llm-key.md).
 
 In-proxy decryption works because the proxy Deployment already has `ENCRYPTION_KEY_SECRET` wired.
 
