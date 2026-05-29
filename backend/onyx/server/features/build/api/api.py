@@ -302,8 +302,10 @@ def _proxy_request(
     forwarded_headers = {
         key: value
         for key, value in request.headers.items()
-        if key.lower() not in EXCLUDED_REQUEST_HEADERS
-        and not key.lower().startswith("x-onyx-")
+        if not (
+            (lowered := key.lower()) in EXCLUDED_REQUEST_HEADERS
+            or lowered.startswith("x-onyx-")
+        )
     }
 
     try:
