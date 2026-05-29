@@ -14,7 +14,6 @@ with no verifiable session tag fails closed rather than routing to a
 guessed session.
 """
 
-from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Protocol
@@ -23,6 +22,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.db.engine.sql_engine import DBSessionFactory
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
@@ -98,11 +98,6 @@ class SandboxIPLookup(Protocol):
     def is_synced(self) -> bool: ...
 
     def stop(self) -> None: ...
-
-
-# Canonical type for the proxy's tenant-id -> DB-session factory. Imported by
-# action_matcher and the gate addon so the signature has a single source.
-DBSessionFactory = Callable[[str], AbstractContextManager[Session]]
 
 
 def default_session_factory(tenant_id: str) -> AbstractContextManager[Session]:

@@ -25,6 +25,16 @@ from tests.unit.sandbox_proxy.conftest import make_request_match
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
 
 
+@pytest.fixture(autouse=True)
+def _noop_token_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default `ensure_fresh_credentials` to a no-op so these tests pin the
+    claim rule and rendering contract; the refresh-seam test re-patches it.
+    The refresh mechanics live in `tests/unit/external_apps/test_token_refresh.py`."""
+    monkeypatch.setattr(
+        external_app_mod, "ensure_fresh_credentials", lambda *_a, **_k: None
+    )
+
+
 def _recorder_db_factory(ops: list[str]) -> Any:
     @contextmanager
     def factory(tenant_id: str) -> Iterator[Any]:
@@ -81,6 +91,35 @@ def test_resolve_forwards_external_app_id_user_id_and_tenant(
     assert captured["external_app_id"] == 99
     assert captured["user_id"] == ctx.sandbox.user_id
     assert ops == ["session:tenant-7"]
+
+
+def test_resolve_refreshes_token_before_rendering(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The resolver refreshes an expiring OAuth token (via `ensure_fresh_credentials`,
+    handed the session factory + ids) before rendering headers, so the injected
+    `Bearer` is live. The refresh mechanics themselves are pinned in
+    `tests/unit/external_apps/test_token_refresh.py`."""
+    calls: list[tuple[Any, str, int, Any]] = []
+
+    def _ensure(factory: Any, tenant_id: str, app_id: int, user_id: Any) -> None:
+        calls.append((factory, tenant_id, app_id, user_id))
+
+    monkeypatch.setattr(external_app_mod, "ensure_fresh_credentials", _ensure)
+    monkeypatch.setattr(
+        external_app_mod,
+        "resolve_injection_headers",
+        lambda *_a, **_k: {"Authorization": "Bearer real"},
+    )
+
+    factory = _recorder_db_factory([])
+    match = make_request_match(external_app_id=99)
+    ctx = _ctx(match=match, db_factory=factory)
+
+    headers = ExternalAppResolver().resolve(_flow().request, ctx)
+
+    assert headers == {"Authorization": "Bearer real"}
+    assert calls == [(factory, "tenant-7", 99, ctx.sandbox.user_id)]
 
 
 def test_resolve_raises_when_match_is_none() -> None:

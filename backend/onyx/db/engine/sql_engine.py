@@ -2,7 +2,9 @@ import os
 import re
 import threading
 import time
+from collections.abc import Callable
 from collections.abc import Generator
+from contextlib import AbstractContextManager
 from contextlib import contextmanager
 from typing import Any
 
@@ -437,6 +439,10 @@ def _safe_close_session(session: Session) -> None:
         logger.warning(
             "DB connection lost during session cleanup — the connection will be invalidated and recycled by the pool."
         )
+
+
+# Canonical type for a tenant-id -> tenant-scoped DB session context manager
+DBSessionFactory = Callable[[str], AbstractContextManager[Session]]
 
 
 @contextmanager

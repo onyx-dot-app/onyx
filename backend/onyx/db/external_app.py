@@ -416,3 +416,20 @@ def upsert_external_app_user_credential(
     cred = db_session.scalars(stmt).one()
     db_session.commit()
     return cred
+
+
+def delete_external_app_user_credential(
+    db_session: Session,
+    *,
+    external_app_id: int,
+    user_id: UUID,
+) -> None:
+    """Delete the user's stored credentials for one app, and commit (no-op if
+    absent). Used when a refresh terminally fails so the user reconnects."""
+    db_session.execute(
+        delete(ExternalAppUserCredential).where(
+            ExternalAppUserCredential.external_app_id == external_app_id,
+            ExternalAppUserCredential.user_id == user_id,
+        )
+    )
+    db_session.commit()
