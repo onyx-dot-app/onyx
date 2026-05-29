@@ -150,18 +150,26 @@ class DockerEventsLookup(SandboxIPLookup):
                 backoff = _RECONNECT_INITIAL_SECONDS
                 self._watch_loop()
             except (APIError, RequestsConnectionError, OSError) as e:
-                self._synced.clear()
                 logger.warning(
                     "docker events lookup error: %s; reconnecting in %.1fs",
                     e,
                     backoff,
                 )
             except Exception:
-                self._synced.clear()
                 logger.exception(
                     "unexpected docker events failure; reconnecting in %.1fs",
                     backoff,
                 )
+            finally:
+                # Clear after every iteration -- including clean returns
+                # from _watch_loop. CancellableStream converts every
+                # daemon-side close (EOF, restart, network hiccup) to
+                # StopIteration, so the for-loop exhausts cleanly and we
+                # return without raising. Without this clear, /healthz
+                # would lie during the reconnect backoff window: we are
+                # no longer actively watching events but _synced is
+                # still set from the prior iteration.
+                self._synced.clear()
 
             if self._stop_event.wait(backoff):
                 return

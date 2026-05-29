@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 from kubernetes import client
@@ -121,3 +122,43 @@ def test_initial_list_raises_on_duplicate_ip() -> None:
 
     with pytest.raises(RuntimeError, match="duplicate sandbox IP"):
         lookup._initial_list()
+
+
+def test_synced_clears_after_watch_loop_returns_cleanly() -> None:
+    """The K8s API server closes the watch stream cleanly every
+    ``_WATCH_TIMEOUT_SECONDS`` (300s), so the watch iterator returns
+    without raising. ``_synced`` must clear on that clean return;
+    otherwise ``/healthz`` reports ready during the reconnect backoff
+    window even though we are not actively watching pods.
+    """
+    listing = client.V1PodList(
+        metadata=client.V1ListMeta(resource_version="42"),
+        items=[],
+    )
+    core_api = MagicMock(spec=client.CoreV1Api)
+    core_api.list_namespaced_pod.return_value = listing
+    lookup = K8sInformerLookup(core_api=core_api)
+
+    # Watch.stream() returns an empty iterator so _watch_loop's for-loop
+    # exhausts immediately, simulating a clean server-side close. Set
+    # stop after the first iteration so _run exits.
+    call_count = [0]
+
+    class _StubWatch:
+        def stream(self, *_: object, **__: object) -> object:
+            call_count[0] += 1
+            if call_count[0] >= 1:
+                lookup._stop_event.set()
+            return iter([])
+
+        def stop(self) -> None:
+            pass
+
+    with patch("onyx.sandbox_proxy.identity_k8s.watch.Watch", _StubWatch):
+        lookup._run()
+
+    # The full iteration ran: _initial_sync_done was set, _synced was
+    # set inside the try, and the finally clause cleared _synced again.
+    assert lookup._initial_sync_done.is_set()
+    assert not lookup._synced.is_set()
+    assert call_count[0] == 1

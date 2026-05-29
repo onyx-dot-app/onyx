@@ -128,7 +128,6 @@ class K8sInformerLookup(SandboxIPLookup):
                 backoff = _RECONNECT_INITIAL_SECONDS
                 self._watch_loop(resource_version)
             except ApiException as e:
-                self._synced.clear()
                 logger.warning(
                     "informer error: %s (status=%s); reconnecting in %.1fs",
                     e.reason,
@@ -141,18 +140,25 @@ class K8sInformerLookup(SandboxIPLookup):
                 ConnectionError,
                 OSError,
             ) as e:
-                self._synced.clear()
                 logger.warning(
                     "informer connection error: %s; reconnecting in %.1fs",
                     e,
                     backoff,
                 )
             except Exception:
-                self._synced.clear()
                 logger.exception(
                     "unexpected informer failure; reconnecting in %.1fs",
                     backoff,
                 )
+            finally:
+                # Clear after every iteration -- including clean returns
+                # from _watch_loop. The K8s API server closes the watch
+                # cleanly every _WATCH_TIMEOUT_SECONDS, so the watch
+                # iterator returns without raising. Without this clear,
+                # /healthz would lie during the reconnect backoff window:
+                # we are no longer actively watching events but _synced
+                # is still set from the prior iteration.
+                self._synced.clear()
 
             # Wait on the stop event so shutdown is prompt.
             if self._stop_event.wait(backoff):

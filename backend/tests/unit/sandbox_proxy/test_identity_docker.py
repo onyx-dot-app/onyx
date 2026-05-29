@@ -202,6 +202,40 @@ def test_apply_event_skips_malformed() -> None:
     assert lookup.lookup("172.18.0.5") is None
 
 
+def test_synced_clears_after_watch_loop_returns_cleanly() -> None:
+    """A clean return from ``_watch_loop`` (stream EOF, daemon close,
+    network hiccup -- all converted to StopIteration by
+    CancellableStream) must clear ``_synced``. Otherwise ``/healthz``
+    keeps reporting 200 during the reconnect backoff window even
+    though we are not actively watching events; a sandbox starting in
+    that window would 403 with ``gate.unidentified_sandbox`` because
+    the cache never saw its start event.
+    """
+    lookup, client = _make_lookup()
+    client.containers.list.return_value = []
+
+    # events() returns an empty iterator so _watch_loop's for-loop
+    # exhausts immediately, simulating a clean daemon-side close. Set
+    # stop after the first iteration so _run exits.
+    call_count = [0]
+
+    def events_side_effect(**_: object) -> object:
+        call_count[0] += 1
+        if call_count[0] >= 1:
+            lookup._stop_event.set()
+        return iter([])
+
+    client.events.side_effect = events_side_effect
+
+    lookup._run()
+
+    # The full iteration ran: _initial_sync_done was set, _synced was
+    # set inside the try, and the finally clause cleared _synced again.
+    assert lookup._initial_sync_done.is_set()
+    assert not lookup._synced.is_set()
+    assert call_count[0] == 1
+
+
 # ---------------------------------------------------------------------------
 # Initial sync
 # ---------------------------------------------------------------------------
