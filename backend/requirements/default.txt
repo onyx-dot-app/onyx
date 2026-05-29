@@ -3608,6 +3608,7 @@ typing-extensions==4.15.0 \
     #   aiosignal
     #   alembic
     #   anyio
+    #   beautifulsoup4
     #   boto3-stubs
     #   braintrust
     #   cohere
