@@ -5,6 +5,21 @@ function conditionallyAddPlural(noun: string, cnt: number): string {
   return noun;
 }
 
+/**
+ * Returns a human-readable relative time string for a past date, or `null`
+ * if the input is absent. Granularity increases with distance: seconds →
+ * minutes → hours → days → weeks → months → years.
+ *
+ * @example
+ * timeAgo("2025-01-15T10:00:00Z") // "3 seconds ago"
+ * timeAgo("2025-01-15T10:00:00Z") // "42 minutes ago"
+ * timeAgo("2025-01-15T10:00:00Z") // "5 hours ago"
+ * timeAgo("2025-01-15T10:00:00Z") // "12 days ago"
+ * timeAgo("2025-01-15T10:00:00Z") // "2 weeks ago"
+ * timeAgo("2025-01-15T10:00:00Z") // "8 months ago"
+ * timeAgo("2025-01-15T10:00:00Z") // "3 years ago"
+ * timeAgo(null)                   // null
+ */
 export function timeAgo(dateString: string | undefined | null): string | null {
   if (!dateString) {
     return null;
@@ -47,11 +62,25 @@ export function timeAgo(dateString: string | undefined | null): string | null {
   return `${yearsDiff} ${conditionallyAddPlural("year", yearsDiff)} ago`;
 }
 
+/**
+ * Formats a date string using the browser's locale and timezone, producing a
+ * short, human-friendly date-and-time string.
+ *
+ * @example
+ * localizeAndPrettify("2025-01-15T10:30:00Z") // "1/15/2025, 10:30:00 AM"
+ */
 export function localizeAndPrettify(dateString: string): string {
   const date = new Date(dateString);
   return date.toLocaleString();
 }
 
+/**
+ * Formats a date string as a long-form date: full month name, numeric day,
+ * and four-digit year, in US English.
+ *
+ * @example
+ * humanReadableFormat("2025-01-15T10:30:00Z") // "January 15, 2025"
+ */
 export function humanReadableFormat(dateString: string): string {
   const date = new Date(dateString);
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -63,7 +92,12 @@ export function humanReadableFormat(dateString: string): string {
 }
 
 /**
- * Format a date as "Jan 15, 2025" (short month name).
+ * Formats a date as a short-form date: abbreviated month name, numeric day,
+ * and four-digit year, in US English. Returns an empty string for a null input.
+ *
+ * @example
+ * humanReadableFormatShort("2025-01-15T10:30:00Z") // "Jan 15, 2025"
+ * humanReadableFormatShort(null)                   // ""
  */
 export function humanReadableFormatShort(date: string | Date | null): string {
   if (!date) return "";
@@ -76,6 +110,13 @@ export function humanReadableFormatShort(date: string | Date | null): string {
   return formatter.format(d);
 }
 
+/**
+ * Formats a datetime string as a long-form date with clock time: full month
+ * name, numeric day, four-digit year, and 12-hour time, in US English.
+ *
+ * @example
+ * humanReadableFormatWithTime("2025-01-15T10:30:00Z") // "January 15, 2025 at 10:30 AM"
+ */
 export function humanReadableFormatWithTime(datetimeString: string): string {
   const date = new Date(datetimeString);
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -90,6 +131,16 @@ export function humanReadableFormatWithTime(datetimeString: string): string {
 
 export type TimeFilter = "day" | "week" | "month" | "year";
 
+/**
+ * Returns a `Date` representing the start of the given time filter window
+ * relative to now, or `null` for an unrecognised filter value.
+ *
+ * @example
+ * getTimeFilterDate("day")   // Date 24 hours ago
+ * getTimeFilterDate("week")  // Date 7 days ago
+ * getTimeFilterDate("month") // Date 30 days ago
+ * getTimeFilterDate("year")  // Date 365 days ago
+ */
 export function getTimeFilterDate(filter: TimeFilter): Date | null {
   const now = new Date();
   switch (filter) {
@@ -106,6 +157,15 @@ export function getTimeFilterDate(filter: TimeFilter): Date | null {
   }
 }
 
+/**
+ * Formats a duration given in seconds as a compact string, rounding up to
+ * the nearest whole second.
+ *
+ * @example
+ * formatDurationSeconds(45)   // "45s"
+ * formatDurationSeconds(90)   // "1m 30s"
+ * formatDurationSeconds(120)  // "2m"
+ */
 export function formatDurationSeconds(seconds: number): string {
   const totalSeconds = Math.ceil(seconds);
   if (totalSeconds < 60) {
@@ -116,6 +176,20 @@ export function formatDurationSeconds(seconds: number): string {
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
 
+/**
+ * Formats a duration given in milliseconds as a compact, human-readable
+ * string, automatically choosing the most appropriate unit. Non-finite
+ * inputs (e.g. `Infinity`, `NaN`) render as `"—"`.
+ *
+ * @example
+ * formatDurationMs(0.5)      // "<1 ms"
+ * formatDurationMs(42)       // "42 ms"
+ * formatDurationMs(1500)     // "1.50 s"
+ * formatDurationMs(75000)    // "1m 15s"
+ * formatDurationMs(3600000)  // "1h"
+ * formatDurationMs(5400000)  // "1h 30m"
+ * formatDurationMs(Infinity) // "—"
+ */
 export function formatDurationMs(ms: number): string {
   if (!Number.isFinite(ms)) return "—";
   if (ms < 1) return "<1 ms";
