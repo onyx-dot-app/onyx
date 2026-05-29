@@ -13,6 +13,7 @@ Key features tested:
 - Edge cases (unicode, code blocks, invalid citations, etc.)
 """
 
+import time
 from datetime import datetime
 
 import pytest
@@ -2437,8 +2438,6 @@ class TestPossibleCitationPatternReDoS:
         """A bracket followed by a long digit run + trailing junk must match
         in well under a second. With the vulnerable pattern this took many
         seconds and grew exponentially with the number of digits."""
-        import time
-
         processor = DynamicCitationProcessor()
         # Opening bracket, 60 digits, then a char that defeats the `$` anchor.
         # 60 digits => 2^59 paths for the vulnerable regex (effectively never
@@ -2458,8 +2457,6 @@ class TestPossibleCitationPatternReDoS:
     def test_long_digit_run_in_token_stream_does_not_hang(self) -> None:
         """End-to-end: feeding the malicious sequence through process_token
         (which calls the regex on the accumulated segment) stays fast."""
-        import time
-
         processor = DynamicCitationProcessor()
         tokens: list[str | None] = ["[" + "9" * 60 + "!"]
 
