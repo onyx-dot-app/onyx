@@ -180,7 +180,7 @@ Other docker-compose-style values you should set deliberately:
 
 # Local testing
 
-> This section covers chart-maintainer testing; for the Onyx Craft local-kind developer workflow, see [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md).
+> This section covers chart-maintainer testing; for the Onyx Craft developer workflow (Tilt + k3d, multi-worktree), see [docs/dev/local-cluster.md](/docs/dev/local-cluster.md) or [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md) for the legacy kind+Telepresence flow.
 
 ## One time setup
 * brew install kind

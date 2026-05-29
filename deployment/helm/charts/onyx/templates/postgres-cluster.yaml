@@ -5,7 +5,18 @@ Name must differ from the operator Deployment (`<release>-<nameOverride>`)
 to avoid a ServiceAccount collision. POSTGRES_HOST in configmap.yaml must
 stay in sync: `<cluster-name>-rw`.
 */}}
-{{- if .Values.postgresql.enabled }}
+{{- /* `postgresql.cluster.enabled` gates only the Cluster CR. Default
+       tracks `postgresql.enabled` for back-compat — installs with the
+       subchart on still render the Cluster CR; installs with the subchart
+       off (external Postgres) still skip the CR. Set `cluster.enabled:
+       true` explicitly to render the Cluster CR while disabling the
+       in-chart CNPG subchart (used by the local-cluster dev-up.sh path
+       that pre-installs CNPG separately). */}}
+{{- $pgClusterEnabled := .Values.postgresql.enabled }}
+{{- if and (hasKey .Values.postgresql "cluster") (hasKey (default dict .Values.postgresql.cluster) "enabled") }}
+{{-   $pgClusterEnabled = .Values.postgresql.cluster.enabled }}
+{{- end }}
+{{- if $pgClusterEnabled }}
 {{- $pgSecretName := include "onyx.secretName" .Values.auth.postgresql -}}
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster

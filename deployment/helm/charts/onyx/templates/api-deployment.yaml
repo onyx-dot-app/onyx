@@ -63,6 +63,14 @@ spec:
             {{- toYaml .Values.api.securityContext | nindent 12 }}
           image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
+          {{- /* Optional command override. When unset, the production
+                 alembic+uvicorn entrypoint runs. The local-cluster dev
+                 path overrides this (values-dev-app.yaml) to wrap uvicorn
+                 in debugpy for VSCode attach. */}}
+          {{- with .Values.api.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- else }}
           command:
             - "/bin/sh"
             - "-c"
@@ -72,7 +80,8 @@ spec:
               {{- end }}
               alembic upgrade head &&
               echo "Starting Onyx Api Server" &&
-              uvicorn onyx.main:app --host {{ .Values.global.host }} --port {{ .Values.api.containerPorts.server }}
+              exec uvicorn onyx.main:app --host {{ .Values.global.host }} --port {{ .Values.api.containerPorts.server }}
+          {{- end }}
           ports:
             - name: api-server-port
               containerPort: {{ .Values.api.containerPorts.server }}

@@ -59,6 +59,10 @@ spec:
             {{- toYaml .Values.celery_shared.securityContext | nindent 12 }}
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
+          {{- with .Values.celery_worker_docfetching.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- else }}
           command:
             [
               "celery",
@@ -75,6 +79,7 @@ spec:
               "-Q",
               "connector_doc_fetching",
             ]
+          {{- end }}
           ports:
             - name: metrics
               containerPort: 9092

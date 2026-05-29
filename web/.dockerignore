@@ -1,4 +1,7 @@
-node_modules
+# Match `node_modules` at any depth — the top-level pattern alone only
+# excludes ./node_modules and would leak `lib/opal/node_modules` into the
+# image, clashing with the bun-installed copy inside the image layer.
+**/node_modules
 .next
 /tests/
 

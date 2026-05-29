@@ -1,0 +1,244 @@
+# Onyx local-cluster APP overlay (per-worktree).
+# Layered by dev.sh under the per-slug values file in ~/.config/onyx-dev/.
+
+global:
+  pullPolicy: "IfNotPresent"
+
+# Infra subcharts off — pods point at the shared onyx-infra release.
+postgresql:
+  enabled: false
+  cluster:
+    enabled: false
+
+redis:
+  enabled: false
+
+opensearch:
+  enabled: false
+
+minio:
+  enabled: false
+
+nginx:
+  enabled: false
+
+codeInterpreter:
+  enabled: false
+
+configMap:
+  POSTGRES_HOST: "onyx-infra-pg-rw.onyx-infra.svc.cluster.local"
+  REDIS_HOST: "onyx-infra.onyx-infra.svc.cluster.local"
+  OPENSEARCH_HOST: "onyx-opensearch-master.onyx-infra.svc.cluster.local"
+  OPENSEARCH_REST_API_PORT: "9200"
+  ENABLE_OPENSEARCH_INDEXING_FOR_ONYX: "true"
+  ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX: "false"
+  S3_ENDPOINT_URL: "http://onyx-infra-minio.onyx-infra.svc.cluster.local:9000"
+  MODEL_SERVER_HOST: "onyx-infra-inference-model-service.onyx-infra.svc.cluster.local"
+  INDEXING_MODEL_SERVER_HOST: "onyx-infra-indexing-model-service.onyx-infra.svc.cluster.local"
+  DISABLE_VECTOR_DB: "false"
+  ENABLE_CRAFT: "true"
+  # Code default v0.1.44 predates firewall-init.sh. Bump as new versions land.
+  SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:v0.1.49"
+
+# Single-node k3d: replicaCount=1 is enough; prod uses 2 with podAntiAffinity.
+sandboxProxy:
+  replicaCount: 1
+
+auth:
+  postgresql:
+    values:
+      username: "postgres"
+      password: "postgres"
+  redis:
+    values:
+      redis_password: "password"
+  objectstorage:
+    values:
+      s3_aws_access_key_id: "minioadmin"
+      s3_aws_secret_access_key: "minioadmin"
+      rootUser: "minioadmin"
+      rootPassword: "minioadmin"
+  opensearch:
+    values:
+      opensearch_admin_password: "Aa1!onyx-localdev-opensearch"
+  sandboxPushSecret:
+    enabled: true
+    values:
+      private_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+api:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  # uvicorn --reload keeps the parent alive; the worker child re-execs on
+  # file change — saves the 3-5s Python import cost on every save.
+  command:
+    - "/bin/sh"
+    - "-c"
+    - "alembic upgrade head && echo 'Starting Onyx Api Server' && exec uvicorn onyx.main:app --host 0.0.0.0 --port 8080 --reload --reload-dir /app/onyx --reload-dir /app/ee --reload-dir /app/shared_configs"
+  extraEnv:
+    - name: ENABLE_DEBUGPY
+      value: "true"
+    - name: DEBUGPY_PORT
+      value: "5678"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 3Gi
+
+webserver:
+  # next dev runs on the host via Tiltfile's next-dev local_resource.
+  replicaCount: 0
+  autoscaling:
+    enabled: false
+
+# Celery workers: dev_celery_reload.py drives watchfiles hot-reload.
+# Debugpy listens on the per-worker port (see .vscode/launch.json).
+celery_beat:
+  replicaCount: 1
+  command:
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.beat", "beat"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5679"}
+
+celery_worker_primary:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.primary", "worker",
+     "--hostname=primary@%n", "-Q", "celery,periodic_tasks"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5680"}
+
+celery_worker_light:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.light", "worker",
+     "--hostname=light@%n", "-Q",
+     "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5681"}
+
+celery_worker_heavy:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.heavy", "worker",
+     "--hostname=heavy@%n", "-Q",
+     "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,sandbox"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5682"}
+
+celery_worker_docfetching:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.docfetching", "worker",
+     "--pool=threads", "--concurrency=2", "--prefetch-multiplier=1",
+     "--hostname=docfetching@%n", "-Q", "connector_doc_fetching"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5683"}
+
+celery_worker_docprocessing:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.docprocessing", "worker",
+     "--pool=threads", "--concurrency=6", "--prefetch-multiplier=1",
+     "--hostname=docprocessing@%n", "-Q", "docprocessing"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5684"}
+
+celery_worker_monitoring:
+  replicaCount: 1
+  command:
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.monitoring", "worker",
+     "--hostname=monitoring@%n", "-Q", "monitoring"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5685"}
+
+celery_worker_user_file_processing:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.user_file_processing", "worker",
+     "--hostname=user-file-processing@%n", "-Q",
+     "user_file_processing,user_file_project_sync,user_file_delete"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5686"}
+
+celery_worker_scheduled_tasks:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.scheduled_tasks", "worker",
+     "--hostname=scheduled_tasks@%n", "-Q", "scheduled_tasks"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5687"}
+
+slackbot:
+  enabled: false
+discordbot:
+  enabled: false
+mcpServer:
+  enabled: false
+inferenceCapability:
+  replicaCount: 0
+indexCapability:
+  replicaCount: 0
+
+monitoring:
+  grafana:
+    dashboards:
+      enabled: false
+  serviceMonitors:
+    enabled: false
+
+ingress:
+  enabled: true
+  className: nginx
+  tls:
+    enabled: false
+  extraAnnotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+  api:
+    host: "PLACEHOLDER-set-by-dev.sh"
+  webserver:
+    host: "PLACEHOLDER-set-by-dev.sh"
+
+sandboxPushPolicy:
+  allowTelepresenceAmbassador: false
+
+# All persistent state lives in the shared onyx-infra release; no worktree PVCs.
+persistent:
+  storageClassName: ""

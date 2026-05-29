@@ -3,6 +3,7 @@
 !/.vscode/env_template.txt
 !/.vscode/env.web_template.txt
 !/.vscode/.env.k8s.template
+!/.vscode/.env.k3d.template
 !/.vscode/launch.json
 !/.vscode/tasks.json
 .zed
@@ -67,3 +68,7 @@ plans/
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 !.claude/settings.json
+
+# direnv local overrides (the committed .envrc is checked in)
+.envrc.local
+.direnv/

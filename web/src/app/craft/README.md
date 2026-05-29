@@ -91,7 +91,7 @@ Craft supports two sandbox backends controlled by `SANDBOX_BACKEND`:
   - `sandbox` — Runs OpenCode agent and Next.js preview server
   - `file-sync` — Sidecar for S3 file synchronization
 
-For local development, see [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md) — one-shot setup via `make craft-up`.
+For local development, see [docs/dev/local-cluster.md](/docs/dev/local-cluster.md) — one-shot setup via `deployment/helm/dev/dev.sh up`. The legacy kind + Telepresence flow at [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md) is also still supported.
 
 **Docker** (self-hosted docker-compose)
 

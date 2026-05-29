@@ -7,8 +7,13 @@ metadata:
     {{- if not .Values.ingress.className }}
     kubernetes.io/ingress.class: nginx
     {{- end }}
+    {{- if .Values.ingress.tls.enabled }}
     cert-manager.io/cluster-issuer: {{ include "onyx.fullname" . }}-letsencrypt
     kubernetes.io/tls-acme: "true"
+    {{- end }}
+    {{- with .Values.ingress.extraAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}
@@ -24,8 +29,10 @@ spec:
                 name: {{ include "onyx.fullname" . }}-webserver
                 port:
                   number: {{ .Values.webserver.service.servicePort }}
+  {{- if .Values.ingress.tls.enabled }}
   tls:
     - hosts:
         - {{ .Values.ingress.webserver.host }}
       secretName: {{ include "onyx.fullname" . }}-ingress-webserver-tls
+  {{- end }}
 {{- end }}
