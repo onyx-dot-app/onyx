@@ -148,9 +148,11 @@ def _apply_pandoc_styles(document: DocxDocument) -> None:
     styles = document.styles
     existing = {style.name for style in styles}
 
-    normal = styles["Normal"]
+    normal = cast(ParagraphStyle, styles["Normal"])
     normal.font.name = _BODY_FONT
     normal.font.size = _BODY_FONT_SIZE
+    # python-docx's template defaults to 1.15x line spacing; pandoc uses single.
+    normal.paragraph_format.line_spacing = 1.0
 
     def ensure(name: str, base: str) -> ParagraphStyle:
         if name not in existing:

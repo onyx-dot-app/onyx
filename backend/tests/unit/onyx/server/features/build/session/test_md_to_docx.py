@@ -294,6 +294,12 @@ def test_default_font_matches_pandoc() -> None:
     assert doc.styles["Heading 1"].font.name == "Aptos Display"
 
 
+def test_line_spacing_is_single() -> None:
+    # python-docx's template defaults to 1.15x line spacing; pandoc uses single.
+    doc = _render("Body.\n")
+    assert doc.styles["Normal"].paragraph_format.line_spacing == 1.0
+
+
 def test_page_margins_match_pandoc() -> None:
     # pandoc renders 1" margins (Word default); python-docx's template uses 1.25"
     # left/right, so set 1" all round to match.
