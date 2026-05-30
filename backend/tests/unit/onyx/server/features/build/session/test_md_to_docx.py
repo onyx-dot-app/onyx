@@ -266,6 +266,32 @@ def _hyperlink_targets(doc: DocxDocument) -> list[str]:
     ]
 
 
+def _hyperlink_displays(doc: DocxDocument) -> list[str]:
+    return [
+        "".join(t.text or "" for t in hyperlink.iter(qn("w:t")))
+        for hyperlink in doc.element.body.iter(qn("w:hyperlink"))
+    ]
+
+
+def test_autolink_display_keeps_trailing_paren() -> None:
+    # An autolinked URL with balanced parens (e.g. a Wikipedia "_(novel)" link)
+    # must keep the closing ")" in the *visible* text, not just the target --
+    # even when mistune re-encodes the URL (here "\_" -> "%5C_"), which previously
+    # defeated the autolink detection.
+    doc = _render(
+        r"See https://en.wikipedia.org/wiki/Foundation\_(Asimov_novel) here."
+    )
+    assert _hyperlink_displays(doc) == [
+        r"https://en.wikipedia.org/wiki/Foundation\_(Asimov_novel)"
+    ]
+
+
+def test_labeled_link_display_is_not_over_extended() -> None:
+    # The paren repair must not pull a ")" into a label that is already balanced.
+    doc = _render("[Foundation](https://en.wikipedia.org/wiki/Foundation_(novel)).")
+    assert _hyperlink_displays(doc) == ["Foundation"]
+
+
 def test_link_keeps_balanced_parens_in_url() -> None:
     # CommonMark allows balanced parens in a destination; mistune splits the
     # closing ")" off, so the converter must re-attach it.

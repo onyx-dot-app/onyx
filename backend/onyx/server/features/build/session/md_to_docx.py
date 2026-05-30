@@ -690,13 +690,15 @@ def _repair_paren_links(nodes: list[Node]) -> None:
             continue
         closing = ")" * take
         node.setdefault("attrs", {})["url"] = url + closing
+        # For an autolink the visible text is the URL, and mistune split the same
+        # ")" off it too. Detect that by the display ending with matching unclosed
+        # "(" rather than comparing to the URL, which mistune may have re-encoded
+        # (e.g. "\_" -> "%5C_"), so the closing reaches the display as well.
         children = node.get("children", [])
-        if (
-            len(children) == 1
-            and children[0].get("type") == "text"
-            and children[0].get("raw") == url
-        ):
-            children[0]["raw"] = url + closing
+        if children and children[-1].get("type") == "text":
+            display = str(children[-1].get("raw", ""))
+            if display.count("(") - display.count(")") >= take:
+                children[-1]["raw"] = display + closing
         following["raw"] = raw[take:]
 
 
