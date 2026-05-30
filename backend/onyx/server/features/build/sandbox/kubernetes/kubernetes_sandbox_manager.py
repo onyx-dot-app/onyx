@@ -1147,11 +1147,18 @@ class KubernetesSandboxManager(SandboxManager):
                         logger.info("Pod %s is ready", pod_name)
                         return True
             except ApiException as e:
-                # 410 Gone: resource_version aged out — re-list, resume.
+                # 410 Gone: resource_version aged out — re-list, check the
+                # snapshot for Ready (the pod may have flipped while the
+                # watch was expiring), then resume from the list's RV.
                 if e.status == 410:
-                    resource_version = self._core_api.list_namespaced_pod(
+                    listing = self._core_api.list_namespaced_pod(
                         namespace=self._namespace, field_selector=field_selector
-                    ).metadata.resource_version
+                    )
+                    for pod in listing.items or []:
+                        if self._evaluate_pod_readiness(pod, pod_name):
+                            logger.info("Pod %s is ready", pod_name)
+                            return True
+                    resource_version = listing.metadata.resource_version
                     continue
                 raise
             finally:
