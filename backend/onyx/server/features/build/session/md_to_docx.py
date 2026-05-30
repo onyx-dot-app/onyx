@@ -568,6 +568,23 @@ def _render_table(
         for index, cell_node in enumerate(row[:num_cols]):
             _fill_cell(cells[index], cell_node, bold=False, footnotes=footnotes)
 
+    _remove_fixed_cell_widths(table)
+
+
+def _remove_fixed_cell_widths(table: Any) -> None:
+    """Drop python-docx's fixed cell widths so columns auto-fit content.
+
+    python-docx splits the full text width equally across columns; pandoc lets
+    the table shrink to its content (leaving whitespace around small tables).
+    """
+    for row in table.rows:
+        for cell in row.cells:
+            tc_pr = cell._tc.tcPr
+            if tc_pr is None:
+                continue
+            for tc_w in tc_pr.findall(qn("w:tcW")):
+                tc_pr.remove(tc_w)
+
 
 def _set_table_cell_margins(table: Any) -> None:
     """Apply pandoc's table cell padding (108 twips left/right, 0 top/bottom)."""

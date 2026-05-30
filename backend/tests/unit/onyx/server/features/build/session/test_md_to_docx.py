@@ -172,6 +172,14 @@ def test_table_is_borderless_with_header_rule_only() -> None:
     assert not any(has_bottom_border(cell) for cell in table.rows[1].cells)
 
 
+def test_table_columns_auto_fit_content() -> None:
+    # pandoc lets tables shrink to their content; python-docx otherwise stretches
+    # them to the full text width via fixed per-cell widths.
+    doc = _render("| Name | Value |\n|--|--|\n| a | 1 |\n")
+    table = doc.tables[0]
+    assert table._tbl.findall(".//" + qn("w:tcW")) == []
+
+
 def test_table_cell_alignment_follows_column_spec() -> None:
     # The Markdown separator row (:--, :--:, --:) sets per-column alignment, the
     # way pandoc renders it.
