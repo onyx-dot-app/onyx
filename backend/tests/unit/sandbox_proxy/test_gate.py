@@ -1,7 +1,8 @@
 """Unit tests for the GateAddon mitmproxy addon.
 
-External dependencies (`_IdentityResolver`, `ActionMatcher`, `CacheFactory`,
-`DBSessionFactory`) are stubbed via small Protocol implementations.
+External dependencies (`_IdentityResolver`, `ActionMatcher`, `CacheFactory`)
+are stubbed via small Protocol implementations; `get_session_with_tenant` is
+patched per test.
 
 The race arbiter (`_claim_expired_or_read_winner`) is covered against a
 real Postgres row in
@@ -43,7 +44,6 @@ from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from tests.unit.sandbox_proxy.conftest import make_flow as _flow
 from tests.unit.sandbox_proxy.conftest import make_request_match
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
-from tests.unit.sandbox_proxy.conftest import noop_db_factory
 from tests.unit.sandbox_proxy.conftest import RecordingCredentialResolver
 from tests.unit.sandbox_proxy.conftest import StubResolver as _StubResolver
 
@@ -94,18 +94,24 @@ def _ctx(
     )
 
 
+@pytest.fixture(autouse=True)
+def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The gate opens tenant sessions via `gate_mod.get_session_with_tenant`.
+    Default it to a dummy MagicMock-yielding session; tests asserting on
+    session-open ordering re-patch it with `_recorder_db_factory(ops)`."""
+    monkeypatch.setattr(gate_mod, "get_session_with_tenant", _recorder_db_factory([]))
+
+
 def _build(
     *,
     resolver: _StubResolver,
     matcher: _StubMatcher,
-    db_factory: Any = noop_db_factory,
     cache_factory: Any = _noop_cache_factory,
     credential_resolvers: list[CredentialResolver] | None = None,
 ) -> GateAddon:
     return GateAddon(
         identity=resolver,
         action_matcher=matcher,
-        db_session_factory=db_factory,
         cache_factory=cache_factory,
         proxy_instance_id="proxy-test",
         credential_dispatcher=CredentialInjectionDispatcher(
@@ -288,7 +294,6 @@ async def test_resolve_and_match_always_forwards_without_session() -> None:
     addon = _build(
         resolver=resolver,
         matcher=_StubMatcher(result=_MATCH_ALWAYS),
-        db_factory=_recorder_db_factory([]),
         # No-claim resolver -> dispatcher returns PASS_THROUGH, leaves the
         # flow forwarded with no response.
         credential_resolvers=[RecordingCredentialResolver(claims_result=False)],
@@ -821,9 +826,6 @@ def test_dispatch_injection_writes_resolved_headers() -> None:
     seen = spy.resolve_calls[0]
     assert seen.sandbox is sandbox
     assert seen.match is _MATCH_ALWAYS
-    # The dispatcher must receive the gate's own session factory — a resolver
-    # that opens its own session would see the wrong tenant schema.
-    assert seen.db_session_factory is addon._db_session_factory
 
 
 def test_dispatch_injection_pass_through_forwards_untouched() -> None:
@@ -1048,10 +1050,10 @@ def test_persist_approval_row_commits_announces_notifies(
     )
 
     cache = _RecorderCache(ops)
+    monkeypatch.setattr(gate_mod, "get_session_with_tenant", _recorder_db_factory(ops))
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory(ops),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
 
@@ -1101,10 +1103,10 @@ def test_persist_approval_row_announce_failure_is_swallowed(
     )
 
     cache = _RecorderCache(ops, rpush_raises=RedisError("connection refused"))
+    monkeypatch.setattr(gate_mod, "get_session_with_tenant", _recorder_db_factory(ops))
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory(ops),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
 
@@ -1154,7 +1156,6 @@ async def test_await_decision_wake_received_returns_decision(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
     addon._parked.add(ctx.tenant_id, approval_id)
@@ -1184,7 +1185,6 @@ async def test_await_decision_timeout_claims_expired(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
     addon._parked.add(ctx.tenant_id, approval_id)
@@ -1224,7 +1224,6 @@ async def test_await_decision_cancelled_claims_expired_and_reraises(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
     addon._parked.add(ctx.tenant_id, approval_id)
@@ -1266,7 +1265,6 @@ async def test_drain_inflight_walks_parked_per_tenant(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: per_tenant_caches[tenant_id],
     )
 
@@ -1320,7 +1318,6 @@ async def test_drain_inflight_completes_when_inflight_set_empty() -> None:
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=_tracking_cache_factory,
     )
 
@@ -1352,7 +1349,6 @@ def test_terminalize_happy_path_writes_wake(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
 
@@ -1384,7 +1380,6 @@ def test_terminalize_db_failure_skips_wake(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
 
@@ -1417,7 +1412,6 @@ def test_terminalize_wake_failure_swallowed(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
 

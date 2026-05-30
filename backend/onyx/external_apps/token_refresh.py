@@ -15,7 +15,7 @@ from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import DBSessionFactory
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.external_app import delete_external_app_user_credential
 from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import get_external_app_user_credential
@@ -43,7 +43,6 @@ _RefreshInputs = tuple[OAuthExternalAppProvider, dict[str, Any], str, str]
 
 
 def ensure_fresh_credentials(
-    db_session_factory: DBSessionFactory,
     tenant_id: str,
     external_app_id: int,
     user_id: UUID,
@@ -60,7 +59,7 @@ def ensure_fresh_credentials(
     try:
         # Cheap pre-check: just the staleness decision (one cred read), no provider
         # or client-cred resolution — those happen under the lock, only when stale.
-        with db_session_factory(tenant_id) as db:
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
             stored = _read_stored_credentials(db, external_app_id, user_id)
         if stored is None or not needs_refresh(stored, datetime.now(timezone.utc)):
             return
@@ -71,7 +70,7 @@ def ensure_fresh_credentials(
             wait_for_lock_s=_LOCK_WAIT_S,
             logger=logger,
         ):
-            _refresh_under_lock(db_session_factory, tenant_id, external_app_id, user_id)
+            _refresh_under_lock(tenant_id, external_app_id, user_id)
     except RedisSharedLockAcquisitionError:
         # Lock winner is refreshing; proceed with the current token.
         logger.info(
@@ -90,14 +89,13 @@ def ensure_fresh_credentials(
 
 
 def _refresh_under_lock(
-    db_session_factory: DBSessionFactory,
     tenant_id: str,
     external_app_id: int,
     user_id: UUID,
 ) -> None:
     # Re-read in a fresh session — double-check after the lock wait, in case a
     # concurrent process already refreshed — then release before the POST.
-    with db_session_factory(tenant_id) as db:
+    with get_session_with_tenant(tenant_id=tenant_id) as db:
         inputs = _load_refresh_inputs(db, external_app_id, user_id)
     if inputs is None:
         return
@@ -116,7 +114,7 @@ def _refresh_under_lock(
         return
     except TokenRefreshTerminalError as exc:
         # Dead grant: drop the credential so the app reads as disconnected.
-        with db_session_factory(tenant_id) as db:
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
             delete_external_app_user_credential(
                 db, external_app_id=external_app_id, user_id=user_id
             )
@@ -128,7 +126,7 @@ def _refresh_under_lock(
         )
         return
 
-    with db_session_factory(tenant_id) as db:
+    with get_session_with_tenant(tenant_id=tenant_id) as db:
         upsert_external_app_user_credential(
             db,
             external_app_id=external_app_id,

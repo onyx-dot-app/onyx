@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from mitmproxy import http
 
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.external_apps.credentials import resolve_injection_headers
 from onyx.external_apps.token_refresh import ensure_fresh_credentials
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
@@ -46,13 +47,12 @@ class ExternalAppResolver(CredentialResolver):
         # short sessions and never raises for a refresh outcome (a dead grant
         # clears the credential, which renders as empty headers below).
         ensure_fresh_credentials(
-            ctx.db_session_factory,
             ctx.sandbox.tenant_id,
             match.external_app_id,
             ctx.sandbox.user_id,
         )
 
-        with ctx.db_session_factory(ctx.sandbox.tenant_id) as db:
+        with get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id) as db:
             headers = resolve_injection_headers(
                 db, match.external_app_id, ctx.sandbox.user_id
             )

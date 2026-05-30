@@ -19,14 +19,11 @@ from onyx.sandbox_proxy.errors import SandboxProxyError
 from tests.unit.sandbox_proxy.conftest import make_flow as _flow
 from tests.unit.sandbox_proxy.conftest import make_request_match
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
-from tests.unit.sandbox_proxy.conftest import noop_db_factory
 from tests.unit.sandbox_proxy.conftest import RecordingCredentialResolver
 
 
 def _ctx(*, match: RequestMatch | None = None) -> InjectionContext:
-    return InjectionContext(
-        sandbox=_sandbox(), match=match, db_session_factory=noop_db_factory
-    )
+    return InjectionContext(sandbox=_sandbox(), match=match)
 
 
 def test_no_resolver_claims_returns_pass_through() -> None:
@@ -169,9 +166,7 @@ def test_resolver_receives_request_and_full_context() -> None:
     match = make_request_match()
     resolver = RecordingCredentialResolver(claims_result=True)
     flow = _flow(host="api.anthropic.com")
-    ctx = InjectionContext(
-        sandbox=sandbox, match=match, db_session_factory=noop_db_factory
-    )
+    ctx = InjectionContext(sandbox=sandbox, match=match)
 
     CredentialInjectionDispatcher([resolver]).apply(flow, ctx)
 

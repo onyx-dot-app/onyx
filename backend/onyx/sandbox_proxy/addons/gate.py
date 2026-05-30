@@ -16,7 +16,7 @@ from mitmproxy import http
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import NotificationType
-from onyx.db.engine.sql_engine import DBSessionFactory
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.db.notification import create_notification
@@ -94,7 +94,6 @@ class GateAddon:
         self,
         identity: _IdentityResolver,
         action_matcher: ActionMatcher,
-        db_session_factory: DBSessionFactory,
         cache_factory: CacheFactory,
         proxy_instance_id: str,
         credential_dispatcher: CredentialInjectionDispatcher,
@@ -103,7 +102,6 @@ class GateAddon:
     ) -> None:
         self._identity = identity
         self._action_matcher = action_matcher
-        self._db_session_factory = db_session_factory
         self._cache_factory = cache_factory
         self._proxy_instance_id = proxy_instance_id
         self._credential_dispatcher = credential_dispatcher
@@ -389,7 +387,7 @@ class GateAddon:
         card on the next `/live` refetch, so we don't fail the request.
         """
         actions_payload = [a.model_dump(mode="json") for a in match.actions]
-        with self._db_session_factory(ctx.tenant_id) as db:
+        with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
             row = action_approval.insert_action_approval(
                 db,
                 session_id=ctx.session_id,
@@ -493,7 +491,7 @@ class GateAddon:
         """Conditionally claim EXPIRED; if the API already wrote a decision,
         return that winner instead so the caller forwards/rejects correctly.
         """
-        with self._db_session_factory(tenant_id) as db:
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
             claimed = action_approval.try_record_decision(
                 db,
                 approval_id=approval_id,
@@ -539,7 +537,6 @@ class GateAddon:
             InjectionContext(
                 sandbox=sandbox,
                 match=match,
-                db_session_factory=self._db_session_factory,
             ),
         )
 
@@ -638,7 +635,7 @@ class GateAddon:
         Body carries no PII; the full payload lives on the action_approval
         row, which the popover fetches when the chat loads.
         """
-        with self._db_session_factory(ctx.tenant_id) as db:
+        with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
             create_notification(
                 user_id=ctx.user_id,
                 notif_type=NotificationType.APPROVAL_REQUESTED,

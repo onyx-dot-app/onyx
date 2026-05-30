@@ -20,7 +20,6 @@ from onyx.sandbox_proxy.ca import CABootstrap
 from onyx.sandbox_proxy.ca_k8s import K8sSecretCAStore
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
-from onyx.sandbox_proxy.identity import default_session_factory
 from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIPLookup
 from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup
@@ -198,7 +197,6 @@ def main() -> int:
                 snapshot_policy.bucket,
                 snapshot_policy.endpoint_host,
             )
-        db_session_factory = default_session_factory
         resolvers = build_resolvers()
         logger.info(
             "credential resolvers registered: %s",
@@ -206,10 +204,7 @@ def main() -> int:
         )
         gate = GateAddon(
             identity=identity,
-            action_matcher=ExternalAppActionMatcher(
-                db_session_factory=db_session_factory
-            ),
-            db_session_factory=db_session_factory,
+            action_matcher=ExternalAppActionMatcher(),
             cache_factory=lambda tid: get_cache_backend(tenant_id=tid),
             proxy_instance_id=proxy_instance_id,
             credential_dispatcher=CredentialInjectionDispatcher(resolvers),
