@@ -57,6 +57,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import PublicFormat
 from kubernetes import client
+from kubernetes import watch
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
 
@@ -127,16 +128,6 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 # SANDBOX_NEXTJS_PORT_END range, with one port per session.
 PUSH_DAEMON_PORT = 8731
 POD_READY_TIMEOUT_SECONDS = 60
-# Progressive poll cadence: short intervals up front (pods usually become
-# Ready in 12–18s, so we want to catch the transition quickly), then back
-# off so a stuck pod doesn't hammer the API server. Each tuple is
-# (count, interval_seconds). Sum of count × interval must stay ≤
-# POD_READY_TIMEOUT_SECONDS.
-POD_READY_POLL_SCHEDULE: tuple[tuple[int, float], ...] = (
-    (6, 0.5),  # 0–3s
-    (5, 1.0),  # 3–8s
-    (26, 2.0),  # 8–60s
-)
 
 # Resource deletion timeout and polling interval
 # Kubernetes deletes are async - we need to wait for resources to actually be gone
@@ -758,8 +749,9 @@ class KubernetesSandboxManager(SandboxManager):
             ),
             readiness_probe=client.V1Probe(
                 http_get=client.V1HTTPGetAction(path="/health", port=PUSH_DAEMON_PORT),
-                initial_delay_seconds=3,
-                period_seconds=10,
+                initial_delay_seconds=1,
+                period_seconds=2,
+                failure_threshold=10,
             ),
         )
 
@@ -1076,93 +1068,105 @@ class KubernetesSandboxManager(SandboxManager):
 
         return None
 
-    def _pod_ready_poll_intervals(self) -> Iterator[float]:
-        """Yield poll intervals according to ``POD_READY_POLL_SCHEDULE``.
+    def _evaluate_pod_readiness(self, pod: client.V1Pod, pod_name: str) -> bool | None:
+        """Inspect one pod snapshot for readiness/failure.
 
-        Fast-path detection in the first few seconds (pods usually transition
-        Pending→Running→Ready in 12–18s), then back off so a stuck pod
-        doesn't hammer the API server.
+        Returns ``True`` if Ready, ``False`` if still progressing, and raises
+        ``RuntimeError`` on a terminal failure (init failure, Failed phase,
+        Succeeded phase).
         """
-        for count, interval in POD_READY_POLL_SCHEDULE:
-            for _ in range(count):
-                yield interval
+        init_error = self._check_init_container_status(pod)
+        if init_error:
+            raise RuntimeError(f"Pod {pod_name} failed to start: {init_error}")
+
+        phase = pod.status.phase
+        if phase == "Failed":
+            raise RuntimeError(f"Pod {pod_name} failed to start")
+        if phase == "Succeeded":
+            raise RuntimeError(
+                f"Pod {pod_name} completed unexpectedly "
+                f"(sandbox pods should run indefinitely)"
+            )
+        if phase == "Running":
+            for condition in pod.status.conditions or []:
+                if condition.type == "Ready" and condition.status == "True":
+                    return True
+        return False
 
     def _wait_for_pod_ready(
         self,
         pod_name: str,
         timeout: float = POD_READY_TIMEOUT_SECONDS,
     ) -> bool:
-        """Wait for pod to become ready.
+        """Block on a single-pod watch until Ready or timeout.
 
-        Args:
-            pod_name: Name of the pod to wait for
-            timeout: Maximum time to wait in seconds
-
-        Returns:
-            True if pod is ready, False if timeout
-
-        Raises:
-            RuntimeError: If pod fails or is deleted
+        Watching beats polling: the apiserver pushes status transitions as
+        they happen, so we catch ``Ready`` within ~100ms instead of waiting
+        for the next poll tick. A bounded retry loop covers ``410 Gone``
+        (resource version aged out under us) by re-listing and resuming.
         """
         start_time = time.time()
-        poll_intervals = self._pod_ready_poll_intervals()
+        field_selector = f"metadata.name={pod_name}"
 
-        while time.time() - start_time < timeout:
+        try:
+            initial = self._core_api.read_namespaced_pod(
+                name=pod_name, namespace=self._namespace
+            )
+            if self._evaluate_pod_readiness(initial, pod_name):
+                logger.info("Pod %s is ready", pod_name)
+                return True
+            resource_version = initial.metadata.resource_version
+        except ApiException as e:
+            if e.status == 404:
+                raise RuntimeError(f"Pod {pod_name} was deleted")
+            raise
+
+        while True:
+            remaining = timeout - (time.time() - start_time)
+            if remaining <= 0:
+                break
+
+            w = watch.Watch()
             try:
-                pod = self._core_api.read_namespaced_pod(
-                    name=pod_name,
+                stream = w.stream(
+                    self._core_api.list_namespaced_pod,
                     namespace=self._namespace,
+                    field_selector=field_selector,
+                    resource_version=resource_version,
+                    timeout_seconds=int(remaining),
                 )
-
-                # Check init container status first (they run before main container)
-                init_error = self._check_init_container_status(pod)
-                if init_error:
-                    raise RuntimeError(f"Pod {pod_name} failed to start: {init_error}")
-
-                phase = pod.status.phase
-
-                # Check for failure conditions
-                if phase == "Failed":
-                    # Try to get more details about the failure
-                    init_error = self._check_init_container_status(pod)
-                    error_msg = f"Pod {pod_name} failed to start"
-                    if init_error:
-                        error_msg += f": {init_error}"
-                    raise RuntimeError(error_msg)
-
-                if phase == "Succeeded":
-                    raise RuntimeError(
-                        f"Pod {pod_name} completed unexpectedly (sandbox pods should run indefinitely)"
-                    )
-
-                # Check if running and ready
-                if phase == "Running":
-                    conditions = pod.status.conditions or []
-                    for condition in conditions:
-                        if condition.type == "Ready" and condition.status == "True":
-                            logger.info("Pod %s is ready", pod_name)
-                            return True
-
-                logger.debug("Pod %s status: %s, waiting...", pod_name, phase)
-
+                for event in stream:
+                    event_type = event.get("type")
+                    obj = event.get("object")
+                    if event_type == "DELETED":
+                        raise RuntimeError(f"Pod {pod_name} was deleted")
+                    if not isinstance(obj, client.V1Pod):
+                        continue
+                    resource_version = obj.metadata.resource_version
+                    if self._evaluate_pod_readiness(obj, pod_name):
+                        logger.info("Pod %s is ready", pod_name)
+                        return True
             except ApiException as e:
-                if e.status == 404:
-                    raise RuntimeError(f"Pod {pod_name} was deleted")
-                logger.warning("Error checking pod status: %s", e)
+                # 410 Gone: resource_version aged out — re-list, resume.
+                if e.status == 410:
+                    resource_version = self._core_api.list_namespaced_pod(
+                        namespace=self._namespace, field_selector=field_selector
+                    ).metadata.resource_version
+                    continue
+                raise
+            finally:
+                w.stop()
 
-            time.sleep(next(poll_intervals, 2.0))
-
-        # On timeout, check one more time for init container failures
+        # On timeout, re-check init container status one more time.
         try:
             pod = self._core_api.read_namespaced_pod(
-                name=pod_name,
-                namespace=self._namespace,
+                name=pod_name, namespace=self._namespace
             )
             init_error = self._check_init_container_status(pod)
             if init_error:
                 raise RuntimeError(f"Pod {pod_name} failed to start: {init_error}")
         except ApiException:
-            pass  # Pod might be deleted, ignore
+            pass
 
         logger.warning("Timeout waiting for pod %s to become ready", pod_name)
         return False

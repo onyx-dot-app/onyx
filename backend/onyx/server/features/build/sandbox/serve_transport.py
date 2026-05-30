@@ -45,7 +45,7 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 
 # opencode-serve boot lags backend Ready by ~1–3s warm, up to ~15s cold.
 OPENCODE_SERVE_READY_TIMEOUT_SECONDS = 30
-OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.5
+OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.1
 
 
 @dataclass(frozen=True)
