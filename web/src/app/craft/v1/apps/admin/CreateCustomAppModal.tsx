@@ -2,9 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Modal from "@/refresh-components/Modal";
-import { Button, MessageCard, Text } from "@opal/components";
+import { Button, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
 import InputKeyValue, {
   KeyValue,

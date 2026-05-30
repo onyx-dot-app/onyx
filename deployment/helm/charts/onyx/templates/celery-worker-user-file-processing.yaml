@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-user-file-processing
+  name: {{ include "onyx.resourceName" (list . "celery-worker-user-file-processing") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.celery_worker_user_file_processing.deploymentLabels }}

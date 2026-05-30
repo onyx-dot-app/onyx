@@ -1,6 +1,6 @@
-"""Comprehensive packet and ACP event logger for build mode debugging.
+"""Comprehensive packet and sandbox event logger for build mode debugging.
 
-Logs all packets, JSON-RPC messages, and ACP events during build mode streaming.
+Logs all packets, JSON-RPC messages, and sandbox events during build mode streaming.
 Provides detailed tracing for the entire agent loop and communication flow.
 
 Log output locations (in priority order):
@@ -30,12 +30,12 @@ DEFAULT_MAX_LOG_LINES = 5000
 
 
 class PacketLogger:
-    """Comprehensive logger for ACP/OpenCode communication and packet streaming.
+    """Comprehensive logger for opencode-serve communication and packet streaming.
 
     Logs:
     - All JSON-RPC requests sent to the agent
     - All JSON-RPC responses/notifications received from the agent
-    - All ACP events emitted during streaming
+    - All sandbox events emitted during streaming
     - Session and sandbox lifecycle events
     - Timing information for debugging performance
 
@@ -435,20 +435,20 @@ class PacketLogger:
             self._write_log(f"[JSONRPC-RAW-{direction}] (logging error: {e})")
 
     # =========================================================================
-    # ACP Event Logging
+    # Sandbox Event Logging
     # =========================================================================
 
-    def log_acp_event(
+    def log_sandbox_event(
         self,
         event_type: str,
         event_data: dict[str, Any],
         sandbox_id: UUID | str | None = None,
         session_id: UUID | str | None = None,
     ) -> None:
-        """Log an ACP event being emitted.
+        """Log a sandbox event being emitted.
 
         Args:
-            event_type: The ACP event type (e.g., "agent_message_chunk")
+            event_type: The sandbox event type (e.g., "agent_message_chunk")
             event_data: The full event data
             sandbox_id: The sandbox ID (optional, for context)
             session_id: The session ID (optional, for context)
@@ -477,21 +477,21 @@ class PacketLogger:
                         }
 
             event_str = json.dumps(display_data, indent=2, default=str)
-            self._write_log(f"[ACP-EVENT] {event_type}{ctx}\n{event_str}")
+            self._write_log(f"[SANDBOX-EVENT] {event_type}{ctx}\n{event_str}")
         except Exception as e:
-            self._write_log(f"[ACP-EVENT] {event_type} (logging error: {e})")
+            self._write_log(f"[SANDBOX-EVENT] {event_type} (logging error: {e})")
 
-    def log_acp_event_yielded(
+    def log_sandbox_event_yielded(
         self,
         event_type: str,
         event_obj: Any,
         sandbox_id: UUID | str | None = None,
         session_id: UUID | str | None = None,
     ) -> None:
-        """Log an ACP event object being yielded from the generator.
+        """Log a sandbox event object being yielded from the generator.
 
         Args:
-            event_type: The ACP event type
+            event_type: The sandbox event type
             event_obj: The Pydantic event object
             sandbox_id: The sandbox ID (optional)
             session_id: The session ID (optional)
@@ -504,9 +504,9 @@ class PacketLogger:
                 event_data = event_obj.model_dump(mode="json", by_alias=True)
             else:
                 event_data = {"raw": str(event_obj)}
-            self.log_acp_event(event_type, event_data, sandbox_id, session_id)
+            self.log_sandbox_event(event_type, event_data, sandbox_id, session_id)
         except Exception as e:
-            self._write_log(f"[ACP-EVENT] {event_type} (logging error: {e})")
+            self._write_log(f"[SANDBOX-EVENT] {event_type} (logging error: {e})")
 
     # =========================================================================
     # Session and Sandbox Lifecycle Logging
@@ -570,53 +570,6 @@ class PacketLogger:
             f"[SESSION-END] session={self._format_uuid(session_id)} "
             f"status={status} duration={duration_ms:.0f}ms events={events_count}"
             f"{error_str}"
-        )
-
-    def log_acp_client_start(
-        self,
-        sandbox_id: UUID | str,
-        session_id: UUID | str,
-        cwd: str,
-        context: str = "",
-    ) -> None:
-        """Log ACP client initialization.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID
-            cwd: Working directory
-            context: "local" or "k8s"
-        """
-        if not self._enabled or not self._logger:
-            return
-
-        ctx_prefix = f"[{context}] " if context else ""
-        self._write_log(
-            f"{ctx_prefix}[ACP-CLIENT-START] "
-            f"sandbox={self._format_uuid(sandbox_id)} "
-            f"session={self._format_uuid(session_id)}\n"
-            f"  cwd: {cwd}"
-        )
-
-    def log_acp_client_stop(
-        self,
-        sandbox_id: UUID | str,
-        session_id: UUID | str,
-        context: str = "",
-    ) -> None:
-        """Log ACP client shutdown.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID
-            context: "local" or "k8s"
-        """
-        if not self._enabled or not self._logger:
-            return
-
-        ctx_prefix = f"[{context}] " if context else ""
-        self._write_log(
-            f"{ctx_prefix}[ACP-CLIENT-STOP] sandbox={self._format_uuid(sandbox_id)} session={self._format_uuid(session_id)}"
         )
 
     # =========================================================================

@@ -1,6 +1,6 @@
 "use client";
 
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { QueryHistoryTable } from "@/app/ee/admin/performance/query-history/QueryHistoryTable";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 

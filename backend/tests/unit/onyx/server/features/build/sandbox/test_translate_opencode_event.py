@@ -11,13 +11,13 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentThoughtChunk
-from acp.schema import Error
-from acp.schema import PromptResponse
-from acp.schema import ToolCallProgress
-from acp.schema import ToolCallStart
 
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
+from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.opencode.serve_client import (
     _synthesize_tool_content,
 )
@@ -33,6 +33,21 @@ SESS = "ses_test123"
 
 def _state() -> _TurnState:
     return _TurnState(session_id=SESS)
+
+
+def _fetch_from(
+    responses: dict[str, dict[str, Any] | None],
+) -> tuple[Any, list[str]]:
+    """Dict-backed ``fetch_message`` stub. Returns the callable and a
+    shared list that records each call so tests can assert hydrate
+    happened exactly once per messageID."""
+    calls: list[str] = []
+
+    def fetch(msg_id: str) -> dict[str, Any] | None:
+        calls.append(msg_id)
+        return responses.get(msg_id)
+
+    return fetch, calls
 
 
 def _drain(events: Any) -> list[Any]:
@@ -317,9 +332,39 @@ def test_event_for_other_session_filtered() -> None:
     assert s.local_text == {}
 
 
-def test_event_with_session_in_info_node_filtered_correctly() -> None:
+def test_message_updated_with_session_in_info_caches_role() -> None:
     s = _state()
-    # Some events nest sessionID inside properties.info
+    # Some events nest sessionID inside properties.info; verify the filter
+    # still recognizes the session AND that we cache role=assistant even
+    # though message.updated alone never yields a terminator.
+    out = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.updated",
+                "properties": {
+                    "info": {
+                        "sessionID": SESS,
+                        "id": "msg_abc",
+                        "role": "assistant",
+                        "time": {"completed": 1779000000000},
+                        "finish": "stop",
+                    }
+                },
+            },
+            s,
+        )
+    )
+    assert out == []
+    assert "msg_abc" in s.assistant_message_ids
+
+
+# ───────────────────────── turn terminators ───────────────────────
+
+
+def test_message_updated_alone_does_not_terminate() -> None:
+    # Opencode fires message.updated with time.completed at EVERY step end
+    # (tool-call step, text step, ...). It's not a turn-level signal.
+    s = _state()
     out = _drain(
         translate_opencode_event(
             {
@@ -336,72 +381,39 @@ def test_event_with_session_in_info_node_filtered_correctly() -> None:
             s,
         )
     )
-    assert len(out) == 1
-    assert isinstance(out[0], PromptResponse)
+    assert out == []
 
 
-# ───────────────────────── terminator (message.updated) ───────────
-
-
-def test_terminator_yields_prompt_response_once() -> None:
+def test_session_idle_terminates_once() -> None:
     s = _state()
     out1 = _drain(
         translate_opencode_event(
-            {
-                "type": "message.updated",
-                "properties": {
-                    "info": {
-                        "sessionID": SESS,
-                        "role": "assistant",
-                        "time": {"completed": 1779000000000},
-                        "finish": "stop",
-                    }
-                },
-            },
-            s,
+            {"type": "session.idle", "properties": {"sessionID": SESS}}, s
         )
     )
     assert len(out1) == 1
     assert isinstance(out1[0], PromptResponse)
-    assert out1[0].stop_reason == "end_turn"
 
-    # Backstop signals after the primary should be no-ops.
     out2 = _drain(
-        translate_opencode_event(
-            {"type": "session.idle", "properties": {"sessionID": SESS}}, s
-        )
-    )
-    assert out2 == []
-    out3 = _drain(
         translate_opencode_event(
             {
                 "type": "session.status",
-                "properties": {"sessionID": SESS, "status": "idle"},
+                "properties": {"sessionID": SESS, "status": {"type": "idle"}},
             },
             s,
         )
     )
-    assert out3 == []
+    assert out2 == []
 
 
-def test_session_idle_acts_as_backstop_terminator() -> None:
-    s = _state()
-    out = _drain(
-        translate_opencode_event(
-            {"type": "session.idle", "properties": {"sessionID": SESS}}, s
-        )
-    )
-    assert len(out) == 1
-    assert isinstance(out[0], PromptResponse)
-
-
-def test_session_status_idle_is_terminator() -> None:
+def test_session_status_idle_object_is_terminator() -> None:
+    # status is an object {type: "idle"|"busy"|...} — match on .type.
     s = _state()
     out = _drain(
         translate_opencode_event(
             {
                 "type": "session.status",
-                "properties": {"sessionID": SESS, "status": "idle"},
+                "properties": {"sessionID": SESS, "status": {"type": "idle"}},
             },
             s,
         )
@@ -416,7 +428,7 @@ def test_session_status_non_idle_is_noop() -> None:
         translate_opencode_event(
             {
                 "type": "session.status",
-                "properties": {"sessionID": SESS, "status": "busy"},
+                "properties": {"sessionID": SESS, "status": {"type": "busy"}},
             },
             s,
         )
@@ -444,7 +456,10 @@ def test_user_message_updated_does_not_terminate() -> None:
     assert out == []
 
 
-def test_assistant_message_without_completed_is_noop() -> None:
+def test_in_progress_assistant_message_updated_is_noop() -> None:
+    # Companion to `test_message_updated_alone_does_not_terminate`: the
+    # in-progress variant (time.completed is None) also never terminates.
+    # message.updated is never a turn-level signal regardless of completed.
     s = _state()
     out = _drain(
         translate_opencode_event(
@@ -465,8 +480,10 @@ def test_assistant_message_without_completed_is_noop() -> None:
 
 
 def test_finish_stop_maps_to_end_turn() -> None:
+    # Finish reason is recorded on message.updated and consumed by
+    # the terminator on the subsequent session.idle.
     s = _state()
-    out = _drain(
+    _drain(
         translate_opencode_event(
             {
                 "type": "message.updated",
@@ -474,12 +491,16 @@ def test_finish_stop_maps_to_end_turn() -> None:
                     "info": {
                         "sessionID": SESS,
                         "role": "assistant",
-                        "time": {"completed": 1779000000000},
                         "finish": "stop",
                     }
                 },
             },
             s,
+        )
+    )
+    out = _drain(
+        translate_opencode_event(
+            {"type": "session.idle", "properties": {"sessionID": SESS}}, s
         )
     )
     assert isinstance(out[0], PromptResponse)
@@ -488,7 +509,7 @@ def test_finish_stop_maps_to_end_turn() -> None:
 
 def test_finish_max_tokens_passes_through() -> None:
     s = _state()
-    out = _drain(
+    _drain(
         translate_opencode_event(
             {
                 "type": "message.updated",
@@ -496,12 +517,16 @@ def test_finish_max_tokens_passes_through() -> None:
                     "info": {
                         "sessionID": SESS,
                         "role": "assistant",
-                        "time": {"completed": 1779000000000},
                         "finish": "max_tokens",
                     }
                 },
             },
             s,
+        )
+    )
+    out = _drain(
+        translate_opencode_event(
+            {"type": "session.idle", "properties": {"sessionID": SESS}}, s
         )
     )
     assert isinstance(out[0], PromptResponse)
@@ -727,8 +752,8 @@ def test_tool_first_sighting_with_running_emits_start_and_progress() -> None:
     """When the first sighting carries status=running (out-of-order publish),
     follow up with a progress event so the consumer sees both stages.
 
-    Note: opencode's "running" maps to ACP's "in_progress" — the consumer
-    sees ACP enum values, not opencode raw ones.
+    Note: opencode's "running" maps to the schema's "in_progress" — the consumer
+    sees sandbox-event enum values, not opencode raw ones.
     """
     s = _state()
     out = _drain(
@@ -884,7 +909,7 @@ def test_edit_tool_propagates_through_translation() -> None:
 
 
 @pytest.mark.parametrize(
-    "opencode_status, acp_status",
+    "opencode_status, schema_status",
     [
         ("pending", "pending"),
         ("running", "in_progress"),
@@ -898,8 +923,8 @@ def test_edit_tool_propagates_through_translation() -> None:
         (42, "pending"),
     ],
 )
-def test_tool_status_mapping(opencode_status: Any, acp_status: str) -> None:
-    assert _tool_status(opencode_status) == acp_status
+def test_tool_status_mapping(opencode_status: Any, schema_status: str) -> None:
+    assert _tool_status(opencode_status) == schema_status
 
 
 # ───────────────────────── raw_output wrapping ────────────────────
@@ -1076,6 +1101,109 @@ def test_missing_type_ignored() -> None:
 def test_missing_properties_ignored() -> None:
     s = _state()
     assert _drain(translate_opencode_event({"type": "message.updated"}, s)) == []
+
+
+# ───────────────────────── REST hydrate path ──────────────────────
+
+
+def _delta_event(msg_id: str, part_id: str = "p1", delta: str = "x") -> dict[str, Any]:
+    return {
+        "type": "message.part.delta",
+        "properties": {
+            "sessionID": SESS,
+            "messageID": msg_id,
+            "partID": part_id,
+            "field": "text",
+            "delta": delta,
+        },
+    }
+
+
+def test_delta_for_unknown_message_hydrates_as_assistant_and_emits() -> None:
+    """Happy path for the race fix: a delta arrives before message.updated,
+    fetch returns role=assistant, the chunk is emitted, and subsequent
+    deltas hit the cached set without re-fetching."""
+    s = _state()
+    fetch, calls = _fetch_from(
+        {
+            "msg_new": {
+                "info": {"id": "msg_new", "role": "assistant"},
+                "parts": [{"id": "p1", "type": "text"}],
+            }
+        }
+    )
+    out1 = _drain(
+        translate_opencode_event(_delta_event("msg_new", delta="hi "), s, fetch)
+    )
+    out2 = _drain(
+        translate_opencode_event(_delta_event("msg_new", delta="there"), s, fetch)
+    )
+    assert len(out1) == 1 and isinstance(out1[0], AgentMessageChunk)
+    assert len(out2) == 1 and isinstance(out2[0], AgentMessageChunk)
+    assert "msg_new" in s.assistant_message_ids
+    assert s.part_types["p1"] == "text"
+    assert calls == ["msg_new"]
+
+
+def test_delta_for_unknown_message_hydrates_as_user_and_drops() -> None:
+    """Race fix negative path via role classification: fetch returns
+    role=user, the delta is dropped and the messageID is cached so the
+    next delta short-circuits without re-fetching."""
+    s = _state()
+    fetch, calls = _fetch_from(
+        {"msg_user": {"info": {"id": "msg_user", "role": "user"}, "parts": []}}
+    )
+    out1 = _drain(translate_opencode_event(_delta_event("msg_user"), s, fetch))
+    out2 = _drain(translate_opencode_event(_delta_event("msg_user"), s, fetch))
+    assert out1 == [] and out2 == []
+    assert "msg_user" in s.user_message_ids
+    assert "msg_user" not in s.assistant_message_ids
+    assert calls == ["msg_user"]
+
+
+def test_hydrate_failure_cached_so_subsequent_deltas_skip_fetch() -> None:
+    """A failed hydrate (empty fetch, missing info, or unknown role) must
+    cache the msg_id as non-assistant so subsequent deltas don't issue
+    fresh REST calls — otherwise every delta for a problematic message
+    triggers a retry storm on the event-processing hot path."""
+    s = _state()
+    fetch, calls = _fetch_from({"msg_broken": None})
+    for _ in range(2):
+        _drain(translate_opencode_event(_delta_event("msg_broken"), s, fetch))
+    assert calls == ["msg_broken"]
+    assert "msg_broken" in s.user_message_ids
+
+
+def test_hydrate_unknown_role_cached_negatively() -> None:
+    s = _state()
+    fetch, calls = _fetch_from(
+        {"msg_system": {"info": {"role": "system"}, "parts": []}}
+    )
+    for _ in range(3):
+        _drain(translate_opencode_event(_delta_event("msg_system"), s, fetch))
+    assert calls == ["msg_system"]
+    assert "msg_system" in s.user_message_ids
+
+
+def test_hydrate_missing_info_object_cached_negatively() -> None:
+    """Defensive: malformed body without an ``info`` dict still caches
+    negatively so we don't refetch."""
+    s = _state()
+    fetch, calls = _fetch_from({"msg_malformed": {"parts": []}})
+    for _ in range(2):
+        _drain(translate_opencode_event(_delta_event("msg_malformed"), s, fetch))
+    assert calls == ["msg_malformed"]
+    assert "msg_malformed" in s.user_message_ids
+
+
+def test_no_fetch_callback_still_caches_to_avoid_repeated_attempts() -> None:
+    """If ``fetch_message`` is omitted (e.g. the subagent fanout path),
+    the messageID is still cached as non-assistant so subsequent deltas
+    don't re-enter the hydrate path."""
+    s = _state()
+    _drain(translate_opencode_event(_delta_event("msg_no_fetch"), s))
+    _drain(translate_opencode_event(_delta_event("msg_no_fetch"), s))
+    assert "msg_no_fetch" in s.user_message_ids
 
 
 def test_non_string_session_id_skips_match() -> None:

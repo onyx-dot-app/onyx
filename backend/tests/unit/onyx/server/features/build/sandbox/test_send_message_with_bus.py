@@ -9,7 +9,7 @@ so we never need a real opencode-serve to exercise the flow.
 Coverage targets:
 - Happy path: assistant text + reasoning + terminator
 - Per-prompt model override threads ``providerID``/``modelID`` into the POST
-- ``prompt_async`` HTTP error surfaces as ACP ``Error``
+- ``prompt_async`` HTTP error surfaces as the ``Error`` event
 - Bus close sentinel ends the stream with an Error if no terminator seen
 - Wall-clock timeout posts abort + yields Error
 - ``GeneratorExit`` (browser disconnect) posts abort and re-raises
@@ -26,16 +26,17 @@ from typing import Any
 
 import httpx
 import pytest
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentThoughtChunk
-from acp.schema import Error
-from acp.schema import PromptResponse
 
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
 from onyx.server.features.build.sandbox.opencode.serve_client import ClientTimeouts
 from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
 
 _SESSION = "ses_test_123"
+_DIRECTORY = "/workspace/sessions/test-session"
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +116,7 @@ def _run_send_message(
         for evt in client.send_message(
             _SESSION,
             "hello",
+            directory=_DIRECTORY,
             model_provider=model_provider,
             model_id=model_id,
             timeout=timeout,
@@ -421,7 +423,7 @@ def test_send_message_omits_model_when_only_one_arg_supplied(
 def test_send_message_yields_error_on_prompt_async_http_error(
     bus: PodEventBus,
 ) -> None:
-    """A 5xx from opencode on prompt_async must produce a single ACP Error
+    """A 5xx from opencode on prompt_async must produce a single sandbox-event Error
     and clean shutdown — not a hang waiting for events that won't come."""
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -431,7 +433,9 @@ def test_send_message_yields_error_on_prompt_async_http_error(
 
     transport = httpx.MockTransport(handler)
     client = _make_client(bus, transport)
-    events: list[Any] = list(client.send_message(_SESSION, "hello", timeout=2.0))
+    events: list[Any] = list(
+        client.send_message(_SESSION, "hello", directory=_DIRECTORY, timeout=2.0)
+    )
     assert len(events) == 1
     assert isinstance(events[0], Error)
     assert events[0].code == 500
@@ -445,7 +449,9 @@ def test_send_message_yields_error_on_prompt_async_connection_error(
 
     transport = httpx.MockTransport(handler)
     client = _make_client(bus, transport)
-    events: list[Any] = list(client.send_message(_SESSION, "hi", timeout=2.0))
+    events: list[Any] = list(
+        client.send_message(_SESSION, "hi", directory=_DIRECTORY, timeout=2.0)
+    )
     assert len(events) == 1
     assert isinstance(events[0], Error)
     assert events[0].code == -3
@@ -459,7 +465,9 @@ def test_send_message_errors_when_stream_ready_never_set(bus: PodEventBus) -> No
     bus.stream_ready.clear()
     transport = httpx.MockTransport(_ok_response)
     client = _make_client(bus, transport, connect_timeout=0.2)
-    events = list(client.send_message(_SESSION, "hi", timeout=2.0))
+    events = list(
+        client.send_message(_SESSION, "hi", directory=_DIRECTORY, timeout=2.0)
+    )
     assert len(events) == 1
     assert isinstance(events[0], Error)
     assert events[0].code == -3
@@ -500,7 +508,9 @@ def test_send_message_wall_clock_timeout_aborts(bus: PodEventBus) -> None:
     transport = httpx.MockTransport(handler)
     client = _make_client(bus, transport)
     # Don't push any events — let the timeout elapse.
-    events = list(client.send_message(_SESSION, "hi", timeout=0.3))
+    events = list(
+        client.send_message(_SESSION, "hi", directory=_DIRECTORY, timeout=0.3)
+    )
     assert any(isinstance(e, Error) and e.code == -1 for e in events)
     assert any("/abort" in p for p in aborts)
 
@@ -529,7 +539,7 @@ def test_send_message_aborts_on_generator_exit(bus: PodEventBus) -> None:
     # subscribe via the bus path the client uses, so let the client do
     # its own subscribe; we just dispatch into the bus, which will route
     # to that subscription.
-    gen = client.send_message(_SESSION, "hi", timeout=5.0)
+    gen = client.send_message(_SESSION, "hi", directory=_DIRECTORY, timeout=5.0)
     bus._dispatch(
         {
             "type": "message.updated",
@@ -661,7 +671,7 @@ def test_send_message_unsubscribes_on_http_error(bus: PodEventBus) -> None:
 
     transport = httpx.MockTransport(handler)
     client = _make_client(bus, transport)
-    list(client.send_message(_SESSION, "hi", timeout=2.0))
+    list(client.send_message(_SESSION, "hi", directory=_DIRECTORY, timeout=2.0))
     assert _SESSION not in bus._subscribers
 
 
@@ -676,7 +686,7 @@ def test_send_message_requires_event_bus() -> None:
         transport=transport,
     )
     with pytest.raises(RuntimeError, match="requires event_bus"):
-        list(client.send_message(_SESSION, "hi"))
+        list(client.send_message(_SESSION, "hi", directory=_DIRECTORY))
 
 
 # ---------------------------------------------------------------------------
@@ -700,4 +710,6 @@ def _gen_to_completion(
 
     threading.Thread(target=fire, daemon=True).start()
     started.set()
-    yield from client.send_message(_SESSION, "hi", timeout=timeout)
+    yield from client.send_message(
+        _SESSION, "hi", directory=_DIRECTORY, timeout=timeout
+    )

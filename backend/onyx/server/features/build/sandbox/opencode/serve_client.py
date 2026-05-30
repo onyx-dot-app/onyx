@@ -1,25 +1,20 @@
-"""HTTP client for ``opencode serve``.
-
-Replaces the per-message ``opencode acp`` subprocess clients in
-``sandbox/kubernetes/internal/acp_exec_client.py`` and
-``sandbox/docker/internal/acp_exec_client.py``. The plan is documented in
-``docs/craft/opencode-serve-migration.md`` and the design in
+"""HTTP client for ``opencode serve`` — the only transport Onyx Craft
+uses to drive in-sandbox agent turns. Design lives in
 ``docs/craft/features/opencode-serve-client.md``.
 
-Public surface (mirrors the existing ACP clients enough that the sandbox
-managers swap in one method call):
+Public surface:
 
 - :class:`OpencodeServeClient`
 - :class:`ClientTimeouts`
 
-Phase 1 deliverable: the client library only — no sandbox-manager wire-up.
-Gated behind ``AGENT_TRANSPORT={"acp","serve"}`` in ``configs.py``.
+Sandbox-event types come from :mod:`onyx.server.features.build.sandbox.event_schema`.
 """
 
 from __future__ import annotations
 
 import queue
 import time
+from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -28,30 +23,30 @@ from typing import Any
 from typing import cast
 
 import httpx
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentThoughtChunk
-from acp.schema import Error
-from acp.schema import PromptResponse
-from acp.schema import ToolCallProgress
-from acp.schema import ToolCallStart
 
-from onyx.server.features.build.configs import ACP_MESSAGE_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_CONNECT_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_REQUEST_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
+from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
-from onyx.server.features.build.sandbox.base import SSEKeepalive
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
+from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.opencode.event_bus import _Subscription
 from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
+from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
 # Acp event union (kept narrow — only the types we actually translate to).
-ACPEvent = (
+SandboxEvent = (
     AgentMessageChunk
     | AgentThoughtChunk
     | ToolCallStart
@@ -112,19 +107,22 @@ class _TurnState:
     # the post-tool synthesized answer. Text parts whose ``messageID``
     # isn't in this set are filtered (user echoes, prior-turn messages).
     assistant_message_ids: set[str] = field(default_factory=set)
-    # PartID → part type ("text", "reasoning", "tool", "step-start",
-    # "step-finish", ...). Populated from ``message.part.updated`` events.
-    # Read by the delta handler to decide whether a delta is a text chunk
-    # (AgentMessageChunk) or a reasoning chunk (AgentThoughtChunk) —
-    # opencode emits BOTH on ``field=text`` deltas (the field refers to
-    # the part's text attribute, not whether the content is reasoning).
+    # PartID → "text" | "reasoning" | "tool" | ... (the delta routes on this).
     part_types: dict[str, str] = field(default_factory=dict)
+    # MessageIDs we've ruled out as assistant (user role, malformed body,
+    # or fetch failed). Kept so subsequent deltas short-circuit without
+    # re-issuing the REST hydrate.
+    user_message_ids: set[str] = field(default_factory=set)
+    # Last LLM finish reason seen on any assistant message.updated. Only the
+    # terminator (fired from session.idle/status) consumes it — message.updated
+    # itself is per-step and can't terminate the turn.
+    last_finish: str | None = None
 
 
 # ---------------------------------------------------------------------------
 # Tool-name mapping. Mirrors the frontend's NAME_MAP / TOOL_KIND_MAP in
 # ``web/src/app/craft/utils/parsePacket.ts`` so the translator emits the
-# same {kind, title} the existing ACP code path emits today.
+# same {kind, title} the existing translator emits today.
 # ---------------------------------------------------------------------------
 
 
@@ -134,6 +132,8 @@ _TOOL_KIND: dict[str, str] = {
     "write": "edit",
     "edit": "edit",
     "patch": "edit",
+    "apply_patch": "edit",
+    "applypatch": "edit",
     "glob": "search",
     "grep": "search",
     "list": "search",
@@ -142,6 +142,11 @@ _TOOL_KIND: dict[str, str] = {
     "todo_write": "other",
     "webfetch": "fetch",
     "websearch": "search",
+    # opencode 1.15.x additions:
+    "lsp": "other",
+    "skill": "other",
+    "question": "other",
+    "invalid": "other",
 }
 
 _TOOL_TITLE: dict[str, str] = {
@@ -150,6 +155,8 @@ _TOOL_TITLE: dict[str, str] = {
     "write": "Writing",
     "edit": "Editing",
     "patch": "Editing",
+    "apply_patch": "Applying patch",
+    "applypatch": "Applying patch",
     "glob": "Searching files",
     "grep": "Searching content",
     "list": "Listing",
@@ -158,6 +165,11 @@ _TOOL_TITLE: dict[str, str] = {
     "todo_write": "Updating todos",
     "webfetch": "Fetching web content",
     "websearch": "Searching web",
+    # opencode 1.15.x additions:
+    "lsp": "Checking code",
+    "skill": "Running skill",
+    "question": "Asking",
+    "invalid": "Validating",
 }
 
 
@@ -169,8 +181,8 @@ def _tool_title(tool: str) -> str:
     return _TOOL_TITLE.get(tool, "Running tool")
 
 
-# opencode's tool status values → ACP's ToolCallStatus literal.
-# ACP: "pending" | "in_progress" | "completed" | "failed"
+# opencode's tool status values → ToolCallStatus literal.
+# Onyx schema: "pending" | "in_progress" | "completed" | "failed"
 # opencode emits: "pending", "running", "completed". "running" → "in_progress".
 _TOOL_STATUS_MAP: dict[str, str] = {
     "pending": "pending",
@@ -261,22 +273,88 @@ def _wrap_raw_output(state: dict[str, Any]) -> dict[str, Any] | None:
     return {"output": str(out)}
 
 
+def _hydrate_message(
+    state: _TurnState,
+    msg_id: str,
+    fetch_message: Callable[[str], dict[str, Any] | None] | None,
+) -> str | None:
+    """REST-fetch a message, populate caches, return role (or None).
+
+    Negative results (fetch failure or unknown role) are cached in
+    ``user_message_ids`` so ``_is_assistant_message`` short-circuits on
+    subsequent deltas instead of re-issuing REST calls.
+    """
+    if fetch_message is None:
+        state.user_message_ids.add(msg_id)
+        return None
+    body = fetch_message(msg_id)
+    if not body:
+        logger.warning("hydrate(%s): empty/failed fetch", msg_id)
+        state.user_message_ids.add(msg_id)
+        return None
+    info = body.get("info") or {}
+    if not isinstance(info, dict):
+        logger.warning("hydrate(%s): no info object", msg_id)
+        state.user_message_ids.add(msg_id)
+        return None
+    role = info.get("role")
+    logger.info(
+        "hydrate(%s): role=%s parts=%s", msg_id, role, len(body.get("parts") or [])
+    )
+    if role == "assistant":
+        state.assistant_message_ids.add(msg_id)
+    elif role == "user":
+        state.user_message_ids.add(msg_id)
+    else:
+        state.user_message_ids.add(msg_id)
+        return None
+    parts = body.get("parts") or []
+    if isinstance(parts, list):
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            part_id = part.get("id")
+            part_type = part.get("type")
+            if isinstance(part_id, str) and isinstance(part_type, str):
+                state.part_types[part_id] = part_type
+    return role if isinstance(role, str) else None
+
+
+def _is_assistant_message(
+    state: _TurnState,
+    msg_id: str | None,
+    fetch_message: Callable[[str], dict[str, Any] | None] | None,
+) -> bool:
+    """True if msg_id is a known assistant message, hydrating once if needed."""
+    if not isinstance(msg_id, str):
+        return False
+    if msg_id in state.assistant_message_ids:
+        return True
+    if msg_id in state.user_message_ids:
+        return False
+    return _hydrate_message(state, msg_id, fetch_message) == "assistant"
+
+
 # ---------------------------------------------------------------------------
-# translate_opencode_event — pure function (no I/O, no self).
+# translate_opencode_event — translation has no I/O of its own. Hydration of
+# unknown messageIDs (the delta-before-message.updated race) is delegated to
+# the optional ``fetch_message`` callable injected by the caller.
 # ---------------------------------------------------------------------------
 
 
 def translate_opencode_event(
-    raw: dict[str, Any], state: _TurnState
-) -> Iterable[ACPEvent]:
-    """Convert one opencode ``/event`` payload into zero-or-more ACPEvents.
+    raw: dict[str, Any],
+    state: _TurnState,
+    fetch_message: Callable[[str], dict[str, Any] | None] | None = None,
+) -> Iterable[SandboxEvent]:
+    """Convert one opencode ``/event`` payload into zero-or-more SandboxEvents.
 
     Pure function: read-only over ``raw`` (but mutates ``state``). Called from
     the reader thread; all field access defensive against unexpected shapes.
 
-    Returns an iterable so single opencode events that imply multiple ACP
-    events (e.g. final ``message.updated`` → flush + ``PromptResponse``) can
-    yield more than one.
+    Returns an iterable so single opencode events that imply multiple
+    sandbox events (e.g. final ``message.updated`` → flush +
+    ``PromptResponse``) can yield more than one.
     """
     etype = raw.get("type")
     if not isinstance(etype, str):
@@ -305,18 +383,13 @@ def translate_opencode_event(
         msg_id = props.get("messageID")
         if not isinstance(delta, str) or not isinstance(part_id, str):
             return
-        # Filter out parts belonging to the user message — only assistant
-        # text should reach the consumer as AgentMessageChunk. In opencode's
-        # event ordering, ``message.updated`` for the assistant message
-        # always fires BEFORE any deltas on its parts, so we can require
-        # ``assistant_message_id`` to be known and to match.
-        if not state.assistant_message_ids:
-            return
-        if isinstance(msg_id, str) and msg_id not in state.assistant_message_ids:
+        # Assistant-only filter. Deltas race ~300ms ahead of message.updated;
+        # _is_assistant_message hydrates via REST when the role is unknown.
+        if not _is_assistant_message(state, msg_id, fetch_message):
             return
         if field_name != "text":
             # Non-text fields (e.g. tool input streaming, future extensions)
-            # have no ACP-event mapping yet. Drop silently.
+            # have no sandbox-event mapping yet. Drop silently.
             return
         # Route by the PART'S TYPE (not the delta's ``field``, which is
         # always "text" because that's the part attribute being updated).
@@ -356,7 +429,7 @@ def translate_opencode_event(
         part_type = part.get("type")
 
         # Record the part's type so later ``message.part.delta`` events
-        # can route to the right ACP event class (text → message chunk,
+        # can route to the right sandbox event class (text → message chunk,
         # reasoning → thought chunk). Deltas alone don't carry the part
         # type, only the part id.
         part_id_for_state = part.get("id")
@@ -364,24 +437,14 @@ def translate_opencode_event(
             state.part_types[part_id_for_state] = part_type
 
         if part_type == "reasoning":
-            # Final reasoning text — gap-fill so dropped deltas are
-            # recovered the same way they are for visible text.
-            msg_id = part.get("messageID")
-            if not state.assistant_message_ids:
-                return
-            if isinstance(msg_id, str) and msg_id not in state.assistant_message_ids:
+            if not _is_assistant_message(state, part.get("messageID"), fetch_message):
                 return
             yield from _reconcile_reasoning_part(part, state)
             return
 
         if part_type == "text":
-            # Same role filter as message.part.delta — assistant parts only.
-            msg_id = part.get("messageID")
-            if not state.assistant_message_ids:
+            if not _is_assistant_message(state, part.get("messageID"), fetch_message):
                 return
-            if isinstance(msg_id, str) and msg_id not in state.assistant_message_ids:
-                return
-            # Reconcile against our local accumulator.
             yield from _reconcile_text_part(part, state)
             return
 
@@ -393,39 +456,39 @@ def translate_opencode_event(
         # field=reasoning; ignore the updated lifecycle for them.
         return
 
-    # ── primary terminator ───────────────────────────────────────────
+    # ── role caching + error termination ─────────────────────────────
+    # NOT a turn terminator: opencode emits time.completed on EVERY step's
+    # assistant message (tool-call step, text step, etc.). The real
+    # end-of-turn signal is session.status:idle / session.idle below.
     if etype == "message.updated":
         info = props.get("info") or {}
         if not isinstance(info, dict):
             return
         if info.get("role") != "assistant":
             return
-        # Record every assistant message id so subsequent text/reasoning
-        # parts and deltas can be filtered against the full set. opencode
-        # creates one assistant message per step within a turn, so we'll
-        # see multiple (initial reasoning+tool-call message, post-tool
-        # answer message, etc.).
         msg_id = info.get("id")
         if isinstance(msg_id, str):
             state.assistant_message_ids.add(msg_id)
-        completed = (info.get("time") or {}).get("completed")
-        if not completed:
-            return
-        # Distinguish clean termination vs error termination.
+        finish = info.get("finish")
+        if isinstance(finish, str):
+            state.last_finish = finish
+        # A message error DOES kill the turn — surface it.
         err = info.get("error")
         if err and isinstance(err, dict):
-            yield from _emit_terminator(state, error=err, finish=info.get("finish"))
-        else:
-            yield from _emit_terminator(state, finish=info.get("finish"))
+            yield from _emit_terminator(state, error=err, finish=finish)
         return
 
-    # ── backstop terminators ─────────────────────────────────────────
+    # ── turn terminators ─────────────────────────────────────────────
+    # Mirrors opencode's CLI: packages/opencode/src/cli/cmd/run.ts:728.
+    # session.status.status is {type: "idle"|"busy"|..., ...} — match on
+    # status.type, not the outer string.
     if etype == "session.idle":
-        yield from _emit_terminator(state)
+        yield from _emit_terminator(state, finish=state.last_finish)
         return
     if etype == "session.status":
-        if props.get("status") == "idle":
-            yield from _emit_terminator(state)
+        status = props.get("status")
+        if isinstance(status, dict) and status.get("type") == "idle":
+            yield from _emit_terminator(state, finish=state.last_finish)
         return
 
     # ── error envelope ───────────────────────────────────────────────
@@ -441,7 +504,9 @@ def translate_opencode_event(
     return
 
 
-def _reconcile_text_part(part: dict[str, Any], state: _TurnState) -> Iterable[ACPEvent]:
+def _reconcile_text_part(
+    part: dict[str, Any], state: _TurnState
+) -> Iterable[SandboxEvent]:
     """Gap-fill reconciliation for visible-text parts. See module
     docstring + the ``message.part.delta`` handler for the full
     invariants. Emits a synthesized AgentMessageChunk for any text in
@@ -456,7 +521,7 @@ def _reconcile_text_part(part: dict[str, Any], state: _TurnState) -> Iterable[AC
 
 def _reconcile_reasoning_part(
     part: dict[str, Any], state: _TurnState
-) -> Iterable[ACPEvent]:
+) -> Iterable[SandboxEvent]:
     """Same gap-fill as :func:`_reconcile_text_part` but for ``type=reasoning``
     parts — yields AgentThoughtChunk instead of AgentMessageChunk."""
     yield from _reconcile_part_text(
@@ -473,7 +538,7 @@ def _reconcile_part_text(
     *,
     emit_class: type[AgentMessageChunk] | type[AgentThoughtChunk],
     session_update: str,
-) -> Iterable[ACPEvent]:
+) -> Iterable[SandboxEvent]:
     """Shared gap-fill logic for any part type whose ``text`` field
     accumulates over deltas. ``state.local_text`` is keyed by partID so
     text-part and reasoning-part accumulators don't collide."""
@@ -507,7 +572,9 @@ def _reconcile_part_text(
         )
 
 
-def _emit_tool_events(part: dict[str, Any], state: _TurnState) -> Iterable[ACPEvent]:
+def _emit_tool_events(
+    part: dict[str, Any], state: _TurnState
+) -> Iterable[SandboxEvent]:
     """Emit ToolCallStart (first sighting) and/or ToolCallProgress for a
     tool part update."""
     call_id = part.get("callID")
@@ -530,6 +597,11 @@ def _emit_tool_events(part: dict[str, Any], state: _TurnState) -> Iterable[ACPEv
         "title": _tool_title(tool),
         "kind": _tool_kind(tool),
         "status": status,
+        # _meta is an ACP-reserved extensibility field. We use it to carry
+        # the raw opencode tool name so the frontend can resolve a precise
+        # title (otherwise tools with kind="other" — todowrite, task, lsp,
+        # skill, … — all fall through to "Running tool").
+        "_meta": {"toolName": tool},
     }
     if raw_input is not None:
         common["rawInput"] = raw_input
@@ -559,7 +631,7 @@ def _emit_terminator(
     *,
     error: dict[str, Any] | None = None,
     finish: Any = None,
-) -> Iterable[ACPEvent]:
+) -> Iterable[SandboxEvent]:
     """Yield ``PromptResponse`` (or ``Error``) exactly once per turn.
 
     Subsequent calls within the same turn are no-ops — opencode emits
@@ -590,7 +662,7 @@ def _emit_terminator(
     ):
         stop_reason = finish
     elif finish == "stop":
-        # opencode uses "stop" where ACP uses "end_turn".
+        # opencode uses "stop" where the schema uses "end_turn".
         stop_reason = "end_turn"
 
     yield PromptResponse.model_validate({"stopReason": stop_reason})
@@ -720,21 +792,34 @@ class OpencodeServeClient:
         self,
         opencode_session_id: str | None,
         *,
-        cwd: str,
+        directory: str,
         title: str | None = None,
     ) -> str:
         """Return a valid opencode session id. Idempotent across replicas.
+
+        ``directory`` anchors the opencode Instance for this session.
+        Opencode-serve scopes its session store per-directory via the
+        ``?directory=`` query parameter on every route (the
+        ``Instance.provide`` middleware in ``server.ts``); the body field
+        is silently ignored. Without it, the session is created in the
+        server's launch cwd (``/workspace``) and every subsequent op must
+        also omit ``?directory=`` to find it — which silently breaks
+        per-session filesystem isolation.
 
         Tolerates a brief cold-pod window where the sandbox is K8s-Ready
         but opencode-serve hasn't bound :4096 yet — both connect failures
         and RemoteProtocolError ("server disconnected before sending a
         response") are retried with short backoff before bubbling up.
         """
+        directory_params = {"directory": directory}
         if opencode_session_id:
             # GET is idempotent — safe to retry on either ConnectError or
             # RemoteProtocolError.
             r = self._http_with_cold_pod_retry(
-                "GET", f"/session/{opencode_session_id}", idempotent=True
+                "GET",
+                f"/session/{opencode_session_id}",
+                params=directory_params,
+                idempotent=True,
             )
             if r.status_code == 200:
                 logger.info(
@@ -757,7 +842,7 @@ class OpencodeServeClient:
                 "[SESSION-LIFECYCLE] ensure_session: no caller-supplied id; creating"
             )
 
-        body: dict[str, Any] = {"directory": cwd}
+        body: dict[str, Any] = {}
         if title:
             body["title"] = title
         # POST /session is NOT idempotent — opencode mints a new session
@@ -766,7 +851,11 @@ class OpencodeServeClient:
         # RemoteProtocolError after a half-handled POST could leak an
         # orphan opencode session.
         r = self._http_with_cold_pod_retry(
-            "POST", "/session", json=body, idempotent=False
+            "POST",
+            "/session",
+            params=directory_params,
+            json=body,
+            idempotent=False,
         )
         _raise_for_status(r, "session create")
         data = r.json()
@@ -774,15 +863,18 @@ class OpencodeServeClient:
         if not isinstance(new_id, str):
             raise RuntimeError("opencode /session returned no id")
         logger.info(
-            "[SESSION-LIFECYCLE] ensure_session: POST /session -> id=%s (cwd=%s)",
+            "[SESSION-LIFECYCLE] ensure_session: POST /session -> id=%s (directory=%s)",
             new_id,
-            cwd,
+            directory,
         )
         return new_id
 
-    def delete_session(self, opencode_session_id: str) -> None:
+    def delete_session(self, opencode_session_id: str, *, directory: str) -> None:
         try:
-            r = self._http.delete(f"/session/{opencode_session_id}")
+            r = self._http.delete(
+                f"/session/{opencode_session_id}",
+                params={"directory": directory},
+            )
             if r.status_code not in (200, 204, 404):
                 logger.warning(
                     "opencode-serve: delete_session(%s) → HTTP %s",
@@ -796,7 +888,9 @@ class OpencodeServeClient:
                 e,
             )
 
-    def list_messages(self, opencode_session_id: str) -> list[dict[str, Any]]:
+    def list_messages(
+        self, opencode_session_id: str, *, directory: str
+    ) -> list[dict[str, Any]]:
         """Snapshot the assistant message accumulator. Returns the parsed
         JSON list directly — callers introspect via dict access.
 
@@ -804,22 +898,52 @@ class OpencodeServeClient:
         streaming and only populated post-terminator. Use this only for
         the post-terminator fallback in the reconnect path.
         """
-        r = self._http.get(f"/session/{opencode_session_id}/message")
+        r = self._http.get(
+            f"/session/{opencode_session_id}/message",
+            params={"directory": directory},
+        )
         _raise_for_status(r, "session messages")
         data = r.json()
         if isinstance(data, list):
             return cast(list[dict[str, Any]], data)
         return []
 
-    def abort(self, opencode_session_id: str) -> None:
+    def abort(self, opencode_session_id: str, *, directory: str) -> None:
         try:
-            self._http.post(f"/session/{opencode_session_id}/abort", json={})
+            self._http.post(
+                f"/session/{opencode_session_id}/abort",
+                params={"directory": directory},
+                json={},
+            )
         except httpx.HTTPError as e:
             logger.warning(
                 "opencode-serve: abort(%s) failed: %s",
                 opencode_session_id,
                 e,
             )
+
+    def get_message(
+        self, opencode_session_id: str, message_id: str, *, directory: str
+    ) -> dict[str, Any] | None:
+        """GET /session/{id}/message/{id}. None on any failure (never raises)."""
+        try:
+            r = self._http_with_cold_pod_retry(
+                "GET",
+                f"/session/{opencode_session_id}/message/{message_id}",
+                params={"directory": directory},
+                idempotent=True,
+            )
+        except httpx.HTTPError as e:
+            logger.warning("get_message(%s) network error: %s", message_id, e)
+            return None
+        if r.status_code != 200:
+            logger.warning("get_message(%s) -> HTTP %s", message_id, r.status_code)
+            return None
+        try:
+            body = r.json()
+        except ValueError:
+            return None
+        return body if isinstance(body, dict) else None
 
     def close(self) -> None:
         self._http.close()
@@ -837,11 +961,17 @@ class OpencodeServeClient:
         opencode_session_id: str,
         message: str,
         *,
+        directory: str,
         model_provider: str | None = None,
         model_id: str | None = None,
-        timeout: float = ACP_MESSAGE_TIMEOUT,
-    ) -> Generator[ACPEvent, None, None]:
-        """Stream one turn of ACPEvents via the shared per-pod bus.
+        timeout: float = SANDBOX_TURN_TIMEOUT_SECONDS,
+    ) -> Generator[SandboxEvent, None, None]:
+        """Stream one turn of SandboxEvents via the shared per-pod bus.
+
+        ``directory`` must match the one passed to :meth:`ensure_session`
+        — opencode-serve scopes its Instance (and therefore the session
+        store) per ``?directory=`` query param; calling with a different
+        directory will 404 the session.
 
         ``GeneratorExit`` (browser disconnect) → POST ``/abort``.
         Wall-clock timeout → POST ``/abort`` and yield :class:`Error`.
@@ -853,6 +983,10 @@ class OpencodeServeClient:
             )
 
         state = _TurnState(session_id=opencode_session_id)
+
+        def fetch_message(mid: str) -> dict[str, Any] | None:
+            return self.get_message(opencode_session_id, mid, directory=directory)
+
         sub = self._event_bus.subscribe(opencode_session_id)
         try:
             # Block until the bus reader has the stream open, else we'd
@@ -870,7 +1004,11 @@ class OpencodeServeClient:
 
             try:
                 self._post_prompt_async(
-                    opencode_session_id, message, model_provider, model_id
+                    opencode_session_id,
+                    message,
+                    model_provider,
+                    model_id,
+                    directory=directory,
                 )
             except httpx.HTTPStatusError as e:
                 yield Error.model_validate(
@@ -886,10 +1024,17 @@ class OpencodeServeClient:
                 )
                 return
 
-            yield from self._consume_from_bus(sub, timeout, opencode_session_id, state)
+            yield from self._consume_from_bus(
+                sub,
+                timeout,
+                opencode_session_id,
+                state,
+                fetch_message,
+                directory=directory,
+            )
 
         except GeneratorExit:
-            self.abort(opencode_session_id)
+            self.abort(opencode_session_id, directory=directory)
             raise
         finally:
             self._event_bus.unsubscribe(sub)
@@ -900,7 +1045,10 @@ class OpencodeServeClient:
         timeout: float,
         opencode_session_id: str,
         state: _TurnState,
-    ) -> Generator[ACPEvent, None, None]:
+        fetch_message: Callable[[str], dict[str, Any] | None],
+        *,
+        directory: str,
+    ) -> Generator[SandboxEvent, None, None]:
         """Drain the bus queue, translate, yield until a
         :class:`PromptResponse` is emitted. permission.asked → auto-allow."""
         terminated_locally = False
@@ -909,7 +1057,7 @@ class OpencodeServeClient:
         while True:
             remaining = timeout - (time.monotonic() - start)
             if remaining <= 0:
-                self.abort(opencode_session_id)
+                self.abort(opencode_session_id, directory=directory)
                 yield Error.model_validate(
                     {"code": -1, "message": "Timeout waiting for response"}
                 )
@@ -940,13 +1088,13 @@ class OpencodeServeClient:
             if raw.get("type") == "server.connected":
                 continue
 
-            for acp_event in translate_opencode_event(raw, state):
-                if isinstance(acp_event, PromptResponse):
+            for sandbox_event in translate_opencode_event(raw, state, fetch_message):
+                if isinstance(sandbox_event, PromptResponse):
                     terminated_locally = True
-                yield acp_event
+                yield sandbox_event
 
             if raw.get("type") == "permission.asked":
-                self._handle_permission_ask(raw, state.session_id)
+                self._handle_permission_ask(raw, state.session_id, directory=directory)
 
             if terminated_locally:
                 return
@@ -959,6 +1107,8 @@ class OpencodeServeClient:
         message: str,
         model_provider: str | None,
         model_id: str | None,
+        *,
+        directory: str,
     ) -> None:
         """POST /session/.../prompt_async.
 
@@ -970,10 +1120,16 @@ class OpencodeServeClient:
         body: dict[str, Any] = {"parts": [{"type": "text", "text": message}]}
         if model_provider and model_id:
             body["model"] = {"providerID": model_provider, "modelID": model_id}
-        r = self._http.post(f"/session/{opencode_session_id}/prompt_async", json=body)
+        r = self._http.post(
+            f"/session/{opencode_session_id}/prompt_async",
+            params={"directory": directory},
+            json=body,
+        )
         _raise_for_status(r, "prompt_async")
 
-    def _handle_permission_ask(self, evt: dict[str, Any], session_id: str) -> None:
+    def _handle_permission_ask(
+        self, evt: dict[str, Any], session_id: str, *, directory: str
+    ) -> None:
         """Auto-allow + telemetry per §Decisions #1.
 
         Production ``opencode.json`` should already cover every permission
@@ -1001,6 +1157,7 @@ class OpencodeServeClient:
         try:
             self._http.post(
                 f"/session/{session_id}/permissions/{perm_id}",
+                params={"directory": directory},
                 json={"response": "once"},
             )
         except httpx.HTTPError as e:

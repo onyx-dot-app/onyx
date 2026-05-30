@@ -23,6 +23,12 @@ import {
 } from "@/app/craft/types/displayTypes";
 
 import {
+  QueuedMessage,
+  MAX_QUEUED_MESSAGES,
+  EMPTY_QUEUED_MESSAGES,
+} from "@/app/app/interfaces";
+
+import {
   createSession as apiCreateSession,
   fetchSession,
   fetchSessionHistory,
@@ -259,6 +265,9 @@ export type PreProvisioningState =
 // Module-level variable to store the provisioning promise (not in Zustand state for serializability)
 let provisioningPromise: Promise<string | null> | null = null;
 
+// Monotonic id for queued messages (kept out of Zustand state for simplicity).
+let nextQueuedMessageId = 1;
+
 /** File preview tab data */
 export interface FilePreviewTab {
   path: string;
@@ -284,12 +293,6 @@ export interface TabNavigationHistory {
   currentIndex: number;
 }
 
-/** Follow-up suggestion bubble */
-export interface SuggestionBubble {
-  theme: "add" | "question";
-  text: string;
-}
-
 /** Output panel tab types */
 export type OutputTabType = "preview" | "files" | "artifacts";
 
@@ -306,6 +309,11 @@ export interface BuildSessionData {
    * Rendered directly without transformation.
    */
   streamItems: StreamItem[];
+  /**
+   * Messages typed while a response is streaming. Auto-sent FIFO once the
+   * current run finishes (see the auto-send effect in BuildChatPanel).
+   */
+  queuedMessages: QueuedMessage[];
   error: string | null;
   webappUrl: string | null;
   /** Sandbox info from backend */
@@ -328,10 +336,6 @@ export interface BuildSessionData {
   filesTabState: FilesTabState;
   /** Browser-style tab navigation history for back/forward */
   tabHistory: TabNavigationHistory;
-  /** Follow-up suggestions after first agent message */
-  followupSuggestions: SuggestionBubble[] | null;
-  /** Whether suggestions are currently being generated */
-  suggestionsLoading: boolean;
 }
 
 interface BuildSessionStore {
@@ -422,6 +426,10 @@ interface BuildSessionStore {
   ) => void;
   clearStreamItems: (sessionId: string) => void;
 
+  // Actions - Queued Messages
+  enqueueMessage: (sessionId: string, text: string) => void;
+  removeQueuedMessage: (sessionId: string, index: number) => void;
+
   // Actions - Abort Control
   setAbortController: (sessionId: string, controller: AbortController) => void;
   abortSession: (sessionId: string) => void;
@@ -475,14 +483,6 @@ interface BuildSessionStore {
   // Tab Navigation History Actions
   navigateTabBack: (sessionId: string) => void;
   navigateTabForward: (sessionId: string) => void;
-
-  // Follow-up Suggestion Actions
-  setFollowupSuggestions: (
-    sessionId: string,
-    suggestions: SuggestionBubble[] | null
-  ) => void;
-  setSuggestionsLoading: (sessionId: string, loading: boolean) => void;
-  clearFollowupSuggestions: (sessionId: string) => void;
 }
 
 // =============================================================================
@@ -499,6 +499,7 @@ const createInitialSessionData = (
   artifacts: [],
   toolCalls: [],
   streamItems: [],
+  queuedMessages: [],
   error: null,
   webappUrl: null,
   sandbox: null,
@@ -516,8 +517,6 @@ const createInitialSessionData = (
     entries: [{ type: "pinned", tab: "preview" }],
     currentIndex: 0,
   },
-  followupSuggestions: null,
-  suggestionsLoading: false,
   ...initialData,
 });
 
@@ -1079,6 +1078,45 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         streamItems: [],
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  // ===========================================================================
+  // Queued Messages
+  // ===========================================================================
+
+  enqueueMessage: (sessionId: string, text: string) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session || session.queuedMessages.length >= MAX_QUEUED_MESSAGES) {
+        return state;
+      }
+      const updatedSession: BuildSessionData = {
+        ...session,
+        queuedMessages: [
+          ...session.queuedMessages,
+          { id: nextQueuedMessageId++, text },
+        ],
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  removeQueuedMessage: (sessionId: string, index: number) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+      const updatedSession: BuildSessionData = {
+        ...session,
+        queuedMessages: session.queuedMessages.filter((_, i) => i !== index),
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -1918,63 +1956,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       return { sessions: newSessions };
     });
   },
-
-  // ===========================================================================
-  // Follow-up Suggestion Actions
-  // ===========================================================================
-
-  setFollowupSuggestions: (
-    sessionId: string,
-    suggestions: SuggestionBubble[] | null
-  ) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        followupSuggestions: suggestions,
-        suggestionsLoading: false,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  setSuggestionsLoading: (sessionId: string, loading: boolean) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        suggestionsLoading: loading,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  clearFollowupSuggestions: (sessionId: string) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        followupSuggestions: null,
-        suggestionsLoading: false,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
 }));
 
 // =============================================================================
@@ -2104,6 +2085,16 @@ export const useStreamItems = () =>
     return sessions.get(currentSessionId)?.streamItems ?? EMPTY_ARRAY;
   });
 
+// Queued messages selector
+export const useQueuedMessages = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return EMPTY_QUEUED_MESSAGES;
+    return (
+      sessions.get(currentSessionId)?.queuedMessages ?? EMPTY_QUEUED_MESSAGES
+    );
+  });
+
 // Webapp refresh selector
 export const useWebappNeedsRefresh = () =>
   useBuildSessionStore((state) => {
@@ -2158,19 +2149,4 @@ export const useTabHistory = () =>
     const { currentSessionId, sessions } = state;
     if (!currentSessionId) return EMPTY_TAB_HISTORY;
     return sessions.get(currentSessionId)?.tabHistory ?? EMPTY_TAB_HISTORY;
-  });
-
-// Follow-up suggestion selectors
-export const useFollowupSuggestions = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return null;
-    return sessions.get(currentSessionId)?.followupSuggestions ?? null;
-  });
-
-export const useSuggestionsLoading = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return false;
-    return sessions.get(currentSessionId)?.suggestionsLoading ?? false;
   });

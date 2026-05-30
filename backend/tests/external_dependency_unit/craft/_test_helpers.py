@@ -15,19 +15,24 @@ Conventions:
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
+from uuid import UUID
 from uuid import uuid4
 
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import delete
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from onyx.db.enums import AccountType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
+from onyx.db.models import ActionApproval
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
@@ -41,7 +46,21 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
+from onyx.external_apps.matching.engine import ActionMatch
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+
+
+def _set_created_at(
+    db_session: Session,
+    model: type[ActionApproval],
+    pk: UUID,
+    when: datetime,
+) -> None:
+    """Force a row's ``created_at`` to ``when``, bypassing ``server_default``."""
+    db_session.execute(
+        update(model).where(model.approval_id == pk).values(created_at=when)
+    )
+    db_session.commit()
 
 
 def make_user(
@@ -309,7 +328,7 @@ def make_cc_pair(
 
 def default_llm_config(
     provider: str = "openai",
-    model_name: str = "gpt-4o-mini",
+    model_name: str = "gpt-5-mini",
     api_key: str = "test-key",
 ) -> LLMProviderConfig:
     """Standard ``LLMProviderConfig`` for tests that don't care about specifics."""
@@ -319,3 +338,32 @@ def default_llm_config(
         api_key=api_key,
         api_base=None,
     )
+
+
+def action_entry(
+    action_type: str,
+    *,
+    display_name: str = "Action",
+    description: str = "An action.",
+    policy: EndpointPolicy = EndpointPolicy.ASK,
+) -> dict[str, Any]:
+    """JSONB-shape dict for one `ActionApproval.actions` entry. Routes
+    through `ActionMatch` so the shape can't drift from the production
+    model."""
+    return ActionMatch(
+        action_type=action_type,
+        display_name=display_name,
+        description=description,
+        policy=policy,
+    ).model_dump(mode="json")
+
+
+def default_action_entries() -> list[dict[str, Any]]:
+    """Single ASK entry for tests that don't care about catalog specifics."""
+    return [
+        action_entry(
+            "shell.exec",
+            display_name="Run command",
+            description="Run a shell command.",
+        )
+    ]

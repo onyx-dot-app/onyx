@@ -49,6 +49,8 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     LABEL_USER_ID,
 )
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
 
 SANDBOX_ID = UUID("12345678-1234-1234-1234-1234567890ab")
 USER_ID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
@@ -75,7 +77,7 @@ def test_labels_include_required_fields() -> None:
     assert labels[LABEL_SANDBOX_ID] == str(SANDBOX_ID)
     assert labels[LABEL_TENANT_ID] == TENANT_ID
     assert labels[LABEL_USER_ID] == str(USER_ID)
-    assert labels["app.kubernetes.io/managed-by"] == "onyx"
+    assert labels[LABEL_K8S_MANAGED_BY] == LABEL_K8S_MANAGED_BY_ONYX
 
 
 def test_labels_omit_user_id_when_none() -> None:
@@ -83,6 +85,10 @@ def test_labels_omit_user_id_when_none() -> None:
     labels = build_sandbox_labels(SANDBOX_ID, TENANT_ID, None)
     assert LABEL_USER_ID not in labels
     assert labels[LABEL_SANDBOX_ID] == str(SANDBOX_ID)
+
+
+_OPENCODE_PASSWORD = "secret-password-fixture"
+_OPENCODE_CONFIG_JSON = '{"providers": {"openai": {"models": {"gpt-4": {}}}}}'
 
 
 @pytest.fixture
@@ -98,6 +104,8 @@ def kwargs() -> ContainerCreateKwargs:
         volume_name="onyx-craft-sandbox-12345678",
         memory_limit="2g",
         cpu_limit=1.0,
+        opencode_password=_OPENCODE_PASSWORD,
+        opencode_config_json=_OPENCODE_CONFIG_JSON,
     )
 
 
@@ -126,6 +134,9 @@ def test_container_kwargs_env_allowlist_excludes_storage_credentials(
     # Required env
     assert env["ONYX_PAT"] == "pat-redacted"
     assert env["ONYX_SERVER_URL"] == "http://api_server:8080"
+    # opencode-serve transport wiring
+    assert env["OPENCODE_SERVER_PASSWORD"] == _OPENCODE_PASSWORD
+    assert env["OPENCODE_CONFIG_CONTENT"] == _OPENCODE_CONFIG_JSON
     # Forbidden env - any storage credential leaking into the sandbox would
     # let the agent read every snapshot/file in the deployment.
     forbidden = {
@@ -223,7 +234,12 @@ def test_container_kwargs_env_is_a_minimal_allowlist(
     """
     env = kwargs["environment"]
     assert isinstance(env, dict)
-    assert set(env.keys()) == {"ONYX_PAT", "ONYX_SERVER_URL"}
+    assert set(env.keys()) == {
+        "ONYX_PAT",
+        "ONYX_SERVER_URL",
+        "OPENCODE_SERVER_PASSWORD",
+        "OPENCODE_CONFIG_CONTENT",
+    }
 
 
 def test_container_kwargs_mounts_only_workspace_sessions(
@@ -259,6 +275,8 @@ def test_container_kwargs_warns_on_internal_compose_host(
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            opencode_password=_OPENCODE_PASSWORD,
+            opencode_config_json=_OPENCODE_CONFIG_JSON,
         )
     assert any(
         "looks like an internal compose hostname" in r.getMessage()
@@ -284,6 +302,8 @@ def test_container_kwargs_no_warning_for_public_url(
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
+            opencode_password=_OPENCODE_PASSWORD,
+            opencode_config_json=_OPENCODE_CONFIG_JSON,
         )
     assert not any(
         "looks like an internal compose hostname" in r.getMessage()

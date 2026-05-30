@@ -286,6 +286,14 @@ class SharingScope(str, PyEnum):
     PUBLIC_ORG = "public_org"
 
 
+class ApprovalDecision(str, PyEnum):
+    """Terminal decision on a gated action; `decision IS NULL` means pending."""
+
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+
+
 class ScheduledTaskStatus(str, PyEnum):
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"
@@ -369,9 +377,29 @@ class ExternalAppType(str, PyEnum):
     """
 
     GOOGLE_CALENDAR = "GOOGLE_CALENDAR"
+    GMAIL = "GMAIL"
     SLACK = "SLACK"
     LINEAR = "LINEAR"
     CUSTOM = "CUSTOM"
+
+
+class EndpointPolicy(str, PyEnum):
+    """What the egress layer does with an outbound request once it has been
+    matched to an action of a connected external app."""
+
+    ALWAYS = "ALWAYS"  # auto-approve: the call proceeds without prompting
+    ASK = "ASK"  # require approval: the user accepts or denies in-session
+    DENY = "DENY"  # block the call outright
+
+
+# Strictness ordering: higher = stricter. When one request matches several
+# actions, the strictest policy governs (sort/`max` with this key); readers
+# of a persisted `actions` list rely on `actions[0]` being the strictest.
+POLICY_SEVERITY: dict[EndpointPolicy, int] = {
+    EndpointPolicy.ALWAYS: 0,
+    EndpointPolicy.ASK: 1,
+    EndpointPolicy.DENY: 2,
+}
 
 
 class PatType(str, PyEnum):

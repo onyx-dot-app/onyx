@@ -7,7 +7,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import { Callout } from "@/components/ui/callout";

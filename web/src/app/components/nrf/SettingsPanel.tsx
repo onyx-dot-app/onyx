@@ -1,6 +1,6 @@
 "use client";
 
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import Text from "@/refresh-components/texts/Text";
 import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";

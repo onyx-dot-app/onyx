@@ -72,7 +72,7 @@ def test_ensure_session_retries_remoteprotocol_then_succeeds() -> None:
     transport = _RecordingTransport(handler)
     client = _make_client(transport)
 
-    resolved = client.ensure_session(_STALE_ID, cwd=_CWD)
+    resolved = client.ensure_session(_STALE_ID, directory=_CWD)
     assert resolved == _STALE_ID
     assert call_count["n"] == 2
 
@@ -92,7 +92,7 @@ def test_ensure_session_retries_connecterror() -> None:
     transport = _RecordingTransport(handler)
     client = _make_client(transport)
 
-    resolved = client.ensure_session(_STALE_ID, cwd=_CWD)
+    resolved = client.ensure_session(_STALE_ID, directory=_CWD)
     assert resolved == _STALE_ID
     assert call_count["n"] == 2
 
@@ -111,7 +111,7 @@ def test_ensure_session_exhausts_retries_and_raises() -> None:
     client = _make_client(transport, retries=2)  # 2 retries → 3 total attempts
 
     try:
-        client.ensure_session(_STALE_ID, cwd=_CWD)
+        client.ensure_session(_STALE_ID, directory=_CWD)
     except httpx.RemoteProtocolError:
         assert call_count["n"] == 3  # initial + 2 retries
         # Crucially: no POST /session ever fired.
@@ -136,7 +136,7 @@ def test_ensure_session_does_not_retry_on_http_error() -> None:
     client = _make_client(transport)
 
     try:
-        client.ensure_session(_STALE_ID, cwd=_CWD)
+        client.ensure_session(_STALE_ID, directory=_CWD)
     except httpx.HTTPStatusError as e:
         assert e.response.status_code == 500
         assert call_count["n"] == 1  # NO retries on 5xx
@@ -162,7 +162,7 @@ def test_ensure_session_retries_post_on_connecterror() -> None:
     transport = _RecordingTransport(handler)
     client = _make_client(transport)
 
-    resolved = client.ensure_session(None, cwd=_CWD)
+    resolved = client.ensure_session(None, directory=_CWD)
     assert resolved == _FRESH_ID
     assert call_count["n"] == 2
 
@@ -185,7 +185,7 @@ def test_ensure_session_does_not_retry_post_on_remoteprotocolerror() -> None:
     client = _make_client(transport)
 
     try:
-        client.ensure_session(None, cwd=_CWD)
+        client.ensure_session(None, directory=_CWD)
     except httpx.RemoteProtocolError:
         assert call_count["n"] == 1, (
             "POST /session must NOT retry on RemoteProtocolError"

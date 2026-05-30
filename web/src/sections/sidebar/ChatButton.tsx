@@ -21,7 +21,7 @@ import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import { Button, LineItemButton, SidebarTab } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
 import {
   shouldShowMoveModal,

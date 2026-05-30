@@ -78,7 +78,21 @@ codeInterpreter:
 
 configMap:
   ENABLE_CRAFT: "true"
-  SANDBOX_API_SERVER_URL: "http://onyx-api-service.onyx.svc.cluster.local:8080"
+  # Host gateway (Docker Desktop), not internal cluster DNS; Linux-kind devs sub their own.
+  SANDBOX_API_SERVER_URL: "http://host.docker.internal:3000"
+  ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
+
+# Can't be disabled when ENABLE_CRAFT=true: sandbox pods won't start
+# without the CA ConfigMap the proxy projects.
+sandboxProxy:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi
 
 # ---- Secrets ----
 
@@ -87,6 +101,14 @@ auth:
     enabled: true
     values:
       private_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+  # Must match ENCRYPTION_KEY_SECRET in .vscode/.env.k8s
+  encryptionKey:
+    enabled: true
+    secretName: "onyx-encryption-key"
+    secretKeys:
+      ENCRYPTION_KEY_SECRET: encryption_key_secret
+    values:
+      encryption_key_secret: "6767676767676767"
 
 # ---- Sandbox push NetworkPolicy ----
 #

@@ -9,7 +9,7 @@ import {
 } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
 import { Popover, PopoverMenu } from "@opal/components";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import {
@@ -119,7 +119,7 @@ export function BuildLLMPopover({
               provider.provider_display_name || provider.provider,
             modelName: model.name,
             displayName: model.display_name || model.name,
-            isRecommended: isRecommendedModel(provider.provider, model.name),
+            isRecommended: isRecommendedModel(model.name),
             isConfigured: true,
           });
         });

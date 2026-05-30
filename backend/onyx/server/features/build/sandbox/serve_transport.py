@@ -1,0 +1,540 @@
+"""Shared opencode-serve transport plumbing.
+
+Lives outside ``base.py`` so the abstract supertype doesn't import concrete
+``opencode.*`` modules (would invert the dependency arrow). ``SandboxManager``
+composes ``_ServeMixin`` in.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import logging
+import os
+import queue
+import threading
+import time
+from abc import abstractmethod
+from collections.abc import Callable
+from collections.abc import Generator
+from dataclasses import dataclass
+from typing import Any
+from uuid import UUID
+
+import httpx
+
+from onyx.server.features.build.api.packet_logger import get_packet_logger
+from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
+from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
+from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
+from onyx.server.features.build.sandbox.opencode.serve_client import _TurnState
+from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
+from onyx.server.features.build.sandbox.opencode.serve_client import (
+    translate_opencode_event,
+)
+from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+SandboxEvent = Any
+
+# Tags serve-transport logs with the api_server replica handling the prompt.
+_API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
+
+# opencode-serve boot lags backend Ready by ~1–3s warm, up to ~15s cold.
+OPENCODE_SERVE_READY_TIMEOUT_SECONDS = 30
+OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.25
+
+
+@dataclass(frozen=True)
+class ServeConnectionInfo:
+    """Per-sandbox opencode-serve URL + Basic-auth password. Constant for
+    the life of the container/pod; cached by ``_ServeMixin``."""
+
+    base_url: str
+    # ``None`` for legacy sandboxes — bus then runs without auth.
+    password: str | None
+
+    def auth(self) -> httpx.BasicAuth | None:
+        if not self.password:
+            return None
+        return httpx.BasicAuth(OPENCODE_SERVER_USERNAME, self.password)
+
+
+class _ServeMixin:
+    """Shared opencode-serve plumbing for ``SandboxManager`` subclasses.
+
+    Subclasses implement :meth:`_load_serve_connection_info`; the mixin
+    handles caching, the prompt slot, the event-bus map + tombstone, the
+    readiness probe, the send-message loop, and the subscribe stream.
+    """
+
+    # Class-level so racing first-callers across instances can't both
+    # initialize and end up with different ``_event_buses_lock`` objects.
+    _serve_state_init_lock = threading.Lock()
+
+    def _init_serve_state(self) -> None:
+        """Idempotent, thread-safe init for serve-transport state."""
+        if getattr(self, "_serve_state_initialized", False):
+            return
+        with _ServeMixin._serve_state_init_lock:
+            if getattr(self, "_serve_state_initialized", False):
+                return
+            # opencode-serve scopes /event by ``?directory=``, so one bus per session dir.
+            self._event_buses: dict[tuple[UUID, str], PodEventBus] = {}
+            # Tombstone: blocks late subscribe from racing a terminate.
+            self._terminated_sandboxes: set[UUID] = set()
+            self._event_buses_lock = threading.Lock()
+            # Key on build_session_id, not opencode_session_id — see prompt_slot.
+            self._prompt_locks: dict[tuple[UUID, UUID], threading.Lock] = {}
+            self._prompt_locks_meta = threading.Lock()
+            self._serve_conn_info: dict[UUID, ServeConnectionInfo] = {}
+            self._serve_conn_info_lock = threading.Lock()
+            self._serve_state_initialized = True
+
+    @abstractmethod
+    def _load_serve_connection_info(
+        self, sandbox_id: UUID
+    ) -> ServeConnectionInfo | None:
+        """Build connection info from the backend. Called once per sandbox;
+        cached until ``_invalidate_serve_connection_info``. Return ``None``
+        if the sandbox doesn't exist."""
+        ...
+
+    def _serve_connection_info(self, sandbox_id: UUID) -> ServeConnectionInfo:
+        """Cached getter; loads on first use, raises if backend reports gone."""
+        info = self._serve_conn_info.get(sandbox_id)
+        if info is not None:
+            return info
+        with self._serve_conn_info_lock:
+            info = self._serve_conn_info.get(sandbox_id)
+            if info is not None:
+                return info
+            loaded = self._load_serve_connection_info(sandbox_id)
+            if loaded is None:
+                raise RuntimeError(
+                    f"No serve connection info for sandbox {sandbox_id}; "
+                    "container/pod is missing or hasn't been provisioned"
+                )
+            if loaded.password is None:
+                logger.warning(
+                    "[SANDBOX-SERVE] No opencode password for sandbox %s; "
+                    "bus will run without auth (legacy sandbox — re-provision to fix)",
+                    sandbox_id,
+                )
+            self._serve_conn_info[sandbox_id] = loaded
+            return loaded
+
+    def _invalidate_serve_connection_info(self, sandbox_id: UUID) -> None:
+        """Drop cached info; call on terminate / re-provision."""
+        with self._serve_conn_info_lock:
+            self._serve_conn_info.pop(sandbox_id, None)
+
+    def _serve_health_check_base_url(self, sandbox_id: UUID) -> str | None:  # noqa: ARG002
+        """Override to probe a different URL during the readiness wait than the
+        persistent ``base_url``. Default ``None`` → use ``base_url``."""
+        return None
+
+    @contextlib.contextmanager
+    def prompt_slot(
+        self,
+        sandbox_id: UUID,
+        build_session_id: UUID,
+    ) -> Generator[bool, None, None]:
+        """Non-blocking try-acquire of a per-build-session lock; yields True
+        if acquired, False if a turn is already in flight (caller must
+        abort without side effects).
+
+        opencode-serve's ``prompt_async`` is fire-and-forget and not
+        concurrent-safe: a second POST while a turn is in flight is
+        silently dropped, the second subscriber catches the *first* turn's
+        terminator, and a phantom user_message gets persisted with no
+        assistant reply. Key on ``build_session_id`` (not
+        ``opencode_session_id``) so the lock survives id rotation from
+        ``on_opencode_session_resolved`` and bounds the dict to one entry
+        per build session.
+        """
+        key = (sandbox_id, build_session_id)
+        with self._prompt_locks_meta:
+            lock = self._prompt_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                self._prompt_locks[key] = lock
+
+        acquired = lock.acquire(blocking=False)
+        try:
+            if not acquired:
+                logger.warning(
+                    "[SANDBOX-SERVE] prompt_slot: refused — concurrent send_message "
+                    "on sandbox=%s build_session=%s",
+                    sandbox_id,
+                    build_session_id,
+                )
+            yield acquired
+        finally:
+            if acquired:
+                lock.release()
+
+    @staticmethod
+    def _session_directory(session_id: UUID) -> str:
+        return f"/workspace/sessions/{session_id}"
+
+    def ensure_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> str | None:
+        """Idempotent preflight to mint (or look up) the opencode-serve
+        session id for this build session. Caller persists it so later
+        turns hit the same session by id."""
+        session_path = self._session_directory(session_id)
+        logger.info(
+            "[SESSION-LIFECYCLE] sandbox.ensure_opencode_session: build_session=%s "
+            "sandbox=%s directory=%s (passing id=None, so client will POST /session)",
+            session_id,
+            sandbox_id,
+            session_path,
+        )
+        with self._build_serve_client(sandbox_id, session_path) as client:
+            return client.ensure_session(
+                None,
+                directory=session_path,
+                title=f"build-session-{str(session_id)[:8]}",
+            )
+
+    def list_subagents(
+        self,
+        sandbox_id: UUID,
+        parent_opencode_session_id: str,
+    ) -> list[str]:
+        """Child opencode session ids spawned under the parent."""
+        # Walk existing buses only — don't spin up a reader thread just to list.
+        with self._event_buses_lock:
+            buses = [
+                bus for (sid, _), bus in self._event_buses.items() if sid == sandbox_id
+            ]
+        for bus in buses:
+            children = bus.list_children(parent_opencode_session_id)
+            if children:
+                return children
+        return []
+
+    def _wait_for_opencode_serve_ready(
+        self,
+        sandbox_id: UUID,
+        timeout: float = OPENCODE_SERVE_READY_TIMEOUT_SECONDS,
+    ) -> bool:
+        """Block until opencode-serve answers ``GET /doc`` with 200. Backend
+        Ready only proves the supervisor is up; opencode binds :4096 a few
+        seconds later."""
+        info = self._serve_connection_info(sandbox_id)
+        probe_base_url = self._serve_health_check_base_url(sandbox_id) or info.base_url
+        # One client across all polls — saves connect-setup churn while the
+        # server is actively refusing connections.
+        with OpencodeServeClient(
+            base_url=probe_base_url, password=info.password, event_bus=None
+        ) as client:
+            deadline = time.time() + timeout
+            last_err = "no probe completed"
+            while time.time() < deadline:
+                try:
+                    if client.health_check():
+                        logger.info(
+                            "[SANDBOX-SERVE] opencode-serve ready for sandbox %s",
+                            sandbox_id,
+                        )
+                        return True
+                    last_err = "health_check returned False"
+                except Exception as e:
+                    last_err = f"{type(e).__name__}: {e}"
+                time.sleep(OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS)
+        logger.error(
+            "[SANDBOX-SERVE] opencode-serve never became ready for sandbox %s "
+            "after %.0fs (last error: %s)",
+            sandbox_id,
+            timeout,
+            last_err,
+        )
+        return False
+
+    def _get_or_create_event_bus(self, sandbox_id: UUID, directory: str) -> PodEventBus:
+        """Lazy per-(sandbox, directory) bus. Refuses to create for a
+        terminated sandbox; replaces self-closed buses so callers don't
+        wedge on BUS_CLOSED_SENTINEL until restart."""
+        key = (sandbox_id, directory)
+        with self._event_buses_lock:
+            bus = self._event_buses.get(key)
+            if bus is not None and not bus.closed:
+                return bus
+            if bus is not None and bus.closed:
+                logger.warning(
+                    "[SANDBOX-SERVE] Replacing self-closed PodEventBus for "
+                    "sandbox %s dir=%s (prior bus exhausted its reconnect budget)",
+                    sandbox_id,
+                    directory,
+                )
+                self._event_buses.pop(key, None)
+            if sandbox_id in self._terminated_sandboxes:
+                raise RuntimeError(
+                    f"Sandbox {sandbox_id} has been terminated; refusing to "
+                    "create a new event bus against its (deleted) backend"
+                )
+            info = self._serve_connection_info(sandbox_id)
+            bus = PodEventBus(
+                base_url=info.base_url,
+                auth=info.auth(),
+                directory=directory,
+                event_read_timeout=OPENCODE_SERVE_EVENT_READ_TIMEOUT,
+            )
+            self._event_buses[key] = bus
+            logger.info(
+                "[SANDBOX-SERVE] Created PodEventBus for sandbox %s dir=%s",
+                sandbox_id,
+                directory,
+            )
+            return bus
+
+    def _build_serve_client(
+        self, sandbox_id: UUID, directory: str
+    ) -> OpencodeServeClient:
+        info = self._serve_connection_info(sandbox_id)
+        bus = self._get_or_create_event_bus(sandbox_id, directory)
+        return OpencodeServeClient(
+            base_url=info.base_url,
+            password=info.password,
+            event_bus=bus,
+        )
+
+    def _close_session_buses(self, sandbox_id: UUID, session_id: UUID) -> None:
+        """Release the per-(sandbox, session) bus. Call from
+        ``cleanup_session_workspace`` — without this the reader thread +
+        httpx connection survive session deletion."""
+        directory = self._session_directory(session_id)
+        with self._event_buses_lock:
+            bus = self._event_buses.pop((sandbox_id, directory), None)
+        if bus is None:
+            return
+        try:
+            bus.close()
+        except Exception:
+            logger.exception(
+                "[SANDBOX-SERVE] PodEventBus close failed for sandbox=%s session=%s",
+                sandbox_id,
+                session_id,
+            )
+
+    def _close_all_sandbox_buses(self, sandbox_id: UUID) -> None:
+        """Tombstone + pop + close every bus for ``sandbox_id``, and drop
+        the per-build-session prompt-slot locks. Call from ``terminate``
+        before destroying the container/pod so late subscribes can't race
+        a fresh bus in, and so we don't leak one ``threading.Lock`` per
+        ``(sandbox_id, build_session_id)`` for the api_server's lifetime."""
+        with self._event_buses_lock:
+            self._terminated_sandboxes.add(sandbox_id)
+            doomed_keys = [k for k in self._event_buses if k[0] == sandbox_id]
+            doomed_buses = [self._event_buses.pop(k) for k in doomed_keys]
+        for bus in doomed_buses:
+            try:
+                bus.close()
+            except Exception:
+                logger.exception(
+                    "[SANDBOX-SERVE] PodEventBus close failed during terminate for %s",
+                    sandbox_id,
+                )
+        with self._prompt_locks_meta:
+            stale = [k for k in self._prompt_locks if k[0] == sandbox_id]
+            for k in stale:
+                self._prompt_locks.pop(k, None)
+        self._invalidate_serve_connection_info(sandbox_id)
+
+    def _send_message_via_serve(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        message: str,
+        opencode_session_id: str | None,
+        agent_provider: str | None,
+        agent_model: str | None,
+        *,
+        on_opencode_session_resolved: Callable[[str], None] | None = None,
+    ) -> Generator[SandboxEvent, None, None]:
+        """Stream sandbox events via the in-sandbox ``opencode serve``. Preflight
+        ``opencode_session_id`` via :meth:`ensure_opencode_session` to avoid
+        one orphan session per turn."""
+        packet_logger = get_packet_logger()
+        session_path = self._session_directory(session_id)
+        client = self._build_serve_client(sandbox_id, session_path)
+        try:
+            logger.info(
+                "[SESSION-LIFECYCLE] _send_message_via_serve: build_session=%s "
+                "caller-supplied opencode_session_id=%s",
+                session_id,
+                opencode_session_id,
+            )
+            resolved_session_id = client.ensure_session(
+                opencode_session_id,
+                directory=session_path,
+                title=f"build-session-{str(session_id)[:8]}",
+            )
+            if resolved_session_id != opencode_session_id:
+                # Caller must persist the new id or we orphan one opencode
+                # session per turn and lose conversation context.
+                if opencode_session_id is not None:
+                    logger.warning(
+                        "[SANDBOX-SERVE] persisted opencode_session_id %s was "
+                        "invalid; replaced with %s for session=%s",
+                        opencode_session_id,
+                        resolved_session_id,
+                        session_id,
+                    )
+                if on_opencode_session_resolved is not None:
+                    on_opencode_session_resolved(resolved_session_id)
+
+            logger.info(
+                "[SANDBOX-SERVE] Sending message: session=%s opencode_session=%s api_pod=%s",
+                session_id,
+                resolved_session_id,
+                _API_SERVER_HOSTNAME,
+            )
+            packet_logger.log_session_start(session_id, sandbox_id, message)
+
+            events_count = 0
+            got_prompt_response = False
+            try:
+                for event in client.send_message(
+                    resolved_session_id,
+                    message,
+                    directory=session_path,
+                    model_provider=agent_provider,
+                    model_id=agent_model,
+                ):
+                    events_count += 1
+                    if isinstance(event, PromptResponse):
+                        got_prompt_response = True
+                    yield event
+
+                logger.info(
+                    "[SANDBOX-SERVE] send_message completed: session=%s events=%s got_prompt_response=%s",
+                    session_id,
+                    events_count,
+                    got_prompt_response,
+                )
+                packet_logger.log_session_end(
+                    session_id, success=True, events_count=events_count
+                )
+            except GeneratorExit:
+                self._abort_and_log_turn_failure(
+                    client=client,
+                    session_id=session_id,
+                    resolved_session_id=resolved_session_id,
+                    session_path=session_path,
+                    events_count=events_count,
+                    packet_logger=packet_logger,
+                    error="GeneratorExit",
+                    log_level=logging.WARNING,
+                )
+                raise
+            except Exception as e:
+                self._abort_and_log_turn_failure(
+                    client=client,
+                    session_id=session_id,
+                    resolved_session_id=resolved_session_id,
+                    session_path=session_path,
+                    events_count=events_count,
+                    packet_logger=packet_logger,
+                    error=f"Exception: {e}",
+                    log_level=logging.ERROR,
+                )
+                raise
+        finally:
+            client.close()
+
+    def _abort_and_log_turn_failure(
+        self,
+        *,
+        client: OpencodeServeClient,
+        session_id: UUID,
+        resolved_session_id: str,
+        session_path: str,
+        events_count: int,
+        packet_logger: Any,
+        error: str,
+        log_level: int,
+    ) -> None:
+        """Best-effort abort + structured log on a failed turn. Abort
+        failures are swallowed — we're already in an error path."""
+        logger.log(
+            log_level,
+            "[SANDBOX-SERVE] turn failed: session=%s events=%s error=%s — sending abort",
+            session_id,
+            events_count,
+            error,
+        )
+        try:
+            client.abort(resolved_session_id, directory=session_path)
+        except Exception as abort_err:
+            logger.warning(
+                "[SANDBOX-SERVE] abort failed during turn cleanup: %s", abort_err
+            )
+        packet_logger.log_session_end(
+            session_id,
+            success=False,
+            error=error,
+            events_count=events_count,
+        )
+
+    def subscribe_to_opencode_session(
+        self,
+        sandbox_id: UUID,
+        opencode_session_id: str,
+        *,
+        directory: str,
+        keepalive_seconds: float = 15.0,
+    ) -> Generator[SandboxEvent, None, None]:
+        """Stream translated sandbox events for an opencode session. Caller closes
+        via ``GeneratorExit``. ``directory`` is required: opencode-serve scopes
+        its session store per-directory, so the hydrate REST call needs it.
+        """
+        bus = self._get_or_create_event_bus(sandbox_id, directory)
+        state = _TurnState(session_id=opencode_session_id)
+        client = self._build_serve_client(sandbox_id, directory)
+
+        def fetch_message(mid: str) -> dict[str, Any] | None:
+            return client.get_message(opencode_session_id, mid, directory=directory)
+
+        sub = bus.subscribe(opencode_session_id)
+        try:
+            last_event = time.monotonic()
+            while True:
+                try:
+                    raw = sub.queue.get(timeout=1.0)
+                except queue.Empty:
+                    if time.monotonic() - last_event >= keepalive_seconds:
+                        yield SSEKeepalive()
+                        last_event = time.monotonic()
+                    continue
+                if raw is BUS_CLOSED_SENTINEL:
+                    return
+                last_event = time.monotonic()
+                if raw.get("type") == "server.connected":
+                    continue
+                for sandbox_event in translate_opencode_event(
+                    raw, state, fetch_message=fetch_message
+                ):
+                    yield sandbox_event
+        finally:
+            # Close client first so a flaky unsubscribe doesn't leak the pool.
+            try:
+                client.close()
+            except Exception:
+                logger.exception(
+                    "[SANDBOX-SERVE] client close failed in subscribe teardown"
+                )
+            try:
+                bus.unsubscribe(sub)
+            except Exception:
+                logger.exception(
+                    "[SANDBOX-SERVE] bus unsubscribe failed in subscribe teardown"
+                )

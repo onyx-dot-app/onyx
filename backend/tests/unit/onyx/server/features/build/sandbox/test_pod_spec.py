@@ -48,9 +48,7 @@ def _push_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ksm, "_push_public_key_b64", None, raising=False)
 
 
-@pytest.fixture
-def pod() -> client.V1Pod:
-    """A freshly-built pod spec. Each test gets its own — no cross-test state."""
+def _build_pod() -> client.V1Pod:
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     mgr._namespace = "onyx-sandboxes"  # type: ignore[attr-defined]
     mgr._image = "onyxdotapp/sandbox:test"  # type: ignore[attr-defined]
@@ -59,8 +57,13 @@ def pod() -> client.V1Pod:
     return mgr._create_sandbox_pod(  # type: ignore[attr-defined]
         sandbox_id="abc12345-abcd-abcd-abcd-abcdef123456",
         tenant_id="t-1",
-        onyx_pat="test-pat",
     )
+
+
+@pytest.fixture
+def pod() -> client.V1Pod:
+    """A freshly-built pod spec. Each test gets its own — no cross-test state."""
+    return _build_pod()
 
 
 def _container(pod: client.V1Pod, name: str) -> client.V1Container:
@@ -161,3 +164,43 @@ def test_share_process_namespace_is_disabled(pod: client.V1Pod) -> None:
     """PID-sharing would expose the sidecar's IRSA env via /proc to the
     agent. Pin explicitly False (not just None / unset)."""
     assert pod.spec.share_process_namespace is False
+
+
+# ---------------------------------------------------------------------------
+# Credential rip-out: the real PAT never lives in the pod
+# ---------------------------------------------------------------------------
+
+
+def test_onyx_pat_env_is_placeholder_not_real(pod: client.V1Pod) -> None:
+    """The pod ships a placeholder; the egress proxy injects the real PAT."""
+    env = {e.name: e.value for e in _container(pod, "sandbox").env}
+    assert env["ONYX_PAT"] == ksm._PROXY_INJECTED_PLACEHOLDER
+
+
+def test_no_proxy_is_loopback_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only loopback may bypass the proxy; the Onyx API host must route through
+    it so the PAT can be injected on the wire."""
+    monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "sandbox-proxy")
+    env = {e.name: e.value for e in ksm._proxy_main_container_env_vars()}
+    assert set(env["NO_PROXY"].split(",")) == {"127.0.0.1", "localhost"}
+    assert env["no_proxy"] == env["NO_PROXY"]
+
+
+def test_no_proxy_env_on_sandbox_container_when_proxy_unconfigured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With no proxy host, the built pod's sandbox container must carry no proxy
+    env at all — pinning the actual spec, not just the helper, so a hardcoded or
+    misplaced proxy var can't create a silent direct-egress (un-injected) path."""
+    monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "")
+    env = {e.name for e in _container(_build_pod(), "sandbox").env}
+    assert env.isdisjoint(
+        {
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "NO_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "no_proxy",
+        }
+    )

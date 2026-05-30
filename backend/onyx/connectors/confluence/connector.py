@@ -19,6 +19,10 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.access import get_all_space_permissions
 from onyx.connectors.confluence.access import get_page_restrictions
+from onyx.connectors.confluence.access import (
+    get_page_restrictions_with_per_ancestor_fetch,
+)
+from onyx.connectors.confluence.onyx_confluence import Confcloud77618Error
 from onyx.connectors.confluence.onyx_confluence import extract_text_from_confluence_html
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.confluence.utils import build_confluence_document_id
@@ -74,6 +78,8 @@ _ATTACHMENT_EXPANSION_FIELDS = [
     "space",
     "metadata.labels",
 ]
+# Fast path: page + ancestor restrictions inlined. Subject to
+# CONFCLOUD-77618 / 76424 on draft/trashed/outdated ancestors.
 _RESTRICTIONS_EXPANSION_FIELDS = [
     "space",
     "restrictions.read.restrictions.user",
@@ -81,6 +87,18 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
     "ancestors.restrictions.read.restrictions.user",
     "ancestors.restrictions.read.restrictions.group",
 ]
+# CONFCLOUD-77618 fallback: bare ancestors only; EE resolver fetches
+# each ancestor's restrictions via `restriction/byOperation`.
+_PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS = [
+    "space",
+    "restrictions.read.restrictions.user",
+    "restrictions.read.restrictions.group",
+    "ancestors",
+]
+# Pruning needs `space` + `ancestors` to populate hierarchy nodes and
+# parent ids; skipping them would flatten the graph. No restrictions
+# expand here, so CONFCLOUD-77618 can't fire.
+_PRUNING_EXPANSION_FIELDS = ["space", "ancestors"]
 
 _SLIM_DOC_BATCH_SIZE = 5000
 
@@ -998,6 +1016,7 @@ class ConfluenceConnector(
             end=end,
             callback=callback,
             include_permissions=False,
+            expand_per_page=False,
         )
 
     def retrieve_all_slim_docs_perm_sync(
@@ -1006,15 +1025,35 @@ class ConfluenceConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        """
-        Return 'slim' docs (IDs + minimal permission data).
-        Does not fetch actual text. Used primarily for incremental permission sync.
-        """
-        return self._retrieve_all_slim_docs(
+        """Yield slim docs for permission sync. Tries the fast path
+        with ancestor restrictions inlined; on CONFCLOUD-77618 restarts
+        the run with per-page restriction lookups. Re-yielding docs
+        from the partial first attempt is safe -- the consumer's
+        `upsert_document_external_perms` is idempotent on `doc_id`."""
+        try:
+            yield from self._retrieve_all_slim_docs(
+                start=start,
+                end=end,
+                callback=callback,
+                include_permissions=True,
+                expand_per_page=False,
+            )
+            return
+        except Confcloud77618Error as e:
+            logger.warning(
+                "CONFCLOUD-77618: ancestor-restrictions expand 404'd "
+                "(URL=%s); restarting Confluence permission sync with "
+                "per-page restriction lookups. Already-yielded docs "
+                "will be re-yielded; DB writes are idempotent.",
+                e.url,
+            )
+
+        yield from self._retrieve_all_slim_docs(
             start=start,
             end=end,
             callback=callback,
             include_permissions=True,
+            expand_per_page=True,
         )
 
     def _retrieve_all_slim_docs(
@@ -1023,9 +1062,18 @@ class ConfluenceConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
         include_permissions: bool = True,
+        expand_per_page: bool = False,
     ) -> GenerateSlimDocumentOutput:
         doc_metadata_list: list[SlimDocument | HierarchyNode] = []
-        restrictions_expand = ",".join(_RESTRICTIONS_EXPANSION_FIELDS)
+
+        # Pruning skips the restrictions expand (the CONFCLOUD-77618
+        # trigger) but still needs space + ancestors for hierarchy.
+        if not include_permissions:
+            restrictions_expand = ",".join(_PRUNING_EXPANSION_FIELDS)
+        elif expand_per_page:
+            restrictions_expand = ",".join(_PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS)
+        else:
+            restrictions_expand = ",".join(_RESTRICTIONS_EXPANSION_FIELDS)
 
         space_level_access_info: dict[str, ExternalAccess] = {}
         if include_permissions:
@@ -1037,12 +1085,30 @@ class ConfluenceConnector(
         for node in self._yield_space_hierarchy_nodes():
             doc_metadata_list.append(node)
 
+        # Per-page mode only: collapse shared ancestors to one GET each.
+        ancestor_restrictions_cache: dict[str, dict[str, Any] | None] = {}
+
         def get_external_access(
-            doc_id: str, restrictions: dict[str, Any], ancestors: list[dict[str, Any]]
+            doc_id: str,
+            restrictions: dict[str, Any],
+            ancestors: list[dict[str, Any]],
+            space_key: str | None,
         ) -> ExternalAccess | None:
-            return get_page_restrictions(
-                self.confluence_client, doc_id, restrictions, ancestors
-            ) or space_level_access_info.get(page_space_key)
+            if expand_per_page:
+                resolved = get_page_restrictions_with_per_ancestor_fetch(
+                    self.confluence_client,
+                    doc_id,
+                    restrictions,
+                    ancestors,
+                    ancestor_restrictions_cache,
+                )
+            else:
+                resolved = get_page_restrictions(
+                    self.confluence_client, doc_id, restrictions, ancestors
+                )
+            return resolved or (
+                space_level_access_info.get(space_key) if space_key else None
+            )
 
         # Query pages (with optional time filtering for indexing_start)
         page_query = self._construct_page_cql_query(start, end)
@@ -1055,7 +1121,6 @@ class ConfluenceConnector(
             for node in self._yield_ancestor_hierarchy_nodes(page):
                 doc_metadata_list.append(node)
 
-            page_id = _get_page_id(page)
             page_restrictions = page.get("restrictions") or {}
             page_space_key = page.get("space", {}).get("key")
             page_ancestors = page.get("ancestors", [])
@@ -1067,7 +1132,12 @@ class ConfluenceConnector(
                 SlimDocument(
                     id=page_id,
                     external_access=(
-                        get_external_access(page_id, page_restrictions, page_ancestors)
+                        get_external_access(
+                            page_id,
+                            page_restrictions,
+                            page_ancestors,
+                            page_space_key,
+                        )
                         if include_permissions
                         else None
                     ),
@@ -1077,7 +1147,8 @@ class ConfluenceConnector(
                 )
             )
 
-            # Query attachments for each page
+            # Attachments resolve from inline `restrictions` only; no
+            # ancestor walk, so per-page mode is a no-op for them.
             page_hierarchy_node_yielded = False
             attachment_query = self._construct_attachment_query(
                 _get_page_id(page), start, end
@@ -1120,7 +1191,10 @@ class ConfluenceConnector(
                         id=attachment_id,
                         external_access=(
                             get_external_access(
-                                attachment_id, attachment_restrictions, []
+                                attachment_id,
+                                attachment_restrictions,
+                                [],
+                                attachment_space_key,
                             )
                             if include_permissions
                             else None

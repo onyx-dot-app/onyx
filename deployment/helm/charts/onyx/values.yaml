@@ -1457,6 +1457,37 @@ configMap:
   # Sandbox config — always "kubernetes" for Helm deployments
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
+  SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
+  SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
+
+# -- Sandbox egress proxy. Only deployed when ENABLE_CRAFT=true.
+sandboxProxy:
+  enabled: true
+  replicaCount: 2
+  containerPorts:
+    proxy: 8080
+    healthz: 8081
+  service:
+    proxyPort: 8080
+  terminationGracePeriodSeconds: 200
+  progressDeadlineSeconds: 300
+  confdirSizeLimit: 100Mi
+  caSecretName: "sandbox-proxy-ca"
+  caConfigMapName: "sandbox-proxy-ca-bundle"
+  podAnnotations: {}
+  # Matches the `onyx` user (uid 1001) baked into the backend image.
+  runAsUser: 1001
+  fsGroup: 1001
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 # -- Additional arbitrary manifests to render as part of the release. Each entry
 # may be either a YAML mapping (a single Kubernetes object) or a multi-line

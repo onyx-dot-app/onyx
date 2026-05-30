@@ -6,7 +6,7 @@ lxml==6.1.0
 matplotlib==3.9.1
 matplotlib-inline==0.2.2
 numpy==1.26.4
-onyx-cli==1.0.3
+onyx-cli==1.0.4
 openpyxl==3.1.5
 pandas==2.2.2
 pdfplumber==0.11.9

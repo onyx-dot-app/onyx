@@ -3,7 +3,7 @@ import { Interactive, Hoverable } from "@opal/core";
 import { Section } from "@/layouts/general-layouts";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -98,7 +98,7 @@ export default function ScimModal({
                     rightSection={
                       <div onClick={(e) => e.stopPropagation()}>
                         <Hoverable.Item group="token" variant="appear-on-hover">
-                          <CopyIconButton getCopyText={() => view.rawToken} />
+                          <CopyButton getCopyText={() => view.rawToken} />
                         </Hoverable.Item>
                       </div>
                     }
