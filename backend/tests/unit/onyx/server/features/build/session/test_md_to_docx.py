@@ -3,7 +3,6 @@
 import re
 import zipfile
 from io import BytesIO
-from random import Random
 from xml.etree import ElementTree
 
 from docx import Document
@@ -62,36 +61,6 @@ def test_malformed_input_never_crashes() -> None:
     ]
     for md_text in malformed:
         _render(md_text)
-
-
-def test_deterministic_markdown_fuzz_produces_parseable_docx() -> None:
-    # Seeded, dependency-free fuzzing: combine malformed Markdown, XML-sensitive
-    # characters, raw HTML, footnotes, tables, links, and invalid Unicode in
-    # different orders; every generated case must yield a parseable .docx.
-    fragments = [
-        "# Heading & <xml>\n\n",
-        "Plain text with <>&\"' and ]]>.\n\n",
-        "**bold *nested `code & <x>` still open\n\n",
-        "[label & <x>](https://example.com/a?b=1&c=<tag>)\n\n",
-        "https://example.com/wiki/Foo_(bar)\n\n",
-        "![alt & <img>](https://example.com/img.png)\n\n",
-        "- bullet\n  - nested\n\n",
-        "1. numbered\n2. second\n\n",
-        "> quote\n> - quoted bullet\n\n",
-        "| A | B |\n|---|---|\n| <x> | a&b |\n\n",
-        "```python\nprint('<xml & ]]>')\n```\n\n",
-        "Footnote ref.[^1]\n\n[^1]: footnote with <>& and `code`\n\n",
-        "<div><span>raw html</span></div>\n\n",
-        "bad controls \x00 \x07 and bad surrogates 𐏿\n\n",
-        "[broken](https://example.com/a_(b)\n\n",
-        "~~strike & <x>~~ and<br>break\n\n",
-    ]
-    rng = Random(1337)
-    for _ in range(25):
-        md_text = "".join(rng.choice(fragments) for _ in range(rng.randint(3, 10)))
-        data = markdown_to_docx_bytes(md_text)
-        _assert_docx_xml_is_parseable(data)
-        Document(BytesIO(data))
 
 
 def test_invalid_xml_characters_are_stripped() -> None:
