@@ -1,0 +1,5 @@
+# Root Bun workspace config for the onyx monorepo.
+
+[install]
+# Hoisted linker is mandatory: Bun's isolated linker breaks Expo monorepo HMR (expo/expo#42689).
+nodeLinker = "hoisted"

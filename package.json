@@ -1,0 +1,12 @@
+{
+  "name": "onyx-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "mobile",
+    "packages/*"
+  ],
+  "trustedDependencies": [
+    "@sentry/react-native"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "//": "Shared TypeScript options for the onyx monorepo (mobile/ + packages/*). Web keeps its own tsconfig. Owned by docs/plans/2026-05-30-mobile-app/01-monorepo-structure.md. Note: @onyx-ai/* packages resolve via Bun-workspace symlinks + each package's package.json \"types\" field (source-only internal packages), NOT via tsconfig paths.",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "moduleDetection": "force"
+  }
+}
