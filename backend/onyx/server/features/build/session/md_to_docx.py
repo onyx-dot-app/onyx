@@ -107,21 +107,22 @@ _markdown_parser = mistune.create_markdown(
 Node = dict[str, Any]
 
 
+# Code points XML 1.0 forbids: C0 controls except tab/newline/CR, the UTF-16
+# surrogate range, and U+FFFE/U+FFFF. Mapped to None for str.translate (C-speed).
+_XML_INVALID_TRANSLATION = {
+    **{code: None for code in range(0x20) if code not in (0x09, 0x0A, 0x0D)},
+    **{code: None for code in range(0xD800, 0xE000)},
+    0xFFFE: None,
+    0xFFFF: None,
+}
+
+
 def _strip_invalid_xml_chars(text: str) -> str:
     """Drop characters XML 1.0 forbids (NULL and most C0 controls).
 
     LLM output occasionally contains them and python-docx raises when
     writing them, so they are stripped before parsing."""
-    return "".join(ch for ch in text if _is_xml_safe(ord(ch)))
-
-
-def _is_xml_safe(code: int) -> bool:
-    return (
-        code in (0x09, 0x0A, 0x0D)
-        or 0x20 <= code <= 0xD7FF
-        or 0xE000 <= code <= 0xFFFD
-        or 0x10000 <= code <= 0x10FFFF
-    )
+    return text.translate(_XML_INVALID_TRANSLATION)
 
 
 @dataclass(frozen=True)
@@ -335,6 +336,23 @@ def _reference_run(mark_tag: str, footnote_id: int | None) -> Any:
 # --------------------------------------------------------------------------- #
 # Block-level rendering
 # --------------------------------------------------------------------------- #
+def _set_paragraph_style(paragraph: Paragraph, style_name: str) -> None:
+    """Set a paragraph's style by id, skipping python-docx's by-name lookup.
+
+    ``add_paragraph(style=name)`` resolves the style by a linear, XML-parsing
+    scan of every style and repeats it per paragraph, which dominates runtime on
+    table/list-heavy documents. Built-in and added style ids are the spaceless
+    form of the name, so set ``w:pStyle`` directly.
+    """
+    paragraph._p.get_or_add_pPr().get_or_add_pStyle().val = style_name.replace(" ", "")
+
+
+def _add_styled_paragraph(document: DocxDocument, style_name: str) -> Paragraph:
+    paragraph = document.add_paragraph()
+    _set_paragraph_style(paragraph, style_name)
+    return paragraph
+
+
 def _render_blocks(
     document: DocxDocument, nodes: list[Node], footnotes: "_Footnotes | None"
 ) -> None:
@@ -358,14 +376,14 @@ def _render_blocks(
                 first_para_pending = False
             else:
                 style = _STYLE_FIRST_PARAGRAPH if first_para_pending else _STYLE_BODY
-                paragraph = document.add_paragraph(style=style)
+                paragraph = _add_styled_paragraph(document, style)
                 _add_runs(paragraph, children, _Fmt(), footnotes)
                 first_para_pending = False
             continue
 
         if node_type == "heading":
             level = min(int(node.get("attrs", {}).get("level", 1)), 6)
-            paragraph = document.add_paragraph(style=f"Heading {level}")
+            paragraph = _add_styled_paragraph(document, f"Heading {level}")
             _add_runs(paragraph, node.get("children", []), _Fmt(), footnotes)
         elif node_type == "block_code":
             _render_code(document, node)
@@ -402,7 +420,7 @@ def _render_quote(
 ) -> None:
     for child in node.get("children", []):
         if child.get("type") == "paragraph":
-            paragraph = document.add_paragraph(style=_STYLE_BLOCK_TEXT)
+            paragraph = _add_styled_paragraph(document, _STYLE_BLOCK_TEXT)
             _add_runs(paragraph, child.get("children", []), _Fmt(), footnotes)
         else:
             _render_blocks(document, [child], footnotes)
@@ -427,7 +445,7 @@ def _render_image_caption(document: DocxDocument, children: list[Node]) -> None:
     """
     image = next(child for child in children if child.get("type") == "image")
     alt = _collect_text(image.get("children", []))
-    paragraph = document.add_paragraph(style=_STYLE_IMAGE_CAPTION)
+    paragraph = _add_styled_paragraph(document, _STYLE_IMAGE_CAPTION)
     paragraph.add_run(alt or "image")
 
 
@@ -476,7 +494,7 @@ def _render_list(
             if child_type in ("block_text", "paragraph"):
                 marker = not has_rendered_marker
                 paragraph_style = item_style if marker else continue_style
-                paragraph = document.add_paragraph(style=paragraph_style)
+                paragraph = _add_styled_paragraph(document, paragraph_style)
                 # Indent 0.5" per level (matching pandoc); the marker line hangs.
                 paragraph.paragraph_format.left_indent = Twips(
                     _LIST_INDENT_PER_LEVEL * (level + 1)
@@ -655,7 +673,7 @@ def _fill_cell(
     paragraph = cell.paragraphs[0]
     # pandoc uses the tight "Compact" style in cells and honours the column
     # alignment from the Markdown separator row (e.g. ``:--:`` -> centered).
-    paragraph.style = _STYLE_COMPACT
+    _set_paragraph_style(paragraph, _STYLE_COMPACT)
     alignment = _TABLE_CELL_ALIGN.get(str(cell_node.get("attrs", {}).get("align")))
     if alignment is not None:
         paragraph.alignment = alignment
