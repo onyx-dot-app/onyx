@@ -14,6 +14,7 @@ import {
   useIsPreProvisioning,
   useIsPreProvisioningFailed,
   usePreProvisionedSessionId,
+  useQueuedMessages,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
@@ -110,6 +111,11 @@ export default function BuildChatPanel({
     (state) => state.nameBuildSession
   );
   const { streamMessage } = useBuildStreaming();
+  const queuedMessages = useQueuedMessages();
+  const enqueueMessage = useBuildSessionStore((state) => state.enqueueMessage);
+  const removeQueuedMessage = useBuildSessionStore(
+    (state) => state.removeQueuedMessage
+  );
   const isPreProvisioning = useIsPreProvisioning();
   const isPreProvisioningFailed = useIsPreProvisioningFailed();
   const preProvisionedSessionId = usePreProvisionedSessionId();
@@ -339,6 +345,61 @@ export default function BuildChatPanel({
     ]
   );
 
+  const handleQueueMessage = useCallback(
+    (text: string) => {
+      if (sessionId) enqueueMessage(sessionId, text);
+    },
+    [sessionId, enqueueMessage]
+  );
+
+  const handleRemoveQueuedMessage = useCallback(
+    (index: number) => {
+      if (sessionId) removeQueuedMessage(sessionId, index);
+    },
+    [sessionId, removeQueuedMessage]
+  );
+
+  // Auto-send the next queued message FIFO after a run cleanly succeeds (each
+  // send re-arms this for the message after). Only fire on a clean completion
+  // and when the send is actually eligible — otherwise we'd dequeue a message
+  // that a failed/rate-limited run never sends, silently dropping it. The
+  // sessionId guard avoids mistaking a session switch for a run completion.
+  const sessionStatus = session?.status;
+  const sessionError = session?.error;
+  const isLimited = limits?.isLimited ?? false;
+  const prevIsRunningRef = useRef(isRunning);
+  const prevSessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    const wasRunning = prevIsRunningRef.current;
+    const prevSessionId = prevSessionIdRef.current;
+    prevIsRunningRef.current = isRunning;
+    prevSessionIdRef.current = sessionId;
+
+    const runSucceeded =
+      wasRunning &&
+      !isRunning &&
+      sessionId === prevSessionId &&
+      sessionStatus === "active" &&
+      !sessionError &&
+      !isLimited;
+    if (runSucceeded && sessionId && queuedMessages.length > 0) {
+      const next = queuedMessages[0];
+      if (next) {
+        removeQueuedMessage(sessionId, 0);
+        void handleSubmit(next.text, []);
+      }
+    }
+  }, [
+    isRunning,
+    sessionId,
+    sessionStatus,
+    sessionError,
+    isLimited,
+    queuedMessages,
+    handleSubmit,
+    removeQueuedMessage,
+  ]);
+
   return (
     <div className="h-full w-full">
       <UpgradePlanModal
@@ -451,6 +512,9 @@ export default function BuildChatPanel({
                 onSubmit={handleSubmit}
                 isRunning={isRunning}
                 placeholder="Continue the conversation..."
+                queuedMessages={queuedMessages}
+                onQueueMessage={handleQueueMessage}
+                onRemoveQueuedMessage={handleRemoveQueuedMessage}
               />
             </div>
           </div>

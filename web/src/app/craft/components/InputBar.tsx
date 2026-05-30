@@ -41,6 +41,13 @@ import { useUser } from "@/providers/UserProvider";
 import useUserSkills from "@/hooks/useUserSkills";
 import { detectSlashTrigger, toPickerSkills } from "@/lib/skills/picker";
 import { getTextContent } from "@/lib/contentEditable";
+import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
+import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
+import {
+  QueuedMessage,
+  MAX_QUEUED_MESSAGES,
+  EMPTY_QUEUED_MESSAGES,
+} from "@/app/app/interfaces";
 
 export interface InputBarHandle {
   reset: () => void;
@@ -55,6 +62,10 @@ export interface InputBarProps {
   placeholder?: string;
   sandboxInitializing?: boolean;
   noBottomRounding?: boolean;
+  /** Queued messages + callbacks; when wired, submitting mid-stream enqueues. */
+  queuedMessages?: readonly QueuedMessage[];
+  onQueueMessage?: (text: string) => void;
+  onRemoveQueuedMessage?: (index: number) => void;
 }
 
 /**
@@ -152,9 +163,15 @@ const InputBar = memo(
         placeholder = "Describe your task...",
         sandboxInitializing = false,
         noBottomRounding = false,
+        queuedMessages,
+        onQueueMessage,
+        onRemoveQueuedMessage,
       },
       ref
     ) => {
+      // Queueing is enabled only when the parent wires up the callbacks.
+      const queueEnabled = !!onQueueMessage;
+      const queue = queuedMessages ?? EMPTY_QUEUED_MESSAGES;
       const { user } = useUser();
       const inputWrapperRef = useRef<HTMLDivElement>(null);
       const {
@@ -205,6 +222,14 @@ const InputBar = memo(
         query: string;
         slashIndex: number;
       }>({ open: false, anchorRect: null, query: "", slashIndex: -1 });
+
+      // Shared queued-message keyboard navigation + highlight state.
+      const queueNav = useQueuedMessageNavigation({
+        messages: queue,
+        inputIsEmpty: !message,
+        onRemove: (index) => onRemoveQueuedMessage?.(index),
+        onEdit: setMessage,
+      });
 
       const getTextBeforeCursor = useCallback((): string | null => {
         const el = inputRef.current;
@@ -338,14 +363,23 @@ const InputBar = memo(
       );
 
       const handleSubmit = useCallback(() => {
-        if (disabled || isRunning || hasUploadingFiles || sandboxInitializing)
+        // File uploads / sandbox init are hard blockers regardless of queueing.
+        if (disabled || hasUploadingFiles || sandboxInitializing) return;
+
+        const text = message.trim();
+
+        // While streaming, queue the message; the parent auto-sends it later.
+        if (isRunning) {
+          if (onQueueMessage && text && queue.length < MAX_QUEUED_MESSAGES) {
+            onQueueMessage(text);
+            clearMessage();
+          }
           return;
+        }
 
-        const hasMessage = message.trim().length > 0;
         const hasFiles = currentMessageFiles.length > 0;
-
-        if (hasMessage) {
-          onSubmit(message.trim(), currentMessageFiles);
+        if (text) {
+          onSubmit(text, currentMessageFiles);
           clearMessage();
           clearFiles({ suppressRefetch: true });
         } else if (hasFiles) {
@@ -358,6 +392,8 @@ const InputBar = memo(
         hasUploadingFiles,
         sandboxInitializing,
         onSubmit,
+        onQueueMessage,
+        queue,
         currentMessageFiles,
         clearFiles,
         clearMessage,
@@ -366,6 +402,7 @@ const InputBar = memo(
       const handleKeyDown = useCallback(
         (event: KeyboardEvent<HTMLDivElement>) => {
           if (handleTileKeyDown(event)) return;
+          if (queueEnabled && queueNav.handleKeyDown(event)) return;
 
           // Shift+Enter falls through to browser default: inserts <br>
           if (
@@ -377,18 +414,27 @@ const InputBar = memo(
             handleSubmit();
           }
         },
-        [handleSubmit, handleTileKeyDown]
+        [handleSubmit, handleTileKeyDown, queueEnabled, queueNav]
       );
 
       const canSubmit =
         message.trim().length > 0 &&
         !disabled &&
-        !isRunning &&
         !hasUploadingFiles &&
-        !sandboxInitializing;
+        !sandboxInitializing &&
+        (!isRunning || (queueEnabled && queue.length < MAX_QUEUED_MESSAGES));
 
       return (
         <Disabled disabled={disabled}>
+          {queueEnabled && (
+            <QueuedMessageBar
+              messages={queue}
+              highlightedIndex={queueNav.highlightedIndex}
+              awaitingPreferredSelection={false}
+              onDiscard={(index) => onRemoveQueuedMessage?.(index)}
+              onHighlight={queueNav.setHighlightedIndex}
+            />
+          )}
           <div
             ref={containerRef}
             className={cn(
@@ -431,6 +477,7 @@ const InputBar = memo(
                 onKeyDown={handleKeyDown}
                 onKeyUp={handleSelectionChange}
                 onMouseUp={handleSelectionChange}
+                onBlur={() => queueNav.setHighlightedIndex(null)}
                 className={cn(
                   "w-full",
                   "h-full",
@@ -455,7 +502,11 @@ const InputBar = memo(
                 aria-multiline={true}
                 aria-disabled={disabled}
                 aria-placeholder={placeholder}
-                data-placeholder={placeholder}
+                data-placeholder={
+                  !message && queueEnabled && queue.length > 0
+                    ? "Press up to edit queued messages"
+                    : placeholder
+                }
                 data-empty={!message ? "" : undefined}
                 onCopy={handleCopy}
                 onCut={handleCut}
