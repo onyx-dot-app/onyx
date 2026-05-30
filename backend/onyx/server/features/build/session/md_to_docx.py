@@ -41,7 +41,11 @@ from docx.text.paragraph import Paragraph
 
 _MONOSPACE_FONT = "Courier New"
 _CODE_FONT_SIZE = Pt(9)
-_LINK_COLOR = "0563C1"
+# pandoc styles links with a "Hyperlink" character style: muted blue, no
+# underline (unlike python-docx's brighter underlined default).
+_STYLE_HYPERLINK = "Hyperlink"
+_STYLE_ID_HYPERLINK = "Hyperlink"
+_LINK_COLOR = RGBColor(0x4F, 0x81, 0xBD)
 # python-docx ships built-in "List Bullet"/"List Number" styles plus numbered
 # variants up to level 3 ("List Bullet 2", "List Bullet 3", ...). Deeper nesting
 # reuses the level-3 style.
@@ -186,6 +190,10 @@ def _apply_pandoc_styles(document: DocxDocument) -> None:
             _STYLE_FOOTNOTE_REFERENCE, WD_STYLE_TYPE.CHARACTER
         )
         reference.font.superscript = True
+
+    if _STYLE_HYPERLINK not in existing:
+        hyperlink = styles.add_style(_STYLE_HYPERLINK, WD_STYLE_TYPE.CHARACTER)
+        hyperlink.font.color.rgb = _LINK_COLOR
 
     for level, size in _HEADING_SIZES.items():
         heading = styles[f"Heading {level}"]
@@ -679,8 +687,12 @@ def _add_hyperlink(paragraph: Paragraph, node: Node, fmt: _Fmt) -> None:
 
     run = OxmlElement("w:r")
     run_props = OxmlElement("w:rPr")
-    # Children must follow the CT_RPr schema order (rFonts, b, i, strike, color,
-    # u) so the inherited formatting carried in ``fmt`` survives on the link run.
+    # Apply the "Hyperlink" character style (colour, no underline) like pandoc.
+    # Children follow CT_RPr schema order (rStyle, rFonts, b, i, strike) so the
+    # inherited formatting carried in ``fmt`` survives on the link run.
+    run_style = OxmlElement("w:rStyle")
+    run_style.set(qn("w:val"), _STYLE_ID_HYPERLINK)
+    run_props.append(run_style)
     if fmt.code:
         fonts = OxmlElement("w:rFonts")
         fonts.set(qn("w:ascii"), _MONOSPACE_FONT)
@@ -692,12 +704,6 @@ def _add_hyperlink(paragraph: Paragraph, node: Node, fmt: _Fmt) -> None:
         run_props.append(OxmlElement("w:i"))
     if fmt.strike:
         run_props.append(OxmlElement("w:strike"))
-    color = OxmlElement("w:color")
-    color.set(qn("w:val"), _LINK_COLOR)
-    run_props.append(color)
-    underline = OxmlElement("w:u")
-    underline.set(qn("w:val"), "single")
-    run_props.append(underline)
     run.append(run_props)
     text_el = OxmlElement("w:t")
     text_el.text = text

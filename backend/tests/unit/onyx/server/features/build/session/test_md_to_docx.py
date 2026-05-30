@@ -198,6 +198,16 @@ def test_link_becomes_real_hyperlink() -> None:
     assert "Onyx" in xml
 
 
+def test_hyperlink_uses_pandoc_style_without_underline() -> None:
+    # pandoc styles links with the muted "Hyperlink" char style and no underline,
+    # not python-docx's brighter underlined default.
+    doc = _render("See [Onyx](https://onyx.app).")
+    link_props = doc.element.xml.split("w:hyperlink")[1]
+    assert 'w:val="Hyperlink"' in link_props  # applies the character style
+    assert "<w:u " not in link_props  # no underline
+    assert str(doc.styles["Hyperlink"].font.color.rgb) == "4F81BD"
+
+
 def test_link_without_url_falls_back_to_text() -> None:
     # An autolink-free bare reference still renders its text without crashing.
     doc = _render("[empty]()")
