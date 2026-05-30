@@ -17,7 +17,8 @@ import { useContentEditable } from "@/hooks/useContentEditable";
 import useFilter from "@/hooks/useFilter";
 import useCCPairs from "@/hooks/useCCPairs";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { ChatState } from "@/app/app/interfaces";
+import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
+import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import useAppFocus from "@/hooks/useAppFocus";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
@@ -141,9 +142,6 @@ const AppInputBar = React.memo(
     const removeCurrentQueuedMessage = useChatSessionStore(
       (state) => state.removeCurrentQueuedMessage
     );
-    const [highlightedQueueIndex, setHighlightedQueueIndex] = useState<
-      number | null
-    >(null);
     const { user, isAdmin } = useUser();
     const isAutoSending = useRef(false);
     const inputWrapperRef = useRef<HTMLDivElement>(null);
@@ -169,6 +167,15 @@ const AppInputBar = React.memo(
       initialContent: initialMessage,
       wrapperRef: inputWrapperRef,
       pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
+    });
+
+    // Keyboard navigation + highlight state for the queued-message bar
+    // (shared with the Craft input bar).
+    const queueNav = useQueuedMessageNavigation({
+      messages: queuedMessages,
+      inputIsEmpty: !message,
+      onRemove: removeCurrentQueuedMessage,
+      onEdit: setMessage,
     });
 
     const filesWrapperRef = useRef<HTMLDivElement>(null);
@@ -341,14 +348,6 @@ const AppInputBar = React.memo(
       stopTTS,
       onSubmit,
     ]);
-
-    useEffect(() => {
-      setHighlightedQueueIndex((prev) => {
-        if (prev === null) return null;
-        if (queuedMessages.length === 0) return null;
-        return Math.min(prev, queuedMessages.length - 1);
-      });
-    }, [queuedMessages]);
 
     // Animate attached files wrapper to its content height so CSS transitions
     // can interpolate between concrete pixel values (0px ↔ Npx).
@@ -722,7 +721,7 @@ const AppInputBar = React.memo(
               const canSubmitNormally =
                 chatState === "input" && !awaitingPreferredSelection;
               if (!canSubmitNormally && message.trim()) {
-                if (queuedMessages.length < 5) {
+                if (queuedMessages.length < MAX_QUEUED_MESSAGES) {
                   enqueueCurrentMessage(message.trim());
                   clearMessage();
                 }
@@ -744,10 +743,10 @@ const AppInputBar = React.memo(
       <>
         <QueuedMessageBar
           messages={queuedMessages}
-          highlightedIndex={highlightedQueueIndex}
+          highlightedIndex={queueNav.highlightedIndex}
           awaitingPreferredSelection={awaitingPreferredSelection}
           onDiscard={removeCurrentQueuedMessage}
-          onHighlight={setHighlightedQueueIndex}
+          onHighlight={queueNav.setHighlightedIndex}
         />
         <Disabled disabled={disabled} allowClick>
           <div
@@ -840,7 +839,7 @@ const AppInputBar = React.memo(
                       onCut={handleCut}
                       onMouseDown={handleTileMouseDown}
                       onClick={handleTileClick}
-                      onBlur={() => setHighlightedQueueIndex(null)}
+                      onBlur={() => queueNav.setHighlightedIndex(null)}
                       onKeyDownCapture={handleKeyDownForPromptShortcuts}
                       onInput={handleContentEditableInput}
                       onCompositionStart={handleCompositionStart}
@@ -868,72 +867,7 @@ const AppInputBar = React.memo(
                       data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {
                         if (handleTileKeyDown(event)) return;
-
-                        // Queue navigation mode
-                        if (highlightedQueueIndex !== null) {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            const text =
-                              queuedMessages[highlightedQueueIndex]!.text;
-                            removeCurrentQueuedMessage(highlightedQueueIndex);
-                            setMessage(text);
-                            setHighlightedQueueIndex(null);
-                            return;
-                          }
-                          if (event.key === "ArrowUp") {
-                            event.preventDefault();
-                            setHighlightedQueueIndex((prev) =>
-                              Math.max((prev ?? 0) - 1, 0)
-                            );
-                            return;
-                          }
-                          if (event.key === "ArrowDown") {
-                            event.preventDefault();
-                            setHighlightedQueueIndex((prev) => {
-                              const next = (prev ?? 0) + 1;
-                              if (next >= queuedMessages.length) {
-                                return null; // exit navigation mode
-                              }
-                              return next;
-                            });
-                            return;
-                          }
-                          if (
-                            event.key === "Delete" ||
-                            event.key === "Backspace"
-                          ) {
-                            event.preventDefault();
-                            removeCurrentQueuedMessage(highlightedQueueIndex);
-                            return;
-                          }
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            setHighlightedQueueIndex(null);
-                            return;
-                          }
-                          if (
-                            event.key === "Shift" ||
-                            event.key === "Alt" ||
-                            event.key === "Control" ||
-                            event.key === "Meta" ||
-                            event.key === "Tab"
-                          ) {
-                            return;
-                          }
-                          // Any other key: exit navigation mode, let keypress proceed
-                          setHighlightedQueueIndex(null);
-                        }
-
-                        // Up arrow to enter navigation mode
-                        if (
-                          event.key === "ArrowUp" &&
-                          !message &&
-                          queuedMessages.length > 0
-                        ) {
-                          event.preventDefault();
-                          setHighlightedQueueIndex(queuedMessages.length - 1);
-                          return;
-                        }
+                        if (queueNav.handleKeyDown(event)) return;
 
                         // Enter to submit or queue (Shift+Enter falls through to browser default: inserts <br>)
                         if (
@@ -960,7 +894,7 @@ const AppInputBar = React.memo(
                             !disabled &&
                             !isClassifying &&
                             !hasUploadingFiles &&
-                            queuedMessages.length < 5
+                            queuedMessages.length < MAX_QUEUED_MESSAGES
                           ) {
                             enqueueCurrentMessage(message.trim());
                             clearMessage();
