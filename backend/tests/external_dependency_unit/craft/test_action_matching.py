@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from contextlib import AbstractContextManager
 from contextlib import contextmanager
-from typing import Any
+from typing import Callable
 
 import pytest
 from mitmproxy import http
@@ -198,7 +199,9 @@ def test_graphql_batched_sorts_strictest_first(
 # ── ExternalAppActionMatcher: full proxy-request → verdict bridge ───
 
 
-def _session_factory(db_session: Session) -> Any:
+def _session_factory(
+    db_session: Session,
+) -> "Callable[[str], AbstractContextManager[Session]]":
     """A ``get_session_with_tenant`` stand-in that hands the matcher the test's
     own session so flushed-but-uncommitted rows are visible; never closes it."""
 
