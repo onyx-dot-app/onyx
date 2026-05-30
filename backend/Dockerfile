@@ -1,4 +1,61 @@
-FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2
+####################################################################################################
+# Builder stage
+#
+# Installs the full build toolchain and compiles/installs all Python dependencies. Nothing from this
+# stage survives into the final image except the resulting site-packages + console scripts, which are
+# copied into the runtime stage below. This is what keeps the GCC/cmake toolchain (~190MB) out of the
+# shipped image: it lives only here and is discarded.
+####################################################################################################
+FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2 AS builder
+
+COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
+
+# Install the full set of system dependencies present during the original single-stage build so the
+# pip install behaves identically. Build-only tools (cmake, gcc, libxmlsec1-dev, pkg-config) live
+# here and never reach the runtime image.
+# cmake/libxmlsec1-dev/pkg-config/gcc needed to compile native wheels (e.g. xmlsec)
+# ca-certificates for HTTPS when fetching from PyPI
+RUN apt-get update && \
+    apt-get install -y \
+        cmake \
+        curl \
+        zip \
+        ca-certificates \
+        libgnutls30 \
+        libblkid1 \
+        libmount1 \
+        libsmartcols1 \
+        libuuid1 \
+        libxmlsec1-dev \
+        pkg-config \
+        gcc \
+        libjemalloc2 \
+        && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+# Install Python dependencies
+# Remove py which is pulled in by retry, py is not needed and is a CVE
+COPY ./requirements/default.txt /tmp/requirements.txt
+COPY ./requirements/ee.txt /tmp/ee-requirements.txt
+# TODO: drop --no-deps once we upgrade to a litellm version with looser dependencies.
+RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
+        -r /tmp/requirements.txt \
+        -r /tmp/ee-requirements.txt && \
+    pip uninstall -y py && \
+    # https://github.com/tornadoweb/tornado/issues/3107
+    rm -f /usr/local/lib/python3.11/site-packages/tornado/test/test.key && \
+    rm -rf ~/.cache/uv /tmp/*.txt
+
+
+####################################################################################################
+# Runtime stage
+#
+# The actual shipped image. Installs only runtime system libraries and copies the already-built
+# Python packages from the builder stage. The runtime apt set is exactly the set that survived the
+# install/remove dance in the original single-stage Dockerfile.
+####################################################################################################
+FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2 AS runtime
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
@@ -9,6 +66,7 @@ founders@onyx.app for more information. Please visit https://github.com/onyx-dot
 
 # Build argument for Craft support (disabled by default)
 # Use --build-arg ENABLE_CRAFT=true to include Node.js and opencode CLI
+# ARGs do not cross build stages, so it must be redeclared here.
 ARG ENABLE_CRAFT=false
 
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
@@ -25,15 +83,17 @@ RUN groupadd -g 1001 onyx && \
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 
-# Install system dependencies
-# cmake needed for psycopg (postgres)
-# libpq-dev needed for psycopg (postgres)
+# Install runtime system dependencies only (no build toolchain).
 # curl included just for users' convenience
-# zip for Vespa step futher down
+# zip for Vespa step further down
 # ca-certificates for HTTPS
+# libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
+# postgresql-client for easy manual tests
+# procps so kubernetes exec sessions can use ps aux for debugging
+# perl-base is part of the base Python Debian image but not needed for Onyx functionality;
+# removed for CVE surface reduction (requires --allow-remove-essential)
 RUN apt-get update && \
     apt-get install -y \
-        cmake \
         curl \
         zip \
         ca-certificates \
@@ -42,15 +102,15 @@ RUN apt-get update && \
         libmount1 \
         libsmartcols1 \
         libuuid1 \
-        libxmlsec1-dev \
-        pkg-config \
-        gcc \
         nano \
         vim \
-        # Install procps so kubernetes exec sessions can use ps aux for debugging
         procps \
         libjemalloc2 \
+        libxmlsec1-openssl \
+        postgresql-client \
         && \
+    apt-get remove -y --allow-remove-essential perl-base && \
+    apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -72,43 +132,18 @@ RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
     fi
 ENV PATH="/root/.opencode/bin:${PATH}"
 
-# Install Python dependencies
-# Remove py which is pulled in by retry, py is not needed and is a CVE
-COPY ./requirements/default.txt /tmp/requirements.txt
-COPY ./requirements/ee.txt /tmp/ee-requirements.txt
-# TODO: drop --no-deps once we upgrade to a litellm version with looser dependencies.
-RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
-        -r /tmp/requirements.txt \
-        -r /tmp/ee-requirements.txt && \
-    pip uninstall -y py && \
+# Copy the Python packages + console scripts built in the builder stage. Both stages derive from the
+# same base image digest, so paths and ABI match exactly.
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Install the Chromium browser used by Playwright and its OS-level runtime libraries. Must run after
+# the site-packages copy above so the playwright CLI is available.
+RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     playwright install chromium && \
     playwright install-deps chromium && \
-    chown -R onyx:onyx /app && \
-    ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
-    # Cleanup for CVEs and size reduction
-    # https://github.com/tornadoweb/tornado/issues/3107
-    # xserver-common and xvfb included by playwright installation but not needed after
-    # perl-base is part of the base Python Debian image but not needed for Onyx functionality
-    # perl-base could only be removed with --allow-remove-essential
-    apt-get update && \
-    apt-get remove -y --allow-remove-essential \
-        perl-base \
-        cmake \
-        libxmlsec1-dev \
-        pkg-config \
-        gcc && \
-    # Install here to avoid some packages being cleaned up above
-    apt-get install -y \
-        libxmlsec1-openssl \
-        # Install postgresql-client for easy manual tests
-        postgresql-client && \
-    apt-get autoremove -y && \
-    # Re-run after autoremove to restore any chromium runtime libs
-    # (libnss3, libnspr4, etc.) that got swept up by the cascade.
-    playwright install-deps chromium && \
     rm -rf /var/lib/apt/lists/* && \
-    rm -rf ~/.cache/uv /tmp/*.txt && \
-    rm -f /usr/local/lib/python3.11/site-packages/tornado/test/test.key
+    apt-get clean
 
 # Pre-downloading models for setups with limited egress
 RUN python -c "from tokenizers import Tokenizer; \
