@@ -390,7 +390,9 @@ export default function BuildChatPanel({
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-auto"
+          // min-h-0 lets this flex child scroll internally instead of growing
+          // the column past the page bounds.
+          className="flex-1 min-h-0 overflow-auto"
         >
           {!hasSession && !existingSessionId ? (
             <BuildWelcome
@@ -404,6 +406,7 @@ export default function BuildChatPanel({
               streamItems={session?.streamItems ?? []}
               isStreaming={isRunning}
               autoScrollEnabled={isAtBottom}
+              scrollContainerRef={scrollContainerRef}
               trailingAssistantSlot={
                 <LiveApprovalsRegion
                   sessionId={sessionId ?? existingSessionId ?? null}
