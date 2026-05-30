@@ -312,9 +312,7 @@ def test_autolink_display_keeps_trailing_paren() -> None:
     # must keep the closing ")" in the *visible* text, not just the target --
     # even when mistune re-encodes the URL (here "\_" -> "%5C_"), which previously
     # defeated the autolink detection.
-    doc = _render(
-        r"See https://en.wikipedia.org/wiki/Foundation\_(Asimov_novel) here."
-    )
+    doc = _render(r"See https://en.wikipedia.org/wiki/Foundation\_(Asimov_novel) here.")
     assert _hyperlink_displays(doc) == [
         r"https://en.wikipedia.org/wiki/Foundation\_(Asimov_novel)"
     ]
