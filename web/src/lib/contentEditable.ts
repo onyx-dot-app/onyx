@@ -126,3 +126,90 @@ export function getTextContent(element: HTMLElement): string {
   }
   return parts.join("");
 }
+
+/**
+ * Remove the stray leading `<br>` Chrome inserts when the last text on the
+ * first "line" is deleted ahead of an inline contentEditable=false tile,
+ * leaving a blank line above it. Scoped to a `<br>` immediately followed by a
+ * rich tile so it never touches a user-authored leading newline. Returns
+ * whether anything was removed.
+ */
+export function stripLeadingBr(el: HTMLElement): boolean {
+  const first = el.firstChild;
+  const next = first?.nextSibling;
+  if (
+    first?.nodeName === "BR" &&
+    next instanceof HTMLElement &&
+    next.hasAttribute("data-rich-tile")
+  ) {
+    el.removeChild(first);
+    return true;
+  }
+  return false;
+}
+
+// ─── Token Deletion (rich-tile insertion) ───────────────────────────────────
+
+/**
+ * Delete `text` immediately before (`direction: "before"`) or after the
+ * collapsed cursor, but only after verifying the characters to remove equal
+ * `text` (else bail + restore the caret). Returns whether they were removed.
+ */
+function deleteAdjacentText(
+  el: HTMLElement,
+  text: string,
+  direction: "before" | "after"
+): boolean {
+  const n = text.length;
+  if (n <= 0) return false;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return false;
+  const range = sel.getRangeAt(0);
+  if (!range.collapsed || !el.contains(range.startContainer)) return false;
+
+  const { startContainer, startOffset } = range;
+  const before = direction === "before";
+
+  // Fast path: the text lives entirely within the caret's text node.
+  if (startContainer.nodeType === Node.TEXT_NODE) {
+    const tc = startContainer.textContent ?? "";
+    const start = before ? startOffset - n : startOffset;
+    const end = before ? startOffset : startOffset + n;
+    if (start >= 0 && end <= tc.length && tc.slice(start, end) === text) {
+      if (before) range.setStart(startContainer, start);
+      else range.setEnd(startContainer, end);
+      range.deleteContents();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return true;
+    }
+  }
+
+  // Fallback for node-spanning text; modify is absent in jsdom.
+  if (typeof sel.modify !== "function") return false;
+  const steps = Array.from(text).length; // code points, not UTF-16 units
+  for (let i = 0; i < steps; i++) {
+    sel.modify("extend", before ? "backward" : "forward", "character");
+  }
+  if (sel.toString() === text) {
+    sel.deleteFromDocument();
+    return true;
+  }
+  const restored = document.createRange();
+  restored.setStart(startContainer, startOffset);
+  restored.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(restored);
+  return false;
+}
+
+export function deleteTokenBeforeCursor(
+  el: HTMLElement,
+  token: string
+): boolean {
+  return deleteAdjacentText(el, token, "before");
+}
+
+export function deleteTextAfterCursor(el: HTMLElement, text: string): boolean {
+  return deleteAdjacentText(el, text, "after");
+}

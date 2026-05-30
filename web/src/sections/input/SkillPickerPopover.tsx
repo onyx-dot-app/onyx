@@ -115,6 +115,11 @@ function SkillPickerPopover({
         data-testid="skill-picker-popover"
         aria-label="Skill picker"
       >
+        <div className="px-2 pt-1.5 pb-1">
+          <Text font="secondary-action" color="text-04">
+            Skills
+          </Text>
+        </div>
         <Popover.Menu scrollContainerRef={scrollContainerRef}>
           {filtered.length === 0
             ? [

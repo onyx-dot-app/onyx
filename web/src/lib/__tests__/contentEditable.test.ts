@@ -2,11 +2,17 @@
  * @jest-environment jsdom
  */
 
-import { getTextContent } from "@/lib/contentEditable";
+import {
+  getTextContent,
+  deleteTokenBeforeCursor,
+  deleteTextAfterCursor,
+  stripLeadingBr,
+} from "@/lib/contentEditable";
 import {
   shouldCreatePasteTile,
   getPasteTilePreview,
   getPasteTileMeta,
+  createRichInputTileNode,
   PASTE_TILE_THRESHOLD_CHARS,
 } from "@/lib/richInputTile";
 
@@ -176,5 +182,143 @@ describe("getTextContent", () => {
     el.appendChild(p2);
     el.appendChild(p3);
     expect(getTextContent(el)).toBe("line1\nline2\nline3");
+  });
+});
+
+describe("createRichInputTileNode — skill tiles", () => {
+  // Skill tiles are built with a "Skill: <name>" preview and an empty meta.
+  it("marks the tile type and stores the skill slug", () => {
+    const tile = createRichInputTileNode({
+      type: "skill",
+      text: "/pptx ",
+      preview: "Skill: Slides",
+      meta: "",
+      skillSlug: "pptx",
+    });
+    expect(tile.getAttribute("data-tile-type")).toBe("skill");
+    expect(tile.getAttribute("data-skill-slug")).toBe("pptx");
+  });
+
+  it("serializes to the legacy `/<slug> ` literal via getTextContent", () => {
+    // This is the contract that keeps the submitted payload identical to the
+    // pre-tile behavior, so the backend needs no changes.
+    const el = document.createElement("div");
+    el.appendChild(document.createTextNode("make me "));
+    el.appendChild(
+      createRichInputTileNode({
+        type: "skill",
+        text: "/pptx ",
+        preview: "Skill: Slides",
+        meta: "",
+        skillSlug: "pptx",
+      })
+    );
+    el.appendChild(document.createTextNode("about cats"));
+    expect(getTextContent(el)).toBe("make me /pptx about cats");
+  });
+
+  it("renders the 'Skill: <name>' preview and omits the meta when empty", () => {
+    const tile = createRichInputTileNode({
+      type: "skill",
+      text: "/pptx ",
+      preview: "Skill: Slides",
+      meta: "",
+      skillSlug: "pptx",
+    });
+    expect(tile.querySelector(".rich-input-tile-preview")?.textContent).toBe(
+      "Skill: Slides"
+    );
+    expect(tile.querySelector(".rich-input-tile-meta")).toBeNull();
+  });
+});
+
+// Caret/selection helpers — only the text-node fast paths are exercised here;
+// the Selection.modify node-boundary fallback isn't implemented by jsdom and is
+// left to e2e (the helpers guard on `typeof sel.modify !== "function"`).
+function caretAt(node: Node, offset: number): void {
+  const sel = window.getSelection()!;
+  const r = document.createRange();
+  r.setStart(node, offset);
+  r.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+function mount(html: string): HTMLDivElement {
+  const el = document.createElement("div");
+  el.contentEditable = "true";
+  el.innerHTML = html;
+  document.body.appendChild(el);
+  return el;
+}
+
+describe("deleteTokenBeforeCursor", () => {
+  it("removes the exact token before the caret and returns true", () => {
+    const el = mount("hi /pptx");
+    const text = el.firstChild as Text;
+    caretAt(text, text.length);
+    expect(deleteTokenBeforeCursor(el, "/pptx")).toBe(true);
+    expect(getTextContent(el)).toBe("hi ");
+    el.remove();
+  });
+
+  it("returns false (and deletes nothing) when the chars don't match", () => {
+    const el = mount("hello");
+    const text = el.firstChild as Text;
+    caretAt(text, text.length);
+    expect(deleteTokenBeforeCursor(el, "/x")).toBe(false);
+    expect(getTextContent(el)).toBe("hello");
+    el.remove();
+  });
+
+  it("returns false for an empty token", () => {
+    const el = mount("hi");
+    caretAt(el.firstChild as Text, 2);
+    expect(deleteTokenBeforeCursor(el, "")).toBe(false);
+    el.remove();
+  });
+});
+
+describe("deleteTextAfterCursor", () => {
+  it("removes the exact text after the caret and returns true", () => {
+    const el = mount("/pptx hi");
+    caretAt(el.firstChild as Text, 0);
+    expect(deleteTextAfterCursor(el, "/pptx")).toBe(true);
+    expect(getTextContent(el)).toBe(" hi");
+    el.remove();
+  });
+
+  it("returns false when the text would overrun the node", () => {
+    const el = mount("ab");
+    caretAt(el.firstChild as Text, 0);
+    expect(deleteTextAfterCursor(el, "abc")).toBe(false);
+    expect(getTextContent(el)).toBe("ab");
+    el.remove();
+  });
+});
+
+describe("stripLeadingBr", () => {
+  function tileHtml(): string {
+    return '<span data-rich-tile data-tile-type="skill">Skill: X</span>';
+  }
+
+  it("removes a leading <br> that precedes a rich tile", () => {
+    const el = mount(`<br>${tileHtml()}`);
+    expect(stripLeadingBr(el)).toBe(true);
+    expect(el.firstChild?.nodeName).toBe("SPAN");
+    el.remove();
+  });
+
+  it("leaves a leading <br> that precedes text (user newline) untouched", () => {
+    const el = mount("<br>hello");
+    expect(stripLeadingBr(el)).toBe(false);
+    expect(el.firstChild?.nodeName).toBe("BR");
+    el.remove();
+  });
+
+  it("returns false when the first child is not a <br>", () => {
+    const el = mount(`${tileHtml()}`);
+    expect(stripLeadingBr(el)).toBe(false);
+    el.remove();
   });
 });
