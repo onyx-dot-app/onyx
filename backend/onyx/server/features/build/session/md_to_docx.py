@@ -35,6 +35,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches
 from docx.shared import Pt
 from docx.shared import RGBColor
+from docx.shared import Twips
 from docx.styles.style import ParagraphStyle
 from docx.table import _Cell
 from docx.text.paragraph import Paragraph
@@ -50,6 +51,10 @@ _LINK_COLOR = RGBColor(0x4F, 0x81, 0xBD)
 # variants up to level 3 ("List Bullet 2", "List Bullet 3", ...). Deeper nesting
 # reuses the level-3 style.
 _MAX_LIST_LEVEL = 3
+# pandoc indents each list level by 0.5" (720 twips) with a 0.25" hanging marker;
+# python-docx's built-in list numbering indents only half as far.
+_LIST_INDENT_PER_LEVEL = 720
+_LIST_HANGING_INDENT = 360
 
 # Paragraph styles, mirroring how pandoc's default reference.docx names and
 # spaces its prose so the output reads like the previous pandoc export. The
@@ -452,9 +457,17 @@ def _render_list(
             if child_type in ("blank_line", "newline"):
                 continue
             if child_type in ("block_text", "paragraph"):
-                paragraph_style = item_style if not has_rendered_marker else continue_style
+                marker = not has_rendered_marker
+                paragraph_style = item_style if marker else continue_style
                 paragraph = document.add_paragraph(style=paragraph_style)
-                if not has_rendered_marker and num_id is not None:
+                # Indent 0.5" per level (matching pandoc); the marker line hangs.
+                paragraph.paragraph_format.left_indent = Twips(
+                    _LIST_INDENT_PER_LEVEL * (level + 1)
+                )
+                paragraph.paragraph_format.first_line_indent = Twips(
+                    -_LIST_HANGING_INDENT if marker else 0
+                )
+                if marker and num_id is not None:
                     _apply_numbering(paragraph, num_id)
                 _add_runs(paragraph, child.get("children", []), _Fmt(), footnotes)
                 has_rendered_marker = True

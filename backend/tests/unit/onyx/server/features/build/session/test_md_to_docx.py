@@ -62,6 +62,24 @@ def test_tight_lists_use_compact_style_with_numbering() -> None:
     assert all(p._p.find(".//" + qn("w:numPr")) is not None for p in list_paragraphs)
 
 
+def test_list_indentation_matches_pandoc() -> None:
+    # pandoc indents 0.5" (720 twips) per level with a 0.25" hanging marker;
+    # python-docx's built-in numbering indents only half as far.
+    doc = _render("1. one\n2. two\n   1. nested\n")
+    indents = {}
+    for paragraph in doc.paragraphs:
+        text = paragraph.text.strip()
+        if not text:
+            continue
+        fmt = paragraph.paragraph_format
+        indents[text] = (
+            None if fmt.left_indent is None else fmt.left_indent.twips,
+            None if fmt.first_line_indent is None else fmt.first_line_indent.twips,
+        )
+    assert indents["one"] == (720, -360)
+    assert indents["nested"] == (1440, -360)
+
+
 def test_loose_lists_keep_list_paragraph_styles() -> None:
     # A blank line between items makes the list loose; pandoc keeps the built-in
     # numbered/bulleted list paragraph styles there.
