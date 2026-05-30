@@ -34,7 +34,10 @@ RUN apt-get update && \
 # Remove py which is pulled in by retry, py is not needed and is a CVE
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
-# TODO: drop --no-deps once we upgrade to a litellm version with looser dependencies.
+# requirements/*.txt are a complete, pre-resolved lock export, so --no-deps installs them as-is
+# without re-resolving. It is also required, not just an optimization: mitmproxy pins tight
+# transitive caps (e.g. hyperframe<=6.0.1) that are only loosened by [tool.uv] override-dependencies
+# in pyproject.toml, which is absent from this build context — a resolving install would fail.
 RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
