@@ -7,23 +7,24 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { PortalHost } from "@rn-primitives/portal";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import * as SplashScreen from "expo-splash-screen";
 
 import { ThemeProvider } from "@/theme/ThemeProvider";
 import { useAppFonts } from "@/theme/fonts";
+import { queryClient, persister, persistMaxAge, persistBuster } from "@/query/client";
 
 // Keep the native splash up until the Opal fonts are loaded so text never
 // flashes in the system fallback face.
 SplashScreen.preventAutoHideAsync();
 
-// Root provider tree for the Onyx mobile app shell (design doc 04).
+// Root provider tree (docs 04 + 06). Order: GestureHandlerRootView >
+// SafeAreaProvider > ThemeProvider > PersistQueryClientProvider >
+// BottomSheetModalProvider > <Stack>, with <PortalHost/> inside ThemeProvider so
+// @rn-primitives overlays inherit theme vars. The Zustand chat store hydrates
+// synchronously from MMKV on import, so it needs no provider/gate.
 //
-// Real providers (deps installed): GestureHandlerRootView > SafeAreaProvider >
-// ThemeProvider > BottomSheetModalProvider > <Stack>, with <PortalHost/> inside
-// ThemeProvider so @rn-primitives overlays (Modal/Popover) inherit theme vars.
-//
-// Commented placeholders owned by sibling docs (wired when their deps land):
-//   - 06: QueryClientProvider (TanStack Query), StoreHydrationGate (Zustand)
+// Still-placeholder providers (wired when their deps land):
 //   - 07: AuthProvider (PAT/session; drives the (auth) vs (app) redirect)
 //   - 08: Sentry.wrap around the default export
 export default function RootLayout() {
@@ -41,19 +42,22 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
-          {/* TODO(06): <QueryClientProvider client={queryClient}> */}
-          {/* TODO(07): <AuthProvider> — drives (auth) vs (app) redirect */}
-          {/* TODO(06): <StoreHydrationGate> — Zustand persist rehydrate */}
-          <BottomSheetModalProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(app)" />
-              <Stack.Screen name="(modals)" options={{ presentation: "modal" }} />
-              <Stack.Screen name="+not-found" />
-            </Stack>
-          </BottomSheetModalProvider>
-          {/* TODO(06): </StoreHydrationGate> </AuthProvider> </QueryClientProvider> */}
-          <PortalHost />
+          <PersistQueryClientProvider
+            client={queryClient}
+            persistOptions={{ persister, maxAge: persistMaxAge, buster: persistBuster }}
+          >
+            {/* TODO(07): <AuthProvider> — drives (auth) vs (app) redirect */}
+            <BottomSheetModalProvider>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="(app)" />
+                <Stack.Screen name="(modals)" options={{ presentation: "modal" }} />
+                <Stack.Screen name="+not-found" />
+              </Stack>
+            </BottomSheetModalProvider>
+            {/* TODO(07): </AuthProvider> */}
+            <PortalHost />
+          </PersistQueryClientProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
