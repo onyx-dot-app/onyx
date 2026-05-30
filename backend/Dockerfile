@@ -1,18 +1,15 @@
 ####################################################################################################
 # Builder stage
 #
-# Installs the full build toolchain and compiles/installs all Python dependencies. Nothing from this
-# stage survives into the final image except the resulting site-packages + console scripts, which are
-# copied into the runtime stage below. This is what keeps the GCC/cmake toolchain (~190MB) out of the
-# shipped image: it lives only here and is discarded.
+# Installs the build toolchain and compiles/installs all Python dependencies. Only the resulting
+# site-packages + console scripts are copied into the runtime stage; the build toolchain never
+# reaches the shipped image.
 ####################################################################################################
 FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2 AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 
-# Install the full set of system dependencies present during the original single-stage build so the
-# pip install behaves identically. Build-only tools (cmake, gcc, libxmlsec1-dev, pkg-config) live
-# here and never reach the runtime image.
+# System dependencies for compiling the Python wheels.
 # cmake/libxmlsec1-dev/pkg-config/gcc needed to compile native wheels (e.g. xmlsec)
 # ca-certificates for HTTPS when fetching from PyPI
 RUN apt-get update && \
@@ -29,7 +26,6 @@ RUN apt-get update && \
         libxmlsec1-dev \
         pkg-config \
         gcc \
-        libjemalloc2 \
         && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
@@ -52,8 +48,7 @@ RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
 # Runtime stage
 #
 # The actual shipped image. Installs only runtime system libraries and copies the already-built
-# Python packages from the builder stage. The runtime apt set is exactly the set that survived the
-# install/remove dance in the original single-stage Dockerfile.
+# Python packages from the builder stage.
 ####################################################################################################
 FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2 AS runtime
 
@@ -128,10 +123,19 @@ RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
     fi
 ENV PATH="/root/.opencode/bin:${PATH}"
 
-# Copy the Python packages + console scripts built in the builder stage. Both stages derive from the
-# same base image digest, so paths and ABI match exactly.
+# Copy the compiled Python packages and only the console scripts our services launch (api server,
+# celery workers/beat, alembic migrations, supervisord, Playwright). Both stages share the same base
+# image digest, so paths and ABI match. Listing the scripts explicitly keeps the base interpreter
+# binaries and any build-stage executables out of the shipped /usr/local/bin.
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder \
+    /usr/local/bin/alembic \
+    /usr/local/bin/celery \
+    /usr/local/bin/uvicorn \
+    /usr/local/bin/supervisord \
+    /usr/local/bin/supervisorctl \
+    /usr/local/bin/playwright \
+    /usr/local/bin/
 
 # Install the Chromium browser used by Playwright and its OS-level runtime libraries. Must run after
 # the site-packages copy above so the playwright CLI is available.
