@@ -32,6 +32,7 @@ from onyx.auth.schemas import UserUpdate
 from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
+from onyx.auth.users import jwt_bearer_auth_backend
 from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
@@ -555,6 +556,17 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             fastapi_users.get_auth_router(auth_backend),
             prefix="/auth",
         )
+
+        # Native mobile bearer JWT login: POST /auth/mobile/login (form-urlencoded
+        # username/password) -> { access_token, token_type: "bearer" } in the body.
+        # Single-tenant only (SingleTenantJWTStrategy); NOT mounted for CLOUD /
+        # multi-tenant, where the JWT does not resolve the tenant (doc 10).
+        if AUTH_TYPE == AuthType.BASIC:
+            include_auth_router_with_prefix(
+                application,
+                fastapi_users.get_auth_router(jwt_bearer_auth_backend),
+                prefix="/auth/mobile",
+            )
 
         include_auth_router_with_prefix(
             application,

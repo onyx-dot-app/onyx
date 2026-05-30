@@ -43,6 +43,7 @@ from fastapi_users import models
 from fastapi_users import schemas
 from fastapi_users import UUIDIDMixin
 from fastapi_users.authentication import AuthenticationBackend
+from fastapi_users.authentication import BearerTransport
 from fastapi_users.authentication import CookieTransport
 from fastapi_users.authentication import JWTStrategy
 from fastapi_users.authentication import (
@@ -1498,6 +1499,21 @@ elif AUTH_BACKEND == AuthBackend.JWT:
     )
 else:
     raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
+
+
+# Bearer-transport JWT auth backend for the native mobile client (doc 10).
+# Reuses the existing JWT strategy (get_jwt_strategy) but delivers the token in the
+# response body as `Authorization: Bearer <jwt>` instead of a Set-Cookie — a native
+# client has no shared cookie jar with the system browser. Registered independently
+# of AUTH_BACKEND so it works alongside the default (cookie) web session backend.
+# NOTE: SingleTenantJWTStrategy is single-tenant only; the mobile bearer routes are
+# mounted for self-hosted (AUTH_TYPE=basic) deployments only — see onyx/main.py.
+jwt_bearer_transport = BearerTransport(tokenUrl="auth/mobile/login")
+jwt_bearer_auth_backend = AuthenticationBackend(
+    name="jwt-bearer",
+    transport=jwt_bearer_transport,
+    get_strategy=get_jwt_strategy,
+)
 
 
 class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
