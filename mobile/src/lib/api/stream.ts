@@ -1,10 +1,7 @@
 // NDJSON streaming reader — ported from web/src/lib/search/streamingUtils.ts (handleSSEStream).
 //
-// Two intentional deltas vs the web original:
-//   1. The generic is unconstrained `<T>` instead of `<T extends PacketType>`, so api-client
-//      stays free of a domain-types dependency. Re-attach the constraint once
-//      @onyx-ai/api-types ships the streaming models (see 02-shared-packages.md).
-//   2. Dropped a stray `console.log("aborting")` and renamed the log to "stream" (it's NDJSON).
+// One intentional delta vs the web original:
+//   1. Dropped a stray `console.log("aborting")` and renamed the log to "stream" (it's NDJSON).
 //
 // IMPORTANT: despite the legacy "SSE" name, the Onyx chat stream is NDJSON — the backend sends
 // `json.dumps(...) + "\n"` via get_json_line() in backend/onyx/server/utils.py. The line buffer
@@ -12,7 +9,9 @@
 // does NOT align with a JSON-object boundary, and one read may carry several objects. Do NOT swap
 // this for an EventSource/SSE client — it would silently drop every packet. See 07-networking-streaming-auth.md.
 
-export async function* handleSSEStream<T>(
+import type { Packet } from "../types";
+
+export async function* handleSSEStream<T = Packet>(
   streamingResponse: Response,
   signal?: AbortSignal
 ): AsyncGenerator<T, void, unknown> {
