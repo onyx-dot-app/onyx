@@ -1,7 +1,9 @@
 from typing import Any
 
+from onyx.db.enums import ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.base import AdminDescriptorSpec
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.base import OAuthFlowSpec
@@ -49,21 +51,23 @@ class GoogleOAuthProvider(OAuthExternalAppProvider, abstract=True):
     """Shared base for Google built-in providers (Calendar, Gmail, ...).
 
     Google APIs share OAuth endpoints, the offline/consent authorize params,
-    the Cloud Console client-credential fields, and an identical token-exchange
-    response shape. Concrete subclasses only vary scope, upstream URL patterns,
-    and user-facing copy — built via :meth:`build_spec`.
+    the Cloud Console client-credential fields, the bearer ``auth_template``,
+    and an identical token-exchange response shape. Concrete subclasses only
+    vary scope, upstream URL patterns, user-facing copy, and their action
+    catalog — assembled via :meth:`build_spec`.
     """
 
     @classmethod
     def build_spec(
         cls,
         *,
-        app_type: Any,
+        app_type: ExternalAppType,
         app_name: str,
         scope: str,
         upstream_url_patterns: list[str],
         description: str,
         google_api_name: str,
+        endpoint_catalog: list[EndpointSpec],
     ) -> OAuthProviderSpec:
         return OAuthProviderSpec(
             app_type=app_type,
@@ -88,6 +92,7 @@ class GoogleOAuthProvider(OAuthExternalAppProvider, abstract=True):
                 required_org_credential_fields=list(_CLIENT_CREDENTIAL_FIELDS),
                 setup_instructions=_setup_instructions(google_api_name),
             ),
+            endpoint_catalog=endpoint_catalog,
         )
 
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
