@@ -648,12 +648,48 @@ def _fill_cell(
 # --------------------------------------------------------------------------- #
 # Inline rendering
 # --------------------------------------------------------------------------- #
+def _repair_paren_links(nodes: list[Node]) -> None:
+    """Re-attach a balancing ``)`` that mistune split off a link destination.
+
+    CommonMark allows balanced parentheses in a link/autolink destination (e.g.
+    ``..._(novel)``), but mistune stops the URL at the first ``)`` and leaves it
+    as following text. When a link's URL has unmatched ``(``, pull the matching
+    ``)`` back from the next text node into the URL (and the visible text for an
+    autolink), the way pandoc parses it.
+    """
+    for index, node in enumerate(nodes):
+        if node.get("type") != "link" or index + 1 >= len(nodes):
+            continue
+        following = nodes[index + 1]
+        if following.get("type") != "text":
+            continue
+        url = str(node.get("attrs", {}).get("url", ""))
+        imbalance = url.count("(") - url.count(")")
+        raw = str(following.get("raw", ""))
+        take = 0
+        while take < imbalance and take < len(raw) and raw[take] == ")":
+            take += 1
+        if take == 0:
+            continue
+        closing = ")" * take
+        node.setdefault("attrs", {})["url"] = url + closing
+        children = node.get("children", [])
+        if (
+            len(children) == 1
+            and children[0].get("type") == "text"
+            and children[0].get("raw") == url
+        ):
+            children[0]["raw"] = url + closing
+        following["raw"] = raw[take:]
+
+
 def _add_runs(
     paragraph: Paragraph,
     nodes: list[Node],
     fmt: _Fmt,
     footnotes: "_Footnotes | None",
 ) -> None:
+    _repair_paren_links(nodes)
     for node in nodes:
         node_type = node.get("type")
         if node_type == "text":

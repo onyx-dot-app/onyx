@@ -224,6 +224,31 @@ def test_link_becomes_real_hyperlink() -> None:
     assert "Onyx" in xml
 
 
+def _hyperlink_targets(doc: DocxDocument) -> list[str]:
+    return [
+        rel.target_ref
+        for rel in doc.part.rels.values()
+        if "hyperlink" in rel.reltype
+    ]
+
+
+def test_link_keeps_balanced_parens_in_url() -> None:
+    # CommonMark allows balanced parens in a destination; mistune splits the
+    # closing ")" off, so the converter must re-attach it.
+    doc = _render("See [Foundation](https://en.wikipedia.org/wiki/Foundation_(novel)).")
+    assert _hyperlink_targets(doc) == [
+        "https://en.wikipedia.org/wiki/Foundation_(novel)"
+    ]
+    assert ")" not in "".join(p.text for p in doc.paragraphs).replace("(novel)", "")
+
+
+def test_paren_wrapped_link_url_is_not_over_extended() -> None:
+    # A link merely wrapped in parens keeps the ")" outside the URL.
+    doc = _render("Wrapped (https://example.com/foo) end.")
+    assert _hyperlink_targets(doc) == ["https://example.com/foo"]
+    assert "(https://example.com/foo)" in "".join(p.text for p in doc.paragraphs)
+
+
 def test_hyperlink_uses_pandoc_style_without_underline() -> None:
     # pandoc styles links with the muted "Hyperlink" char style and no underline,
     # not python-docx's brighter underlined default.
