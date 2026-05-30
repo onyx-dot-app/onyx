@@ -200,6 +200,8 @@ def _apply_pandoc_styles(document: DocxDocument) -> None:
         heading.font.name = _HEADING_FONT
         heading.font.size = size
         heading.font.color.rgb = _HEADING_COLOR
+        # pandoc headings are coloured + sized, not bold; python-docx's are bold.
+        heading.font.bold = False
 
 
 # --------------------------------------------------------------------------- #
@@ -683,8 +685,11 @@ def _add_runs(
 
 def _styled_run(paragraph: Paragraph, text: str, fmt: _Fmt) -> None:
     run = paragraph.add_run(text)
-    run.bold = fmt.bold
-    run.italic = fmt.italic
+    # Only set flags that are on, so plain runs don't emit redundant b="0"/i="0".
+    if fmt.bold:
+        run.bold = True
+    if fmt.italic:
+        run.italic = True
     if fmt.strike:
         run.font.strike = True
     if fmt.code:
