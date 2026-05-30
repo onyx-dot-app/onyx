@@ -33,6 +33,33 @@ def test_empty_markdown_produces_valid_docx() -> None:
     assert doc.tables == []
 
 
+def test_malformed_input_never_crashes() -> None:
+    # LLM output can be malformed; the converter must always produce a valid
+    # .docx rather than raise. _render asserts the PK magic + reloads the file.
+    malformed = [
+        "```python\ndef f():\n    return 1\n",  # unclosed code fence
+        "**bold that never closes",
+        "| a | b | c |\n|---|---|\n| 1 |\n",  # ragged table
+        "[text](http://example.com",  # unclosed link
+        "> - **a\n>   - b",  # nested + unclosed
+        "####### too deep\n",
+        "A claim.[^1] with no definition.\n",  # orphan footnote ref
+        "[^1]: orphan note with no reference.\n",  # orphan footnote def
+        "<div><p>raw html</p></div>\n\nAfter.\n",
+        "##No space\n- \n1.\n[](())\n**\n~~\n`\n|\n",  # mixed garbage
+        "   \n\n\t\n",  # whitespace only
+    ]
+    for md_text in malformed:
+        _render(md_text)
+
+
+def test_invalid_xml_characters_are_stripped() -> None:
+    # XML 1.0 forbids NULL / most C0 control chars; python-docx raises on them,
+    # so they must be stripped while tab/newline are preserved.
+    doc = _render("text with \x00 null \x07 bell \x1f sep\ttab\n")
+    assert [p.text for p in doc.paragraphs] == ["text with  null  bell  sep\ttab"]
+
+
 def test_headings_map_to_heading_styles() -> None:
     doc = _render("# H1\n\n## H2\n\n### H3\n")
     styles = _paragraph_styles(doc)

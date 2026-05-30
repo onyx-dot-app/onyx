@@ -107,6 +107,23 @@ _markdown_parser = mistune.create_markdown(
 Node = dict[str, Any]
 
 
+def _strip_invalid_xml_chars(text: str) -> str:
+    """Drop characters XML 1.0 forbids (NULL and most C0 controls).
+
+    LLM output occasionally contains them and python-docx raises when
+    writing them, so they are stripped before parsing."""
+    return "".join(ch for ch in text if _is_xml_safe(ord(ch)))
+
+
+def _is_xml_safe(code: int) -> bool:
+    return (
+        code in (0x09, 0x0A, 0x0D)
+        or 0x20 <= code <= 0xD7FF
+        or 0xE000 <= code <= 0xFFFD
+        or 0x10000 <= code <= 0x10FFFF
+    )
+
+
 @dataclass(frozen=True)
 class _Fmt:
     """Inline formatting flags carried down through nested inline nodes."""
@@ -119,7 +136,7 @@ class _Fmt:
 
 def markdown_to_docx_bytes(md_text: str) -> bytes:
     """Render Markdown text to the bytes of a .docx file."""
-    tokens = _markdown_parser(md_text)
+    tokens = _markdown_parser(_strip_invalid_xml_chars(md_text))
     nodes: list[Node] = tokens if isinstance(tokens, list) else []
 
     document = Document()
