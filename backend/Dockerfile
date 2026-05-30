@@ -90,8 +90,6 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 # libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
 # postgresql-client for easy manual tests
 # procps so kubernetes exec sessions can use ps aux for debugging
-# perl-base is part of the base Python Debian image but not needed for Onyx functionality;
-# removed for CVE surface reduction (requires --allow-remove-essential)
 RUN apt-get update && \
     apt-get install -y \
         curl \
@@ -109,8 +107,6 @@ RUN apt-get update && \
         libxmlsec1-openssl \
         postgresql-client \
         && \
-    apt-get remove -y --allow-remove-essential perl-base && \
-    apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -139,8 +135,17 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Install the Chromium browser used by Playwright and its OS-level runtime libraries. Must run after
 # the site-packages copy above so the playwright CLI is available.
+#
+# perl-base is part of the base Python Debian image but not needed for Onyx functionality; it is
+# removed for CVE surface reduction (requires --allow-remove-essential). It must be removed AFTER the
+# first `playwright install-deps`, because the font/X11 packages that install-deps pulls in run perl
+# scripts in their dpkg configure step. The second `playwright install-deps` then restores any
+# chromium runtime libs (libnss3, libnspr4, etc.) that autoremove swept up in the cascade.
 RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     playwright install chromium && \
+    playwright install-deps chromium && \
+    apt-get remove -y --allow-remove-essential perl-base && \
+    apt-get autoremove -y && \
     playwright install-deps chromium && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
