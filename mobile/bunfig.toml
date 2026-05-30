@@ -1,0 +1,5 @@
+# Bun config for the standalone Onyx mobile Expo app.
+
+[install]
+# Hoisted linker for reliable Expo + Bun + Metro module resolution (avoids isolated-linker quirks).
+nodeLinker = "hoisted"

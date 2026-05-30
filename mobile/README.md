@@ -1,26 +1,27 @@
 # Onyx Mobile (Expo)
 
-React Native mobile app for Onyx. Lives inside the `onyx` monorepo as the `mobile` Bun
-workspace. Design: `docs/plans/2026-05-30-mobile-app/` (start with `overview.md`).
+A **standalone** React Native app for Onyx. It lives in the `onyx` repo under `mobile/` but is
+fully independent of `web/` — its own dependencies, lockfile, and tooling, so web and mobile
+scale separately. Design docs: `docs/plans/2026-05-30-mobile-app/` (start with `overview.md`).
 
-> **Status: foundation only (Phase 0, doc 01).** This is the workspace + resolution plumbing.
-> The app shell here is the stock Expo Router template — the real route tree, UI, state, and
-> networking land in later phases. Most things below are intentional stubs.
+> **Status: foundation (Phase 0).** The app shell is a trimmed Expo Router starter; the real
+> route tree, UI, state, and chat networking land in later phases. `src/lib/api/` holds the API
+> client (ported from web, mobile-owned).
 
-## Stack (locked)
+## Stack
 
 - **Expo SDK 56** (managed, New Architecture) · **Expo Router** · React 19.2 / RN 0.85.
-- **NativeWind v4** + Opal design tokens (doc 03 / 05) — _not wired yet_.
+- **NativeWind v4** + Opal-derived design tokens (doc 03 / 05) — _not wired yet_.
 - Zustand + TanStack Query (doc 06); `expo/fetch` NDJSON streaming + PAT auth (doc 07).
-- Shared code in `../packages/{api-types,api-client,design-tokens}` (`@onyx-ai/*`).
 
 ## First-time setup
 
-The monorepo is not installed yet. From the **repo root** (`onyx/`):
+This is a standalone app — install from **inside `mobile/`**:
 
 ```bash
-bun install             # installs all workspaces into one hoisted tree (root bun.lock)
-cd mobile && bunx expo install --fix  # pin native deps to the SDK if needed
+cd mobile
+bun install              # creates mobile/bun.lock + mobile/node_modules
+bunx expo install --fix  # pin native deps to the SDK if needed
 ```
 
 > Node LTS must be on PATH for `expo prebuild` / CNG even though Bun runs the app.
@@ -29,13 +30,12 @@ cd mobile && bunx expo install --fix  # pin native deps to the SDK if needed
 ## Run
 
 ```bash
-cd mobile
 bun run ios        # or: bun run android / bun run web
 ```
 
-## Monorepo notes
+## Notes
 
-- `metro.config.js` watches the repo root so edits in `../packages/*` hot-reload.
-- `@onyx-ai/*` packages are **source-only** (no build step) — resolved via the workspace
-  symlink + each package's `package.json` `"types"`/`"main"` → `src/index.ts`.
-- `tsconfig.json` extends both `expo/tsconfig.base` and the shared `../tsconfig.base.json`.
+- `src/lib/api/` — the API client (fetcher, endpoint registry, NDJSON streaming reader). Ported
+  from web and de-Next-ified; mobile owns it independently.
+- `metro.config.js` is the default Expo config (NativeWind's `withNativeWind` is added in doc 05).
+- `bunfig.toml` pins `nodeLinker = "hoisted"` for reliable Expo + Bun + Metro resolution.

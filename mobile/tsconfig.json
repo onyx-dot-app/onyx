@@ -1,7 +1,8 @@
 {
-  "extends": ["expo/tsconfig.base", "../tsconfig.base.json"],
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "noUncheckedIndexedAccess": true,
     "paths": {
       "@/*": [
         "./src/*"
