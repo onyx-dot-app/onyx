@@ -1537,26 +1537,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         isLoaded: true,
       });
 
-      // Now restore the sandbox if needed (messages are already visible).
-      // The backend enforces a timeout and returns an error if restore
-      // takes too long, so no frontend timeout needed here.
       if (needsRestore) {
         try {
           sessionData = await restoreSession(sessionId);
-
-          // Sandbox is now running - fetch artifacts
-          const restoredArtifacts = await fetchArtifacts(sessionId);
-
-          updateSessionData(sessionId, {
-            status: sessionData.status === "active" ? "active" : "idle",
-            artifacts: restoredArtifacts,
-            sandbox: sessionData.sandbox,
-            // Bump so OutputPanel's SWR refetches webapp-info (which
-            // derives the actual webappUrl from the backend).
-            webappNeedsRefresh:
-              (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
-          });
         } catch (restoreErr) {
+          // Only a genuine restore failure marks the sandbox failed.
           console.error("Sandbox restore failed:", restoreErr);
           updateSessionData(sessionId, {
             status: "idle",
@@ -1564,6 +1549,28 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
               ? { ...sessionData.sandbox, status: "failed" }
               : null,
           });
+          return;
+        }
+
+        // Restore succeeded — reflect the real status; bump webappNeedsRefresh
+        // so OutputPanel's SWR refetches webapp-info.
+        updateSessionData(sessionId, {
+          status: sessionData.status === "active" ? "active" : "idle",
+          sandbox: sessionData.sandbox,
+          webappNeedsRefresh:
+            (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
+        });
+
+        // Artifacts hit the sandbox and can fail transiently right after the
+        // pod comes up — that must NOT flip the sandbox to "failed". SWR retries.
+        try {
+          const restoredArtifacts = await fetchArtifacts(sessionId);
+          updateSessionData(sessionId, { artifacts: restoredArtifacts });
+        } catch (artifactsErr) {
+          console.warn(
+            "Failed to fetch artifacts after restore:",
+            artifactsErr
+          );
         }
       }
     } catch (err) {
