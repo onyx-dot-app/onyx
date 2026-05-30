@@ -3,6 +3,8 @@
 import re
 import zipfile
 from io import BytesIO
+from random import Random
+from xml.etree import ElementTree
 
 from docx import Document
 from docx.document import Document as DocxDocument
@@ -18,6 +20,15 @@ def _render(md_text: str) -> DocxDocument:
     # A .docx is a zip archive, which always starts with the "PK" magic bytes.
     assert data[:2] == b"PK"
     return Document(BytesIO(data))
+
+
+def _assert_docx_xml_is_parseable(data: bytes) -> None:
+    # A .docx is a zip of XML parts; parsing each one catches bad escaping in
+    # text, relationships, footnotes, styles, etc.
+    with zipfile.ZipFile(BytesIO(data)) as archive:
+        for name in archive.namelist():
+            if name.endswith((".xml", ".rels")):
+                ElementTree.fromstring(archive.read(name))
 
 
 def _paragraph_styles(doc: DocxDocument) -> list[str]:
@@ -53,11 +64,65 @@ def test_malformed_input_never_crashes() -> None:
         _render(md_text)
 
 
+def test_deterministic_markdown_fuzz_produces_parseable_docx() -> None:
+    # Seeded, dependency-free fuzzing: combine malformed Markdown, XML-sensitive
+    # characters, raw HTML, footnotes, tables, links, and invalid Unicode in
+    # different orders; every generated case must yield a parseable .docx.
+    fragments = [
+        "# Heading & <xml>\n\n",
+        "Plain text with <>&\"' and ]]>.\n\n",
+        "**bold *nested `code & <x>` still open\n\n",
+        "[label & <x>](https://example.com/a?b=1&c=<tag>)\n\n",
+        "https://example.com/wiki/Foo_(bar)\n\n",
+        "![alt & <img>](https://example.com/img.png)\n\n",
+        "- bullet\n  - nested\n\n",
+        "1. numbered\n2. second\n\n",
+        "> quote\n> - quoted bullet\n\n",
+        "| A | B |\n|---|---|\n| <x> | a&b |\n\n",
+        "```python\nprint('<xml & ]]>')\n```\n\n",
+        "Footnote ref.[^1]\n\n[^1]: footnote with <>& and `code`\n\n",
+        "<div><span>raw html</span></div>\n\n",
+        "bad controls \x00 \x07 and bad surrogates 𐏿\n\n",
+        "[broken](https://example.com/a_(b)\n\n",
+        "~~strike & <x>~~ and<br>break\n\n",
+    ]
+    rng = Random(1337)
+    for _ in range(25):
+        md_text = "".join(rng.choice(fragments) for _ in range(rng.randint(3, 10)))
+        data = markdown_to_docx_bytes(md_text)
+        _assert_docx_xml_is_parseable(data)
+        Document(BytesIO(data))
+
+
 def test_invalid_xml_characters_are_stripped() -> None:
     # XML 1.0 forbids NULL / most C0 control chars; python-docx raises on them,
     # so they must be stripped while tab/newline are preserved.
     doc = _render("text with \x00 null \x07 bell \x1f sep\ttab\n")
     assert [p.text for p in doc.paragraphs] == ["text with  null  bell  sep\ttab"]
+
+
+def test_invalid_surrogates_are_stripped() -> None:
+    # Unpaired UTF-16 surrogates are invalid XML and appear when upstream systems
+    # mishandle Unicode.
+    doc = _render("before \ud800 middle \udfff after")
+    assert [p.text for p in doc.paragraphs] == ["before  middle  after"]
+
+
+def test_xml_metacharacters_are_escaped_across_docx_parts() -> None:
+    md = (
+        "Text &lt;tag attr=&quot;value&quot;&gt; &amp; 'quotes' and ]]&gt; marker.\n\n"
+        '[link & label](https://example.com/search?a=1&b=<two>#frag"quote")\n\n'
+        '| A&B | <C> |\n|---|---|\n| "x" | y > z |\n\n'
+        "Footnote.[^1]\n\n"
+        "[^1]: Note with <xml> & ]]> plus `code & <literal>`.\n"
+    )
+    data = markdown_to_docx_bytes(md)
+    _assert_docx_xml_is_parseable(data)
+    doc = Document(BytesIO(data))
+    text = "\n".join(p.text for p in doc.paragraphs)
+    assert "<tag attr=\"value\"> & 'quotes' and ]]> marker." in text
+    assert "link & label" in text
+    assert doc.tables[0].rows[1].cells[0].text == '"x"'
 
 
 def test_headings_map_to_heading_styles() -> None:
@@ -332,6 +397,22 @@ def test_hyperlink_inherits_surrounding_formatting() -> None:
     assert "w:hyperlink" in xml
     hyperlink_run_props = xml.split("w:hyperlink")[1]
     assert "<w:b" in hyperlink_run_props
+
+
+def _hyperlink_run_xml(doc: DocxDocument) -> list[str]:
+    hyperlink = next(doc.element.body.iter(qn("w:hyperlink")))
+    return [run.xml for run in hyperlink.iter(qn("w:r"))]
+
+
+def test_hyperlink_preserves_nested_label_formatting() -> None:
+    # Formatting inside the link label must survive; collapsing the children into
+    # one hyperlink run would lose the bold/italic/code spans (pandoc keeps them).
+    doc = _render("[**bold** and *italic* and `code`](https://onyx.app)")
+    runs = _hyperlink_run_xml(doc)
+    assert len(runs) == 5
+    assert "<w:b/>" in runs[0] and ">bold<" in runs[0]
+    assert "<w:i/>" in runs[2] and ">italic<" in runs[2]
+    assert 'w:ascii="Courier New"' in runs[4] and ">code<" in runs[4]
 
 
 def test_hyperlink_preserves_whitespace_in_text() -> None:

@@ -754,7 +754,7 @@ def _add_runs(
         elif node_type == "codespan":
             _styled_run(paragraph, str(node.get("raw", "")), replace(fmt, code=True))
         elif node_type == "link":
-            _add_hyperlink(paragraph, node, fmt)
+            _add_hyperlink(paragraph, node, fmt, footnotes)
         elif node_type == "image":
             alt = _collect_text(node.get("children", []))
             _styled_run(paragraph, f"[image: {alt}]" if alt else "[image]", fmt)
@@ -788,45 +788,55 @@ def _styled_run(paragraph: Paragraph, text: str, fmt: _Fmt) -> None:
         run.font.name = _MONOSPACE_FONT
 
 
-def _add_hyperlink(paragraph: Paragraph, node: Node, fmt: _Fmt) -> None:
+def _add_hyperlink(
+    paragraph: Paragraph, node: Node, fmt: _Fmt, footnotes: "_Footnotes | None"
+) -> None:
     url = str(node.get("attrs", {}).get("url", ""))
-    text = _collect_text(node.get("children", [])) or url
+    children = node.get("children", [])
     if not url:
-        _styled_run(paragraph, text, fmt)
+        _add_runs(paragraph, children, fmt, footnotes)
         return
 
     r_id = paragraph.part.relate_to(url, RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
     hyperlink = OxmlElement("w:hyperlink")
     hyperlink.set(qn("r:id"), r_id)
 
-    run = OxmlElement("w:r")
-    run_props = OxmlElement("w:rPr")
-    # Apply the "Hyperlink" character style (colour, no underline) like pandoc.
-    # Children follow CT_RPr schema order (rStyle, rFonts, b, i, strike) so the
-    # inherited formatting carried in ``fmt`` survives on the link run.
+    # Render the label's inline content so nested bold/italic/code survive, then
+    # move those runs into the hyperlink and tag each with the "Hyperlink"
+    # character style (colour, no underline) like pandoc.
+    start = len(paragraph._p)
+    _add_runs(paragraph, children, fmt, footnotes)
+    rendered = paragraph._p[start:]
+    for element in rendered:
+        paragraph._p.remove(element)
+        if element.tag == qn("w:r"):
+            _apply_hyperlink_style(element)
+        hyperlink.append(element)
+    if not rendered:
+        # Empty label: fall back to the URL as the visible text.
+        hyperlink.append(_hyperlink_text_run(url))
+    paragraph._p.append(hyperlink)
+
+
+def _apply_hyperlink_style(run: Any) -> None:
+    run_props = run.find(qn("w:rPr"))
+    if run_props is None:
+        run_props = OxmlElement("w:rPr")
+        run.insert(0, run_props)
     run_style = OxmlElement("w:rStyle")
     run_style.set(qn("w:val"), _STYLE_ID_HYPERLINK)
-    run_props.append(run_style)
-    if fmt.code:
-        fonts = OxmlElement("w:rFonts")
-        fonts.set(qn("w:ascii"), _MONOSPACE_FONT)
-        fonts.set(qn("w:hAnsi"), _MONOSPACE_FONT)
-        run_props.append(fonts)
-    if fmt.bold:
-        run_props.append(OxmlElement("w:b"))
-    if fmt.italic:
-        run_props.append(OxmlElement("w:i"))
-    if fmt.strike:
-        run_props.append(OxmlElement("w:strike"))
-    run.append(run_props)
+    run_props.insert(0, run_style)  # rStyle is first in CT_RPr
+
+
+def _hyperlink_text_run(text: str) -> Any:
+    run = OxmlElement("w:r")
+    _apply_hyperlink_style(run)
     text_el = OxmlElement("w:t")
     text_el.text = text
-    # Preserve leading/trailing whitespace; OOXML strips it without this hint.
     if text != text.strip():
         text_el.set(qn("xml:space"), "preserve")
     run.append(text_el)
-    hyperlink.append(run)
-    paragraph._p.append(hyperlink)
+    return run
 
 
 def _add_inline_html(paragraph: Paragraph, raw: str) -> None:
