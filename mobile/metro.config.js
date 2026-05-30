@@ -1,8 +1,9 @@
 // Metro config for the standalone Onyx mobile Expo app.
-// (NativeWind's withNativeWind() wrapper is added later — see doc 05.)
+// Wrapped with NativeWind so Tailwind classes compile through the bundler.
 
 const { getDefaultConfig } = require("expo/metro-config");
+const { withNativeWind } = require("nativewind/metro");
 
 const config = getDefaultConfig(__dirname);
 
-module.exports = config;
+module.exports = withNativeWind(config, { input: "./global.css" });

@@ -17,6 +17,7 @@
     "expo-symbols": "~56.0.5",
     "expo-system-ui": "~56.0.5",
     "expo-web-browser": "~56.0.5",
+    "nativewind": "4.2.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.85.3",
@@ -28,7 +29,9 @@
     "react-native-worklets": "0.8.3"
   },
   "devDependencies": {
+    "@types/node": "25.9.1",
     "@types/react": "~19.2.2",
+    "tailwindcss": "3.4.17",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -36,7 +39,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "generate:theme": "bun scripts/generate-theme.ts"
   },
   "private": true
 }
