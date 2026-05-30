@@ -14,7 +14,6 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import ActionApproval
@@ -92,8 +91,9 @@ class _UnusedMatcher(ActionMatcher):
 
 
 def _build_addon() -> GateAddon:
-    """`GateAddon` with only `db_session_factory` wired; the arbiter doesn't
-    touch the others, so they're obvious-fail stubs."""
+    """`GateAddon` for the claim arbiter; it opens its own tenant session via
+    `get_session_with_tenant`, so the identity/matcher/cache deps are
+    obvious-fail stubs the arbiter never touches."""
 
     def _factory_raises(tenant_id: str) -> Any:  # noqa: ARG001
         raise AssertionError("cache_factory unexpectedly used")
@@ -101,9 +101,6 @@ def _build_addon() -> GateAddon:
     return GateAddon(
         identity=_UnusedResolver(),
         action_matcher=_UnusedMatcher(),
-        db_session_factory=lambda tenant_id: get_session_with_tenant(
-            tenant_id=tenant_id
-        ),
         cache_factory=_factory_raises,
         proxy_instance_id="proxy-test",
         credential_dispatcher=CredentialInjectionDispatcher([]),
