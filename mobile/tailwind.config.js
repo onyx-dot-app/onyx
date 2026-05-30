@@ -1,7 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  // Scan the app source for className usage.
-  content: ["./src/**/*.{ts,tsx}"],
+  // Scan the router screens AND shared source for className usage.
+  content: ["./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
   // Opal dark mode is class-driven (`.dark`); NativeWind toggles it per scheme.
   darkMode: "class",
   presets: [
