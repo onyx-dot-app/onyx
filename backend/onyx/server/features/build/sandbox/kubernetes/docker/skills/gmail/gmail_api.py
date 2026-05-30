@@ -13,12 +13,16 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from email.message import EmailMessage
 from typing import Any
 
 _BASE = "https://gmail.googleapis.com/gmail/v1/users/me/"
 _PAGE_SIZE = 100
 _DEFAULT_LIMIT = 25
+# Each listed message needs its own metadata GET (Gmail's list returns only
+# id/threadId), so fan them out concurrently rather than N sequential calls.
+_MAX_FETCH_WORKERS = 8
 _METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 # Headers worth surfacing from a metadata-format message fetch.
 _METADATA_HEADERS = ("From", "To", "Cc", "Subject", "Date")
@@ -148,6 +152,22 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _message_summary(ref: dict[str, Any]) -> dict[str, Any]:
+    """Fetch one message's metadata and reduce it to the summary fields."""
+    msg = _req(
+        "GET",
+        f"messages/{_seg(ref['id'])}",
+        params={"format": "metadata", "metadataHeaders": list(_METADATA_HEADERS)},
+    )
+    return {
+        "id": msg.get("id"),
+        "threadId": msg.get("threadId"),
+        "labelIds": msg.get("labelIds"),
+        "snippet": msg.get("snippet"),
+        "headers": _headers_to_dict(msg.get("payload", {}).get("headers", [])),
+    }
+
+
 def _cmd_messages(a: argparse.Namespace) -> dict[str, Any]:
     listed = _list_ids(
         "messages",
@@ -155,22 +175,14 @@ def _cmd_messages(a: argparse.Namespace) -> dict[str, Any]:
         "messages",
         a.limit,
     )
-    summaries: list[dict[str, Any]] = []
-    for ref in listed["items"]:
-        msg = _req(
-            "GET",
-            f"messages/{_seg(ref['id'])}",
-            params={"format": "metadata", "metadataHeaders": list(_METADATA_HEADERS)},
-        )
-        summaries.append(
-            {
-                "id": msg.get("id"),
-                "threadId": msg.get("threadId"),
-                "labelIds": msg.get("labelIds"),
-                "snippet": msg.get("snippet"),
-                "headers": _headers_to_dict(msg.get("payload", {}).get("headers", [])),
-            }
-        )
+    refs = listed["items"]
+    # Fan the per-message metadata GETs out concurrently: a page of N is then
+    # ~one round-trip of latency instead of N sequential ones. `map` preserves
+    # input order and re-raises the first failure (same fail-fast as a loop).
+    with ThreadPoolExecutor(
+        max_workers=min(_MAX_FETCH_WORKERS, len(refs) or 1)
+    ) as pool:
+        summaries = list(pool.map(_message_summary, refs))
     return {
         "ok": True,
         "items": summaries,
