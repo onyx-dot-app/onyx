@@ -2,135 +2,116 @@
 
 export const typography = {
   "heading-h1": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_600SemiBold",
     "fontSize": 48,
-    "fontWeight": "600",
     "lineHeight": 64,
     "letterSpacing": -0.48
   },
   "heading-h2": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_600SemiBold",
     "fontSize": 24,
-    "fontWeight": "600",
     "lineHeight": 36,
     "letterSpacing": -0.24
   },
   "heading-h3": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_600SemiBold",
     "fontSize": 18,
-    "fontWeight": "600",
     "lineHeight": 28,
     "letterSpacing": -0.18
   },
   "heading-h3-muted": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_500Medium",
     "fontSize": 18,
-    "fontWeight": "500",
     "lineHeight": 28,
     "letterSpacing": -0.18
   },
   "main-content-body": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_500Medium",
     "fontSize": 16,
-    "fontWeight": "450",
     "lineHeight": 24,
     "letterSpacing": 0
   },
   "main-content-emphasis": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_700Bold",
     "fontSize": 16,
-    "fontWeight": "700",
     "lineHeight": 24,
     "letterSpacing": 0
   },
   "main-content-muted": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_400Regular",
     "fontSize": 16,
-    "fontWeight": "400",
     "lineHeight": 24,
     "letterSpacing": 0
   },
   "main-content-mono": {
-    "fontFamily": "DMMono",
+    "fontFamily": "DMMono_400Regular",
     "fontSize": 16,
-    "fontWeight": "400",
     "lineHeight": 23,
     "letterSpacing": 0
   },
   "main-ui-body": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_500Medium",
     "fontSize": 14,
-    "fontWeight": "500",
     "lineHeight": 20,
     "letterSpacing": 0
   },
   "main-ui-muted": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_400Regular",
     "fontSize": 14,
-    "fontWeight": "400",
     "lineHeight": 20,
     "letterSpacing": 0
   },
   "main-ui-action": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_600SemiBold",
     "fontSize": 14,
-    "fontWeight": "600",
     "lineHeight": 20,
     "letterSpacing": 0
   },
   "main-ui-mono": {
-    "fontFamily": "DMMono",
+    "fontFamily": "DMMono_400Regular",
     "fontSize": 14,
-    "fontWeight": "400",
     "lineHeight": 20,
     "letterSpacing": 0
   },
   "secondary-body": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_400Regular",
     "fontSize": 12,
-    "fontWeight": "400",
     "lineHeight": 16,
     "letterSpacing": 0
   },
   "secondary-action": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_600SemiBold",
     "fontSize": 12,
-    "fontWeight": "600",
     "lineHeight": 16,
     "letterSpacing": 0
   },
   "secondary-mono": {
-    "fontFamily": "DMMono",
+    "fontFamily": "DMMono_400Regular",
     "fontSize": 12,
-    "fontWeight": "400",
     "lineHeight": 16,
     "letterSpacing": 0
   },
   "secondary-mono-label": {
-    "fontFamily": "DMMono",
+    "fontFamily": "DMMono_500Medium",
     "fontSize": 12,
-    "fontWeight": "500",
     "lineHeight": 16,
     "letterSpacing": 0
   },
   "figure-small-label": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_700Bold",
     "fontSize": 10,
-    "fontWeight": "700",
     "lineHeight": 12,
     "letterSpacing": 0
   },
   "figure-small-value": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_400Regular",
     "fontSize": 10,
-    "fontWeight": "400",
     "lineHeight": 12,
     "letterSpacing": 0
   },
   "figure-keystroke": {
-    "fontFamily": "HankenGrotesk",
+    "fontFamily": "HankenGrotesk_400Regular",
     "fontSize": 12,
-    "fontWeight": "400",
     "lineHeight": 16,
     "letterSpacing": -0.6
   }

@@ -8,3 +8,19 @@ export {
 } from "@/components/opal/Button";
 export { Card, type CardProps } from "@/components/opal/Card";
 export { Tag, type TagProps, type TagTone } from "@/components/opal/Tag";
+
+// Interactive primitives (rn-primitives + @gorhom/bottom-sheet, themed).
+export { Modal, ModalPrimitive, type ModalProps } from "@/components/opal/Modal";
+export {
+  Popover,
+  PopoverContent,
+  PopoverPrimitive,
+  type PopoverContentProps,
+  type PopoverRootProps,
+} from "@/components/opal/Popover";
+export { Checkbox, type CheckboxProps } from "@/components/opal/Checkbox";
+export {
+  BottomSheet,
+  type BottomSheetProps,
+  type BottomSheetRef,
+} from "@/components/opal/BottomSheet";

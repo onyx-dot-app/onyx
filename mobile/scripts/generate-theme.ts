@@ -263,20 +263,94 @@ function main(): void {
   }
 
   // --- Typography (typography.css) ------------------------------------------
+  // Each Opal font family maps to the @expo-google-fonts package base name. The
+  // *loaded* font family at runtime is weight-specific (e.g.
+  // "HankenGrotesk_600SemiBold"), because that is how the weight-specific font
+  // objects are registered by useAppFonts() in src/theme/fonts.ts. React Native
+  // does not synthesize weights from a single family the way the web does, so we
+  // must point fontFamily at the exact loaded face per weight.
   const FONT_FAMILY_MAP: Record<string, string> = {
     "--font-hanken-grotesk": "HankenGrotesk",
     "--font-dm-mono": "DMMono",
     "--font-kh-teka": "KHTeka",
   };
+
+  // The Google-Fonts weight suffix for each standard numeric weight.
+  const WEIGHT_SUFFIX: Record<number, string> = {
+    100: "Thin",
+    200: "ExtraLight",
+    300: "Light",
+    400: "Regular",
+    500: "Medium",
+    600: "SemiBold",
+    700: "Bold",
+    800: "ExtraBold",
+    900: "Black",
+  };
+
+  // The numeric weights each family ACTUALLY ships in @expo-google-fonts, used
+  // to round non-standard CSS weights (e.g. 450) to the nearest available face.
+  // HankenGrotesk ships 100..900; DMMono only ships 300/400/500.
+  const FAMILY_AVAILABLE_WEIGHTS: Record<string, number[]> = {
+    HankenGrotesk: [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    DMMono: [300, 400, 500],
+    // KHTeka is not bundled as a Google font; fall back to the standard ladder
+    // so the generator never throws if it ever appears in Opal CSS.
+    KHTeka: [100, 200, 300, 400, 500, 600, 700, 800, 900],
+  };
+
+  /**
+   * Round a CSS numeric weight to the nearest weight the family actually
+   * provides. Ties (e.g. 450 between 400 and 500) round UP to the heavier
+   * weight, matching the task spec (450 -> 500 Medium).
+   */
+  function nearestAvailableWeight(family: string, weight: number): number {
+    const available = FAMILY_AVAILABLE_WEIGHTS[family] ?? [400];
+    let best = available[0]!;
+    let bestDist = Math.abs(weight - best);
+    for (const w of available) {
+      const dist = Math.abs(weight - w);
+      // `<=` makes ties resolve to the heavier (later, sorted) weight.
+      if (dist <= bestDist) {
+        best = w;
+        bestDist = dist;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Resolve the weight-specific loaded font-family name, e.g.
+   * ("HankenGrotesk", 450) -> "HankenGrotesk_500Medium".
+   */
+  function loadedFontFamily(family: string, weight: number): string {
+    const rounded = nearestAvailableWeight(family, weight);
+    const suffix = WEIGHT_SUFFIX[rounded];
+    if (!suffix) {
+      throw new Error(
+        `No weight suffix for rounded weight ${rounded} (family ${family})`,
+      );
+    }
+    return `${family}_${rounded}${suffix}`;
+  }
+
   const typographyCss = stripComments(typographyCssRaw);
+  // NOTE: `fontWeight` is intentionally NOT part of the emitted preset. The
+  // weight is fully encoded by the weight-specific `fontFamily` (e.g.
+  // "HankenGrotesk_600SemiBold"). Emitting `fontWeight` as well risks Android
+  // synthesizing an extra-bold face on top of an already-bold font file
+  // ("double weighting"), so we drop it. fontFamily is the single source of
+  // truth for weight.
   type Preset = {
     fontFamily: string;
     fontSize: number;
-    fontWeight: string;
     lineHeight: number;
     letterSpacing: number;
   };
   const typography: Record<string, Preset> = {};
+  // Track the set of weight-specific family names actually referenced, so the
+  // verification step can confirm fonts.ts loads exactly these.
+  const usedFontFamilies = new Set<string>();
   // Match `.font-<name> { ... }` class bodies. Skip selectors with extra
   // qualifiers (e.g. `.font-main-content-body strong`).
   const classRe = /\.font-([a-z0-9-]+)\s*\{([^}]*)\}/gi;
@@ -292,10 +366,15 @@ function main(): void {
     // Require the core type properties; this also skips the `strong` rule.
     if (!sizeMatch || !weightMatch || !lineMatch) continue;
     const familyVar = familyMatch ? familyMatch[1]! : "--font-hanken-grotesk";
+    const baseFamily = FONT_FAMILY_MAP[familyVar] ?? "HankenGrotesk";
+    const cssWeight = parseInt(weightMatch[1]!, 10);
+    const fontFamily = loadedFontFamily(baseFamily, cssWeight);
+    usedFontFamilies.add(fontFamily);
     typography[name] = {
-      fontFamily: FONT_FAMILY_MAP[familyVar] ?? "HankenGrotesk",
+      // Weight-specific loaded face — see the Preset note above for why we omit
+      // fontWeight here.
+      fontFamily,
       fontSize: parseFloat(sizeMatch[1]!),
-      fontWeight: weightMatch[1]!,
       lineHeight: parseFloat(lineMatch[1]!),
       letterSpacing: spacingMatch ? parseFloat(spacingMatch[1]!) : 0,
     };
@@ -399,6 +478,33 @@ function main(): void {
     );
   }
 
+  // --- Typography font-family assertions ------------------------------------
+  // Every emitted preset must reference a weight-specific loaded face, never a
+  // bare family name, and never a weight the family does not ship.
+  for (const [name, preset] of Object.entries(typography)) {
+    if (!/^[A-Za-z]+_\d{3}[A-Za-z]+$/.test(preset.fontFamily)) {
+      throw new Error(
+        `ASSERTION FAILED: typography["${name}"].fontFamily is not weight-specific: "${preset.fontFamily}"`,
+      );
+    }
+  }
+  // Spot-check the known 450->500 rounding case.
+  assertEq(
+    typography["main-content-body"]!.fontFamily,
+    "HankenGrotesk_500Medium",
+    'typography["main-content-body"].fontFamily',
+  );
+  assertEq(
+    typography["main-content-mono"]!.fontFamily,
+    "DMMono_400Regular",
+    'typography["main-content-mono"].fontFamily',
+  );
+  assertEq(
+    typography["heading-h1"]!.fontFamily,
+    "HankenGrotesk_600SemiBold",
+    'typography["heading-h1"].fontFamily',
+  );
+
   // --- Report ---------------------------------------------------------------
   console.log("Opal -> mobile theme generation complete.");
   console.log("");
@@ -423,6 +529,13 @@ function main(): void {
   console.log(
     `  background-tint-01 resolved  = ${tint01} (light) / ${darkColors["background-tint-01"]} (dark)`,
   );
+  console.log("");
+  console.log(
+    `Weight-specific font families referenced (${usedFontFamilies.size}):`,
+  );
+  for (const fam of Array.from(usedFontFamilies).sort()) {
+    console.log(`  ${fam}`);
+  }
   console.log("");
   console.log("All assertions passed.");
   console.log("");
