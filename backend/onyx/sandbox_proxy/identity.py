@@ -14,15 +14,12 @@ with no verifiable session tag fails closed rather than routing to a
 guessed session.
 """
 
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import DBSessionFactory
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
@@ -100,26 +97,9 @@ class SandboxIPLookup(Protocol):
     def stop(self) -> None: ...
 
 
-def default_session_factory(tenant_id: str) -> AbstractContextManager[Session]:
-    """tenant_id -> a tenant-scoped DB session context manager. The single
-    production factory: the gate (approval-row writes), the action matcher (app
-    + policy reads), and ``IdentityResolver`` all share it so they resolve the
-    same tenant schema."""
-    return get_session_with_tenant(tenant_id=tenant_id)
-
-
 class IdentityResolver:
-    def __init__(
-        self,
-        ip_lookup: SandboxIPLookup,
-        db_session_factory: DBSessionFactory | None = None,
-    ) -> None:
+    def __init__(self, ip_lookup: SandboxIPLookup) -> None:
         self._ip_lookup = ip_lookup
-        self._session_factory = (
-            db_session_factory
-            if db_session_factory is not None
-            else default_session_factory
-        )
 
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None:
         """Pod IP → owning user + tenant; `None` if IP unknown or sandbox has no owner.
@@ -130,7 +110,7 @@ class IdentityResolver:
         if identity is None:
             return None
 
-        with self._session_factory(identity.tenant_id) as db:
+        with get_session_with_tenant(tenant_id=identity.tenant_id) as db:
             user_id = db.scalar(
                 select(Sandbox.user_id).where(Sandbox.id == identity.sandbox_id)
             )
@@ -159,7 +139,7 @@ class IdentityResolver:
         Status is intentionally not filtered: this is the session that
         originated the egress regardless of its current status.
         """
-        with self._session_factory(tenant_id) as db:
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
             stmt = (
                 select(BuildSession.id)
                 .where(BuildSession.id == session_id)

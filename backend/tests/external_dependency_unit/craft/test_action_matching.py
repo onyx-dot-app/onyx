@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 import pytest
 from mitmproxy import http
@@ -22,7 +23,7 @@ from onyx.external_apps.matching.engine import ActionMatch
 from onyx.external_apps.matching.engine import match_action
 from onyx.external_apps.matching.engine import RequestMatch
 from onyx.external_apps.matching.request import ProxiedRequest
-from onyx.sandbox_proxy.action_matcher import DBSessionFactory
+from onyx.sandbox_proxy import action_matcher as action_matcher_mod
 from onyx.sandbox_proxy.action_matcher import ExternalAppActionMatcher
 from tests.external_dependency_unit.craft._test_helpers import make_external_app
 from tests.external_dependency_unit.craft._test_helpers import make_skill
@@ -197,9 +198,9 @@ def test_graphql_batched_sorts_strictest_first(
 # ── ExternalAppActionMatcher: full proxy-request → verdict bridge ───
 
 
-def _session_factory(db_session: Session) -> DBSessionFactory:
-    """A ``DBSessionFactory`` that hands the matcher the test's own session
-    so flushed-but-uncommitted rows are visible; never closes it."""
+def _session_factory(db_session: Session) -> Any:
+    """A ``get_session_with_tenant`` stand-in that hands the matcher the test's
+    own session so flushed-but-uncommitted rows are visible; never closes it."""
 
     @contextmanager
     def factory(tenant_id: str) -> Iterator[Session]:  # noqa: ARG001
@@ -221,6 +222,7 @@ def _slack_request(
 def test_external_app_matcher_resolves_app_and_verdict(
     db_session: Session,
     test_user: object,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     skill = make_skill(db_session)
     app = make_external_app(
@@ -232,7 +234,10 @@ def test_external_app_matcher_resolves_app_and_verdict(
     )
     _set_policy(db_session, app, "slack.messages.write", EndpointPolicy.DENY)
 
-    matcher = ExternalAppActionMatcher(db_session_factory=_session_factory(db_session))
+    monkeypatch.setattr(
+        action_matcher_mod, "get_session_with_tenant", _session_factory(db_session)
+    )
+    matcher = ExternalAppActionMatcher()
     matched = matcher.match(_slack_request(), "public")
 
     assert matched is not None
@@ -246,8 +251,12 @@ def test_external_app_matcher_resolves_app_and_verdict(
 def test_external_app_matcher_unconnected_host_returns_none(
     db_session: Session,
     test_user: object,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    matcher = ExternalAppActionMatcher(db_session_factory=_session_factory(db_session))
+    monkeypatch.setattr(
+        action_matcher_mod, "get_session_with_tenant", _session_factory(db_session)
+    )
+    matcher = ExternalAppActionMatcher()
     request = http.Request.make("GET", "https://example.com/", headers={})
     assert matcher.match(request, "public") is None
 
@@ -255,6 +264,7 @@ def test_external_app_matcher_unconnected_host_returns_none(
 def test_external_app_matcher_off_catalog_on_connected_host_returns_none(
     db_session: Session,
     test_user: object,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     skill = make_skill(db_session)
     make_external_app(
@@ -265,6 +275,9 @@ def test_external_app_matcher_off_catalog_on_connected_host_returns_none(
         upstream_url_patterns=["https://slack\\.com/api/.*"],
     )
 
-    matcher = ExternalAppActionMatcher(db_session_factory=_session_factory(db_session))
+    monkeypatch.setattr(
+        action_matcher_mod, "get_session_with_tenant", _session_factory(db_session)
+    )
+    matcher = ExternalAppActionMatcher()
     request = _slack_request(url="https://slack.com/api/some.unknownMethod")
     assert matcher.match(request, "public") is None

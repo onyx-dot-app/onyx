@@ -10,8 +10,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID
@@ -225,14 +223,3 @@ def make_request_match(
         external_app_id=external_app_id,
         payload=payload if payload is not None else {},
     )
-
-
-@contextmanager
-def _noop_session(tenant_id: str) -> Iterator[Any]:  # noqa: ARG001
-    raise AssertionError("db factory unexpectedly used")
-    yield  # pragma: no cover
-
-
-def noop_db_factory(tenant_id: str) -> Any:
-    """`DBSessionFactory` whose session never opens."""
-    return _noop_session(tenant_id)

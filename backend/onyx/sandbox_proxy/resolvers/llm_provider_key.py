@@ -13,6 +13,7 @@ from mitmproxy import http
 
 from onyx.auth.constants import API_KEY_HEADER_NAME
 from onyx.auth.constants import BEARER_PREFIX
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.users import fetch_user_by_id
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
@@ -46,7 +47,7 @@ class LLMProviderKeyResolver(CredentialResolver):
     def resolve(self, request: http.Request, ctx: InjectionContext) -> dict[str, str]:
         provider_type, header, prefix = _HOST_TO_PROVIDER[request.host.lower()]
         user_id = ctx.sandbox.user_id
-        with ctx.db_session_factory(ctx.sandbox.tenant_id) as db:
+        with get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id) as db:
             user = fetch_user_by_id(db, user_id)
             if user is None:
                 raise CredentialUnavailableError(f"sandbox user {user_id} not found")

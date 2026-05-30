@@ -273,6 +273,7 @@ def _setup(
     app.skill.name = "Google Calendar"
 
     monkeypatch.setattr(tr, "redis_shared_lock", _noop_cm)
+    monkeypatch.setattr(tr, "get_session_with_tenant", _noop_cm)
     monkeypatch.setattr(tr, "get_external_app_by_id", lambda *_a, **_k: app)
     monkeypatch.setattr(tr, "get_provider_for_app", lambda *_a, **_k: provider)
     monkeypatch.setattr(
@@ -291,8 +292,7 @@ def _setup(
 
 
 def _run() -> None:
-    # The factory: any callable returning a context manager yielding a session.
-    tr.ensure_fresh_credentials(_noop_cm, "public", 1, uuid4())
+    tr.ensure_fresh_credentials("public", 1, uuid4())
 
 
 def test_ensure_fresh_noop_when_token_fresh(monkeypatch: pytest.MonkeyPatch) -> None:
