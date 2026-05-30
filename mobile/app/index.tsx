@@ -1,12 +1,19 @@
 import { Redirect } from "expo-router";
 
-// Entry route. For now it sends users straight into the chat surface.
-//
-// Auth gating (see doc 07) will replace this: the AuthProvider decides whether
-// to redirect into the (auth) group (logged out) or the (app) group (has a PAT).
+import { useAuth } from "@/auth";
+
+// Entry route = the auth gate. AuthProvider resolves the JWT (from a cold-start
+// OAuth deep link or SecureStore) and we redirect accordingly.
 export default function Index() {
-  // typedRoutes is enabled (app.json experiments) but the .expo/types route
-  // map isn't generated offline, so the Href union is unknown here — cast to
-  // keep the typecheck green. Remove the cast once route types are generated.
-  return <Redirect href={"/(app)/(chat)" as never} />;
+  const { status } = useAuth();
+
+  // Still resolving — the native splash is up; render nothing.
+  if (status === "loading") return null;
+
+  // typedRoutes is on but .expo/types isn't generated offline, so cast the Href.
+  return (
+    <Redirect
+      href={(status === "signedIn" ? "/(app)/(chat)" : "/(auth)/login") as never}
+    />
+  );
 }

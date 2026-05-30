@@ -7,6 +7,8 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { createMMKV } from "react-native-mmkv";
 import type { ClientConfig } from "@/lib/api";
 import { appConfig } from "@/lib/config";
+import { fetch as expoFetch } from "expo/fetch";
+import { getAuthHeaders } from "@/auth";
 
 // ── QueryClient ────────────────────────────────────────────────────────────────
 export const queryClient = new QueryClient({
@@ -21,11 +23,12 @@ export const queryClient = new QueryClient({
 
 // ── Default ClientConfig ───────────────────────────────────────────────────────
 // The transport seam consumed by errorHandlingFetcher in every query/mutation.
-// For now auth headers are empty; doc 07 swaps getAuthHeaders to inject a Bearer PAT.
+// Auth: getAuthHeaders (from @/auth) injects the Bearer JWT from secure-store.
 export const clientConfig: ClientConfig = {
   baseUrl: appConfig.apiBaseUrl,
-  fetchImpl: fetch, // global fetch for now; doc 07 may swap to expo/fetch for streaming
-  getAuthHeaders: async () => ({}), // TODO(07): inject `Authorization: Bearer onyx_pat_...`
+  // expo/fetch (not global RN fetch) — only it exposes a real streaming response.body.
+  fetchImpl: expoFetch as unknown as typeof fetch,
+  getAuthHeaders, // reads the Bearer JWT from expo-secure-store (doc 07 / @/auth)
 };
 
 // ── React Query persister (MMKV-backed, synchronous) ────────────────────────────

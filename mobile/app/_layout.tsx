@@ -13,20 +13,20 @@ import * as SplashScreen from "expo-splash-screen";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 import { useAppFonts } from "@/theme/fonts";
 import { queryClient, persister, persistMaxAge, persistBuster } from "@/query/client";
+import { AuthProvider } from "@/auth";
 
 // Keep the native splash up until the Opal fonts are loaded so text never
 // flashes in the system fallback face.
 SplashScreen.preventAutoHideAsync();
 
-// Root provider tree (docs 04 + 06). Order: GestureHandlerRootView >
-// SafeAreaProvider > ThemeProvider > PersistQueryClientProvider >
+// Root provider tree (docs 04 + 06 + 07). Order: GestureHandlerRootView >
+// SafeAreaProvider > ThemeProvider > PersistQueryClientProvider > AuthProvider >
 // BottomSheetModalProvider > <Stack>, with <PortalHost/> inside ThemeProvider so
 // @rn-primitives overlays inherit theme vars. The Zustand chat store hydrates
-// synchronously from MMKV on import, so it needs no provider/gate.
+// synchronously from MMKV on import (no gate). AuthProvider (doc 07) holds the JWT
+// and drives the (auth) vs (app) redirect.
 //
-// Still-placeholder providers (wired when their deps land):
-//   - 07: AuthProvider (PAT/session; drives the (auth) vs (app) redirect)
-//   - 08: Sentry.wrap around the default export
+// Still-placeholder: 08 — Sentry.wrap around the default export.
 export default function RootLayout() {
   const fontsLoaded = useAppFonts();
 
@@ -46,17 +46,17 @@ export default function RootLayout() {
             client={queryClient}
             persistOptions={{ persister, maxAge: persistMaxAge, buster: persistBuster }}
           >
-            {/* TODO(07): <AuthProvider> — drives (auth) vs (app) redirect */}
-            <BottomSheetModalProvider>
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="(auth)" />
-                <Stack.Screen name="(app)" />
-                <Stack.Screen name="(modals)" options={{ presentation: "modal" }} />
-                <Stack.Screen name="+not-found" />
-              </Stack>
-            </BottomSheetModalProvider>
-            {/* TODO(07): </AuthProvider> */}
-            <PortalHost />
+            <AuthProvider>
+              <BottomSheetModalProvider>
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="(auth)" />
+                  <Stack.Screen name="(app)" />
+                  <Stack.Screen name="(modals)" options={{ presentation: "modal" }} />
+                  <Stack.Screen name="+not-found" />
+                </Stack>
+              </BottomSheetModalProvider>
+              <PortalHost />
+            </AuthProvider>
           </PersistQueryClientProvider>
         </ThemeProvider>
       </SafeAreaProvider>
