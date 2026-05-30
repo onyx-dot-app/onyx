@@ -115,7 +115,9 @@ def inspect(path: Path) -> DocStats:
 # --------------------------------------------------------------------------- #
 # Comparison
 # --------------------------------------------------------------------------- #
-def _paragraph_alignment_score(a: list[tuple[str, str]], b: list[tuple[str, str]]) -> float:
+def _paragraph_alignment_score(
+    a: list[tuple[str, str]], b: list[tuple[str, str]]
+) -> float:
     """Fraction of position-aligned paragraphs whose text AND style both match."""
     if not a and not b:
         return 1.0
@@ -131,15 +133,27 @@ def _text_alignment_score(a: list[tuple[str, str]], b: list[tuple[str, str]]) ->
     return matches / max(len(a), len(b))
 
 
-def compare(reference: DocStats, candidate: DocStats, *, max_mismatches: int = 25) -> None:
+def compare(
+    reference: DocStats, candidate: DocStats, *, max_mismatches: int = 25
+) -> None:
     """Print a human-readable structural diff of candidate vs reference."""
-    print(f"\n=== COMPARE ===\n  reference (target): {reference.path}\n  candidate (ours):   {candidate.path}\n")
+    print(
+        f"\n=== COMPARE ===\n  reference (target): {reference.path}\n  candidate (ours):   {candidate.path}\n"
+    )
 
-    print("paragraphs (non-empty):"
-          f" reference={len(reference.paragraphs)} candidate={len(candidate.paragraphs)}")
-    print(f"tables:           reference={reference.num_tables} candidate={candidate.num_tables}")
-    print(f"embedded images:  reference={reference.num_embedded_images} candidate={candidate.num_embedded_images}")
-    print(f"alt-text images:  reference={reference.num_alt_text_images} candidate={candidate.num_alt_text_images}")
+    print(
+        "paragraphs (non-empty):"
+        f" reference={len(reference.paragraphs)} candidate={len(candidate.paragraphs)}"
+    )
+    print(
+        f"tables:           reference={reference.num_tables} candidate={candidate.num_tables}"
+    )
+    print(
+        f"embedded images:  reference={reference.num_embedded_images} candidate={candidate.num_embedded_images}"
+    )
+    print(
+        f"alt-text images:  reference={reference.num_alt_text_images} candidate={candidate.num_alt_text_images}"
+    )
 
     print("\nparagraph-style histogram:")
     all_styles = sorted(set(reference.style_histogram) | set(candidate.style_histogram))
@@ -156,14 +170,20 @@ def compare(reference: DocStats, candidate: DocStats, *, max_mismatches: int = 2
     print(f"  text alignment (text only):     {text_score:6.1%}")
     print(f"  full alignment (text + style):  {style_score:6.1%}")
 
-    print(f"\nfirst {max_mismatches} aligned paragraphs that differ (style and/or text):")
+    print(
+        f"\nfirst {max_mismatches} aligned paragraphs that differ (style and/or text):"
+    )
     shown = 0
-    for index, (ref_p, cand_p) in enumerate(zip(reference.paragraphs, candidate.paragraphs)):
+    for index, (ref_p, cand_p) in enumerate(
+        zip(reference.paragraphs, candidate.paragraphs)
+    ):
         if ref_p == cand_p:
             continue
         ref_style, ref_text = ref_p
         cand_style, cand_text = cand_p
-        style_note = "" if ref_style == cand_style else f" [{cand_style} != {ref_style}]"
+        style_note = (
+            "" if ref_style == cand_style else f" [{cand_style} != {ref_style}]"
+        )
         print(f"  #{index}{style_note}")
         if ref_text != cand_text:
             print(f"     ref:  {ref_text[:90]}")
@@ -191,10 +211,14 @@ def _cmd_generate(md_path: Path, outdir: Path) -> tuple[Path, Path | None]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    gen = sub.add_parser("generate", help="markdown -> .docx (mistune, + pypandoc if available)")
+    gen = sub.add_parser(
+        "generate", help="markdown -> .docx (mistune, + pypandoc if available)"
+    )
     gen.add_argument("markdown", type=Path)
     gen.add_argument("--outdir", type=Path, default=Path.cwd())
 
@@ -202,7 +226,9 @@ def main(argv: list[str] | None = None) -> int:
     cmp_.add_argument("reference", type=Path, help="the target output (e.g. pypandoc)")
     cmp_.add_argument("candidate", type=Path, help="our output (e.g. mistune)")
 
-    all_ = sub.add_parser("all", help="generate from markdown, then compare mistune vs pypandoc")
+    all_ = sub.add_parser(
+        "all", help="generate from markdown, then compare mistune vs pypandoc"
+    )
     all_.add_argument("markdown", type=Path)
     all_.add_argument("--outdir", type=Path, default=Path.cwd())
 
@@ -219,7 +245,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "all":
         mistune_out, pypandoc_out = _cmd_generate(args.markdown, args.outdir)
         if pypandoc_out is None:
-            print("cannot compare without the pypandoc reference output.", file=sys.stderr)
+            print(
+                "cannot compare without the pypandoc reference output.", file=sys.stderr
+            )
             return 1
         compare(inspect(pypandoc_out), inspect(mistune_out))
         return 0

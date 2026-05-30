@@ -191,9 +191,7 @@ def _apply_pandoc_styles(document: DocxDocument) -> None:
 
     ensure(_STYLE_FOOTNOTE_TEXT, "Normal")
     if _STYLE_FOOTNOTE_REFERENCE not in existing:
-        reference = styles.add_style(
-            _STYLE_FOOTNOTE_REFERENCE, WD_STYLE_TYPE.CHARACTER
-        )
+        reference = styles.add_style(_STYLE_FOOTNOTE_REFERENCE, WD_STYLE_TYPE.CHARACTER)
         reference.font.superscript = True
 
     if _STYLE_HYPERLINK not in existing:
@@ -446,7 +444,9 @@ def _render_list(
         # Ordered lists get their own numbering instance so each restarts at its
         # start value; bullets can rely on the built-in style.
         item_style = list_style
-        num_id = _create_list_numbering(document, list_style, start) if ordered else None
+        num_id = (
+            _create_list_numbering(document, list_style, start) if ordered else None
+        )
 
     for item in node.get("children", []):
         if item.get("type") != "list_item":
@@ -702,11 +702,17 @@ def _add_runs(
             )
         elif node_type == "emphasis":
             _add_runs(
-                paragraph, node.get("children", []), replace(fmt, italic=True), footnotes
+                paragraph,
+                node.get("children", []),
+                replace(fmt, italic=True),
+                footnotes,
             )
         elif node_type == "strikethrough":
             _add_runs(
-                paragraph, node.get("children", []), replace(fmt, strike=True), footnotes
+                paragraph,
+                node.get("children", []),
+                replace(fmt, strike=True),
+                footnotes,
             )
         elif node_type == "codespan":
             _styled_run(paragraph, str(node.get("raw", "")), replace(fmt, code=True))

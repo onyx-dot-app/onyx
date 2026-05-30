@@ -206,14 +206,23 @@ def test_table_cell_alignment_follows_column_spec() -> None:
     for row in doc.tables[0].rows:
         row_alignments.append(
             [
-                None if cell.paragraphs[0].alignment is None else cell.paragraphs[0].alignment
+                None
+                if cell.paragraphs[0].alignment is None
+                else cell.paragraphs[0].alignment
                 for cell in row.cells
             ]
         )
     # WD_ALIGN_PARAGRAPH: left default (None), CENTER == 1, RIGHT == 2.
-    assert all(alignments[1] == WD_ALIGN_PARAGRAPH.CENTER for alignments in row_alignments)
-    assert all(alignments[2] == WD_ALIGN_PARAGRAPH.RIGHT for alignments in row_alignments)
-    assert all(alignments[0] in (None, WD_ALIGN_PARAGRAPH.LEFT) for alignments in row_alignments)
+    assert all(
+        alignments[1] == WD_ALIGN_PARAGRAPH.CENTER for alignments in row_alignments
+    )
+    assert all(
+        alignments[2] == WD_ALIGN_PARAGRAPH.RIGHT for alignments in row_alignments
+    )
+    assert all(
+        alignments[0] in (None, WD_ALIGN_PARAGRAPH.LEFT)
+        for alignments in row_alignments
+    )
 
 
 def test_link_becomes_real_hyperlink() -> None:
@@ -226,9 +235,7 @@ def test_link_becomes_real_hyperlink() -> None:
 
 def _hyperlink_targets(doc: DocxDocument) -> list[str]:
     return [
-        rel.target_ref
-        for rel in doc.part.rels.values()
-        if "hyperlink" in rel.reltype
+        rel.target_ref for rel in doc.part.rels.values() if "hyperlink" in rel.reltype
     ]
 
 
