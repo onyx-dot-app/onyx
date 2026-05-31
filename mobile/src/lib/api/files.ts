@@ -3,6 +3,8 @@
 // `getUserFileStatuses` (web/src/app/app/projects/projectsService.ts) against the
 // same backend routes — but talks to the backend directly (no `/api` prefix).
 
+import * as LegacyFileSystem from "expo-file-system/legacy";
+
 import { errorHandlingFetcher } from "./fetcher";
 import { FetchError } from "./errors";
 import type { ClientConfig } from "./config";
@@ -29,47 +31,59 @@ export function chatFileUrl(baseUrl: string, fileId: string): string {
  * and return the categorized result. Message-only files are uploaded with no
  * `project_id` (web parity).
  *
- * Uses the RN global `fetch` rather than `config.fetchImpl` (expo/fetch): the
- * global fetch is the reliable path for multipart `{ uri, name, type }` file
- * parts on React Native. `Content-Type` is intentionally NOT set so the runtime
- * fills in the `multipart/form-data; boundary=…` header itself.
+ * Uses expo-file-system's native `uploadAsync` (MULTIPART) rather than
+ * `fetch` + a hand-built FormData part. On Expo SDK 56 / RN 0.85 the WHATWG
+ * `fetch` rejects the React-Native-style `{ uri, name, type }` FormData part
+ * with "Unsupported FormDataPart implementation", so the upload never reached
+ * the backend (no user_file record was ever created). `uploadAsync` reads the
+ * `file://` URI and builds the multipart body natively, which works reliably.
+ *
+ * It uploads one file per request; callers (useComposerAttachments.uploadOne)
+ * already upload a single file at a time, so we loop and merge results to keep
+ * the array signature.
  */
 export async function uploadChatFiles(
   files: UploadableFile[],
   config: ClientConfig,
 ): Promise<CategorizedFiles> {
-  const formData = new FormData();
-  for (const file of files) {
-    // RN FormData accepts a `{ uri, name, type }` object for file parts; the
-    // typed DOM FormData signature doesn't know about it, hence the cast.
-    formData.append("files", {
-      uri: file.uri,
-      name: file.name,
-      type: file.mimeType ?? "application/octet-stream",
-    } as unknown as Blob);
-  }
-
-  const headers = new Headers();
+  const headers: Record<string, string> = {};
   new Headers(await config.getAuthHeaders()).forEach((value, key) => {
-    headers.set(key, value);
+    headers[key] = value;
   });
 
-  const response = await fetch(`${config.baseUrl}${SWR_KEYS.chatFileUpload}`, {
-    method: "POST",
-    headers,
-    body: formData,
-  });
+  const url = `${config.baseUrl}${SWR_KEYS.chatFileUpload}`;
+  const merged: CategorizedFiles = { user_files: [], rejected_files: [] };
 
-  if (!response.ok) {
-    const info = await response.json().catch(() => ({}));
-    throw new FetchError(
-      `Upload files failed with status ${response.status}`,
-      response.status,
-      info,
-    );
+  for (const file of files) {
+    const response = await LegacyFileSystem.uploadAsync(url, file.uri, {
+      httpMethod: "POST",
+      uploadType: LegacyFileSystem.FileSystemUploadType.MULTIPART,
+      // Backend reads `files: list[UploadFile]` (projects/api.py upload_user_files).
+      fieldName: "files",
+      mimeType: file.mimeType,
+      headers,
+    });
+
+    if (response.status < 200 || response.status >= 300) {
+      let info: unknown = {};
+      try {
+        info = JSON.parse(response.body);
+      } catch {
+        info = response.body;
+      }
+      throw new FetchError(
+        `Upload files failed with status ${response.status}`,
+        response.status,
+        info,
+      );
+    }
+
+    const parsed = JSON.parse(response.body) as CategorizedFiles;
+    if (parsed.user_files) merged.user_files.push(...parsed.user_files);
+    if (parsed.rejected_files) merged.rejected_files.push(...parsed.rejected_files);
   }
 
-  return (await response.json()) as CategorizedFiles;
+  return merged;
 }
 
 /**
