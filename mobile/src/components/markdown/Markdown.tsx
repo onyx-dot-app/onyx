@@ -1,5 +1,10 @@
 import { useMemo } from "react";
-import { Linking, Platform, Text as RNText } from "react-native";
+import {
+  Linking,
+  StyleSheet,
+  Text as RNText,
+  type TextStyle,
+} from "react-native";
 import RNMarkdown, {
   type ASTNode,
   type RenderRules,
@@ -61,38 +66,51 @@ function trimTrailingNewline(content: string): string {
 const EMOJI_RUN =
   /([\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]+)/gu;
 
-/**
- * iOS pins each text run to the font on the Text; the brand font HankenGrotesk
- * has no emoji glyphs (and a custom `.notdef` "?" box that blocks the system
- * emoji fallback), so emoji must be rendered in iOS's dedicated emoji family.
- * Android falls back to its color-emoji font per-glyph, so no override needed.
- */
-const EMOJI_FONT_STYLE =
-  Platform.OS === "ios" ? { fontFamily: "Apple Color Emoji" } : undefined;
+/** Drop `fontFamily` from a style so the run uses the system font. */
+function withoutFontFamily(style: unknown): TextStyle {
+  const rest = { ...((StyleSheet.flatten(style as TextStyle) ?? {}) as TextStyle) };
+  delete rest.fontFamily;
+  return rest;
+}
 
 /**
- * Render a markdown text node, rendering any emoji runs in the emoji font so
- * they show as real emoji instead of HankenGrotesk's tofu "?" box. Non-emoji
- * text keeps the inherited Opal typography/color.
+ * Render a markdown text node so emoji show as real color emoji.
+ *
+ * iOS pins a text run to the run's font, and the brand font HankenGrotesk has no
+ * emoji glyphs (its `.notdef` "?" box even blocks the system emoji fallback). A
+ * dedicated emoji family name isn't reliably resolvable in RN either. The robust
+ * fix: render emoji runs with NO custom font in their ancestor chain so they use
+ * the SYSTEM font (which renders color emoji), while keeping HankenGrotesk on the
+ * non-emoji runs only. The outer wrapper therefore drops `fontFamily`; non-emoji
+ * runs re-apply it; emoji runs are bare strings that inherit the (font-less)
+ * wrapper. The matching `textgroup` override drops `fontFamily` one level up so
+ * nothing in the chain re-imposes the brand font on the emoji runs.
  */
 function renderTextWithEmoji(
   key: string,
   text: string,
-  inheritedStyle: object,
+  inheritedStyle: unknown,
 ): React.ReactNode {
+  const flat = (StyleSheet.flatten(inheritedStyle as TextStyle) ??
+    {}) as TextStyle;
   const segments = text.split(EMOJI_RUN);
   if (segments.length === 1) {
     return (
-      <RNText key={key} style={inheritedStyle}>
+      <RNText key={key} style={flat}>
         {text}
       </RNText>
     );
   }
+  const fontFamily = flat.fontFamily;
+  const noFamily = withoutFontFamily(flat);
   return (
-    <RNText key={key} style={inheritedStyle}>
+    <RNText key={key} style={noFamily}>
       {segments.map((seg, i) =>
         seg === "" ? null : i % 2 === 1 ? (
-          <RNText key={i} style={EMOJI_FONT_STYLE}>
+          // emoji run → bare string, inherits the font-less wrapper → system font
+          seg
+        ) : fontFamily ? (
+          <RNText key={i} style={{ fontFamily }}>
             {seg}
           </RNText>
         ) : (
@@ -336,8 +354,14 @@ function Markdown({
       code_block: (node) => (
         <CodeBlock key={node.key} code={trimTrailingNewline(node.content)} />
       ),
-      // Render emoji runs in the emoji font (HankenGrotesk has no emoji glyphs
-      // and would render tofu "?" boxes). Non-emoji text keeps inherited styles.
+      // Emoji handling (see renderTextWithEmoji): emoji must render in the
+      // system font, so we drop the brand `fontFamily` at BOTH the textgroup
+      // (one level up) and the text node, re-applying it only to non-emoji runs.
+      textgroup: (node, children, _parent, _styles, inheritedStyles = {}) => (
+        <RNText key={node.key} style={withoutFontFamily(inheritedStyles)}>
+          {children}
+        </RNText>
+      ),
       text: (node, _children, _parent, _styles, inheritedStyles = {}) =>
         renderTextWithEmoji(node.key, node.content, inheritedStyles),
       ...(hasCitationData
