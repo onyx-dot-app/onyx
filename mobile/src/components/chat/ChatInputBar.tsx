@@ -16,7 +16,7 @@ import {
   useChatSessionStore,
   useCurrentPersonaId,
 } from "@/state/chatSessionStore";
-import { usePersonas } from "@/query/personas";
+import { usePersonas, resolveAgent } from "@/query/personas";
 import { useForcedTools } from "@/state/useForcedTools";
 import { ActionsPopover } from "@/components/chat/actions/ActionsPopover";
 import { ForcedToolChip } from "@/components/chat/actions/ForcedToolChip";
@@ -57,7 +57,9 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
   // its tools. forcedToolIds is ephemeral UI state for the tool forced next.
   const personaId = useCurrentPersonaId();
   const { data: personas } = usePersonas();
-  const agent = personas?.find((p) => p.id === personaId);
+  // Fall back to the default assistant on a fresh/draft chat (no session persona
+  // yet) so the actions trigger appears immediately — mirrors the send path.
+  const agent = resolveAgent(personas, personaId);
   const forcedToolIds = useForcedTools((s) => s.forcedToolIds);
 
   const {

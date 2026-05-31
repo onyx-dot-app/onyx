@@ -34,7 +34,7 @@ import {
 import type { Packet, FileDescriptor } from "@/lib/types";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useForcedTools } from "@/state/useForcedTools";
-import { usePersonas } from "@/query/personas";
+import { usePersonas, resolveAgent } from "@/query/personas";
 import { useAgentPreferences } from "@/query/agentPreferences";
 import { useAvailableSourceStrings } from "@/query/connectors";
 import { readEnabledSources } from "@/lib/sources/useSourcePreferences";
@@ -353,13 +353,15 @@ export function useSendMessage(
       // internal_search_filters = filters built from the enabled source set.
       const personaId =
         store.getState().sessions.get(activeSessionId)?.personaId;
-      const agent = personasRef.current?.find((p) => p.id === personaId);
+      // Resolve with the default-assistant fallback (matches ActionsPopover), so
+      // the send respects the tool prefs of the agent the user actually sees.
+      const agent = resolveAgent(personasRef.current, personaId);
       const disabledToolIds =
-        personaId !== undefined
-          ? (agentPrefsRef.current?.[personaId]?.disabled_tool_ids ?? [])
+        agent !== undefined
+          ? (agentPrefsRef.current?.[agent.id]?.disabled_tool_ids ?? [])
           : [];
-      // agent unresolved (personas not yet loaded / personaId not found) → omit
-      // allowed_tool_ids; backend defaults to all tools (no restriction). Intentional.
+      // agent unresolved (personas not yet loaded) → omit allowed_tool_ids;
+      // backend defaults to all tools (no restriction). Intentional.
       const allowedToolIds = agent
         ? agent.tools
             .filter((t) => !disabledToolIds.includes(t.id))
