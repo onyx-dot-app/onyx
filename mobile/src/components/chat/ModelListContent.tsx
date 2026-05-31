@@ -146,7 +146,11 @@ export function ModelListContent({
           No models found
         </Text>
       ) : (
-        <ScrollComponent style={{ maxHeight }} showsVerticalScrollIndicator={false}>
+        <ScrollComponent
+          style={{ maxHeight }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {groups.length === 1
             ? groups[0]?.options.map(renderRow)
             : groups.map((g) => {

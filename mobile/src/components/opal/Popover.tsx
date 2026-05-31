@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { StyleSheet } from "react-native";
 import * as PopoverPrimitive from "@rn-primitives/popover";
 
 import { cn } from "@/lib/cn";
@@ -27,6 +28,13 @@ import { cn } from "@/lib/cn";
 
 type PopoverRootProps = React.ComponentProps<typeof PopoverPrimitive.Root>;
 
+/**
+ * Imperative handle for the trigger — `open()` / `close()`. Use this as the type
+ * for a `useRef` when a caller needs to dismiss the popover programmatically
+ * (e.g. after a selection) without an outside press.
+ */
+type PopoverTriggerRef = PopoverPrimitive.TriggerRef;
+
 interface PopoverContentProps
   extends Omit<React.ComponentProps<typeof PopoverPrimitive.Content>, "children"> {
   /** Extra classes merged onto the content card. */
@@ -49,7 +57,14 @@ function PopoverContent({
 }: PopoverContentProps) {
   return (
     <PopoverPrimitive.Portal>
-      <PopoverPrimitive.Overlay style={{ flex: 1 }}>
+      {/* Full-screen absolute fill — NOT flex:1. <PortalHost/> renders into a bare
+          Fragment in normal layout flow and the rn-primitives Overlay applies no
+          positioning of its own, so flex:1 would make the Overlay a flex sibling of
+          the app content (splitting the screen) instead of a screen-covering backdrop.
+          The Content positions absolutely against this Overlay using screen
+          coordinates, so the Overlay must sit at origin (0,0) and cover the screen
+          (matches the opal Modal overlay, which uses absolute inset-0). */}
+      <PopoverPrimitive.Overlay style={StyleSheet.absoluteFill}>
         <PopoverPrimitive.Content
           sideOffset={sideOffset}
           {...rest}
@@ -85,4 +100,5 @@ export {
   PopoverPrimitiveExport as PopoverPrimitive,
   type PopoverContentProps,
   type PopoverRootProps,
+  type PopoverTriggerRef,
 };
