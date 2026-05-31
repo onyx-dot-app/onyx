@@ -52,14 +52,13 @@ function trimTrailingNewline(content: string): string {
   return content;
 }
 
-// EMOJI NOTE: the chat answer renders in the SYSTEM font (no `fontFamily` on the
-// text styles below — only `fontWeight`). The Opal brand font HankenGrotesk has
-// no emoji glyphs and ships a `.notdef` "?" box that wins over iOS's per-glyph
-// emoji fallback, so any emoji the model emits rendered as tofu. iOS won't
-// resolve a named emoji font in RN, and the markdown library applies the body/
-// heading font on a Text ancestor of every run, so emoji can only render when no
-// custom font is in the chain at all. Using the system font keeps emoji working
-// while preserving size + weight; UI chrome elsewhere still uses HankenGrotesk.
+// EMOJI ON iOS 26 SIMULATOR: model-emitted emoji render as "?" boxes here. This
+// is a React Native bug specific to the iOS 26 simulator's CoreText path
+// (facebook/react-native#56183) — it affects ALL fonts (system included) and
+// both architectures, and Safari on the same simulator renders emoji fine. It is
+// NOT caused by this renderer or the brand font, and there is no JS workaround;
+// it should render on a real device / non-iOS-26 simulator. So we keep the Opal
+// brand font here and don't contort the styles around it.
 
 /**
  * Pull the language label off a fence node's info string. markdown-it stores
@@ -83,9 +82,9 @@ function extractLanguage(node: ASTNode): string | undefined {
 /**
  * Chat markdown renderer. Wraps `react-native-markdown-display`'s `<Markdown>`
  * and derives its `styles` + `rules` maps from the Opal token system:
- *   - headings -> `heading-h1..h3` typography presets
+ *   - headings -> `heading-h1..h3` typography presets (resized for chat)
  *   - body / paragraphs -> `main-content-body`
- *   - strong / em -> body preset with bold weight / italic style
+ *   - strong / em -> emphasis preset / italic style
  *   - links -> `action-text-link-05` token color, underlined
  *   - inline code -> `main-content-mono` mono preset on a tinted surface
  *   - blockquotes / lists -> body preset with token borders / colors
@@ -114,23 +113,18 @@ function Markdown({
   // `body` preset propagates to paragraphs / list items / etc.
   const styles = useMemo(
     () => ({
-      // Base text color + typography for the whole document. NB: NO `fontFamily`
-      // (system font) so emoji render — see EMOJI NOTE above. `fontFamily:
-      // undefined` clears the brand family the preset spread would set; weight is
-      // carried explicitly via `fontWeight`.
+      // Base text color + typography for the whole document.
       body: {
         ...typography["main-content-body"],
-        fontFamily: undefined,
-        fontWeight: "500" as const,
         color: bodyColor,
       },
 
-      // Headings — chat-appropriate sizes (the raw Opal `heading-h1` is a 48px
-      // hero size). System font (no fontFamily) + explicit weight so emoji render.
+      // Headings — keep the Opal heading font but use chat-appropriate sizes.
+      // The raw Opal `heading-h1` is a 48px hero size (with a tight -0.48
+      // letterSpacing tuned for that size), far too large in a chat answer, so
+      // size + letterSpacing are overridden.
       heading1: {
         ...typography["heading-h1"],
-        fontFamily: undefined,
-        fontWeight: "600" as const,
         fontSize: 22,
         lineHeight: 30,
         letterSpacing: -0.2,
@@ -140,8 +134,6 @@ function Markdown({
       },
       heading2: {
         ...typography["heading-h2"],
-        fontFamily: undefined,
-        fontWeight: "600" as const,
         fontSize: 19,
         lineHeight: 27,
         letterSpacing: -0.1,
@@ -151,8 +143,6 @@ function Markdown({
       },
       heading3: {
         ...typography["heading-h3"],
-        fontFamily: undefined,
-        fontWeight: "600" as const,
         fontSize: 17,
         lineHeight: 25,
         letterSpacing: 0,
@@ -163,8 +153,6 @@ function Markdown({
       // h4-h6 have no dedicated Opal preset; step down from h3.
       heading4: {
         ...typography["heading-h3"],
-        fontFamily: undefined,
-        fontWeight: "600" as const,
         fontSize: 16,
         lineHeight: 24,
         letterSpacing: 0,
@@ -174,8 +162,6 @@ function Markdown({
       },
       heading5: {
         ...typography["heading-h3-muted"],
-        fontFamily: undefined,
-        fontWeight: "500" as const,
         fontSize: 15,
         lineHeight: 22,
         color: colors["text-04"],
@@ -184,8 +170,6 @@ function Markdown({
       },
       heading6: {
         ...typography["heading-h3-muted"],
-        fontFamily: undefined,
-        fontWeight: "500" as const,
         fontSize: 14,
         lineHeight: 20,
         color: colors["text-03"],
@@ -204,10 +188,9 @@ function Markdown({
         width: "100%" as const,
       },
 
-      // Emphasis — bold weight only (system font, inherits body size); no
-      // fontFamily so emoji inside bold text still render.
+      // Emphasis.
       strong: {
-        fontWeight: "700" as const,
+        ...typography["main-content-emphasis"],
       },
       em: {
         fontStyle: "italic" as const,
@@ -274,7 +257,7 @@ function Markdown({
       th: {
         flex: 1,
         padding: 6,
-        fontWeight: "700" as const,
+        ...typography["main-content-emphasis"],
         color: colors["text-05"],
       },
       tr: {
