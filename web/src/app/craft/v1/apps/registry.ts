@@ -44,6 +44,9 @@ export interface EndpointDescriptor {
   action_id: string;
   normalised_name: string;
   description: string;
+  // Policy a newly-created app seeds this action's selector with (admin can
+  // override). Mirrors `EndpointSpec.default_policy` on the backend.
+  default_policy: EndpointPolicy;
 }
 
 export interface ActionPolicyView {

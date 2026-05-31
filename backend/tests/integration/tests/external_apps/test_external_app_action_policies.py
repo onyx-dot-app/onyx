@@ -5,7 +5,8 @@ external apps, exercised end-to-end through the ``/admin/apps`` API via
 Contract under test (observed through the admin response's ``actions`` view):
 
 - a created built-in app returns its full action catalog — supplied policies
-  honoured, everything else ``ASK``;
+  honoured, everything else falling back to each action's declared
+  ``default_policy`` (Slack reads default to ``ALWAYS``, the write to ``ASK``);
 - a supplied map merges over the stored set: named actions update, unmentioned
   ones keep their value, and the full action set is unchanged;
 - an omitted map (``None`` — e.g. an enable toggle / rename) preserves choices;
@@ -82,16 +83,17 @@ def test_create_returns_full_catalog_with_overrides(
     )
 
     states = _states(created)
-    # Overrides honoured; unset catalog actions come back as ASK.
+    # Overrides honoured; unset catalog actions fall back to their declared
+    # default (Slack reads default to ALWAYS).
     assert states[SlackAction.MESSAGES_READ.value] == EndpointPolicy.ALWAYS
     assert states[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.DENY
-    assert states[SlackAction.CHANNELS_READ.value] == EndpointPolicy.ASK
-    assert states[SlackAction.USERS_READ.value] == EndpointPolicy.ASK
+    assert states[SlackAction.CHANNELS_READ.value] == EndpointPolicy.ALWAYS
+    assert states[SlackAction.USERS_READ.value] == EndpointPolicy.ALWAYS
     # The same set persists across a fresh read.
     assert _fetch_states(admin_user, created.id) == states
 
 
-def test_create_without_policies_yields_all_ask(
+def test_create_without_policies_yields_action_defaults(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
@@ -99,7 +101,13 @@ def test_create_without_policies_yields_all_ask(
 
     states = _states(created)
     assert states  # the catalog is non-empty
-    assert all(state == EndpointPolicy.ASK for state in states.values())
+    # No supplied policies → each action falls back to its declared default:
+    # reads auto-approve (ALWAYS), the write requires approval (ASK).
+    assert states[SlackAction.CHANNELS_READ.value] == EndpointPolicy.ALWAYS
+    assert states[SlackAction.MESSAGES_READ.value] == EndpointPolicy.ALWAYS
+    assert states[SlackAction.USERS_READ.value] == EndpointPolicy.ALWAYS
+    assert states[SlackAction.SEARCH_READ.value] == EndpointPolicy.ALWAYS
+    assert states[SlackAction.MESSAGES_WRITE.value] == EndpointPolicy.ASK
     assert _fetch_states(admin_user, created.id) == states
 
 
