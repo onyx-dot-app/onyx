@@ -6,6 +6,7 @@ import { ChatHeader } from "@/components/chat/ChatHeader";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
 import { MessageThread } from "@/components/chat/MessageThread";
 import { useChatSessionStore } from "@/state/chatSessionStore";
+import { useResetForcedToolsOnSessionChange } from "@/state/useForcedTools";
 import { useHydrateCurrentSession } from "@/chat/useHydrateCurrentSession";
 
 // The single chat screen. It renders whatever session is current — a brand-new
@@ -18,6 +19,9 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const currentSessionId = useChatSessionStore((s) => s.currentSessionId);
   const { isLoading, isError, retry } = useHydrateCurrentSession();
+
+  // Clear any one-shot forced tool when the session or agent changes (web parity).
+  useResetForcedToolsOnSessionChange();
 
   return (
     <View className="flex-1 bg-background-neutral-00">
