@@ -755,6 +755,15 @@ export const useCurrentChatState = () =>
     return currentSession?.chatState || "input";
   });
 
+export const useCurrentPersonaId = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.personaId;
+  });
+
 export const useUncaughtError = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;

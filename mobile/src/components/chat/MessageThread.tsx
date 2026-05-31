@@ -1,49 +1,27 @@
-import { memo, useEffect, useRef } from "react";
-import { ActivityIndicator, ScrollView, View } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  ScrollView,
+  View,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
+} from "react-native";
 
 import { Text } from "@/components/opal";
 import { MessageRow } from "@/components/lists/MessageRow";
-import { useToken } from "@/theme/ThemeProvider";
+import { AgentMessage } from "@/components/message/AgentMessage";
+import { CitationSheetProvider } from "@/components/message/sources/CitationSheet";
+import type { FullChatState } from "@/components/message/interfaces";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
+  useCurrentPersonaId,
 } from "@/state/chatSessionStore";
-import type { Message } from "@/lib/types";
+import { usePersonas } from "@/query/personas";
+import type { Message, MinimalAgent } from "@/lib/types";
 
-// Renders the current session's message chain (user bubbles + streaming assistant
-// markdown), auto-scrolling to the newest content. Reads the store's live message
-// tree, so it updates as packets stream in via useSendMessage.
-
-// Left-aligned assistant message: markdown body, or a "thinking" spinner while the
-// node is still empty and the stream is in flight.
-const AssistantMessage = memo(function AssistantMessage({
-  text,
-  pending,
-}: {
-  text: string;
-  pending: boolean;
-}) {
-  const spinnerColor = useToken("text-03");
-  if (!text) {
-    return pending ? (
-      <View className="w-full flex-row items-center gap-2 px-4 py-2">
-        <ActivityIndicator size="small" color={spinnerColor} />
-        <Text font="secondary-body" color="text-03">
-          Thinking…
-        </Text>
-      </View>
-    ) : null;
-  }
-  // Plain text for now; markdown rendering needs a `punycode` polyfill for
-  // markdown-it under Metro (follow-up).
-  return (
-    <View className="w-full px-4 py-1">
-      <Text font="main-content-body" color="text-05">
-        {text}
-      </Text>
-    </View>
-  );
-});
+// Renders the current session's message chain (user bubbles + the rich
+// AgentMessage timeline for assistant turns), auto-scrolling to the newest
+// content while the user stays near the bottom.
 
 const ErrorMessage = memo(function ErrorMessage({ text }: { text: string }) {
   return (
@@ -57,58 +35,109 @@ const ErrorMessage = memo(function ErrorMessage({ text }: { text: string }) {
   );
 });
 
-const MessageItem = memo(function MessageItem({
+// Assistant turn: builds a STABLE per-message chatState (so non-streaming turns
+// don't re-render on every flush) and renders the AgentMessage timeline.
+const AssistantTurn = memo(function AssistantTurn({
   message,
-  isLast,
-  streaming,
+  agent,
 }: {
   message: Message;
-  isLast: boolean;
-  streaming: boolean;
+  agent: MinimalAgent;
+}) {
+  const chatState = useMemo<FullChatState>(
+    () => ({
+      agent,
+      docs: message.documents ?? null,
+      citations: message.citations,
+    }),
+    [agent, message.documents, message.citations]
+  );
+
+  return (
+    <View style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
+      <AgentMessage
+        rawPackets={message.packets}
+        packetCount={message.packetCount}
+        nodeId={message.nodeId}
+        chatState={chatState}
+        processingDurationSeconds={message.processingDurationSeconds}
+      />
+    </View>
+  );
+});
+
+const MessageItem = memo(function MessageItem({
+  message,
+  agent,
+}: {
+  message: Message;
+  agent: MinimalAgent;
 }) {
   if (message.type === "user") {
-    return (
-      <MessageRow role="user" text={message.message} files={message.files} />
-    );
+    return <MessageRow role="user" text={message.message} files={message.files} />;
   }
   if (message.type === "error") {
     return <ErrorMessage text={message.message} />;
   }
-  // assistant (system nodes are filtered out before render)
-  return <AssistantMessage text={message.message} pending={isLast && streaming} />;
+  return <AssistantTurn message={message} agent={agent} />;
 });
 
 export function MessageThread() {
   const history = useCurrentMessageHistory();
   const chatState = useCurrentChatState();
+  const personaId = useCurrentPersonaId();
+  const personas = usePersonas();
   const scrollRef = useRef<ScrollView>(null);
+  const nearBottomRef = useRef(true);
+
+  // Resolve the agent for the timeline avatar; stable until persona data changes.
+  const agent = useMemo<MinimalAgent>(() => {
+    const found = personas.data?.find((p) => p.id === personaId);
+    return (
+      found ?? ({ id: personaId ?? 0, name: "", description: "" } as MinimalAgent)
+    );
+  }, [personas.data, personaId]);
 
   const visible = history.filter((m) => m.type !== "system");
   const streaming = chatState === "loading" || chatState === "streaming";
 
-  // Keep pinned to the newest content as it streams in.
+  // Pin to the newest content only when the user is already near the bottom
+  // (so they can scroll up to read history mid-stream without being yanked).
   useEffect(() => {
-    scrollRef.current?.scrollToEnd({ animated: true });
-  }, [visible.length, chatState]);
+    if (nearBottomRef.current) {
+      scrollRef.current?.scrollToEnd({ animated: !streaming });
+    }
+  }, [visible.length, chatState, streaming]);
+
+  const onScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+      const distanceFromBottom =
+        contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      nearBottomRef.current = distanceFromBottom < 120;
+    },
+    []
+  );
 
   return (
-    <ScrollView
-      ref={scrollRef}
-      className="flex-1"
-      contentContainerStyle={{ paddingVertical: 8 }}
-      keyboardShouldPersistTaps="handled"
-      onContentSizeChange={() =>
-        scrollRef.current?.scrollToEnd({ animated: true })
-      }
-    >
-      {visible.map((m, i) => (
-        <MessageItem
-          key={m.nodeId}
-          message={m}
-          isLast={i === visible.length - 1}
-          streaming={streaming}
-        />
-      ))}
-    </ScrollView>
+    <CitationSheetProvider>
+      <ScrollView
+        ref={scrollRef}
+        className="flex-1"
+        contentContainerStyle={{ paddingVertical: 8 }}
+        keyboardShouldPersistTaps="handled"
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        onContentSizeChange={() => {
+          if (nearBottomRef.current) {
+            scrollRef.current?.scrollToEnd({ animated: false });
+          }
+        }}
+      >
+        {visible.map((m) => (
+          <MessageItem key={m.nodeId} message={m} agent={agent} />
+        ))}
+      </ScrollView>
+    </CitationSheetProvider>
   );
 }

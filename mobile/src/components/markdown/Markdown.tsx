@@ -10,14 +10,31 @@ import { radii } from "@/theme/generated/radii";
 import { useThemeColors } from "@/theme/ThemeProvider";
 
 import { CodeBlock } from "@/components/markdown/CodeBlock";
+import { makeCitationLinkRule } from "@/components/message/citations/citationRule";
+import type { CitationMap, OnyxDocument } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+/**
+ * Visual variant:
+ *  - "default": full body color (text-05), normal paragraph spacing.
+ *  - "muted": muted body color (text-03), tighter spacing (timeline reasoning,
+ *    expanded view) — mirrors web mutedTextMarkdownComponents.
+ *  - "muted-collapsed": muted, no paragraph spacing — mirrors web
+ *    collapsedMarkdownComponents.
+ */
+type MarkdownVariant = "default" | "muted" | "muted-collapsed";
+
 interface MarkdownProps {
   /** The raw markdown source to render. */
   children: string;
+  variant?: MarkdownVariant;
+  /** citation_num -> document_id; when provided, inline [[N]](url) become pills. */
+  citations?: CitationMap;
+  /** Documents a citation resolves to (matched by document_id). */
+  documents?: OnyxDocument[] | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,8 +88,17 @@ function extractLanguage(node: ASTNode): string | undefined {
  * not yet implemented — code renders as flat monospace and `$...$` math renders
  * as plain text.
  */
-function Markdown({ children }: MarkdownProps) {
+function Markdown({
+  children,
+  variant = "default",
+  citations,
+  documents,
+}: MarkdownProps) {
   const colors = useThemeColors();
+  const muted = variant === "muted" || variant === "muted-collapsed";
+  const bodyColor = muted ? colors["text-03"] : colors["text-05"];
+  const paragraphSpacing =
+    variant === "muted-collapsed" ? 0 : variant === "muted" ? 4 : 12;
 
   // Style map keyed by markdown node type. Text-bearing styles cascade onto
   // descendant text nodes via the library's inheritedStyles mechanism, so the
@@ -82,7 +108,7 @@ function Markdown({ children }: MarkdownProps) {
       // Base text color + typography for the whole document.
       body: {
         ...typography["main-content-body"],
-        color: colors["text-05"],
+        color: bodyColor,
       },
 
       // Headings — Opal heading presets. The library wraps headings in a View,
@@ -128,10 +154,10 @@ function Markdown({ children }: MarkdownProps) {
       // Paragraph spacing (the View wrapper; text color cascades from body).
       paragraph: {
         marginTop: 0,
-        marginBottom: 12,
+        marginBottom: paragraphSpacing,
         flexWrap: "wrap" as const,
         flexDirection: "row" as const,
-        alignItems: "flex-start" as const,
+        alignItems: "center" as const,
         justifyContent: "flex-start" as const,
         width: "100%" as const,
       },
@@ -218,12 +244,15 @@ function Markdown({ children }: MarkdownProps) {
         padding: 6,
       },
     }),
-    [colors],
+    [colors, bodyColor, paragraphSpacing],
   );
 
   // Override the fenced / indented code-block rules with our CodeBlock (which
-  // adds the copy affordance). Everything else falls back to the library
-  // defaults (driven by the `styles` map above).
+  // adds the copy affordance). When citation data is provided, also override the
+  // `link` rule so inline [[N]](url) markers render as CitationPills. Everything
+  // else falls back to the library defaults (driven by the `styles` map above).
+  const hasCitationData =
+    citations !== undefined || (documents != null && documents.length > 0);
   const rules = useMemo<RenderRules>(
     () => ({
       fence: (node) => (
@@ -234,13 +263,13 @@ function Markdown({ children }: MarkdownProps) {
         />
       ),
       code_block: (node) => (
-        <CodeBlock
-          key={node.key}
-          code={trimTrailingNewline(node.content)}
-        />
+        <CodeBlock key={node.key} code={trimTrailingNewline(node.content)} />
       ),
+      ...(hasCitationData
+        ? { link: makeCitationLinkRule({ citations, documents }) }
+        : {}),
     }),
-    [],
+    [hasCitationData, citations, documents],
   );
 
   return (

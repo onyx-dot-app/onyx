@@ -63,6 +63,66 @@ export function getCitationMap(packets: Packet[]): CitationMap {
   return citationMap;
 }
 
+// ── Incremental single-packet derivation (perf) ───────────────────────────────
+// `applyPacket` runs once per streamed packet, so deriving cached fields from a
+// single packet (O(1)) rather than re-scanning the whole array (O(n) per packet
+// = O(n²) over a stream) keeps streaming smooth on-device. The full-array
+// helpers above remain for history rebuild, where a one-shot recompute is fine.
+
+/** The visible text contributed by a single MESSAGE_START / MESSAGE_DELTA packet. */
+function textDeltaOf(packet: Packet): string {
+  if (
+    packet.obj.type === PacketType.MESSAGE_START ||
+    packet.obj.type === PacketType.MESSAGE_DELTA
+  ) {
+    return (packet.obj as MessageStart | MessageDelta).content || "";
+  }
+  return "";
+}
+
+/** Merge a single packet's CITATION_INFO into an existing citation map (new object only when it changes). */
+function mergeCitation(
+  existing: CitationMap | undefined,
+  packet: Packet
+): CitationMap | undefined {
+  if (packet.obj.type !== PacketType.CITATION_INFO) return existing;
+  const info = packet.obj as CitationInfo;
+  const base = existing ?? {};
+  if (base[info.citation_number] === info.document_id) return existing;
+  return { ...base, [info.citation_number]: info.document_id };
+}
+
+/** Merge a single packet's search/fetch documents into an existing list, de-duped by id (last wins, order preserved). */
+function mergeDocuments(
+  existing: OnyxDocument[] | null | undefined,
+  packet: Packet
+): OnyxDocument[] | null | undefined {
+  let incoming: OnyxDocument[] | null | undefined;
+  if (packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA) {
+    incoming = (packet.obj as SearchToolDocumentsDelta).documents;
+  } else if (packet.obj.type === PacketType.FETCH_TOOL_DOCUMENTS) {
+    incoming = (packet.obj as FetchToolDocuments).documents;
+  }
+  if (!incoming || incoming.length === 0) return existing;
+
+  const next = existing ? [...existing] : [];
+  const indexById = new Map<string, number>();
+  next.forEach((doc, i) => {
+    if (doc.document_id) indexById.set(doc.document_id, i);
+  });
+  for (const doc of incoming) {
+    if (!doc.document_id) continue;
+    const at = indexById.get(doc.document_id);
+    if (at === undefined) {
+      indexById.set(doc.document_id, next.length);
+      next.push(doc);
+    } else {
+      next[at] = doc; // last wins, mirrors web documentMap.set
+    }
+  }
+  return next;
+}
+
 /** Collect every document delivered by search / fetch tool packets, de-duplicated by id. */
 export function getDocuments(packets: Packet[]): OnyxDocument[] {
   const byId = new Map<string, OnyxDocument>();
@@ -155,10 +215,13 @@ export function applyPacket(
   // Append the packet (clone the array — never mutate the stored one).
   const packets = [...existing.packets, packet];
 
-  // Derive cached fields off the full packet list (cheap; arrays are small).
-  const message = getTextContent(packets);
-  const citations = getCitationMap(packets);
-  const documents = getDocuments(packets);
+  // Derive cached fields INCREMENTALLY from just the new packet (O(1)).
+  // Re-scanning the whole array per packet would be O(n²) over a long stream
+  // (thousands of MESSAGE_DELTA packets) and is the main streaming-jank risk.
+  const delta = textDeltaOf(packet);
+  const message = delta ? existing.message + delta : existing.message;
+  const citations = mergeCitation(existing.citations, packet);
+  const documents = mergeDocuments(existing.documents, packet);
 
   // Capture stop reason if this packet (or any prior) was a STOP.
   let stopReason: StreamStopReason | null | undefined = existing.stopReason;
@@ -175,7 +238,7 @@ export function applyPacket(
     packetCount: packets.length,
     message,
     citations,
-    documents: documents.length > 0 ? documents : existing.documents,
+    documents,
     stopReason,
   };
 

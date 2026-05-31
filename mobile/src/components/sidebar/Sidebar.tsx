@@ -5,8 +5,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Text } from "@/components/opal";
 import { useToken } from "@/theme/ThemeProvider";
+import { useAuth } from "@/auth";
 import { useDrawer } from "@/components/drawer/DrawerProvider";
 import { EditBigIcon, SidebarIcon } from "@/components/ui/icons";
+import { SvgLogOut } from "@/components/icons";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarRow } from "./SidebarRow";
 import { useChatSessions } from "@/query/sessions";
@@ -32,6 +34,15 @@ export function Sidebar() {
   const setCurrentSession = useChatSessionStore((s) => s.setCurrentSession);
   const startNewChat = useStartNewChat();
   const newChatColor = useToken("text-04");
+  const logoutColor = useToken("text-04");
+  const { signOut } = useAuth();
+
+  // Sign out, then close the drawer. The (app) auth guard redirects to the login
+  // screen reactively once status flips to "signedOut" — no manual nav needed.
+  async function handleLogout() {
+    close();
+    await signOut();
+  }
 
   async function handleNewChat() {
     close();
@@ -136,6 +147,21 @@ export function Sidebar() {
           </SidebarSection>
         </View>
       </ScrollView>
+
+      {/* Footer — Log out, pinned at the bottom of the sidebar. */}
+      <View className="border-t border-border-01 px-2 pb-1 pt-2">
+        <Pressable
+          onPress={handleLogout}
+          accessibilityRole="button"
+          accessibilityLabel="Log out"
+          className="h-10 flex-row items-center gap-2 rounded-[8px] px-2 active:bg-background-tint-03"
+        >
+          <SvgLogOut size={18} color={logoutColor} />
+          <Text font="main-ui-body" color="text-04">
+            Log out
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
