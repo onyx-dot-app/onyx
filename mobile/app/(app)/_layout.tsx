@@ -1,56 +1,28 @@
-import { Tabs } from "expo-router";
-import { Text } from "react-native";
+import { Redirect, Stack } from "expo-router";
 
-import { useToken } from "@/theme/ThemeProvider";
+import { useAuth } from "@/auth";
+import { Drawer } from "@/components/drawer/Drawer";
+import { DrawerProvider } from "@/components/drawer/DrawerProvider";
+import { Sidebar } from "@/components/sidebar/Sidebar";
 
-// Authenticated flow group. Owns the primary navigation.
+// Authenticated flow group. ChatGPT-style: a custom slide-over drawer (Reanimated +
+// gesture-handler) hosts navigation INSTEAD of a bottom tab bar. The drawer wraps the
+// route navigator so the sidebar floats above content and persists across screens.
 //
-// OPEN DECISION (doc 04): bottom tabs vs. drawer for the (app) primary nav.
-// Web uses a sidebar; phones-first leans tabs, so this ships a reasonable
-// default of bottom Tabs — NOT locked. Swap to a drawer here if that wins.
-//
-// No icon library is installed, so tab "icons" are simple emoji glyphs. They
-// can be replaced with a real icon set (or removed) later — do not add a dep.
+// Reactive auth guard (mirrors the (auth) group): bounce to login when signed out.
 export default function AppLayout() {
-  const activeColor = useToken("text-05");
-  const inactiveColor = useToken("text-03");
+  const { status } = useAuth();
+
+  if (status === "loading") return null;
+  if (status === "signedOut") {
+    return <Redirect href={"/(auth)/login" as never} />;
+  }
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: activeColor,
-        tabBarInactiveTintColor: inactiveColor,
-      }}
-    >
-      <Tabs.Screen
-        name="(chat)"
-        options={{
-          title: "Chat",
-          tabBarIcon: ({ color }) => <Text style={{ color }}>💬</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: "Search",
-          tabBarIcon: ({ color }) => <Text style={{ color }}>🔍</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="assistants"
-        options={{
-          title: "Assistants",
-          tabBarIcon: ({ color }) => <Text style={{ color }}>🤖</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: "Settings",
-          tabBarIcon: ({ color }) => <Text style={{ color }}>⚙️</Text>,
-        }}
-      />
-    </Tabs>
+    <DrawerProvider>
+      <Drawer sidebar={<Sidebar />}>
+        <Stack screenOptions={{ headerShown: false }} />
+      </Drawer>
+    </DrawerProvider>
   );
 }

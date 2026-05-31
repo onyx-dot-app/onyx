@@ -86,7 +86,9 @@ export interface SendMessageRequest {
 /** Loosely-typed shape of the backend ChatFullResponse (stream:false fallback). */
 export type ChatFullResponse = unknown;
 
-const SEND_MESSAGE_PATH = "/api/chat/send-message";
+// Root-relative path (no `/api` — that's the web-only Next.js proxy prefix). The
+// mobile client talks to the backend directly, like the other query/mutation paths.
+const SEND_MESSAGE_PATH = "/chat/send-chat-message";
 
 async function buildHeaders(config: ClientConfig): Promise<Headers> {
   const headers = new Headers();

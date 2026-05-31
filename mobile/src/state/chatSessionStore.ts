@@ -23,6 +23,7 @@ import {
   BackendChatSession,
   FeedbackType,
   QueuedMessage,
+  SelectedModel,
 } from "@/lib/types";
 import {
   getLatestMessageChain,
@@ -58,6 +59,11 @@ interface ChatSessionData {
   isLoaded: boolean;
   description?: string;
   personaId?: number;
+
+  // The model chosen for this session via the input-bar selector. Sent as
+  // llm_override on each message; in-memory only (not persisted to the backend
+  // session in v1). Undefined → use the resolved default model.
+  selectedModel?: SelectedModel;
 
   // Streaming duration tracking
   streamingStartTime?: number;
@@ -110,6 +116,7 @@ interface ChatSessionStore {
   ) => void;
   updateCanContinue: (sessionId: string, canContinue: boolean) => void;
   updateSubmittedMessage: (sessionId: string, message: string) => void;
+  updateSelectedModel: (sessionId: string, model: SelectedModel) => void;
   updateMessageFeedback: (
     sessionId: string,
     messageId: number,
@@ -349,6 +356,10 @@ export const useChatSessionStore = create<ChatSessionStore>()(
 
       updateSubmittedMessage: (sessionId: string, submittedMessage: string) => {
         get().updateSessionData(sessionId, { submittedMessage });
+      },
+
+      updateSelectedModel: (sessionId: string, selectedModel: SelectedModel) => {
+        get().updateSessionData(sessionId, { selectedModel });
       },
 
       updateMessageFeedback: (

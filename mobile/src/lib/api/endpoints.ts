@@ -5,222 +5,228 @@
  * instead of inline strings to prevent typos and make key usage greppable.
  *
  * For dynamic keys (e.g. per-ID endpoints), use the builder functions.
+ *
+ * NOTE: paths are ROOT-RELATIVE (no `/api` prefix). The mobile client talks to the
+ * backend directly, which serves routes at root — the `/api` prefix is a web-only
+ * Next.js proxy convention. Any prefix belongs in `apiBaseUrl` (config), matching the
+ * auth client (e.g. `/auth/mobile/login`). For a reverse-proxy deployment, set
+ * ONYX_API_BASE_URL to include the prefix (e.g. https://host/api).
  */
 export const SWR_KEYS = {
   // ── User ──────────────────────────────────────────────────────────────────
-  me: "/api/me",
+  me: "/me",
 
   // ── Health / Version ──────────────────────────────────────────────────────
-  health: "/api/health",
-  version: "/api/version",
+  health: "/health",
+  version: "/version",
 
   // ── Settings ──────────────────────────────────────────────────────────────
-  settings: "/api/settings",
-  enterpriseSettings: "/api/enterprise-settings",
-  customAnalyticsScript: "/api/enterprise-settings/custom-analytics-script",
-  authType: "/api/auth/type",
+  settings: "/settings",
+  enterpriseSettings: "/enterprise-settings",
+  customAnalyticsScript: "/enterprise-settings/custom-analytics-script",
+  authType: "/auth/type",
 
   // ── Agents / Personas ─────────────────────────────────────────────────────
-  personas: "/api/persona",
-  persona: (id: number) => `/api/persona/${id}`,
-  agentPreferences: "/api/user/assistant/preferences",
-  defaultAssistantConfig: "/api/admin/default-assistant/configuration",
-  personaLabels: "/api/persona/labels",
-  adminAgents: "/api/admin/agents",
-  adminPersona: "/api/admin/persona",
+  personas: "/persona",
+  persona: (id: number) => `/persona/${id}`,
+  agentPreferences: "/user/assistant/preferences",
+  defaultAssistantConfig: "/admin/default-assistant/configuration",
+  personaLabels: "/persona/labels",
+  adminAgents: "/admin/agents",
+  adminPersona: "/admin/persona",
 
   // ── LLM Providers ─────────────────────────────────────────────────────────
-  llmProviders: "/api/llm/provider",
+  llmProviders: "/llm/provider",
   llmProvidersForPersona: (personaId: number) =>
-    `/api/llm/persona/${personaId}/providers`,
-  adminLlmProviders: "/api/admin/llm/provider",
-  llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
-  customProviderNames: "/api/admin/llm/custom-provider-names",
-  wellKnownLlmProviders: "/api/admin/llm/built-in/options",
+    `/llm/persona/${personaId}/providers`,
+  adminLlmProviders: "/admin/llm/provider",
+  llmProvidersWithImageGen: "/admin/llm/provider?include_image_gen=true",
+  customProviderNames: "/admin/llm/custom-provider-names",
+  wellKnownLlmProviders: "/admin/llm/built-in/options",
   wellKnownLlmProvider: (providerEndpoint: string) =>
-    `/api/admin/llm/built-in/options/${providerEndpoint}`,
-  llmContextualCost: "/api/admin/llm/provider-contextual-cost",
+    `/admin/llm/built-in/options/${providerEndpoint}`,
+  llmContextualCost: "/admin/llm/provider-contextual-cost",
 
   // ── Image Generation ──────────────────────────────────────────────────────
-  imageGenConfig: "/api/admin/image-generation/config",
+  imageGenConfig: "/admin/image-generation/config",
 
   // ── Documents ─────────────────────────────────────────────────────────────
-  documentSets: "/api/manage/document-set",
-  documentSetsEditable: "/api/manage/document-set?get_editable=true",
-  tags: "/api/query/valid-tags",
-  connectorStatus: "/api/manage/connector-status",
+  documentSets: "/manage/document-set",
+  documentSetsEditable: "/manage/document-set?get_editable=true",
+  tags: "/query/valid-tags",
+  connectorStatus: "/manage/connector-status",
 
   // ── Credentials & Connectors ──────────────────────────────────────────────
-  adminCredentials: "/api/manage/admin/credential",
-  indexingStatus: "/api/manage/admin/connector/indexing-status",
-  adminConnectorStatus: "/api/manage/admin/connector/status",
-  federatedConnectors: "/api/federated",
+  adminCredentials: "/manage/admin/credential",
+  indexingStatus: "/manage/admin/connector/indexing-status",
+  adminConnectorStatus: "/manage/admin/connector/status",
+  federatedConnectors: "/federated",
 
   // ── Google Connectors ─────────────────────────────────────────────────────
   googleConnectorAppCredential: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/app-credential`,
+    `/manage/admin/connector/${service}/app-credential`,
   googleConnectorServiceAccountKey: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/service-account-key`,
+    `/manage/admin/connector/${service}/service-account-key`,
   googleConnectorCredentials: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/credentials`,
+    `/manage/admin/connector/${service}/credentials`,
   googleConnectorPublicCredential: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/public-credential`,
+    `/manage/admin/connector/${service}/public-credential`,
   googleConnectorServiceAccountCredential: (
     service: "gmail" | "google-drive"
-  ) => `/api/manage/admin/connector/${service}/service-account-credential`,
+  ) => `/manage/admin/connector/${service}/service-account-credential`,
 
   // ── Search Settings ───────────────────────────────────────────────────────
-  currentSearchSettings: "/api/search-settings/get-current-search-settings",
-  secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
-  embeddingProviders: "/api/admin/embedding/embedding-provider",
+  currentSearchSettings: "/search-settings/get-current-search-settings",
+  secondarySearchSettings: "/search-settings/get-secondary-search-settings",
+  embeddingProviders: "/admin/embedding/embedding-provider",
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────
-  chatSessions: "/api/chat/get-user-chat-sessions",
+  chatSessions: "/chat/get-user-chat-sessions",
 
   // ── Projects & Files ──────────────────────────────────────────────────────
-  userProjects: "/api/user/projects",
-  recentFiles: "/api/user/files/recent",
-  userPats: "/api/user/pats",
-  notifications: "/api/notifications",
+  userProjects: "/user/projects",
+  recentFiles: "/user/files/recent",
+  userPats: "/user/pats",
+  notifications: "/notifications",
 
   // ── Users ─────────────────────────────────────────────────────────────────
-  acceptedUsers: "/api/manage/users/accepted/all",
-  invitedUsers: "/api/manage/users/invited",
+  acceptedUsers: "/manage/users/accepted/all",
+  invitedUsers: "/manage/users/invited",
   // Curator-accessible listing of all users (and optionally service-account
   // entries when `?include_api_keys=true`). Used by group create/edit pages so
   // global curators — who cannot hit the admin-only `/accepted/all` and
   // `/invited` endpoints — can still load the member picker.
-  groupMemberCandidates: "/api/manage/users?include_api_keys=true",
-  pendingTenantUsers: "/api/tenants/users/pending",
-  userCounts: "/api/manage/users/counts",
+  groupMemberCandidates: "/manage/users?include_api_keys=true",
+  pendingTenantUsers: "/tenants/users/pending",
+  userCounts: "/manage/users/counts",
 
   // ── API Keys ──────────────────────────────────────────────────────────────
-  adminApiKeys: "/api/admin/api-key",
+  adminApiKeys: "/admin/api-key",
 
   // ── Groups ────────────────────────────────────────────────────────────────
-  adminUserGroups: "/api/manage/admin/user-group",
-  shareableGroups: "/api/manage/user-groups/minimal",
-  scimToken: "/api/admin/enterprise-settings/scim/token",
+  adminUserGroups: "/manage/admin/user-group",
+  shareableGroups: "/manage/user-groups/minimal",
+  scimToken: "/admin/enterprise-settings/scim/token",
 
   // ── MCP Servers ───────────────────────────────────────────────────────────
-  adminMcpServers: "/api/admin/mcp/servers",
-  mcpServers: "/api/mcp/servers",
+  adminMcpServers: "/admin/mcp/servers",
+  mcpServers: "/mcp/servers",
 
   // ── Skills ────────────────────────────────────────────────────────────────
-  adminSkills: "/api/admin/skills",
-  userSkills: "/api/skills",
+  adminSkills: "/admin/skills",
+  userSkills: "/skills",
 
   // ── Tools ─────────────────────────────────────────────────────────────────
-  tools: "/api/tool",
-  openApiTools: "/api/tool/openapi",
-  oauthTokenStatus: "/api/user-oauth-token/status",
+  tools: "/tool",
+  openApiTools: "/tool/openapi",
+  oauthTokenStatus: "/user-oauth-token/status",
 
   // ── Voice ─────────────────────────────────────────────────────────────────
-  voiceProviders: "/api/admin/voice/providers",
-  voiceStatus: "/api/voice/status",
+  voiceProviders: "/admin/voice/providers",
+  voiceStatus: "/voice/status",
 
   // ── Build (Craft) ─────────────────────────────────────────────────────────
-  buildUserLibraryTree: "/api/build/user-library/tree",
+  buildUserLibraryTree: "/build/user-library/tree",
   buildSessionFiles: (sessionId: string) =>
-    `/api/build/sessions/${sessionId}/files?path=`,
+    `/build/sessions/${sessionId}/files?path=`,
   buildSessionOutputFiles: (sessionId: string) =>
-    `/api/build/sessions/${sessionId}/files?path=outputs`,
+    `/build/sessions/${sessionId}/files?path=outputs`,
   buildSessionWebappInfo: (sessionId: string) =>
-    `/api/build/sessions/${sessionId}/webapp-info`,
+    `/build/sessions/${sessionId}/webapp-info`,
   buildSessionArtifacts: (sessionId: string) =>
-    `/api/build/sessions/${sessionId}/artifacts`,
+    `/build/sessions/${sessionId}/artifacts`,
   buildSessionArtifactFile: (sessionId: string, filePath: string) =>
-    `/api/build/sessions/${sessionId}/artifacts/${filePath}`,
+    `/build/sessions/${sessionId}/artifacts/${filePath}`,
   buildSessionPptxPreview: (sessionId: string, filePath: string) =>
-    `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
-  buildExternalApps: "/api/build/apps",
-  buildExternalAppsAdmin: "/api/build/admin/apps",
-  buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
+    `/build/sessions/${sessionId}/pptx-preview/${filePath}`,
+  buildExternalApps: "/build/apps",
+  buildExternalAppsAdmin: "/build/admin/apps",
+  buildExternalAppsBuiltInOptions: "/build/admin/apps/built-in/options",
   buildSessionLiveApprovals: (sessionId: string) =>
-    `/api/build/approvals/sessions/${sessionId}/live`,
+    `/build/approvals/sessions/${sessionId}/live`,
 
   // ── Token Rate Limits ─────────────────────────────────────────────────────
-  globalTokenRateLimits: "/api/admin/token-rate-limits/global",
-  userTokenRateLimits: "/api/admin/token-rate-limits/users",
-  userGroupTokenRateLimits: "/api/admin/token-rate-limits/user-groups",
+  globalTokenRateLimits: "/admin/token-rate-limits/global",
+  userTokenRateLimits: "/admin/token-rate-limits/users",
+  userGroupTokenRateLimits: "/admin/token-rate-limits/user-groups",
   userGroupTokenRateLimit: (groupId: number) =>
-    `/api/admin/token-rate-limits/user-group/${groupId}`,
+    `/admin/token-rate-limits/user-group/${groupId}`,
 
   // ── Usage Reports ─────────────────────────────────────────────────────────
-  usageReport: "/api/admin/usage-report",
+  usageReport: "/admin/usage-report",
 
   // ── Web Search ────────────────────────────────────────────────────────────
-  webSearchContentProviders: "/api/admin/web-search/content-providers",
-  webSearchSearchProviders: "/api/admin/web-search/search-providers",
+  webSearchContentProviders: "/admin/web-search/content-providers",
+  webSearchSearchProviders: "/admin/web-search/search-providers",
 
   // ── Prompt shortcuts ──────────────────────────────────────────────────────
-  promptShortcuts: "/api/input_prompt",
+  promptShortcuts: "/input_prompt",
 
   // ── License & Billing ─────────────────────────────────────────────────────
-  license: "/api/license",
-  billingInformationCloud: "/api/tenants/billing-information",
-  billingInformationSelfHosted: "/api/admin/billing/billing-information",
+  license: "/license",
+  billingInformationCloud: "/tenants/billing-information",
+  billingInformationSelfHosted: "/admin/billing/billing-information",
 
   // ── Admin ─────────────────────────────────────────────────────────────────
-  hooks: "/api/admin/hooks",
-  hookSpecs: "/api/admin/hooks/specs",
+  hooks: "/admin/hooks",
+  hookSpecs: "/admin/hooks/specs",
 
   // ── Slack Bots ────────────────────────────────────────────────────────────
-  slackChannels: "/api/manage/admin/slack-app/channel",
-  slackBots: "/api/manage/admin/slack-app/bots",
-  slackBot: (botId: number) => `/api/manage/admin/slack-app/bots/${botId}`,
+  slackChannels: "/manage/admin/slack-app/channel",
+  slackBots: "/manage/admin/slack-app/bots",
+  slackBot: (botId: number) => `/manage/admin/slack-app/bots/${botId}`,
   slackBotConfig: (botId: number) =>
-    `/api/manage/admin/slack-app/bots/${botId}/config`,
+    `/manage/admin/slack-app/bots/${botId}/config`,
 
   // ── Standard Answers (EE) ─────────────────────────────────────────────────
-  standardAnswerCategories: "/api/manage/admin/standard-answer/category",
-  standardAnswers: "/api/manage/admin/standard-answer",
+  standardAnswerCategories: "/manage/admin/standard-answer/category",
+  standardAnswers: "/manage/admin/standard-answer",
 
   // ── Query History (EE) ────────────────────────────────────────────────────
-  adminChatSessionHistory: "/api/admin/chat-session-history",
-  adminChatSession: (id: string) => `/api/admin/chat-session-history/${id}`,
+  adminChatSessionHistory: "/admin/chat-session-history",
+  adminChatSession: (id: string) => `/admin/chat-session-history/${id}`,
 
   // ── MCP Server (per-ID) ───────────────────────────────────────────────────
-  adminMcpServer: (id: number) => `/api/admin/mcp/servers/${id}`,
+  adminMcpServer: (id: number) => `/admin/mcp/servers/${id}`,
 
   // ── Document Processing ───────────────────────────────────────────────────
-  unstructuredApiKeySet: "/api/search-settings/unstructured-api-key-set",
+  unstructuredApiKeySet: "/search-settings/unstructured-api-key-set",
 
   // ── Connectors ────────────────────────────────────────────────────────────
-  connector: "/api/manage/connector",
+  connector: "/manage/connector",
 
   // ── Index Attempts ────────────────────────────────────────────────────────
   indexAttemptStageMetrics: (indexAttemptId: number) =>
-    `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
+    `/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
 
   // ── CC-Pair Sync Attempts ─────────────────────────────────────────────────
   // The `*Probe` variants are single-row reads used to surface the
   // `applicable` flag without paying for a full page; see
   // `useSyncAttemptsPaginatedFetch`.
   ccPairPermissionSyncAttempts: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/permission-sync-attempts`,
+    `/manage/admin/cc-pair/${ccPairId}/permission-sync-attempts`,
   ccPairPermissionSyncAttemptsProbe: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/permission-sync-attempts?page_num=0&page_size=1`,
+    `/manage/admin/cc-pair/${ccPairId}/permission-sync-attempts?page_num=0&page_size=1`,
   ccPairExternalGroupSyncAttempts: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts`,
+    `/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts`,
   ccPairExternalGroupSyncAttemptsProbe: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts?page_num=0&page_size=1`,
+    `/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts?page_num=0&page_size=1`,
 
   // ── Indexing Errors ───────────────────────────────────────────────────────
   // Base key for the per-cc-pair errors endpoint. The page also reads
   // paginated variants via `usePaginatedFetch`, but `mutate` against
   // this base key invalidates every variant under the same prefix.
   ccPairIndexingErrors: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/errors`,
+    `/manage/admin/cc-pair/${ccPairId}/errors`,
 
   // ── Scheduled Tasks (Craft) ───────────────────────────────────────────────
   // `scheduledTaskRuns` is a base URL — the run-history table appends
   // `?limit=…` / `?cursor=…` for pagination. Invalidate from elsewhere with
   // a prefix predicate so every paginated variant gets refreshed at once.
-  scheduledTasks: "/api/build/scheduled-tasks",
-  scheduledTask: (taskId: string) => `/api/build/scheduled-tasks/${taskId}`,
+  scheduledTasks: "/build/scheduled-tasks",
+  scheduledTask: (taskId: string) => `/build/scheduled-tasks/${taskId}`,
   scheduledTaskRuns: (taskId: string) =>
-    `/api/build/scheduled-tasks/${taskId}/runs`,
+    `/build/scheduled-tasks/${taskId}/runs`,
   scheduledRunContext: (sessionId: string) =>
-    `/api/build/sessions/${sessionId}/scheduled-run-context`,
+    `/build/sessions/${sessionId}/scheduled-run-context`,
 } as const;

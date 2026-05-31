@@ -34,6 +34,14 @@
             "imageWidth": 76
           }
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "buildReactNativeFromSource": true
+          }
+        }
       ]
     ],
     "experiments": {

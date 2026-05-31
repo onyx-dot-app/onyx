@@ -52,7 +52,7 @@ export function useCreateSession() {
   return useMutation({
     mutationFn: ({ personaId, description, projectId }: CreateSessionArgs) =>
       errorHandlingFetcher<CreateSessionResponse>(
-        "/api/chat/create-chat-session",
+        "/chat/create-chat-session",
         clientConfig,
         {
           method: "POST",
@@ -84,7 +84,7 @@ export function useRenameSession() {
   const queryClient = useQueryClient();
   return useMutation<unknown, Error, RenameSessionArgs, RenameMutationContext>({
     mutationFn: ({ chatSessionId, newName }) =>
-      errorHandlingFetcher("/api/chat/rename-chat-session", clientConfig, {
+      errorHandlingFetcher("/chat/rename-chat-session", clientConfig, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -134,7 +134,7 @@ export function useDeleteSession() {
   return useMutation<unknown, Error, string, DeleteMutationContext>({
     mutationFn: (chatSessionId: string) =>
       errorHandlingFetcher(
-        `/api/chat/delete-chat-session/${chatSessionId}`,
+        `/chat/delete-chat-session/${chatSessionId}`,
         clientConfig,
         { method: "DELETE" }
       ),

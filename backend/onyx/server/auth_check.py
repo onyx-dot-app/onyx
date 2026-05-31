@@ -34,6 +34,12 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/refresh", {"POST"}),
     ("/auth/register", {"POST"}),
     ("/auth/login", {"POST"}),
+    # native mobile bearer-JWT login/logout — public like /auth/login & /auth/logout
+    # above, but login returns the JWT in the response body instead of a Set-Cookie.
+    # get_auth_router(jwt_bearer_auth_backend) emits both routes. Mounted for
+    # self-hosted (AUTH_TYPE=basic) only — see onyx/main.py.
+    ("/auth/mobile/login", {"POST"}),
+    ("/auth/mobile/logout", {"POST"}),
     # reCAPTCHA pre-OAuth challenge — user is not yet authenticated when
     # they solve it, and the endpoint's own handler enforces the only
     # thing that matters (valid Google siteverify response).

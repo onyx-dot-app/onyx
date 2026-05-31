@@ -102,6 +102,23 @@ function isPacket(value: unknown): value is Packet {
   );
 }
 
+// The backend can emit a top-level error object (not a Packet) when generation fails
+// — e.g. `{ error, error_code, is_retryable }`. Detect it so we can surface it in the
+// thread instead of silently dropping it (which would leave an empty assistant turn).
+function asStreamError(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  if (
+    !("obj" in v) &&
+    !("placement" in v) &&
+    "error" in v &&
+    typeof v.error === "string"
+  ) {
+    return v.error;
+  }
+  return null;
+}
+
 // Flush cadence fallback when requestAnimationFrame is unavailable. ~50ms keeps the
 // list updating smoothly without re-rendering on every token.
 const FLUSH_INTERVAL_MS = 50;
@@ -226,6 +243,11 @@ export function useSendMessage(
         }
       };
 
+      // The model chosen for this session via the input-bar selector (if any). Web
+      // maps model_provider = descriptor.name (the provider *instance* name) and
+      // model_version = model_configuration.name.
+      const selected = store.getState().sessions.get(sessionId)?.selectedModel;
+
       const req: SendMessageRequest = {
         message: trimmed,
         // A brand-new (optimistic-only) session has a non-UUID temp id; treat any
@@ -233,6 +255,12 @@ export function useSendMessage(
         chat_session_id: isUuid(sessionId) ? sessionId : null,
         parent_message_id: parentMessageId,
         file_descriptors: [],
+        llm_override: selected
+          ? {
+              model_provider: selected.name,
+              model_version: selected.modelName,
+            }
+          : undefined,
         origin: "unset",
       };
 
@@ -257,6 +285,22 @@ export function useSendMessage(
               tree.set(assistantNodeId, {
                 ...agentNode,
                 messageId: idInfo.reserved_assistant_message_id,
+              });
+            }
+            scheduleFlush();
+            continue;
+          }
+
+          // Backend-emitted generation error → render it as an error turn.
+          const streamErr = asStreamError(item);
+          if (streamErr) {
+            const node = tree.get(assistantNodeId);
+            if (node) {
+              tree = new Map(tree);
+              tree.set(assistantNodeId, {
+                ...node,
+                type: "error",
+                message: streamErr,
               });
             }
             scheduleFlush();

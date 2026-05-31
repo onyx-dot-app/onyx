@@ -1637,8 +1637,16 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
         return router
 
 
+# The native mobile bearer-JWT backend must be registered on the authenticator
+# (not only on the login router) so API routes accept `Authorization: Bearer <jwt>`.
+# Mounted for self-hosted (AUTH_TYPE=basic) only — mirrors onyx/main.py and the
+# SingleTenantJWTStrategy's single-tenant constraint.
+_auth_backends = [auth_backend]
+if AUTH_TYPE == AuthType.BASIC:
+    _auth_backends.append(jwt_bearer_auth_backend)
+
 fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](
-    get_user_manager, [auth_backend]
+    get_user_manager, _auth_backends
 )
 
 

@@ -56,4 +56,4 @@ export const persistMaxAge = 1000 * 60 * 60 * 24; // 24h
  * Cache buster — any change invalidates ALL previously-persisted query cache.
  * Keyed off the API base + app build so a backend/app change can't restore stale shapes.
  */
-export const persistBuster = `${appConfig.apiBaseUrl}|${appConfig.isCloud ? "cloud" : "self"}`;
+export const persistBuster = `${appConfig.apiBaseUrl}|${appConfig.isCloud ? "cloud" : "self"}|v3`;
