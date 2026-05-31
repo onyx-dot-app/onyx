@@ -131,6 +131,11 @@ class MCPAuthenticationType(str, PyEnum):
     PT_OAUTH = "PT_OAUTH"  # Pass-Through OAuth
 
 
+class MCPOAuthProviderMode(str, PyEnum):
+    AUTO_DISCOVERY = "AUTO_DISCOVERY"
+    KNOWN_PROVIDER = "KNOWN_PROVIDER"
+
+
 class MCPTransport(str, PyEnum):
     """MCP transport types"""
 
