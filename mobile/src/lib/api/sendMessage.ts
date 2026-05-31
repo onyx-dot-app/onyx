@@ -20,7 +20,7 @@
 import type { ClientConfig } from "./config";
 import { FetchError } from "./errors";
 import { handleSSEStream } from "./stream";
-import type { Packet, FileDescriptor } from "../types";
+import type { Packet, FileDescriptor, Filters } from "../types";
 
 // Auto-place after the latest message in the chain. Mirrors the backend constant
 // AUTO_PLACE_AFTER_LATEST_MESSAGE (= -1) in models.py.
@@ -71,6 +71,9 @@ export interface SendMessageRequest {
 
   allowed_tool_ids?: number[] | null;
   forced_tool_id?: number | null;
+
+  /** Internal search filters (enabled source_type[], document sets, time). */
+  internal_search_filters?: Filters | null;
 
   deep_research?: boolean;
   include_citations?: boolean;
