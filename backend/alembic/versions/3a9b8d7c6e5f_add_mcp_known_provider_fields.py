@@ -1,7 +1,7 @@
 """add mcp known-provider oauth fields
 
 Revision ID: 3a9b8d7c6e5f
-Revises: d0e1f2a3b4c5
+Revises: 4d545225fd82
 Create Date: 2026-05-31 13:40:00.000000
 
 """
@@ -14,7 +14,7 @@ from onyx.db.enums import MCPOAuthProviderMode
 
 # revision identifiers, used by Alembic.
 revision = "3a9b8d7c6e5f"
-down_revision = "d0e1f2a3b4c5"
+down_revision = "4d545225fd82"
 branch_labels = None
 depends_on = None
 
