@@ -144,6 +144,16 @@ export function ActionsPopover({ agent, personaId }: ActionsPopoverProps) {
       }
     }
 
+    // Mutual exclusion (web parity: disabling a tool UN-FORCES it): if this
+    // action disables a currently-forced tool, also clear the force so it can't
+    // be both forced and in disabled_tool_ids (which would trip the backend's
+    // "Forced tool not found in tools" ValueError on send). toggleForcedTool
+    // clears it given the max-one-forced invariant.
+    const willDisable = !isDisabled;
+    if (willDisable && forcedToolIds.includes(toolId)) {
+      toggleForcedTool(toolId);
+    }
+
     setToolDisabled(toolId, !isDisabled);
   }
 
@@ -152,6 +162,13 @@ export function ActionsPopover({ agent, personaId }: ActionsPopoverProps) {
     const willForce = !forcedToolIds.includes(toolId);
     if (willForce && toolId === searchToolId && enabledSourceCount === 0) {
       setSecondaryView("sources");
+    }
+    // Mutual exclusion (web parity: ActionLineItem `if (disabled) onToggle()`):
+    // forcing a disabled tool RE-ENABLES it first so it can't be both forced
+    // and in disabled_tool_ids (which would trip the backend's "Forced tool
+    // not found in tools" ValueError on send).
+    if (willForce && disabledToolIds.includes(toolId)) {
+      setToolDisabled(toolId, false);
     }
     toggleForcedTool(toolId);
   }
