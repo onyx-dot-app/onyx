@@ -14,7 +14,12 @@ import {
 import {
   DRAFT_SESSION_ID,
   useChatSessionStore,
+  useCurrentPersonaId,
 } from "@/state/chatSessionStore";
+import { usePersonas } from "@/query/personas";
+import { useForcedTools } from "@/state/useForcedTools";
+import { ActionsPopover } from "@/components/chat/actions/ActionsPopover";
+import { ForcedToolChip } from "@/components/chat/actions/ForcedToolChip";
 import { ModelSelectorTrigger } from "./ModelSelectorTrigger";
 import { AttachMenu } from "./AttachMenu";
 import { AttachmentTray } from "./AttachmentTray";
@@ -47,6 +52,14 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
   const [message, setMessage] = useState("");
 
   const { send, stop, isStreaming } = useSendMessage(sid);
+
+  // Resolve the active agent so the ActionsPopover + forced-tool chip can read
+  // its tools. forcedToolIds is ephemeral UI state for the tool forced next.
+  const personaId = useCurrentPersonaId();
+  const { data: personas } = usePersonas();
+  const agent = personas?.find((p) => p.id === personaId);
+  const forcedToolIds = useForcedTools((s) => s.forcedToolIds);
+
   const {
     tiles,
     attachedFileIds,
@@ -156,7 +169,7 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
 
       {/* Bottom toolbar (web `:540` — h-11, p-1, space-between) */}
       <View className="h-11 flex-row items-center justify-between px-1">
-        {/* Left cluster: attach popover (Photos / Upload File / Recent Files) */}
+        {/* Left cluster: attach popover + actions popover + forced-tool chip(s) */}
         <View className="flex-row items-center gap-1">
           <AttachMenu
             imagesAllowed={imagesAllowed}
@@ -176,6 +189,22 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
               </Pressable>
             }
           />
+          {/* Actions popover (tool enable/disable + force + sources). Renders its
+              own sliders trigger; only shown when the agent exposes tools. */}
+          {agent && agent.tools.length > 0 ? (
+            <ActionsPopover agent={agent} personaId={agent.id} />
+          ) : null}
+          {/* Forced-tool chip(s) — web shows these bottom-left. Tap to clear. */}
+          {forcedToolIds.map((id) => {
+            const tool = agent?.tools.find((t) => t.id === id);
+            return tool ? (
+              <ForcedToolChip
+                key={id}
+                tool={tool}
+                onClear={() => useForcedTools.getState().toggleForcedTool(id)}
+              />
+            ) : null;
+          })}
         </View>
 
         {/* Right cluster: model selector trigger + send/stop */}
