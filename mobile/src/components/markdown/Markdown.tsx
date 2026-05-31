@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Linking } from "react-native";
+import { Linking, Platform, Text as RNText } from "react-native";
 import RNMarkdown, {
   type ASTNode,
   type RenderRules,
@@ -53,21 +53,54 @@ function trimTrailingNewline(content: string): string {
 }
 
 /**
- * Strip emoji / pictographs from markdown text.
- *
- * The Opal brand font (HankenGrotesk) has no emoji glyphs and ships a custom
- * `.notdef` (a "?"-in-a-box) glyph, which blocks iOS's per-glyph emoji fallback —
- * so any emoji the model emits (e.g. "## 🏆 Gold Rate") renders as a tofu "?"
- * box. Until we wire an emoji-capable fallback font, drop emoji from the source
- * (covers headings + body + code) and tidy the whitespace they leave behind.
+ * Emoji-run splitter (capturing group so `String.split` keeps the matches).
+ * `split` yields alternating [text, emoji, text, emoji, …] — odd indices are
+ * emoji runs. Consecutive emoji (incl. ZWJ sequences, skin-tone + variation
+ * selectors, keycaps, flags) collapse into one run via the trailing `+`.
  */
-function stripEmoji(content: string): string {
-  return content
-    .replace(
-      /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu,
-      "",
-    )
-    .replace(/[ \t]{2,}/g, " ");
+const EMOJI_RUN =
+  /([\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]+)/gu;
+
+/**
+ * iOS pins each text run to the font on the Text; the brand font HankenGrotesk
+ * has no emoji glyphs (and a custom `.notdef` "?" box that blocks the system
+ * emoji fallback), so emoji must be rendered in iOS's dedicated emoji family.
+ * Android falls back to its color-emoji font per-glyph, so no override needed.
+ */
+const EMOJI_FONT_STYLE =
+  Platform.OS === "ios" ? { fontFamily: "Apple Color Emoji" } : undefined;
+
+/**
+ * Render a markdown text node, rendering any emoji runs in the emoji font so
+ * they show as real emoji instead of HankenGrotesk's tofu "?" box. Non-emoji
+ * text keeps the inherited Opal typography/color.
+ */
+function renderTextWithEmoji(
+  key: string,
+  text: string,
+  inheritedStyle: object,
+): React.ReactNode {
+  const segments = text.split(EMOJI_RUN);
+  if (segments.length === 1) {
+    return (
+      <RNText key={key} style={inheritedStyle}>
+        {text}
+      </RNText>
+    );
+  }
+  return (
+    <RNText key={key} style={inheritedStyle}>
+      {segments.map((seg, i) =>
+        seg === "" ? null : i % 2 === 1 ? (
+          <RNText key={i} style={EMOJI_FONT_STYLE}>
+            {seg}
+          </RNText>
+        ) : (
+          seg
+        ),
+      )}
+    </RNText>
+  );
 }
 
 /**
@@ -113,8 +146,6 @@ function Markdown({
   documents,
 }: MarkdownProps) {
   const colors = useThemeColors();
-  // Drop emoji the brand font can't render (see stripEmoji) before parsing.
-  const content = useMemo(() => stripEmoji(children), [children]);
   const muted = variant === "muted" || variant === "muted-collapsed";
   const bodyColor = muted ? colors["text-03"] : colors["text-05"];
   const paragraphSpacing =
@@ -305,6 +336,10 @@ function Markdown({
       code_block: (node) => (
         <CodeBlock key={node.key} code={trimTrailingNewline(node.content)} />
       ),
+      // Render emoji runs in the emoji font (HankenGrotesk has no emoji glyphs
+      // and would render tofu "?" boxes). Non-emoji text keeps inherited styles.
+      text: (node, _children, _parent, _styles, inheritedStyles = {}) =>
+        renderTextWithEmoji(node.key, node.content, inheritedStyles),
       ...(hasCitationData
         ? { link: makeCitationLinkRule({ citations, documents }) }
         : {}),
@@ -324,7 +359,7 @@ function Markdown({
         return false;
       }}
     >
-      {content}
+      {children}
     </RNMarkdown>
   );
 }
