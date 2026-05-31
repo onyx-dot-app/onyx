@@ -754,6 +754,42 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext:
+      "Pull service requests from a Jira Service Management project. The configured token must be able to browse all requests in the service desk.",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "text",
+        query: "Enter the Jira Service Management project key:",
+        label: "Project Key",
+        name: "project_key",
+        optional: false,
+        description:
+          "The project key of the service desk to index (e.g., ITSM).",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "text",
+        query: "Enter the service desk ID:",
+        label: "Service Desk ID",
+        name: "service_desk_id",
+        optional: true,
+        description:
+          "Optional numeric service desk ID. If omitted, Onyx resolves it from the project key.",
+      },
+    ],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
@@ -1974,6 +2010,12 @@ export interface JiraConfig {
   project_key?: string;
   comment_email_blacklist?: string[];
   jql_query?: string;
+}
+
+export interface JiraServiceManagementConfig {
+  jira_base_url: string;
+  project_key: string;
+  service_desk_id?: string;
 }
 
 export interface SalesforceConfig {
