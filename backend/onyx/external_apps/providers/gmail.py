@@ -1,3 +1,4 @@
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.actions import ExternalAppAction
@@ -31,18 +32,21 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path=_MESSAGES),
             RestRoute(method="GET", path=_MESSAGE_ITEM),
         ),
+        default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GmailAction.LABELS_READ,
         normalised_name="List labels",
         description="List the labels in the mailbox.",
         matches=(RestRoute(method="GET", path=f"{_USER}/labels"),),
+        default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GmailAction.PROFILE_READ,
         normalised_name="Read profile",
         description="Read the connected account's Gmail profile.",
         matches=(RestRoute(method="GET", path=f"{_USER}/profile"),),
+        default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GmailAction.MESSAGES_SEND,
