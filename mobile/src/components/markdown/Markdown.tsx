@@ -53,6 +53,24 @@ function trimTrailingNewline(content: string): string {
 }
 
 /**
+ * Strip emoji / pictographs from markdown text.
+ *
+ * The Opal brand font (HankenGrotesk) has no emoji glyphs and ships a custom
+ * `.notdef` (a "?"-in-a-box) glyph, which blocks iOS's per-glyph emoji fallback —
+ * so any emoji the model emits (e.g. "## 🏆 Gold Rate") renders as a tofu "?"
+ * box. Until we wire an emoji-capable fallback font, drop emoji from the source
+ * (covers headings + body + code) and tidy the whitespace they leave behind.
+ */
+function stripEmoji(content: string): string {
+  return content
+    .replace(
+      /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu,
+      "",
+    )
+    .replace(/[ \t]{2,}/g, " ");
+}
+
+/**
  * Pull the language label off a fence node's info string. markdown-it stores
  * the fence info on `node.sourceInfo`; fall back to the `language-xxx` class on
  * `node.attributes` if present.
@@ -95,6 +113,8 @@ function Markdown({
   documents,
 }: MarkdownProps) {
   const colors = useThemeColors();
+  // Drop emoji the brand font can't render (see stripEmoji) before parsing.
+  const content = useMemo(() => stripEmoji(children), [children]);
   const muted = variant === "muted" || variant === "muted-collapsed";
   const bodyColor = muted ? colors["text-03"] : colors["text-05"];
   const paragraphSpacing =
@@ -113,39 +133,59 @@ function Markdown({
 
       // Headings — Opal heading presets. The library wraps headings in a View,
       // so the typography needs to sit on the heading style (cascades to text).
+      // Headings — keep the Opal heading FONT (HankenGrotesk SemiBold) but use
+      // chat-appropriate sizes. The raw Opal `heading-h1` is a 48px hero size
+      // (with a tight -0.48 letterSpacing tuned for that size); inside a chat
+      // answer that's far too large, so size + letterSpacing are overridden.
       heading1: {
         ...typography["heading-h1"],
+        fontSize: 22,
+        lineHeight: 30,
+        letterSpacing: -0.2,
         color: colors["text-05"],
         marginTop: 16,
         marginBottom: 8,
       },
       heading2: {
         ...typography["heading-h2"],
+        fontSize: 19,
+        lineHeight: 27,
+        letterSpacing: -0.1,
         color: colors["text-05"],
-        marginTop: 16,
-        marginBottom: 8,
+        marginTop: 14,
+        marginBottom: 6,
       },
       heading3: {
         ...typography["heading-h3"],
+        fontSize: 17,
+        lineHeight: 25,
+        letterSpacing: 0,
         color: colors["text-05"],
         marginTop: 12,
         marginBottom: 6,
       },
-      // h4-h6 have no dedicated Opal preset; fall back to the smallest heading.
+      // h4-h6 have no dedicated Opal preset; step down from h3.
       heading4: {
         ...typography["heading-h3"],
+        fontSize: 16,
+        lineHeight: 24,
+        letterSpacing: 0,
         color: colors["text-05"],
         marginTop: 12,
-        marginBottom: 6,
+        marginBottom: 4,
       },
       heading5: {
         ...typography["heading-h3-muted"],
+        fontSize: 15,
+        lineHeight: 22,
         color: colors["text-04"],
         marginTop: 8,
         marginBottom: 4,
       },
       heading6: {
         ...typography["heading-h3-muted"],
+        fontSize: 14,
+        lineHeight: 20,
         color: colors["text-03"],
         marginTop: 8,
         marginBottom: 4,
@@ -284,7 +324,7 @@ function Markdown({
         return false;
       }}
     >
-      {children}
+      {content}
     </RNMarkdown>
   );
 }

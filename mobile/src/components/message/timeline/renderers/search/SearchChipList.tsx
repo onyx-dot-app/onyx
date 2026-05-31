@@ -195,7 +195,15 @@ function Chip({ label, sourceType, isInternet, isQuery, onPress }: ChipProps) {
           color={iconColor}
         />
       )}
-      <Text font="secondary-body" color="text-04">
+      {/* Single line + shrink so the icon and label stay on the SAME row; a long
+          query inside the narrow timeline column would otherwise wrap below the
+          (vertically-centered) icon and read as "icon on top, text below". */}
+      <Text
+        font="secondary-body"
+        color="text-04"
+        numberOfLines={1}
+        style={{ flexShrink: 1 }}
+      >
         {label}
       </Text>
     </Pressable>
