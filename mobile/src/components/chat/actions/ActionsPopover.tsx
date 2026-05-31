@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { Dimensions, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Popover, Text, type PopoverTriggerRef } from "@/components/opal";
+import { Popover, Text } from "@/components/opal";
 import { ActionLineItem } from "@/components/chat/actions/ActionLineItem";
 import { SwitchList } from "@/components/chat/actions/SwitchList";
 import { toSourceItem } from "@/components/chat/actions/SourceRow";
@@ -36,7 +36,7 @@ import { useSourcePreferences } from "@/lib/sources/useSourcePreferences";
 //
 // SOURCE <-> SEARCH COUPLING (ported from web, adapted to mobile hooks):
 //   1. Enabling the FIRST source force-pins Search (toggleForcedTool); disabling
-//      the LAST source un-forces it (clearForcedTools when search is the forced
+//      the LAST source un-forces it (toggleForcedTool when search is the forced
 //      tool).
 //   2. Toggling a source keeps Search ENABLED (not in disabled_tool_ids) while
 //      >=1 source is on, and disabled when 0 are on (web setSearchToolEnabled).
@@ -45,6 +45,12 @@ import { useSourcePreferences } from "@/lib/sources/useSourcePreferences";
 //      enableAllSources() if none stashed).
 //   4. Force-pinning Search while 0 sources are enabled opens the sources
 //      sub-view so the user can pick sources.
+//
+// DIVERGENCE FROM WEB: mobile couples the Search tool <-> sources ONLY on user
+// toggle. Unlike web, it intentionally does NOT run a mount-time reconciliation
+// effect (which would side-effect backend mutations on mount), so cross-mount /
+// cross-platform drift (e.g. enabled-search + 0-sources) is tolerated; the
+// send-path filter computation is the safety net.
 // ---------------------------------------------------------------------------
 
 interface ActionsPopoverProps {
@@ -57,7 +63,6 @@ interface ActionsPopoverProps {
 type SecondaryView = null | "sources";
 
 export function ActionsPopover({ agent, personaId }: ActionsPopoverProps) {
-  const triggerRef = useRef<PopoverTriggerRef>(null);
   const insets = useSafeAreaInsets();
   const [secondaryView, setSecondaryView] = useState<SecondaryView>(null);
 
@@ -67,7 +72,6 @@ export function ActionsPopover({ agent, personaId }: ActionsPopoverProps) {
   // --- force-tool (ephemeral) ---------------------------------------------
   const forcedToolIds = useForcedTools((s) => s.forcedToolIds);
   const toggleForcedTool = useForcedTools((s) => s.toggleForcedTool);
-  const clearForcedTools = useForcedTools((s) => s.clearForcedTools);
 
   // --- tool enable/disable (backend-persisted) ----------------------------
   const { data: agentPrefs } = useAgentPreferences();
@@ -96,8 +100,9 @@ export function ActionsPopover({ agent, personaId }: ActionsPopoverProps) {
   );
   const searchToolId = searchTool?.id ?? null;
 
+  // Exclude MCP tools: MCP is out of scope for this feature (web parity).
   const displayTools = useMemo(
-    () => agent.tools.filter((t) => t.chat_selectable),
+    () => agent.tools.filter((t) => t.chat_selectable && !t.mcp_server_id),
     [agent.tools]
   );
 
@@ -172,7 +177,9 @@ export function ActionsPopover({ agent, personaId }: ActionsPopoverProps) {
         newEnabledCount === 0 &&
         forcedToolIds.includes(searchToolId)
       ) {
-        clearForcedTools();
+        // Un-force only the search tool (correct even if the max-one-forced
+        // invariant ever changes); given that invariant this clears all forcing.
+        toggleForcedTool(searchToolId);
       }
     }
 
@@ -201,7 +208,7 @@ export function ActionsPopover({ agent, personaId }: ActionsPopoverProps) {
 
   return (
     <Popover onOpenChange={handleOpenChange}>
-      <Popover.Trigger ref={triggerRef} asChild>
+      <Popover.Trigger asChild>
         {/* Sliders trigger — mirrors the AttachMenu / send-cluster icon button
             (h-8 w-8, rounded, active tint). */}
         <Pressable
