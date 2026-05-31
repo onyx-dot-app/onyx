@@ -264,7 +264,10 @@ export default function ConfigureProviderModal({
                             </Text>
                           </div>
                           <PolicyToggle
-                            value={policies[action.action_id] ?? "ASK"}
+                            value={
+                              policies[action.action_id] ??
+                              action.default_policy
+                            }
                             onChange={(value) =>
                               setPolicies((prev) => ({
                                 ...prev,
