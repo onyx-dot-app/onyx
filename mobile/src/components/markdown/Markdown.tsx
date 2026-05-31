@@ -1,10 +1,5 @@
 import { useMemo } from "react";
-import {
-  Linking,
-  StyleSheet,
-  Text as RNText,
-  type TextStyle,
-} from "react-native";
+import { Linking } from "react-native";
 import RNMarkdown, {
   type ASTNode,
   type RenderRules,
@@ -57,69 +52,14 @@ function trimTrailingNewline(content: string): string {
   return content;
 }
 
-/**
- * Emoji-run splitter (capturing group so `String.split` keeps the matches).
- * `split` yields alternating [text, emoji, text, emoji, …] — odd indices are
- * emoji runs. Consecutive emoji (incl. ZWJ sequences, skin-tone + variation
- * selectors, keycaps, flags) collapse into one run via the trailing `+`.
- */
-const EMOJI_RUN =
-  /([\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]+)/gu;
-
-/** Drop `fontFamily` from a style so the run uses the system font. */
-function withoutFontFamily(style: unknown): TextStyle {
-  const rest = { ...((StyleSheet.flatten(style as TextStyle) ?? {}) as TextStyle) };
-  delete rest.fontFamily;
-  return rest;
-}
-
-/**
- * Render a markdown text node so emoji show as real color emoji.
- *
- * iOS pins a text run to the run's font, and the brand font HankenGrotesk has no
- * emoji glyphs (its `.notdef` "?" box even blocks the system emoji fallback). A
- * dedicated emoji family name isn't reliably resolvable in RN either. The robust
- * fix: render emoji runs with NO custom font in their ancestor chain so they use
- * the SYSTEM font (which renders color emoji), while keeping HankenGrotesk on the
- * non-emoji runs only. The outer wrapper therefore drops `fontFamily`; non-emoji
- * runs re-apply it; emoji runs are bare strings that inherit the (font-less)
- * wrapper. The matching `textgroup` override drops `fontFamily` one level up so
- * nothing in the chain re-imposes the brand font on the emoji runs.
- */
-function renderTextWithEmoji(
-  key: string,
-  text: string,
-  inheritedStyle: unknown,
-): React.ReactNode {
-  const flat = (StyleSheet.flatten(inheritedStyle as TextStyle) ??
-    {}) as TextStyle;
-  const segments = text.split(EMOJI_RUN);
-  if (segments.length === 1) {
-    return (
-      <RNText key={key} style={flat}>
-        {text}
-      </RNText>
-    );
-  }
-  const fontFamily = flat.fontFamily;
-  const noFamily = withoutFontFamily(flat);
-  return (
-    <RNText key={key} style={noFamily}>
-      {segments.map((seg, i) =>
-        seg === "" ? null : i % 2 === 1 ? (
-          // emoji run → bare string, inherits the font-less wrapper → system font
-          seg
-        ) : fontFamily ? (
-          <RNText key={i} style={{ fontFamily }}>
-            {seg}
-          </RNText>
-        ) : (
-          seg
-        ),
-      )}
-    </RNText>
-  );
-}
+// EMOJI NOTE: the chat answer renders in the SYSTEM font (no `fontFamily` on the
+// text styles below — only `fontWeight`). The Opal brand font HankenGrotesk has
+// no emoji glyphs and ships a `.notdef` "?" box that wins over iOS's per-glyph
+// emoji fallback, so any emoji the model emits rendered as tofu. iOS won't
+// resolve a named emoji font in RN, and the markdown library applies the body/
+// heading font on a Text ancestor of every run, so emoji can only render when no
+// custom font is in the chain at all. Using the system font keeps emoji working
+// while preserving size + weight; UI chrome elsewhere still uses HankenGrotesk.
 
 /**
  * Pull the language label off a fence node's info string. markdown-it stores
@@ -174,20 +114,23 @@ function Markdown({
   // `body` preset propagates to paragraphs / list items / etc.
   const styles = useMemo(
     () => ({
-      // Base text color + typography for the whole document.
+      // Base text color + typography for the whole document. NB: NO `fontFamily`
+      // (system font) so emoji render — see EMOJI NOTE above. `fontFamily:
+      // undefined` clears the brand family the preset spread would set; weight is
+      // carried explicitly via `fontWeight`.
       body: {
         ...typography["main-content-body"],
+        fontFamily: undefined,
+        fontWeight: "500" as const,
         color: bodyColor,
       },
 
-      // Headings — Opal heading presets. The library wraps headings in a View,
-      // so the typography needs to sit on the heading style (cascades to text).
-      // Headings — keep the Opal heading FONT (HankenGrotesk SemiBold) but use
-      // chat-appropriate sizes. The raw Opal `heading-h1` is a 48px hero size
-      // (with a tight -0.48 letterSpacing tuned for that size); inside a chat
-      // answer that's far too large, so size + letterSpacing are overridden.
+      // Headings — chat-appropriate sizes (the raw Opal `heading-h1` is a 48px
+      // hero size). System font (no fontFamily) + explicit weight so emoji render.
       heading1: {
         ...typography["heading-h1"],
+        fontFamily: undefined,
+        fontWeight: "600" as const,
         fontSize: 22,
         lineHeight: 30,
         letterSpacing: -0.2,
@@ -197,6 +140,8 @@ function Markdown({
       },
       heading2: {
         ...typography["heading-h2"],
+        fontFamily: undefined,
+        fontWeight: "600" as const,
         fontSize: 19,
         lineHeight: 27,
         letterSpacing: -0.1,
@@ -206,6 +151,8 @@ function Markdown({
       },
       heading3: {
         ...typography["heading-h3"],
+        fontFamily: undefined,
+        fontWeight: "600" as const,
         fontSize: 17,
         lineHeight: 25,
         letterSpacing: 0,
@@ -216,6 +163,8 @@ function Markdown({
       // h4-h6 have no dedicated Opal preset; step down from h3.
       heading4: {
         ...typography["heading-h3"],
+        fontFamily: undefined,
+        fontWeight: "600" as const,
         fontSize: 16,
         lineHeight: 24,
         letterSpacing: 0,
@@ -225,6 +174,8 @@ function Markdown({
       },
       heading5: {
         ...typography["heading-h3-muted"],
+        fontFamily: undefined,
+        fontWeight: "500" as const,
         fontSize: 15,
         lineHeight: 22,
         color: colors["text-04"],
@@ -233,6 +184,8 @@ function Markdown({
       },
       heading6: {
         ...typography["heading-h3-muted"],
+        fontFamily: undefined,
+        fontWeight: "500" as const,
         fontSize: 14,
         lineHeight: 20,
         color: colors["text-03"],
@@ -251,9 +204,10 @@ function Markdown({
         width: "100%" as const,
       },
 
-      // Emphasis.
+      // Emphasis — bold weight only (system font, inherits body size); no
+      // fontFamily so emoji inside bold text still render.
       strong: {
-        ...typography["main-content-emphasis"],
+        fontWeight: "700" as const,
       },
       em: {
         fontStyle: "italic" as const,
@@ -320,7 +274,7 @@ function Markdown({
       th: {
         flex: 1,
         padding: 6,
-        ...typography["main-content-emphasis"],
+        fontWeight: "700" as const,
         color: colors["text-05"],
       },
       tr: {
@@ -354,16 +308,6 @@ function Markdown({
       code_block: (node) => (
         <CodeBlock key={node.key} code={trimTrailingNewline(node.content)} />
       ),
-      // Emoji handling (see renderTextWithEmoji): emoji must render in the
-      // system font, so we drop the brand `fontFamily` at BOTH the textgroup
-      // (one level up) and the text node, re-applying it only to non-emoji runs.
-      textgroup: (node, children, _parent, _styles, inheritedStyles = {}) => (
-        <RNText key={node.key} style={withoutFontFamily(inheritedStyles)}>
-          {children}
-        </RNText>
-      ),
-      text: (node, _children, _parent, _styles, inheritedStyles = {}) =>
-        renderTextWithEmoji(node.key, node.content, inheritedStyles),
       ...(hasCitationData
         ? { link: makeCitationLinkRule({ citations, documents }) }
         : {}),
