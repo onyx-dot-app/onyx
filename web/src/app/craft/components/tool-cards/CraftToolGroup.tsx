@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Tag, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgChevronDown } from "@opal/icons";
@@ -19,6 +19,8 @@ import type { ToolCallState } from "@/app/craft/types/displayTypes";
 
 interface CraftToolGroupProps {
   toolCalls: ToolCallState[];
+  /** Once an assistant message follows, animate the block closed. */
+  autoCollapse?: boolean;
 }
 
 function aggregateStatus(toolCalls: ToolCallState[]): ToolCallState["status"] {
@@ -50,27 +52,33 @@ function renderStatusIcon(toolCalls: ToolCallState[]) {
   return <ToolIcon className={cn(baseClass, "stroke-text-03")} />;
 }
 
-export default function CraftToolGroup({ toolCalls }: CraftToolGroupProps) {
+export default function CraftToolGroup({
+  toolCalls,
+  autoCollapse = false,
+}: CraftToolGroupProps) {
   const aggregate = aggregateStatus(toolCalls);
   const hasFailure = aggregate === "failed";
-  const [isOpen, setIsOpen] = useState(hasFailure);
+  // Open while the run is active (or on failure) so streaming calls stay
+  // visible and nothing collapses as new calls append; settled groups (e.g.
+  // re-rendered history) start collapsed.
+  const [isOpen, setIsOpen] = useState(
+    aggregate === "in_progress" || hasFailure
+  );
   const failedCount = toolCalls.filter((t) => t.status === "failed").length;
-  // Surface the *currently relevant* tool's label so the user can see WHICH
-  // step the agent is on without expanding the card. Prefer the most recent
-  // in-progress tool; once everything is settled, fall back to the most
-  // recent tool overall (so the header shows the last action that happened
-  // rather than reverting to a generic "Working" label).
-  const lastInProgress = [...toolCalls]
-    .reverse()
-    .find((t) => t.status === "pending" || t.status === "in_progress");
-  const focused = lastInProgress ?? toolCalls[toolCalls.length - 1];
-  const titleText = focused?.title ?? "Working";
-  const descriptionText = focused?.description ?? null;
+
+  // Fold closed once a message follows; fire once so a manual re-open sticks.
+  const didAutoCollapse = useRef(false);
+  useEffect(() => {
+    if (autoCollapse && !hasFailure && !didAutoCollapse.current) {
+      didAutoCollapse.current = true;
+      setIsOpen(false);
+    }
+  }, [autoCollapse, hasFailure]);
 
   return (
     <div
       className={cn(
-        "rounded-08",
+        "rounded-08 overflow-hidden",
         hasFailure && "border border-status-error-03 bg-status-error-00"
       )}
     >
@@ -85,15 +93,8 @@ export default function CraftToolGroup({ toolCalls }: CraftToolGroupProps) {
             <div className="flex items-center gap-2 min-w-0 w-full">
               {renderStatusIcon(toolCalls)}
               <Text font="main-ui-muted" color="text-04" nowrap>
-                {titleText}
+                Working
               </Text>
-              {descriptionText && (
-                <span className="truncate min-w-0">
-                  <Text font="main-ui-body" color="text-03" nowrap>
-                    {descriptionText}
-                  </Text>
-                </span>
-              )}
               <span className="ml-auto shrink-0 flex items-center gap-2">
                 {hasFailure && failedCount > 0 && (
                   <Tag
@@ -118,9 +119,9 @@ export default function CraftToolGroup({ toolCalls }: CraftToolGroupProps) {
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="mx-2 mb-2 mt-1 rounded-md bg-background-tint-00 flex flex-col py-1">
+          <div className="flex flex-col border-t-[0.5px] border-border-01">
             {toolCalls.map((toolCall) => (
-              <CraftToolCard key={toolCall.id} toolCall={toolCall} dense />
+              <CraftToolCard key={toolCall.id} toolCall={toolCall} nested />
             ))}
           </div>
         </CollapsibleContent>

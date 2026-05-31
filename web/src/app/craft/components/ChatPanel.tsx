@@ -15,6 +15,7 @@ import {
   useIsPreProvisioningFailed,
   usePreProvisionedSessionId,
   useQueuedMessages,
+  useViewedSubagentSessionId,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
@@ -32,6 +33,8 @@ import ScheduledRunBanner from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsRegion";
+import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
+import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -41,6 +44,7 @@ import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
 import { Tooltip } from "@opal/components";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
@@ -69,10 +73,10 @@ export default function BuildChatPanel({
   const { isMobile } = useScreenSize();
   const toggleOutputPanel = useToggleOutputPanel();
 
-  // Track when output panel is fully closed (after animation completes)
-  // This prevents the "open panel" button from appearing during the close animation
-  const [isOutputPanelFullyClosed, setIsOutputPanelFullyClosed] =
-    useState(!outputPanelOpen);
+  // Main-column view mode: chat (main agent) vs a subagent transcript.
+  const viewedSubagentSessionId = useViewedSubagentSessionId();
+  const isViewingSubagent = viewedSubagentSessionId !== null;
+  const reduceMotion = useReducedMotion();
 
   const { limits, refreshLimits } = useUsageLimits();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -87,17 +91,6 @@ export default function BuildChatPanel({
       refreshLimits();
     }
   }, [session?.error, refreshLimits, setCurrentError]);
-
-  useEffect(() => {
-    if (outputPanelOpen) {
-      // Panel opening - immediately mark as not fully closed
-      setIsOutputPanelFullyClosed(false);
-    } else {
-      // Panel closing - wait for 300ms animation to complete
-      const timer = setTimeout(() => setIsOutputPanelFullyClosed(true), 300);
-      return () => clearTimeout(timer);
-    }
-  }, [outputPanelOpen]);
 
   // Access actions directly like chat does - these don't cause re-renders
   const consumePreProvisionedSession = useBuildSessionStore(
@@ -140,6 +133,21 @@ export default function BuildChatPanel({
     const activeSession = existingSessionId ?? preProvisionedSessionId ?? null;
     setActiveSession(activeSession);
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
+
+  const maybeAutoOpenPanelForPreview = useBuildSessionStore(
+    (s) => s.maybeAutoOpenPanelForPreview
+  );
+
+  // Auto-open the panel the first time webappUrl becomes non-null this session.
+  const prevWebappUrlRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevWebappUrlRef.current;
+    const current = session?.webappUrl ?? null;
+    if (prev === null && current !== null && sessionId) {
+      maybeAutoOpenPanelForPreview(sessionId);
+    }
+    prevWebappUrlRef.current = current;
+  }, [session?.webappUrl, sessionId, maybeAutoOpenPanelForPreview]);
 
   // Ref to access InputBar methods
   const inputBarRef = useRef<InputBarHandle>(null);
@@ -426,28 +434,40 @@ export default function BuildChatPanel({
                 size="sm"
               />
             )}
-            <SandboxStatusIndicator />
+            <AgentSwitcher />
             <ScheduledRunBanner
               sessionId={sessionId ?? existingSessionId ?? null}
             />
           </div>
-          {/* Output panel toggle - only show when panel is fully closed (after animation) */}
-          {isOutputPanelFullyClosed && (
-            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
+          {/* Right cluster: sandbox status sits left of the panel toggle. The
+              toggle stays pinned to the right edge, so the status chip's width
+              changes grow leftward into empty space without shifting anything. */}
+          <div className="flex flex-row items-center gap-2 shrink-0">
+            <SandboxStatusIndicator />
+            {/* Output panel toggle — same icon for open and close */}
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <IconButton
               icon={SvgSidebar}
               onClick={toggleOutputPanel}
-              tooltip="Open output panel"
+              tooltip={
+                outputPanelOpen ? "Close output panel" : "Open output panel"
+              }
               tertiary
-              className="bg-background-tint-00! border rounded-full"
-              iconClassName="stroke-text-04!"
+              className={cn(
+                "border rounded-full p-2.5!",
+                outputPanelOpen
+                  ? "bg-background-tint-02!"
+                  : "bg-background-tint-00!"
+              )}
+              iconClassName="stroke-text-04! h-5! w-5!"
             />
-          )}
+          </div>
           {/* Soft fade border at bottom */}
           <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
         </div>
 
-        {/* Main content area */}
+        {/* Main content area — cross-fades when switching between the main
+            agent and a subagent (keyed by the viewed agent). */}
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
@@ -455,26 +475,38 @@ export default function BuildChatPanel({
           // the column past the page bounds.
           className="flex-1 min-h-0 overflow-auto"
         >
-          {!hasSession && !existingSessionId ? (
-            <BuildWelcome
-              onSubmit={handleSubmit}
-              isRunning={isRunning}
-              sandboxInitializing={sandboxNotReady}
-            />
-          ) : (
-            <BuildMessageList
-              messages={session?.messages ?? []}
-              streamItems={session?.streamItems ?? []}
-              isStreaming={isRunning}
-              autoScrollEnabled={isAtBottom}
-              scrollContainerRef={scrollContainerRef}
-              trailingAssistantSlot={
-                <LiveApprovalsRegion
-                  sessionId={sessionId ?? existingSessionId ?? null}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={viewedSubagentSessionId ?? "main"}
+              initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
+              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {isViewingSubagent && viewedSubagentSessionId ? (
+                <SubagentView subagentSessionId={viewedSubagentSessionId} />
+              ) : !hasSession && !existingSessionId ? (
+                <BuildWelcome
+                  onSubmit={handleSubmit}
+                  isRunning={isRunning}
+                  sandboxInitializing={sandboxNotReady}
                 />
-              }
-            />
-          )}
+              ) : (
+                <BuildMessageList
+                  messages={session?.messages ?? []}
+                  streamItems={session?.streamItems ?? []}
+                  isStreaming={isRunning}
+                  autoScrollEnabled={isAtBottom}
+                  scrollContainerRef={scrollContainerRef}
+                  trailingAssistantSlot={
+                    <LiveApprovalsRegion
+                      sessionId={sessionId ?? existingSessionId ?? null}
+                    />
+                  }
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
         {/* Input bar at bottom when session exists. */}
@@ -482,7 +514,7 @@ export default function BuildChatPanel({
           <div className="px-4 pb-8 pt-4 relative">
             {/* Soft fade border at top */}
             <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
-            <div className="max-w-2xl mx-auto">
+            <div className="max-w-[720px] mx-auto">
               {/* Scroll to bottom button - shown when user has scrolled away */}
               {showScrollButton && (
                 <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
@@ -507,11 +539,18 @@ export default function BuildChatPanel({
                   </Tooltip>
                 </div>
               )}
+              {/* The composer stays in view for subagents (layout consistency)
+                  but is disabled — replying to subagents is not supported. */}
               <InputBar
                 ref={inputBarRef}
                 onSubmit={handleSubmit}
                 isRunning={isRunning}
-                placeholder="Continue the conversation..."
+                disabled={isViewingSubagent}
+                placeholder={
+                  isViewingSubagent
+                    ? "Switch to the main agent to send a message"
+                    : "Continue the conversation..."
+                }
                 queuedMessages={queuedMessages}
                 onQueueMessage={handleQueueMessage}
                 onRemoveQueuedMessage={handleRemoveQueuedMessage}
