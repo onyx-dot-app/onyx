@@ -1,7 +1,9 @@
+import { createElement } from "react";
 import { Pressable, View } from "react-native";
 
 import { Switch, Text } from "@/components/opal";
-import { ChevronRightIcon, SlidersIcon } from "@/components/ui/icons";
+import { ChevronRightIcon } from "@/components/ui/icons";
+import { getIconForAction } from "@/lib/actionIcons";
 import { useToken } from "@/theme/ThemeProvider";
 import type { ToolSnapshot } from "@/lib/types/tools";
 
@@ -22,10 +24,11 @@ import type { ToolSnapshot } from "@/lib/types/tools";
 //   - disabled → label strikethrough (`textDecorationLine` via style),
 //   - default  → label `text-04`.
 //
-// The generic per-tool glyph uses `SlidersIcon` (the actions glyph): mobile has
-// no per-tool icon set, so a single sensible generic is used for every row.
-// Dynamic label/icon colours go through `Text color` / `useToken` (never a
-// `text-*` className), per the codebase convention.
+// The per-tool glyph comes from `getIconForAction(tool)` — a 1:1 port of web's
+// actionUtils mapping (Search→search, WebSearch→globe, ImageGen→image,
+// KnowledgeGraph→server, OpenURL→external-link, CodeInterpreter→terminal,
+// CodingAgent/default→cpu). Dynamic label/icon colours go through `Text color` /
+// `useToken` (never a `text-*` className), per the codebase convention.
 // ---------------------------------------------------------------------------
 
 interface ActionLineItemProps {
@@ -63,6 +66,7 @@ export function ActionLineItem({
 
   const labelColor = isForced ? "action-link-05" : "text-04";
   const iconColor = isForced ? accent : isDisabled ? mutedColor : defaultColor;
+  const toolIcon = getIconForAction(tool);
 
   return (
     <Pressable
@@ -79,7 +83,9 @@ export function ActionLineItem({
       }
     >
       <View className="flex-1 flex-row items-center gap-2">
-        <SlidersIcon size={16} color={iconColor} />
+        {/* createElement (not <ToolIcon/>) so the linter doesn't read the
+            tool-chosen icon as a component declared during render. */}
+        {createElement(toolIcon, { size: 16, color: iconColor })}
         <Text
           font="main-ui-body"
           color={labelColor}

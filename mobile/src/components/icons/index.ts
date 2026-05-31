@@ -51,6 +51,8 @@ export { SvgArrowExchange } from "@/components/icons/SvgArrowExchange";
 export { SvgExternalLink } from "@/components/icons/SvgExternalLink";
 export { SvgDownload } from "@/components/icons/SvgDownload";
 export { SvgImage } from "@/components/icons/SvgImage";
+export { SvgCpu } from "@/components/icons/SvgCpu";
+export { SvgServer } from "@/components/icons/SvgServer";
 
 // Aliases — the Opal curated set has no dedicated glyph for these, so the
 // closest curated icon stands in (documented at the source component).

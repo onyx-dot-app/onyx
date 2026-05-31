@@ -211,7 +211,7 @@ export function ActionsPopover({ agent, personaId }: ActionsPopoverProps) {
 
   const screenHeight = Dimensions.get("window").height;
   const screenWidth = Dimensions.get("window").width;
-  const contentWidth = Math.min(320, screenWidth - 24);
+  const contentWidth = Math.min(256, screenWidth - 48);
   const maxListHeight = Math.round(screenHeight * 0.5);
 
   const sourceItems = configuredSources.map((s) =>
