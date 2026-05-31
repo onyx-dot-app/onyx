@@ -33,6 +33,12 @@ import {
 } from "@/lib/api/sendMessage";
 import type { Packet, FileDescriptor } from "@/lib/types";
 import { useChatSessionStore } from "@/state/chatSessionStore";
+import { useForcedTools } from "@/state/useForcedTools";
+import { usePersonas } from "@/query/personas";
+import { useAgentPreferences } from "@/query/agentPreferences";
+import { useAvailableSourceStrings } from "@/query/connectors";
+import { useSourcePreferences } from "@/lib/sources/useSourcePreferences";
+import { buildFilters } from "@/lib/sources/sourceMetadata";
 import {
   buildImmediateMessages,
   getLatestMessageChain,
@@ -165,6 +171,34 @@ export function useSendMessage(
 
   // Lazy session create + backend auto-naming (web parity).
   const { ensureSession, autoNameSession } = useChatSessionLifecycle();
+
+  // ── Send-request control state (tools / sources / force-tool) ───────────────
+  // These feed three fields of the send request so the actions popover controls
+  // take effect: allowed_tool_ids (agent tools minus disabled), forced_tool_id
+  // (the one-shot forced tool), internal_search_filters (enabled source types).
+  //
+  // `personas` + `agentPrefs` are TanStack Query data: read the latest off `data`
+  // (closing over the variable is fine — the async send() reads it after the hook
+  // re-renders with fresh data; for absolute freshness we'd use queryClient, but
+  // closing over the latest render's value matches how the model selector reads
+  // store state here). `selectedSources` is React state, so the async send() would
+  // close over a STALE value — mirror it into a ref and read the ref in send().
+  const { data: personas } = usePersonas();
+  const { data: agentPrefs } = useAgentPreferences();
+  const availableSourceStrings = useAvailableSourceStrings();
+  const { selectedSources } = useSourcePreferences(availableSourceStrings);
+  const selectedSourcesRef = useRef(selectedSources);
+  useEffect(() => {
+    selectedSourcesRef.current = selectedSources;
+  }, [selectedSources]);
+  const personasRef = useRef(personas);
+  useEffect(() => {
+    personasRef.current = personas;
+  }, [personas]);
+  const agentPrefsRef = useRef(agentPrefs);
+  useEffect(() => {
+    agentPrefsRef.current = agentPrefs;
+  }, [agentPrefs]);
 
   const cancelScheduledFlush = useCallback(() => {
     if (rafRef.current !== null) {
@@ -309,6 +343,28 @@ export function useSendMessage(
         .getState()
         .sessions.get(activeSessionId)?.selectedModel;
 
+      // ── Tools / sources / force-tool (read imperatively, no stale closures) ──
+      // allowed_tool_ids = the current agent's tools minus the user's disabled set.
+      // forced_tool_id   = the one-shot forced tool (first id, or null).
+      // internal_search_filters = filters built from the enabled source set.
+      const personaId =
+        store.getState().sessions.get(activeSessionId)?.personaId;
+      const agent = personasRef.current?.find((p) => p.id === personaId);
+      const disabledToolIds =
+        personaId !== undefined
+          ? (agentPrefsRef.current?.[personaId]?.disabled_tool_ids ?? [])
+          : [];
+      const allowedToolIds = agent
+        ? agent.tools
+            .filter((t) => !disabledToolIds.includes(t.id))
+            .map((t) => t.id)
+        : undefined;
+
+      const forcedIds = useForcedTools.getState().forcedToolIds;
+      const forcedToolId = forcedIds.length > 0 ? forcedIds[0] : null;
+
+      const internalSearchFilters = buildFilters(selectedSourcesRef.current);
+
       const req: SendMessageRequest = {
         message: trimmed,
         // activeSessionId is always a real UUID here (created above for new chats).
@@ -322,6 +378,9 @@ export function useSendMessage(
             }
           : undefined,
         origin: "unset",
+        allowed_tool_ids: allowedToolIds,
+        forced_tool_id: forcedToolId,
+        internal_search_filters: internalSearchFilters,
       };
 
       let sawFirstPacket = false;
@@ -387,6 +446,9 @@ export function useSendMessage(
         store.getState().updateSessionMessageTree(activeSessionId, tree);
         store.getState().updateChatState(activeSessionId, "input");
         store.getState().setStreamingStartTime(activeSessionId, null);
+        // The forced tool is one-shot (web parity): clear it after a SUCCESSFUL
+        // send only — not on abort/error, where the user likely wants to retry.
+        useForcedTools.getState().clearForcedTools();
       } catch (err) {
         cancelScheduledFlush();
         // Flush whatever streamed before the failure.
