@@ -21,6 +21,7 @@ export {
   type PopoverTriggerRef,
 } from "@/components/opal/Popover";
 export { Checkbox, type CheckboxProps } from "@/components/opal/Checkbox";
+export { Switch, type SwitchProps } from "@/components/opal/Switch";
 export {
   BottomSheet,
   type BottomSheetProps,
