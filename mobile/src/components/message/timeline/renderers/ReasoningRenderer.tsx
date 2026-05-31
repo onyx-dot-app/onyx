@@ -133,6 +133,7 @@ export function ReasoningRenderer({
         displayContent={displayContent}
         renderContent={renderMarkdown}
         isStreaming={!hasEnd}
+        maxLines={4}
       />
     </View>
   );
