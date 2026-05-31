@@ -123,16 +123,18 @@ def test_stamp_source_propagates_checkpoint_return_value() -> None:
     expected = JiraConnectorCheckpoint(has_more=False, cursor="tok123")
 
     def _gen() -> Generator[Any, None, JiraConnectorCheckpoint]:
-        return
-        yield  # noqa: unreachable
+        yield  # at least one yield makes this a real generator
+        return expected
 
-    # Consume the generator and capture the return value via StopIteration
     wrapped = _stamp_source(_gen(), DocumentSource.JIRA_SERVICE_MANAGEMENT)
+    # Drain any yielded items then capture the return value from StopIteration.
+    checkpoint = None
     try:
         while True:
             next(wrapped)
-    except StopIteration:
-        pass  # checkpoint propagation tested via empty generator exercised above
+    except StopIteration as exc:
+        checkpoint = exc.value
+    assert checkpoint == expected
 
 
 # ---------------------------------------------------------------------------

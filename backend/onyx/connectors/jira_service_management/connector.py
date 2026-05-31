@@ -16,12 +16,12 @@ and permission-sync logic from JiraConnector; the only additions are:
 from __future__ import annotations
 
 from collections.abc import Generator
-from typing import Any
 from typing import TypeVar
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CheckpointOutput
+from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.connector import JiraConnectorCheckpoint
@@ -104,16 +104,19 @@ class JiraServiceManagementConnector(JiraConnector):
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
-    ) -> Any:
+    ) -> GenerateSlimDocumentOutput:
         # SlimDocuments don't carry a source field, so pass through unchanged.
         yield from super().retrieve_all_slim_docs_perm_sync(start, end, callback)
 
     def validate_connector_settings(self) -> None:
-        super().validate_connector_settings()
-
-        # If the caller specified a project key (without a custom JQL) we can
-        # verify that the project is actually a service management project.
+        # When a project key is given (without custom JQL) we validate existence
+        # and check the project type in a single project() call, avoiding the
+        # redundant call that super() would otherwise make.
         if self.jira_project and not self.jql_query:
+            if self._jira_client is None:
+                from onyx.connectors.models import ConnectorMissingCredentialError
+
+                raise ConnectorMissingCredentialError("Jira")
             try:
                 project = self.jira_client.project(self.jira_project)
                 project_type = getattr(project, "projectTypeKey", None)
@@ -125,9 +128,15 @@ class JiraServiceManagementConnector(JiraConnector):
                     )
             except ConnectorValidationError:
                 raise
-            except Exception:
-                # If we can't retrieve project type (e.g. older server), skip.
-                logger.debug(
-                    "Could not verify project type for '%s'; skipping JSM check.",
-                    self.jira_project,
-                )
+            except Exception as e:
+                # Propagate auth/permission errors; ignore type-fetch failures
+                # (e.g. older Jira Server that omits projectTypeKey).
+                if getattr(e, "status_code", None) in (401, 403, 429):
+                    self._handle_jira_connector_settings_error(e)
+                else:
+                    logger.debug(
+                        "Could not verify project type for '%s'; skipping JSM check.",
+                        self.jira_project,
+                    )
+        else:
+            super().validate_connector_settings()
