@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { Pressable, View } from "react-native";
 
-import { Switch, Text } from "@/components/opal";
+import { Text } from "@/components/opal";
 import { ChevronRightIcon } from "@/components/ui/icons";
 import { getIconForAction } from "@/lib/actionIcons";
 import { useToken } from "@/theme/ThemeProvider";
@@ -10,19 +10,20 @@ import type { ToolSnapshot } from "@/lib/types/tools";
 // ---------------------------------------------------------------------------
 // ActionLineItem — a single tool row in the actions popover (web parity).
 //
-// Behaviour (mirrors web `ActionLineItem`):
-//   - Tapping the row BODY forces the tool (`onToggleForced`).
-//   - For the search tool, tapping the row opens the sources sub-view
-//     (`onOpenSources`) instead, and the right side shows a "<enabled> of
-//     <total>" count + chevron affordance rather than a switch.
-//   - The opal `Switch` on the right enables/disables the tool
-//     (`onToggleEnabled`) — independent of the force tap.
+// Behaviour (mirrors web `ActionLineItem` availability model):
+//   - Tapping an AVAILABLE non-search row FORCES the tool (`onToggleForced`).
+//     A forced tool is indicated by the row highlight only — there is NO
+//     per-tool enable/disable switch (that lives only in the sources sub-view).
+//   - An UNAVAILABLE tool is greyed and not pressable.
+//   - The search tool is NEVER unavailable; tapping it opens the sources
+//     sub-view (`onOpenSources`) and the right side shows a "<enabled> of
+//     <total>" count + chevron affordance.
 //
 // Visual states:
-//   - forced   → label `action-link-05` + row `bg-action-link-01` (fixed bg →
-//                static class, toggled conditionally),
-//   - disabled → label strikethrough (`textDecorationLine` via style),
-//   - default  → label `text-04`.
+//   - forced       → label `action-link-05` + row `bg-action-link-01` (fixed bg
+//                    → static class, toggled conditionally),
+//   - unavailable  → muted label/icon (`text-03`), no `active:` affordance,
+//   - default      → label `text-04`.
 //
 // The per-tool glyph comes from `getIconForAction(tool)` — a 1:1 port of web's
 // actionUtils mapping (Search→search, WebSearch→globe, ImageGen→image,
@@ -36,11 +37,9 @@ interface ActionLineItemProps {
   tool: ToolSnapshot;
   /** Whether the tool is forced for the next message. */
   isForced: boolean;
-  /** Whether the tool is disabled (enable/disable preference). */
-  isDisabled: boolean;
-  /** Toggle the tool's enabled/disabled preference (the right-side switch). */
-  onToggleEnabled: () => void;
-  /** Toggle forcing the tool (tapping the row body). */
+  /** Whether the tool is unavailable (not in the global registry; greyed). */
+  isUnavailable: boolean;
+  /** Force the tool (tapping the row body) — non-search tools only. */
   onToggleForced: () => void;
   /** Whether this row is the internal search tool. */
   isSearchTool: boolean;
@@ -53,8 +52,7 @@ interface ActionLineItemProps {
 export function ActionLineItem({
   tool,
   isForced,
-  isDisabled,
-  onToggleEnabled,
+  isUnavailable,
   onToggleForced,
   isSearchTool,
   onOpenSources,
@@ -64,23 +62,38 @@ export function ActionLineItem({
   const mutedColor = useToken("text-03");
   const defaultColor = useToken("text-04");
 
-  const labelColor = isForced ? "action-link-05" : "text-04";
-  const iconColor = isForced ? accent : isDisabled ? mutedColor : defaultColor;
+  const labelColor = isForced
+    ? "action-link-05"
+    : isUnavailable
+      ? "text-03"
+      : "text-04";
+  const iconColor = isForced
+    ? accent
+    : isUnavailable
+      ? mutedColor
+      : defaultColor;
   const toolIcon = getIconForAction(tool);
+
+  // Search opens sources; available non-search forces; unavailable is inert.
+  function handlePress() {
+    if (isSearchTool) onOpenSources?.();
+    else onToggleForced();
+  }
+
+  const rowClassName = isForced
+    ? "flex-row items-center justify-between gap-2 rounded-[8px] bg-action-link-01 px-3 py-2"
+    : isUnavailable
+      ? "flex-row items-center justify-between gap-2 rounded-[8px] px-3 py-2"
+      : "flex-row items-center justify-between gap-2 rounded-[8px] px-3 py-2 active:bg-background-tint-02";
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={tool.display_name}
-      onPress={() => {
-        if (isSearchTool) onOpenSources?.();
-        else onToggleForced();
-      }}
-      className={
-        isForced
-          ? "flex-row items-center justify-between gap-2 rounded-[8px] bg-action-link-01 px-3 py-2"
-          : "flex-row items-center justify-between gap-2 rounded-[8px] px-3 py-2 active:bg-background-tint-02"
-      }
+      accessibilityState={isUnavailable ? { disabled: true } : undefined}
+      disabled={!isSearchTool && isUnavailable}
+      onPress={handlePress}
+      className={rowClassName}
     >
       <View className="flex-1 flex-row items-center gap-2">
         {/* createElement (not <ToolIcon/>) so the linter doesn't read the
@@ -90,10 +103,7 @@ export function ActionLineItem({
           font="main-ui-body"
           color={labelColor}
           numberOfLines={1}
-          style={[
-            { flex: 1 },
-            isDisabled ? { textDecorationLine: "line-through" } : null,
-          ]}
+          style={{ flex: 1 }}
         >
           {tool.display_name}
         </Text>
@@ -108,13 +118,7 @@ export function ActionLineItem({
           ) : null}
           <ChevronRightIcon size={16} color={mutedColor} />
         </View>
-      ) : (
-        <Switch
-          value={!isDisabled}
-          onValueChange={onToggleEnabled}
-          accessibilityLabel={`${isDisabled ? "Enable" : "Disable"} ${tool.display_name}`}
-        />
-      )}
+      ) : null}
     </Pressable>
   );
 }

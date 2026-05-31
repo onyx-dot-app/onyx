@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Dimensions, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -10,12 +10,8 @@ import { ChevronLeftIcon, SlidersIcon } from "@/components/ui/icons";
 import { useToken } from "@/theme/ThemeProvider";
 import { SEARCH_TOOL_ID } from "@/lib/constants";
 import type { MinimalAgent } from "@/lib/types/agents";
-import type { MobileSource } from "@/lib/sources/sourceMetadata";
 import { useForcedTools } from "@/state/useForcedTools";
-import {
-  useAgentPreferences,
-  useUpdateAgentPreference,
-} from "@/query/agentPreferences";
+import { useTools } from "@/query/tools";
 import { useAvailableSourceStrings } from "@/query/connectors";
 import { useSourcePreferences } from "@/lib/sources/useSourcePreferences";
 
@@ -28,41 +24,29 @@ import { useSourcePreferences } from "@/lib/sources/useSourcePreferences";
 // `personaId`. Requires a <PortalHost/> near the app root (present in
 // app/_layout.tsx).
 //
-// Three independent state layers feed the rows:
-//   - force-tool      → useForcedTools (ephemeral zustand; max one forced tool)
-//   - tool enable/dis → useAgentPreferences + useUpdateAgentPreference
-//                       (backend disabled_tool_ids, optimistic)
-//   - source prefs    → useSourcePreferences (MMKV)
+// AVAILABILITY MODEL (web parity): tools have NO per-tool enable switch. A tool
+// is shown greyed/disabled when UNAVAILABLE and normal when available; a tool is
+// available iff its id is in the GLOBAL tool registry (`useTools` -> GET /tool).
+// The search tool is NEVER unavailable. Tapping an available non-search tool
+// FORCES it (toggleForcedTool). Only SOURCES keep enable/disable switches (in
+// the sources sub-view).
 //
-// SOURCE <-> SEARCH COUPLING (ported from web, adapted to mobile hooks):
-//   1. Enabling the FIRST source force-pins Search (toggleForcedTool); disabling
-//      the LAST source un-forces it (toggleForcedTool when search is the forced
-//      tool).
-//   2. Toggling a source keeps Search ENABLED (not in disabled_tool_ids) while
-//      >=1 source is on, and disabled when 0 are on (web setSearchToolEnabled).
-//   3. Toggling the Search tool OFF stashes the currently-enabled sources (ref)
-//      then disableAllSources(); toggling ON restores the stash (or
-//      enableAllSources() if none stashed).
-//   4. Force-pinning Search while 0 sources are enabled opens the sources
-//      sub-view so the user can pick sources.
-//
-// DIVERGENCE FROM WEB: mobile couples the Search tool <-> sources ONLY on user
-// toggle. Unlike web, it intentionally does NOT run a mount-time reconciliation
-// effect (which would side-effect backend mutations on mount), so cross-mount /
-// cross-platform drift (e.g. enabled-search + 0-sources) is tolerated; the
-// send-path filter computation is the safety net.
+// SOURCE <-> SEARCH FORCE COUPLING (ported from web): enabling the FIRST source
+// force-pins the Search tool (toggleForcedTool); disabling the LAST source
+// un-forces it. This is how the Search tool gets forced. Guarded on the search
+// tool being present on the agent.
 // ---------------------------------------------------------------------------
 
 interface ActionsPopoverProps {
   /** The agent whose tools + sources this popover manages. */
   agent: MinimalAgent;
-  /** The persona id used to read/write tool enable/disable preferences. */
+  /** The persona id (retained for parity with the chat surface API). */
   personaId: number;
 }
 
 type SecondaryView = null | "sources";
 
-export function ActionsPopover({ agent, personaId }: ActionsPopoverProps) {
+export function ActionsPopover({ agent }: ActionsPopoverProps) {
   const insets = useSafeAreaInsets();
   const [secondaryView, setSecondaryView] = useState<SecondaryView>(null);
 
@@ -73,32 +57,25 @@ export function ActionsPopover({ agent, personaId }: ActionsPopoverProps) {
   const forcedToolIds = useForcedTools((s) => s.forcedToolIds);
   const toggleForcedTool = useForcedTools((s) => s.toggleForcedTool);
 
-  // --- tool enable/disable (backend-persisted) ----------------------------
-  const { data: agentPrefs } = useAgentPreferences();
-  const updateMutation = useUpdateAgentPreference();
-  const disabledToolIds = agentPrefs?.[personaId]?.disabled_tool_ids ?? [];
+  // --- global tool registry (availability) --------------------------------
+  // A tool is available iff its id is in this set (web parity: useAvailableTools).
+  const { data: availableTools } = useTools();
+  const availableToolIdSet = useMemo(
+    () => new Set((availableTools ?? []).map((t) => t.id)),
+    [availableTools]
+  );
 
   // --- source prefs (MMKV) -------------------------------------------------
   const availableSourceStrings = useAvailableSourceStrings();
-  const {
-    configuredSources,
-    isSourceEnabled,
-    toggleSource,
-    enableAllSources,
-    disableAllSources,
-    enableSources,
-    selectedSources,
-  } = useSourcePreferences(availableSourceStrings);
-
-  // Sources stashed when the Search tool is toggled off, restored on re-enable.
-  const stashedSourcesRef = useRef<MobileSource[]>([]);
+  const { configuredSources, isSourceEnabled, toggleSource } =
+    useSourcePreferences(availableSourceStrings);
 
   // --- search tool identity (string in_code_tool_id -> numeric id) ---------
   const searchTool = useMemo(
     () => agent.tools.find((t) => t.in_code_tool_id === SEARCH_TOOL_ID),
     [agent.tools]
   );
-  const searchToolId = searchTool?.id ?? null;
+  const searchToolId = searchTool?.id;
 
   // Exclude MCP tools: MCP is out of scope for this feature (web parity).
   const displayTools = useMemo(
@@ -111,97 +88,29 @@ export function ActionsPopover({ agent, personaId }: ActionsPopoverProps) {
   ).length;
   const totalSourceCount = configuredSources.length;
 
-  // --- enable/disable mutation helper -------------------------------------
-  // Flip a tool's membership in disabled_tool_ids and persist (optimistic).
-  function setToolDisabled(toolId: number, disabled: boolean) {
-    const current = agentPrefs?.[personaId]?.disabled_tool_ids ?? [];
-    const isCurrentlyDisabled = current.includes(toolId);
-    if (disabled === isCurrentlyDisabled) return; // no-op
-    const nextDisabled = disabled
-      ? [...current, toolId]
-      : current.filter((id) => id !== toolId);
-    updateMutation.mutate({
-      personaId,
-      preference: { disabled_tool_ids: nextDisabled },
-    });
-  }
-
-  function handleToggleEnabled(toolId: number) {
-    const isDisabled = disabledToolIds.includes(toolId);
-
-    // Coupling rule 3: toggling the Search tool stashes/restores sources.
-    if (searchToolId !== null && toolId === searchToolId) {
-      if (isDisabled) {
-        // Enabling Search — restore the stashed set (or enable all if none).
-        const stashed = stashedSourcesRef.current;
-        if (stashed.length > 0) enableSources(stashed);
-        else enableAllSources();
-        stashedSourcesRef.current = [];
-      } else {
-        // Disabling Search — stash the currently-enabled sources, then clear.
-        stashedSourcesRef.current = [...selectedSources];
-        disableAllSources();
-      }
-    }
-
-    // Mutual exclusion (web parity: disabling a tool UN-FORCES it): if this
-    // action disables a currently-forced tool, also clear the force so it can't
-    // be both forced and in disabled_tool_ids (which would trip the backend's
-    // "Forced tool not found in tools" ValueError on send). toggleForcedTool
-    // clears it given the max-one-forced invariant.
-    const willDisable = !isDisabled;
-    if (willDisable && forcedToolIds.includes(toolId)) {
-      toggleForcedTool(toolId);
-    }
-
-    setToolDisabled(toolId, !isDisabled);
-  }
-
+  // Force the tapped tool (max-one-forced invariant lives in the store).
   function handleToggleForced(toolId: number) {
-    // Coupling rule 4: force-pinning Search with 0 sources opens the sub-view.
-    const willForce = !forcedToolIds.includes(toolId);
-    if (willForce && toolId === searchToolId && enabledSourceCount === 0) {
-      setSecondaryView("sources");
-    }
-    // Mutual exclusion (web parity: ActionLineItem `if (disabled) onToggle()`):
-    // forcing a disabled tool RE-ENABLES it first so it can't be both forced
-    // and in disabled_tool_ids (which would trip the backend's "Forced tool
-    // not found in tools" ValueError on send).
-    if (willForce && disabledToolIds.includes(toolId)) {
-      setToolDisabled(toolId, false);
-    }
     toggleForcedTool(toolId);
   }
 
-  // Mirror web setSearchToolEnabled: keep the Search tool's disabled_tool_ids
-  // membership in sync with "are any sources enabled" (coupling rule 2).
-  function setSearchToolEnabled(enabled: boolean) {
-    if (searchToolId === null) return;
-    setToolDisabled(searchToolId, !enabled);
-  }
-
-  function handleSourceToggle(uniqueKey: string) {
-    const willEnable = !isSourceEnabled(uniqueKey);
+  function handleSourceToggle(key: string) {
+    const willEnable = !isSourceEnabled(key);
     const newEnabledCount = enabledSourceCount + (willEnable ? 1 : -1);
 
-    toggleSource(uniqueKey);
+    toggleSource(key);
 
-    // Coupling rule 1: first source force-pins Search; last source un-forces.
-    if (searchToolId !== null) {
-      if (willEnable) {
-        if (!forcedToolIds.includes(searchToolId)) toggleForcedTool(searchToolId);
+    // Source -> force-search coupling: first source force-pins Search; last
+    // source un-forces it. Guarded on the search tool being present.
+    if (searchToolId !== undefined) {
+      if (willEnable && !forcedToolIds.includes(searchToolId)) {
+        toggleForcedTool(searchToolId);
       } else if (
         newEnabledCount === 0 &&
         forcedToolIds.includes(searchToolId)
       ) {
-        // Un-force only the search tool (correct even if the max-one-forced
-        // invariant ever changes); given that invariant this clears all forcing.
         toggleForcedTool(searchToolId);
       }
     }
-
-    // Coupling rule 2: Search enabled iff >=1 source remains on.
-    setSearchToolEnabled(newEnabledCount > 0);
   }
 
   function handleOpenChange(next: boolean) {
@@ -299,13 +208,15 @@ export function ActionsPopover({ agent, personaId }: ActionsPopoverProps) {
             >
               {displayTools.map((tool) => {
                 const isSearchTool = tool.in_code_tool_id === SEARCH_TOOL_ID;
+                const isUnavailable =
+                  !availableToolIdSet.has(tool.id) &&
+                  tool.in_code_tool_id !== SEARCH_TOOL_ID;
                 return (
                   <ActionLineItem
                     key={tool.id}
                     tool={tool}
                     isForced={forcedToolIds.includes(tool.id)}
-                    isDisabled={disabledToolIds.includes(tool.id)}
-                    onToggleEnabled={() => handleToggleEnabled(tool.id)}
+                    isUnavailable={isUnavailable}
                     onToggleForced={() => handleToggleForced(tool.id)}
                     isSearchTool={isSearchTool}
                     onOpenSources={
