@@ -67,7 +67,9 @@ const MessageItem = memo(function MessageItem({
   streaming: boolean;
 }) {
   if (message.type === "user") {
-    return <MessageRow role="user" text={message.message} />;
+    return (
+      <MessageRow role="user" text={message.message} files={message.files} />
+    );
   }
   if (message.type === "error") {
     return <ErrorMessage text={message.message} />;

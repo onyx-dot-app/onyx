@@ -1,20 +1,32 @@
 import { useState } from "react";
-import { TextInput, View } from "react-native";
+import { Pressable, TextInput, View } from "react-native";
 
 import { Button } from "@/components/opal";
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from "@/components/ui/icons";
 import { useToken } from "@/theme/ThemeProvider";
 import { typography } from "@/theme/generated/typography";
-import { useSendMessage } from "@/chat/useSendMessage";
+import { useSendMessage, useComposerAttachments } from "@/chat";
+import { useLlmProviders } from "@/query/llmProviders";
+import {
+  modelSupportsImageInput,
+  resolveDefaultModel,
+} from "@/lib/languageModels";
+import {
+  DRAFT_SESSION_ID,
+  useChatSessionStore,
+} from "@/state/chatSessionStore";
 import { ModelSelectorTrigger } from "./ModelSelectorTrigger";
+import { AttachMenu } from "./AttachMenu";
+import { AttachmentTray } from "./AttachmentTray";
 
-// Chat composer — ports web `AppInputBar.tsx` (container + text area + bottom
-// toolbar). Phase 05 scope: static, web-faithful shell wired to send/stop. The
-// model selector (phase 07) mounts in the right cluster, left of Send; the attach
-// [+] icon is rendered but inert (file upload is a later phase).
+// Chat composer — ports web `AppInputBar.tsx` (container + attachment tray + text
+// area + bottom toolbar). The attach [+] icon opens the AttachMenu popover
+// (Photos / Upload File / Recent Files); picked files upload optimistically and
+// show as tiles in the tray, then ride the send as `file_descriptors`.
 //
 // Tokens/sizes copied from web:
 //   container  bg-background-neutral-00, rounded-16, shadow-01 (no border)
+//   tray       flex-wrap gap-1 p-1 (FileCard tiles)
 //   text area  px-3 py-2, main-ui-body, text-05, placeholder text-03, grow 44→200
 //   toolbar    h-11, p-1, justify-between; left = attach, right = send/stop
 //   send/stop  default-primary Button (theme-primary-05), arrow-up ↔ stop square
@@ -24,14 +36,44 @@ const MIN_INPUT_HEIGHT = 24;
 const MAX_INPUT_HEIGHT = 184; // 200px row − 16px (py-2) vertical padding
 
 interface ChatInputBarProps {
-  /** Session to send into. Null on a brand-new chat (send wiring lands later). */
+  /** Session to send into. Null on a brand-new chat (uses the "draft" key). */
   sessionId?: string | null;
+  /** Disable input + send (e.g. while the session's history is still loading). */
+  disabled?: boolean;
 }
 
-export function ChatInputBar({ sessionId }: ChatInputBarProps) {
+export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps) {
+  const sid = sessionId ?? DRAFT_SESSION_ID;
   const [message, setMessage] = useState("");
 
-  const { send, stop, isStreaming } = useSendMessage(sessionId ?? "draft");
+  const { send, stop, isStreaming } = useSendMessage(sid);
+  const {
+    tiles,
+    attachedFileIds,
+    isUploading,
+    attachments,
+    addImages,
+    addDocuments,
+    addRecentFile,
+    removeByFileId,
+    remove,
+    clear,
+    toFileDescriptors,
+  } = useComposerAttachments();
+
+  // Vision gate: only allow image picks when the active model accepts images
+  // (web `modelSupportsImageInput`). Default to allowed until providers load so
+  // we never falsely block before we know the model.
+  const { data: llmData } = useLlmProviders();
+  const providers = llmData?.providers ?? [];
+  const selectedModel = useChatSessionStore(
+    (s) => s.sessions.get(sid)?.selectedModel,
+  );
+  const activeModel =
+    selectedModel ?? resolveDefaultModel(providers, llmData?.default_text ?? null);
+  const imagesAllowed = activeModel
+    ? modelSupportsImageInput(providers, activeModel.modelName, activeModel.name)
+    : true;
 
   const placeholderColor = useToken("text-03");
   const typedColor = useToken("text-05");
@@ -44,16 +86,31 @@ export function ChatInputBar({ sessionId }: ChatInputBarProps) {
   const shadowColor = useToken("shadow-02");
 
   const trimmed = message.trim();
-  const sendDisabled = !isStreaming && trimmed.length === 0;
+  const hasSendableAttachment = attachments.some(
+    (a) => a.fileId && a.status !== "failed",
+  );
+  // Disabled unless streaming (→ stop). Blocked while the session is loading or
+  // uploading, and when there's neither text nor a ready attachment to send.
+  const sendDisabled =
+    !isStreaming &&
+    (disabled ||
+      isUploading ||
+      (trimmed.length === 0 && !hasSendableAttachment));
 
   function handleSendPress() {
     if (isStreaming) {
       stop();
       return;
     }
-    if (!trimmed) return;
-    void send(trimmed);
-    setMessage("");
+    if (disabled || isUploading) return;
+    const descriptors = toFileDescriptors();
+    if (!trimmed && descriptors.length === 0) return;
+    // Clear the composer only once the message is committed (onAccepted) — so a
+    // failed lazy session-creation never discards the user's text + attachments.
+    void send(trimmed, descriptors, () => {
+      setMessage("");
+      clear();
+    });
   }
 
   return (
@@ -68,6 +125,13 @@ export function ChatInputBar({ sessionId }: ChatInputBarProps) {
         elevation: 4,
       }}
     >
+      {/* Attachment tray (web `:797` — flex-wrap files wrapper above the text) */}
+      {tiles.length > 0 ? (
+        <View className="px-1 pt-1">
+          <AttachmentTray models={tiles} onRemove={remove} />
+        </View>
+      ) : null}
+
       {/* Text area (web `:827` — px-3 py-2, grows with content) */}
       <View className="px-3 py-2">
         <TextInput
@@ -75,6 +139,7 @@ export function ChatInputBar({ sessionId }: ChatInputBarProps) {
           onChangeText={setMessage}
           placeholder="How can I help you today?"
           placeholderTextColor={placeholderColor}
+          editable={!disabled}
           multiline
           style={[
             typography["main-ui-body"],
@@ -91,25 +156,31 @@ export function ChatInputBar({ sessionId }: ChatInputBarProps) {
 
       {/* Bottom toolbar (web `:540` — h-11, p-1, space-between) */}
       <View className="h-11 flex-row items-center justify-between px-1">
-        {/* Left cluster: attach (inert in v1) */}
+        {/* Left cluster: attach popover (Photos / Upload File / Recent Files) */}
         <View className="flex-row items-center gap-1">
-          <Button
-            variant="default"
-            prominence="tertiary"
-            size="sm"
-            className="w-8 px-0"
-            accessibilityLabel="Attach files"
-            onPress={() => {
-              // TODO(phase): file upload pipeline (picker + upload + chips)
-            }}
-          >
-            <PaperclipIcon size={16} color={attachIconColor} />
-          </Button>
+          <AttachMenu
+            imagesAllowed={imagesAllowed}
+            attachedFileIds={attachedFileIds}
+            onPickImages={addImages}
+            onPickDocuments={addDocuments}
+            onPickRecent={addRecentFile}
+            onUnpickRecent={(file) => removeByFileId(file.file_id)}
+            trigger={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Attach files"
+                hitSlop={8}
+                className="h-8 w-8 items-center justify-center rounded-[8px] active:bg-background-tint-02"
+              >
+                <PaperclipIcon size={16} color={attachIconColor} />
+              </Pressable>
+            }
+          />
         </View>
 
         {/* Right cluster: model selector trigger + send/stop */}
         <View className="flex-row items-center gap-1">
-          <ModelSelectorTrigger sessionId={sessionId ?? "draft"} />
+          <ModelSelectorTrigger sessionId={sid} />
           <Button
             variant="default"
             prominence="primary"

@@ -1,7 +1,14 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { View } from "react-native";
 
 import { Card, Text } from "@/components/opal";
+import { AttachmentTray } from "@/components/chat/AttachmentTray";
+import type { AttachmentTileModel } from "@/components/chat/AttachmentTile";
+import { useAuthImageHeaders } from "@/components/chat/useAuthImageHeaders";
+import { chatFileUrl } from "@/lib/api";
+import { appConfig } from "@/lib/config";
+import { isImageFile } from "@/lib/fileTypes";
+import { ChatFileType, type FileDescriptor } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -14,6 +21,8 @@ export interface MessageRowProps {
   role: MessageRole;
   /** The message body (placeholder; the real streaming list is doc 06). */
   text: string;
+  /** Attachments sent with the message (rendered as a read-only tile tray). */
+  files?: FileDescriptor[];
 }
 
 // ---------------------------------------------------------------------------
@@ -38,39 +47,57 @@ const BUBBLE_ASSISTANT = "max-w-[85%] bg-background-neutral-01 border-border-02"
 // ---------------------------------------------------------------------------
 
 /**
- * Canonical example of a memoized FlashList row that follows the NativeWind +
- * virtualization discipline documented in `VirtualList`.
- *
- * Discipline demonstrated here:
- *  - Wrapped in `React.memo` so it only re-renders when `role`/`text` change.
- *  - Per-row `className` is chosen from a small set of STATIC strings by role
- *    (`ROW_WRAPPER_*` / `BUBBLE_*`) — never built via interpolation.
- *  - Token-based color/typography come through the opal `Card`/`Text`
- *    primitives, which resolve dynamic colors via `style` under the hood.
+ * Memoized FlashList row (NativeWind + virtualization discipline). Renders any
+ * attached files as a read-only `AttachmentTray` above the text bubble; the
+ * bubble itself is omitted for files-only messages (empty text).
  */
-function MessageRowComponent({ role, text }: MessageRowProps) {
+function MessageRowComponent({ role, text, files }: MessageRowProps) {
   const isUser = role === "user";
   const wrapperClass = isUser ? ROW_WRAPPER_USER : ROW_WRAPPER_ASSISTANT;
   const bubbleClass = isUser ? BUBBLE_USER : BUBBLE_ASSISTANT;
 
+  // Sent-message images load from the authed backend route (web rides cookies).
+  const headers = useAuthImageHeaders();
+  const tiles = useMemo<AttachmentTileModel[]>(() => {
+    if (!files || files.length === 0) return [];
+    return files.map((file) => {
+      const isImage =
+        file.type === ChatFileType.IMAGE || isImageFile(file.name ?? "");
+      return {
+        id: file.id,
+        name: file.name ?? "file",
+        isImage,
+        status: "uploaded" as const,
+        // Wait for the bearer header before loading the authed /chat/file URL so
+        // we don't fire a guaranteed-401 request on first paint.
+        imageSource:
+          isImage && headers
+            ? { uri: chatFileUrl(appConfig.apiBaseUrl, file.id), headers }
+            : undefined,
+      };
+    });
+  }, [files, headers]);
+
   return (
     <View className={wrapperClass}>
-      <Card className={bubbleClass}>
-        <Text
-          font={isUser ? "main-ui-body" : "main-content-body"}
-          color="text-05"
-        >
-          {text}
-        </Text>
-      </Card>
+      {tiles.length > 0 ? <AttachmentTray models={tiles} /> : null}
+      {text ? (
+        <Card className={bubbleClass}>
+          <Text
+            font={isUser ? "main-ui-body" : "main-content-body"}
+            color="text-05"
+          >
+            {text}
+          </Text>
+        </Card>
+      ) : null}
     </View>
   );
 }
 
 /**
  * Memoized so cell recycling and theme re-renders don't needlessly re-render
- * rows whose props are unchanged. The default shallow prop comparison is
- * sufficient because both props are primitives.
+ * rows whose props are unchanged.
  */
 const MessageRow = memo(MessageRowComponent);
 MessageRow.displayName = "MessageRow";

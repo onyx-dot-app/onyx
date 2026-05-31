@@ -27,9 +27,11 @@
     "expo-crypto": "~56.0.4",
     "expo-dev-client": "~56.0.18",
     "expo-device": "~56.0.4",
+    "expo-document-picker": "~56.0.4",
     "expo-font": "~56.0.5",
     "expo-glass-effect": "~56.0.4",
     "expo-image": "~56.0.9",
+    "expo-image-picker": "~56.0.15",
     "expo-linking": "~56.0.13",
     "expo-router": "~56.2.8",
     "expo-secure-store": "~56.0.4",
@@ -56,6 +58,8 @@
   "devDependencies": {
     "@types/node": "25.9.1",
     "@types/react": "~19.2.2",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~56.0.4",
     "tailwindcss": "3.4.17",
     "typescript": "~6.0.3"
   },

@@ -207,3 +207,129 @@ export function SearchIcon({
     </Svg>
   );
 }
+
+// web: lib/opal/src/icons/file-text.tsx — non-image attachment glyph (viewBox 16×20)
+export function FileTextIcon({
+  size = 16,
+  color = "#000",
+  strokeWidth = 1.5,
+}: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 20" fill="none">
+      <Path
+        d="M9.66634 1.6665H2.99967C2.55765 1.6665 2.13372 1.8421 1.82116 2.15466C1.5086 2.46722 1.33301 2.89114 1.33301 3.33317V16.6665C1.33301 17.1085 1.5086 17.5325 1.82116 17.845C2.13372 18.1576 2.55765 18.3332 2.99967 18.3332H12.9997C13.4417 18.3332 13.8656 18.1576 14.1782 17.845C14.4907 17.5325 14.6663 17.1085 14.6663 16.6665V6.6665M9.66634 1.6665L14.6663 6.6665M9.66634 1.6665L9.66634 6.6665L14.6663 6.6665M11.333 10.8332H4.66634M11.333 14.1665H4.66634M6.33301 7.49984H4.66634"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// web: lib/opal/src/icons/image.tsx — image attachment / "Photos" picker row
+export function ImageIcon({
+  size = 16,
+  color = "#000",
+  strokeWidth = 1.5,
+}: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M11 14L6.06066 9.06072C5.47487 8.47498 4.52513 8.47498 3.93934 9.06072L2 11M2 3.49998C2 2.67156 2.67157 2 3.5 2H12.5C13.3285 2 14 2.67156 14 3.49998V12.4999C14 13.3283 13.3285 13.9998 12.5 13.9998H3.5C2.67157 13.9998 2 13.3283 2 12.4999V3.49998ZM9.875 7.62492C10.7034 7.62492 11.375 6.95338 11.375 6.12494C11.375 5.29653 10.7034 4.62496 9.875 4.62496C9.04655 4.62496 8.375 5.29653 8.375 6.12494C8.375 6.95338 9.04655 7.62492 9.875 7.62492Z"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+// web: lib/opal/src/icons/x.tsx — remove/close (viewBox 28, heavier stroke)
+export function XIcon({
+  size = 16,
+  color = "#000",
+  strokeWidth = 2.5,
+}: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 28 28" fill="none">
+      <Path
+        d="M21 7L7 21M7 7L21 21"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// web: lib/opal/src/icons/loader.tsx — spinner arc (viewBox 15); rotate via <Spinner/>
+export function LoaderIcon({
+  size = 16,
+  color = "#000",
+  strokeWidth = 1.5,
+}: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 15 15" fill="none">
+      <Path
+        d="M7.41667 14.0833C3.73477 14.0833 0.75 11.0986 0.75 7.41667C0.75 3.73477 3.73477 0.75 7.41667 0.75C11.0986 0.75 14.0833 3.73477 14.0833 7.41667"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// web: lib/opal/src/icons/upload-square.tsx — "Upload File" picker row
+export function UploadSquareIcon({
+  size = 16,
+  color = "#000",
+  strokeWidth = 1.5,
+}: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M11 14H12.6667C13.3929 14 14 13.3929 14 12.6667V3.33333C14 2.60711 13.3929 2 12.6667 2H3.33333C2.60711 2 2 2.60711 2 3.33333V12.6667C2 13.3929 2.60711 14 3.33333 14H5M10.6666 8.16667L7.99998 5.5M7.99998 5.5L5.33331 8.16667M7.99998 5.5V14"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// web: lib/opal/src/icons/more-horizontal.tsx — "All Recent Files" row
+export function MoreHorizontalIcon({
+  size = 16,
+  color = "#000",
+  strokeWidth = 1.5,
+}: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M8 8.75C8.41421 8.75 8.75 8.41421 8.75 8C8.75 7.58579 8.41421 7.25 8 7.25C7.58579 7.25 7.25 7.58579 7.25 8C7.25 8.41421 7.58579 8.75 8 8.75Z"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12.75 8.75C13.1642 8.75 13.5 8.41421 13.5 8C13.5 7.58579 13.1642 7.25 12.75 7.25C12.3358 7.25 12 7.58579 12 8C12 8.41421 12.3358 8.75 12.75 8.75Z"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3.25 8.75C3.66421 8.75 4 8.41421 4 8C4 7.58579 3.66421 7.25 3.25 7.25C2.83579 7.25 2.5 7.58579 2.5 8C2.5 8.41421 2.83579 8.75 3.25 8.75Z"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

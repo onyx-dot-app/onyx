@@ -42,7 +42,15 @@
             "buildReactNativeFromSource": true
           }
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Onyx to access your photos so you can attach them to messages.",
+          "cameraPermission": false
+        }
+      ],
+      "expo-document-picker"
     ],
     "experiments": {
       "typedRoutes": true,

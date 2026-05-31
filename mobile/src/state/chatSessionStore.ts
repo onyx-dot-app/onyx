@@ -33,6 +33,11 @@ import {
 import { chatPersistStorage, PERSIST_VERSION } from "./persist";
 import { useMemo } from "react";
 
+// Local placeholder id for a not-yet-created (draft) chat. The composer keys its
+// pre-session state (selected model, send) under this until the first message
+// creates the real backend session. Never sent to the backend.
+export const DRAFT_SESSION_ID = "draft";
+
 interface ChatSessionData {
   sessionId: string;
   messageTree: MessageTreeState;
@@ -95,6 +100,7 @@ interface ChatSessionStore {
     sessionId: string,
     initialData?: Partial<ChatSessionData>
   ) => void;
+  removeSession: (sessionId: string) => void;
   updateSessionData: (
     sessionId: string,
     updates: Partial<ChatSessionData>
@@ -282,6 +288,23 @@ export const useChatSessionStore = create<ChatSessionStore>()(
           newSessions.set(sessionId, newSession);
 
           return { sessions: newSessions };
+        });
+      },
+
+      // Drop a session entry entirely (e.g. the transient "draft" placeholder once
+      // its real backend session has been created). If it was current, clears current.
+      removeSession: (sessionId: string) => {
+        set((state) => {
+          if (!state.sessions.has(sessionId)) return state;
+          const newSessions = new Map(state.sessions);
+          newSessions.delete(sessionId);
+          return {
+            sessions: newSessions,
+            currentSessionId:
+              state.currentSessionId === sessionId
+                ? null
+                : state.currentSessionId,
+          };
         });
       },
 

@@ -1,7 +1,8 @@
 import { Stack } from "expo-router";
 
-// Chat tab owns a Stack so [sessionId] pushes over the session list rather
-// than swapping the whole tab.
+// Chat tab is a SINGLE screen (index). It renders whichever session is current —
+// new draft or one opened from Recents — so there is no separate [sessionId] route;
+// the screen loads the selected session's history in place.
 export default function ChatLayout() {
   return <Stack screenOptions={{ headerShown: false }} />;
 }

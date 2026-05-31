@@ -39,20 +39,24 @@ export function Sidebar() {
     router.navigate("/(app)/(chat)" as never);
   }
 
-  // Most-recent first. Skip un-named sessions (a freshly-created, not-yet-used chat
-  // has no name until the backend titles it on first message) so the new empty
-  // session doesn't show as a blank row.
+  // Most-recent first. We do NOT filter out un-named sessions: web shows them with
+  // a "New Chat" fallback (the backend titles a session shortly after its first
+  // message — see useChatSessionLifecycle.autoNameSession). With lazy creation,
+  // empty/untitled sessions aren't spawned on the "New Chat" tap anyway.
   const recents = (sessions ?? [])
-    .filter((s) => (s.name ?? "").trim().length > 0)
+    .slice()
     .sort(
       (a, b) =>
         new Date(b.time_created).getTime() - new Date(a.time_created).getTime(),
     );
 
   function openSession(id: string) {
+    // Open in the single chat screen (it loads + hydrates this session's history)
+    // rather than pushing a separate [sessionId] route. `navigate` (not `push`)
+    // avoids stacking chat screens.
     setCurrentSession(id);
     close();
-    router.push(`/(app)/(chat)/${id}` as never);
+    router.navigate("/(app)/(chat)" as never);
   }
 
   return (
@@ -123,7 +127,7 @@ export function Sidebar() {
               recents.map((s) => (
                 <SidebarRow
                   key={s.id}
-                  label={s.name ?? "New Chat"}
+                  label={(s.name ?? "").trim() || "New Chat"}
                   selected={s.id === currentSessionId}
                   onPress={() => openSession(s.id)}
                 />

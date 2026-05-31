@@ -8,6 +8,7 @@ export {
 } from "@/components/opal/Button";
 export { Card, type CardProps } from "@/components/opal/Card";
 export { Tag, type TagProps, type TagTone } from "@/components/opal/Tag";
+export { Spinner, type SpinnerProps } from "@/components/opal/Spinner";
 
 // Interactive primitives (rn-primitives + @gorhom/bottom-sheet, themed).
 export { Modal, ModalPrimitive, type ModalProps } from "@/components/opal/Modal";
@@ -17,6 +18,7 @@ export {
   PopoverPrimitive,
   type PopoverContentProps,
   type PopoverRootProps,
+  type PopoverTriggerRef,
 } from "@/components/opal/Popover";
 export { Checkbox, type CheckboxProps } from "@/components/opal/Checkbox";
 export {

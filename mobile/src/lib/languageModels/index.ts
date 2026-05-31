@@ -162,3 +162,53 @@ export function resolveDefaultModel(
     displayName: modelDisplayName(base.mc),
   };
 }
+
+/** Find a model_configuration by name within a single provider's list. */
+export function findModelInModelConfigurations(
+  modelConfigurations: ModelConfiguration[],
+  modelName: string,
+): ModelConfiguration | null {
+  return modelConfigurations.find((m) => m.name === modelName) || null;
+}
+
+/**
+ * Locate a model_configuration across providers (web parity:
+ * `findModelConfiguration`). When `providerName` is given, only that provider
+ * instance is searched; otherwise the first match wins.
+ */
+export function findModelConfiguration(
+  providers: LLMProviderDescriptor[],
+  modelName: string,
+  providerName: string | null = null,
+): ModelConfiguration | null {
+  if (providerName) {
+    const provider = providers.find((p) => p.name === providerName);
+    return provider
+      ? findModelInModelConfigurations(provider.model_configurations, modelName)
+      : null;
+  }
+  for (const provider of providers) {
+    const mc = findModelInModelConfigurations(
+      provider.model_configurations,
+      modelName,
+    );
+    if (mc) return mc;
+  }
+  return null;
+}
+
+/**
+ * Whether the given model accepts image input (web parity:
+ * `modelSupportsImageInput`). Used to gate image attachments — when false, the
+ * composer refuses image picks and prompts the user to switch to a vision model.
+ */
+export function modelSupportsImageInput(
+  providers: LLMProviderDescriptor[],
+  modelName: string,
+  providerName: string | null = null,
+): boolean {
+  return (
+    findModelConfiguration(providers, modelName, providerName)
+      ?.supports_image_input || false
+  );
+}

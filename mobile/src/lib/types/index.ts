@@ -8,6 +8,7 @@
 //   chat.ts      <- web/src/app/app/interfaces.ts
 //   streaming.ts <- web/src/app/app/services/streamingModels.ts
 //   llm.ts       <- web/src/lib/languageModels/types.ts (subset)
+//   files.ts     <- web/src/app/app/projects/projectsService.ts (subset)
 //
 // No cross-file export-name collisions exist, so `export *` is safe.
 
@@ -18,3 +19,4 @@ export * from "./tools";
 export * from "./chat";
 export * from "./streaming";
 export * from "./llm";
+export * from "./files";

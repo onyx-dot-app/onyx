@@ -1,42 +1,51 @@
-import { useEffect, useRef } from "react";
 import { KeyboardAvoidingView, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Button, Spinner, Text } from "@/components/opal";
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
 import { MessageThread } from "@/components/chat/MessageThread";
 import { useChatSessionStore } from "@/state/chatSessionStore";
-import { useStartNewChat } from "@/chat/useStartNewChat";
-import { getLatestMessageChain } from "@/state/messageTree";
+import { useHydrateCurrentSession } from "@/chat/useHydrateCurrentSession";
 
-// New-chat screen: header + streaming message thread + composer. On mount it ensures
-// a usable session (reuse the current one if it's still empty, else create a fresh
-// one) so the composer is bound to a real session id from the start.
-export default function ChatList() {
+// The single chat screen. It renders whatever session is current — a brand-new
+// draft (currentSessionId null) OR a session opened from Recents. Opening a recent
+// just sets currentSessionId; this screen loads + hydrates that session's history
+// on demand (useHydrateCurrentSession) instead of pushing a separate [sessionId]
+// route. A fresh chat is started lazily via the sidebar "New Chat" (draft → real
+// session on first send; see useChatSessionLifecycle).
+export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const currentSessionId = useChatSessionStore((s) => s.currentSessionId);
-  const startNewChat = useStartNewChat();
-  const ensuredRef = useRef(false);
-
-  useEffect(() => {
-    if (ensuredRef.current) return;
-    ensuredRef.current = true;
-    const state = useChatSessionStore.getState();
-    const cur = state.currentSessionId
-      ? state.sessions.get(state.currentSessionId)
-      : null;
-    const hasMessages = cur
-      ? getLatestMessageChain(cur.messageTree).some((m) => m.type !== "system")
-      : false;
-    if (!cur || hasMessages) {
-      void startNewChat();
-    }
-  }, [startNewChat]);
+  const { isLoading, isError, retry } = useHydrateCurrentSession();
 
   return (
     <View className="flex-1 bg-background-neutral-00">
       <ChatHeader />
-      <MessageThread />
+
+      {isError ? (
+        <View className="flex-1 items-center justify-center gap-3 px-6">
+          <Text font="secondary-body" color="text-03">
+            Couldn’t load this chat.
+          </Text>
+          <Button
+            variant="default"
+            prominence="secondary"
+            size="sm"
+            onPress={retry}
+            accessibilityLabel="Try again"
+          >
+            Try again
+          </Button>
+        </View>
+      ) : isLoading ? (
+        <View className="flex-1 items-center justify-center">
+          <Spinner size={24} color="text-03" />
+        </View>
+      ) : (
+        <MessageThread />
+      )}
+
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
@@ -44,7 +53,10 @@ export default function ChatList() {
           className="px-3"
           style={{ paddingBottom: Math.max(insets.bottom, 8) }}
         >
-          <ChatInputBar sessionId={currentSessionId} />
+          <ChatInputBar
+            sessionId={currentSessionId}
+            disabled={isLoading || isError}
+          />
         </View>
       </KeyboardAvoidingView>
     </View>

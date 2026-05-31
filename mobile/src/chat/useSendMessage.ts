@@ -21,7 +21,7 @@
 // on foreground is doc-06/UI's job. We just abort cleanly and leave the flag.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, type AppStateStatus } from "react-native";
+import { Alert, AppState, type AppStateStatus } from "react-native";
 import { fetch as expoFetch } from "expo/fetch";
 
 import { appConfig } from "@/lib/config";
@@ -31,7 +31,7 @@ import {
   AUTO_PLACE_AFTER_LATEST_MESSAGE,
   type SendMessageRequest,
 } from "@/lib/api/sendMessage";
-import type { Packet } from "@/lib/types";
+import type { Packet, FileDescriptor } from "@/lib/types";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import {
   buildImmediateMessages,
@@ -41,6 +41,7 @@ import {
 } from "@/state/messageTree";
 import { applyPacket } from "@/state/packetProcessor";
 import { getAuthHeaders } from "@/auth";
+import { useChatSessionLifecycle } from "./useChatSessionLifecycle";
 
 // ── Default transport config ────────────────────────────────────────────────
 // appConfig + expo/fetch + the real JWT auth headers (from @/auth), so a send is
@@ -124,7 +125,17 @@ function asStreamError(value: unknown): string | null {
 const FLUSH_INTERVAL_MS = 50;
 
 export interface UseSendMessageResult {
-  send: (text: string) => Promise<void>;
+  /**
+   * Send `text` with optional uploaded-file attachments (sent as file_descriptors).
+   * `onAccepted` fires once the message is committed to the thread (after the
+   * session is created + optimistic insert) — callers clear the composer there so
+   * a pre-stream failure (e.g. session creation) never discards the user's input.
+   */
+  send: (
+    text: string,
+    files?: FileDescriptor[],
+    onAccepted?: () => void
+  ) => Promise<void>;
   stop: () => void;
   isStreaming: boolean;
 }
@@ -140,6 +151,10 @@ export function useSendMessage(
   const controllerRef = useRef<AbortController | null>(null);
   // Guards against state writes after unmount.
   const mountedRef = useRef(true);
+  // The session the in-flight stream actually runs under. For a draft chat this
+  // becomes the real UUID created mid-send (before the `sessionId` prop catches up
+  // on re-render), so background-abort tags pendingRefetch with the right key.
+  const activeSessionRef = useRef<string | null>(null);
 
   // Pending-flush bookkeeping for batched tree writes.
   const dirtyRef = useRef(false);
@@ -147,6 +162,9 @@ export function useSendMessage(
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const store = useChatSessionStore;
+
+  // Lazy session create + backend auto-naming (web parity).
+  const { ensureSession, autoNameSession } = useChatSessionLifecycle();
 
   const cancelScheduledFlush = useCallback(() => {
     if (rafRef.current !== null) {
@@ -160,14 +178,51 @@ export function useSendMessage(
   }, []);
 
   const send = useCallback(
-    async (text: string) => {
+    async (
+      text: string,
+      files: FileDescriptor[] = [],
+      onAccepted?: () => void
+    ) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      // Allow a files-only message (no text) when attachments are present.
+      if (!trimmed && files.length === 0) return;
+
+      // ── Lazy session creation (web parity) ────────────────────────────────
+      // No backend session is created on the "New Chat" tap; the first message of a
+      // brand-new (draft) chat creates it HERE — before streaming — so we hold a
+      // stable UUID up front (no fragile mid-stream re-keying). The hook instance is
+      // stable across the resulting currentSession change, so stop()/abort keep
+      // working. After the first response completes we ask the backend to auto-title it.
+      let activeSessionId = sessionId;
+      let createdNewSession = false;
+      if (!isUuid(sessionId)) {
+        const realId = await ensureSession();
+        if (!realId) {
+          Alert.alert(
+            "Couldn't start chat",
+            "Please check your connection and try again.",
+          );
+          return;
+        }
+        createdNewSession = true;
+        // Carry the model picked while drafting onto the real session, then drop the
+        // transient "draft" entry so its model can't leak into the next new chat.
+        const draft = store.getState().sessions.get(sessionId);
+        store.getState().setCurrentSession(realId);
+        if (draft?.selectedModel) {
+          store.getState().updateSelectedModel(realId, draft.selectedModel);
+        }
+        store.getState().removeSession(sessionId);
+        activeSessionId = realId;
+      }
+
+      // Remember the id the stream runs under (for background-abort refetch keying).
+      activeSessionRef.current = activeSessionId;
 
       const s = store.getState();
 
       // ── (a) Optimistic insert ────────────────────────────────────────────
-      const existing = s.sessions.get(sessionId);
+      const existing = s.sessions.get(activeSessionId);
       const currentTree: MessageTreeState =
         existing?.messageTree ?? new Map();
       const chain = getLatestMessageChain(currentTree);
@@ -178,7 +233,7 @@ export function useSendMessage(
       const { initialUserNode, initialAgentNode } = buildImmediateMessages(
         parentNodeId,
         trimmed,
-        []
+        files
       );
 
       // Wire children/latest links from the parent down to the new user node, then
@@ -208,16 +263,20 @@ export function useSendMessage(
 
       const assistantNodeId = initialAgentNode.nodeId;
 
-      store.getState().updateSessionAndMessageTree(sessionId, tree);
-      store.getState().updateChatState(sessionId, "loading");
-      store.getState().setUncaughtError(sessionId, null);
-      store.getState().setStreamingStartTime(sessionId, Date.now());
+      store.getState().updateSessionAndMessageTree(activeSessionId, tree);
+      store.getState().updateChatState(activeSessionId, "loading");
+      store.getState().setUncaughtError(activeSessionId, null);
+      store.getState().setStreamingStartTime(activeSessionId, Date.now());
 
       // ── (b) AbortController ───────────────────────────────────────────────
       const controller = new AbortController();
       controllerRef.current = controller;
-      store.getState().setAbortController(sessionId, controller);
+      store.getState().setAbortController(activeSessionId, controller);
       if (mountedRef.current) setIsStreaming(true);
+
+      // The message is now committed to the thread — safe to clear the composer.
+      // (If session creation above had failed we returned earlier, preserving input.)
+      onAccepted?.();
 
       // ── Batched tree writes ───────────────────────────────────────────────
       // We mutate a local `tree` synchronously on every packet (cheap immutable map
@@ -227,7 +286,7 @@ export function useSendMessage(
         rafRef.current = null;
         if (!dirtyRef.current) return;
         dirtyRef.current = false;
-        store.getState().updateSessionMessageTree(sessionId, tree);
+        store.getState().updateSessionMessageTree(activeSessionId, tree);
       };
 
       const scheduleFlush = () => {
@@ -246,15 +305,16 @@ export function useSendMessage(
       // The model chosen for this session via the input-bar selector (if any). Web
       // maps model_provider = descriptor.name (the provider *instance* name) and
       // model_version = model_configuration.name.
-      const selected = store.getState().sessions.get(sessionId)?.selectedModel;
+      const selected = store
+        .getState()
+        .sessions.get(activeSessionId)?.selectedModel;
 
       const req: SendMessageRequest = {
         message: trimmed,
-        // A brand-new (optimistic-only) session has a non-UUID temp id; treat any
-        // non-UUID as "no session yet" so the backend creates one.
-        chat_session_id: isUuid(sessionId) ? sessionId : null,
+        // activeSessionId is always a real UUID here (created above for new chats).
+        chat_session_id: activeSessionId,
         parent_message_id: parentMessageId,
-        file_descriptors: [],
+        file_descriptors: files,
         llm_override: selected
           ? {
               model_provider: selected.name,
@@ -313,7 +373,7 @@ export function useSendMessage(
           if (!sawFirstPacket) {
             sawFirstPacket = true;
             if (mountedRef.current) {
-              store.getState().updateChatState(sessionId, "streaming");
+              store.getState().updateChatState(activeSessionId, "streaming");
             }
           }
 
@@ -324,42 +384,56 @@ export function useSendMessage(
         // ── (d) Completion ──────────────────────────────────────────────────
         cancelScheduledFlush();
         // Final synchronous flush so the last tokens land immediately.
-        store.getState().updateSessionMessageTree(sessionId, tree);
-        store.getState().updateChatState(sessionId, "input");
-        store.getState().setStreamingStartTime(sessionId, null);
+        store.getState().updateSessionMessageTree(activeSessionId, tree);
+        store.getState().updateChatState(activeSessionId, "input");
+        store.getState().setStreamingStartTime(activeSessionId, null);
       } catch (err) {
         cancelScheduledFlush();
         // Flush whatever streamed before the failure.
-        store.getState().updateSessionMessageTree(sessionId, tree);
+        store.getState().updateSessionMessageTree(activeSessionId, tree);
 
         if (isAbortError(err)) {
           // ── (e) Clean user/lifecycle stop ────────────────────────────────
-          store.getState().updateChatState(sessionId, "input");
-          store.getState().setStreamingStartTime(sessionId, null);
+          store.getState().updateChatState(activeSessionId, "input");
+          store.getState().setStreamingStartTime(activeSessionId, null);
         } else if (err instanceof FetchError && (err.status === 401 || err.status === 403)) {
           // Surface auth failures for the integrator's auth handler. We leave the
           // turn in place and reset chatState; the integrator's auth layer (which
           // owns token refresh / re-login) reads FetchError.status.
-          store.getState().updateChatState(sessionId, "input");
-          store.getState().setStreamingStartTime(sessionId, null);
+          store.getState().updateChatState(activeSessionId, "input");
+          store.getState().setStreamingStartTime(activeSessionId, null);
           store
             .getState()
-            .setUncaughtError(sessionId, `auth_error:${err.status}`);
+            .setUncaughtError(activeSessionId, `auth_error:${err.status}`);
         } else {
           const message =
             err instanceof Error ? err.message : "Something went wrong.";
-          store.getState().updateChatState(sessionId, "input");
-          store.getState().setStreamingStartTime(sessionId, null);
-          store.getState().setUncaughtError(sessionId, message);
+          store.getState().updateChatState(activeSessionId, "input");
+          store.getState().setStreamingStartTime(activeSessionId, null);
+          store.getState().setUncaughtError(activeSessionId, message);
         }
       } finally {
         if (controllerRef.current === controller) {
           controllerRef.current = null;
         }
         if (mountedRef.current) setIsStreaming(false);
+
+        // First message of a new chat reached a terminal state → let the backend
+        // auto-title it (web parity: web names after the try/catch, so a stopped or
+        // errored first stream still gets titled instead of stranded as "New Chat").
+        if (createdNewSession) {
+          void autoNameSession(activeSessionId);
+        }
       }
     },
-    [sessionId, config, store, cancelScheduledFlush]
+    [
+      sessionId,
+      config,
+      store,
+      cancelScheduledFlush,
+      ensureSession,
+      autoNameSession,
+    ]
   );
 
   // ── stop(): user-initiated cancel ──────────────────────────────────────────
@@ -376,7 +450,9 @@ export function useSendMessage(
       ) {
         // Abort the dead-in-the-water socket and leave a re-fetch flag. We do NOT
         // attempt to resume the stream — the UI re-fetches the session on foreground.
-        pendingRefetch.add(sessionId);
+        // Key the flag to the session the stream actually runs under (the real UUID
+        // for a draft chat whose creation outran the `sessionId` prop re-render).
+        pendingRefetch.add(activeSessionRef.current ?? sessionId);
         controllerRef.current.abort();
       }
     };

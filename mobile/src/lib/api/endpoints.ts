@@ -82,10 +82,17 @@ export const SWR_KEYS = {
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────
   chatSessions: "/chat/get-user-chat-sessions",
+  // Full message history for one session (used to hydrate the thread on open).
+  getChatSession: (chatSessionId: string) =>
+    `/chat/get-chat-session/${chatSessionId}`,
 
   // ── Projects & Files ──────────────────────────────────────────────────────
   userProjects: "/user/projects",
   recentFiles: "/user/files/recent",
+  // Chat attachment upload (multipart) + status polling. The `/chat/file/{id}`
+  // download path is built via `chatFileUrl()` in lib/api/files.ts.
+  chatFileUpload: "/user/projects/file/upload",
+  chatFileStatuses: "/user/projects/file/statuses",
   userPats: "/user/pats",
   notifications: "/notifications",
 

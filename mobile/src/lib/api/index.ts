@@ -14,3 +14,9 @@ export { errorHandlingFetcher } from "./fetcher";
 export { UrlBuilder } from "./url-builder";
 export { handleSSEStream } from "./stream";
 export { SWR_KEYS } from "./endpoints";
+export {
+  uploadChatFiles,
+  fetchFileStatuses,
+  chatFileUrl,
+  type UploadableFile,
+} from "./files";
