@@ -191,6 +191,26 @@ export function ChevronRightIcon({
   );
 }
 
+// Mirror of ChevronRightIcon (web has no left chevron in the ported set); used as
+// the back glyph in the actions popover's sources sub-view header.
+export function ChevronLeftIcon({
+  size = 16,
+  color = "#000",
+  strokeWidth = 1.5,
+}: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M10 12L6 8L10 4"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // web: lib/opal/src/icons/edit-big.tsx — "New Session" / new chat
 export function EditBigIcon({
   size = 16,
