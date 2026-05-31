@@ -58,6 +58,39 @@ function persistSnapshot(enabled: MobileSource[], all: MobileSource[]) {
   storage.set(LS_KEY, JSON.stringify(snapshot));
 }
 
+/**
+ * Pure, synchronous reader of the committed MMKV source-preference snapshot.
+ *
+ * This is the single source of truth for the seeding logic shared by the hook's
+ * init effect and by callers that need the freshest enabled-source set WITHOUT
+ * mounting the hook (e.g. the send path — see useSendMessage). Because it reads
+ * MMKV fresh on every call it is immune to cross-instance React-state staleness:
+ * the popover writes MMKV on toggle, and this reader observes that write.
+ *
+ * Logic (mirrors the hook's init seeding exactly):
+ *   - No valid snapshot           -> all configured sources enabled (first run).
+ *   - Snapshot present            -> configured sources whose key is enabled,
+ *                                    PLUS any configured source absent from the
+ *                                    snapshot (new sources default enabled).
+ *
+ * Stale keys (no longer in the configured set) are naturally dropped. This
+ * function NEVER writes/persists and uses NO hooks.
+ */
+export function readEnabledSources(
+  availableSourceStrings: string[]
+): MobileSource[] {
+  const configured = getConfiguredSources(availableSourceStrings);
+  const saved = loadSnapshot();
+  if (!saved) return configured; // first run: all enabled
+  const has = (k: string) =>
+    Object.prototype.hasOwnProperty.call(saved.sourcePreferences, k);
+  const newSources = configured.filter((s) => !has(s.uniqueKey));
+  const enabled = configured.filter(
+    (s) => has(s.uniqueKey) && saved.sourcePreferences[s.uniqueKey]
+  );
+  return [...enabled, ...newSources]; // new sources enabled by default
+}
+
 export function useSourcePreferences(availableSourceStrings: string[]) {
   const configured = useMemo(
     () => getConfiguredSources(availableSourceStrings),
@@ -78,23 +111,13 @@ export function useSourcePreferences(availableSourceStrings: string[]) {
 
   useEffect(() => {
     if (initialized || configured.length === 0) return;
-    const saved = loadSnapshot();
-    if (saved) {
-      const has = (k: string) =>
-        Object.prototype.hasOwnProperty.call(saved.sourcePreferences, k);
-      const newSources = configured.filter((s) => !has(s.uniqueKey));
-      const enabled = configured.filter(
-        (s) => has(s.uniqueKey) && saved.sourcePreferences[s.uniqueKey]
-      );
-      const merged = [...enabled, ...newSources]; // new sources enabled by default
-      setSelected(merged);
-      persistSnapshot(merged, configured);
-    } else {
-      setSelected(configured); // first run: all enabled
-      persistSnapshot(configured, configured);
-    }
+    // Delegate the seeding logic to the pure reader (single source of truth);
+    // re-persist so any dropped stale keys / new-source defaults are committed.
+    const seeded = readEnabledSources(availableSourceStrings);
+    setSelected(seeded);
+    persistSnapshot(seeded, configured);
     setInitialized(true);
-  }, [initialized, configured]);
+  }, [initialized, configured, availableSourceStrings]);
 
   const enableSources = useCallback(
     (sources: MobileSource[]) => {

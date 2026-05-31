@@ -37,7 +37,7 @@ import { useForcedTools } from "@/state/useForcedTools";
 import { usePersonas } from "@/query/personas";
 import { useAgentPreferences } from "@/query/agentPreferences";
 import { useAvailableSourceStrings } from "@/query/connectors";
-import { useSourcePreferences } from "@/lib/sources/useSourcePreferences";
+import { readEnabledSources } from "@/lib/sources/useSourcePreferences";
 import { buildFilters } from "@/lib/sources/sourceMetadata";
 import {
   buildImmediateMessages,
@@ -181,16 +181,20 @@ export function useSendMessage(
   // (closing over the variable is fine — the async send() reads it after the hook
   // re-renders with fresh data; for absolute freshness we'd use queryClient, but
   // closing over the latest render's value matches how the model selector reads
-  // store state here). `selectedSources` is React state, so the async send() would
-  // close over a STALE value — mirror it into a ref and read the ref in send().
+  // store state here).
+  //
+  // Source prefs are NOT mounted via useSourcePreferences here: that hook holds
+  // LOCAL React state seeded once from MMKV, so a different instance (the actions
+  // popover) toggling a source would not be observed here → stale filters. Instead
+  // we mirror the available-source strings into a ref and, at send time, call the
+  // pure readEnabledSources() which reads the freshest committed MMKV snapshot.
   const { data: personas } = usePersonas();
   const { data: agentPrefs } = useAgentPreferences();
   const availableSourceStrings = useAvailableSourceStrings();
-  const { selectedSources } = useSourcePreferences(availableSourceStrings);
-  const selectedSourcesRef = useRef(selectedSources);
+  const availableSourcesRef = useRef(availableSourceStrings);
   useEffect(() => {
-    selectedSourcesRef.current = selectedSources;
-  }, [selectedSources]);
+    availableSourcesRef.current = availableSourceStrings;
+  }, [availableSourceStrings]);
   const personasRef = useRef(personas);
   useEffect(() => {
     personasRef.current = personas;
@@ -354,6 +358,8 @@ export function useSendMessage(
         personaId !== undefined
           ? (agentPrefsRef.current?.[personaId]?.disabled_tool_ids ?? [])
           : [];
+      // agent unresolved (personas not yet loaded / personaId not found) → omit
+      // allowed_tool_ids; backend defaults to all tools (no restriction). Intentional.
       const allowedToolIds = agent
         ? agent.tools
             .filter((t) => !disabledToolIds.includes(t.id))
@@ -363,7 +369,11 @@ export function useSendMessage(
       const forcedIds = useForcedTools.getState().forcedToolIds;
       const forcedToolId = forcedIds.length > 0 ? forcedIds[0] : null;
 
-      const internalSearchFilters = buildFilters(selectedSourcesRef.current);
+      // Read the freshest committed MMKV snapshot at send time (no cross-instance
+      // staleness — the popover's toggles are written to MMKV and observed here).
+      const internalSearchFilters = buildFilters(
+        readEnabledSources(availableSourcesRef.current)
+      );
 
       const req: SendMessageRequest = {
         message: trimmed,
