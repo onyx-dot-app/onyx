@@ -126,8 +126,9 @@ def test_ask_default_action_rendered_as_available(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    """With no overrides, the write action falls back to its ``ASK`` default and
-    is rendered as available-with-approval rather than disabled."""
+    """With no overrides, the write action falls back to its ``ASK`` default,
+    which counts as available (not disabled) — ASK and ALWAYS aren't
+    distinguished in the skill file."""
     user = make_user(db_session)
     skill = _slack_skill(db_session)
     app = make_external_app(
@@ -142,10 +143,9 @@ def test_ask_default_action_rendered_as_available(
     files = build_skills_fileset_for_user(user, db_session)
 
     rendered = files[f"{_SLACK_ID}/SKILL.md"].decode("utf-8")
-    available, _, disabled = rendered.partition("No actions are disabled.")
-    # Slack's write action defaults to ASK -> available, annotated, not disabled.
-    assert "Post a message" in available
-    assert "_(requires approval)_" in available
+    available, _, _ = rendered.partition("No actions are disabled.")
+    # Slack's write action defaults to ASK -> available, not disabled.
+    assert "- **Post a message**" in available
     assert "No actions are disabled." in rendered
 
 

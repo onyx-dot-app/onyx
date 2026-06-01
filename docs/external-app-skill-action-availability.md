@@ -41,10 +41,11 @@ Search messages are enabled; Post a message is disabled."
   the stored overrides. There is no getter by `skill_id` yet — add one.
 
 - **Availability semantics:** `DENY` = disabled; `ALWAYS`/`ASK` = available
-  (an `ASK` action *can* be used, it just prompts for approval). We render two
-  groups — Available and Disabled — and annotate `ASK` actions as
-  "requires approval" so the agent can prefer auto-approved paths. This matches
-  the gate's actual behavior and the user's "enabled / disabled" framing.
+  (an `ASK` action *can* be used, it just prompts for approval at egress). We
+  render two groups — Available and Disabled — and do **not** distinguish
+  `ASK` from `ALWAYS` in the skill file: the approval prompt is handled by the
+  gate at call time, so the agent only needs the binary enabled/disabled signal.
+  This matches the user's "enabled / disabled" framing.
 
 - **The skill file is a hint, not the enforcement boundary.** The proxy gate
   remains the source of truth. If policy changes after a sandbox is hydrated the

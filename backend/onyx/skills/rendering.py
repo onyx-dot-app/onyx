@@ -88,9 +88,8 @@ def build_action_availability_section(
 ) -> str:
     """Render the enabled/disabled action lists from the app's effective policy.
 
-    ``DENY`` actions are disabled; everything else is available, with ``ASK``
-    actions annotated as requiring approval. Falls back to the catalog defaults
-    when no app row (and thus no stored override) exists.
+    ``DENY`` actions are disabled; everything else is available. Falls back to the
+    catalog defaults when no app row (and thus no stored override) exists.
     """
     stored = get_policies(db_session, external_app.id) if external_app else {}
     views = action_policy_views(app_type, stored)
@@ -100,22 +99,10 @@ def build_action_availability_section(
     available: list[str] = []
     disabled: list[str] = []
     for view in views:
-        if view.state == EndpointPolicy.DENY:
-            disabled.append(f"- **{view.normalised_name}** — {view.description}")
-            continue
-        suffix = " _(requires approval)_" if view.state == EndpointPolicy.ASK else ""
-        available.append(f"- **{view.normalised_name}** — {view.description}{suffix}")
+        bucket = disabled if view.state == EndpointPolicy.DENY else available
+        bucket.append(f"- **{view.normalised_name}** — {view.description}")
 
-    lines: list[str] = []
-    lines.append(
-        "These actions are enabled for you"
-        + (
-            "; actions marked _(requires approval)_ prompt the user before running."
-            if any("_(requires approval)_" in line for line in available)
-            else "."
-        )
-    )
-    lines.append("")
+    lines: list[str] = ["These actions are enabled for you:", ""]
     lines.extend(available or ["- (none)"])
     lines.append("")
     lines.append(
