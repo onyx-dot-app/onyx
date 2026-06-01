@@ -5,14 +5,13 @@ import { Text } from "@/components/opal";
 import { SvgBubbleText } from "@/components/icons";
 import { useToken } from "@/theme/ThemeProvider";
 import { formatRelativeTime } from "@/lib/projectUtils";
+import { UNNAMED_CHAT } from "@/lib/chatLabels";
 import type { ChatSession } from "@/lib/types";
 
 // Native mirror of web `ProjectChatSessionList`: a "Recent Chats" header and the
 // project's chat sessions (newest first), each a tappable row with a bubble glyph,
 // name, and "Last message …" sub-line. Web shows an agent avatar for non-featured
 // personas; mobile renders the bubble glyph for all (documented simplification).
-
-const UNNAMED_CHAT = "New Chat";
 
 interface ProjectChatSessionListProps {
   chats: ChatSession[];

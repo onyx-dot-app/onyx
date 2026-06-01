@@ -17,7 +17,6 @@ export {
   loginWithPassword,
   loginWithGoogle,
   register,
-  refreshToken,
   logout,
   extractTokenFromUrl,
   AuthError,

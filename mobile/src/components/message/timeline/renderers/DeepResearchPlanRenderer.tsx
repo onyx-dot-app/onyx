@@ -1,7 +1,7 @@
 // DeepResearchPlanRenderer.tsx — streams the deep-research plan markdown.
 // Ported (functional) from web DeepResearchPlanRenderer.
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { View } from "react-native";
 
 import {
@@ -13,6 +13,7 @@ import type { MessageRendererProps } from "@/components/message/interfaces";
 import { Markdown } from "@/components/markdown";
 import { ExpandableTextDisplay } from "@/components/message/ExpandableTextDisplay";
 import { timelineTokens as T } from "@/theme/timelineTokens";
+import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 
 export function DeepResearchPlanRenderer({
   packets,
@@ -31,13 +32,7 @@ export function DeepResearchPlanRenderer({
     return { content: deltas, hasEnd: end };
   }, [packets]);
 
-  const firedRef = useRef(false);
-  useEffect(() => {
-    if (hasEnd && !firedRef.current) {
-      firedRef.current = true;
-      onComplete();
-    }
-  }, [hasEnd, onComplete]);
+  useFireOnComplete(hasEnd, onComplete);
 
   const renderMarkdown = useCallback(
     (text: string, isExpanded: boolean) => (

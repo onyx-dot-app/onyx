@@ -18,7 +18,6 @@ import { persist } from "zustand/middleware";
 import {
   ChatState,
   RegenerationState,
-  Message,
   ChatSessionSharedStatus,
   BackendChatSession,
   FeedbackType,
@@ -31,6 +30,7 @@ import {
   MessageTreeState,
 } from "./messageTree";
 import { chatPersistStorage, PERSIST_VERSION } from "./persist";
+import { createInitialSessionData } from "./sessionDefaults";
 import { useMemo } from "react";
 
 // Local placeholder id for a not-yet-created (draft) chat. The composer keys its
@@ -204,38 +204,6 @@ interface ChatSessionStore {
   ) => void;
   cleanupOldSessions: (maxSessions?: number) => void;
 }
-
-const createInitialSessionData = (
-  sessionId: string,
-  initialData?: Partial<ChatSessionData>
-): ChatSessionData => ({
-  sessionId,
-  messageTree: new Map<number, Message>(),
-  chatState: "input" as ChatState,
-  regenerationState: null,
-  canContinue: false,
-  submittedMessage: "",
-  maxTokens: 128_000,
-  chatSessionSharedStatus: ChatSessionSharedStatus.Private,
-  selectedNodeIdForDocDisplay: null,
-  abortController: new AbortController(),
-  hasPerformedInitialScroll: true,
-  documentSidebarVisible: false,
-  hasSentLocalUserMessage: false,
-
-  // Session-specific state defaults
-  isFetchingChatMessages: false,
-  uncaughtError: null,
-  loadingError: null,
-  isReady: true,
-
-  lastAccessed: new Date(),
-  isLoaded: false,
-  queuedMessages: [],
-  latestMessageRenderComplete: true,
-  isStreamDraining: false,
-  ...initialData,
-});
 
 let nextQueuedMessageId = 0;
 

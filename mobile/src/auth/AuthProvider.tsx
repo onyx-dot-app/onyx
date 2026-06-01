@@ -94,42 +94,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
   }, []);
 
-  const signInWithPassword = useCallback(
-    async (email: string, password: string) => {
+  // Shared head of every auth action: clear the prior error, run the action, and on
+  // failure surface a readable message before rethrowing so the screen can react too.
+  const runAuthAction = useCallback(
+    async <T,>(fn: () => Promise<T>, fallbackMsg: string): Promise<T> => {
       setError(null);
       try {
-        const jwt = await loginWithPassword(email, password);
-        await adoptToken(jwt);
+        return await fn();
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Sign-in failed.");
+        setError(e instanceof Error ? e.message : fallbackMsg);
         throw e; // let the screen also react (e.g. stop its spinner)
       }
     },
-    [adoptToken],
+    [],
   );
 
-  const signInWithGoogle = useCallback(async () => {
-    setError(null);
-    try {
-      const jwt = await loginWithGoogle();
-      await adoptToken(jwt);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Sign-in failed.");
-      throw e;
-    }
-  }, [adoptToken]);
+  const signInWithPassword = useCallback(
+    (email: string, password: string) =>
+      runAuthAction(async () => {
+        await adoptToken(await loginWithPassword(email, password));
+      }, "Sign-in failed."),
+    [adoptToken, runAuthAction],
+  );
+
+  const signInWithGoogle = useCallback(
+    () =>
+      runAuthAction(async () => {
+        await adoptToken(await loginWithGoogle());
+      }, "Sign-in failed."),
+    [adoptToken, runAuthAction],
+  );
 
   const register = useCallback(
-    async (email: string, password: string) => {
-      setError(null);
-      try {
-        return await registerAccount(email, password);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Could not create your account.");
-        throw e;
-      }
-    },
-    [],
+    (email: string, password: string) =>
+      runAuthAction(() => registerAccount(email, password), "Could not create your account."),
+    [runAuthAction],
   );
 
   const signOut = useCallback(async () => {

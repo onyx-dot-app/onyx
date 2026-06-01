@@ -41,10 +41,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
 
-  const colors = useMemo<ColorMap>(
-    () => (isDark ? darkColors : lightColors),
-    [isDark],
-  );
+  const colors: ColorMap = isDark ? darkColors : lightColors;
 
   const style = useMemo(() => vars(buildThemeVars(colors)), [colors]);
 

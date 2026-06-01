@@ -6,18 +6,11 @@
 //
 // The multipart upload itself is driven imperatively (per file, for per-tile
 // status) by `useComposerAttachments`, which invalidates `recentFiles` on success.
-import { useQuery } from "@tanstack/react-query";
-
-import { errorHandlingFetcher } from "@/lib/api";
 import type { ProjectFile } from "@/lib/types";
 import { queryKeys } from "./keys";
-import { clientConfig } from "./client";
+import { useSimpleQuery } from "./client";
 
 /** The user's recently-uploaded files (bare `ProjectFile[]`, newest first). */
 export function useRecentFiles() {
-  return useQuery({
-    queryKey: [queryKeys.recentFiles],
-    queryFn: () =>
-      errorHandlingFetcher<ProjectFile[]>(queryKeys.recentFiles, clientConfig),
-  });
+  return useSimpleQuery<ProjectFile[]>(queryKeys.recentFiles);
 }

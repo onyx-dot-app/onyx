@@ -2,7 +2,7 @@
 // renderer, so the timeline never shows a blank step. Labels the step with the
 // tool name + icon and fires onComplete on completion.
 
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 
 import type { Packet } from "@/lib/types";
 import type { MessageRendererProps } from "@/components/message/interfaces";
@@ -11,6 +11,7 @@ import {
   getToolIconName,
   isToolComplete,
 } from "@/state/timeline/toolDisplayHelpers";
+import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 
 export function GenericToolRenderer({
   packets,
@@ -19,13 +20,7 @@ export function GenericToolRenderer({
 }: MessageRendererProps<Packet>) {
   const complete = useMemo(() => isToolComplete(packets), [packets]);
 
-  const firedRef = useRef(false);
-  useEffect(() => {
-    if (complete && !firedRef.current) {
-      firedRef.current = true;
-      onComplete();
-    }
-  }, [complete, onComplete]);
+  useFireOnComplete(complete, onComplete);
 
   return children([
     {

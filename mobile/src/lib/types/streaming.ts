@@ -445,8 +445,7 @@ export type ObjTypes =
   | DeepResearchPlanObj
   | ResearchAgentObj
   | CodingAgentObj
-  | PacketErrorObj
-  | CitationObj;
+  | PacketErrorObj;
 
 // Placement interface for packet positioning
 export interface Placement {
@@ -456,88 +455,43 @@ export interface Placement {
   model_index?: number | null; // For multi-model answer generation - identifies which model produced this packet
 }
 
+// Generic packet wrapper for a specific streaming object type
+export interface PacketOf<T extends ObjTypes> {
+  placement: Placement;
+  obj: T;
+}
+
 // Packet wrapper for streaming objects
-export interface Packet {
-  placement: Placement;
-  obj: ObjTypes;
-}
+export type Packet = PacketOf<ObjTypes>;
 
-export interface ChatPacket {
-  placement: Placement;
-  obj: ChatObj;
-}
+export type ChatPacket = PacketOf<ChatObj>;
 
-export interface StopPacket {
-  placement: Placement;
-  obj: StopObj;
-}
+export type StopPacket = PacketOf<StopObj>;
 
-export interface CitationPacket {
-  placement: Placement;
-  obj: CitationObj;
-}
+export type CitationPacket = PacketOf<CitationObj>;
 
 // New specific tool packet types
-export interface SearchToolPacket {
-  placement: Placement;
-  obj: SearchToolObj;
-}
+export type SearchToolPacket = PacketOf<SearchToolObj>;
 
-export interface ImageGenerationToolPacket {
-  placement: Placement;
-  obj: ImageGenerationToolObj;
-}
+export type ImageGenerationToolPacket = PacketOf<ImageGenerationToolObj>;
 
-export interface PythonToolPacket {
-  placement: Placement;
-  obj: PythonToolObj;
-}
+export type PythonToolPacket = PacketOf<PythonToolObj>;
 
-export interface FetchToolPacket {
-  placement: Placement;
-  obj: FetchToolObj;
-}
+export type FetchToolPacket = PacketOf<FetchToolObj>;
 
-export interface CustomToolPacket {
-  placement: Placement;
-  obj: CustomToolObj;
-}
+export type CustomToolPacket = PacketOf<CustomToolObj>;
 
-export interface FileReaderToolPacket {
-  placement: Placement;
-  obj: FileReaderToolObj;
-}
-export interface MemoryToolPacket {
-  placement: Placement;
-  obj: MemoryToolObj;
-}
+export type FileReaderToolPacket = PacketOf<FileReaderToolObj>;
+export type MemoryToolPacket = PacketOf<MemoryToolObj>;
 
-export interface ReasoningPacket {
-  placement: Placement;
-  obj: ReasoningObj;
-}
+export type ReasoningPacket = PacketOf<ReasoningObj>;
 
-export interface SectionEndPacket {
-  placement: Placement;
-  obj: SectionEndObj;
-}
+export type SectionEndPacket = PacketOf<SectionEndObj>;
 
-export interface TopLevelBranchingPacket {
-  placement: Placement;
-  obj: TopLevelBranchingObj;
-}
+export type TopLevelBranchingPacket = PacketOf<TopLevelBranchingObj>;
 
-export interface DeepResearchPlanPacket {
-  placement: Placement;
-  obj: DeepResearchPlanObj;
-}
+export type DeepResearchPlanPacket = PacketOf<DeepResearchPlanObj>;
 
-export interface ResearchAgentPacket {
-  placement: Placement;
-  obj: ResearchAgentObj;
-}
+export type ResearchAgentPacket = PacketOf<ResearchAgentObj>;
 
-export interface CodingAgentPacket {
-  placement: Placement;
-  obj: CodingAgentObj;
-}
+export type CodingAgentPacket = PacketOf<CodingAgentObj>;

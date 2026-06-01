@@ -5,7 +5,7 @@
 // renderers while results are still streaming. Reanimated opacity loop.
 
 import { useEffect } from "react";
-import { View, type ViewStyle } from "react-native";
+import { type ViewStyle } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -55,22 +55,6 @@ export function BlinkingBar({ addMargin = false, style }: BlinkingBarProps) {
         animatedStyle,
         style,
       ]}
-    />
-  );
-}
-
-/** Static (non-animated) variant for environments where animation is undesirable. */
-export function StaticBar({ addMargin = false }: BlinkingBarProps) {
-  const color = useToken("theme-primary-05");
-  return (
-    <View
-      style={{
-        width: 8,
-        height: 16,
-        borderRadius: radii["02"],
-        backgroundColor: color,
-        marginTop: addMargin ? 2 : 0,
-      }}
     />
   );
 }

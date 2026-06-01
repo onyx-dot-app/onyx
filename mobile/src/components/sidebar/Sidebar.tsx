@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { router } from "expo-router";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,9 +7,9 @@ import { Text } from "@/components/opal";
 import { useToken } from "@/theme/ThemeProvider";
 import { useAuth } from "@/auth";
 import { useDrawer } from "@/components/drawer/DrawerProvider";
-import { EditBigIcon, SidebarIcon } from "@/components/ui/icons";
 import { OnyxLogo } from "@/components/ui/logos";
-import { SvgFolderPlus, SvgLogOut } from "@/components/icons";
+import { SvgEditBig, SvgFolderPlus, SvgLogOut } from "@/components/icons";
+import { SvgSidebar } from "@/components/icons/SvgSidebar";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarRow } from "./SidebarRow";
 import { ProjectFolderRow } from "./ProjectFolderRow";
@@ -17,8 +17,9 @@ import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { useChatSessions } from "@/query/sessions";
 import { useProjects } from "@/query/projects";
 import { useChatSessionStore } from "@/state/chatSessionStore";
-import { useProjectChatTarget } from "@/state/projectChatTarget";
 import { useStartNewChat } from "@/chat/useStartNewChat";
+import { useOpenExistingChat } from "@/chat/useOpenExistingChat";
+import { chatDisplayName } from "@/lib/chatLabels";
 
 // Drawer sidebar. Surface matches the web chat sidebar exactly (bg-background-tint-02,
 // generated from the web Opal palette).
@@ -32,17 +33,14 @@ import { useStartNewChat } from "@/chat/useStartNewChat";
 export function Sidebar() {
   const insets = useSafeAreaInsets();
   const { close } = useDrawer();
-  const collapseColor = useToken("text-03");
   const logoColor = useToken("theme-primary-05");
 
   const { data: sessions, isLoading } = useChatSessions();
   const { data: projects } = useProjects();
   const currentSessionId = useChatSessionStore((s) => s.currentSessionId);
-  const setCurrentSession = useChatSessionStore((s) => s.setCurrentSession);
   const startNewChat = useStartNewChat();
-  const newChatColor = useToken("text-04");
-  const newProjectColor = useToken("text-04");
-  const logoutColor = useToken("text-04");
+  const openExistingChat = useOpenExistingChat();
+  const iconColor = useToken("text-04");
   const { signOut } = useAuth();
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
@@ -63,21 +61,23 @@ export function Sidebar() {
   // a "New Chat" fallback (the backend titles a session shortly after its first
   // message — see useChatSessionLifecycle.autoNameSession). With lazy creation,
   // empty/untitled sessions aren't spawned on the "New Chat" tap anyway.
-  const recents = (sessions ?? [])
-    .slice()
-    .sort(
-      (a, b) =>
-        new Date(b.time_created).getTime() - new Date(a.time_created).getTime(),
-    );
+  const recents = useMemo(
+    () =>
+      (sessions ?? [])
+        .slice()
+        .sort(
+          (a, b) =>
+            new Date(b.time_created).getTime() -
+            new Date(a.time_created).getTime(),
+        ),
+    [sessions],
+  );
 
   function openSession(id: string) {
-    // Opening an existing chat is not a new project chat — drop any lingering
-    // project target so it can't bind a later draft to the wrong project.
-    useProjectChatTarget.getState().clear();
-    // Open in the single chat screen (it loads + hydrates this session's history)
-    // rather than pushing a separate [sessionId] route. `navigate` (not `push`)
-    // avoids stacking chat screens.
-    setCurrentSession(id);
+    // Clears any lingering project target + makes the session current (hydrates its
+    // history). Open in the single chat screen rather than pushing a separate
+    // [sessionId] route. `navigate` (not `push`) avoids stacking chat screens.
+    openExistingChat(id);
     close();
     router.navigate("/(app)/(chat)" as never);
   }
@@ -112,7 +112,7 @@ export function Sidebar() {
           accessibilityLabel="Close sidebar"
           style={{ padding: 6, borderRadius: 8 }}
         >
-          <SidebarIcon size={20} color={collapseColor} />
+          <SvgSidebar size={20} color="text-03" />
         </Pressable>
       </View>
 
@@ -123,7 +123,7 @@ export function Sidebar() {
         accessibilityLabel="New chat"
         className="mx-2 mb-1 h-10 flex-row items-center gap-2 rounded-[8px] px-2 active:bg-background-tint-03"
       >
-        <EditBigIcon size={18} color={newChatColor} />
+        <SvgEditBig size={18} color={iconColor} />
         <Text font="main-ui-body" color="text-04">
           New Chat
         </Text>
@@ -146,7 +146,7 @@ export function Sidebar() {
               accessibilityLabel="New project"
               className="mx-2 mb-1 h-10 flex-row items-center gap-2 rounded-[8px] px-2 active:bg-background-tint-03"
             >
-              <SvgFolderPlus size={18} color={newProjectColor} />
+              <SvgFolderPlus size={18} color={iconColor} />
               <Text font="main-ui-body" color="text-04">
                 New Project
               </Text>
@@ -169,7 +169,7 @@ export function Sidebar() {
               recents.map((s) => (
                 <SidebarRow
                   key={s.id}
-                  label={(s.name ?? "").trim() || "New Chat"}
+                  label={chatDisplayName(s.name)}
                   selected={s.id === currentSessionId}
                   onPress={() => openSession(s.id)}
                 />
@@ -187,7 +187,7 @@ export function Sidebar() {
           accessibilityLabel="Log out"
           className="h-10 flex-row items-center gap-2 rounded-[8px] px-2 active:bg-background-tint-03"
         >
-          <SvgLogOut size={18} color={logoutColor} />
+          <SvgLogOut size={18} color={iconColor} />
           <Text font="main-ui-body" color="text-04">
             Log out
           </Text>

@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { TextInput, View } from "react-native";
+import { View } from "react-native";
 import { router } from "expo-router";
 
 import { Button, Modal, Text } from "@/components/opal";
-import { typography } from "@/theme/generated/typography";
-import { useToken } from "@/theme/ThemeProvider";
 import { useCreateProject } from "@/query/projects";
 import { useStartProjectChat } from "@/chat/useStartProjectChat";
+import { ProjectModalTextInput } from "./ProjectModalTextInput";
 
 // Native mirror of web `CreateProjectModal`. A controlled opal Modal with a single
 // "Project Name" field. On submit it creates the project and navigates to its
@@ -21,8 +20,6 @@ export function CreateProjectModal({ visible, onClose }: CreateProjectModalProps
   const [name, setName] = useState("");
   const createProject = useCreateProject();
   const startProjectChat = useStartProjectChat();
-  const placeholderColor = useToken("text-03");
-  const typedColor = useToken("text-05");
 
   const trimmed = name.trim();
   const canSubmit = trimmed.length > 0 && !createProject.isPending;
@@ -57,16 +54,13 @@ export function CreateProjectModal({ visible, onClose }: CreateProjectModalProps
           <Text font="main-ui-action" color="text-04">
             Project Name
           </Text>
-          <TextInput
+          <ProjectModalTextInput
             value={name}
             onChangeText={setName}
             placeholder="What are you working on?"
-            placeholderTextColor={placeholderColor}
             autoFocus
             returnKeyType="done"
             onSubmitEditing={handleSubmit}
-            className="rounded-[8px] border border-border-02 bg-background-neutral-00 px-3 py-2"
-            style={[typography["main-ui-body"], { color: typedColor }]}
           />
         </View>
 

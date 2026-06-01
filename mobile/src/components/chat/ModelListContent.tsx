@@ -2,7 +2,9 @@ import { useMemo, useState, type ComponentType } from "react";
 import { Dimensions, Pressable, ScrollView, TextInput, View } from "react-native";
 
 import { Text } from "@/components/opal";
-import { CheckIcon, ChevronRightIcon, SearchIcon } from "@/components/ui/icons";
+import { SvgCheck } from "@/components/icons/SvgCheck";
+import { SvgChevronRight } from "@/components/icons/SvgChevronRight";
+import { SvgSearch } from "@/components/icons/SvgSearch";
 import { useToken } from "@/theme/ThemeProvider";
 import { typography } from "@/theme/generated/typography";
 import {
@@ -41,9 +43,7 @@ interface ModelListContentProps {
   // Swappable container/input so this renders correctly inside a bottom sheet
   // (BottomSheetScrollView / BottomSheetTextInput) or a plain surface. Typed loosely
   // since gorhom's variants have compatible-but-not-identical prop shapes.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ScrollComponent?: ComponentType<any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   InputComponent?: ComponentType<any>;
 }
 
@@ -60,7 +60,6 @@ export function ModelListContent({
 
   const searchTextColor = useToken("text-04");
   const mutedColor = useToken("text-03");
-  const checkColor = useToken("action-link-05");
 
   const options = useMemo(() => buildLlmOptions(providers), [providers]);
   const filtered = useMemo(() => {
@@ -107,7 +106,7 @@ export function ModelListContent({
             </Text>
           ) : null}
         </View>
-        {isSel ? <CheckIcon size={16} color={checkColor} /> : null}
+        {isSel ? <SvgCheck size={16} color="action-link-05" /> : null}
       </Pressable>
     );
   }
@@ -116,7 +115,7 @@ export function ModelListContent({
     <View>
       {/* Search box (web: InputTypeIn internal, leading search icon) */}
       <View className="mb-2 h-9 flex-row items-center gap-2 rounded-[8px] bg-background-tint-02 px-2">
-        <SearchIcon size={16} color={mutedColor} />
+        <SvgSearch size={16} color={mutedColor} />
         <InputComponent
           value={query}
           onChangeText={setQuery}
@@ -182,7 +181,7 @@ export function ModelListContent({
                           transform: [{ rotate: open ? "90deg" : "0deg" }],
                         }}
                       >
-                        <ChevronRightIcon size={16} color={mutedColor} />
+                        <SvgChevronRight size={16} color={mutedColor} />
                       </View>
                     </Pressable>
                     {open ? g.options.map(renderRow) : null}

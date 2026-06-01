@@ -1,8 +1,7 @@
 import { Pressable } from "react-native";
 
 import { Text } from "@/components/opal";
-import { XIcon } from "@/components/ui/icons";
-import { useToken } from "@/theme/ThemeProvider";
+import { SvgX } from "@/components/icons/SvgX";
 import type { ToolSnapshot } from "@/lib/types/tools";
 
 // ---------------------------------------------------------------------------
@@ -22,7 +21,6 @@ interface ForcedToolChipProps {
 }
 
 export function ForcedToolChip({ tool, onClear }: ForcedToolChipProps) {
-  const accent = useToken("action-link-05");
   return (
     <Pressable
       accessibilityRole="button"
@@ -34,9 +32,7 @@ export function ForcedToolChip({ tool, onClear }: ForcedToolChipProps) {
       <Text font="secondary-action" color="action-link-05" numberOfLines={1}>
         {tool.display_name}
       </Text>
-      <XIcon size={12} color={accent} />
+      <SvgX size={12} color="action-link-05" />
     </Pressable>
   );
 }
-
-export default ForcedToolChip;

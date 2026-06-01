@@ -1,16 +1,16 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import {
   Pressable,
   ScrollView,
   View,
   type ViewStyle,
 } from "react-native";
-import * as Clipboard from "expo-clipboard";
 
 import { Text } from "@/components/opal";
 import { typography } from "@/theme/generated/typography";
 import { radii } from "@/theme/generated/radii";
 import { useThemeColors } from "@/theme/ThemeProvider";
+import { useCopyToClipboard } from "@/lib/useCopyToClipboard";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,6 +26,8 @@ interface CodeBlockProps {
    */
   language?: string;
 }
+
+const CODE_SCROLL_CONTENT_STYLE = { padding: 12 } as const;
 
 // ---------------------------------------------------------------------------
 // CodeBlock
@@ -46,15 +48,12 @@ interface CodeBlockProps {
  */
 function CodeBlock({ code, language }: CodeBlockProps) {
   const colors = useThemeColors();
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyToClipboard();
 
   const handleCopy = useCallback(() => {
     if (!code) return;
-    void Clipboard.setStringAsync(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }, [code]);
+    void copy(code);
+  }, [code, copy]);
 
   const containerStyle = useMemo<ViewStyle>(
     () => ({
@@ -92,7 +91,7 @@ function CodeBlock({ code, language }: CodeBlockProps) {
     <View style={containerStyle}>
       <View style={headerStyle}>
         <Text font="secondary-mono" color="text-03" numberOfLines={1}>
-          {language ? language : "code"}
+          {language || "code"}
         </Text>
         <Pressable
           onPress={handleCopy}
@@ -109,7 +108,7 @@ function CodeBlock({ code, language }: CodeBlockProps) {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ padding: 12 }}
+        contentContainerStyle={CODE_SCROLL_CONTENT_STYLE}
       >
         {/* RN Text (via Opal would force wrapping props); use a raw style array
             so the monospace preset + code color cascade onto the code text. */}

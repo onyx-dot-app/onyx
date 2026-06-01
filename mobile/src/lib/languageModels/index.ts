@@ -3,7 +3,8 @@
 // the default model, and pick a provider icon.
 import type { ComponentType } from "react";
 
-import { CpuIcon, type IconProps } from "@/components/ui/icons";
+import { SvgCpu } from "@/components/icons/SvgCpu";
+import type { IconProps } from "@/components/icons/Icon";
 import {
   AnthropicLogo,
   GoogleLogo,
@@ -79,7 +80,7 @@ export function groupLlmOptions(options: LLMOption[]): LLMOptionGroup[] {
 
 // Substring matchers (provider kind → vendor → model name), mirroring web's
 // MODEL_ICON_MAP. First match wins; unmatched models fall back to the Cpu glyph.
-const ICON_MATCHERS: Array<[string, ComponentType<IconProps>]> = [
+const ICON_MATCHERS: [string, ComponentType<IconProps>][] = [
   // Provider kind matches first (e.g. "ollama_chat" → Ollama, even for a gpt-* model).
   ["ollama", OllamaLogo],
   ["anthropic", AnthropicLogo],
@@ -106,7 +107,7 @@ export function getModelIcon(
   for (const [key, Icon] of ICON_MATCHERS) {
     if (haystacks.some((h) => h.includes(key))) return Icon;
   }
-  return CpuIcon;
+  return SvgCpu;
 }
 
 /**

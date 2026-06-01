@@ -1,6 +1,6 @@
 import Svg, { Path, G, Defs, ClipPath, Rect } from "react-native-svg";
 
-import type { IconProps } from "./icons";
+import type { IconProps } from "@/components/icons/Icon";
 
 // Provider/model brand logos, ported 1:1 from the web Opal logo set
 // (web/lib/opal/src/logos/*). Monochrome marks (OpenAI) honor `color`; brand-colored

@@ -1,60 +1,25 @@
 import { useRef, type ReactNode } from "react";
-import { Alert, Dimensions, Pressable, ScrollView, View } from "react-native";
+import { Dimensions, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as ImagePicker from "expo-image-picker";
-import * as DocumentPicker from "expo-document-picker";
 
 import { Popover, Text, type PopoverTriggerRef } from "@/components/opal";
-import { ImageIcon, UploadSquareIcon } from "@/components/ui/icons";
+import { SvgImage } from "@/components/icons/SvgImage";
+import { SvgUploadSquare } from "@/components/icons/SvgUploadSquare";
+import { ActionRow } from "@/components/chat/ActionRow";
 import { RecentFileRow } from "@/components/chat/RecentFileRow";
-import { useToken } from "@/theme/ThemeProvider";
 import { useRecentFiles } from "@/query/files";
+import { useFilePicker } from "@/chat/useFilePicker";
 import {
   useLinkFileToProject,
   useUnlinkFileFromProject,
   useUploadProjectFiles,
 } from "@/query/projects";
-import type { UploadableFile } from "@/lib/api";
 import { UserFileStatus, type ProjectFile } from "@/lib/types";
 
 // Native mirror of web's `FilePickerPopover` as used inside ProjectContextPanel:
 // an anchored opal Popover with Photos / Upload File and the recent-files list,
 // where tapping a recent file LINKS it to (or UNLINKS it from) this project, and
 // fresh picks upload with the project_id attached.
-
-// Best-effort filename from a local URI when the picker reports none.
-function nameFromUri(uri: string, fallback: string): string {
-  const seg = (uri.split("/").pop() ?? "").split("?")[0] ?? "";
-  return seg.includes(".") ? decodeURIComponent(seg) : fallback;
-}
-
-interface ActionRowProps {
-  icon: ReactNode;
-  label: string;
-  description: string;
-  onPress: () => void;
-}
-
-function ActionRow({ icon, label, description, onPress }: ActionRowProps) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      className="flex-row items-center gap-3 rounded-[8px] px-2 py-2 active:bg-background-tint-02"
-    >
-      <View className="h-5 w-5 items-center justify-center">{icon}</View>
-      <View className="flex-1">
-        <Text font="main-ui-body" color="text-05" numberOfLines={1}>
-          {label}
-        </Text>
-        <Text font="secondary-body" color="text-03" numberOfLines={1}>
-          {description}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
 
 interface ProjectFilePickerProps {
   projectId: number;
@@ -71,7 +36,6 @@ export function ProjectFilePicker({
 }: ProjectFilePickerProps) {
   const triggerRef = useRef<PopoverTriggerRef>(null);
   const insets = useSafeAreaInsets();
-  const iconColor = useToken("text-04");
 
   const { data: recentFiles } = useRecentFiles();
   const recent = recentFiles ?? [];
@@ -80,6 +44,10 @@ export function ProjectFilePicker({
   const link = useLinkFileToProject(projectId);
   const unlink = useUnlinkFileFromProject(projectId);
 
+  // No vision gate here — project uploads accept images.
+  const { pickImages: runPickImages, pickDocuments: runPickDocuments } =
+    useFilePicker();
+
   const screenWidth = Dimensions.get("window").width;
   const contentWidth = Math.min(320, screenWidth - 24);
 
@@ -87,49 +55,23 @@ export function ProjectFilePicker({
     triggerRef.current?.close();
   }
 
-  async function pickImages() {
+  function pickImages() {
     close();
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsMultipleSelection: true,
-        quality: 1,
-      });
-      if (result.canceled) return;
-      const files: UploadableFile[] = result.assets.map((asset) => ({
-        uri: asset.uri,
-        name: asset.fileName ?? nameFromUri(asset.uri, "image.jpg"),
-        mimeType: asset.mimeType,
-      }));
-      if (files.length > 0) upload.mutate(files);
-    } catch {
-      Alert.alert("Couldn't open photos", "Please try again.");
-    }
+    void runPickImages((files) => upload.mutate(files));
   }
 
-  async function pickDocuments() {
+  function pickDocuments() {
     close();
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        multiple: true,
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled) return;
-      const files: UploadableFile[] = result.assets.map((asset) => ({
-        uri: asset.uri,
-        name: asset.name,
-        mimeType: asset.mimeType,
-      }));
-      if (files.length > 0) upload.mutate(files);
-    } catch {
-      Alert.alert("Couldn't open files", "Please try again.");
-    }
+    void runPickDocuments((files) => upload.mutate(files));
   }
 
   function toggleRecent(file: ProjectFile) {
     close();
-    if (file.status === UserFileStatus.UPLOADING) return;
-    if (file.status === UserFileStatus.DELETING) return;
+    if (
+      file.status === UserFileStatus.UPLOADING ||
+      file.status === UserFileStatus.DELETING
+    )
+      return;
     if (projectFileDbIds.has(file.id)) unlink.mutate(file.id);
     else link.mutate(file);
   }
@@ -152,13 +94,13 @@ export function ProjectFilePicker({
         style={{ width: contentWidth }}
       >
         <ActionRow
-          icon={<ImageIcon size={18} color={iconColor} />}
+          icon={<SvgImage size={18} color="text-04" />}
           label="Photos"
           description="Add from your photo library"
           onPress={pickImages}
         />
         <ActionRow
-          icon={<UploadSquareIcon size={18} color={iconColor} />}
+          icon={<SvgUploadSquare size={18} color="text-04" />}
           label="Upload File"
           description="Choose a document from your device"
           onPress={pickDocuments}

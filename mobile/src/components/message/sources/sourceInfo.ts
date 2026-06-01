@@ -65,15 +65,3 @@ export function getDisplayNameForSource(doc: OnyxDocument): string {
     MAX_TITLE_LENGTH
   );
 }
-
-/** Best-effort hostname for a URL (for favicon / web result display). */
-export function hostnameOf(url: string | undefined): string | null {
-  if (!url) return null;
-  try {
-    return new URL(url).hostname || null;
-  } catch {
-    // RN's URL may not parse all inputs; fall back to a regex.
-    const m = url.match(/^https?:\/\/([^/?#]+)/i);
-    return m?.[1] ?? null;
-  }
-}

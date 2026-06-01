@@ -18,7 +18,7 @@
 //   - COMPACT caps the body at maxHeight 96 with overflow hidden instead of the
 //     web FadingEdgeContainer (no fade-mask primitive on RN yet).
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { View } from "react-native";
 import Animated, {
   useSharedValue,
@@ -47,6 +47,7 @@ import { CodeBlock } from "@/components/markdown/CodeBlock";
 import { SvgTerminal } from "@/components/icons";
 import { useToken } from "@/theme/ThemeProvider";
 import { radii } from "@/theme/generated/radii";
+import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 
 // ---------------------------------------------------------------------------
 // State reduction
@@ -212,13 +213,7 @@ export function PythonToolRenderer({
     hasError,
   } = useMemo(() => constructCurrentPythonState(packets), [packets]);
 
-  const onCompleteFiredRef = useRef(false);
-  useEffect(() => {
-    if (isComplete && !onCompleteFiredRef.current) {
-      onCompleteFiredRef.current = true;
-      onComplete();
-    }
-  }, [isComplete, onComplete]);
+  useFireOnComplete(isComplete, onComplete);
 
   const status = useMemo(() => {
     if (isStreaming) return "Writing code...";

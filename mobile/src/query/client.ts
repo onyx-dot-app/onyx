@@ -2,13 +2,19 @@
 //
 // The integrator wires <PersistQueryClientProvider client={queryClient}
 // persistOptions={{ persister, maxAge, buster }}/> in app/_layout.tsx (see ./client exports).
-import { QueryClient } from "@tanstack/react-query";
+import {
+  QueryClient,
+  useQuery,
+  type UseQueryOptions,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { createMMKV } from "react-native-mmkv";
-import type { ClientConfig } from "@/lib/api";
+import { errorHandlingFetcher, type ClientConfig } from "@/lib/api";
 import { appConfig } from "@/lib/config";
 import { fetch as expoFetch } from "expo/fetch";
 import { getAuthHeaders } from "@/auth";
+import { makeMmkvStateStorage } from "@/state/persist";
 
 // ── QueryClient ────────────────────────────────────────────────────────────────
 export const queryClient = new QueryClient({
@@ -20,6 +26,21 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+// ── Shared read-query helper ─────────────────────────────────────────────────────
+// Most read hooks are the identical shape: useQuery on a single string key whose
+// queryFn just GETs that same key via errorHandlingFetcher (+ optional overrides
+// like a longer staleTime). This collapses that boilerplate to one call.
+export function useSimpleQuery<T>(
+  key: string,
+  opts?: Omit<UseQueryOptions<T, Error, T, [string]>, "queryKey" | "queryFn">
+): UseQueryResult<T, Error> {
+  return useQuery<T, Error, T, [string]>({
+    queryKey: [key],
+    queryFn: () => errorHandlingFetcher<T>(key, clientConfig),
+    ...opts,
+  });
+}
 
 // ── Default ClientConfig ───────────────────────────────────────────────────────
 // The transport seam consumed by errorHandlingFetcher in every query/mutation.
@@ -37,15 +58,7 @@ export const clientConfig: ClientConfig = {
 const queryStorage = createMMKV({ id: "onyx.query-cache" });
 
 export const persister = createSyncStoragePersister({
-  storage: {
-    getItem: (key) => queryStorage.getString(key) ?? null,
-    setItem: (key, value) => {
-      queryStorage.set(key, value);
-    },
-    removeItem: (key) => {
-      queryStorage.remove(key);
-    },
-  },
+  storage: makeMmkvStateStorage(queryStorage),
 });
 
 // ── Persist tuning (integrator passes these to PersistQueryClientProvider) ──────

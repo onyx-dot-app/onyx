@@ -13,7 +13,6 @@
 // Empty (no queries) -> a single step with empty content + BlinkingBar deferred
 // to the chip list's empty state once querying begins.
 
-import { useEffect, useRef } from "react";
 import { View } from "react-native";
 
 import { ValidSources, type OnyxDocument, type SearchToolPacket } from "@/lib/types";
@@ -30,6 +29,7 @@ import {
   INITIAL_RESULTS_TO_SHOW,
   RESULTS_PER_EXPANSION,
 } from "@/state/timeline/searchStateUtils";
+import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 import { SearchChipList, type ChipSource } from "./SearchChipList";
 
 const QUERIES_HEADER = "Searching internal documents";
@@ -86,13 +86,7 @@ export function InternalSearchToolRenderer({
 }: MessageRendererProps<SearchToolPacket>) {
   const { queries, results, isComplete } = constructCurrentSearchState(packets);
 
-  const onCompleteFiredRef = useRef(false);
-  useEffect(() => {
-    if (isComplete && !onCompleteFiredRef.current) {
-      onCompleteFiredRef.current = true;
-      onComplete();
-    }
-  }, [isComplete, onComplete]);
+  useFireOnComplete(isComplete, onComplete);
 
   const isCompact = renderType === RenderType.COMPACT;
   const isHighlight = renderType === RenderType.HIGHLIGHT;

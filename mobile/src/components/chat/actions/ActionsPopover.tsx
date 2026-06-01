@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react";
 import { Dimensions, Pressable, ScrollView, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Popover, Text } from "@/components/opal";
 import { ActionLineItem } from "@/components/chat/actions/ActionLineItem";
 import { SwitchList } from "@/components/chat/actions/SwitchList";
 import { toSourceItem } from "@/components/chat/actions/SourceRow";
-import { ChevronLeftIcon, SlidersIcon } from "@/components/ui/icons";
-import { useToken } from "@/theme/ThemeProvider";
+import { usePopoverPlacement } from "@/components/chat/usePopoverPlacement";
+import { SvgChevronLeft } from "@/components/icons/SvgChevronLeft";
+import { SvgSliders } from "@/components/icons/SvgSliders";
 import { SEARCH_TOOL_ID } from "@/lib/constants";
 import type { MinimalAgent } from "@/lib/types/agents";
 import { useForcedTools } from "@/state/useForcedTools";
@@ -47,11 +47,11 @@ interface ActionsPopoverProps {
 type SecondaryView = null | "sources";
 
 export function ActionsPopover({ agent }: ActionsPopoverProps) {
-  const insets = useSafeAreaInsets();
+  const { insets, contentWidth } = usePopoverPlacement({
+    maxWidth: 256,
+    widthMargin: 48,
+  });
   const [secondaryView, setSecondaryView] = useState<SecondaryView>(null);
-
-  const triggerColor = useToken("text-04");
-  const backColor = useToken("text-03");
 
   // --- force-tool (ephemeral) ---------------------------------------------
   const forcedToolIds = useForcedTools((s) => s.forcedToolIds);
@@ -88,11 +88,6 @@ export function ActionsPopover({ agent }: ActionsPopoverProps) {
   ).length;
   const totalSourceCount = configuredSources.length;
 
-  // Force the tapped tool (max-one-forced invariant lives in the store).
-  function handleToggleForced(toolId: number) {
-    toggleForcedTool(toolId);
-  }
-
   function handleSourceToggle(key: string) {
     const willEnable = !isSourceEnabled(key);
     const newEnabledCount = enabledSourceCount + (willEnable ? 1 : -1);
@@ -119,8 +114,6 @@ export function ActionsPopover({ agent }: ActionsPopoverProps) {
   }
 
   const screenHeight = Dimensions.get("window").height;
-  const screenWidth = Dimensions.get("window").width;
-  const contentWidth = Math.min(256, screenWidth - 48);
   const maxListHeight = Math.round(screenHeight * 0.5);
 
   const sourceItems = configuredSources.map((s) =>
@@ -143,7 +136,7 @@ export function ActionsPopover({ agent }: ActionsPopoverProps) {
           hitSlop={8}
           className="h-8 w-8 items-center justify-center rounded-[8px] active:bg-background-tint-02"
         >
-          <SlidersIcon size={18} color={triggerColor} />
+          <SvgSliders size={18} color="text-04" />
         </Pressable>
       </Popover.Trigger>
 
@@ -151,12 +144,7 @@ export function ActionsPopover({ agent }: ActionsPopoverProps) {
         side="top"
         align="start"
         sideOffset={8}
-        insets={{
-          top: insets.top + 8,
-          bottom: insets.bottom + 8,
-          left: 12,
-          right: 12,
-        }}
+        insets={insets}
         style={{ width: contentWidth }}
       >
         {secondaryView === "sources" ? (
@@ -169,7 +157,7 @@ export function ActionsPopover({ agent }: ActionsPopoverProps) {
               onPress={() => setSecondaryView(null)}
               className="mb-1 flex-row items-center gap-1 rounded-[8px] px-1 py-1 active:bg-background-tint-02"
             >
-              <ChevronLeftIcon size={16} color={backColor} />
+              <SvgChevronLeft size={16} color="text-03" />
               <Text font="main-ui-action" color="text-05">
                 Sources
               </Text>
@@ -217,7 +205,7 @@ export function ActionsPopover({ agent }: ActionsPopoverProps) {
                     tool={tool}
                     isForced={forcedToolIds.includes(tool.id)}
                     isUnavailable={isUnavailable}
-                    onToggleForced={() => handleToggleForced(tool.id)}
+                    onToggleForced={() => toggleForcedTool(tool.id)}
                     isSearchTool={isSearchTool}
                     onOpenSources={
                       isSearchTool
@@ -242,5 +230,3 @@ export function ActionsPopover({ agent }: ActionsPopoverProps) {
     </Popover>
   );
 }
-
-export default ActionsPopover;

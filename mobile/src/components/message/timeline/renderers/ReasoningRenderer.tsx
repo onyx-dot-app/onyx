@@ -143,7 +143,6 @@ export function ReasoningRenderer({
       icon: "circle",
       status: displayStatus,
       content: reasoningContent,
-      expandedText: reasoningContent,
       noPaddingRight: true,
     },
   ]);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 
 import { Button, Text } from "@/components/opal";
@@ -56,7 +56,10 @@ export function ProjectContextPanel({
 
   const projectName = project?.name ?? "Loading project...";
   const instructions = project?.instructions;
-  const projectFileDbIds = new Set(files.map((f) => f.id));
+  const projectFileDbIds = useMemo(
+    () => new Set(files.map((f) => f.id)),
+    [files],
+  );
 
   async function commitRename() {
     const next = draftName.trim();

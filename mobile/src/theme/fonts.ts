@@ -42,16 +42,7 @@ const FONT_MAP = {
   HankenGrotesk_700Bold,
   DMMono_400Regular,
   DMMono_500Medium,
-} as const;
-
-/**
- * The list of registered (weight-specific) font family names, exported for
- * reference / verification. Every value of `fontFamily` in the generated
- * typography presets must appear in this list.
- */
-export const registeredFontFamilies = Object.keys(FONT_MAP) as Array<
-  keyof typeof FONT_MAP
->;
+};
 
 /**
  * Load the Opal typefaces (Hanken Grotesk + DM Mono) at exactly the weights the

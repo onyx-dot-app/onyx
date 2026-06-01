@@ -7,7 +7,6 @@
 // FULL => filename + char range header, then a bordered preview surface with
 // previewStart…/…previewEnd in monospace. BlinkingBar while still loading.
 
-import { useEffect, useRef } from "react";
 import { View } from "react-native";
 
 import {
@@ -23,6 +22,7 @@ import { Text } from "@/components/opal";
 import { BlinkingBar } from "@/components/message/BlinkingBar";
 import { useThemeColors } from "@/theme/ThemeProvider";
 import { radii } from "@/theme/generated/radii";
+import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 
 interface FileReaderState {
   fileName: string | null;
@@ -82,13 +82,7 @@ export function FileReaderToolRenderer({
   const state = constructFileReaderState(packets);
   const colors = useThemeColors();
 
-  const onCompleteFiredRef = useRef(false);
-  useEffect(() => {
-    if (state.isComplete && !onCompleteFiredRef.current) {
-      onCompleteFiredRef.current = true;
-      onComplete();
-    }
-  }, [state.isComplete, onComplete]);
+  useFireOnComplete(state.isComplete, onComplete);
 
   const statusText = state.fileName
     ? `Read ${state.fileName} (${formatCharRange(

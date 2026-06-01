@@ -1,17 +1,18 @@
 import { useRef, useState } from "react";
-import { Alert, Pressable, TextInput, View } from "react-native";
+import { Pressable, TextInput, View } from "react-native";
 import { router } from "expo-router";
 
 import { Popover, Text, type PopoverTriggerRef } from "@/components/opal";
 import { SvgEdit, SvgFolder, SvgFolderOpen, SvgTrash } from "@/components/icons";
-import { MoreHorizontalIcon } from "@/components/ui/icons";
+import { SvgMoreHorizontal } from "@/components/icons/SvgMoreHorizontal";
 import { typography } from "@/theme/generated/typography";
 import { useToken } from "@/theme/ThemeProvider";
 import { useDrawer } from "@/components/drawer/DrawerProvider";
-import { useChatSessionStore } from "@/state/chatSessionStore";
-import { useProjectChatTarget } from "@/state/projectChatTarget";
 import { useStartProjectChat } from "@/chat/useStartProjectChat";
-import { useRenameProject, useDeleteProject } from "@/query/projects";
+import { useOpenExistingChat } from "@/chat/useOpenExistingChat";
+import { useConfirmDeleteProject } from "@/chat/confirmDeleteProject";
+import { useRenameProject } from "@/query/projects";
+import { chatDisplayName } from "@/lib/chatLabels";
 import type { Project } from "@/lib/types";
 import { SidebarRow } from "./SidebarRow";
 
@@ -19,27 +20,23 @@ import { SidebarRow } from "./SidebarRow";
 // glyph toggles an inline list of the project's chats; the name navigates to the
 // project screen; the ⋯ menu offers Rename (inline) / Delete (confirm).
 
-const UNNAMED_CHAT = "New Chat";
-
 interface ProjectFolderRowProps {
   project: Project;
 }
 
 export function ProjectFolderRow({ project }: ProjectFolderRowProps) {
   const { close } = useDrawer();
-  const setCurrentSession = useChatSessionStore((s) => s.setCurrentSession);
   const startProjectChat = useStartProjectChat();
+  const openExistingChat = useOpenExistingChat();
+  const confirmDeleteProject = useConfirmDeleteProject();
   const rename = useRenameProject();
-  const deleteProject = useDeleteProject();
 
   const [expanded, setExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draftName, setDraftName] = useState(project.name);
   const menuRef = useRef<PopoverTriggerRef>(null);
 
-  const folderColor = useToken("text-03");
-  const nameColor = useToken("text-03");
-  const menuColor = useToken("text-03");
+  const iconColor = useToken("text-03");
   const dangerColor = useToken("action-text-danger-05");
 
   function openProject() {
@@ -50,8 +47,7 @@ export function ProjectFolderRow({ project }: ProjectFolderRowProps) {
   }
 
   function openChat(chatSessionId: string) {
-    useProjectChatTarget.getState().clear();
-    setCurrentSession(chatSessionId);
+    openExistingChat(chatSessionId);
     close();
     router.navigate("/(app)/(chat)" as never);
   }
@@ -72,25 +68,7 @@ export function ProjectFolderRow({ project }: ProjectFolderRowProps) {
 
   function confirmDelete() {
     menuRef.current?.close();
-    Alert.alert(
-      "Delete Project",
-      "Are you sure you want to delete this project? This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            // If a pending project-chat launcher targeted this project, drop it
-            // so the next draft can't be sent with a deleted project_id.
-            if (useProjectChatTarget.getState().projectId === project.id) {
-              useProjectChatTarget.getState().clear();
-            }
-            deleteProject.mutate(project.id);
-          },
-        },
-      ],
-    );
+    confirmDeleteProject(project.id);
   }
 
   return (
@@ -104,9 +82,9 @@ export function ProjectFolderRow({ project }: ProjectFolderRowProps) {
           className="mr-2 h-7 w-7 items-center justify-center"
         >
           {expanded ? (
-            <SvgFolderOpen size={18} color={folderColor} />
+            <SvgFolderOpen size={18} color={iconColor} />
           ) : (
-            <SvgFolder size={18} color={folderColor} />
+            <SvgFolder size={18} color={iconColor} />
           )}
         </Pressable>
 
@@ -120,7 +98,7 @@ export function ProjectFolderRow({ project }: ProjectFolderRowProps) {
             onBlur={commitRename}
             style={[
               typography["main-ui-body"],
-              { color: nameColor, flex: 1, padding: 0 },
+              { color: iconColor, flex: 1, padding: 0 },
             ]}
           />
         ) : (
@@ -139,7 +117,7 @@ export function ProjectFolderRow({ project }: ProjectFolderRowProps) {
               accessibilityLabel="Project actions"
               className="h-7 w-7 items-center justify-center rounded-[8px]"
             >
-              <MoreHorizontalIcon size={18} color={menuColor} />
+              <SvgMoreHorizontal size={18} color={iconColor} />
             </Pressable>
           </Popover.Trigger>
           <Popover.Content side="bottom" align="end" sideOffset={6}>
@@ -152,7 +130,7 @@ export function ProjectFolderRow({ project }: ProjectFolderRowProps) {
               accessibilityLabel="Rename project"
               className="flex-row items-center gap-2 rounded-[8px] px-2 py-2 active:bg-background-tint-02"
             >
-              <SvgEdit size={16} color={menuColor} />
+              <SvgEdit size={16} color={iconColor} />
               <Text font="main-ui-body" color="text-04">
                 Rename Project
               </Text>
@@ -177,7 +155,7 @@ export function ProjectFolderRow({ project }: ProjectFolderRowProps) {
         ? project.chat_sessions.map((chat) => (
             <View key={chat.id} style={{ paddingLeft: 16 }}>
               <SidebarRow
-                label={(chat.name ?? "").trim() || UNNAMED_CHAT}
+                label={chatDisplayName(chat.name)}
                 onPress={() => openChat(chat.id)}
               />
             </View>

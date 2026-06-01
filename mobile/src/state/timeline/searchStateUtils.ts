@@ -10,17 +10,6 @@ import {
 
 export const MAX_TITLE_LENGTH = 25;
 
-export const getMetadataTags = (metadata?: {
-  [key: string]: string;
-}): string[] | undefined => {
-  if (!metadata) return undefined;
-  const tags = Object.values(metadata)
-    .filter((value) => typeof value === "string" && value.length > 0)
-    .slice(0, 2)
-    .map((value) => `# ${value}`);
-  return tags.length > 0 ? tags : undefined;
-};
-
 export const INITIAL_QUERIES_TO_SHOW = 3;
 export const QUERIES_PER_EXPANSION = 5;
 export const INITIAL_RESULTS_TO_SHOW = 3;

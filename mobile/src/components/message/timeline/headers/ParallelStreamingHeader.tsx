@@ -3,19 +3,12 @@
 // Ports web ParallelStreamingHeader (Opal pill Tabs -> horizontal ScrollView).
 
 import { memo } from "react";
-import { View, Pressable, ScrollView } from "react-native";
+import { View } from "react-native";
 
-import { Text, Spinner } from "@/components/opal";
-import { useThemeColors } from "@/theme/ThemeProvider";
-import { radii } from "@/theme/generated/radii";
-import { TimelineIcon } from "@/components/message/timeline/toolIcon";
 import { HeaderToggle } from "@/components/message/timeline/headers/HeaderToggle";
+import { TimelinePillTabs } from "@/components/message/timeline/primitives/TimelinePillTabs";
 import type { TransformedStep } from "@/state/timeline/transformers";
-import {
-  getToolName,
-  getToolIconName,
-  isToolComplete,
-} from "@/state/timeline/toolDisplayHelpers";
+import { isToolComplete } from "@/state/timeline/toolDisplayHelpers";
 
 export interface ParallelStreamingHeaderProps {
   steps: TransformedStep[];
@@ -34,8 +27,6 @@ export const ParallelStreamingHeader = memo(function ParallelStreamingHeader({
   isExpanded,
   onToggle,
 }: ParallelStreamingHeaderProps) {
-  const colors = useThemeColors();
-
   return (
     <View
       style={{
@@ -45,47 +36,13 @@ export const ParallelStreamingHeader = memo(function ParallelStreamingHeader({
         justifyContent: "space-between",
       }}
     >
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ alignItems: "center", gap: 6, paddingHorizontal: 4 }}
+      <TimelinePillTabs
+        steps={steps}
+        activeKey={activeTab}
+        onSelect={onTabChange}
+        loadingPredicate={(step) => !isToolComplete(step.packets)}
         style={{ flex: 1 }}
-      >
-        {steps.map((step) => {
-          const active = step.key === activeTab;
-          const loading = !isToolComplete(step.packets);
-          return (
-            <Pressable
-              key={step.key}
-              onPress={() => onTabChange(step.key)}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 4,
-                paddingHorizontal: 8,
-                paddingVertical: 4,
-                borderRadius: radii["08"],
-                backgroundColor: active
-                  ? colors["background-tint-02"]
-                  : "transparent",
-              }}
-            >
-              {loading ? (
-                <Spinner size={12} color="text-03" />
-              ) : (
-                <TimelineIcon
-                  name={getToolIconName(step.packets)}
-                  size={12}
-                  color={active ? "text-04" : "text-02"}
-                />
-              )}
-              <Text font="main-ui-muted" color={active ? "text-04" : "text-03"}>
-                {getToolName(step.packets)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      />
 
       {collapsible && (
         <HeaderToggle isExpanded={isExpanded} onToggle={onToggle} />

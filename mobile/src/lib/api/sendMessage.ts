@@ -1,6 +1,6 @@
 // sendMessage.ts — the chat STREAMING SEND transport for mobile.
 //
-// This is the one network call that has to actually *stream*. On React Native the
+// streamChatMessage is the one network call that has to actually *stream*. On React Native the
 // GLOBAL `fetch` resolves its Response only after the whole body arrives and exposes
 // no readable `response.body` — so it cannot stream. `expo/fetch` returns a real
 // streaming Response whose `body` is a web ReadableStream on both iOS and Android.
@@ -17,6 +17,7 @@
 // socket. The caller aborts an `AbortController`; the signal flows into `handleSSEStream`,
 // which calls `reader.cancel()`. See 07-networking-streaming-auth.md.
 
+import { resolveAuthHeaders } from "./authHeaders";
 import type { ClientConfig } from "./config";
 import { FetchError } from "./errors";
 import { handleSSEStream } from "./stream";
@@ -82,23 +83,17 @@ export interface SendMessageRequest {
   additional_context?: string | null;
 
   // When True (default) the backend returns an NDJSON stream; when False it returns
-  // a single ChatFullResponse JSON body (see sendChatMessageOneShot).
+  // a single JSON body. Mobile only ever streams (see streamChatMessage).
   stream?: boolean;
 }
-
-/** Loosely-typed shape of the backend ChatFullResponse (stream:false fallback). */
-export type ChatFullResponse = unknown;
 
 // Root-relative path (no `/api` — that's the web-only Next.js proxy prefix). The
 // mobile client talks to the backend directly, like the other query/mutation paths.
 const SEND_MESSAGE_PATH = "/chat/send-chat-message";
 
 async function buildHeaders(config: ClientConfig): Promise<Headers> {
-  const headers = new Headers();
   // Merge any auth headers (mobile: a bearer PAT) the platform supplies.
-  new Headers(await config.getAuthHeaders()).forEach((value, key) => {
-    headers.set(key, value);
-  });
+  const headers = await resolveAuthHeaders(config);
   headers.set("Content-Type", "application/json");
   // The backend mislabels the NDJSON stream as text/event-stream; we Accept it to
   // match, but parse it as NDJSON via handleSSEStream regardless.
@@ -107,20 +102,20 @@ async function buildHeaders(config: ClientConfig): Promise<Headers> {
 }
 
 /**
- * Stream a chat message. POSTs the request to `/api/chat/send-message` via the
- * platform fetch (expo/fetch on mobile), then yields each decoded NDJSON `Packet`.
+ * Shared POST for the send path: builds the wire body (`{ ...req, stream }`),
+ * issues the POST via the platform fetch with the merged auth headers, and throws
+ * `FetchError` on a non-ok response (with the parsed body). The success-body handling
+ * (NDJSON stream) is left to the caller.
  *
- * Cancellation: pass an `AbortSignal`. Aborting it cancels the underlying reader
- * inside `handleSSEStream`. Do NOT `break` out of the generator to cancel.
- *
- * @throws FetchError on a non-ok HTTP response (status + parsed body carried through).
+ * @throws FetchError on a non-ok HTTP response.
  */
-export async function* streamChatMessage(
+async function postSendMessage(
   req: SendMessageRequest,
   config: ClientConfig,
+  stream: boolean,
   signal?: AbortSignal
-): AsyncGenerator<Packet, void, unknown> {
-  const body = JSON.stringify({ ...req, stream: true });
+): Promise<Response> {
+  const body = JSON.stringify({ ...req, stream });
 
   const response = await config.fetchImpl(
     `${config.baseUrl}${SEND_MESSAGE_PATH}`,
@@ -137,45 +132,29 @@ export async function* streamChatMessage(
     // (and the integrator's auth handler) can still read `.status`.
     const info = await response.json().catch(() => ({}));
     throw new FetchError(
-      `send-message failed with status ${response.status}`,
+      `send-message${stream ? "" : " (one-shot)"} failed with status ${response.status}`,
       response.status,
       info
     );
   }
 
-  yield* handleSSEStream<Packet>(response, signal);
+  return response;
 }
 
 /**
- * The stream:false fallback. POSTs with `stream: false` and returns the single
- * ChatFullResponse JSON body. Used for flaky-network mode and tests where a real
- * streaming body is undesirable.
+ * Stream a chat message. POSTs the request to `/api/chat/send-message` via the
+ * platform fetch (expo/fetch on mobile), then yields each decoded NDJSON `Packet`.
  *
- * @throws FetchError on a non-ok HTTP response.
+ * Cancellation: pass an `AbortSignal`. Aborting it cancels the underlying reader
+ * inside `handleSSEStream`. Do NOT `break` out of the generator to cancel.
+ *
+ * @throws FetchError on a non-ok HTTP response (status + parsed body carried through).
  */
-export async function sendChatMessageOneShot(
+export async function* streamChatMessage(
   req: SendMessageRequest,
-  config: ClientConfig
-): Promise<ChatFullResponse> {
-  const body = JSON.stringify({ ...req, stream: false });
-
-  const response = await config.fetchImpl(
-    `${config.baseUrl}${SEND_MESSAGE_PATH}`,
-    {
-      method: "POST",
-      headers: await buildHeaders(config),
-      body,
-    }
-  );
-
-  if (!response.ok) {
-    const info = await response.json().catch(() => ({}));
-    throw new FetchError(
-      `send-message (one-shot) failed with status ${response.status}`,
-      response.status,
-      info
-    );
-  }
-
-  return (await response.json()) as ChatFullResponse;
+  config: ClientConfig,
+  signal?: AbortSignal
+): AsyncGenerator<Packet, void, unknown> {
+  const response = await postSendMessage(req, config, true, signal);
+  yield* handleSSEStream<Packet>(response, signal);
 }

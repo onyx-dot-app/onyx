@@ -1,6 +1,5 @@
-import { ValidSources } from "./domain";
+import { ValidSources, DocumentSetSummary, MinimalUserSnapshot } from "./domain";
 import { ToolSnapshot } from "./tools";
-import { DocumentSetSummary, MinimalUserSnapshot } from "./domain";
 
 // ── Domain / application types ────────────────────────────────────────────────
 

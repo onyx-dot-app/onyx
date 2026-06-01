@@ -20,7 +20,7 @@
 //     requires firing onComplete once the tool is complete, so a ref-guarded effect
 //     fires it when memoryState.isComplete becomes true.
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback } from "react";
 import { View } from "react-native";
 
 import type { MemoryToolPacket } from "@/lib/types";
@@ -35,6 +35,7 @@ import {
   constructCurrentMemoryState,
   type MemoryState,
 } from "@/state/timeline/memoryStateUtils";
+import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 
 const STATUS_LABEL = "Updating memory";
 
@@ -50,13 +51,7 @@ export function MemoryToolRenderer({
   const isHighlight = renderType === RenderType.HIGHLIGHT;
 
   // Fire onComplete once when the tool finishes (mobile contract; web omits this).
-  const completedRef = useRef(false);
-  useEffect(() => {
-    if (isComplete && !completedRef.current) {
-      completedRef.current = true;
-      onComplete();
-    }
-  }, [isComplete, onComplete]);
+  useFireOnComplete(isComplete, onComplete);
 
   const renderMemoryText = useCallback(
     (text: string) => (

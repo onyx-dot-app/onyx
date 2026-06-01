@@ -19,67 +19,41 @@ import type { ToolSnapshot } from "@/lib/types/tools";
 
 type IconComponent = ComponentType<IconProps>;
 
-function isSearchTool(tool: ToolSnapshot): boolean {
-  return (
-    tool.in_code_tool_id === "SearchTool" ||
-    tool.name === "run_search" ||
-    !!tool.display_name?.toLowerCase().includes("search tool")
-  );
+/**
+ * One match rule per known tool, in first-match-wins order (web getIconForAction
+ * parity). A tool matches if its `in_code_tool_id` is in `ids`, its `name` is in
+ * `names`, or its lowercased `display_name` contains any `displayIncludes` entry.
+ */
+interface ActionIconRule {
+  icon: IconComponent;
+  ids?: string[];
+  names?: string[];
+  displayIncludes?: string[];
 }
 
-function isWebSearchTool(tool: ToolSnapshot): boolean {
-  return (
-    tool.in_code_tool_id === "WebSearchTool" ||
-    !!tool.display_name?.toLowerCase().includes("web_search")
-  );
-}
+const ACTION_ICON_RULES: ActionIconRule[] = [
+  { icon: SvgSearch, ids: ["SearchTool"], names: ["run_search"], displayIncludes: ["search tool"] },
+  { icon: SvgGlobe, ids: ["WebSearchTool"], displayIncludes: ["web_search"] },
+  { icon: SvgImage, ids: ["ImageGenerationTool"], displayIncludes: ["image generation"] },
+  { icon: SvgServer, ids: ["KnowledgeGraphTool"], displayIncludes: ["knowledge graph"] },
+  { icon: SvgExternalLink, ids: ["OpenURLTool"], names: ["open_url"], displayIncludes: ["open url"] },
+  { icon: SvgTerminal, ids: ["PythonTool"], names: ["python"], displayIncludes: ["code interpreter"] },
+  { icon: SvgCpu, ids: ["CodingAgentTool"], names: ["coding_agent"], displayIncludes: ["coding agent"] },
+];
 
-function isImageGenerationTool(tool: ToolSnapshot): boolean {
+function matchesRule(tool: ToolSnapshot, rule: ActionIconRule): boolean {
+  const display = tool.display_name?.toLowerCase();
   return (
-    tool.in_code_tool_id === "ImageGenerationTool" ||
-    !!tool.display_name?.toLowerCase().includes("image generation")
-  );
-}
-
-function isKnowledgeGraphTool(tool: ToolSnapshot): boolean {
-  return (
-    tool.in_code_tool_id === "KnowledgeGraphTool" ||
-    !!tool.display_name?.toLowerCase().includes("knowledge graph")
-  );
-}
-
-function isOpenUrlTool(tool: ToolSnapshot): boolean {
-  return (
-    tool.in_code_tool_id === "OpenURLTool" ||
-    tool.name === "open_url" ||
-    !!tool.display_name?.toLowerCase().includes("open url")
-  );
-}
-
-function isCodeInterpreterTool(tool: ToolSnapshot): boolean {
-  return (
-    tool.in_code_tool_id === "PythonTool" ||
-    tool.name === "python" ||
-    !!tool.display_name?.toLowerCase().includes("code interpreter")
-  );
-}
-
-function isCodingAgentTool(tool: ToolSnapshot): boolean {
-  return (
-    tool.in_code_tool_id === "CodingAgentTool" ||
-    tool.name === "coding_agent" ||
-    !!tool.display_name?.toLowerCase().includes("coding agent")
+    (!!tool.in_code_tool_id && (rule.ids?.includes(tool.in_code_tool_id) ?? false)) ||
+    (!!tool.name && (rule.names?.includes(tool.name) ?? false)) ||
+    (!!display && (rule.displayIncludes?.some((s) => display.includes(s)) ?? false))
   );
 }
 
 /** Return the icon component for a tool/action (web getIconForAction parity). */
 export function getIconForAction(tool: ToolSnapshot): IconComponent {
-  if (isSearchTool(tool)) return SvgSearch;
-  if (isWebSearchTool(tool)) return SvgGlobe;
-  if (isImageGenerationTool(tool)) return SvgImage;
-  if (isKnowledgeGraphTool(tool)) return SvgServer;
-  if (isOpenUrlTool(tool)) return SvgExternalLink;
-  if (isCodeInterpreterTool(tool)) return SvgTerminal;
-  if (isCodingAgentTool(tool)) return SvgCpu;
+  for (const rule of ACTION_ICON_RULES) {
+    if (matchesRule(tool, rule)) return rule.icon;
+  }
   return SvgCpu;
 }

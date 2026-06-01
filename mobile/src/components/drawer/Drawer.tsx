@@ -43,12 +43,13 @@ export function Drawer({
     .activeOffsetX([-15, 15]) // only claim horizontal drags…
     .failOffsetY([-14, 14]) // …and bail on vertical ones (let scroll through)
     .onBegin((e) => {
-      active.value = progress.value > 0.5 || e.x <= EDGE_OPEN_ZONE;
+      active.value = progress.value > OPEN_THRESHOLD || e.x <= EDGE_OPEN_ZONE;
       startProgress.value = progress.value;
     })
     .onUpdate((e) => {
       if (!active.value) return;
       const next = startProgress.value + e.translationX / DRAWER_WIDTH;
+      // eslint-disable-next-line react-hooks/immutability -- mutating a Reanimated shared value is intended
       progress.value = Math.min(Math.max(next, 0), 1);
     })
     .onEnd((e) => {
@@ -106,7 +107,7 @@ export function Drawer({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { flex: 1 },
-  fill: { ...StyleSheet.absoluteFillObject },
+  fill: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   backdrop: { backgroundColor: "#000" },
   sidebar: {
     position: "absolute",

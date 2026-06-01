@@ -3,8 +3,10 @@ import { Pressable, View } from "react-native";
 import { Image } from "expo-image";
 
 import { Spinner, Text } from "@/components/opal";
-import { FileTextIcon, XIcon } from "@/components/ui/icons";
+import { SvgFileText } from "@/components/icons/SvgFileText";
+import { SvgX } from "@/components/icons/SvgX";
 import { useToken } from "@/theme/ThemeProvider";
+import { fileExtensionLabel } from "@/lib/fileTypes";
 
 // ---------------------------------------------------------------------------
 // AttachmentTile — native mirror of web `FileCard`.
@@ -46,14 +48,6 @@ interface AttachmentTileProps {
   onRemove?: (id: string) => void;
 }
 
-// File extension → short upper-case label (matches web `FileCard.typeLabel`,
-// which plain-uppercases the extension — no special cases).
-function typeLabel(name: string): string {
-  const idx = name.lastIndexOf(".");
-  if (idx <= 0 || idx === name.length - 1) return "";
-  return name.slice(idx + 1).toUpperCase();
-}
-
 function statusLabel(status: AttachmentTileStatus, fallback: string): string {
   switch (status) {
     case "uploading":
@@ -75,9 +69,7 @@ function AttachmentTileComponent({
   // Remove button colours (web: bg-background-neutral-inverted-01, X text-inverted-03).
   const removeBg = useToken("background-neutral-inverted-01");
   const removeBorder = useToken("border-02");
-  const removeGlyph = useToken("text-inverted-03");
   const shadow = useToken("shadow-02");
-  const mutedColor = useToken("text-03");
   const scrim = useToken("mask-03");
 
   // web: remove allowed once the upload POST resolves (status ≠ UPLOADING).
@@ -105,7 +97,7 @@ function AttachmentTileComponent({
         className="h-4 w-4 items-center justify-center rounded-[4px] border active:opacity-90"
         style={{ backgroundColor: removeBg, borderColor: removeBorder }}
       >
-        <XIcon size={12} color={removeGlyph} />
+        <SvgX size={12} color="text-inverted-03" />
       </Pressable>
     </View>
   ) : null;
@@ -128,7 +120,7 @@ function AttachmentTileComponent({
             />
           ) : (
             <View className="h-full w-full items-center justify-center">
-              <FileTextIcon size={spinnerSize} color={mutedColor} />
+              <SvgFileText size={spinnerSize} color="text-03" />
             </View>
           )}
           {inFlight ? (
@@ -153,7 +145,7 @@ function AttachmentTileComponent({
           {inFlight ? (
             <Spinner size={20} color="text-03" />
           ) : (
-            <FileTextIcon size={20} color={mutedColor} />
+            <SvgFileText size={20} color="text-03" />
           )}
         </View>
         <View className="min-w-0 flex-1 pr-1">
@@ -161,7 +153,10 @@ function AttachmentTileComponent({
             {model.name}
           </Text>
           <Text font="secondary-body" color="text-03" numberOfLines={1}>
-            {statusLabel(model.status, typeLabel(model.name))}
+            {statusLabel(
+              model.status,
+              fileExtensionLabel(model.name, { plaintextForTxt: false }),
+            )}
           </Text>
         </View>
       </View>

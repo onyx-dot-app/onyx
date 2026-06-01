@@ -10,12 +10,12 @@
 import { useRef, useState, type ReactNode } from "react";
 import { View, Pressable } from "react-native";
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
-import * as Clipboard from "expo-clipboard";
 
 import { BottomSheet, type BottomSheetRef, Text } from "@/components/opal";
 import { useThemeColors } from "@/theme/ThemeProvider";
 import { radii } from "@/theme/generated/radii";
 import { SvgMaximize2, SvgCopy, SvgCheck } from "@/components/icons";
+import { useCopyToClipboard } from "@/lib/useCopyToClipboard";
 
 const LINE_HEIGHT = 20;
 
@@ -45,7 +45,7 @@ export function ExpandableTextDisplay({
   const colors = useThemeColors();
   const sheetRef = useRef<BottomSheetRef>(null);
   const [childHeight, setChildHeight] = useState(0);
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyToClipboard();
 
   const collapsedMaxHeight = maxLines * LINE_HEIGHT;
   const isOverflowing = childHeight > collapsedMaxHeight + 1;
@@ -54,12 +54,6 @@ export function ExpandableTextDisplay({
   // While streaming + overflowing, shift content up so the newest lines show.
   const translateY =
     isStreaming && isOverflowing ? -(childHeight - collapsedMaxHeight) : 0;
-
-  async function copy() {
-    await Clipboard.setStringAsync(content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
 
   return (
     <View>
@@ -107,7 +101,7 @@ export function ExpandableTextDisplay({
             {title}
           </Text>
           <Pressable
-            onPress={copy}
+            onPress={() => void copy(content)}
             hitSlop={8}
             style={{
               flexDirection: "row",

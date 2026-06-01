@@ -34,40 +34,10 @@ import {
 } from "@/lib/types";
 import { MessageTreeState, getLatestMessageChain } from "./messageTree";
 
-// ── Derivation helpers (ported from web packetUtils.ts) ───────────────────────
-
-/** Concatenate the visible text content carried by MESSAGE_START / MESSAGE_DELTA packets. */
-export function getTextContent(packets: Packet[]): string {
-  return packets
-    .map((packet) => {
-      if (
-        packet.obj.type === PacketType.MESSAGE_START ||
-        packet.obj.type === PacketType.MESSAGE_DELTA
-      ) {
-        return (packet.obj as MessageStart | MessageDelta).content || "";
-      }
-      return "";
-    })
-    .join("");
-}
-
-/** Build the citation_num → document_id map from CITATION_INFO packets. */
-export function getCitationMap(packets: Packet[]): CitationMap {
-  const citationMap: CitationMap = {};
-  for (const packet of packets) {
-    if (packet.obj.type === PacketType.CITATION_INFO) {
-      const info = packet.obj as CitationInfo;
-      citationMap[info.citation_number] = info.document_id;
-    }
-  }
-  return citationMap;
-}
-
 // ── Incremental single-packet derivation (perf) ───────────────────────────────
 // `applyPacket` runs once per streamed packet, so deriving cached fields from a
 // single packet (O(1)) rather than re-scanning the whole array (O(n) per packet
-// = O(n²) over a stream) keeps streaming smooth on-device. The full-array
-// helpers above remain for history rebuild, where a one-shot recompute is fine.
+// = O(n²) over a stream) keeps streaming smooth on-device.
 
 /** The visible text contributed by a single MESSAGE_START / MESSAGE_DELTA packet. */
 function textDeltaOf(packet: Packet): string {
@@ -121,30 +91,6 @@ function mergeDocuments(
     }
   }
   return next;
-}
-
-/** Collect every document delivered by search / fetch tool packets, de-duplicated by id. */
-export function getDocuments(packets: Packet[]): OnyxDocument[] {
-  const byId = new Map<string, OnyxDocument>();
-  for (const packet of packets) {
-    let docs: OnyxDocument[] | null | undefined;
-    if (packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA) {
-      docs = (packet.obj as SearchToolDocumentsDelta).documents;
-    } else if (packet.obj.type === PacketType.FETCH_TOOL_DOCUMENTS) {
-      docs = (packet.obj as FetchToolDocuments).documents;
-    }
-    if (docs) {
-      for (const doc of docs) {
-        if (doc.document_id) byId.set(doc.document_id, doc);
-      }
-    }
-  }
-  return Array.from(byId.values());
-}
-
-/** True once a STOP packet has been seen for this message. */
-export function isStreamingComplete(packets: Packet[]): boolean {
-  return packets.some((p) => p.obj.type === PacketType.STOP);
 }
 
 // ── Target-node resolution ────────────────────────────────────────────────────
@@ -245,19 +191,4 @@ export function applyPacket(
   const newTree = new Map(tree);
   newTree.set(nodeId, updated);
   return newTree;
-}
-
-/**
- * Convenience: apply a batch of packets in order. Equivalent to folding `applyPacket`
- * over `packets`. Useful when replaying a buffered chunk.
- */
-export function applyPackets(
-  tree: MessageTreeState,
-  packets: Packet[],
-  targetNodeId?: number
-): MessageTreeState {
-  return packets.reduce(
-    (acc, packet) => applyPacket(acc, packet, targetNodeId),
-    tree
-  );
 }

@@ -18,7 +18,7 @@
 //   • Web's animated GeneratingImageDisplay (96×96 SVG progress ring) collapses
 //     to a full-width, aspect-1 tinted box with a BlinkingBar — RN-idiomatic.
 
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { View } from "react-native";
 import { Image } from "expo-image";
 
@@ -36,6 +36,7 @@ import { chatFileUrl } from "@/lib/api";
 import { appConfig } from "@/lib/config";
 import { useToken } from "@/theme/ThemeProvider";
 import { radii } from "@/theme/generated/radii";
+import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 
 interface GeneratedImage {
   file_id: string;
@@ -169,13 +170,7 @@ export function ImageToolRenderer({
   );
 
   // Fire onComplete once, when the tool reaches its terminal state (web parity).
-  const completionHandledRef = useRef(false);
-  useEffect(() => {
-    if (isComplete && !completionHandledRef.current) {
-      completionHandledRef.current = true;
-      onComplete();
-    }
-  }, [isComplete, onComplete]);
+  useFireOnComplete(isComplete, onComplete);
 
   // Generating: label (text-03) + pulsing placeholder. Web shows the same
   // "Generating images..." status across all render types.

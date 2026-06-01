@@ -3,7 +3,7 @@
 // collapsible step. The web version renders each sub-step as its own
 // StepContainer; collapsed here into a single step (documented simplification).
 
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { View } from "react-native";
 
 import {
@@ -19,6 +19,7 @@ import { Text } from "@/components/opal";
 import { Markdown } from "@/components/markdown";
 import { CodeBlock } from "@/components/markdown/CodeBlock";
 import { timelineTokens as T } from "@/theme/timelineTokens";
+import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 
 interface BashView {
   cmd: string;
@@ -68,13 +69,7 @@ export function CodingAgentRenderer({
     return { thinking, bashes, answer, isComplete };
   }, [packets]);
 
-  const firedRef = useRef(false);
-  useEffect(() => {
-    if (isComplete && !firedRef.current) {
-      firedRef.current = true;
-      onComplete();
-    }
-  }, [isComplete, onComplete]);
+  useFireOnComplete(isComplete, onComplete);
 
   return children([
     {

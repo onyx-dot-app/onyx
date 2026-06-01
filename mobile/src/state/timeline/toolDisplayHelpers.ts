@@ -31,10 +31,6 @@ export type TimelineIconName =
   | "stop-circle"
   | "x-octagon";
 
-export function hasToolError(packets: Packet[]): boolean {
-  return packets.some((p) => p.obj.type === PacketType.ERROR);
-}
-
 /**
  * Whether a tool group is complete.
  * - Research agents: only PARENT-level SECTION_END (sub_turn_index null/undefined).
@@ -67,14 +63,6 @@ export function isToolComplete(packets: Packet[]): boolean {
     (p) =>
       p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR
   );
-}
-
-export function getToolErrorIconName(): TimelineIconName {
-  return "x-circle";
-}
-
-export function getToolKey(turn_index: number, tab_index: number): string {
-  return `${turn_index}-${tab_index}`;
 }
 
 export function parseToolKey(key: string): {

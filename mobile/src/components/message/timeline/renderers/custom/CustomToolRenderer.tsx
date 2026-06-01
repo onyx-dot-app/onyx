@@ -19,7 +19,7 @@
 //   - The image/file URL is built with `chatFileUrl(appConfig.apiBaseUrl, …)`,
 //     the mobile equivalent of web `buildImgUrl`.
 
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { Linking, Pressable, View } from "react-native";
 
 import {
@@ -43,6 +43,7 @@ import { chatFileUrl } from "@/lib/api";
 import { appConfig } from "@/lib/config";
 import { useToken } from "@/theme/ThemeProvider";
 import { timelineTokens as T } from "@/theme/timelineTokens";
+import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 
 // ---------------------------------------------------------------------------
 // State reduction
@@ -190,13 +191,7 @@ export function CustomToolRenderer({
 
   const linkColor = useToken("action-link-05");
 
-  const completeFiredRef = useRef(false);
-  useEffect(() => {
-    if (isComplete && !completeFiredRef.current) {
-      completeFiredRef.current = true;
-      onComplete();
-    }
-  }, [isComplete, onComplete]);
+  useFireOnComplete(isComplete, onComplete);
 
   // Header/status label — mirrors the web status logic.
   const status = useMemo<string | null>(() => {

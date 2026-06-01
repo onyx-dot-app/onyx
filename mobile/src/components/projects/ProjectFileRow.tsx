@@ -1,9 +1,10 @@
 import { Pressable, View } from "react-native";
 
 import { Spinner, Text } from "@/components/opal";
-import { FileTextIcon, ImageIcon, XIcon } from "@/components/ui/icons";
-import { useToken } from "@/theme/ThemeProvider";
-import { isImageFile } from "@/lib/fileTypes";
+import { SvgFileText } from "@/components/icons/SvgFileText";
+import { SvgImage } from "@/components/icons/SvgImage";
+import { SvgX } from "@/components/icons/SvgX";
+import { fileExtensionLabel, isImageFile } from "@/lib/fileTypes";
 import { UserFileStatus, type ProjectFile } from "@/lib/types";
 
 // A single project file row (mobile analogue of web `FileCard`). Image/file glyph
@@ -20,14 +21,8 @@ function statusLabel(file: ProjectFile): string {
       return "Failed";
     case UserFileStatus.DELETING:
       return "Removing…";
-    default: {
-      const idx = file.name.lastIndexOf(".");
-      const ext =
-        idx > 0 && idx < file.name.length - 1
-          ? file.name.slice(idx + 1).toLowerCase()
-          : "";
-      return ext ? (ext === "txt" ? "PLAINTEXT" : ext.toUpperCase()) : "File";
-    }
+    default:
+      return fileExtensionLabel(file.name) || "File";
   }
 }
 
@@ -37,7 +32,6 @@ interface ProjectFileRowProps {
 }
 
 export function ProjectFileRow({ file, onRemove }: ProjectFileRowProps) {
-  const mutedColor = useToken("text-02");
   const isBusy =
     file.status === UserFileStatus.PROCESSING ||
     file.status === UserFileStatus.UPLOADING ||
@@ -51,9 +45,9 @@ export function ProjectFileRow({ file, onRemove }: ProjectFileRowProps) {
         {isBusy ? (
           <Spinner size={16} color="text-03" />
         ) : isImg ? (
-          <ImageIcon size={18} color={mutedColor} />
+          <SvgImage size={18} color="text-02" />
         ) : (
-          <FileTextIcon size={18} color={mutedColor} />
+          <SvgFileText size={18} color="text-02" />
         )}
       </View>
       <View className="flex-1">
@@ -74,7 +68,7 @@ export function ProjectFileRow({ file, onRemove }: ProjectFileRowProps) {
         accessibilityLabel={`Remove ${file.name}`}
         className="h-7 w-7 items-center justify-center rounded-[8px] active:bg-background-tint-02"
       >
-        <XIcon size={16} color={mutedColor} />
+        <SvgX size={16} color="text-02" />
       </Pressable>
     </View>
   );

@@ -5,10 +5,9 @@
 //   - GET /manage/connector-status (current_chat_accessible_user) -> BasicCCPairInfo[]
 //   - GET /federated (BASIC_ACCESS)                               -> FederatedConnectorStatus[]
 // useAvailableSourceStrings merges both into a single list of raw source strings.
-import { useQuery } from "@tanstack/react-query";
-import { errorHandlingFetcher } from "@/lib/api";
+import { useMemo } from "react";
 import { queryKeys } from "./keys";
-import { clientConfig } from "./client";
+import { useSimpleQuery } from "./client";
 
 /** Non-admin CC-pair status row (subset of the backend ConnectorIndexingStatus). */
 export interface BasicCCPairInfo {
@@ -25,34 +24,24 @@ export interface FederatedConnectorStatus {
 }
 
 export function useConnectorStatus() {
-  return useQuery({
-    queryKey: [queryKeys.connectorStatus],
-    queryFn: () =>
-      errorHandlingFetcher<BasicCCPairInfo[]>(
-        queryKeys.connectorStatus,
-        clientConfig
-      ),
-    staleTime: 30_000,
-  });
+  return useSimpleQuery<BasicCCPairInfo[]>(queryKeys.connectorStatus);
 }
 
 export function useFederatedConnectors() {
-  return useQuery({
-    queryKey: [queryKeys.federatedConnectors],
-    queryFn: () =>
-      errorHandlingFetcher<FederatedConnectorStatus[]>(
-        queryKeys.federatedConnectors,
-        clientConfig
-      ),
-    staleTime: 30_000,
-  });
+  return useSimpleQuery<FederatedConnectorStatus[]>(
+    queryKeys.federatedConnectors
+  );
 }
 
 /** Combined raw source strings for the current chat (CC-pairs + federated). */
 export function useAvailableSourceStrings(): string[] {
   const { data: ccPairs } = useConnectorStatus();
   const { data: federated } = useFederatedConnectors();
-  const cc = (ccPairs ?? []).map((p) => p.source);
-  const fed = (federated ?? []).map((f) => f.source);
-  return [...cc, ...fed];
+  return useMemo(
+    () => [
+      ...(ccPairs ?? []).map((p) => p.source),
+      ...(federated ?? []).map((f) => f.source),
+    ],
+    [ccPairs, federated]
+  );
 }

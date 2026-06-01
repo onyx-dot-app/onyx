@@ -5,6 +5,7 @@
 
 import * as LegacyFileSystem from "expo-file-system/legacy";
 
+import { resolveAuthHeadersRecord } from "./authHeaders";
 import { errorHandlingFetcher } from "./fetcher";
 import { FetchError } from "./errors";
 import type { ClientConfig } from "./config";
@@ -47,10 +48,7 @@ export async function uploadChatFiles(
   config: ClientConfig,
   projectId?: number | null,
 ): Promise<CategorizedFiles> {
-  const headers: Record<string, string> = {};
-  new Headers(await config.getAuthHeaders()).forEach((value, key) => {
-    headers[key] = value;
-  });
+  const headers = await resolveAuthHeadersRecord(config);
 
   const url = `${config.baseUrl}${SWR_KEYS.chatFileUpload}`;
   const merged: CategorizedFiles = { user_files: [], rejected_files: [] };

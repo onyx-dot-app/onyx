@@ -57,5 +57,3 @@ export function SwitchList({ items }: SwitchListProps) {
     </View>
   );
 }
-
-export default SwitchList;

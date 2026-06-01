@@ -10,7 +10,7 @@
 //
 // The mutation mirrors query/sessions.ts:useRenameSession — optimistic onMutate,
 // rollback onError, invalidate onSettled.
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { errorHandlingFetcher } from "@/lib/api";
 import type {
@@ -18,19 +18,14 @@ import type {
   UserSpecificAgentPreferences,
 } from "@/lib/types/domain";
 
-import { clientConfig } from "./client";
+import { clientConfig, useSimpleQuery } from "./client";
 import { queryKeys } from "./keys";
 
 export function useAgentPreferences() {
-  return useQuery({
-    queryKey: [queryKeys.agentPreferences],
-    queryFn: () =>
-      errorHandlingFetcher<UserSpecificAgentPreferences>(
-        queryKeys.agentPreferences,
-        clientConfig
-      ),
-    staleTime: 60_000,
-  });
+  return useSimpleQuery<UserSpecificAgentPreferences>(
+    queryKeys.agentPreferences,
+    { staleTime: 60_000 }
+  );
 }
 
 interface UpdateArgs {

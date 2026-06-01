@@ -49,8 +49,6 @@ export interface RendererResult {
   status: string | ReactNode | null;
   /** Body content. */
   content: ReactNode;
-  /** Override look in the expanded view (e.g. ReasoningRenderer). */
-  expandedText?: ReactNode;
   /** Show the collapse button only when true. */
   supportsCollapsible?: boolean;
   /** Stay collapsible even in single-step timelines (e.g. Python). */

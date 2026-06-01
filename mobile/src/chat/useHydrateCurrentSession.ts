@@ -14,9 +14,7 @@ import { clientConfig } from "@/query/client";
 import type { BackendChatSession } from "@/lib/types";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { processRawChatHistory } from "@/state/processRawChatHistory";
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isUuid } from "./uuid";
 
 export interface HydrateCurrentSessionResult {
   /** True while the current session's history is being fetched. */
@@ -34,7 +32,7 @@ export function useHydrateCurrentSession(): HydrateCurrentSessionResult {
   );
 
   const isRealSession =
-    !!currentSessionId && UUID_RE.test(currentSessionId);
+    !!currentSessionId && isUuid(currentSessionId);
   // Load only when there is no local tree yet (opened from Recents / cold).
   const needsLoad =
     isRealSession &&

@@ -3,7 +3,7 @@
 // typewriter/voice-sync (we render text as it arrives; store flushes are already
 // rAF-batched, so markdown re-parse runs at frame cadence, not per token).
 
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { View } from "react-native";
 
 import { PacketType, type ChatPacket, type MessageStart, type MessageDelta } from "@/lib/types";
@@ -12,6 +12,7 @@ import { Markdown } from "@/components/markdown";
 import { BlinkingBar } from "@/components/message/BlinkingBar";
 import { processContent } from "@/components/message/citations/processContent";
 import { isFinalAnswerComplete } from "@/state/timeline/packetUtils";
+import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 
 export function MessageTextRenderer({
   packets,
@@ -40,13 +41,7 @@ export function MessageTextRenderer({
     [packets]
   );
 
-  const onCompleteFiredRef = useRef(false);
-  useEffect(() => {
-    if (isStreamFinished && !onCompleteFiredRef.current) {
-      onCompleteFiredRef.current = true;
-      onComplete();
-    }
-  }, [isStreamFinished, onComplete]);
+  useFireOnComplete(isStreamFinished, onComplete);
 
   const showCursor = !stopPacketSeen && !isStreamFinished;
 

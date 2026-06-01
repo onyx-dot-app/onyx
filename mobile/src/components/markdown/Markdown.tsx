@@ -62,8 +62,7 @@ function trimTrailingNewline(content: string): string {
 
 /**
  * Pull the language label off a fence node's info string. markdown-it stores
- * the fence info on `node.sourceInfo`; fall back to the `language-xxx` class on
- * `node.attributes` if present.
+ * the fence info on `node.sourceInfo`.
  */
 function extractLanguage(node: ASTNode): string | undefined {
   const sourceInfo = (node as ASTNode & { sourceInfo?: string }).sourceInfo;

@@ -1,15 +1,15 @@
 import { createElement, useEffect, useRef, useState } from "react";
 import { Dimensions, Keyboard, Platform, Pressable } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Popover, Text, type PopoverTriggerRef } from "@/components/opal";
-import { ChevronDownIcon } from "@/components/ui/icons";
+import { SvgChevronDown } from "@/components/icons/SvgChevronDown";
 import { useToken } from "@/theme/ThemeProvider";
-import { getModelIcon, resolveDefaultModel } from "@/lib/languageModels";
-import { useLlmProviders } from "@/query/llmProviders";
+import { getModelIcon } from "@/lib/languageModels";
+import { useActiveModel } from "@/chat/useActiveModel";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import type { LLMOption } from "@/lib/types";
 import { ModelListContent } from "./ModelListContent";
+import { usePopoverPlacement } from "./usePopoverPlacement";
 
 // Single-model selector in the input bar's right cluster (left of Send). Shows the
 // active model (provider icon + name + chevron); tapping opens an anchored popover
@@ -34,23 +34,23 @@ interface ModelSelectorTriggerProps {
 
 export function ModelSelectorTrigger({ sessionId }: ModelSelectorTriggerProps) {
   const triggerRef = useRef<PopoverTriggerRef>(null);
-  const insets = useSafeAreaInsets();
   // Track open state so the keyboard listener is only active while the popover is up
   // (otherwise typing in the main composer would needlessly re-render this control).
   const [open, setOpen] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Safe-area-aware insets + width clamp. The keyboard height is folded into the
+  // bottom inset so the card lifts above the soft keyboard while open.
+  const { insets, contentWidth } = usePopoverPlacement({
+    maxWidth: 320,
+    widthMargin: 24,
+    extraBottom: keyboardHeight,
+  });
 
-  const { data, isLoading } = useLlmProviders();
-  const providers = data?.providers ?? [];
-  const defaultModel = resolveDefaultModel(providers, data?.default_text ?? null);
-
-  const selectedModel = useChatSessionStore(
-    (s) => s.sessions.get(sessionId)?.selectedModel,
-  );
+  const { providers, isLoading, defaultModel, selectedModel, activeModel } =
+    useActiveModel(sessionId);
   const updateSelectedModel = useChatSessionStore((s) => s.updateSelectedModel);
 
   const labelColor = useToken("text-04");
-  const chevronColor = useToken("text-03");
   // True once the user explicitly picks a model — after that we stop auto-syncing.
   const manualRef = useRef(false);
 
@@ -92,12 +92,7 @@ export function ModelSelectorTrigger({ sessionId }: ModelSelectorTriggerProps) {
   // Nothing to choose from yet.
   if (!isLoading && providers.length === 0) return null;
 
-  const active = selectedModel ?? defaultModel;
-
   const screenWidth = Dimensions.get("window").width;
-  // Cap the popover width so it never overflows a narrow screen — rn-primitives'
-  // avoidCollisions repositions the card but does not shrink its measured width.
-  const contentWidth = Math.min(320, screenWidth - 24);
   // Label width tracks screen width (web shrink-wraps with no cap); long names still
   // truncate with an ellipsis, but common ones like "Claude 3.5 Sonnet" fit in full.
   const labelMaxWidth = Math.min(180, Math.round(screenWidth * 0.4));
@@ -131,7 +126,11 @@ export function ModelSelectorTrigger({ sessionId }: ModelSelectorTriggerProps) {
               via createElement so the linter doesn't read it as a component declared
               during render (react-hooks/static-components). */}
           {createElement(
-            getModelIcon(active?.provider ?? "", undefined, active?.modelName),
+            getModelIcon(
+              activeModel?.provider ?? "",
+              undefined,
+              activeModel?.modelName,
+            ),
             { size: 16, color: labelColor },
           )}
           <Text
@@ -141,9 +140,9 @@ export function ModelSelectorTrigger({ sessionId }: ModelSelectorTriggerProps) {
             maxFontSizeMultiplier={1.2}
             style={{ maxWidth: labelMaxWidth }}
           >
-            {active?.displayName ?? "Model"}
+            {activeModel?.displayName ?? "Model"}
           </Text>
-          <ChevronDownIcon size={16} color={chevronColor} />
+          <SvgChevronDown size={16} color="text-03" />
         </Pressable>
       </Popover.Trigger>
 
@@ -151,12 +150,7 @@ export function ModelSelectorTrigger({ sessionId }: ModelSelectorTriggerProps) {
         side="top"
         align="end"
         sideOffset={8}
-        insets={{
-          top: insets.top + 8,
-          bottom: insets.bottom + 8 + keyboardHeight,
-          left: 12,
-          right: 12,
-        }}
+        insets={insets}
         style={{ width: contentWidth }}
       >
         <Text
@@ -169,7 +163,7 @@ export function ModelSelectorTrigger({ sessionId }: ModelSelectorTriggerProps) {
         <ModelListContent
           providers={providers}
           isLoading={isLoading}
-          selected={active}
+          selected={activeModel}
           onSelect={handleSelect}
         />
       </Popover.Content>

@@ -1,3 +1,4 @@
+import { resolveAuthHeaders } from "./authHeaders";
 import { FetchError, RedirectError } from "./errors";
 import type { ClientConfig } from "./config";
 
@@ -16,16 +17,15 @@ function resolveUrl(baseUrl: string, path: string): string {
   return path.startsWith("/") ? `${baseUrl}${path}` : `${baseUrl}/${path}`;
 }
 
-export async function errorHandlingFetcher<T>(
+// Shared transport for both fetchers: merge auth headers under any caller-provided
+// headers, issue the request, and apply the 403 -> RedirectError / !ok -> FetchError
+// semantics. The success-body handling (json vs. void) is left to the caller.
+async function fetchWithErrorHandling(
   url: string,
   config: ClientConfig,
   init?: RequestInit
-): Promise<T> {
-  // Merge auth headers under any caller-provided headers (any HeadersInit shape).
-  const headers = new Headers(init?.headers);
-  new Headers(await config.getAuthHeaders()).forEach((value, key) => {
-    headers.set(key, value);
-  });
+): Promise<Response> {
+  const headers = await resolveAuthHeaders(config, init?.headers);
 
   const res = await config.fetchImpl(resolveUrl(config.baseUrl, url), {
     ...init,
@@ -39,6 +39,15 @@ export async function errorHandlingFetcher<T>(
     throw new FetchError(DEFAULT_ERROR_MSG, res.status, await res.json());
   }
 
+  return res;
+}
+
+export async function errorHandlingFetcher<T>(
+  url: string,
+  config: ClientConfig,
+  init?: RequestInit
+): Promise<T> {
+  const res = await fetchWithErrorHandling(url, config, init);
   return (await res.json()) as T;
 }
 
@@ -53,20 +62,5 @@ export async function errorHandlingFetcherVoid(
   config: ClientConfig,
   init?: RequestInit
 ): Promise<void> {
-  const headers = new Headers(init?.headers);
-  new Headers(await config.getAuthHeaders()).forEach((value, key) => {
-    headers.set(key, value);
-  });
-
-  const res = await config.fetchImpl(resolveUrl(config.baseUrl, url), {
-    ...init,
-    headers,
-  });
-
-  if (res.status === 403) {
-    throw new RedirectError(DEFAULT_AUTH_ERROR_MSG, res.status, await res.json());
-  }
-  if (!res.ok) {
-    throw new FetchError(DEFAULT_ERROR_MSG, res.status, await res.json());
-  }
+  await fetchWithErrorHandling(url, config, init);
 }

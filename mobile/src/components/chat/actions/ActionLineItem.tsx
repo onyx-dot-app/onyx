@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { Pressable, View } from "react-native";
 
 import { Text } from "@/components/opal";
-import { ChevronRightIcon } from "@/components/ui/icons";
+import { SvgChevronRight } from "@/components/icons/SvgChevronRight";
 import { getIconForAction } from "@/lib/actionIcons";
 import { useToken } from "@/theme/ThemeProvider";
 import type { ToolSnapshot } from "@/lib/types/tools";
@@ -116,11 +116,9 @@ export function ActionLineItem({
               {`${sourceCount.enabled} of ${sourceCount.total}`}
             </Text>
           ) : null}
-          <ChevronRightIcon size={16} color={mutedColor} />
+          <SvgChevronRight size={16} color={mutedColor} />
         </View>
       ) : null}
     </Pressable>
   );
 }
-
-export default ActionLineItem;

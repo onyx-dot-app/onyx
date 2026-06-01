@@ -15,13 +15,13 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { appConfig } from "@/lib/config";
 import {
-  chatFileUrl,
   fetchFileStatuses,
   uploadChatFiles,
   type UploadableFile,
 } from "@/lib/api";
 import { clientConfig } from "@/query/client";
 import { queryKeys } from "@/query/keys";
+import { authedChatImageSource } from "@/lib/chatImageSource";
 import { isImageFile } from "@/lib/fileTypes";
 import {
   ChatFileType,
@@ -248,11 +248,12 @@ export function useComposerAttachments(): UseComposerAttachmentsResult {
         if (a.localUri) imageSource = { uri: a.localUri };
         // Remote (recent) images need the bearer header — wait until it resolves
         // so we never fire a guaranteed-401 unauthenticated request to /chat/file.
-        else if (a.fileId && authHeaders)
-          imageSource = {
-            uri: chatFileUrl(appConfig.apiBaseUrl, a.fileId),
-            headers: authHeaders,
-          };
+        else if (a.fileId)
+          imageSource = authedChatImageSource(
+            appConfig.apiBaseUrl,
+            a.fileId,
+            authHeaders,
+          );
       }
       return {
         id: a.id,

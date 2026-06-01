@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { TextInput, View } from "react-native";
+import { View } from "react-native";
 
 import { Button, Modal, Text } from "@/components/opal";
-import { typography } from "@/theme/generated/typography";
-import { useToken } from "@/theme/ThemeProvider";
 import { useUpsertProjectInstructions } from "@/query/projects";
+import { ProjectModalTextInput } from "./ProjectModalTextInput";
 
 // Native mirror of web `AddInstructionModal`. Controlled opal Modal with a
 // multiline instructions field, seeded from the project's current instructions.
@@ -25,8 +24,6 @@ export function AddInstructionModal({
 }: AddInstructionModalProps) {
   const [text, setText] = useState(initialInstructions ?? "");
   const upsert = useUpsertProjectInstructions(projectId);
-  const placeholderColor = useToken("text-03");
-  const typedColor = useToken("text-05");
 
   // Re-seed the field each time the sheet OPENS so it reflects the latest saved
   // value. Tracking the previous `visible` and setting state during render (not
@@ -53,19 +50,14 @@ export function AddInstructionModal({
           Specify the behaviors or tone for the chat sessions in this project.
         </Text>
 
-        <TextInput
+        <ProjectModalTextInput
           value={text}
           onChangeText={setText}
           placeholder="My goal with is to... be sure to... in your responses."
-          placeholderTextColor={placeholderColor}
           autoFocus
           multiline
           textAlignVertical="top"
-          className="rounded-[8px] border border-border-02 bg-background-neutral-00 px-3 py-2"
-          style={[
-            typography["main-ui-body"],
-            { color: typedColor, minHeight: 120, maxHeight: 240 },
-          ]}
+          style={{ minHeight: 120, maxHeight: 240 }}
         />
 
         <View className="flex-row justify-end gap-2">

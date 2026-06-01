@@ -272,29 +272,6 @@ export async function loginWithGoogle(): Promise<string> {
   return token;
 }
 
-// ── Refresh ──────────────────────────────────────────────────────────────────────────
-
-/**
- * Best-effort token refresh. POSTs to the backend refresh route and returns a new
- * JWT, or `null` if refresh isn't available / fails (the caller should then fall
- * through to a full re-login). Never throws.
- *
- * Note: the backend refresh route may rely on an httpOnly cookie that this native
- * client doesn't hold, in which case it will simply 401 and we return null.
- */
-export async function refreshToken(): Promise<string | null> {
-  try {
-    const res = await fetch(`${appConfig.apiBaseUrl}${REFRESH_PATH}`, {
-      method: "POST",
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as BearerLoginResponse;
-    return data.access_token ?? null;
-  } catch {
-    return null;
-  }
-}
-
 // ── Logout ───────────────────────────────────────────────────────────────────────────
 
 /**

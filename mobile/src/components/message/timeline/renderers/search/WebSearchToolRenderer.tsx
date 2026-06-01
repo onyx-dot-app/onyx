@@ -11,7 +11,6 @@
 // - INLINE:    query chips under the queries header, timelineLayout "content".
 // Empty (no queries) -> a single step with empty content.
 
-import { useEffect, useRef } from "react";
 import { View } from "react-native";
 
 import { ValidSources, type SearchToolPacket } from "@/lib/types";
@@ -26,6 +25,7 @@ import {
   INITIAL_QUERIES_TO_SHOW,
   QUERIES_PER_EXPANSION,
 } from "@/state/timeline/searchStateUtils";
+import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 import { SearchChipList, type ChipSource } from "./SearchChipList";
 
 const QUERIES_HEADER = "Searching the web";
@@ -48,13 +48,7 @@ export function WebSearchToolRenderer({
 }: MessageRendererProps<SearchToolPacket>) {
   const { queries, isComplete } = constructCurrentSearchState(packets);
 
-  const onCompleteFiredRef = useRef(false);
-  useEffect(() => {
-    if (isComplete && !onCompleteFiredRef.current) {
-      onCompleteFiredRef.current = true;
-      onComplete();
-    }
-  }, [isComplete, onComplete]);
+  useFireOnComplete(isComplete, onComplete);
 
   const isHighlight = renderType === RenderType.HIGHLIGHT;
   const isInline = renderType === RenderType.INLINE;

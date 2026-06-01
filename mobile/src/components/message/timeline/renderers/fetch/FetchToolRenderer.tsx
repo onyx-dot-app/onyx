@@ -20,7 +20,7 @@
 // "show more" behavior. Docs/URLs open via `Linking.openURL` (web used
 // `window.open(_, "_blank")`).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Linking, Pressable, View } from "react-native";
 
 import { type FetchToolPacket, type OnyxDocument } from "@/lib/types";
@@ -33,6 +33,7 @@ import {
   INITIAL_URLS_TO_SHOW,
   URLS_PER_EXPANSION,
 } from "@/state/timeline/fetchStateUtils";
+import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 import { BlinkingBar } from "@/components/message/BlinkingBar";
 import { SourceIcon } from "@/components/message/sources/SourceIcon";
 import { truncateText } from "@/components/message/sources/sourceInfo";
@@ -144,13 +145,7 @@ export function FetchToolRenderer({
   const headerColor = useToken("text-02");
 
   // Fire onComplete once when the tool finishes (mobile timeline-shell contract).
-  const completeFiredRef = useRef(false);
-  useEffect(() => {
-    if (isComplete && !completeFiredRef.current) {
-      completeFiredRef.current = true;
-      onComplete();
-    }
-  }, [isComplete, onComplete]);
+  useFireOnComplete(isComplete, onComplete);
 
   const openDoc = useCallback((doc: OnyxDocument) => {
     if (doc.link) Linking.openURL(doc.link).catch(() => undefined);

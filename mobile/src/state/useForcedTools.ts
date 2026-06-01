@@ -5,7 +5,6 @@ import { useChatSessionStore, useCurrentPersonaId } from "./chatSessionStore";
 
 interface ForcedToolsState {
   forcedToolIds: number[];
-  setForcedToolIds: (ids: number[]) => void;
   toggleForcedTool: (id: number) => void;
   clearForcedTools: () => void;
 }
@@ -17,7 +16,6 @@ interface ForcedToolsState {
  */
 export const useForcedTools = create<ForcedToolsState>((set, get) => ({
   forcedToolIds: [],
-  setForcedToolIds: (ids) => set({ forcedToolIds: ids }),
   toggleForcedTool: (id) => {
     const { forcedToolIds } = get();
     if (forcedToolIds.includes(id)) set({ forcedToolIds: [] });

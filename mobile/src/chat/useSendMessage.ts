@@ -48,6 +48,7 @@ import {
 import { applyPacket } from "@/state/packetProcessor";
 import { getAuthHeaders } from "@/auth";
 import { useChatSessionLifecycle } from "./useChatSessionLifecycle";
+import { isUuid } from "./uuid";
 
 // ── Default transport config ────────────────────────────────────────────────
 // appConfig + expo/fetch + the real JWT auth headers (from @/auth), so a send is
@@ -403,20 +404,24 @@ export function useSendMessage(
           const idInfo = asMessageIdInfo(item);
           if (idInfo) {
             const userNode = tree.get(initialUserNode.nodeId);
-            if (userNode && idInfo.user_message_id !== null) {
-              tree = new Map(tree);
-              tree.set(initialUserNode.nodeId, {
-                ...userNode,
-                messageId: idInfo.user_message_id,
-              });
-            }
             const agentNode = tree.get(assistantNodeId);
-            if (agentNode) {
+            if (
+              (userNode && idInfo.user_message_id !== null) ||
+              agentNode
+            ) {
               tree = new Map(tree);
-              tree.set(assistantNodeId, {
-                ...agentNode,
-                messageId: idInfo.reserved_assistant_message_id,
-              });
+              if (userNode && idInfo.user_message_id !== null) {
+                tree.set(initialUserNode.nodeId, {
+                  ...userNode,
+                  messageId: idInfo.user_message_id,
+                });
+              }
+              if (agentNode) {
+                tree.set(assistantNodeId, {
+                  ...agentNode,
+                  messageId: idInfo.reserved_assistant_message_id,
+                });
+              }
             }
             scheduleFlush();
             continue;
@@ -466,25 +471,22 @@ export function useSendMessage(
         // Flush whatever streamed before the failure.
         store.getState().updateSessionMessageTree(activeSessionId, tree);
 
-        if (isAbortError(err)) {
-          // ── (e) Clean user/lifecycle stop ────────────────────────────────
-          store.getState().updateChatState(activeSessionId, "input");
-          store.getState().setStreamingStartTime(activeSessionId, null);
-        } else if (err instanceof FetchError && (err.status === 401 || err.status === 403)) {
-          // Surface auth failures for the integrator's auth handler. We leave the
-          // turn in place and reset chatState; the integrator's auth layer (which
-          // owns token refresh / re-login) reads FetchError.status.
-          store.getState().updateChatState(activeSessionId, "input");
-          store.getState().setStreamingStartTime(activeSessionId, null);
-          store
-            .getState()
-            .setUncaughtError(activeSessionId, `auth_error:${err.status}`);
-        } else {
-          const message =
-            err instanceof Error ? err.message : "Something went wrong.";
-          store.getState().updateChatState(activeSessionId, "input");
-          store.getState().setStreamingStartTime(activeSessionId, null);
-          store.getState().setUncaughtError(activeSessionId, message);
+        // Every terminal path resets chatState + streaming clock; the only thing
+        // that varies is the error tag. AbortError is a clean user/lifecycle stop
+        // (no tag). A FetchError 401/403 is surfaced for the integrator's auth
+        // handler (which owns token refresh / re-login) via `auth_error:<status>`.
+        // Anything else becomes a generic error tag.
+        store.getState().updateChatState(activeSessionId, "input");
+        store.getState().setStreamingStartTime(activeSessionId, null);
+        if (!isAbortError(err)) {
+          const tag =
+            err instanceof FetchError &&
+            (err.status === 401 || err.status === 403)
+              ? `auth_error:${err.status}`
+              : err instanceof Error
+                ? err.message
+                : "Something went wrong.";
+          store.getState().setUncaughtError(activeSessionId, tag);
         }
       } finally {
         if (controllerRef.current === controller) {
@@ -548,12 +550,6 @@ export function useSendMessage(
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function isUuid(value: string): boolean {
-  return UUID_RE.test(value);
-}
-
 function isAbortError(err: unknown): boolean {
   return (
     !!err &&

@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { Animated, Easing } from "react-native";
 
-import { LoaderIcon } from "@/components/ui/icons";
-import { useToken } from "@/theme/ThemeProvider";
+import { SvgLoader } from "@/components/icons/SvgLoader";
 import type { ColorToken } from "@/theme/generated/colors";
 
 // ---------------------------------------------------------------------------
 // Spinner — native mirror of web's `SimpleLoader` (an Opal loader glyph spun
 // with `animate-spin`). RN has no CSS animation, so we rotate the ported
-// `LoaderIcon` with the built-in `Animated` API (useNativeDriver, linear loop).
+// `SvgLoader` with the built-in `Animated` API (useNativeDriver, linear loop).
 // Used in attachment tiles while a file uploads / processes.
 // ---------------------------------------------------------------------------
 
@@ -24,7 +23,6 @@ function Spinner({ size = 16, color = "text-03" }: SpinnerProps) {
   // initialised state value (not a ref) so it's created once and is safe to read
   // during render (the React Compiler forbids reading refs in render).
   const [progress] = useState(() => new Animated.Value(0));
-  const glyphColor = useToken(color);
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -49,7 +47,7 @@ function Spinner({ size = 16, color = "text-03" }: SpinnerProps) {
       accessibilityRole="progressbar"
       style={{ width: size, height: size, transform: [{ rotate }] }}
     >
-      <LoaderIcon size={size} color={glyphColor} />
+      <SvgLoader size={size} color={color} />
     </Animated.View>
   );
 }

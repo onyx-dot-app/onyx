@@ -107,5 +107,3 @@ export function Switch({
     </Pressable>
   );
 }
-
-export default Switch;

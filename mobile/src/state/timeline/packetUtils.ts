@@ -5,13 +5,7 @@
 // Only the helpers the timeline pipeline needs. Mobile's PacketType enum
 // (src/lib/types/streaming.ts) mirrors the backend, so these port verbatim.
 
-import {
-  MessageDelta,
-  MessageStart,
-  Packet,
-  PacketType,
-  StreamingCitation,
-} from "@/lib/types";
+import { Packet, PacketType } from "@/lib/types";
 
 export function isToolPacket(
   packet: Packet,
@@ -74,26 +68,6 @@ export function isDisplayPacket(packet: Packet): boolean {
   );
 }
 
-export function isSearchToolPacket(packet: Packet): boolean {
-  return (
-    packet.obj.type === PacketType.SEARCH_TOOL_START ||
-    packet.obj.type === PacketType.SEARCH_TOOL_QUERIES_DELTA ||
-    packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA
-  );
-}
-
-export function isStreamingComplete(packets: Packet[]): boolean {
-  return packets.some((packet) => packet.obj.type === PacketType.STOP);
-}
-
-export function isFinalAnswerComing(packets: Packet[]): boolean {
-  return packets.some(
-    (packet) =>
-      packet.obj.type === PacketType.MESSAGE_START ||
-      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
-  );
-}
-
 export function isFinalAnswerComplete(packets: Packet[]): boolean {
   const messageStartPacket = packets.find(
     (packet) =>
@@ -111,41 +85,4 @@ export function isFinalAnswerComplete(packets: Packet[]): boolean {
         packet.obj.type === PacketType.ERROR) &&
       packet.placement.turn_index === messageStartPacket.placement.turn_index
   );
-}
-
-export function getTextContent(packets: Packet[]): string {
-  return packets
-    .map((packet) => {
-      if (
-        packet.obj.type === PacketType.MESSAGE_START ||
-        packet.obj.type === PacketType.MESSAGE_DELTA
-      ) {
-        return (packet.obj as MessageStart | MessageDelta).content || "";
-      }
-      return "";
-    })
-    .join("");
-}
-
-export function getCitations(packets: Packet[]): StreamingCitation[] {
-  const citations: StreamingCitation[] = [];
-  const seenDocIds = new Set<string>();
-
-  packets.forEach((packet) => {
-    if (packet.obj.type === PacketType.CITATION_INFO) {
-      const citationInfo = packet.obj as {
-        citation_number: number;
-        document_id: string;
-      };
-      if (!seenDocIds.has(citationInfo.document_id)) {
-        seenDocIds.add(citationInfo.document_id);
-        citations.push({
-          citation_num: citationInfo.citation_number,
-          document_id: citationInfo.document_id,
-        });
-      }
-    }
-  });
-
-  return citations;
 }

@@ -13,10 +13,13 @@
 //      slice (recent N sessions' trees + draft text) through this storage.
 import { createMMKV, type MMKV } from "react-native-mmkv";
 import type { PersistOptions, StateStorage } from "zustand/middleware";
-import type { Message } from "@/lib/types";
 import type { MessageTreeState } from "./messageTree";
 // Type-only import: avoids a runtime import cycle with chatSessionStore.
 import type { ChatSessionData } from "./chatSessionStore";
+// Shared default-builder. Lives in its own module (it only type-imports
+// ChatSessionData from the store), so this value import does NOT reintroduce the
+// store↔persist runtime cycle the type-only import above avoids.
+import { createInitialSessionData } from "./sessionDefaults";
 
 // ── MMKV singleton ───────────────────────────────────────────────────────────
 export const storage: MMKV = createMMKV({ id: "onyx.chat" });
@@ -89,15 +92,24 @@ export function deserializeWithMaps<T = unknown>(text: string): T {
 // ── zustand StateStorage adapter (sync) ───────────────────────────────────────
 // MMKV's getString returns `string | undefined`; zustand's StateStorage contract
 // wants `string | null`, so we coalesce.
-export const mmkvStateStorage: StateStorage = {
-  getItem: (name) => storage.getString(name) ?? null,
-  setItem: (name, value) => {
-    storage.set(name, value);
-  },
-  removeItem: (name) => {
-    storage.remove(name);
-  },
-};
+// The inferred (narrow) return type is intentionally NOT annotated as
+// `StateStorage`: its concrete sync return types (`string | null` / `void`) make
+// it assignable to BOTH zustand's `StateStorage` (below) and the React Query
+// sync-storage persister's stricter `Storage` shape (used in @/query/client).
+/** Build a sync zustand `StateStorage` adapter over any MMKV instance. */
+export function makeMmkvStateStorage(mmkv: MMKV) {
+  return {
+    getItem: (name: string) => mmkv.getString(name) ?? null,
+    setItem: (name: string, value: string) => {
+      mmkv.set(name, value);
+    },
+    removeItem: (name: string) => {
+      mmkv.remove(name);
+    },
+  };
+}
+
+export const mmkvStateStorage: StateStorage = makeMmkvStateStorage(storage);
 
 // ── Slim persisted slice ──────────────────────────────────────────────────────
 // We only persist what's useful to rehydrate offline: the current session id and,
@@ -158,37 +170,18 @@ function buildSlice(state: ChatStoreSnapshot): PersistedState {
 }
 
 // Rebuild a full ChatSessionData from a persisted slice, restoring fresh volatile
-// fields. We import the defaults lazily-by-construction here to avoid the cycle:
-// everything not persisted gets a sensible fresh default.
+// fields. Reuses the store's shared default-builder (createInitialSessionData) and
+// overrides only the persisted fields, so the two no longer drift apart when a
+// ChatSessionData field is added.
 function reviveSessionData(slice: PersistedSessionSlice): ChatSessionData {
-  return {
-    sessionId: slice.sessionId,
-    messageTree: slice.messageTree ?? new Map<number, Message>(),
-    chatState: "input",
-    regenerationState: null,
-    canContinue: false,
+  return createInitialSessionData(slice.sessionId, {
+    messageTree: slice.messageTree ?? new Map(),
     submittedMessage: slice.submittedMessage ?? "",
-    maxTokens: 128_000,
-    // ChatSessionSharedStatus.Private — string literal avoids importing the enum
-    // (kept as the runtime value "private").
-    chatSessionSharedStatus: "private" as ChatSessionData["chatSessionSharedStatus"],
-    selectedNodeIdForDocDisplay: null,
-    abortController: new AbortController(),
-    hasPerformedInitialScroll: true,
-    documentSidebarVisible: false,
-    hasSentLocalUserMessage: false,
-    isFetchingChatMessages: false,
-    uncaughtError: null,
-    loadingError: null,
-    isReady: true,
-    lastAccessed: new Date(slice.lastAccessedMs ?? Date.now()),
-    isLoaded: false,
     description: slice.description,
     personaId: slice.personaId,
-    queuedMessages: [],
-    latestMessageRenderComplete: true,
-    isStreamDraining: false,
-  };
+    lastAccessed: new Date(slice.lastAccessedMs ?? Date.now()),
+    isLoaded: false,
+  });
 }
 
 /**

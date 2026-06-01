@@ -3,28 +3,22 @@
 // web ParallelTimelineTabs (Opal pill Tabs -> horizontal ScrollView).
 
 import { memo, useEffect, useState } from "react";
-import { View, Pressable, ScrollView } from "react-native";
+import { View } from "react-native";
 
 import type { StopReason } from "@/lib/types";
 import type { FullChatState } from "@/components/message/interfaces";
 import type { TurnGroup } from "@/state/timeline/transformers";
-import { useThemeColors } from "@/theme/ThemeProvider";
-import { radii } from "@/theme/generated/radii";
-import { Text, Spinner } from "@/components/opal";
 import { TimelineRow } from "@/components/message/timeline/primitives/TimelineRow";
 import { TimelineSurface } from "@/components/message/timeline/primitives/TimelineSurface";
 import { TimelineTopSpacer } from "@/components/message/timeline/primitives/TimelineTopSpacer";
+import { TimelinePillTabs } from "@/components/message/timeline/primitives/TimelinePillTabs";
 import { TimelineIcon } from "@/components/message/timeline/toolIcon";
 import {
   TimelineRendererComponent,
   type TimelineRendererOutput,
 } from "@/components/message/timeline/TimelineRendererComponent";
 import { TimelineStepComposer } from "@/components/message/timeline/TimelineStepComposer";
-import {
-  getToolName,
-  getToolIconName,
-  isToolComplete,
-} from "@/state/timeline/toolDisplayHelpers";
+import { isToolComplete } from "@/state/timeline/toolDisplayHelpers";
 
 export interface ParallelTimelineTabsProps {
   turnGroup: TurnGroup;
@@ -43,7 +37,6 @@ export const ParallelTimelineTabs = memo(function ParallelTimelineTabs({
   isLastTurnGroup,
   isFirstTurnGroup,
 }: ParallelTimelineTabsProps) {
-  const colors = useThemeColors();
   const [activeTab, setActiveTab] = useState(turnGroup.steps[0]?.key ?? "");
 
   // Keep activeTab valid as steps stream in.
@@ -75,46 +68,14 @@ export const ParallelTimelineTabs = memo(function ParallelTimelineTabs({
     >
       <TimelineSurface roundedBottom={isLastTurnGroup}>
         <TimelineTopSpacer variant="default" />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ alignItems: "center", gap: 6, paddingHorizontal: 4 }}
-        >
-          {turnGroup.steps.map((step) => {
-            const active = step.key === activeTab;
-            const loading = !stopPacketSeen && !isToolComplete(step.packets);
-            return (
-              <Pressable
-                key={step.key}
-                onPress={() => setActiveTab(step.key)}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 4,
-                  paddingHorizontal: 8,
-                  paddingVertical: 4,
-                  borderRadius: radii["08"],
-                  backgroundColor: active
-                    ? colors["background-tint-02"]
-                    : "transparent",
-                }}
-              >
-                {loading ? (
-                  <Spinner size={12} color="text-03" />
-                ) : (
-                  <TimelineIcon
-                    name={getToolIconName(step.packets)}
-                    size={12}
-                    color={active ? "text-04" : "text-02"}
-                  />
-                )}
-                <Text font="main-ui-muted" color={active ? "text-04" : "text-03"}>
-                  {getToolName(step.packets)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <TimelinePillTabs
+          steps={turnGroup.steps}
+          activeKey={activeTab}
+          onSelect={setActiveTab}
+          loadingPredicate={(step) =>
+            !stopPacketSeen && !isToolComplete(step.packets)
+          }
+        />
 
         {activeStep && (
           <View style={{ paddingHorizontal: 4, paddingBottom: 4 }}>

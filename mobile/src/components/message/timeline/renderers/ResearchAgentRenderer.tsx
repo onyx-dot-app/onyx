@@ -3,7 +3,7 @@
 // also recursively renders nested tool calls (by sub_turn_index); that recursion
 // is simplified here to the report + task (documented functional-coverage gap).
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { View } from "react-native";
 
 import {
@@ -17,6 +17,7 @@ import { Text } from "@/components/opal";
 import { Markdown } from "@/components/markdown";
 import { ExpandableTextDisplay } from "@/components/message/ExpandableTextDisplay";
 import { timelineTokens as T } from "@/theme/timelineTokens";
+import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 
 export function ResearchAgentRenderer({
   packets,
@@ -48,13 +49,7 @@ export function ResearchAgentRenderer({
     return { task, report, hasEnd: end };
   }, [packets]);
 
-  const firedRef = useRef(false);
-  useEffect(() => {
-    if (hasEnd && !firedRef.current) {
-      firedRef.current = true;
-      onComplete();
-    }
-  }, [hasEnd, onComplete]);
+  useFireOnComplete(hasEnd, onComplete);
 
   const renderMarkdown = useCallback(
     (text: string, isExpanded: boolean) => (

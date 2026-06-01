@@ -1,22 +1,17 @@
 import { Pressable, View } from "react-native";
 
 import { Spinner, Text } from "@/components/opal";
-import { CheckIcon, FileTextIcon, ImageIcon } from "@/components/ui/icons";
+import { SvgCheck } from "@/components/icons/SvgCheck";
+import { SvgFileText } from "@/components/icons/SvgFileText";
+import { SvgImage } from "@/components/icons/SvgImage";
 import { useToken } from "@/theme/ThemeProvider";
-import { isImageFile } from "@/lib/fileTypes";
+import { fileExtensionLabel, isImageFile } from "@/lib/fileTypes";
 import { UserFileStatus, type ProjectFile } from "@/lib/types";
 
 // A single "Recent Files" row — mirror of web `FileLineItem`. Loader glyph while
 // the file is still processing, else an image/file icon; the trailing slot shows
 // a check when the file is already attached, otherwise its extension label.
 // Shared by the attach popover (quick list) and the "All Recent Files" modal.
-
-function fileExtensionLabel(name: string): string {
-  const idx = name.lastIndexOf(".");
-  if (idx <= 0 || idx === name.length - 1) return "";
-  const ext = name.slice(idx + 1).toLowerCase();
-  return ext === "txt" ? "PLAINTEXT" : ext.toUpperCase();
-}
 
 interface RecentFileRowProps {
   file: ProjectFile;
@@ -26,7 +21,6 @@ interface RecentFileRowProps {
 
 export function RecentFileRow({ file, attached, onToggle }: RecentFileRowProps) {
   const mutedColor = useToken("text-03");
-  const checkColor = useToken("action-link-05");
 
   const isBusy =
     file.status === UserFileStatus.PROCESSING ||
@@ -45,9 +39,9 @@ export function RecentFileRow({ file, attached, onToggle }: RecentFileRowProps) 
         {isBusy ? (
           <Spinner size={16} color="text-03" />
         ) : isImg ? (
-          <ImageIcon size={16} color={mutedColor} />
+          <SvgImage size={16} color={mutedColor} />
         ) : (
-          <FileTextIcon size={16} color={mutedColor} />
+          <SvgFileText size={16} color={mutedColor} />
         )}
       </View>
       <Text
@@ -59,7 +53,7 @@ export function RecentFileRow({ file, attached, onToggle }: RecentFileRowProps) 
         {file.name}
       </Text>
       {attached ? (
-        <CheckIcon size={16} color={checkColor} />
+        <SvgCheck size={16} color="action-link-05" />
       ) : (
         <Text font="secondary-body" color="text-03">
           {fileExtensionLabel(file.name)}

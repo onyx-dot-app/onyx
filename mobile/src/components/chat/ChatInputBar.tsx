@@ -2,18 +2,16 @@ import { useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 
 import { Button } from "@/components/opal";
-import { ArrowUpIcon, PaperclipIcon, StopIcon } from "@/components/ui/icons";
+import { SvgArrowUp } from "@/components/icons/SvgArrowUp";
+import { SvgPaperclip } from "@/components/icons/SvgPaperclip";
+import { SvgStop } from "@/components/icons/SvgStop";
 import { useToken } from "@/theme/ThemeProvider";
 import { typography } from "@/theme/generated/typography";
 import { useSendMessage, useComposerAttachments } from "@/chat";
-import { useLlmProviders } from "@/query/llmProviders";
-import {
-  modelSupportsImageInput,
-  resolveDefaultModel,
-} from "@/lib/languageModels";
+import { useActiveModel } from "@/chat/useActiveModel";
+import { modelSupportsImageInput } from "@/lib/languageModels";
 import {
   DRAFT_SESSION_ID,
-  useChatSessionStore,
   useCurrentPersonaId,
 } from "@/state/chatSessionStore";
 import { usePersonas, resolveAgent } from "@/query/personas";
@@ -79,21 +77,13 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
   // Vision gate: only allow image picks when the active model accepts images
   // (web `modelSupportsImageInput`). Default to allowed until providers load so
   // we never falsely block before we know the model.
-  const { data: llmData } = useLlmProviders();
-  const providers = llmData?.providers ?? [];
-  const selectedModel = useChatSessionStore(
-    (s) => s.sessions.get(sid)?.selectedModel,
-  );
-  const activeModel =
-    selectedModel ?? resolveDefaultModel(providers, llmData?.default_text ?? null);
+  const { providers, activeModel } = useActiveModel(sid);
   const imagesAllowed = activeModel
     ? modelSupportsImageInput(providers, activeModel.modelName, activeModel.name)
     : true;
 
   const placeholderColor = useToken("text-03");
   const typedColor = useToken("text-05");
-  const sendIconColor = useToken("text-inverted-05");
-  const attachIconColor = useToken("text-03");
   // web shadow-01 is colored by --shadow-02, which is a faint WHITE glow in dark
   // mode (#ffffff1a) and a soft black shadow in light mode — that glow is what
   // separates the black bar from the black chat surface. The token already bakes
@@ -187,7 +177,7 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
                 hitSlop={8}
                 className="h-8 w-8 items-center justify-center rounded-[8px] active:bg-background-tint-02"
               >
-                <PaperclipIcon size={16} color={attachIconColor} />
+                <SvgPaperclip size={16} color="text-03" />
               </Pressable>
             }
           />
@@ -222,9 +212,9 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
             onPress={handleSendPress}
           >
             {isStreaming ? (
-              <StopIcon size={16} color={sendIconColor} />
+              <SvgStop size={16} color="text-inverted-05" />
             ) : (
-              <ArrowUpIcon size={16} color={sendIconColor} />
+              <SvgArrowUp size={16} color="text-inverted-05" />
             )}
           </Button>
         </View>
