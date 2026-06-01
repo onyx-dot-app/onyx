@@ -47,7 +47,7 @@ ATTACHMENTS_DIRECTORY = "attachments"
 SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 
 SANDBOX_CONTAINER_IMAGE = os.environ.get(
-    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.44"
+    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.50"
 )
 
 # Path structure: s3://{bucket}/{tenant_id}/snapshots/{session_id}/{snapshot_id}.tar.gz
