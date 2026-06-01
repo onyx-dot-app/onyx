@@ -773,7 +773,14 @@ class TestEmptyAnswerRecovery:
         *,
         with_citation_processor: bool,
         tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO,
+        state_container: Any = None,
+        pre_answer_processing_time: float | None = None,
+        span_sink: list[Any] | None = None,
     ) -> tuple[Any, list[Any]]:
+        from contextlib import nullcontext
+        from unittest.mock import patch
+
+        from onyx.chat import llm_step as _llm_step_module
         from onyx.chat.citation_processor import CitationMode
         from onyx.chat.citation_processor import DynamicCitationProcessor
         from onyx.chat.llm_step import run_llm_step_pkt_generator
@@ -787,24 +794,41 @@ class TestEmptyAnswerRecovery:
             else None
         )
 
-        gen = run_llm_step_pkt_generator(
-            history=[],
-            tool_definitions=[],
-            tool_choice=tool_choice,
-            llm=llm,
-            placement=Placement(turn_index=0),
-            state_container=None,
-            citation_processor=citation_processor,
+        # Capture the generation span so tests can assert what the trace recorded.
+        real_generation_span = _llm_step_module.generation_span
+
+        def _capturing_span(*args: Any, **kwargs: Any) -> Any:
+            span = real_generation_span(*args, **kwargs)
+            if span_sink is not None:
+                span_sink.append(span)
+            return span
+
+        span_patch = (
+            patch.object(_llm_step_module, "generation_span", _capturing_span)
+            if span_sink is not None
+            else nullcontext()
         )
 
-        packets: list[Any] = []
-        result: Any = None
-        while True:
-            try:
-                packets.append(next(gen))
-            except StopIteration as stop:
-                result = stop.value
-                break
+        with span_patch:
+            gen = run_llm_step_pkt_generator(
+                history=[],
+                tool_definitions=[],
+                tool_choice=tool_choice,
+                llm=llm,
+                placement=Placement(turn_index=0),
+                state_container=state_container,
+                citation_processor=citation_processor,
+                pre_answer_processing_time=pre_answer_processing_time,
+            )
+
+            packets: list[Any] = []
+            result: Any = None
+            while True:
+                try:
+                    packets.append(next(gen))
+                except StopIteration as stop:
+                    result = stop.value
+                    break
 
         llm_step_result, _ = result
         return llm_step_result, packets
@@ -865,3 +889,55 @@ class TestEmptyAnswerRecovery:
         )
         assert llm_step_result.answer is None
         assert llm_step_result.raw_answer == raw
+
+    def test_recovered_answer_is_recorded_in_tracing_span(self) -> None:
+        """The generation span output must reflect the recovered answer, not the
+        empty intermediate state (otherwise the recovered turn is invisible in
+        traces)."""
+        raw = "[1234567890123456789]"
+        span_sink: list[Any] = []
+        llm_step_result, _ = self._run(
+            [raw], with_citation_processor=True, span_sink=span_sink
+        )
+        assert llm_step_result.answer == raw
+
+        assert len(span_sink) == 1
+        output = span_sink[0].span_data.output
+        assert output is not None
+        # output is [AssistantMessage.model_dump()]; the recovered text is recorded.
+        assert any(raw in str(entry.get("content")) for entry in output)
+
+    def test_normal_answer_recorded_in_tracing_span(self) -> None:
+        """Sanity check that the moved span-output assignment still records normal
+        answers."""
+        span_sink: list[Any] = []
+        llm_step_result, _ = self._run(
+            ["Hello ", "world."], with_citation_processor=True, span_sink=span_sink
+        )
+        assert llm_step_result.answer == "Hello world."
+        output = span_sink[0].span_data.output
+        assert output is not None
+        assert any("Hello world." in str(entry.get("content")) for entry in output)
+
+    def test_recovery_sets_pre_answer_time_when_no_prior_answer_start(self) -> None:
+        """When all content is swallowed before reaching _emit_content_chunk (e.g.
+        an XML tool-call block the filter strips), recovery fires the
+        AgentResponseStart branch and must persist pre-answer timing — mirroring
+        the normal path — so the metric is not lost."""
+        from unittest.mock import MagicMock
+
+        # A complete <function_calls> block is stripped by the XML content filter,
+        # so _emit_content_chunk never runs and answer_start stays False, while the
+        # raw answer retains the text.
+        raw = "<function_calls><invoke>x</invoke></function_calls>"
+        state_container = MagicMock()
+        llm_step_result, _ = self._run(
+            [raw],
+            with_citation_processor=True,
+            state_container=state_container,
+            pre_answer_processing_time=1.5,
+        )
+
+        assert llm_step_result.answer == raw
+        state_container.set_pre_answer_processing_time.assert_called_once_with(1.5)
+        state_container.set_answer_tokens.assert_called_with(raw)
