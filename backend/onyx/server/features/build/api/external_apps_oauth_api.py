@@ -174,7 +174,10 @@ def handle_external_app_oauth_callback(
     try:
         response = requests.post(
             oauth.token_url,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+            },
             data={
                 "grant_type": "authorization_code",
                 "client_id": client_id,

@@ -198,7 +198,12 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         try:
             response = requests.post(
                 self.spec.oauth.token_url,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                # Ask for JSON so providers that default to form-encoded
+                # refresh responses (e.g. GitHub) still parse via response.json().
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "application/json",
+                },
                 data=self.build_refresh_request(
                     refresh_token, client_id, client_secret
                 ),

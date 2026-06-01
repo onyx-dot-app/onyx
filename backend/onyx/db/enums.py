@@ -380,6 +380,7 @@ class ExternalAppType(str, PyEnum):
     GMAIL = "GMAIL"
     SLACK = "SLACK"
     LINEAR = "LINEAR"
+    GITHUB = "GITHUB"
     CUSTOM = "CUSTOM"
 
 
