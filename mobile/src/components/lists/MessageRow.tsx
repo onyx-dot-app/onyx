@@ -38,8 +38,18 @@ export interface MessageRowProps {
 const ROW_WRAPPER_USER = "w-full px-4 py-1 items-end";
 const ROW_WRAPPER_ASSISTANT = "w-full px-4 py-1 items-start";
 
-/** Bubble surface: distinct tinted backgrounds per role, capped width. */
-const BUBBLE_USER = "max-w-[85%] bg-background-neutral-03 border-border-02";
+/**
+ * Bubble surface (NativeWind discipline: full static strings, merged over the
+ * `Card` base via `cn`/twMerge).
+ *
+ * User bubble mirrors the web `HumanMessage` exactly: the `background-tint-02`
+ * tint with NO border, web's asymmetric "chat-tail" radius (top + bottom-left
+ * rounded, bottom-right square), and web's tighter px-3/py-2 padding. We set all
+ * four corners and `border-0`/padding explicitly so they deterministically
+ * override the `Card` base (rounded-12 / border / p-4) regardless of merge order.
+ */
+const BUBBLE_USER =
+  "max-w-[85%] bg-background-tint-02 border-0 rounded-tl-[16px] rounded-tr-[16px] rounded-bl-[16px] rounded-br-[0px] px-3 py-2";
 const BUBBLE_ASSISTANT = "max-w-[85%] bg-background-neutral-01 border-border-02";
 
 // ---------------------------------------------------------------------------
@@ -83,10 +93,8 @@ function MessageRowComponent({ role, text, files }: MessageRowProps) {
       {tiles.length > 0 ? <AttachmentTray models={tiles} /> : null}
       {text ? (
         <Card className={bubbleClass}>
-          <Text
-            font={isUser ? "main-ui-body" : "main-content-body"}
-            color="text-05"
-          >
+          {/* Web renders both human + agent body copy with `mainContentBody`. */}
+          <Text font="main-content-body" color="text-05">
             {text}
           </Text>
         </Card>
