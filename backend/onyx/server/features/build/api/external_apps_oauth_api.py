@@ -21,7 +21,6 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.base import token_response_error
 from onyx.external_apps.providers.registry import get_provider_or_raise
 from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.redis.redis_pool import get_redis_client
@@ -213,7 +212,7 @@ def handle_external_app_oauth_callback(
             status_code_override=response.status_code,
         )
 
-    error = token_response_error(response, response_data)
+    error = provider.classify_token_response(response, response_data)
     if error:
         logger.warning(
             "%s OAuth token exchange failed for user %s, app %d: %s",
