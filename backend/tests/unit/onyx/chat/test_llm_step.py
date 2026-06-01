@@ -9,6 +9,7 @@ from onyx.chat.llm_step import _extract_tool_call_kickoffs
 from onyx.chat.llm_step import _increment_turns
 from onyx.chat.llm_step import _parse_tool_args_to_dict
 from onyx.chat.llm_step import _resolve_tool_arguments
+from onyx.chat.llm_step import _ThinkingTagContentFilter
 from onyx.chat.llm_step import _XmlToolCallContentFilter
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.chat.llm_step import translate_history_to_llm_format
@@ -385,6 +386,115 @@ class TestXmlToolCallContentFilter:
         assert (
             output == "A <function_calls_v2><invoke>noop</invoke></function_calls_v2> B"
         )
+
+
+class TestThinkingTagContentFilter:
+    """Tests for _ThinkingTagContentFilter that extracts <thinking>/<think> blocks."""
+
+    @staticmethod
+    def _run(chunks: list[str]) -> tuple[str, str]:
+        """Helper: process all chunks and flush, returning (filtered, thinking)."""
+        f = _ThinkingTagContentFilter()
+        filtered_parts: list[str] = []
+        thinking_parts: list[str] = []
+        for chunk in chunks:
+            for is_thinking, text in f.process(chunk):
+                (thinking_parts if is_thinking else filtered_parts).append(text)
+        for is_thinking, text in f.flush():
+            (thinking_parts if is_thinking else filtered_parts).append(text)
+        return "".join(filtered_parts), "".join(thinking_parts)
+
+    @staticmethod
+    def _run_ordered(chunks: list[str]) -> list[tuple[bool, str]]:
+        """Helper: collect all segments in order for ordering assertions."""
+        f = _ThinkingTagContentFilter()
+        segments: list[tuple[bool, str]] = []
+        for chunk in chunks:
+            segments.extend(f.process(chunk))
+        segments.extend(f.flush())
+        return segments
+
+    def test_extracts_thinking_block_single_chunk(self) -> None:
+        filtered, thinking = self._run(
+            ["<thinking>reasoning here</thinking>answer here"]
+        )
+        assert thinking == "reasoning here"
+        assert filtered == "answer here"
+
+    def test_extracts_thinking_block_split_across_chunks(self) -> None:
+        filtered, thinking = self._run(
+            ["<thin", "king>rea", "soning</thi", "nking>ans", "wer"]
+        )
+        assert thinking == "reasoning"
+        assert filtered == "answer"
+
+    def test_thinking_at_start_then_content(self) -> None:
+        filtered, thinking = self._run(
+            ["<thinking>step 1\nstep 2</thinking>\n\nHere is my answer."]
+        )
+        assert thinking == "step 1\nstep 2"
+        assert filtered == "\n\nHere is my answer."
+
+    def test_multiple_thinking_blocks(self) -> None:
+        filtered, thinking = self._run(
+            [
+                "<thinking>first</thinking>middle"
+                "<thinking>second</thinking>end"
+            ]
+        )
+        assert thinking == "firstsecond"
+        assert filtered == "middleend"
+
+    def test_no_thinking_tags_passes_through(self) -> None:
+        filtered, thinking = self._run(["just normal content"])
+        assert filtered == "just normal content"
+        assert thinking == ""
+
+    def test_preserves_other_xml_tags(self) -> None:
+        filtered, thinking = self._run(["<b>bold</b> text"])
+        assert filtered == "<b>bold</b> text"
+        assert thinking == ""
+
+    def test_unclosed_thinking_tag_flushed(self) -> None:
+        filtered, thinking = self._run(["<thinking>never closed"])
+        assert thinking == "never closed"
+        assert filtered == ""
+
+    def test_empty_thinking_block(self) -> None:
+        filtered, thinking = self._run(["<thinking></thinking>content"])
+        assert thinking == ""
+        assert filtered == "content"
+
+    def test_case_insensitive(self) -> None:
+        filtered, thinking = self._run(
+            ["<THINKING>caps reasoning</THINKING>answer"]
+        )
+        assert thinking == "caps reasoning"
+        assert filtered == "answer"
+
+    def test_tag_split_at_angle_bracket(self) -> None:
+        filtered, thinking = self._run(
+            ["before<", "thinking>inside</thinking>after"]
+        )
+        assert thinking == "inside"
+        assert filtered == "beforeafter"
+
+    def test_think_tags(self) -> None:
+        filtered, thinking = self._run(
+            ["<think>short form</think>answer"]
+        )
+        assert thinking == "short form"
+        assert filtered == "answer"
+
+    def test_segments_preserve_order(self) -> None:
+        segments = self._run_ordered(
+            ["before<thinking>inside</thinking>after"]
+        )
+        assert segments == [
+            (False, "before"),
+            (True, "inside"),
+            (False, "after"),
+        ]
 
 
 class TestIncrementTurns:

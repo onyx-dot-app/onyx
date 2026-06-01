@@ -77,6 +77,11 @@ _XML_PARAMETER_RE = re.compile(
 _FUNCTION_CALLS_OPEN_MARKER = "<function_calls"
 _FUNCTION_CALLS_CLOSE_MARKER = "</function_calls>"
 
+_THINKING_TAG_PAIRS: list[tuple[str, str]] = [
+    ("<thinking>", "</thinking>"),
+    ("<think>", "</think>"),
+]
+
 
 class _XmlToolCallContentFilter:
     """Streaming filter that strips XML-style tool call payload blocks from text."""
@@ -171,6 +176,105 @@ def _find_function_calls_open_marker(text_lower: str) -> int:
             return idx
 
         search_from = idx + 1
+
+
+def _matching_tag_prefix_len(text: str, tag: str) -> int:
+    """Return longest suffix of *text* that matches a prefix of *tag*."""
+    max_len = min(len(text), len(tag) - 1)
+    text_lower = text.lower()
+    tag_lower = tag.lower()
+    for candidate_len in range(max_len, 0, -1):
+        if text_lower.endswith(tag_lower[:candidate_len]):
+            return candidate_len
+    return 0
+
+
+class _ThinkingTagContentFilter:
+    """Streaming filter that extracts ``<thinking>``/``<think>`` blocks.
+
+    Returns an ordered list of ``(is_thinking, text)`` segments so the caller
+    can emit reasoning and content packets in the correct sequence.  Handles
+    both ``<thinking>…</thinking>`` and ``<think>…</think>`` tag pairs, and
+    handles tags that are split across streaming chunks.
+    """
+
+    def __init__(self) -> None:
+        self._pending = ""
+        self._inside_block = False
+        self._active_close_tag = ""
+
+    def process(self, content: str) -> list[tuple[bool, str]]:
+        if not content:
+            return []
+
+        self._pending += content
+        segments: list[tuple[bool, str]] = []
+
+        while self._pending:
+            pending_lower = self._pending.lower()
+
+            if self._inside_block:
+                end_idx = pending_lower.find(self._active_close_tag)
+                if end_idx == -1:
+                    tail_len = _matching_tag_prefix_len(
+                        self._pending, self._active_close_tag
+                    )
+                    emit_upto = len(self._pending) - tail_len
+                    if emit_upto > 0:
+                        segments.append((True, self._pending[:emit_upto]))
+                        self._pending = self._pending[emit_upto:]
+                    return segments
+
+                if end_idx > 0:
+                    segments.append((True, self._pending[:end_idx]))
+                self._pending = self._pending[
+                    end_idx + len(self._active_close_tag) :
+                ]
+                self._inside_block = False
+                continue
+
+            # Outside block — find the earliest matching open tag.
+            best_idx = -1
+            best_open_tag = ""
+            best_close_tag = ""
+            for open_tag, close_tag in _THINKING_TAG_PAIRS:
+                idx = pending_lower.find(open_tag)
+                if idx != -1 and (best_idx == -1 or idx < best_idx):
+                    best_idx = idx
+                    best_open_tag = open_tag
+                    best_close_tag = close_tag
+
+            if best_idx == -1:
+                max_tail = 0
+                for open_tag, _ in _THINKING_TAG_PAIRS:
+                    max_tail = max(
+                        max_tail,
+                        _matching_tag_prefix_len(self._pending, open_tag),
+                    )
+                emit_upto = len(self._pending) - max_tail
+                if emit_upto > 0:
+                    segments.append((False, self._pending[:emit_upto]))
+                    self._pending = self._pending[emit_upto:]
+                return segments
+
+            if best_idx > 0:
+                segments.append((False, self._pending[:best_idx]))
+
+            self._pending = self._pending[best_idx + len(best_open_tag) :]
+            self._inside_block = True
+            self._active_close_tag = best_close_tag
+
+        return segments
+
+    def flush(self) -> list[tuple[bool, str]]:
+        remaining = self._pending
+        self._pending = ""
+        was_inside = self._inside_block
+        self._inside_block = False
+        self._active_close_tag = ""
+        if not remaining:
+            return []
+        return [(was_inside, remaining)]
 
 
 def _try_parse_json_string(value: Any) -> Any:
@@ -1125,6 +1229,7 @@ def run_llm_step_pkt_generator(
     empty_chunk_count = 0
     finish_reasons: set[str] = set()
     xml_tool_call_content_filter = _XmlToolCallContentFilter()
+    thinking_tag_content_filter = _ThinkingTagContentFilter()
 
     processor_state: Any = None
 
@@ -1171,6 +1276,7 @@ def run_llm_step_pkt_generator(
             nonlocal has_reasoned
             nonlocal turn_index
             nonlocal sub_turn_index
+            nonlocal answer_start
 
             if reasoning_start:
                 yield Packet(
@@ -1186,6 +1292,8 @@ def run_llm_step_pkt_generator(
                     turn_index, sub_turn_index
                 )
                 reasoning_start = False
+                # Reset so the new turn gets its own AgentResponseStart.
+                answer_start = False
 
         def _emit_content_chunk(content_chunk: str) -> Generator[Packet, None, None]:
             nonlocal accumulated_answer
@@ -1246,6 +1354,28 @@ def run_llm_step_pkt_generator(
                     placement=_current_placement(),
                     obj=AgentResponseDelta(content=content_chunk),
                 )
+
+        def _emit_thinking_segments(
+            segments: list[tuple[bool, str]],
+        ) -> Generator[Packet, None, None]:
+            nonlocal accumulated_reasoning, reasoning_start
+            for is_thinking, text in segments:
+                if is_thinking:
+                    accumulated_reasoning += text
+                    if state_container:
+                        state_container.set_reasoning_tokens(accumulated_reasoning)
+                    if not reasoning_start:
+                        yield Packet(
+                            placement=_current_placement(),
+                            obj=ReasoningStart(),
+                        )
+                    yield Packet(
+                        placement=_current_placement(),
+                        obj=ReasoningDelta(reasoning=text),
+                    )
+                    reasoning_start = True
+                else:
+                    yield from _emit_content_chunk(text)
 
         for packet in llm.stream(
             prompt=llm_msg_history,
@@ -1328,9 +1458,19 @@ def run_llm_step_pkt_generator(
                 # Keep raw content for fallback extraction. Display content can be
                 # filtered and, in deep-research REQUIRED mode, routed as reasoning.
                 accumulated_raw_answer += delta.content
-                filtered_content = xml_tool_call_content_filter.process(delta.content)
-                if filtered_content:
-                    yield from _emit_content_chunk(filtered_content)
+
+                # Strip XML tool call blocks first so <thinking> tags
+                # inside <function_calls> are discarded with the payload.
+                tool_filtered = xml_tool_call_content_filter.process(
+                    delta.content
+                )
+
+                # Then extract <thinking>/<think> tags, emitting segments
+                # in order so interleaved content keeps the right sequence.
+                if tool_filtered:
+                    yield from _emit_thinking_segments(
+                        thinking_tag_content_filter.process(tool_filtered)
+                    )
 
             if delta.tool_calls:
                 yield from _close_reasoning_if_active()
@@ -1345,10 +1485,16 @@ def run_llm_step_pkt_generator(
                         parsers=arg_parsers,
                     )
 
-        # Flush any tail text buffered while checking for split "<function_calls" markers.
-        filtered_content_tail = xml_tool_call_content_filter.flush()
-        if filtered_content_tail:
-            yield from _emit_content_chunk(filtered_content_tail)
+        # Flush XML tool call filter (upstream), then feed its tail through
+        # the thinking filter so the pipeline order is preserved.
+        xml_tail = xml_tool_call_content_filter.flush()
+        if xml_tail:
+            yield from _emit_thinking_segments(
+                thinking_tag_content_filter.process(xml_tail)
+            )
+
+        # Flush thinking filter for any remaining buffered content.
+        yield from _emit_thinking_segments(thinking_tag_content_filter.flush())
 
         # Flush custom token processor to get any final tool calls
         if custom_token_processor:
