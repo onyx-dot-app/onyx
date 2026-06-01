@@ -32,7 +32,7 @@ from onyx.auth.schemas import UserUpdate
 from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
-from onyx.auth.users import jwt_bearer_auth_backend
+from onyx.auth.users import redis_bearer_auth_backend
 from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
@@ -557,16 +557,15 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             prefix="/auth",
         )
 
-        # Native mobile bearer JWT login: POST /auth/mobile/login (form-urlencoded
+        # Native mobile bearer login: POST /auth/mobile/login (form-urlencoded
         # username/password) -> { access_token, token_type: "bearer" } in the body.
-        # Single-tenant only (SingleTenantJWTStrategy); NOT mounted for CLOUD /
-        # multi-tenant, where the JWT does not resolve the tenant (doc 10).
-        if AUTH_TYPE == AuthType.BASIC:
-            include_auth_router_with_prefix(
-                application,
-                fastapi_users.get_auth_router(jwt_bearer_auth_backend),
-                prefix="/auth/mobile",
-            )
+        # Uses the opaque, tenant-resolving, revocable Redis session token, so it works
+        # for both single-tenant self-hosted (BASIC) and multi-tenant cloud (CLOUD).
+        include_auth_router_with_prefix(
+            application,
+            fastapi_users.get_auth_router(redis_bearer_auth_backend),
+            prefix="/auth/mobile",
+        )
 
         include_auth_router_with_prefix(
             application,
@@ -588,6 +587,36 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             application,
             fastapi_users.get_users_router(UserRead, UserUpdate),
             prefix="/users",
+        )
+
+    # Native mobile Google OAuth: GET /auth/mobile/oauth/google/authorize -> IdP ->
+    # GET /auth/mobile/oauth/google/callback (https) -> 302 onyx://callback?token=.
+    # Issues the redis-bearer token (works single- and multi-tenant). Mounted wherever
+    # Google creds exist: GOOGLE_OAUTH, BASIC+OAUTH_ENABLED, or cloud/multi-tenant.
+    if (
+        AUTH_TYPE == AuthType.GOOGLE_OAUTH
+        or (AUTH_TYPE == AuthType.BASIC and OAUTH_ENABLED)
+        or MULTI_TENANT
+        or AUTH_TYPE == AuthType.CLOUD
+    ):
+        mobile_google_client = GoogleOAuth2(
+            OAUTH_CLIENT_ID,
+            OAUTH_CLIENT_SECRET,
+            scopes=list(GOOGLE_OAUTH_SCOPE_OVERRIDE or GOOGLE_LOGIN_BASE_SCOPES),
+        )
+        include_auth_router_with_prefix(
+            application,
+            create_onyx_oauth_router(
+                mobile_google_client,
+                redis_bearer_auth_backend,
+                USER_AUTH_SECRET,
+                associate_by_email=True,
+                is_verified_by_default=True,
+                redirect_url=f"{WEB_DOMAIN}/auth/mobile/oauth/google/callback",
+                mobile_token_redirect=True,
+                app_redirect_allowlist=["onyx://"],
+            ),
+            prefix="/auth/mobile/oauth/google",
         )
 
     # Register Google OAuth when AUTH_TYPE is GOOGLE_OAUTH, or when

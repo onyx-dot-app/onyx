@@ -1501,18 +1501,17 @@ else:
     raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
 
 
-# Bearer-transport JWT auth backend for the native mobile client (doc 10).
-# Reuses the existing JWT strategy (get_jwt_strategy) but delivers the token in the
-# response body as `Authorization: Bearer <jwt>` instead of a Set-Cookie — a native
-# client has no shared cookie jar with the system browser. Registered independently
-# of AUTH_BACKEND so it works alongside the default (cookie) web session backend.
-# NOTE: SingleTenantJWTStrategy is single-tenant only; the mobile bearer routes are
-# mounted for self-hosted (AUTH_TYPE=basic) deployments only — see onyx/main.py.
-jwt_bearer_transport = BearerTransport(tokenUrl="auth/mobile/login")
-jwt_bearer_auth_backend = AuthenticationBackend(
-    name="jwt-bearer",
-    transport=jwt_bearer_transport,
-    get_strategy=get_jwt_strategy,
+# Bearer-transport Redis session backend for the native mobile client. Reuses the
+# TenantAwareRedisStrategy (same opaque, server-side {sub, tenant_id} token as the web
+# cookie session) but delivers it in the response body as `Authorization: Bearer
+# <token>` — a native client has no shared cookie jar with the system browser. Because
+# the tenant lives in the server-side Redis record (not the token), this works for both
+# single-tenant self-hosted and multi-tenant cloud, and logout is revocable.
+redis_bearer_transport = BearerTransport(tokenUrl="auth/mobile/login")
+redis_bearer_auth_backend = AuthenticationBackend(
+    name="redis-bearer",
+    transport=redis_bearer_transport,
+    get_strategy=get_redis_strategy,
 )
 
 
@@ -1637,13 +1636,17 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
         return router
 
 
-# The native mobile bearer-JWT backend must be registered on the authenticator
-# (not only on the login router) so API routes accept `Authorization: Bearer <jwt>`.
-# Mounted for self-hosted (AUTH_TYPE=basic) only — mirrors onyx/main.py and the
-# SingleTenantJWTStrategy's single-tenant constraint.
+# The native mobile bearer backend must be registered on the authenticator (not only
+# on the login router) so API routes accept `Authorization: Bearer <token>`.
+# Registered wherever mobile login is offered (self-hosted single-tenant + cloud).
 _auth_backends = [auth_backend]
-if AUTH_TYPE == AuthType.BASIC:
-    _auth_backends.append(jwt_bearer_auth_backend)
+if (
+    AUTH_TYPE == AuthType.BASIC
+    or AUTH_TYPE == AuthType.GOOGLE_OAUTH
+    or MULTI_TENANT
+    or AUTH_TYPE == AuthType.CLOUD
+):
+    _auth_backends.append(redis_bearer_auth_backend)
 
 fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](
     get_user_manager, _auth_backends
@@ -2082,6 +2085,22 @@ def generate_state_token(
     return generate_jwt(data, secret, lifetime_seconds)
 
 
+def validate_app_redirect(app_redirect: str, allowlist: list[str]) -> str:
+    """Reject any post-OAuth app redirect that isn't an allowlisted custom scheme.
+
+    The native client proposes where to deliver the issued token (e.g.
+    ``onyx://callback``), but the server only honors schemes it explicitly trusts.
+    This prevents an open-redirect / token-exfiltration via a client-supplied
+    redirect.
+    """
+    if app_redirect and any(app_redirect.startswith(prefix) for prefix in allowlist):
+        return app_redirect
+    raise OnyxError(
+        OnyxErrorCode.VALIDATION_ERROR,
+        getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
+    )
+
+
 def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 
@@ -2110,6 +2129,8 @@ def create_onyx_oauth_router(
     associate_by_email: bool = False,
     is_verified_by_default: bool = False,
     enable_pkce: bool = False,
+    mobile_token_redirect: bool = False,
+    app_redirect_allowlist: Optional[list[str]] = None,
 ) -> APIRouter:
     return get_oauth_router(
         oauth_client,
@@ -2120,6 +2141,8 @@ def create_onyx_oauth_router(
         associate_by_email,
         is_verified_by_default,
         enable_pkce=enable_pkce,
+        mobile_token_redirect=mobile_token_redirect,
+        app_redirect_allowlist=app_redirect_allowlist,
     )
 
 
@@ -2139,8 +2162,17 @@ def get_oauth_router(
     csrf_token_cookie_httponly: bool = True,
     csrf_token_cookie_samesite: Optional[Literal["lax", "strict", "none"]] = "lax",
     enable_pkce: bool = False,
+    mobile_token_redirect: bool = False,
+    app_redirect_allowlist: Optional[list[str]] = None,
 ) -> APIRouter:
-    """Generate a router with the OAuth routes."""
+    """Generate a router with the OAuth routes.
+
+    When ``mobile_token_redirect`` is True the callback issues the backend's bearer
+    token and 302-redirects to an allowlisted custom-scheme deep link
+    (``<app_redirect>?token=...``) instead of setting a session cookie — for native
+    clients that have no shared cookie jar. The IdP ``redirect_uri`` still stays the
+    https backend callback (``redirect_url``); only the final hop is the app scheme.
+    """
     router = APIRouter()
     callback_route_name = f"oauth:{oauth_client.name}.{backend.name}.callback"
 
@@ -2194,6 +2226,13 @@ def get_oauth_router(
             "referral_source": referral_source or "default_referral",
             CSRF_TOKEN_KEY: csrf_token,
         }
+        if mobile_token_redirect:
+            # The native client proposes where to deliver the token; validate it
+            # against the allowlist and carry it (signed) through to the callback.
+            state_data["app_redirect"] = validate_app_redirect(
+                request.query_params.get("redirect_uri", ""),
+                app_redirect_allowlist or [],
+            )
         state = generate_state_token(state_data, state_secret)
         pkce_cookie: tuple[str, str] | None = None
 
@@ -2492,6 +2531,20 @@ def get_oauth_router(
                 )
 
             # Login user
+            if mobile_token_redirect:
+                # Native client: no cookie jar. Mint the bearer token this backend's
+                # strategy issues and hand it to the app via the allowlisted custom-
+                # scheme deep link. app_redirect is re-validated from the signed state.
+                await user_manager.on_after_login(user, request, None)
+                app_redirect = validate_app_redirect(
+                    state_data.get("app_redirect", ""), app_redirect_allowlist or []
+                )
+                mobile_token = await strategy.write_token(user)
+                return RedirectResponse(
+                    add_url_params(app_redirect, {"token": mobile_token}),
+                    status_code=302,
+                )
+
             response = await backend.login(strategy, user)
             await user_manager.on_after_login(user, request, response)
 

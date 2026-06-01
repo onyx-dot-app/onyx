@@ -34,10 +34,10 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/refresh", {"POST"}),
     ("/auth/register", {"POST"}),
     ("/auth/login", {"POST"}),
-    # native mobile bearer-JWT login/logout — public like /auth/login & /auth/logout
-    # above, but login returns the JWT in the response body instead of a Set-Cookie.
-    # get_auth_router(jwt_bearer_auth_backend) emits both routes. Mounted for
-    # self-hosted (AUTH_TYPE=basic) only — see onyx/main.py.
+    # native mobile bearer login/logout — public like /auth/login & /auth/logout above,
+    # but login returns the session token in the response body instead of a Set-Cookie.
+    # get_auth_router(redis_bearer_auth_backend) emits both routes. Mounted for
+    # self-hosted (basic) + cloud/multi-tenant — see onyx/main.py.
     ("/auth/mobile/login", {"POST"}),
     ("/auth/mobile/logout", {"POST"}),
     # reCAPTCHA pre-OAuth challenge — user is not yet authenticated when
@@ -57,6 +57,9 @@ PUBLIC_ENDPOINT_SPECS = [
     # oauth
     ("/auth/oauth/authorize", {"GET"}),
     ("/auth/oauth/callback", {"GET"}),
+    # native mobile google oauth — issues a bearer token via the onyx:// deep link
+    ("/auth/mobile/oauth/google/authorize", {"GET"}),
+    ("/auth/mobile/oauth/google/callback", {"GET"}),
     # oidc
     ("/auth/oidc/authorize", {"GET"}),
     ("/auth/oidc/callback", {"GET"}),
