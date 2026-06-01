@@ -42,6 +42,10 @@ export default defineConfig({
         storageState: "admin_auth.json",
       },
       grepInvert: [/@exclusive/, /@lite/],
+      // MCP tests run as their own shard (the `mcp` project below). They are
+      // heavier and need extra server containers, so we keep them out of the
+      // admin shard to roughly halve its runtime.
+      testIgnore: /\/tests\/e2e\/mcp\//,
     },
     {
       // this suite runs independently and serially + slower
@@ -54,6 +58,21 @@ export default defineConfig({
       },
       grep: /@exclusive/,
       workers: 1,
+    },
+    {
+      // Poor-man's sharding: MCP tests are split into their own shard. They are
+      // slow and require extra server containers (oauth / api-key / per-user-key),
+      // so isolating them keeps the admin shard lean and lets the two run in
+      // parallel. Selected by path so any spec added under tests/e2e/mcp/ is
+      // automatically picked up. Captures no screenshots, so it is excluded from
+      // visual regression in the workflow.
+      name: "mcp",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 720 },
+        storageState: "admin_auth.json",
+      },
+      testMatch: /.*\/tests\/e2e\/mcp\/.*\.spec\.ts/,
     },
     {
       // runs against the Onyx Lite stack (DISABLE_VECTOR_DB=true, no Vespa/Redis)

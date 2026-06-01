@@ -305,10 +305,23 @@ jobs:
       - "extras=ecr-cache"
       - volume=50gb
     timeout-minutes: 45
+    # Poor-man's sharding: each matrix entry is a Playwright `--project` running on
+    # its own runner. The MCP shard is the only one that needs the extra MCP
+    # server containers, so only it loads the mcp-* compose files. `compose-files`
+    # is consumed via the COMPOSE_FILE env var (colon-separated) at the job level
+    # so every `docker compose` invocation in the job (up + logs) uses it.
+    env:
+      COMPOSE_FILE: ${{ matrix.compose-files }}
     strategy:
       fail-fast: false
       matrix:
-        project: [admin, exclusive]
+        include:
+          - project: admin
+            compose-files: docker-compose.yml:docker-compose.dev.yml
+          - project: exclusive
+            compose-files: docker-compose.yml:docker-compose.dev.yml
+          - project: mcp
+            compose-files: docker-compose.yml:docker-compose.dev.yml:docker-compose.mcp-oauth-test.yml:docker-compose.mcp-api-key-test.yml:docker-compose.mcp-per-user-key-test.yml
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
@@ -375,9 +388,11 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Start Docker containers
+        # Compose file set comes from COMPOSE_FILE (matrix.compose-files); the
+        # mcp shard additionally brings up the mcp-* server containers.
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml up -d --wait --wait-timeout 300
+          docker compose up -d --wait --wait-timeout 300
         id: start_docker
 
       - name: Seed dev license
@@ -409,22 +424,24 @@ jobs:
           retention-days: 30
 
       # --- Visual Regression Diff ---
+      # The mcp shard captures no screenshots, so it skips the visual-regression
+      # steps entirely (no needless AWS/uv setup, no empty row in the PR comment).
       - name: Configure AWS credentials
-        if: always()
+        if: always() && matrix.project != 'mcp'
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Install the latest version of uv
-        if: always()
+        if: always() && matrix.project != 'mcp'
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # ratchet:astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: false
           version: "0.9.9"
 
       - name: Determine baseline revision
-        if: always()
+        if: always() && matrix.project != 'mcp'
         id: baseline-rev
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -448,7 +465,7 @@ jobs:
           fi
 
       - name: Generate screenshot diff report
-        if: always()
+        if: always() && matrix.project != 'mcp'
         env:
           PROJECT: ${{ matrix.project }}
           PLAYWRIGHT_S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
@@ -459,7 +476,7 @@ jobs:
             --rev "${BASELINE_REV}"
 
       - name: Upload visual diff report to S3
-        if: always()
+        if: always() && matrix.project != 'mcp'
         env:
           PROJECT: ${{ matrix.project }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -482,7 +499,7 @@ jobs:
 
       - name: Upload visual diff summary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
+        if: always() && matrix.project != 'mcp'
         with:
           name: screenshot-diff-summary-${{ matrix.project }}
           path: ./web/output/screenshot-diff/${{ matrix.project }}/summary.json
@@ -491,7 +508,7 @@ jobs:
 
       - name: Upload visual diff report artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
+        if: always() && matrix.project != 'mcp'
         with:
           name: screenshot-diff-report-${{ matrix.project }}-${{ github.run_id }}
           path: ./web/output/screenshot-diff/${{ matrix.project }}/
@@ -500,7 +517,7 @@ jobs:
 
       - name: Update S3 baselines
         if: >-
-          success() && (
+          success() && matrix.project != 'mcp' && (
             github.ref == 'refs/heads/main' ||
             startsWith(github.ref, 'refs/heads/release/') ||
             startsWith(github.ref, 'refs/tags/v') ||
