@@ -1372,10 +1372,8 @@ def run_llm_step_pkt_generator(
             tab_index=tab_index if use_existing_tab_index else None,
             sub_turn_index=sub_turn_index,
         )
-        # Close reasoning, flush any held-back citation text, and run empty-answer
-        # recovery BEFORE recording span output below — all while the generation
-        # span is still open — so the trace reflects the answer the user actually
-        # received rather than an intermediate (possibly empty) state.
+        # Run the flush + recovery below while the span is still open, so the
+        # span output recorded afterward reflects the answer the user received.
         yield from _close_reasoning_if_active()
 
         # Flush any remaining content from citation processor
@@ -1385,21 +1383,12 @@ def run_llm_step_pkt_generator(
         if citation_processor:
             yield from _emit_citation_results(citation_processor.process_token(None))
 
-        # ── Empty-answer recovery ───────────────────────────────────────────
-        # The model may emit real text that is then entirely consumed by content/
-        # citation processing, leaving an empty displayed answer. The most common
-        # trigger is an answer dominated by bracketed-numeric text that matches
-        # the citation pattern but has no entry in the citation mapping (e.g. a
-        # long bracketed number like "[123456789012345]", an array, or a list of
-        # ids): DynamicCitationProcessor intentionally strips such unmapped
-        # markers, which can reduce the whole answer to nothing even though the
-        # provider clearly responded. Without this guard the empty answer
-        # propagates to run_llm_loop and raises EmptyLLMResponseError ("the
-        # provider returned no text or tool calls"), which is both misleading and
-        # silent in logs. Surface the raw model output instead. Restricted to
-        # non-REQUIRED tool choice so the deep-research / forced-tool flows (where
-        # pre-tool content is reasoning and an empty answer is expected) keep
-        # relying on fallback tool extraction.
+        # Empty-answer recovery: the model emitted text but content/citation
+        # processing consumed all of it (e.g. an unmapped bracketed-numeric answer
+        # like "[123456789012345]" that the citation processor strips). Surface the
+        # raw output instead of returning an empty answer, which would raise a
+        # misleading EmptyLLMResponseError downstream. Skipped for REQUIRED tool
+        # choice, where empty pre-tool content is expected (fallback extraction).
         if (
             tool_choice != ToolChoiceOptions.REQUIRED
             and not tool_calls
@@ -1416,8 +1405,7 @@ def run_llm_step_pkt_generator(
             )
             if not answer_start:
                 # Mirror _emit_content_chunk: persist pre-answer timing before the
-                # first AgentResponseStart so the metric is populated even when the
-                # only content reached us via this recovery path.
+                # first AgentResponseStart.
                 if state_container and pre_answer_processing_time is not None:
                     state_container.set_pre_answer_processing_time(
                         pre_answer_processing_time
@@ -1438,10 +1426,7 @@ def run_llm_step_pkt_generator(
             if state_container:
                 state_container.set_answer_tokens(accumulated_answer)
 
-        # Record the final assistant output for tracing. Done after the citation
-        # flush and empty-answer recovery so the span reflects the answer the user
-        # received (including a recovered raw answer) rather than an intermediate
-        # empty state.
+        # Record assistant output for tracing (after flush + recovery).
         if tool_calls:
             tool_calls_list: list[ToolCall] = [
                 ToolCall(
