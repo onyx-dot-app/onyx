@@ -2548,11 +2548,11 @@ def get_oauth_router(
                 # Native client: no cookie jar. Mint the bearer token this backend's
                 # strategy issues and hand it to the app via the allowlisted custom-
                 # scheme deep link. app_redirect is re-validated from the signed state.
-                await user_manager.on_after_login(user, request, None)
                 app_redirect = validate_app_redirect(
                     state_data.get("app_redirect", ""), app_redirect_allowlist or []
                 )
                 mobile_token = await strategy.write_token(user)
+                await user_manager.on_after_login(user, request, None)
                 return RedirectResponse(
                     add_url_params(app_redirect, {"token": mobile_token}),
                     status_code=302,

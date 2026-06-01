@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi import Response
 from fastapi.testclient import TestClient
 from fastapi_users.authentication import AuthenticationBackend
+from fastapi_users.authentication import BearerTransport
 from fastapi_users.authentication import CookieTransport
 from fastapi_users.jwt import generate_jwt
 from httpx_oauth.oauth2 import BaseOAuth2
@@ -400,3 +401,70 @@ def test_oidc_callback_non_pkce_rejects_csrf_mismatch() -> None:
     # NOTE: In the non-PKCE path, oauth2_authorize_callback exchanges the code
     # before route-body CSRF validation runs. This is a known ordering trade-off.
     assert oauth_client.access_token_calls
+
+
+def test_mobile_oauth_writes_token_before_after_login_hook() -> None:
+    oauth_client = _StubOAuthClient()
+    order: list[str] = []
+
+    strategy = MagicMock()
+
+    async def write_token(_user: MagicMock) -> str:
+        order.append("write_token")
+        return "mobile-session-token"
+
+    strategy.write_token = AsyncMock(side_effect=write_token)
+
+    async def get_strategy() -> MagicMock:
+        return strategy
+
+    backend = AuthenticationBackend(
+        name="redis-bearer",
+        transport=BearerTransport(tokenUrl="auth/mobile/login"),
+        get_strategy=get_strategy,
+    )
+
+    user = MagicMock()
+    user.is_active = True
+    user_manager = MagicMock()
+    user_manager.oauth_callback = AsyncMock(return_value=user)
+
+    async def on_after_login(_user: MagicMock, _request: Any, _response: Any) -> None:
+        order.append("on_after_login")
+
+    user_manager.on_after_login = AsyncMock(side_effect=on_after_login)
+
+    async def get_user_manager() -> MagicMock:
+        return user_manager
+
+    router = get_oauth_router(
+        oauth_client=cast(BaseOAuth2[Any], oauth_client),
+        backend=backend,
+        get_user_manager=get_user_manager,
+        state_secret="test-secret",
+        redirect_url="http://localhost/auth/mobile/oauth/google/callback",
+        associate_by_email=True,
+        is_verified_by_default=True,
+        mobile_token_redirect=True,
+        app_redirect_allowlist=["onyx://"],
+    )
+    app = FastAPI()
+    app.include_router(router, prefix="/auth/mobile/oauth/google")
+    register_onyx_exception_handlers(app)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    authorize_response = client.get(
+        "/auth/mobile/oauth/google/authorize",
+        params={"redirect_uri": "onyx://callback"},
+    )
+    state = _extract_state_from_authorize_response(authorize_response)
+
+    response = client.get(
+        "/auth/mobile/oauth/google/callback",
+        params={"code": "abc123", "state": state},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "onyx://callback?token=mobile-session-token"
+    assert order == ["write_token", "on_after_login"]
