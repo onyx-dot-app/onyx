@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { appConfig } from "@/lib/config";
+import { getApiBaseUrl } from "@/lib/serverUrl";
 import {
   fetchFileStatuses,
   uploadChatFiles,
@@ -230,7 +230,7 @@ export function useComposerAttachments(): UseComposerAttachmentsResult {
         // Remote images need the bearer header — wait for it or fire a guaranteed 401.
         else if (a.fileId)
           imageSource = authedChatImageSource(
-            appConfig.apiBaseUrl,
+            getApiBaseUrl(),
             a.fileId,
             authHeaders,
           );

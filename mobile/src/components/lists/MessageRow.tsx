@@ -6,7 +6,7 @@ import { AttachmentTray } from "@/components/chat/AttachmentTray";
 import type { AttachmentTileModel } from "@/components/chat/AttachmentTile";
 import { useAuthImageHeaders } from "@/components/chat/useAuthImageHeaders";
 import { authedChatImageSource } from "@/lib/chatImageSource";
-import { appConfig } from "@/lib/config";
+import { getApiBaseUrl } from "@/lib/serverUrl";
 import { isImageFile } from "@/lib/fileTypes";
 import { ChatFileType, type FileDescriptor } from "@/lib/types";
 
@@ -50,7 +50,7 @@ function MessageRowComponent({ role, text, files }: MessageRowProps) {
         // Wait for the bearer header before loading the authed /chat/file URL so
         // we don't fire a guaranteed-401 request on first paint.
         imageSource: isImage
-          ? authedChatImageSource(appConfig.apiBaseUrl, file.id, headers)
+          ? authedChatImageSource(getApiBaseUrl(), file.id, headers)
           : undefined,
       };
     });

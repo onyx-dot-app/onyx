@@ -9,6 +9,10 @@ export default function Index() {
   if (status === "loading") return null;
 
   // typedRoutes is on but .expo/types isn't generated offline, so cast the Href.
+  if (status === "noDomain") {
+    return <Redirect href={"/(auth)/domain" as never} />;
+  }
+
   return (
     <Redirect
       href={(status === "signedIn" ? "/(app)/(chat)" : "/(auth)/login") as never}

@@ -6,7 +6,7 @@ export { FetchError, RedirectError } from "./errors";
 export { errorHandlingFetcher, errorHandlingFetcherVoid } from "./fetcher";
 export { UrlBuilder } from "./url-builder";
 export { handleSSEStream } from "./stream";
-export { SWR_KEYS } from "./endpoints";
+export { API_PATHS } from "./endpoints";
 export {
   uploadChatFiles,
   fetchFileStatuses,

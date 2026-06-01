@@ -1,10 +1,11 @@
-// Centralized SWR cache key registry. Reference these constants instead of inline
-// strings; use the builder functions for per-ID keys.
+// Centralized API path registry. Reference these constants instead of inline strings;
+// use the builder functions for per-ID keys. These double as TanStack Query keys — a
+// URL string (or `[builder(id)]`) IS the query key.
 //
 // Paths are ROOT-RELATIVE (no `/api` prefix). The mobile client talks to the backend
 // directly; the `/api` prefix is a web-only Next.js proxy convention. Any prefix belongs
 // in config.baseUrl (set ONYX_API_BASE_URL for a reverse-proxy deployment).
-export const SWR_KEYS = {
+export const API_PATHS = {
   me: "/me",
 
   health: "/health",

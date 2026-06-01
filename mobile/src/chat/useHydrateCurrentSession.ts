@@ -5,7 +5,7 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { errorHandlingFetcher, SWR_KEYS } from "@/lib/api";
+import { errorHandlingFetcher, API_PATHS } from "@/lib/api";
 import { clientConfig } from "@/query/client";
 import type { BackendChatSession } from "@/lib/types";
 import { useChatSessionStore } from "@/state/chatSessionStore";
@@ -35,7 +35,7 @@ export function useHydrateCurrentSession(): HydrateCurrentSessionResult {
     queryKey: ["getChatSession", currentSessionId],
     queryFn: () =>
       errorHandlingFetcher<BackendChatSession>(
-        SWR_KEYS.getChatSession(currentSessionId as string),
+        API_PATHS.getChatSession(currentSessionId as string),
         clientConfig,
       ),
     enabled: needsLoad,

@@ -1,6 +1,7 @@
 // Single source of truth for auth state. SecureStore is the durable store; this context
 // mirrors it in React state so screens re-render on sign-in/out. The router gates on
-// `status`: "loading" (splash), "signedIn" ((app) routes), "signedOut" (redirect to login).
+// `status`: "loading" (splash), "noDomain" (no server URL yet -> domain screen),
+// "signedIn" ((app) routes), "signedOut" (redirect to login).
 import {
   createContext,
   useCallback,
@@ -12,6 +13,7 @@ import {
 
 import * as Linking from "expo-linking";
 
+import { hydrateServerUrl } from "@/lib/serverUrl";
 import {
   loginWithPassword,
   loginWithGoogle,
@@ -21,7 +23,7 @@ import {
 } from "./authClient";
 import { getToken, setToken, deleteToken } from "./secureStore";
 
-export type AuthStatus = "loading" | "signedIn" | "signedOut";
+export type AuthStatus = "loading" | "noDomain" | "signedIn" | "signedOut";
 
 export interface AuthContextValue {
   token: string | null;
@@ -32,6 +34,9 @@ export interface AuthContextValue {
   // Does NOT sign in (backend may require email verification first).
   register: (email: string, password: string) => Promise<{ needsVerification: boolean }>;
   signOut: () => Promise<void>;
+  // Re-run startup hydration (server URL + token). Called after the domain screen
+  // saves a URL so the gate moves off "noDomain".
+  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -41,30 +46,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [error, setError] = useState<string | null>(null);
 
-  // Cold-start hydration: adopt a token if the app was launched by an onyx://callback
-  // deep link (cold-start OAuth), else fall back to the persisted JWT in SecureStore.
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const initialUrl = await Linking.getInitialURL();
-        const tokenFromUrl = initialUrl ? extractTokenFromUrl(initialUrl) : null;
-        const resolved = tokenFromUrl ?? (await getToken());
-        if (!active) return;
-        if (tokenFromUrl) await setToken(tokenFromUrl);
-        setTokenState(resolved);
-        setStatus(resolved ? "signedIn" : "signedOut");
-      } catch {
-        // SecureStore read failed (rare) — treat as signed out so the user can retry.
-        if (!active) return;
-        setTokenState(null);
-        setStatus("signedOut");
+  // Startup hydration: first resolve the server URL — without one there's nothing to
+  // talk to, so gate to the domain screen. With one, adopt a token from an
+  // onyx://callback deep link (cold-start OAuth) or the persisted JWT in SecureStore.
+  // Exposed as `refresh` so the domain screen can re-run it after saving a URL.
+  const runHydration = useCallback(async () => {
+    try {
+      const server = await hydrateServerUrl();
+      if (!server) {
+        setStatus("noDomain");
+        return;
       }
-    })();
-    return () => {
-      active = false;
-    };
+      const initialUrl = await Linking.getInitialURL();
+      const tokenFromUrl = initialUrl ? extractTokenFromUrl(initialUrl) : null;
+      const resolved = tokenFromUrl ?? (await getToken());
+      if (tokenFromUrl) await setToken(tokenFromUrl);
+      setTokenState(resolved);
+      setStatus(resolved ? "signedIn" : "signedOut");
+    } catch {
+      // SecureStore read failed (rare) — treat as signed out so the user can retry.
+      setTokenState(null);
+      setStatus("signedOut");
+    }
   }, []);
+
+  useEffect(() => {
+    // Inline async wrapper so the setState calls land after awaits (not synchronously
+    // in the effect body) — the standard mount-hydration pattern.
+    void (async () => {
+      await runHydration();
+    })();
+  }, [runHydration]);
 
   // Shared tail of every sign-in path: persist + flip to signedIn + clear error.
   const adoptToken = useCallback(async (jwt: string) => {
@@ -134,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithGoogle,
         register,
         signOut,
+        refresh: runHydration,
       }}
     >
       {children}

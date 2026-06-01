@@ -9,8 +9,13 @@ import { OrDivider } from "@/components/auth/OrDivider";
 import { useGoogleSignIn } from "@/components/auth/useGoogleSignIn";
 import { Text, Button } from "@/components/opal";
 import { GoogleLogo } from "@/components/ui/logos";
+import { API_PATHS } from "@/lib/api/endpoints";
+import type { AuthTypeResponse } from "@/lib/types/auth";
+import { useSimpleQuery } from "@/query/client";
 
-// Mirrors web AuthFlowContainer. Password creds hit the mobile Bearer login route.
+// Mirrors web AuthFlowContainer: discover the server's auth type, then render only the
+// methods it supports. Password creds hit the mobile Bearer login route; Google opens
+// the system browser. OIDC/SAML aren't wired on mobile yet.
 export default function Login() {
   const { signInWithPassword, error: authError } = useAuth();
 
@@ -20,6 +25,17 @@ export default function Login() {
   const [localError, setLocalError] = useState<string | null>(null);
 
   const error = localError ?? authError;
+
+  const {
+    data: authMeta,
+    isLoading: authLoading,
+    isError: authMetaFailed,
+  } = useSimpleQuery<AuthTypeResponse>(API_PATHS.authType);
+
+  const authType = authMeta?.auth_type;
+  const showGoogle = authType === "google_oauth" || authType === "cloud";
+  const showPassword = authType === "basic" || authType === "cloud";
+  const ssoOnly = authType === "oidc" || authType === "saml";
 
   const handleGoogleSignIn = useGoogleSignIn(setLocalError, setBusy);
 
@@ -43,68 +59,91 @@ export default function Login() {
       title="Welcome to Onyx"
       subtitle="Your open source AI platform for work"
       footer={
-        <View className="flex-row items-center justify-center">
-          <Text font="main-ui-body" color="text-03">
-            New to Onyx?{" "}
-          </Text>
-          <Pressable
-            onPress={() => router.push("/(auth)/register" as never)}
-            disabled={busy}
-          >
-            <Text
-              font="main-ui-action"
-              color="text-05"
-              style={{ textDecorationLine: "underline" }}
-            >
-              Create an Account
+        showPassword ? (
+          <View className="flex-row items-center justify-center">
+            <Text font="main-ui-body" color="text-03">
+              New to Onyx?{" "}
             </Text>
-          </Pressable>
-        </View>
+            <Pressable
+              onPress={() => router.push("/(auth)/register" as never)}
+              disabled={busy}
+            >
+              <Text
+                font="main-ui-action"
+                color="text-05"
+                style={{ textDecorationLine: "underline" }}
+              >
+                Create an Account
+              </Text>
+            </Pressable>
+          </View>
+        ) : undefined
       }
     >
-      <Button
-        variant="default"
-        prominence="secondary"
-        onPress={handleGoogleSignIn}
-        disabled={busy}
-        leftIcon={<GoogleLogo size={18} />}
-      >
-        Continue with Google
-      </Button>
+      {authLoading ? (
+        <Text font="main-ui-body" color="text-03">
+          Loading sign-in options…
+        </Text>
+      ) : authMetaFailed || !authType ? (
+        <Text font="secondary-body" color="status-text-error-05">
+          Couldn&apos;t load sign-in options. Check the server address and try again.
+        </Text>
+      ) : ssoOnly ? (
+        <Text font="main-ui-body" color="text-03">
+          This server uses SSO sign-in, which isn&apos;t supported in the mobile app
+          yet.
+        </Text>
+      ) : (
+        <>
+          {showGoogle ? (
+            <Button
+              variant="default"
+              prominence="secondary"
+              onPress={handleGoogleSignIn}
+              disabled={busy}
+              leftIcon={<GoogleLogo size={18} />}
+            >
+              Continue with Google
+            </Button>
+          ) : null}
 
-      <OrDivider />
+          {showGoogle && showPassword ? <OrDivider /> : null}
 
-      <View className="gap-3">
-        <AuthTextField
-          label="Email Address"
-          placeholder="email@yourcompany.com"
-          keyboardType="email-address"
-          textContentType="emailAddress"
-          value={email}
-          onChangeText={setEmail}
-          editable={!busy}
-        />
+          {showPassword ? (
+            <View className="gap-3">
+              <AuthTextField
+                label="Email Address"
+                placeholder="email@yourcompany.com"
+                keyboardType="email-address"
+                textContentType="emailAddress"
+                value={email}
+                onChangeText={setEmail}
+                editable={!busy}
+              />
 
-        <AuthTextField
-          label="Password"
-          placeholder="••••••••"
-          secureTextEntry
-          textContentType="password"
-          value={password}
-          onChangeText={setPassword}
-          editable={!busy}
-        />
+              <AuthTextField
+                label="Password"
+                placeholder="••••••••"
+                secureTextEntry
+                textContentType="password"
+                value={password}
+                onChangeText={setPassword}
+                editable={!busy}
+              />
 
-        <Button onPress={handlePasswordSignIn} disabled={busy}>
-          {busy ? "Signing in…" : "Sign In"}
-        </Button>
+              <Button onPress={handlePasswordSignIn} disabled={busy}>
+                {busy ? "Signing in…" : "Sign In"}
+              </Button>
 
-        {error ? (
-          <Text font="secondary-body" color="status-text-error-05">
-            {error}
-          </Text>
-        ) : null}
-      </View>
+              {error ? (
+                <Text font="secondary-body" color="status-text-error-05">
+                  {error}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+        </>
+      )}
     </AuthCard>
   );
 }

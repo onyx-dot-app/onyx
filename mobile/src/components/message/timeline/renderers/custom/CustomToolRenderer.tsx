@@ -22,7 +22,7 @@ import { SvgDownload, SvgExternalLink } from "@/components/icons";
 import { CodeBlock } from "@/components/markdown/CodeBlock";
 import { IoBlockLabel } from "@/components/message/IoBlockLabel";
 import { chatFileUrl } from "@/lib/api";
-import { appConfig } from "@/lib/config";
+import { getApiBaseUrl } from "@/lib/serverUrl";
 import { useToken } from "@/theme/ThemeProvider";
 import { timelineTokens as T } from "@/theme/timelineTokens";
 import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
@@ -92,7 +92,7 @@ interface FileLinkProps {
 
 function FileLink({ fileId, index, linkColor }: FileLinkProps) {
   const url = useMemo(
-    () => chatFileUrl(appConfig.apiBaseUrl, fileId),
+    () => chatFileUrl(getApiBaseUrl(), fileId),
     [fileId]
   );
 

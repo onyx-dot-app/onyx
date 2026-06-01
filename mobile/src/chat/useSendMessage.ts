@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AppState, type AppStateStatus } from "react-native";
 import { fetch as expoFetch } from "expo/fetch";
 
-import { appConfig } from "@/lib/config";
+import { getApiBaseUrl } from "@/lib/serverUrl";
 import { FetchError, type ClientConfig } from "@/lib/api";
 import {
   streamChatMessage,
@@ -35,7 +35,10 @@ import { isUuid } from "./uuid";
 
 // expo/fetch is MANDATORY: the global RN fetch cannot stream. Callers may override.
 export const defaultStreamConfig: ClientConfig = {
-  baseUrl: appConfig.apiBaseUrl,
+  // Getter: resolves the runtime-chosen server URL per use (see lib/serverUrl).
+  get baseUrl(): string {
+    return getApiBaseUrl();
+  },
   fetchImpl: expoFetch as unknown as typeof fetch,
   getAuthHeaders, // injects `Authorization: Bearer <jwt>` from secure-store
 };

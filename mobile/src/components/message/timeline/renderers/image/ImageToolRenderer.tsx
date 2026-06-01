@@ -17,7 +17,7 @@ import { BlinkingBar } from "@/components/message/BlinkingBar";
 import type { MessageRendererProps } from "@/components/message/interfaces";
 import { useAuthImageHeaders } from "@/components/chat/useAuthImageHeaders";
 import { chatFileUrl } from "@/lib/api";
-import { appConfig } from "@/lib/config";
+import { getApiBaseUrl } from "@/lib/serverUrl";
 import { useToken } from "@/theme/ThemeProvider";
 import { radii } from "@/theme/generated/radii";
 import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
@@ -80,7 +80,7 @@ function GeneratedImageTile({ fileId }: GeneratedImageTileProps) {
   const source = useMemo(
     () =>
       headers
-        ? { uri: chatFileUrl(appConfig.apiBaseUrl, fileId), headers }
+        ? { uri: chatFileUrl(getApiBaseUrl(), fileId), headers }
         : undefined,
     [headers, fileId]
   );

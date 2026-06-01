@@ -3,7 +3,7 @@
 // Uses the global `fetch` directly (NOT query/client) to avoid an import cycle:
 // query/client wires getAuthHeaders -> @/auth. These calls are non-streaming.
 import * as WebBrowser from "expo-web-browser";
-import { appConfig } from "@/lib/config";
+import { getApiBaseUrl } from "@/lib/serverUrl";
 
 // Backend route consts (the backend may adjust; everything imports these names).
 export const MOBILE_LOGIN_PATH = "/auth/mobile/login";
@@ -87,7 +87,7 @@ export async function loginWithPassword(email: string, password: string): Promis
 
   let res: Response;
   try {
-    res = await fetch(`${appConfig.apiBaseUrl}${MOBILE_LOGIN_PATH}`, {
+    res = await fetch(`${getApiBaseUrl()}${MOBILE_LOGIN_PATH}`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),
@@ -144,7 +144,7 @@ export async function register(
 ): Promise<{ needsVerification: boolean }> {
   let res: Response;
   try {
-    res = await fetch(`${appConfig.apiBaseUrl}${REGISTER_PATH}`, {
+    res = await fetch(`${getApiBaseUrl()}${REGISTER_PATH}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -173,9 +173,12 @@ export async function register(
 // System browser (not an in-app webview) reuses the user's Google session and honors
 // IdP policies (MFA, device trust). Throws SignInCancelledError on dismiss/no token.
 export async function loginWithGoogle(): Promise<string> {
+  // redirect=true makes the backend 302 straight to the IdP (vs returning JSON), which
+  // is what openAuthSessionAsync needs; redirect_uri is the app-scheme deep link the
+  // backend 302s back to with ?token=... after login.
   const authUrl =
-    `${appConfig.apiBaseUrl}${GOOGLE_OAUTH_AUTHORIZE_PATH}` +
-    `?redirect_uri=${encodeURIComponent(AUTH_REDIRECT_URL)}`;
+    `${getApiBaseUrl()}${GOOGLE_OAUTH_AUTHORIZE_PATH}` +
+    `?redirect_uri=${encodeURIComponent(AUTH_REDIRECT_URL)}&redirect=true`;
 
   const result = await WebBrowser.openAuthSessionAsync(authUrl, AUTH_REDIRECT_URL);
 
@@ -195,7 +198,7 @@ export async function loginWithGoogle(): Promise<string> {
 export async function logout(jwt: string): Promise<void> {
   if (!jwt) return;
   try {
-    await fetch(`${appConfig.apiBaseUrl}${LOGOUT_PATH}`, {
+    await fetch(`${getApiBaseUrl()}${LOGOUT_PATH}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${jwt}` },
     });

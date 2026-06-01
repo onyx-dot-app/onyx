@@ -9,6 +9,7 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { createMMKV } from "react-native-mmkv";
 import { errorHandlingFetcher, type ClientConfig } from "@/lib/api";
 import { appConfig } from "@/lib/config";
+import { getApiBaseUrl } from "@/lib/serverUrl";
 import { fetch as expoFetch } from "expo/fetch";
 import { getAuthHeaders } from "@/auth";
 import { makeMmkvStateStorage } from "@/state/persist";
@@ -37,7 +38,12 @@ export function useSimpleQuery<T>(
 }
 
 export const clientConfig: ClientConfig = {
-  baseUrl: appConfig.apiBaseUrl,
+  // Getter (not a fixed string): the server URL is chosen at runtime on the domain
+  // screen and may not be hydrated yet at module load. The fetcher reads
+  // config.baseUrl per request, so this resolves to the live value each call.
+  get baseUrl(): string {
+    return getApiBaseUrl();
+  },
   // expo/fetch (not global RN fetch) — only it exposes a real streaming response.body.
   fetchImpl: expoFetch as unknown as typeof fetch,
   getAuthHeaders, // injects the Bearer JWT from expo-secure-store

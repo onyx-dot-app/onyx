@@ -7,7 +7,7 @@ import { resolveAuthHeadersRecord } from "./authHeaders";
 import { errorHandlingFetcher } from "./fetcher";
 import { FetchError } from "./errors";
 import type { ClientConfig } from "./config";
-import { SWR_KEYS } from "./endpoints";
+import { API_PATHS } from "./endpoints";
 import type { CategorizedFiles, ProjectFile } from "@/lib/types";
 
 // A locally-picked file ready to upload (from expo-image/-document-picker).
@@ -36,7 +36,7 @@ export async function uploadChatFiles(
 ): Promise<CategorizedFiles> {
   const headers = await resolveAuthHeadersRecord(config);
 
-  const url = `${config.baseUrl}${SWR_KEYS.chatFileUpload}`;
+  const url = `${config.baseUrl}${API_PATHS.chatFileUpload}`;
   const merged: CategorizedFiles = { user_files: [], rejected_files: [] };
   // A projectId links the upload to that project; omit it for plain chat
   // attachments (web parity: message files have no project).
@@ -84,7 +84,7 @@ export async function fetchFileStatuses(
   config: ClientConfig,
 ): Promise<ProjectFile[]> {
   return errorHandlingFetcher<ProjectFile[]>(
-    SWR_KEYS.chatFileStatuses,
+    API_PATHS.chatFileStatuses,
     config,
     {
       method: "POST",
