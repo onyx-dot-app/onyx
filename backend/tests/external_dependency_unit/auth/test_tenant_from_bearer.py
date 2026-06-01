@@ -8,13 +8,14 @@ from collections.abc import AsyncIterator
 
 import pytest
 import pytest_asyncio
-from fastapi import HTTPException
 from fastapi import Request
 
 from ee.onyx.server.middleware.tenant_tracking import _tenant_from_bearer_session_token
 from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME
 from onyx.auth.constants import API_KEY_HEADER_NAME
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_async_redis_connection
 
 
@@ -117,7 +118,9 @@ async def test_malformed_tenant_id_is_rejected() -> None:
         ex=60,
     )
     try:
-        with pytest.raises(HTTPException):
+        with pytest.raises(OnyxError) as exc_info:
             await _tenant_from_bearer_session_token(_request_with_bearer(token))
+        assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+        assert exc_info.value.detail == "Invalid tenant ID format"
     finally:
         await redis.delete(f"{REDIS_AUTH_KEY_PREFIX}{token}")
