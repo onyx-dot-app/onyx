@@ -117,9 +117,10 @@ ONYX_QUERY_HISTORY_TYPE = QueryHistoryType(
 # fixes it)
 WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 
-# Native-mobile Google OAuth callback origin; defaults to WEB_DOMAIN (set to the backend
-# origin, e.g. http://localhost:8080, when mobile reaches the backend directly).
-MOBILE_OAUTH_REDIRECT_BASE = os.environ.get("MOBILE_OAUTH_REDIRECT_BASE") or WEB_DOMAIN
+# Native-mobile Google OAuth callback origin. Must point at the backend origin,
+# or a path proxied to the backend, e.g. https://example.com/api. Leave unset to
+# disable mobile Google OAuth.
+MOBILE_OAUTH_REDIRECT_BASE = os.environ.get("MOBILE_OAUTH_REDIRECT_BASE")
 
 
 #####

@@ -188,7 +188,7 @@ logger = setup_logger()
 def _should_mount_mobile_google_oauth() -> bool:
     if not should_enable_redis_bearer_auth():
         return False
-    if not OAUTH_ENABLED:
+    if not OAUTH_ENABLED or not MOBILE_OAUTH_REDIRECT_BASE:
         return False
 
     return (
