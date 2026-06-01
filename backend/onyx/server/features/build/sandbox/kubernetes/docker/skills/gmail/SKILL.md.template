@@ -7,8 +7,6 @@ description: Read, search, and send email from the connected user's Gmail via a 
 
 Call the Gmail API as the connected user via the bundled helper.
 
-## Available actions
-
 {{ACTION_AVAILABILITY_SECTION}}
 
 ## Usage

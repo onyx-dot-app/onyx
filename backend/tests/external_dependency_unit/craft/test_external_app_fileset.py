@@ -93,12 +93,12 @@ def test_unauthenticated_provider_delivers_nothing(
     assert not _has_slack_content(files)
 
 
-def test_denied_action_rendered_as_disabled(
+def test_denied_action_listed_as_unavailable(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    """A ``DENY`` policy override surfaces the action under the disabled list,
-    while the rest stay available; the raw template is never shipped."""
+    """A ``DENY`` policy override surfaces the action in the unavailable warning;
+    available actions are not listed, and the raw template is never shipped."""
     user = make_user(db_session)
     skill = _slack_skill(db_session)
     app = make_external_app(
@@ -115,20 +115,21 @@ def test_denied_action_rendered_as_disabled(
 
     assert f"{_SLACK_ID}/SKILL.md.template" not in files
     rendered = files[f"{_SLACK_ID}/SKILL.md"].decode("utf-8")
-    disabled_section = rendered.split("disabled — do not attempt them:", 1)[1]
-    # The denied write lands in the disabled list as a bullet; a default-ALWAYS
-    # read does not (its "### List channels" usage header lives elsewhere).
-    assert "- **Post a message**" in disabled_section
-    assert "- **List channels**" not in disabled_section
+    warning = rendered.split(
+        "These actions are unavailable and should not be attempted:", 1
+    )[1]
+    # The denied write is listed; an available read is not (its "### List
+    # channels" usage header lives elsewhere, never as a "- List channels" item).
+    assert "- Post a message" in warning
+    assert "- List channels" not in warning
 
 
-def test_ask_default_action_rendered_as_available(
+def test_no_disabled_actions_omits_section(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    """With no overrides, the write action falls back to its ``ASK`` default,
-    which counts as available (not disabled) — ASK and ALWAYS aren't
-    distinguished in the skill file."""
+    """With no ``DENY`` overrides nothing is unavailable, so the warning section
+    is omitted entirely — available actions are never enumerated."""
     user = make_user(db_session)
     skill = _slack_skill(db_session)
     app = make_external_app(
@@ -143,10 +144,8 @@ def test_ask_default_action_rendered_as_available(
     files = build_skills_fileset_for_user(user, db_session)
 
     rendered = files[f"{_SLACK_ID}/SKILL.md"].decode("utf-8")
-    # Slack's write action defaults to ASK -> available, not disabled.
-    assert "- **Post a message**" in rendered
-    # No DENY policies -> the disabled section is omitted entirely.
-    assert "disabled" not in rendered
+    # No DENY policies -> the unavailable-actions warning is omitted entirely.
+    assert "unavailable and should not be attempted" not in rendered
 
 
 def test_disabled_provider_delivers_nothing_even_when_authenticated(

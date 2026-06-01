@@ -7,8 +7,6 @@ description: Query and mutate Linear (issues, projects, teams) on the connected 
 
 Call Linear as the connected user via the bundled helper.
 
-## Available actions
-
 {{ACTION_AVAILABILITY_SECTION}}
 
 ## Usage

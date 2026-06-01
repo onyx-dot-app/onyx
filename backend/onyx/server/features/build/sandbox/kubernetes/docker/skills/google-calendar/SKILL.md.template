@@ -7,8 +7,6 @@ description: Read and manage the connected user's Google Calendar via a light Ca
 
 Call the Google Calendar API as the connected user via the bundled helper.
 
-## Available actions
-
 {{ACTION_AVAILABILITY_SECTION}}
 
 ## Usage
