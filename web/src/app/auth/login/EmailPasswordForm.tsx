@@ -221,7 +221,6 @@ export default function EmailPasswordForm({
                         }}
                         placeholder="∗∗∗∗∗∗∗∗∗∗∗∗∗∗"
                         data-testid="password"
-                        useNativeType
                         autoComplete={
                           isSignup ? "new-password" : "current-password"
                         }
