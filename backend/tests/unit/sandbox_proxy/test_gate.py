@@ -126,7 +126,8 @@ def _assert_403(flow: http.HTTPFlow, expected_code: SandboxProxyError) -> None:
     content = flow.response.content
     assert content is not None
     body = json.loads(content)
-    assert body == {"error": expected_code.value}
+    assert body["error"] == expected_code.value
+    assert body["message"]
 
 
 _MATCH = make_request_match(payload={"text": "hi"})
