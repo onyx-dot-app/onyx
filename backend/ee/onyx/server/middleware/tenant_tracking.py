@@ -14,6 +14,8 @@ from ee.onyx.configs.multi_tenant_gating_config import (
     MULTI_TENANT_GATING_ALLOWED_PREFIXES,
 )
 from ee.onyx.server.tenants.product_gating import is_tenant_gated
+from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME
+from onyx.auth.constants import API_KEY_HEADER_NAME
 from onyx.auth.constants import BEARER_PREFIX
 from onyx.auth.utils import extract_tenant_from_auth_header
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
@@ -105,12 +107,14 @@ def _is_path_allowed(path: str) -> bool:
 
 
 async def _tenant_from_bearer_session_token(request: Request) -> str | None:
-    """Resolve tenant_id from an opaque Redis session token in the Authorization
-    header (native mobile clients have no cookie jar). Mirrors the cookie path's
-    Redis lookup. Valid API keys / PATs never reach here — their inline tenant is
+    """Resolve tenant_id from an opaque Redis session token in an auth header
+    (native mobile clients have no cookie jar). Mirrors the cookie path's Redis
+    lookup. Valid API keys / PATs never reach here — their inline tenant is
     resolved earlier by extract_tenant_from_auth_header in the caller.
     """
-    auth_header = request.headers.get("Authorization")
+    auth_header = request.headers.get(
+        API_KEY_HEADER_ALTERNATIVE_NAME
+    ) or request.headers.get(API_KEY_HEADER_NAME)
     if not auth_header or not auth_header.startswith(BEARER_PREFIX):
         return None
 

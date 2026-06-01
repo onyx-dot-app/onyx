@@ -12,6 +12,8 @@ from fastapi import HTTPException
 from fastapi import Request
 
 from ee.onyx.server.middleware.tenant_tracking import _tenant_from_bearer_session_token
+from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME
+from onyx.auth.constants import API_KEY_HEADER_NAME
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.redis.redis_pool import get_async_redis_connection
 
@@ -33,11 +35,11 @@ async def _fresh_async_redis() -> AsyncIterator[None]:
         await conn.aclose()
 
 
-def _request_with_bearer(token: str) -> Request:
+def _request_with_bearer(token: str, header_name: str = API_KEY_HEADER_NAME) -> Request:
     return Request(
         {
             "type": "http",
-            "headers": [(b"authorization", f"Bearer {token}".encode())],
+            "headers": [(header_name.lower().encode(), f"Bearer {token}".encode())],
         }
     )
 
@@ -54,6 +56,25 @@ async def test_resolves_tenant_from_redis_bearer_token() -> None:
     )
     try:
         resolved = await _tenant_from_bearer_session_token(_request_with_bearer(token))
+        assert resolved == tenant
+    finally:
+        await redis.delete(f"{REDIS_AUTH_KEY_PREFIX}{token}")
+
+
+@pytest.mark.asyncio
+async def test_resolves_tenant_from_alternative_auth_header() -> None:
+    token = f"test-{uuid.uuid4().hex}"
+    tenant = "tenant_alt123"
+    redis = await get_async_redis_connection()
+    await redis.set(
+        f"{REDIS_AUTH_KEY_PREFIX}{token}",
+        json.dumps({"sub": str(uuid.uuid4()), "tenant_id": tenant}),
+        ex=60,
+    )
+    try:
+        resolved = await _tenant_from_bearer_session_token(
+            _request_with_bearer(token, API_KEY_HEADER_ALTERNATIVE_NAME)
+        )
         assert resolved == tenant
     finally:
         await redis.delete(f"{REDIS_AUTH_KEY_PREFIX}{token}")
