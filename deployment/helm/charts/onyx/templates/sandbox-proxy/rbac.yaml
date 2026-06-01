@@ -1,4 +1,4 @@
-{{- if eq (include "onyx.sandboxProxyEnabled" .) "true" }}
+{{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" }}
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
 apiVersion: v1
 kind: ServiceAccount

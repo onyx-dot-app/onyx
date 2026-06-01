@@ -186,10 +186,3 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- $engine := default "hpa" .Values.autoscaling.engine -}}
 {{- $engine | lower -}}
 {{- end }}
-
-{{/*
-True when the sandbox proxy stack should render (Craft enabled + proxy enabled).
-*/}}
-{{- define "onyx.sandboxProxyEnabled" -}}
-{{- and (eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true") (.Values.sandboxProxy | default dict).enabled -}}
-{{- end }}

@@ -38,7 +38,7 @@ data:
   {{- if .Values.codeInterpreter.enabled }}
   CODE_INTERPRETER_BASE_URL: "http://{{ .Release.Name }}-code-interpreter:{{ .Values.codeInterpreter.service.port }}"
   {{- end }}
-  {{- if eq (include "onyx.sandboxProxyEnabled" .) "true" }}
+  {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" }}
   SANDBOX_PROXY_HOST: "{{ include "onyx.fullname" . }}-sandbox-proxy.{{ .Release.Namespace }}.svc.cluster.local"
   SANDBOX_PROXY_PORT: "{{ (((.Values.sandboxProxy | default dict).service | default dict).proxyPort | default 8080) }}"
   {{- end }}

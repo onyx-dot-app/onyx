@@ -96,8 +96,7 @@ SANDBOX_POD_MEMORY_LIMIT = os.environ.get("SANDBOX_POD_MEMORY_LIMIT", "10Gi")
 # Sandbox egress proxy
 # ============================================================================
 
-# Empty host disables proxy wiring for tests/dev (the initContainer is skipped
-# and HTTPS_PROXY isn't set on the sandbox).
+# Required when SANDBOX_BACKEND=kubernetes.
 SANDBOX_PROXY_HOST = os.environ.get("SANDBOX_PROXY_HOST", "")
 SANDBOX_PROXY_PORT = int(os.environ.get("SANDBOX_PROXY_PORT", "8080"))
 
