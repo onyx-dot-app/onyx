@@ -51,7 +51,7 @@ export const clientConfig: ClientConfig = {
 
 // Separate MMKV instance from the chat store so query-cache clears can't touch
 // persisted chat trees.
-const queryStorage = createMMKV({ id: "onyx.query-cache" });
+export const queryStorage = createMMKV({ id: "onyx.query-cache" });
 
 export const persister = createSyncStoragePersister({
   storage: makeMmkvStateStorage(queryStorage),

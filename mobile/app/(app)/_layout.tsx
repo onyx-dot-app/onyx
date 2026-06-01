@@ -11,6 +11,9 @@ export default function AppLayout() {
   const { status } = useAuth();
 
   if (status === "loading") return null;
+  if (status === "noDomain") {
+    return <Redirect href={"/(auth)/domain" as never} />;
+  }
   if (status === "signedOut") {
     return <Redirect href={"/(auth)/login" as never} />;
   }

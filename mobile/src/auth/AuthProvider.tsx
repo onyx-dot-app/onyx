@@ -13,7 +13,7 @@ import {
 
 import * as Linking from "expo-linking";
 
-import { hydrateServerUrl } from "@/lib/serverUrl";
+import { clearServerUrl, hydrateServerUrl } from "@/lib/serverUrl";
 import {
   loginWithPassword,
   loginWithGoogle,
@@ -126,14 +126,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     const current = token;
     // Clear local state first so the UI never shows a stale signed-in screen if the
-    // network logout hangs.
+    // network logout hangs. Logout returns to the START of the funnel (domain entry),
+    // so go to "noDomain" — not "signedOut".
     setTokenState(null);
-    setStatus("signedOut");
+    setStatus("noDomain");
     setError(null);
+    // Wipe all per-user client state (chat sessions, query cache, MMKV) so a different
+    // user signing in on this device can't see the previous user's data. Dynamic import
+    // avoids an auth <-> query/client module cycle; best-effort (never block sign-out).
+    try {
+      const { clearUserData } = await import("@/state/clearUserData");
+      clearUserData();
+    } catch {
+      // ignore — local token is already cleared, which is the security-critical part
+    }
     if (current) {
-      await logout(current); // best-effort; swallows its own errors
+      await logout(current); // best-effort; uses the still-set server URL
     }
     await deleteToken();
+    // Forget the server URL LAST (after logout used it) so logout returns to the
+    // domain-entry screen.
+    await clearServerUrl();
   }, [token]);
 
   return (

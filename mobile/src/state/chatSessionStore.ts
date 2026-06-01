@@ -80,6 +80,9 @@ interface ChatSessionStore {
   currentSessionId: string | null;
   sessions: Map<string, ChatSessionData>;
 
+  // Wipe all in-memory session state (used on sign-out so the next user starts clean).
+  reset: () => void;
+
   // Actions - Session Management
   setCurrentSession: (sessionId: string | null) => void;
   createSession: (
@@ -199,6 +202,13 @@ export const useChatSessionStore = create<ChatSessionStore>()(
       // Initial state
       currentSessionId: null,
       sessions: new Map<string, ChatSessionData>(),
+
+      // Reset to initial state (set() merges, so the action methods are preserved).
+      reset: () =>
+        set({
+          currentSessionId: null,
+          sessions: new Map<string, ChatSessionData>(),
+        }),
 
       // Session Management Actions
       setCurrentSession: (sessionId: string | null) => {

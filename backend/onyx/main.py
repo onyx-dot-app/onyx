@@ -44,6 +44,7 @@ from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
 from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
+from onyx.configs.app_configs import MOBILE_OAUTH_REDIRECT_BASE
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import OAUTH_ENABLED
@@ -612,7 +613,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
                 USER_AUTH_SECRET,
                 associate_by_email=True,
                 is_verified_by_default=True,
-                redirect_url=f"{WEB_DOMAIN}/auth/mobile/oauth/google/callback",
+                redirect_url=f"{MOBILE_OAUTH_REDIRECT_BASE}/auth/mobile/oauth/google/callback",
                 mobile_token_redirect=True,
                 app_redirect_allowlist=["onyx://"],
             ),
