@@ -8,10 +8,17 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
 from onyx.db.connector import _INTERNAL_ONLY_SOURCES
 from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
+from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ExternalAppType
+from onyx.db.external_app import get_policies
+from onyx.db.models import ExternalApp
 from onyx.db.models import User
+from onyx.external_apps.providers.registry import action_policy_views
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+ACTION_AVAILABILITY_PLACEHOLDER = "{{ACTION_AVAILABILITY_SECTION}}"
 
 
 def build_available_sources_section(
@@ -72,3 +79,68 @@ def render_company_search_skill(
     template = template_path.read_text()
     sources_section = build_available_sources_section(db_session, user)
     return template.replace("{{AVAILABLE_SOURCES_SECTION}}", sources_section)
+
+
+def build_action_availability_section(
+    db_session: Session,
+    app_type: ExternalAppType,
+    external_app: ExternalApp | None,
+) -> str:
+    """Render the enabled/disabled action lists from the app's effective policy.
+
+    ``DENY`` actions are disabled; everything else is available, with ``ASK``
+    actions annotated as requiring approval. Falls back to the catalog defaults
+    when no app row (and thus no stored override) exists.
+    """
+    stored = get_policies(db_session, external_app.id) if external_app else {}
+    views = action_policy_views(app_type, stored)
+    if not views:
+        return "No actions are configured for this app."
+
+    available: list[str] = []
+    disabled: list[str] = []
+    for view in views:
+        if view.state == EndpointPolicy.DENY:
+            disabled.append(f"- **{view.normalised_name}** — {view.description}")
+            continue
+        suffix = " _(requires approval)_" if view.state == EndpointPolicy.ASK else ""
+        available.append(f"- **{view.normalised_name}** — {view.description}{suffix}")
+
+    lines: list[str] = []
+    lines.append(
+        "These actions are enabled for you"
+        + (
+            "; actions marked _(requires approval)_ prompt the user before running."
+            if any("_(requires approval)_" in line for line in available)
+            else "."
+        )
+    )
+    lines.append("")
+    lines.extend(available or ["- (none)"])
+    lines.append("")
+    lines.append(
+        "The following actions are disabled — do not attempt them:"
+        if disabled
+        else "No actions are disabled."
+    )
+    if disabled:
+        lines.append("")
+        lines.extend(disabled)
+    return "\n".join(lines)
+
+
+def render_external_app_skill(
+    db_session: Session,
+    slug: str,
+    app_type: ExternalAppType,
+    external_app: ExternalApp | None,
+    skills_dir: Path,
+) -> str:
+    """Render an external-app SKILL.md with its per-user action availability.
+
+    ``skills_dir`` is the parent directory of ``{slug}/``.
+    """
+    template_path = skills_dir / slug / "SKILL.md.template"
+    template = template_path.read_text()
+    section = build_action_availability_section(db_session, app_type, external_app)
+    return template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)

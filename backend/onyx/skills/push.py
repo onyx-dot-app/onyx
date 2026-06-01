@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.db.external_app import get_external_app_by_skill_id
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
@@ -24,7 +25,9 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.built_in import COMPANY_SEARCH
+from onyx.skills.built_in import EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
 from onyx.skills.rendering import render_company_search_skill
+from onyx.skills.rendering import render_external_app_skill
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -63,15 +66,29 @@ def _render_template(
     db_session: Session,
     user: User,
 ) -> None:
-    """Overwrite ``{slug}/SKILL.md`` with a per-user rendering. Only
-    company-search has a renderer today; other templated built-ins log
-    a warning and ship the static siblings as-is."""
+    """Overwrite ``{slug}/SKILL.md`` with a per-user rendering. company-search
+    and external-app built-ins have renderers; any other templated built-in logs
+    a warning and ships the static siblings as-is."""
     if definition.built_in_skill_id == COMPANY_SEARCH.built_in_skill_id:
         rendered = render_company_search_skill(
             db_session, user, definition.source_dir.parent
         )
         files[f"{skill.slug}/SKILL.md"] = rendered.encode("utf-8")
         return
+
+    app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
+    if app_type is not None:
+        external_app = get_external_app_by_skill_id(db_session, skill.id)
+        rendered = render_external_app_skill(
+            db_session,
+            skill.slug,
+            app_type,
+            external_app,
+            definition.source_dir.parent,
+        )
+        files[f"{skill.slug}/SKILL.md"] = rendered.encode("utf-8")
+        return
+
     logger.warning(
         "Built-in %s has_template=True but no renderer", definition.built_in_skill_id
     )

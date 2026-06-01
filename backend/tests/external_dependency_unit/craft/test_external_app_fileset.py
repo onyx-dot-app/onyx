@@ -18,9 +18,11 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import Skill
 from onyx.db.models import User
+from onyx.external_apps.providers.slack import SlackAction
 from onyx.skills.built_in import SLACK
 from onyx.skills.push import build_skills_fileset_for_user
 from tests.external_dependency_unit.craft._test_helpers import make_external_app
@@ -89,6 +91,62 @@ def test_unauthenticated_provider_delivers_nothing(
     files = build_skills_fileset_for_user(user, db_session)
 
     assert not _has_slack_content(files)
+
+
+def test_denied_action_rendered_as_disabled(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    """A ``DENY`` policy override surfaces the action under the disabled list,
+    while the rest stay available; the raw template is never shipped."""
+    user = make_user(db_session)
+    skill = _slack_skill(db_session)
+    app = make_external_app(
+        db_session,
+        skill=skill,
+        app_type=ExternalAppType.SLACK,
+        auth_template=_AUTH_TEMPLATE,
+        action_policies={SlackAction.MESSAGES_WRITE.value: EndpointPolicy.DENY},
+    )
+    make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
+    db_session.commit()
+
+    files = build_skills_fileset_for_user(user, db_session)
+
+    assert f"{_SLACK_ID}/SKILL.md.template" not in files
+    rendered = files[f"{_SLACK_ID}/SKILL.md"].decode("utf-8")
+    disabled_section = rendered.split("disabled — do not attempt them:", 1)[1]
+    # The denied write lands in the disabled list as a bullet; a default-ALWAYS
+    # read does not (its "### List channels" usage header lives elsewhere).
+    assert "- **Post a message**" in disabled_section
+    assert "- **List channels**" not in disabled_section
+
+
+def test_ask_default_action_rendered_as_available(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    """With no overrides, the write action falls back to its ``ASK`` default and
+    is rendered as available-with-approval rather than disabled."""
+    user = make_user(db_session)
+    skill = _slack_skill(db_session)
+    app = make_external_app(
+        db_session,
+        skill=skill,
+        app_type=ExternalAppType.SLACK,
+        auth_template=_AUTH_TEMPLATE,
+    )
+    make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
+    db_session.commit()
+
+    files = build_skills_fileset_for_user(user, db_session)
+
+    rendered = files[f"{_SLACK_ID}/SKILL.md"].decode("utf-8")
+    available, _, disabled = rendered.partition("No actions are disabled.")
+    # Slack's write action defaults to ASK -> available, annotated, not disabled.
+    assert "Post a message" in available
+    assert "_(requires approval)_" in available
+    assert "No actions are disabled." in rendered
 
 
 def test_disabled_provider_delivers_nothing_even_when_authenticated(

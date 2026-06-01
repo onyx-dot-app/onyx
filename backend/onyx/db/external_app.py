@@ -132,6 +132,23 @@ def get_external_app_by_id(
     return db_session.scalar(stmt)
 
 
+def get_external_app_by_skill_id(
+    db_session: Session,
+    skill_id: UUID,
+) -> ExternalApp | None:
+    """The external-app gateway backing ``skill_id``, with its policies eager
+    loaded, or None if the skill isn't an external app."""
+    stmt = (
+        select(ExternalApp)
+        .options(
+            selectinload(ExternalApp.skill),
+            selectinload(ExternalApp.policies),
+        )
+        .where(ExternalApp.skill_id == skill_id)
+    )
+    return db_session.scalar(stmt)
+
+
 def get_external_apps(
     db_session: Session,
 ) -> list[ExternalApp]:
