@@ -108,6 +108,12 @@ ONYX_QUERY_HISTORY_TYPE = QueryHistoryType(
     (os.environ.get("ONYX_QUERY_HISTORY_TYPE") or QueryHistoryType.NORMAL.value).lower()
 )
 
+# Visibility-only: hides the Query History page from the admin sidebar; the
+# history APIs + recording stay on (unlike ONYX_QUERY_HISTORY_TYPE=disabled).
+HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL = (
+    os.environ.get("HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL", "").lower() == "true"
+)
+
 #####
 # Web Configs
 #####

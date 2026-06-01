@@ -148,7 +148,10 @@ function buildItems(
   // 7. Usage (admin only)
   if (!isCurator) {
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
-    if (settings?.settings.query_history_type !== "disabled") {
+    if (
+      settings?.settings.query_history_type !== "disabled" &&
+      !settings?.settings.hide_query_history_from_admin_panel
+    ) {
       addGated(SECTIONS.USAGE, ADMIN_ROUTES.QUERY_HISTORY, Tier.BUSINESS);
     }
   }
