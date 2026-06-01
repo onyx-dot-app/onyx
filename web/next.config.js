@@ -1,5 +1,6 @@
 // Always require withSentryConfig
 const { withSentryConfig } = require("@sentry/nextjs");
+const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
 
 const cspHeader = `
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
@@ -24,7 +25,8 @@ const nextConfig = {
   allowedDevOrigins: ["cataract-brunette-icon.ngrok-free.dev"],
   transpilePackages: ["@onyx-ai/opal"],
   typedRoutes: true,
-  reactCompiler: true,
+  // NOTE: `reactCompiler` is set per-phase in module.exports below — enabled for
+  // builds, disabled for the dev server. See the comment there for the rationale.
   // Pin the workspace root to this directory so Turbopack resolves modules
   // against web/bun.lock. Without this, Next.js detects multiple lockfiles
   // (the repo-root bun.lock and web/bun.lock) and infers the wrong root.
@@ -190,5 +192,22 @@ const sentryWebpackPluginOptions = {
   }),
 };
 
-// Export the module with conditional Sentry configuration
-module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);
+// Export the module with conditional Sentry configuration.
+//
+// React Compiler is a production runtime optimization (automatic memoization). It
+// provides no runtime benefit during local development, but it is expensive in the
+// dev server: under Turbopack there is no native SWC path, so Next runs
+// `babel-plugin-react-compiler` through a JS babel-loader that Turbopack executes
+// in a pool of per-CPU-core worker subprocesses. On a many-core machine this roughly
+// doubles dev-server peak memory and adds ~35-50% to route compile times.
+//
+// So enable it for builds (`next build`) and disable it for the dev server
+// (`next dev`). Set ENABLE_REACT_COMPILER=1 to force it on locally when you want to
+// validate React Compiler behavior in dev.
+module.exports = (phase) => {
+  const isDevServer = phase === PHASE_DEVELOPMENT_SERVER;
+  nextConfig.reactCompiler =
+    !isDevServer || process.env.ENABLE_REACT_COMPILER === "1";
+
+  return withSentryConfig(nextConfig, sentryWebpackPluginOptions);
+};
