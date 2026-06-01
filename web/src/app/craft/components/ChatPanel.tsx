@@ -472,8 +472,7 @@ export default function BuildChatPanel({
           ref={scrollContainerRef}
           onScroll={handleScroll}
           // min-h-0 lets this flex child scroll internally instead of growing
-          // the column past the page bounds.
-          className="flex-1 min-h-0 overflow-auto"
+          className="flex flex-col flex-1 min-h-0 overflow-auto"
         >
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
@@ -482,6 +481,7 @@ export default function BuildChatPanel({
               animate={{ opacity: 1, y: 0 }}
               exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
               transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+              className="flex flex-col flex-1"
             >
               {isViewingSubagent && viewedSubagentSessionId ? (
                 <SubagentView subagentSessionId={viewedSubagentSessionId} />
