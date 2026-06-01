@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/server.tsx (stroke-based, viewBox 16).
+// Mirrors web server icon.
 // Full-viewBox clipPath in the web source is a no-op and is omitted.
 /** Server / stacked racks — used for the Knowledge Graph action. */
 function SvgServer(props: IconProps) {

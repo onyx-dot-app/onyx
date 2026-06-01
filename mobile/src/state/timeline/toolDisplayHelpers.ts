@@ -1,11 +1,10 @@
 // toolDisplayHelpers.ts — tool-step presentation helpers (names, icon NAMES,
 // completion/error detection, group-key parsing).
 //
-// Ported from web:
-//   web/src/app/app/message/messageComponents/toolDisplayHelpers.tsx
-// AMENDMENT (M5): getToolIcon returns an icon NAME (a string union), not a React
-// component, so this module stays pure/leaf (no import edge into components/).
-// A `components/message/timeline/toolIcon.tsx` helper maps the name → Svg*.
+// Mirrors web toolDisplayHelpers.tsx.
+// getToolIcon returns an icon NAME (a string union), not a React component, so
+// this module stays pure/leaf (no import edge into components/). A
+// `components/message/timeline/toolIcon.tsx` helper maps the name → Svg*.
 
 import { Packet, PacketType, SearchToolStart } from "@/lib/types";
 

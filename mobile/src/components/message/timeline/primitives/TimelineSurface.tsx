@@ -1,6 +1,5 @@
-// TimelineSurface.tsx — background + rounded corners for a step. Ported from web
-// TimelineSurface (tint -> background-tint-00, error -> status-error-00). Hover
-// dropped. Returns null with no children.
+// TimelineSurface.tsx — background + rounded corners for a step. Native mirror of web TimelineSurface.
+// Hover dropped; returns null with no children.
 
 import { Children, type ReactNode } from "react";
 import { View, type ViewStyle } from "react-native";

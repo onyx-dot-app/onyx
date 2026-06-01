@@ -1,12 +1,11 @@
-// SearchChipList.tsx — a flex-wrap row of source/query chips for the search
-// renderers. Ported from web
-//   web/src/app/app/message/messageComponents/timeline/renderers/search/SearchChipList.tsx
+// SearchChipList.tsx — a wrapping row of source/query chips for the search
+// renderers. Native mirror of web SearchChipList.
 //
 // Web renders each chip via the Opal `SourceTag` (favicon/connector glyph +
 // truncated label, hover details card + tooltip). Mobile has no SourceTag, so a
 // chip is a plain Pressable pill: a SourceIcon (or SvgSearch for query chips) +
-// a truncated `secondary-body` title on a `bg-background-tint-02 rounded-08`
-// background. Result chips open `url` via Linking; query chips are not pressable
+// a truncated title on a tinted pill background. Result chips open `url` via
+// Linking; query chips are not pressable
 // to a doc. The hover details card and tooltip are dropped (no hover on mobile).
 //
 // Expansion: visibleCount starts at `initialCount` and grows by `expansionCount`

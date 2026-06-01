@@ -22,17 +22,10 @@ import { ModelSelectorTrigger } from "./ModelSelectorTrigger";
 import { AttachMenu } from "./AttachMenu";
 import { AttachmentTray } from "./AttachmentTray";
 
-// Chat composer — ports web `AppInputBar.tsx` (container + attachment tray + text
-// area + bottom toolbar). The attach [+] icon opens the AttachMenu popover
-// (Photos / Upload File / Recent Files); picked files upload optimistically and
-// show as tiles in the tray, then ride the send as `file_descriptors`.
-//
-// Tokens/sizes copied from web:
-//   container  bg-background-neutral-00, rounded-16, shadow-01 (no border)
-//   tray       flex-wrap gap-1 p-1 (FileCard tiles)
-//   text area  px-3 py-2, main-ui-body, text-05, placeholder text-03, grow 44→200
-//   toolbar    h-11, p-1, justify-between; left = attach, right = send/stop
-//   send/stop  default-primary Button (theme-primary-05), arrow-up ↔ stop square
+// Chat composer — native mirror of web AppInputBar. The attach [+] icon opens
+// the AttachMenu popover (Photos / Upload File / Recent Files); picked files
+// upload optimistically and show as tiles in the tray, then ride the send as
+// `file_descriptors`.
 
 // Text area grows between these (web `useContentEditable` defaults).
 const MIN_INPUT_HEIGHT = 24;

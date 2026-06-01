@@ -2,9 +2,9 @@ import Svg, { Path, G, Defs, ClipPath, Rect } from "react-native-svg";
 
 import type { IconProps } from "@/components/icons/Icon";
 
-// Provider/model brand logos, ported 1:1 from the web Opal logo set
-// (web/lib/opal/src/logos/*). Monochrome marks (OpenAI) honor `color`; brand-colored
-// marks (Claude, Google/Gemini) use their fixed brand colors and ignore `color`.
+// Provider/model brand logos. Mirrors the web Opal logo set. Monochrome marks
+// (OpenAI) honor `color`; brand-colored marks (Claude, Google/Gemini) use their
+// fixed brand colors and ignore `color`.
 
 // web: lib/opal/src/logos/onyx-logo.tsx — the Onyx brand mark (four diamonds).
 // Monochrome: honors `color` (the web binds it to --theme-primary-05). Default

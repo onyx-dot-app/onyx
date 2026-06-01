@@ -1,9 +1,9 @@
 /* eslint-disable react-hooks/refs, react-hooks/purity -- streamingStartRef is a
    render-stable timer origin captured once; reading it during render is
    intentional and matches the web AgentTimeline. */
-// AgentTimeline.tsx — the collapsible agent timeline shell. Ported from web
-// AgentTimeline: derives UI state via hooks, selects the header by state, and
-// renders the collapsed-streaming body or the expanded step list. Memoized.
+// AgentTimeline.tsx — the collapsible agent timeline shell: derives UI state via
+// hooks, selects the header by state, and renders the collapsed-streaming body
+// or the expanded step list. Memoized. Native mirror of web AgentTimeline.
 
 import { memo, useMemo, useRef, type ReactNode } from "react";
 import { View } from "react-native";

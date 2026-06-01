@@ -1,8 +1,6 @@
-// CitationPill.tsx — inline citation chip. Ports web SourceTag variant
-// "inlineCitation": rounded-04, p-0.5, gap-0.5, figure-small-value text,
-// background-tint-02, optional +N count, NO leading icon. Press inverts to
-// background-tint-inverted-03 + text-inverted-05 (mobile press state ~ web open
-// state) and opens the citation detail sheet.
+// CitationPill.tsx — inline citation chip. Mirrors web SourceTag variant
+// "inlineCitation": optional +N count, no leading icon. Press opens the citation
+// detail sheet (mobile press state mirrors web's open state).
 
 import { Pressable, View } from "react-native";
 

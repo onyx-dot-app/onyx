@@ -19,12 +19,12 @@
 // it back here would be circular. These auth calls are non-streaming, so the
 // global fetch is sufficient.
 //
-// The exact backend paths are DOCUMENTED PLACEHOLDERS that doc 10 implements — see
-// the named path consts below and the BACKEND CONTRACT in the task notes.
+// The exact backend paths are placeholders the backend may adjust — see the named
+// path consts below.
 import * as WebBrowser from "expo-web-browser";
 import { appConfig } from "@/lib/config";
 
-// ── Backend route consts (doc 10 may adjust; everything imports these names) ─────
+// ── Backend route consts (the backend may adjust; everything imports these names) ─────
 
 /** fastapi-users BearerTransport login. Form-urlencoded `username`+`password` -> JWT. */
 export const MOBILE_LOGIN_PATH = "/auth/mobile/login";

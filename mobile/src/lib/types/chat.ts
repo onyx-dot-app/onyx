@@ -320,10 +320,6 @@ export interface PromptData {
   content: string;
 }
 
-/**
- * // Start of Selection
- */
-
 export interface BaseQuestionIdentifier {
   level: number;
   level_question_num: number;

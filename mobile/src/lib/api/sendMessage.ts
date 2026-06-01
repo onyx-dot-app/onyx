@@ -4,8 +4,8 @@
 // GLOBAL `fetch` resolves its Response only after the whole body arrives and exposes
 // no readable `response.body` — so it cannot stream. `expo/fetch` returns a real
 // streaming Response whose `body` is a web ReadableStream on both iOS and Android.
-// The integrator wires `config.fetchImpl = expoFetch` (see integration notes); this
-// module stays transport-neutral and just consumes `config.fetchImpl`.
+// The integrator wires `config.fetchImpl = expoFetch`; this module stays
+// transport-neutral and just consumes `config.fetchImpl`.
 //
 // The body wire-format mirrors the backend `SendMessageRequest` pydantic model
 // (backend/onyx/server/query_and_chat/models.py, ~line 99). The response is NDJSON
@@ -15,7 +15,7 @@
 //
 // Cancellation is NEVER `for await ... break` — that abandons the reader and leaks the
 // socket. The caller aborts an `AbortController`; the signal flows into `handleSSEStream`,
-// which calls `reader.cancel()`. See 07-networking-streaming-auth.md.
+// which calls `reader.cancel()`.
 
 import { resolveAuthHeaders } from "./authHeaders";
 import type { ClientConfig } from "./config";

@@ -24,9 +24,6 @@ import { chatDisplayName } from "@/lib/chatLabels";
 // Drawer sidebar. Surface matches the web chat sidebar exactly (bg-background-tint-02,
 // generated from the web Opal palette).
 //
-// Phase 03 = header (logo + workspace name + collapse).
-// Phase 04 = live "Recents" list (chat sessions, tap to open).
-//
 // Horizontal rhythm mirrors the web: the body has 8px side padding (web `px-2`),
 // and the section header + rows add their own 8px, so text sits at 16px and the row
 // highlight is inset 8px from the drawer edge.

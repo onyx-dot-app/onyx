@@ -3,7 +3,7 @@
    dispatch (each renderer keeps its own hook scope), not a render-time factory. */
 // TimelineRendererComponent.tsx — bridges a step's packets to its renderer,
 // owns per-step expand state, computes RenderType, and enhances results with
-// timeline context. Ported from web TimelineRendererComponent.
+// timeline context. Native mirror of web TimelineRendererComponent.
 
 import { memo, useCallback, useState, type ReactNode } from "react";
 

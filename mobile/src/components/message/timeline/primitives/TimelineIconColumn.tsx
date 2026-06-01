@@ -1,6 +1,7 @@
 // TimelineIconColumn.tsx — the left rail: vertical connector line + step icon.
+// Native mirror of web TimelineIconColumn.
 //
-// Ported from web TimelineIconColumn.tsx. Web draws the 1px line with `w-px`
+// Web draws the 1px line with `w-px`
 // divs + `bg-border-*` and CSS-var heights; here we use Views with numeric
 // tokens and a resolved border color. Hover states are dropped (no pointer on
 // mobile). THREE paths: spacer (width only), default (top-connector + icon +

@@ -90,10 +90,9 @@ function extractLanguage(node: ASTNode): string | undefined {
  *   - fenced & indented code blocks -> the `<CodeBlock>` component (copy button)
  *
  * Mirrors the FEATURE set of the web `MinimalMarkdown` (GFM, code blocks with
- * copy). FOLLOW-UP (out of scope here): syntax highlighting (web uses
- * rehype-highlight) and KaTeX math (web uses remark-math + rehype-katex) are
- * not yet implemented — code renders as flat monospace and `$...$` math renders
- * as plain text.
+ * copy). Known limitations: syntax highlighting (web uses rehype-highlight) and
+ * KaTeX math (web uses remark-math + rehype-katex) are not yet implemented —
+ * code renders as flat monospace and `$...$` math renders as plain text.
  */
 function Markdown({
   children,

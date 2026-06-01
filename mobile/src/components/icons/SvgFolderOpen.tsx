@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported 1:1 from web/lib/opal/src/icons/folder-open.tsx (FILL-based, viewBox 32x26).
+// Mirrors web folder-open icon.
 // Web fills the traced outline at 0.8 opacity with a hairline stroke — replicated here.
 /** Open folder — Projects (expanded / project header glyph). */
 function SvgFolderOpen(props: IconProps) {

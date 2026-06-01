@@ -10,7 +10,7 @@
 //      whose signal cancels the reader inside handleSSEStream.
 //   4. Each Packet is reduced into the assistant node via applyPacket. Writes are
 //      BATCHED per animation frame (~rAF / ~50ms fallback) so FlashList re-renders at a
-//      sane cadence instead of once per token (per doc 06).
+//      sane cadence instead of once per token.
 //   5. On completion chatState="input"; on AbortError it's a clean user stop; a
 //      FetchError 401/403 is surfaced for the integrator's auth handler; anything else
 //      becomes an error state on the session.
@@ -18,7 +18,7 @@
 // AppState lifecycle: while streaming, backgrounding the app aborts the stream and sets
 // a per-session re-fetch flag (sessionId added to a module-level set, readable via
 // `consumePendingRefetch`). We do NOT try to resume the socket — re-fetching the session
-// on foreground is doc-06/UI's job. We just abort cleanly and leave the flag.
+// on foreground is the UI's job. We just abort cleanly and leave the flag.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AppState, type AppStateStatus } from "react-native";

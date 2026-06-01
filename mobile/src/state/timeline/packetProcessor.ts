@@ -1,7 +1,6 @@
 // packetProcessor.ts — incremental packet → grouped-step reducer for the timeline.
 //
-// Ported from web:
-//   web/src/app/app/message/messageComponents/timeline/hooks/packetProcessor.ts
+// Mirrors web packetProcessor.ts.
 // Pure, imperative, ref-friendly. Processes ONLY new packets via a
 // `nextPacketIndex` cursor (so an idle render does no work), groups packets by
 // `${turn_index}-${tab_index}`, splits groups into tool-steps vs display

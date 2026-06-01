@@ -1,6 +1,5 @@
 // InternalSearchToolRenderer.tsx — the internal document search timeline step.
-// Ported from web
-//   web/src/app/app/message/messageComponents/timeline/renderers/search/InternalSearchToolRenderer.tsx
+// Native mirror of web InternalSearchToolRenderer.
 //
 // Icon "search-menu", status "Searching internal documents".
 //

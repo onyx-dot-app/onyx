@@ -1,8 +1,7 @@
 import { Tag, ValidSources } from "./domain";
 import { Agent } from "./agents";
 
-// Inlined from web's AdminDateRangeSelector (the web file lives under
-// src/components/, which mobile does not port). Definitions copied verbatim.
+// Mirrors web AdminDateRangeSelector (inlined; mobile does not port src/components).
 export type DateRange =
   | {
       from: Date;

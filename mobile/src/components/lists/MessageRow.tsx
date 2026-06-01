@@ -19,7 +19,7 @@ export type MessageRole = "user" | "assistant";
 export interface MessageRowProps {
   /** Who authored the message — drives alignment and surface styling. */
   role: MessageRole;
-  /** The message body (placeholder; the real streaming list is doc 06). */
+  /** The message body. */
   text: string;
   /** Attachments sent with the message (rendered as a read-only tile tray). */
   files?: FileDescriptor[];

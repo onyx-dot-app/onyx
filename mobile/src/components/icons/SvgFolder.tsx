@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported 1:1 from web/lib/opal/src/icons/folder.tsx (stroke-based, viewBox 16x16).
+// Mirrors web folder icon.
 /** Closed folder — Projects (collapsed). */
 function SvgFolder(props: IconProps) {
   return (

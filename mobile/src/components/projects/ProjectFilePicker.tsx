@@ -16,10 +16,9 @@ import {
 } from "@/query/projects";
 import { UserFileStatus, type ProjectFile } from "@/lib/types";
 
-// Native mirror of web's `FilePickerPopover` as used inside ProjectContextPanel:
-// an anchored opal Popover with Photos / Upload File and the recent-files list,
-// where tapping a recent file LINKS it to (or UNLINKS it from) this project, and
-// fresh picks upload with the project_id attached.
+// Native mirror of web's `FilePickerPopover` inside ProjectContextPanel: a Popover
+// with Photos / Upload File and a recent-files list. Tapping a recent file LINKS
+// it to (or UNLINKS it from) this project; fresh picks upload with project_id.
 
 interface ProjectFilePickerProps {
   projectId: number;

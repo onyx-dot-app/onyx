@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- the 500ms minimum-display
    timing intentionally records the reasoning start time via setState in an
    effect; ported verbatim from web ReasoningRenderer. */
-// ReasoningRenderer.tsx — the "thinking" block. Ported from web ReasoningRenderer.
+// ReasoningRenderer.tsx — the "thinking" block. Native mirror of web ReasoningRenderer.
 // Reduces ReasoningPackets to {hasStart,hasEnd,content}; extracts an optional
 // markdown-heading title as the status label; enforces a 500ms minimum
 // "Thinking" display; renders content via ExpandableTextDisplay + Markdown.

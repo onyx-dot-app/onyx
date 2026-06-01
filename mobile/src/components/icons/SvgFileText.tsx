@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/file-text.tsx (stroke-based, viewBox 16x20).
+// Mirrors web file-text icon.
 /** Document / file with text lines. */
 function SvgFileText(props: IconProps) {
   return (

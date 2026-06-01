@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/external-link.tsx (stroke-based, viewBox 24).
+// Mirrors web external-link icon.
 /** External link / open in new window. */
 function SvgExternalLink(props: IconProps) {
   return (

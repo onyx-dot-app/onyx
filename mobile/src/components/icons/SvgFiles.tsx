@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported 1:1 from web/lib/opal/src/icons/files.tsx (stroke-based, viewBox 16x16).
+// Mirrors web files icon.
 /** Stacked files — "View files" / file count. */
 function SvgFiles(props: IconProps) {
   return (

@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/x.tsx (stroke-based, viewBox 28).
+// Mirrors web x icon.
 /** Close / dismiss "X". */
 function SvgX(props: IconProps) {
   return (

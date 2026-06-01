@@ -1,5 +1,4 @@
-// WebSearchToolRenderer.tsx — the web search timeline step. Ported from web
-//   web/src/app/app/message/messageComponents/timeline/renderers/search/WebSearchToolRenderer.tsx
+// WebSearchToolRenderer.tsx — the web search timeline step. Native mirror of web WebSearchToolRenderer.
 //
 // Icon "globe", status "Searching the web". Shows ONLY queries — results are
 // handled by the fetch tool. Not collapsible (supportsCollapsible false).

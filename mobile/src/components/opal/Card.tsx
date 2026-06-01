@@ -10,9 +10,9 @@ interface CardProps extends Omit<ViewProps, "children"> {
 }
 
 /**
- * Themed container surface. Uses STATIC doc-03 token classes (background,
- * border, radius) so NativeWind compiles them; a `className` passthrough is
- * merged via `cn`.
+ * Themed container surface. Uses STATIC token classes (background, border,
+ * radius) so NativeWind compiles them; a `className` passthrough is merged via
+ * `cn`.
  */
 function Card({ className, children, ...rest }: CardProps) {
   return (

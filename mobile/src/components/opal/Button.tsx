@@ -74,8 +74,8 @@ const containerVariants = cva(
   },
 );
 
-// Label color token per (variant × prominence). Resolved through the doc-03
-// palette by `Text` (via style), NOT a dynamic className.
+// Label color token per (variant × prominence). Resolved by `Text` (via
+// style), NOT a dynamic className.
 const LABEL_COLOR: Record<ButtonVariant, Record<ButtonProminence, TextColor>> = {
   default: {
     primary: "text-inverted-05",
@@ -127,7 +127,7 @@ interface ButtonProps extends Omit<PressableProps, "children" | "disabled" | "st
  * Native mirror of the Opal `Button`. Built on RN `Pressable`. Variant styling
  * is a fixed small set, so it uses CVA with STATIC NativeWind class strings
  * (those the compiler can scan). The label uses the Opal `Text` component for
- * consistent typography; its color is a doc-03 token applied via `style`.
+ * consistent typography; its color is a token applied via `style`.
  */
 function Button({
   variant = "default",

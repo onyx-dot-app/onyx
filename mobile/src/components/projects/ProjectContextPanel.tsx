@@ -15,11 +15,8 @@ import type { Project, ProjectFile } from "@/lib/types";
 import { ProjectFileRow } from "./ProjectFileRow";
 import { ProjectFilePicker } from "./ProjectFilePicker";
 
-// Native mirror of web `ProjectContextPanel`. Folder glyph + editable name, a
-// divider, an Instructions section (current text + "Set Instructions"), and a
-// Files section ("Add Files" + the linked-file list, or an empty dashed prompt).
-// Colors/typography use the same Opal tokens as web (text-04 headers, text-02
-// body, border-01 dashes).
+// Native mirror of web `ProjectContextPanel`: folder glyph + editable name, an
+// Instructions section, and a Files section (linked files or an empty prompt).
 
 interface ProjectContextPanelProps {
   projectId: number;
@@ -47,8 +44,8 @@ export function ProjectContextPanel({
   const [isEditingName, setIsEditingName] = useState(false);
   const [draftName, setDraftName] = useState("");
 
-  // Seed the draft from the current name the moment editing begins (no effect —
-  // avoids the set-state-in-effect cascade lint and is simpler).
+  // Seed the draft from the current name when editing begins; doing it here (not
+  // in an effect) avoids the set-state-in-effect cascade lint.
   function startEditing() {
     setDraftName(project?.name ?? "");
     setIsEditingName(true);
@@ -75,7 +72,7 @@ export function ProjectContextPanel({
 
   return (
     <View className="gap-6 px-4 pb-2 pt-4">
-      {/* Folder glyph + editable project name (web: SvgFolderOpen + heading-h2) */}
+      {/* Folder glyph + editable project name */}
       <View className="gap-1">
         <SvgFolderOpen size={32} color={folderColor} />
         {isEditingName ? (
@@ -108,7 +105,6 @@ export function ProjectContextPanel({
 
       <View className="h-[1px] bg-border-01" />
 
-      {/* Instructions */}
       <View className="flex-row items-start justify-between gap-2">
         <View className="min-w-0 flex-1 gap-0.5">
           <Text font="heading-h3" color="text-04">
@@ -135,7 +131,6 @@ export function ProjectContextPanel({
         </Button>
       </View>
 
-      {/* Files */}
       <View className="gap-2">
         <View className="flex-row items-start justify-between gap-2">
           <View className="min-w-0 flex-1 gap-0.5">

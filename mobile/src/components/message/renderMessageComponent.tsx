@@ -1,10 +1,9 @@
 /* eslint-disable react-hooks/static-components -- findRenderer returns a STABLE
    module-level renderer fn; rendering it as <Renderer/> is intentional dynamic
    dispatch (each renderer keeps its own hook scope), not a render-time factory. */
-// renderMessageComponent.tsx — renderer dispatch. Ported from web
-// renderMessageComponent: ordered predicate routing (chat first; deep-research
-// before generic tools) + RendererComponent (final-answer path) with mixed
-// chat+image handling.
+// renderMessageComponent.tsx — renderer dispatch. Mirrors web renderMessageComponent:
+// ordered predicate routing (chat first; deep-research before generic tools) +
+// RendererComponent (final-answer path) with mixed chat+image handling.
 
 import { memo, type ReactNode } from "react";
 

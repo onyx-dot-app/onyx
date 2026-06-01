@@ -18,7 +18,7 @@ import type {
   SelectedModel,
 } from "@/lib/types";
 
-// Popover content for the model selector — ports web `ModelListContent.tsx`:
+// Popover content for the model selector — native mirror of web ModelListContent:
 // search box, provider groups (flat when single provider), model rows with a
 // capabilities sub-label and a selected check (action-link-05), + loading/empty.
 

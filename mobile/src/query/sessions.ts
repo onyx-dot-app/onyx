@@ -5,7 +5,7 @@
 //   [queryKeys.chatSessions] on success. Rename + delete additionally do optimistic
 //   updates (snapshot in onMutate, rollback in onError).
 //
-// Endpoint URLs + payloads are ported faithfully from web/src/app/app/services/lib.tsx.
+// Mirrors web lib.tsx (endpoint URLs + payloads).
 import {
   useQuery,
   useMutation,
@@ -17,8 +17,8 @@ import { queryKeys } from "./keys";
 import { clientConfig } from "./client";
 
 // The backend wraps the list in { sessions: [...], has_more }.
-// (We use ChatSessionSummary per design doc 06; web's paginated hook types these as
-// ChatSession, but the fields the mobile list touches — id, name — are shared.)
+// (We type these as ChatSessionSummary; web's paginated hook uses ChatSession, but the
+// fields the mobile list touches — id, name — are shared.)
 interface ChatSessionsResponse {
   sessions: ChatSessionSummary[];
   has_more?: boolean;

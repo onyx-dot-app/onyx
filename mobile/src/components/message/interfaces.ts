@@ -1,10 +1,8 @@
 // interfaces.ts — the renderer contract for the agent-message timeline.
 //
-// Ported from web:
-//   web/src/app/app/message/messageComponents/interfaces.ts
-// AMENDMENT: RendererResult.icon is a TimelineIconName (string), not a React
-// component, so the pure state/timeline layer stays leaf. The components layer
-// maps the name to an Svg* via `timeline/toolIcon`.
+// Mirrors web interfaces.ts. Deviation: RendererResult.icon is a TimelineIconName
+// (string), not a React component, so the pure state/timeline layer stays leaf. The
+// components layer maps the name to an Svg* via `timeline/toolIcon`.
 
 import type { ReactNode } from "react";
 import type {

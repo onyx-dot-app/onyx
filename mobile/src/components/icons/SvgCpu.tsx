@@ -2,9 +2,8 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/cpu.tsx (stroke-based, viewBox 16).
-// The web source wraps the path in a full-viewBox clipPath that does no real
-// clipping, so only the <Path> is ported (matches SvgGlobe's approach).
+// Mirrors web cpu icon. Web's full-viewBox clipPath is a no-op, so only the
+// <Path> is kept (matches SvgGlobe).
 /** CPU / processor — default action glyph (also used for the coding agent). */
 function SvgCpu(props: IconProps) {
   return (

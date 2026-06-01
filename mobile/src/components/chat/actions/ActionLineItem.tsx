@@ -25,7 +25,7 @@ import type { ToolSnapshot } from "@/lib/types/tools";
 //   - unavailable  → muted label/icon (`text-03`), no `active:` affordance,
 //   - default      → label `text-04`.
 //
-// The per-tool glyph comes from `getIconForAction(tool)` — a 1:1 port of web's
+// The per-tool glyph comes from `getIconForAction(tool)` — mirrors web's
 // actionUtils mapping (Search→search, WebSearch→globe, ImageGen→image,
 // KnowledgeGraph→server, OpenURL→external-link, CodeInterpreter→terminal,
 // CodingAgent/default→cpu). Dynamic label/icon colours go through `Text color` /

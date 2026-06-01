@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/log-out.tsx (stroke-based, viewBox 24).
+// Mirrors web log-out icon.
 /** Log out / sign out (door + arrow). */
 function SvgLogOut(props: IconProps) {
   return (

@@ -1,7 +1,6 @@
 import { PlaceholderScreen } from "@/components/PlaceholderScreen";
 
-// Placeholder. Wires to the theme_preference (light/dark/system) control from
-// doc 03 later.
+// Placeholder. Will wire to the theme_preference (light/dark/system) control.
 export default function Appearance() {
   return <PlaceholderScreen label="Appearance" />;
 }

@@ -2,11 +2,10 @@ import { resolveAuthHeaders } from "./authHeaders";
 import { FetchError, RedirectError } from "./errors";
 import type { ClientConfig } from "./config";
 
-// Transport-neutral port of web's errorHandlingFetcher (web/src/lib/fetcher.ts).
-// Same error semantics (403 -> RedirectError, other !ok -> FetchError, else res.json()),
-// but instead of the global `fetch` it uses config.fetchImpl + config.getAuthHeaders +
-// config.baseUrl — so the identical code runs on web (browser fetch + cookies) and
-// mobile (expo/fetch + bearer PAT).
+// Mirrors web errorHandlingFetcher (same error semantics).
+// Transport-neutral: instead of the global `fetch` it uses config.fetchImpl +
+// config.getAuthHeaders + config.baseUrl, so the identical code runs on web
+// (browser fetch + cookies) and mobile (expo/fetch + bearer PAT).
 
 const DEFAULT_AUTH_ERROR_MSG =
   "An error occurred while fetching the data, related to the user's authentication status.";

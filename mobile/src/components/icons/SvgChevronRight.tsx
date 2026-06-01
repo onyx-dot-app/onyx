@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/chevron-right.tsx (stroke-based, viewBox 16).
+// Mirrors web chevron-right icon.
 /** Chevron pointing right. */
 function SvgChevronRight(props: IconProps) {
   return (

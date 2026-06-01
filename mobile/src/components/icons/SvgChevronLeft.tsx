@@ -2,9 +2,8 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Mirror of SvgChevronRight (the Opal curated set has no left chevron); used as
-// the back glyph in the actions popover's sources sub-view header (stroke-based,
-// viewBox 16).
+// Mirror of SvgChevronRight (no curated left chevron); the back glyph in the
+// actions popover's sources sub-view header.
 /** Chevron pointing left (back). */
 function SvgChevronLeft(props: IconProps) {
   return (

@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported 1:1 from web/lib/opal/src/icons/add-lines.tsx (stroke-based, viewBox 16x16).
+// Mirrors web add-lines icon.
 /** Lines with a plus — "Set Instructions". */
 function SvgAddLines(props: IconProps) {
   return (

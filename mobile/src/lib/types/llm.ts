@@ -1,6 +1,5 @@
-// LLM provider + model types — mirror of web `web/src/lib/languageModels/types.ts`
-// (only the fields the mobile model selector needs). The backend returns
-// `LLMProviderDescriptor[]` from GET /llm/provider.
+// Mirrors web languageModels/types.ts (only the fields the mobile model selector
+// needs). The backend returns `LLMProviderDescriptor[]` from GET /llm/provider.
 
 export interface ModelConfiguration {
   id?: number;

@@ -1,6 +1,6 @@
-// LLM option helpers — ported from web `web/src/lib/languageModels/utils.ts` +
-// `getModelIcon`. Flatten providers → selectable options, group by provider, resolve
-// the default model, and pick a provider icon.
+// Mirrors web languageModels/utils.ts + `getModelIcon`. Flatten providers →
+// selectable options, group by provider, resolve the default model, and pick a
+// provider icon.
 import type { ComponentType } from "react";
 
 import { SvgCpu } from "@/components/icons/SvgCpu";

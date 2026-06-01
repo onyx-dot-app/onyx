@@ -7,9 +7,8 @@ import { useCreateProject } from "@/query/projects";
 import { useStartProjectChat } from "@/chat/useStartProjectChat";
 import { ProjectModalTextInput } from "./ProjectModalTextInput";
 
-// Native mirror of web `CreateProjectModal`. A controlled opal Modal with a single
-// "Project Name" field. On submit it creates the project and navigates to its
-// detail screen (web: route({projectId})). Same copy + colors as web.
+// Native mirror of web `CreateProjectModal`: a controlled opal Modal with a single
+// "Project Name" field that creates the project and navigates to its detail screen.
 
 interface CreateProjectModalProps {
   visible: boolean;

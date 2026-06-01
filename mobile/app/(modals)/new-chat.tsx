@@ -1,7 +1,6 @@
 import { PlaceholderScreen } from "@/components/PlaceholderScreen";
 
-// Placeholder. Presented modally (native sheet). Real new-chat flow lands in
-// docs 05/06.
+// Placeholder for the new-chat flow. Presented modally (native sheet).
 export default function NewChat() {
   return <PlaceholderScreen label="New chat" />;
 }

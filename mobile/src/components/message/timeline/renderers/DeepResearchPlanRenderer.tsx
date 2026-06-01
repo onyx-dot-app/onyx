@@ -1,5 +1,5 @@
 // DeepResearchPlanRenderer.tsx — streams the deep-research plan markdown.
-// Ported (functional) from web DeepResearchPlanRenderer.
+// Native mirror of web DeepResearchPlanRenderer.
 
 import { useCallback, useMemo } from "react";
 import { View } from "react-native";

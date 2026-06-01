@@ -1,7 +1,6 @@
 // useTimelineUIState.ts — pure timeline UI state machine.
 //
-// Ported verbatim from web:
-//   web/src/app/app/message/messageComponents/timeline/hooks/useTimelineUIState.ts
+// Mirrors web useTimelineUIState.
 
 import { useMemo } from "react";
 import { TurnGroup, TransformedStep } from "@/state/timeline/transformers";

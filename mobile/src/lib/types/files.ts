@@ -1,6 +1,5 @@
-// User-file types — mirror of web `web/src/app/app/projects/projectsService.ts`
-// (the subset the mobile chat composer needs) and the backend
-// `CategorizedFilesSnapshot` / `UserFileSnapshot` shapes returned by
+// Mirrors web projectsService.ts (the subset the mobile chat composer needs) plus
+// the backend `CategorizedFilesSnapshot` / `UserFileSnapshot` shapes returned by
 // `POST /user/projects/file/upload` and `POST /user/projects/file/statuses`.
 
 import type { ChatFileType } from "./chat";

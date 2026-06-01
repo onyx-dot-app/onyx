@@ -1,7 +1,7 @@
 // AgentMessage.tsx — orchestrates a single assistant turn: runs the packet
 // pipeline + pacing, renders the AgentTimeline (thinking/tools) then the final
-// answer (markdown + citations). Ported from web AgentMessage (TTS / toolbar /
-// message-switching dropped for this pass; seams left for them).
+// answer (markdown + citations). Native mirror of web AgentMessage; TTS, toolbar,
+// and message-switching are not implemented here (seams left for them).
 
 import { memo, useMemo, type ReactNode } from "react";
 import { View } from "react-native";

@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/menu.tsx (stroke-based, viewBox 32).
+// Mirrors web menu icon.
 /** Hamburger menu (three lines). */
 function SvgMenu(props: IconProps) {
   return (

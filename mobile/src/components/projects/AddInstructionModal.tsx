@@ -5,9 +5,8 @@ import { Button, Modal, Text } from "@/components/opal";
 import { useUpsertProjectInstructions } from "@/query/projects";
 import { ProjectModalTextInput } from "./ProjectModalTextInput";
 
-// Native mirror of web `AddInstructionModal`. Controlled opal Modal with a
+// Native mirror of web `AddInstructionModal`: a controlled opal Modal with a
 // multiline instructions field, seeded from the project's current instructions.
-// Same copy + colors as web.
 
 interface AddInstructionModalProps {
   visible: boolean;

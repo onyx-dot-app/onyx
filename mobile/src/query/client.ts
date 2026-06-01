@@ -49,7 +49,7 @@ export const clientConfig: ClientConfig = {
   baseUrl: appConfig.apiBaseUrl,
   // expo/fetch (not global RN fetch) — only it exposes a real streaming response.body.
   fetchImpl: expoFetch as unknown as typeof fetch,
-  getAuthHeaders, // reads the Bearer JWT from expo-secure-store (doc 07 / @/auth)
+  getAuthHeaders, // reads the Bearer JWT from expo-secure-store (@/auth)
 };
 
 // ── React Query persister (MMKV-backed, synchronous) ────────────────────────────

@@ -1,7 +1,5 @@
 // ImageToolRenderer.tsx — the image-generation tool block.
-//
-// Ported from web:
-//   web/src/app/app/message/messageComponents/renderers/ImageToolRenderer.tsx
+// Native mirror of web ImageToolRenderer.
 //
 // Scans IMAGE_GENERATION_TOOL_START + IMAGE_GENERATION_TOOL_DELTA packets
 // (images: { file_id, url, ... }[]). While generating (start, no section end)
@@ -15,8 +13,8 @@
 //     download-on-hover) collapses to an `expo-image` <Image> with bearer auth
 //     headers from `useAuthImageHeaders` and the `chatFileUrl` route helper —
 //     mirroring `MessageRow` / `AttachmentTile`. No modal / download / hover.
-//   • Web's animated GeneratingImageDisplay (96×96 SVG progress ring) collapses
-//     to a full-width, aspect-1 tinted box with a BlinkingBar — RN-idiomatic.
+//   • Web's animated GeneratingImageDisplay collapses to a full-width square
+//     tinted box with a BlinkingBar — RN-idiomatic.
 
 import { useMemo } from "react";
 import { View } from "react-native";

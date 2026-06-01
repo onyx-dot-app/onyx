@@ -1,6 +1,6 @@
-// ExpandedTimelineContent.tsx — full step list when the timeline is expanded.
-// Ported from web ExpandedTimelineContent (parallel/coding groups -> tabs;
-// sequential steps -> StepContainer rows; Done/Stopped terminal rows).
+// ExpandedTimelineContent.tsx — full step list when the timeline is expanded
+// (parallel/coding groups -> tabs; sequential steps -> StepContainer rows;
+// Done/Stopped terminal rows). Native mirror of web ExpandedTimelineContent.
 
 import { memo, useMemo } from "react";
 import { View } from "react-native";

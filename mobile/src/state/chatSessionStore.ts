@@ -1,18 +1,8 @@
-// Ported near-verbatim from web/src/app/app/stores/useChatSessionStore.ts.
-//
-// Changes from web (all mechanical — behavior is identical):
-//   1. Imports rewritten: domain types come from "@/lib/types", tree helpers from "./messageTree".
-//   2. zustand `persist` middleware is layered on top of the (otherwise verbatim) store
-//      to persist a SLIM slice to MMKV — see ./persist.ts. The core create() body is unchanged.
-//
-// What we did NOT change:
-//   - The store was already DOM-free: scroll/sidebar fields (hasPerformedInitialScroll,
-//     documentSidebarVisible, selectedNodeIdForDocDisplay, isStreamDraining, …) are plain
-//     booleans/numbers with no DOM reads, so they are kept verbatim — there was nothing
-//     browser-only to no-op. AbortController is a global in Hermes/RN, so abort* actions work.
-//   - No send/stream/network function is referenced by the store, so there is no stub to leave.
-//     The network send loop is doc 07's responsibility (it will call updateSession*/updateChatState
-//     from outside the store, exactly like web's lib does).
+// Mirrors web useChatSessionStore. The store was already DOM-free, so the only
+// change is layering zustand `persist` to persist a SLIM slice to MMKV (see
+// ./persist.ts); the core create() body and all actions are unchanged. The
+// network send loop lives outside the store and calls updateSession*/updateChatState
+// from outside, exactly like web's lib does.
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
@@ -823,5 +813,5 @@ export const useCurrentIsStreamDraining = () =>
     return currentSession?.isStreamDraining ?? false;
   });
 
-// Re-export the type so the persist slice (and doc 07 consumers) can reference it.
+// Re-export the type so the persist slice (and other consumers) can reference it.
 export type { ChatSessionData };

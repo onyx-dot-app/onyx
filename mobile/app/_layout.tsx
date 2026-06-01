@@ -19,14 +19,12 @@ import { AuthProvider } from "@/auth";
 // flashes in the system fallback face.
 SplashScreen.preventAutoHideAsync();
 
-// Root provider tree (docs 04 + 06 + 07). Order: GestureHandlerRootView >
-// SafeAreaProvider > ThemeProvider > PersistQueryClientProvider > AuthProvider >
+// Root provider tree. Order: GestureHandlerRootView > SafeAreaProvider >
+// ThemeProvider > PersistQueryClientProvider > AuthProvider >
 // BottomSheetModalProvider > <Stack>, with <PortalHost/> inside ThemeProvider so
 // @rn-primitives overlays inherit theme vars. The Zustand chat store hydrates
-// synchronously from MMKV on import (no gate). AuthProvider (doc 07) holds the JWT
-// and drives the (auth) vs (app) redirect.
-//
-// Still-placeholder: 08 — Sentry.wrap around the default export.
+// synchronously from MMKV on import (no gate). AuthProvider holds the JWT and
+// drives the (auth) vs (app) redirect.
 export default function RootLayout() {
   const fontsLoaded = useAppFonts();
 
@@ -38,7 +36,7 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    // TODO(08): wrap this export in Sentry.wrap once @sentry/react-native is installed
+    // TODO: wrap this export in Sentry.wrap once @sentry/react-native is installed
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>

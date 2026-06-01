@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/upload-square.tsx (stroke-based, viewBox 16).
+// Mirrors web upload-square icon.
 /** Upload into a square — "Upload File" picker row. */
 function SvgUploadSquare(props: IconProps) {
   return (

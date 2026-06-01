@@ -10,8 +10,7 @@ import { useGoogleSignIn } from "@/components/auth/useGoogleSignIn";
 import { Text, Button } from "@/components/opal";
 import { GoogleLogo } from "@/components/ui/logos";
 
-// Sign-in screen. Mirrors the web auth layout (web/src/components/auth/
-// AuthFlowContainer + app/auth/login): an Onyx-logo-topped card with a
+// Sign-in screen. Mirrors web AuthFlowContainer: an Onyx-logo-topped card with a
 // "Continue with Google" button, an "or" divider, and the email/password form.
 // Password creds post to the backend's mobile Bearer login route, which returns
 // a JWT the AuthProvider stores; on success status flips to signedIn and

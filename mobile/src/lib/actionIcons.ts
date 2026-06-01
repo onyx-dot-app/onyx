@@ -1,6 +1,4 @@
-// Maps a tool/action to its glyph — a 1:1 port of web's
-// web/src/app/app/services/actionUtils.ts getIconForAction(). Mobile reuses the
-// curated @/components/icons set; the one substitution is OpenURL → SvgExternalLink
+// Mirrors web actionUtils.ts getIconForAction(). Deviation: OpenURL → SvgExternalLink
 // (mobile has no rotated chain-link SvgLink; the external-link glyph is the
 // closest curated equivalent).
 import type { ComponentType } from "react";

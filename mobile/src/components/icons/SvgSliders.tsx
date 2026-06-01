@@ -2,9 +2,8 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/sliders.tsx (stroke-based, viewBox 16). The
-// web SVG wraps the path in a full-viewBox clipPath (a no-op), so only the path
-// is ported here, matching the other icons.
+// Mirrors web sliders icon. Web's full-viewBox clipPath is a no-op, so only the
+// path is kept.
 /** Sliders — actions popover trigger. */
 function SvgSliders(props: IconProps) {
   return (

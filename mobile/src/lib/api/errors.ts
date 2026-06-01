@@ -1,4 +1,4 @@
-// Ported verbatim from web/src/lib/fetcher.ts (FetchError + RedirectError).
+// Mirrors web fetcher.ts (FetchError + RedirectError).
 // The SWR-coupled `skipRetryOnAuthError` helper stays in web (it references swr's
 // SWRConfiguration); only these framework-neutral error classes move into the package.
 

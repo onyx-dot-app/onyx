@@ -1,4 +1,4 @@
-// formatDuration.ts — ports web lib/time formatDurationSeconds.
+// Ports web lib/time formatDurationSeconds.
 
 export function formatDurationSeconds(seconds: number): string {
   const totalSeconds = Math.ceil(seconds);

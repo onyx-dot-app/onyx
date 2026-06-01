@@ -2,7 +2,7 @@
 // The ONLY platform differences are the fetch implementation and how auth is carried:
 //   - web:    fetchImpl = browser `fetch`, getAuthHeaders = () => ({})  (cookies ride automatically)
 //   - mobile: fetchImpl = `expo/fetch`,   getAuthHeaders = () => ({ Authorization: `Bearer <jwt>` })
-// Concrete providers are constructed per platform — see 07-networking-streaming-auth.md.
+// Concrete providers are constructed per platform.
 
 export interface ClientConfig {
   /** Absolute API base, e.g. "https://cloud.onyx.app" or "http://localhost:8080". */

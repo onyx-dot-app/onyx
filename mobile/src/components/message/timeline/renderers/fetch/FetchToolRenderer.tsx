@@ -1,12 +1,10 @@
 // FetchToolRenderer.tsx — renders URL fetch/open ("Reading") tool steps.
-//
-// Ported from web:
-//   web/src/app/app/message/messageComponents/timeline/renderers/fetch/FetchToolRenderer.tsx
+// Native mirror of web FetchToolRenderer.
 //
 // RenderType modes:
 // - FULL / COMPACT: icon "circle", status "Reading". Body is the doc/URL chips
 //   (the timeline shell draws the "Reading" header from `status`).
-// - HIGHLIGHT: header embedded in content as a text-02 "Reading" line
+// - HIGHLIGHT: header embedded in content as a "Reading" line
 //   (timelineLayout "content"); no StepContainer chrome.
 //
 // Body content priority (mirrors web):
@@ -14,11 +12,10 @@
 //   else complete & has URLs -> URL chips
 //   else                     -> BlinkingBar (while still streaming)
 //
-// AMENDMENT: web reuses `SearchChipList` for the chips. That component is not
-// ported yet, so we render an inline flex-wrap of chips here (SourceIcon +
-// truncated title) with the same INITIAL_URLS_TO_SHOW / URLS_PER_EXPANSION
-// "show more" behavior. Docs/URLs open via `Linking.openURL` (web used
-// `window.open(_, "_blank")`).
+// AMENDMENT: web reuses `SearchChipList` for the chips; here we render a local
+// inline wrapping row of chips (SourceIcon + truncated title) with the same
+// INITIAL_URLS_TO_SHOW / URLS_PER_EXPANSION "show more" behavior. Docs/URLs open
+// via `Linking.openURL` (web used `window.open(_, "_blank")`).
 
 import { useCallback, useMemo, useState } from "react";
 import { Linking, Pressable, View } from "react-native";
@@ -82,7 +79,7 @@ function Chip({ title, sourceType, isInternet, onPress }: ChipProps) {
 }
 
 // ---------------------------------------------------------------------------
-// ChipList — inline flex-wrap of chips with "show more" expansion.
+// ChipList — inline wrapping row of chips with "show more" expansion.
 // Mirrors web SearchChipList's INITIAL_URLS_TO_SHOW / URLS_PER_EXPANSION.
 // ---------------------------------------------------------------------------
 

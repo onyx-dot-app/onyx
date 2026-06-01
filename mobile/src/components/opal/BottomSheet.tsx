@@ -21,12 +21,12 @@ import { useThemeColors } from "@/theme/ThemeProvider";
 //   // open:  ref.current?.present()
 //   // close: ref.current?.dismiss()
 //
-// The handle indicator + sheet background + backdrop scrim are pulled from
-// doc-03 tokens (resolved via useThemeColors, applied through `style` — never a
-// dynamic className).
+// The handle indicator + sheet background + backdrop scrim are theme tokens
+// (resolved via useThemeColors, applied through `style` — never a dynamic
+// className).
 //
 // ⚠️ A <BottomSheetModalProvider> (from @gorhom/bottom-sheet) MUST wrap the app
-// for the modal variant to work. See integrationNotes.
+// for the modal variant to work.
 // ---------------------------------------------------------------------------
 
 /**

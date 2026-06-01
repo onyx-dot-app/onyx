@@ -48,8 +48,8 @@ const FONT_MAP = {
  * Load the Opal typefaces (Hanken Grotesk + DM Mono) at exactly the weights the
  * typography presets use. Returns `true` once all faces are ready.
  *
- * Wire this into the app root and gate rendering on the returned boolean (see
- * the integration notes) so text never flashes in the system fallback font.
+ * Wire this into the app root and gate rendering on the returned boolean so text
+ * never flashes in the system fallback font.
  */
 export function useAppFonts(): boolean {
   const [loaded] = useFonts(FONT_MAP);

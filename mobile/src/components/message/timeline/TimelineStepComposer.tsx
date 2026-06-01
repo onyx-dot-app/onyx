@@ -1,6 +1,6 @@
 // TimelineStepComposer.tsx — renders renderer results into raw content
-// (timelineLayout "content") or StepContainer-wrapped rows. Ported from web
-// TimelineStepComposer.
+// (timelineLayout "content") or StepContainer-wrapped rows.
+// Native mirror of web TimelineStepComposer.
 
 import { Fragment } from "react";
 

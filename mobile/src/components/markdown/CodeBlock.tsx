@@ -34,15 +34,11 @@ const CODE_SCROLL_CONTENT_STYLE = { padding: 12 } as const;
 // ---------------------------------------------------------------------------
 
 /**
- * Native mirror of the web `CodeBlock` (web/src/app/app/message/CodeBlock.tsx),
- * mirroring its FEATURES rather than its implementation:
- *   - monospace code rendered with the Opal `main-content-mono` typography preset
- *   - code-token colors (`background-code-01` surface, `code-code` text)
- *   - a header showing the language label and a copy affordance
+ * Native mirror of web `CodeBlock`.
  *
- * Full syntax highlighting (rehype-highlight on web) and KaTeX math are OUT OF
- * SCOPE here — code is rendered as flat monospace text. See the follow-up note
- * in Markdown.tsx.
+ * Syntax highlighting (rehype-highlight on web) and KaTeX math are not
+ * implemented — code renders as flat monospace text. See the note in
+ * Markdown.tsx.
  *
  * Wired as the `fence` / `code_block` rule in Markdown.tsx.
  */

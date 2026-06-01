@@ -1,5 +1,5 @@
 // TimelineStepContent.tsx — step header (status + fold/expand) + body.
-// Ported from web TimelineStepContent. Web Button -> Pressable + icon; status
+// Native mirror of web TimelineStepContent. Web Button -> Pressable + icon; status
 // rendered via Opal Text when it's a string, else the node is rendered directly
 // (RN can't nest arbitrary Views inside <Text>).
 

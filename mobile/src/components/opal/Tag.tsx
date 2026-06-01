@@ -33,7 +33,7 @@ const tagVariants = cva(
   },
 );
 
-// Label color token per tone — applied by `Text` via `style` (doc-03 palette).
+// Label color token per tone — applied by `Text` via `style`.
 const TAG_TEXT_COLOR: Record<TagTone, TextColor> = {
   neutral: "text-04",
   info: "status-text-info-05",
@@ -54,8 +54,8 @@ interface TagProps extends VariantProps<typeof tagVariants> {
 
 /**
  * Small pill / badge. Tone is a fixed small set, so styling uses CVA with
- * STATIC NativeWind classes; the label color is a doc-03 token applied via
- * `Text` `style`.
+ * STATIC NativeWind classes; the label color is a token applied via `Text`
+ * `style`.
  */
 function Tag({ tone = "neutral", className, children }: TagProps) {
   return (

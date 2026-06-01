@@ -17,8 +17,7 @@ interface AuthCardProps {
 
 // Shared scaffold for the login and register screens: a keyboard-avoiding,
 // centered scroll view wrapping an Onyx-logo-topped card, with an optional
-// footer row beneath. Mirrors the web auth layout
-// (web/src/components/auth/AuthFlowContainer).
+// footer row beneath. Native mirror of web `AuthFlowContainer`.
 export function AuthCard({ title, subtitle, children, footer }: AuthCardProps) {
   const colors = useThemeColors();
 

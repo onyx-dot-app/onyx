@@ -5,9 +5,9 @@ import { SvgLoader } from "@/components/icons/SvgLoader";
 import type { ColorToken } from "@/theme/generated/colors";
 
 // ---------------------------------------------------------------------------
-// Spinner — native mirror of web's `SimpleLoader` (an Opal loader glyph spun
-// with `animate-spin`). RN has no CSS animation, so we rotate the ported
-// `SvgLoader` with the built-in `Animated` API (useNativeDriver, linear loop).
+// Spinner — native mirror of web SimpleLoader.
+// RN has no CSS animation, so we rotate `SvgLoader` with the built-in
+// `Animated` API (useNativeDriver, linear loop).
 // Used in attachment tiles while a file uploads / processes.
 // ---------------------------------------------------------------------------
 

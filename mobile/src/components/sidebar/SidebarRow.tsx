@@ -2,12 +2,8 @@ import { Pressable } from "react-native";
 
 import { Text } from "@/components/opal";
 
-// One sidebar chat row — mirrors the web ChatButton/SidebarTab. Spacing via NativeWind
-// classNames (inline horizontal style is unreliable under NativeWind here):
-//   mx-2 → 8px inset so the highlight sits in from the drawer edge (web `body px-2`)
-//   px-2 → text lands at 16px total
-//   h-10 → 40px row, justify-center vertical
-//   selected → bg-background-tint-00 + text-04; pressed → bg-background-tint-03 (active:)
+// One sidebar chat row — mirrors the web ChatButton/SidebarTab. Spacing uses
+// NativeWind classNames (inline horizontal style is unreliable under NativeWind here).
 export function SidebarRow({
   label,
   selected = false,

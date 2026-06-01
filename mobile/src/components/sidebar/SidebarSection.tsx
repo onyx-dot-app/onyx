@@ -3,8 +3,7 @@ import { View } from "react-native";
 
 import { Text } from "@/components/opal";
 
-// A labelled sidebar section (web: SidebarSection). Header via classNames: min-h-8
-// (32px), pl-4 (16px, aligns with row text), pr-2, py-1; secondary-body in text-02.
+// A labelled sidebar section (web: SidebarSection).
 export function SidebarSection({
   title,
   children,

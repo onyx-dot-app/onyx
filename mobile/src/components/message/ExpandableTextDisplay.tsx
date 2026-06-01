@@ -2,10 +2,9 @@
 // bottom-sheet. Ports web ExpandableTextDisplay (Radix modal -> @gorhom sheet;
 // CSS line-clamp/translateY -> measured max-height clamp + translateY).
 //
-// Collapsed: content clipped to `maxLines` of height. While streaming the latest
-// lines are bottom-anchored (content translated up) with a top "…" indicator,
-// mirroring web. A maximize button opens the full text in a scrollable sheet
-// with a copy action. Overflow is measured via the child's onLayout height.
+// Collapsed content is clipped to `maxLines` of height; overflow is measured via
+// the child's onLayout height. While streaming, the latest lines are
+// bottom-anchored (content translated up) with a top "…" indicator.
 
 import { useRef, useState, type ReactNode } from "react";
 import { View, Pressable } from "react-native";

@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/image.tsx (stroke-based, viewBox 16).
+// Mirrors web image icon.
 /** Image / picture frame with mountain + sun. */
 function SvgImage(props: IconProps) {
   return (

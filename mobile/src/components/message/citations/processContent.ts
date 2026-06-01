@@ -1,10 +1,10 @@
 // processContent.ts — pre-process streamed markdown before parsing.
 //
-// Ports the citation-marker stripping from web markdownUtils.processContent
-// (KaTeX/math escaping is omitted — mobile has no KaTeX, math renders as plain
-// text, consistent with the deferred decision). Strips trailing INCOMPLETE
-// citation markers so markdown-it never renders a half-arrived `[[N]](url`. Also
-// tags an unterminated trailing code fence as ```plaintext to avoid a glitch.
+// Mirrors web markdownUtils.processContent. Deviation: KaTeX/math escaping is
+// omitted — mobile has no KaTeX, so math renders as plain text. Strips trailing
+// INCOMPLETE citation markers so markdown-it never renders a half-arrived
+// `[[N]](url`. Also tags an unterminated trailing code fence as ```plaintext to
+// avoid a glitch.
 
 export function processContent(content: string): string {
   // [[N]](partial-url  — link opened, url not yet closed.

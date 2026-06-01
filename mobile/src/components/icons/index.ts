@@ -1,12 +1,8 @@
-// ===========================================================================
-// Icons barrel — curated Opal icon set, ported to React Native.
-// ===========================================================================
+// Icons barrel — mirrors the web Opal icon set.
 //
-// Onyx rule: ONLY curated icons (no icon-font libraries). Every icon here is a
-// hand-port of its web counterpart in web/lib/opal/src/icons/. To add more,
-// follow the port recipe documented at the top of `Icon.tsx`, then register the
-// new `Svg*` component below.
-// ===========================================================================
+// Onyx rule: ONLY curated icons (no icon-font libraries). To add more, follow
+// the port recipe documented at the top of `Icon.tsx`, then register the new
+// `Svg*` component below.
 
 export {
   Icon,
@@ -30,7 +26,7 @@ export { SvgMenu } from "@/components/icons/SvgMenu";
 export { SvgUser } from "@/components/icons/SvgUser";
 export { SvgLogOut } from "@/components/icons/SvgLogOut";
 
-// Timeline / agent-message icon set (ported from web/lib/opal/src/icons).
+// Timeline / agent-message icon set — mirrors web Opal icons.
 export { SvgCircle } from "@/components/icons/SvgCircle";
 export { SvgSearchMenu } from "@/components/icons/SvgSearchMenu";
 export { SvgGlobe } from "@/components/icons/SvgGlobe";
@@ -54,7 +50,7 @@ export { SvgImage } from "@/components/icons/SvgImage";
 export { SvgCpu } from "@/components/icons/SvgCpu";
 export { SvgServer } from "@/components/icons/SvgServer";
 
-// Projects icon set (ported 1:1 from web/lib/opal/src/icons).
+// Projects icon set — mirrors web Opal icons.
 export { SvgEdit } from "@/components/icons/SvgEdit";
 export { SvgFolder } from "@/components/icons/SvgFolder";
 export { SvgFolderOpen } from "@/components/icons/SvgFolderOpen";

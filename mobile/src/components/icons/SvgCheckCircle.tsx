@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/check-circle.tsx (stroke-based, viewBox 16).
+// Mirrors web check-circle icon.
 /** Circle with a checkmark. */
 function SvgCheckCircle(props: IconProps) {
   return (

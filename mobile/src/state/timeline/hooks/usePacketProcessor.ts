@@ -4,8 +4,7 @@
    render. Ported verbatim from the battle-tested web usePacketProcessor. */
 // usePacketProcessor.ts — React wrapper around the incremental packetProcessor.
 //
-// Ported verbatim from web:
-//   web/src/app/app/message/messageComponents/timeline/hooks/usePacketProcessor.ts
+// Mirrors web usePacketProcessor.
 // ProcessorState lives in a ref (synchronous incremental processing, no double
 // render). Only renderComplete/forceShowAnswer are useState. Resets on nodeId
 // change / stream shrink happen during render (legal derived-from-props reset).

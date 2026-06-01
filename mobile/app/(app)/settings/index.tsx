@@ -2,7 +2,7 @@ import { View } from "react-native";
 
 import { Button, Card, Tag, Text } from "@/components/opal";
 
-// Showcase / smoke-test for the opal-native display components (doc 05).
+// Showcase / smoke-test for the opal-native display components.
 export default function Settings() {
   return (
     <View className="flex-1 bg-background-neutral-00 p-4">
@@ -16,7 +16,7 @@ export default function Settings() {
 
         <Text font="main-ui-body" color="text-03">
           These opal-native components mirror the web Opal API on React Native,
-          consuming the doc-03 token system for typography and color.
+          consuming the token system for typography and color.
         </Text>
 
         <View className="flex-row gap-2 pt-1">

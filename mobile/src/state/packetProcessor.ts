@@ -5,16 +5,10 @@
 // documents, citations). It is a pure function: it returns a NEW MessageTreeState and
 // never mutates the input (the target Message and its `packets` array are cloned).
 //
-// What this ports from web:
-//   - The streaming send loop in web (services/lib.tsx + currentMessageFIFO.ts) appends
-//     raw `Packet`s onto the in-flight assistant Message's `packets` array, keyed by
-//     `placement.model_index` for multi-model. We reproduce just that append-and-derive
-//     step here as a testable reducer.
-//   - The "derive content from packets" helpers mirror web's services/packetUtils.ts
-//     (getTextContent / getCitations) and the document accumulation in
-//     message/.../timeline/hooks/packetProcessor.ts (handleDocumentPacket).
+// Mirrors web's append-and-derive packet step (services/lib.tsx streaming loop +
+// packetUtils.ts), reproduced here as a testable reducer.
 //
-// What this intentionally DROPS (out of scope per design doc 06):
+// What this intentionally DROPS:
 //   - web's UI grouping / timeline transform (toolGroups, displayGroups, turn grouping).
 //   - the typewriter pacing hooks (usePacedTurnGroups / usePacedMessageSwitching).
 //   These are presentation concerns layered on top of `packets`; this reducer only owns

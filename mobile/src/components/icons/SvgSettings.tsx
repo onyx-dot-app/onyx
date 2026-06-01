@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/settings.tsx (stroke-based, viewBox 16).
+// Mirrors web settings icon.
 // The web source wraps the paths in a <clipPath>; the clip is a no-op for
 // rendering (it just bounds to the 16x16 box the artwork already fits), so it
 // is dropped here — only the two visible paths are kept.

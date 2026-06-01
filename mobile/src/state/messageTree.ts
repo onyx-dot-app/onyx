@@ -1,8 +1,6 @@
-// Ported verbatim from web/src/app/app/services/messageTree.ts.
-// This module is pure (no React, no DOM). The ONLY change from web is the import:
-//   web:    import { FileDescriptor, Message } from "../interfaces";
-//   mobile: import { FileDescriptor, Message } from "@/lib/types";
-// Behavior is identical — the message tree is a Map<number, Message> keyed by nodeId.
+// Mirrors web messageTree.ts. Pure module (no React/DOM); the only change is the
+// import path (domain types from "@/lib/types"). Tree is a Map<number, Message>
+// keyed by nodeId.
 import { FileDescriptor, Message } from "@/lib/types";
 
 export const SYSTEM_MESSAGE_ID = -3;

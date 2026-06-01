@@ -1,21 +1,10 @@
-// CustomToolRenderer.tsx — renders a user-defined ("custom") tool call.
-// Ported from web:
-//   web/src/app/app/message/messageComponents/renderers/CustomToolRenderer.tsx
-//
-// Scans CUSTOM_TOOL_START / CUSTOM_TOOL_ARGS / CUSTOM_TOOL_DELTA + SECTION_END /
-// ERROR packets into {toolName, args, responseType, data, fileIds, error,
-// isRunning, isComplete}, then renders:
-//   - a "Waiting for response..." line while still running,
-//   - an IoBlockLabel "Request" + a CodeBlock of the JSON-stringified args,
-//   - an error message (when the tool errored),
-//   - file responses as Open/Download links (opened via Linking),
-//   - an IoBlockLabel "Response" + a CodeBlock of the JSON/text data.
+// CustomToolRenderer.tsx — renders a user-defined ("custom") tool call. Native mirror of web CustomToolRenderer.
 //
 // DEVIATIONS from web:
 //   - No syntax highlighting (web used highlight.js); CodeBlock renders flat
 //     monospace text, matching the mobile CodeBlock contract.
 //   - COMPACT drops the web FadingEdgeContainer (max-h clip + fade); it renders
-//     the same content as FULL, per the mobile port brief.
+//     the same content as FULL.
 //   - The image/file URL is built with `chatFileUrl(appConfig.apiBaseUrl, …)`,
 //     the mobile equivalent of web `buildImgUrl`.
 

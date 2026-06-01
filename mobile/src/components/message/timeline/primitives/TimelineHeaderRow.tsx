@@ -1,5 +1,5 @@
 // TimelineHeaderRow.tsx — top header row (avatar slot + header content), aligned
-// to the rail width. Ported from web TimelineHeaderRow.
+// to the rail width. Native mirror of web TimelineHeaderRow.
 
 import type { ReactNode } from "react";
 import { View } from "react-native";

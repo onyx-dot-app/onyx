@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported 1:1 from web/lib/opal/src/icons/folder-plus.tsx (stroke-based, viewBox 16x16).
+// Mirrors web folder-plus icon.
 /** Folder with a plus — "Create New Project". */
 function SvgFolderPlus(props: IconProps) {
   return (

@@ -10,8 +10,7 @@ interface AuthTextFieldProps extends TextInputProps {
 
 // A labeled text input for the auth forms: the rounded/bordered TextInput shared
 // by the email, password, and confirm-password fields on the login and register
-// screens. Capitalization/autocorrect are off and the placeholder is tinted
-// text-03; all other input props pass straight through.
+// screens. Capitalization/autocorrect are off; all other input props pass through.
 export function AuthTextField({ label, ...inputProps }: AuthTextFieldProps) {
   const colors = useThemeColors();
 

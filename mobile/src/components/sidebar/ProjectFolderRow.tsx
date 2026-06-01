@@ -16,7 +16,7 @@ import { chatDisplayName } from "@/lib/chatLabels";
 import type { Project } from "@/lib/types";
 import { SidebarRow } from "./SidebarRow";
 
-// Sidebar project row — mobile mirror of web `ProjectFolderButton`. The folder
+// Sidebar project row — native mirror of web `ProjectFolderButton`. The folder
 // glyph toggles an inline list of the project's chats; the name navigates to the
 // project screen; the ⋯ menu offers Rename (inline) / Delete (confirm).
 

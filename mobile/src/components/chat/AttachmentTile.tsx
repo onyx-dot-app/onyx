@@ -11,16 +11,13 @@ import { fileExtensionLabel } from "@/lib/fileTypes";
 // ---------------------------------------------------------------------------
 // AttachmentTile — native mirror of web `FileCard`.
 //
-//   • Image  → 80×80 (44×44 compact) thumbnail, object-cover, rounded-08,
-//              border-01. A translucent spinner scrim covers it while the file
-//              uploads / processes (web shows a spinner only — but mobile has the
-//              local URI, so we show the preview underneath the scrim).
+//   • Image  → thumbnail with a translucent spinner scrim while the file uploads
+//              (web shows a spinner only; mobile has the local URI, so the preview
+//              shows underneath the scrim).
 //   • File   → bordered chip: icon (or spinner) + name + type / status label.
-//   • Remove → 16×16 dark button at the top-left corner (X 12×12), shown once the
-//              upload POST has resolved (status ≠ "uploading"), web parity.
+//   • Remove → button shown once the upload POST resolves (status ≠ "uploading").
 //
-// Shared by the composer (removable) and sent message bubbles (read-only). All
-// colours/typography come from theme tokens via `style`; layout is static classes.
+// Shared by the composer (removable) and sent message bubbles (read-only).
 // ---------------------------------------------------------------------------
 
 export type AttachmentTileStatus =
@@ -66,7 +63,7 @@ function AttachmentTileComponent({
   compact = false,
   onRemove,
 }: AttachmentTileProps) {
-  // Remove button colours (web: bg-background-neutral-inverted-01, X text-inverted-03).
+  // Remove-button and upload-scrim colours.
   const removeBg = useToken("background-neutral-inverted-01");
   const removeBorder = useToken("border-02");
   const shadow = useToken("shadow-02");

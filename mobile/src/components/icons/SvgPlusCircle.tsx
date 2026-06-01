@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported 1:1 from web/lib/opal/src/icons/plus-circle.tsx (stroke-based, viewBox 16x16).
+// Mirrors web plus-circle icon.
 // The web source wraps the path in a decorative clipPath; it's unnecessary here
 // since the artwork fits the viewBox.
 /** Plus in a circle — "Add Files". */

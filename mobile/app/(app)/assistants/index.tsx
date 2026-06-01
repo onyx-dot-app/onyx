@@ -1,6 +1,6 @@
 import { PlaceholderScreen } from "@/components/PlaceholderScreen";
 
-// Placeholder. Real assistants list lands in docs 05/06.
+// Placeholder for the assistants list.
 export default function Assistants() {
   return <PlaceholderScreen label="Assistants" />;
 }

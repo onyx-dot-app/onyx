@@ -1,6 +1,6 @@
-// Project types — mirror of web `web/src/app/app/projects/projectsService.ts`
-// (the `Project` / `ProjectDetails` shapes the mobile UI needs). `ProjectFile`,
-// `CategorizedFiles`, `RejectedFile`, and `UserFileStatus` already live in ./files.
+// Mirrors web projectsService.ts (the `Project` / `ProjectDetails` shapes the
+// mobile UI needs). `ProjectFile`, `CategorizedFiles`, `RejectedFile`, and
+// `UserFileStatus` live in ./files.
 
 import type { ChatSession } from "./chat";
 import type { ProjectFile } from "./files";

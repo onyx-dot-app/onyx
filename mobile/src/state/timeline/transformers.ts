@@ -1,7 +1,6 @@
 // transformers.ts — pure packet-group → step/turn shaping.
 //
-// Ported verbatim from web:
-//   web/src/app/app/message/messageComponents/timeline/transformers.ts
+// Mirrors web transformers.ts.
 // Reshapes the processor's GroupedPacket[] into TransformedStep[] and buckets
 // them into TurnGroup[] (parallel tools share a turn_index, differ by tab_index).
 

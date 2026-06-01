@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/x-circle.tsx (stroke-based, viewBox 15).
+// Mirrors web x-circle icon.
 /** X inside a circle / close in a circle. */
 function SvgXCircle(props: IconProps) {
   return (

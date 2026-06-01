@@ -1,6 +1,6 @@
-// AgentAvatar.tsx — small agent avatar for the timeline header. Functional
-// stand-in for web AgentAvatar: a tinted circle with the agent's initial (or the
-// Onyx brand mark when no name). Per-agent uploaded images/icons are deferred.
+// AgentAvatar.tsx — small agent avatar for the timeline header: a tinted circle
+// with the agent's initial (or the Onyx brand mark when no name). Native mirror of
+// web AgentAvatar; per-agent uploaded images/icons are deferred.
 
 import { View } from "react-native";
 

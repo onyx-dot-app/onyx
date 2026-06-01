@@ -11,8 +11,8 @@ interface ForcedToolsState {
 
 /**
  * Ephemeral UI state — the tool forced for the NEXT message (max one).
- * Mirrors web/src/lib/hooks/useForcedTools.ts. Not persisted; cleared on
- * session/agent change and after a successful send.
+ * Mirrors web useForcedTools. Not persisted; cleared on session/agent change
+ * and after a successful send.
  */
 export const useForcedTools = create<ForcedToolsState>((set, get) => ({
   forcedToolIds: [],

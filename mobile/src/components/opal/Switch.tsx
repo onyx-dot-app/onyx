@@ -14,11 +14,6 @@ import { useToken } from "@/theme/ThemeProvider";
 //
 //   <Switch value={v} onValueChange={setV} />
 //
-// Track 32×18, thumb 14px (white), slides 1→17px over 150ms.
-// Off   → `background-tint-03` track.
-// On    → `action-link-05` track.
-// Disabled → `background-neutral-04` track + non-interactive.
-//
 // Dynamic/track colours are resolved through `useToken()` and applied via
 // `style` (never a dynamic className), and animated with Reanimated's
 // `interpolateColor` driven by a shared value (matching the codebase

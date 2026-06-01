@@ -4,8 +4,8 @@
 // module builds a minimal equivalent keyed by the raw source string, plus:
 //   - getConfiguredSources: dedup + normalize raw source strings (CC-pairs +
 //     federated connectors) into MobileSource[] (mirrors web getConfiguredSources).
-//   - buildFilters: ported from web/src/lib/search/utils.ts (sources-only; mobile
-//     has no doc-set/time/tag pickers yet).
+//   - buildFilters: mirrors web search/utils.ts (sources-only; mobile has no
+//     doc-set/time/tag pickers yet).
 
 import { humanizeSourceType } from "@/components/message/sources/sourceInfo";
 import type { Filters } from "@/lib/types";
@@ -44,10 +44,10 @@ export function getConfiguredSources(
 }
 
 /**
- * Ported from web/src/lib/search/utils.ts (sources-only; mobile has no
- * doc-set/time/tag pickers yet). NOTE: the mobile `Filters` type (search.ts) has
- * no `tags` field — unlike the web object literal — so `tags` is intentionally
- * omitted here to satisfy the type exactly.
+ * Mirrors web search/utils.ts (sources-only; mobile has no doc-set/time/tag
+ * pickers yet). NOTE: the mobile `Filters` type (search.ts) has no `tags` field
+ * — unlike the web object literal — so `tags` is intentionally omitted here to
+ * satisfy the type exactly.
  */
 export function buildFilters(sources: MobileSource[]): Filters {
   return {

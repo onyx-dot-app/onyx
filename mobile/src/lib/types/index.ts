@@ -1,6 +1,5 @@
-// Barrel for the ported Onyx web domain + streaming types.
-// Each module is a faithful copy of its web counterpart (only imports/couplings
-// were rewritten for the standalone mobile app):
+// Barrel for the Onyx domain + streaming types. Each module mirrors its web
+// source; only imports/couplings were rewritten for the standalone mobile app:
 //   domain.ts    <- web/src/lib/types.ts
 //   agents.ts    <- web/src/lib/agents/types.ts
 //   search.ts    <- web/src/lib/search/interfaces.ts

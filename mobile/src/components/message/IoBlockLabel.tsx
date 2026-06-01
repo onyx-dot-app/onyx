@@ -1,10 +1,7 @@
 // IoBlockLabel.tsx — small "Request" / "Response" label.
 //
-// Ported from web:
-//   web/src/app/app/message/messageComponents/IoBlockLabel.tsx
-// Used by tool renderers that show a paired input/output (e.g. CustomTool,
-// CodingAgent's bash step). Arrow-exchange icon + secondary-body label.
-// Web `flex items-center gap-1` -> RN row with a 4px gap.
+// Native mirror of web IoBlockLabel. Used by tool renderers that show a paired
+// input/output (e.g. CustomTool, CodingAgent's bash step).
 
 import { View } from "react-native";
 

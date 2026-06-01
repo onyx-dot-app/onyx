@@ -1,13 +1,7 @@
 // timelineTokens.ts — layout spacing scale for the agent timeline.
 //
-// Ported from the web source of truth:
-//   web/src/app/app/message/messageComponents/timeline/primitives/tokens.ts
-// On web these are rem strings injected as `--timeline-*` CSS custom
-// properties via TimelineRoot. React Native has no CSS variables, so we port
-// them to a plain numeric (px) module (1rem = 16px) and pass the numbers
-// straight into RN style width/height/padding.
-//
-// Keep this in sync with the web tokens.ts if the web layout ever changes.
+// Mirrors web tokens.ts. RN has no CSS variables, so web's rem `--timeline-*`
+// custom properties become plain numeric px here (1rem = 16px). Keep in sync.
 
 export interface TimelineTokens {
   /** Width of the left rail column (avatar + connector + icon). */
@@ -41,13 +35,6 @@ export interface TimelineTokens {
 }
 
 // rem -> px @16. Values mirror web timelineTokenDefaults exactly.
-//   railWidth 2.25rem, headerRowHeight 2.25rem, stepHeaderHeight 2rem,
-//   topConnectorHeight 0.5rem, firstTopSpacerHeight 0.25rem, iconSize 0.75rem,
-//   branchIconWrapperSize 1.25rem, branchIconSize 0.75rem,
-//   stepHeaderRightSectionWidth 2.125rem, headerPaddingLeft 0.5rem,
-//   headerPaddingRight 0.25rem, headerTextPaddingX 0.375rem,
-//   headerTextPaddingY 0.125rem, stepTopPadding 0.25rem,
-//   agentMessagePaddingLeft 0.12rem, timelineCommonTextPadding 0.12rem
 export const timelineTokens: TimelineTokens = {
   railWidth: 36,
   headerRowHeight: 36,

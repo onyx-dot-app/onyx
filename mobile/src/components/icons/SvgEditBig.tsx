@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/edit-big.tsx (stroke-based, viewBox 16).
+// Mirrors web edit-big icon.
 /** Large edit / pencil-on-page. */
 function SvgEditBig(props: IconProps) {
   return (

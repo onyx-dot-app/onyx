@@ -1,9 +1,9 @@
-// sourceInfo.ts — citation/source display helpers (amendment M7).
+// sourceInfo.ts — citation/source display helpers.
 //
-// Ported pragmatically from web sourceTagUtils.ts. Mobile lacks the full
-// per-connector source-metadata map, so getDisplayNameForSource humanizes the
-// source_type for internal docs (e.g. "google_drive" -> "Google Drive") instead
-// of looking up a curated connector name — a documented approximation.
+// Mirrors web sourceTagUtils.ts. Deviation: mobile lacks the full per-connector
+// source-metadata map, so getDisplayNameForSource humanizes the source_type for
+// internal docs (e.g. "google_drive" -> "Google Drive") instead of looking up a
+// curated connector name — an approximation of web behavior.
 
 import type { OnyxDocument } from "@/lib/types";
 

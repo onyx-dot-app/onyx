@@ -1,6 +1,6 @@
 // Build the in-memory message tree from a backend chat session's flat message list.
-// Ported from web `processRawChatHistory` (web/src/app/app/services/lib.tsx) —
-// keyed by nodeId = message_id, with parent/child links rebuilt from parent_message.
+// Mirrors web processRawChatHistory — keyed by nodeId = message_id, with
+// parent/child links rebuilt from parent_message.
 //
 // Mobile divergence: `toolCall` is set to null here (the mobile Message.toolCall is
 // ToolCallMetadata while the backend sends a ToolCallFinalResult, and the mobile

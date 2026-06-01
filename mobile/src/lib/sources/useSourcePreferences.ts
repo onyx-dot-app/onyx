@@ -1,9 +1,9 @@
 /* eslint-disable react-hooks/set-state-in-effect -- the init/re-init effects seed selected-source state from the MMKV snapshot (and reset it when the available-source set changes) by design; this is the lazy-initialization-from-an-external-store pattern. */
 // MMKV-backed source enable/disable preferences.
 //
-// Ports web useSourcePreferences (web/src/lib/hooks.ts) to mobile. Persists
-// enabled/disabled per source `uniqueKey` to MMKV under `selectedInternalSearchSources`
-// (web used localStorage). Behaviour:
+// Mirrors web useSourcePreferences. Persists enabled/disabled per source
+// `uniqueKey` to MMKV under `selectedInternalSearchSources` (web used
+// localStorage). Behaviour:
 //   - First run: all configured sources enabled.
 //   - New sources (not present in the saved snapshot): enabled by default.
 //   - Stale keys (no longer in the available set): dropped on re-init.

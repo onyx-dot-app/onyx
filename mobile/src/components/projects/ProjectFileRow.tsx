@@ -7,9 +7,9 @@ import { SvgX } from "@/components/icons/SvgX";
 import { fileExtensionLabel, isImageFile } from "@/lib/fileTypes";
 import { UserFileStatus, type ProjectFile } from "@/lib/types";
 
-// A single project file row (mobile analogue of web `FileCard`). Image/file glyph
-// + name + a status sub-label, with a trailing remove (unlink) affordance. A busy
-// file (uploading/processing) shows a spinner instead of the remove button.
+// A single project file row (mobile analogue of web `FileCard`): glyph + name +
+// status sub-label, with a trailing remove (unlink) affordance. A busy file
+// (uploading/processing) shows a spinner instead of the remove button.
 
 function statusLabel(file: ProjectFile): string {
   switch (file.status) {

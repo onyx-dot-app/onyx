@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/book-open.tsx (stroke-based, viewBox 16).
+// Mirrors web book-open icon.
 /** Open book. */
 function SvgBookOpen(props: IconProps) {
   return (

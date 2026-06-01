@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/search.tsx (stroke-based, viewBox 16).
+// Mirrors web search icon.
 /** Magnifying glass / search. */
 function SvgSearch(props: IconProps) {
   return (

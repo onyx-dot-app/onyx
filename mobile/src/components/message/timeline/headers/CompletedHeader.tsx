@@ -1,6 +1,6 @@
 // CompletedHeader.tsx — "Thought for {duration}" / "Generated N images" + step
-// count, plus the memory-only branch (amendment M8). Ported from web
-// CompletedHeader (MemoriesModal/tooltip -> a simple memory chip).
+// count, plus the memory-only branch. Native mirror of web CompletedHeader.
+// MemoriesModal/tooltip -> a simple memory chip.
 
 import { memo } from "react";
 import { View, Pressable } from "react-native";

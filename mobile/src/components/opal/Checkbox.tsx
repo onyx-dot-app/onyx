@@ -53,7 +53,7 @@ function CheckGlyph({ color }: { color: string }) {
 /**
  * Native mirror of the Opal `Checkbox`. The box background/border is a fixed
  * two-state set, so it uses STATIC NativeWind classes toggled on `checked`; the
- * check glyph color is a doc-03 token applied via `style`.
+ * check glyph color is a token applied via `style`.
  */
 function Checkbox({
   checked,

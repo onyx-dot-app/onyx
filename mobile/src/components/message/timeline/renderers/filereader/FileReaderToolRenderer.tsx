@@ -1,5 +1,4 @@
-// FileReaderToolRenderer.tsx — the "Read <file>" timeline step. Ported from web
-//   web/src/app/app/message/messageComponents/timeline/renderers/filereader/FileReaderToolRenderer.tsx
+// FileReaderToolRenderer.tsx — the "Read <file>" timeline step. Native mirror of web FileReaderToolRenderer.
 //
 // Reduces FileReaderToolPackets inline to {fileName, charRange, previews,
 // isReading, isComplete}. Status: "Read <name> (chars X–Y of Z)" (en-dash,

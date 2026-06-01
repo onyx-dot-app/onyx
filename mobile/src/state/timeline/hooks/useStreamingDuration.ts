@@ -1,8 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- the 1s interval updates elapsed seconds via setState inside an effect by design. */
 // useStreamingDuration.ts — tracks elapsed streaming duration.
 //
-// Ported from web:
-//   web/src/app/app/message/messageComponents/timeline/hooks/useStreamingDuration.ts
+// Mirrors web useStreamingDuration.
 //
 // RN perf amendment: the web version drives updates with requestAnimationFrame.
 // On React Native we instead use a 1s setInterval (rAF is unnecessary here since

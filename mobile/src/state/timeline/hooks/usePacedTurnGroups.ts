@@ -4,8 +4,7 @@
    in place. Ported verbatim from the battle-tested web usePacedTurnGroups. */
 // usePacedTurnGroups.ts — staggered (200ms) reveal of timeline steps.
 //
-// Ported verbatim from web:
-//   web/src/app/app/message/messageComponents/timeline/hooks/usePacedTurnGroups.ts
+// Mirrors web usePacedTurnGroups.
 // Pacing state in a ref; a single `revealTrigger` counter forces re-derivation.
 // STOP flushes everything; history (stopPacketSeen on first render) bypasses
 // pacing entirely. Output arrays are reference-stabilized so unchanged groups

@@ -1,24 +1,12 @@
-// MemoryToolRenderer.tsx — renders memory tool execution steps.
-//
-// Ported from web:
-//   web/src/app/app/message/messageComponents/timeline/renderers/memory/MemoryToolRenderer.tsx
+// MemoryToolRenderer.tsx — renders memory tool execution steps. Native mirror of web MemoryToolRenderer.
 // State reducer is shared with web's logic via "@/state/timeline/memoryStateUtils".
 //
-// States:
-//   - Pre-start: icon "edit-big", status "Memory", empty body.
-//   - No access: "Memory tool disabled" (text-03). HIGHLIGHT embeds a muted header.
-//   - Streaming / delta: status "Updating memory" + the memory text. While the text
-//     has not arrived yet (and stop not seen) a BlinkingBar is shown.
-//
 // DEVIATIONS from web:
-//   - Web wraps the memory text in a flex row alongside a tertiary maximize Button
-//     that opens a MemoriesModal. Mobile has no MemoriesModal; instead the memory
-//     text is rendered through ExpandableTextDisplay (title "Memory"), which renders
-//     its own maximize Pressable (SvgMaximize2 size 16, color text-03) opening the
-//     full text in a bottom sheet. This matches "tapping maximize shows it full".
-//   - Web does not call onComplete (not in its props). The mobile renderer contract
-//     requires firing onComplete once the tool is complete, so a ref-guarded effect
-//     fires it when memoryState.isComplete becomes true.
+//   - Web has no MemoriesModal here; the memory text is rendered through
+//     ExpandableTextDisplay, whose maximize control opens the full text in a
+//     bottom sheet.
+//   - Web does not fire onComplete; the mobile renderer contract requires it, so
+//     a ref-guarded effect fires it when memoryState.isComplete becomes true.
 
 import { useCallback } from "react";
 import { View } from "react-native";

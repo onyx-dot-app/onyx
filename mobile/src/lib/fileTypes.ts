@@ -1,6 +1,5 @@
-// Filename-based image detection — ported from web `web/src/lib/utils.ts`
-// (`IMAGE_EXTENSIONS` / `isImageFile`). Used to decide whether a recent /
-// document-picked file renders as an image thumbnail.
+// Mirrors web utils.ts (`IMAGE_EXTENSIONS` / `isImageFile`). Used to decide
+// whether a recent / document-picked file renders as an image thumbnail.
 
 export const IMAGE_EXTENSIONS = [
   "png",

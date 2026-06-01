@@ -1,16 +1,7 @@
-// PythonToolRenderer.tsx — the code-interpreter (Python) tool block.
-//
-// Ported from web:
-//   web/src/app/app/message/messageComponents/timeline/renderers/code/PythonToolRenderer.tsx
+// PythonToolRenderer.tsx — the code-interpreter (Python) tool block. Native mirror of web PythonToolRenderer.
 //
 // Reduces PythonToolPackets to {code, stdout, stderr, fileIds, isStreaming,
-// isExecuting, isComplete, hasError}. Renders:
-//   - a 3-dot pulse loading indicator while streaming/executing
-//   - the code in a CodeBlock (language "python")
-//   - a stdout box (background-neutral-02, rounded, secondary-mono)
-//   - a stderr box (status-error-01 bg / status-error-02 border, status-error-05 text)
-//   - a generated-file count
-//   - a "No output" fallback (terminal glyph) when complete with no output
+// isExecuting, isComplete, hasError}.
 //
 // AMENDMENTS vs web:
 //   - Syntax highlighting (highlight.js) is OUT OF SCOPE; CodeBlock renders flat

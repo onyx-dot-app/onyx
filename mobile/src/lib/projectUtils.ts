@@ -1,5 +1,4 @@
-// Project helpers — ported 1:1 from web
-// `web/src/app/app/components/projects/project_utils.ts`.
+// Mirrors web project_utils.ts.
 
 /** Human "time ago" label for a chat's last-updated timestamp. */
 export function formatRelativeTime(isoDate: string): string {

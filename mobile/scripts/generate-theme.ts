@@ -383,7 +383,6 @@ function main(): void {
   // --- Emit files -----------------------------------------------------------
   mkdirSync(OUT_DIR, { recursive: true });
 
-  // colors.ts
   const colorsTs =
     HEADER +
     "\nexport const lightColors = " +
@@ -409,7 +408,6 @@ function main(): void {
     " as const;\n";
   writeFileSync(join(OUT_DIR, "radii.ts"), radiiTs);
 
-  // typography.ts
   const typographyTs =
     HEADER +
     "\nexport const typography = " +

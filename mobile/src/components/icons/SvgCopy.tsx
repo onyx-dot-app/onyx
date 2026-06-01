@@ -2,7 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Ported from web/lib/opal/src/icons/copy.tsx (stroke-based, viewBox 16).
+// Mirrors web copy icon.
 // The web source wraps the path in a <clipPath> bounding to the 16x16 box; that
 // clip is a no-op for rendering and is dropped here.
 /** Copy / duplicate (overlapping sheets). */

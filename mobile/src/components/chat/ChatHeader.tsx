@@ -5,8 +5,7 @@ import { SvgChevronDown } from "@/components/icons/SvgChevronDown";
 import { ScreenHeader } from "@/components/chat/ScreenHeader";
 
 // Chat-screen header: the shared ScreenHeader chrome (web SvgSidebar toggle that
-// opens the drawer) + a static "Chat" title with a decorative chevron. The selector
-// behind the chevron is a later phase.
+// opens the drawer) + a static "Chat" title with a decorative chevron.
 export function ChatHeader() {
   return (
     <ScreenHeader>

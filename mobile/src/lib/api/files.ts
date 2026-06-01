@@ -1,7 +1,6 @@
 // Chat-attachment file transport: multipart upload, status polling, and the
-// authed image-download URL. Mirrors the web `uploadFiles` /
-// `getUserFileStatuses` (web/src/app/app/projects/projectsService.ts) against the
-// same backend routes — but talks to the backend directly (no `/api` prefix).
+// authed image-download URL. Mirrors web projectsService.ts (uploadFiles /
+// getUserFileStatuses), but talks to the backend directly (no `/api` prefix).
 
 import * as LegacyFileSystem from "expo-file-system/legacy";
 

@@ -2,11 +2,9 @@ import { View } from "react-native";
 
 import { AttachmentTile, type AttachmentTileModel } from "./AttachmentTile";
 
-// AttachmentTray — native mirror of web's files wrapper
-// (`flex flex-wrap gap-1 p-1`). Lays out attachment tiles in a wrapping row and
-// switches images to the 44×44 compact size when more than one file is attached
-// (web `shouldCompactImages = currentMessageFiles.length > 1`). Removable in the
-// composer; read-only (no `onRemove`) in sent message bubbles.
+// AttachmentTray — native mirror of web's files wrapper. Lays out attachment tiles
+// in a wrapping row and switches images to the compact size when more than one file
+// is attached. Removable in the composer; read-only (no `onRemove`) in sent bubbles.
 
 interface AttachmentTrayProps {
   models: AttachmentTileModel[];

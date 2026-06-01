@@ -1,4 +1,4 @@
-// TimelineRow.tsx — rail column + content column. Ported from web TimelineRow.
+// TimelineRow.tsx — rail column + content column. Native mirror of web TimelineRow.
 
 import type { ReactNode } from "react";
 import { View } from "react-native";

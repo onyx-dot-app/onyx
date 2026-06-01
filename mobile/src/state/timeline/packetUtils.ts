@@ -1,7 +1,6 @@
 // packetUtils.ts — pure packet classifiers + content extraction.
 //
-// Ported from web:
-//   web/src/app/app/services/packetUtils.ts
+// Mirrors web packetUtils.ts.
 // Only the helpers the timeline pipeline needs. Mobile's PacketType enum
 // (src/lib/types/streaming.ts) mirrors the backend, so these port verbatim.
 

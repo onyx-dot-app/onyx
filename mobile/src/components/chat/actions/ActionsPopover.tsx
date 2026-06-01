@@ -31,7 +31,7 @@ import { useSourcePreferences } from "@/lib/sources/useSourcePreferences";
 // FORCES it (toggleForcedTool). Only SOURCES keep enable/disable switches (in
 // the sources sub-view).
 //
-// SOURCE <-> SEARCH FORCE COUPLING (ported from web): enabling the FIRST source
+// SOURCE <-> SEARCH FORCE COUPLING: enabling the FIRST source
 // force-pins the Search tool (toggleForcedTool); disabling the LAST source
 // un-forces it. This is how the Search tool gets forced. Guarded on the search
 // tool being present on the agent.

@@ -12,13 +12,13 @@ import type { ColorToken } from "@/theme/generated/colors";
 // Types
 // ---------------------------------------------------------------------------
 
-/** Font preset — one of the 19 Opal typography presets (doc-03 token system). */
+/** Font preset — one of the 19 Opal typography presets. */
 export type TextFont = TypographyPreset;
 
 /**
- * Color variant — any color token from the doc-03 palette. This is a superset
- * of the web Opal `TextColor` union (which only allows `text-0X` / inverted /
- * light / dark variants) so callers can use semantic tokens directly on RN.
+ * Color variant — any color token from the palette. This is a superset of the
+ * web Opal `TextColor` union (which only allows `text-0X` / inverted / light /
+ * dark variants) so callers can use semantic tokens directly on RN.
  */
 export type TextColor = ColorToken;
 
@@ -46,7 +46,7 @@ interface TextProps extends Omit<RNTextProps, "style"> {
  * dynamic className like `text-${color}` would silently produce no style.
  * Therefore typography and color are applied through the `style` prop — never
  * through dynamically-built classNames:
- *   - typography via `typography[font]` (a style object from doc-03)
+ *   - typography via `typography[font]` (a generated style object)
  *   - color via `useThemeColors()[color]` (resolved hex for the active scheme)
  *
  * TODO: port the web-only `as` (HTML tag) and inline-markdown (`RichStr`) APIs

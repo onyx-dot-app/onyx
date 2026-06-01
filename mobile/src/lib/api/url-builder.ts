@@ -1,4 +1,4 @@
-// Ported verbatim from web/src/lib/utilsSS.ts (the UrlBuilder class only).
+// Mirrors web utilsSS.ts (the UrlBuilder class only).
 // The env/cookie-coupled helpers (buildUrl/buildClientUrl/fetchSS — they read
 // HOST_URL/INTERNAL_URL + next/headers) stay in web. Here the base URL comes from
 // ClientConfig.baseUrl, so the static fromInternalUrl/fromClientUrl factories are dropped.
