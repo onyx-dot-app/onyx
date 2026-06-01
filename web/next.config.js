@@ -206,8 +206,11 @@ const sentryWebpackPluginOptions = {
 // validate React Compiler behavior in dev.
 module.exports = (phase) => {
   const isDevServer = phase === PHASE_DEVELOPMENT_SERVER;
-  nextConfig.reactCompiler =
-    !isDevServer || process.env.ENABLE_REACT_COMPILER === "1";
-
-  return withSentryConfig(nextConfig, sentryWebpackPluginOptions);
+  return withSentryConfig(
+    {
+      ...nextConfig,
+      reactCompiler: !isDevServer || process.env.ENABLE_REACT_COMPILER === "1",
+    },
+    sentryWebpackPluginOptions
+  );
 };
