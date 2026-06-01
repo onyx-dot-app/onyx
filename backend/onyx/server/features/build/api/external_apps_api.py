@@ -17,6 +17,7 @@ from onyx.db.external_app import get_external_apps
 from onyx.db.external_app import get_policies
 from onyx.db.external_app import get_user_credentials_by_app_id
 from onyx.db.external_app import required_user_credential_keys
+from onyx.db.external_app import set_external_app_enablement_and_policies
 from onyx.db.external_app import update_external_app
 from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.external_app import validate_auth_template
@@ -371,6 +372,12 @@ def delete_external_app_admin(
     # Resolve affected users before the delete cascades the skill row away.
     app = _get_app_or_404(db_session, external_app_id)
     if MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Built-in apps are provided by Onyx and cannot be deleted.",
+        )
+    if _is_onyx_managed(app.app_type):
+        # Cloud built-ins are Onyx-provisioned; an admin disables (not deletes).
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx and cannot be deleted.",
