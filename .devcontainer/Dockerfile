@@ -1,4 +1,8 @@
-FROM ubuntu:26.04@sha256:cc925e589b7543b910fea57a240468940003fbfc0515245a495dd0ad8fe7cef1
+# Registry prefix for base images. Defaults to Docker Hub; CI overrides this to the ECR
+# pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker
+# Hub rate limits.
+ARG BASE_IMAGE_REGISTRY=docker.io
+FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:cc925e589b7543b910fea57a240468940003fbfc0515245a495dd0ad8fe7cef1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \

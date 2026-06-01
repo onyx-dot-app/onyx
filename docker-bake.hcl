@@ -26,6 +26,13 @@ variable "TAG" {
   default = "latest"
 }
 
+# Registry prefix for base images (the Dockerfiles' BASE_IMAGE_REGISTRY ARG). Defaults to
+# Docker Hub; CI overrides this (via the matching environment variable, which bake reads
+# automatically) to the ECR pull-through cache so base-image pulls avoid Docker Hub rate limits.
+variable "BASE_IMAGE_REGISTRY" {
+  default = "docker.io"
+}
+
 target "backend" {
   context    = "backend"
   dockerfile = "Dockerfile"
@@ -35,6 +42,10 @@ target "backend" {
     "type=registry,ref=${BACKEND_REPOSITORY}:edge",
   ]
   cache-to   = ["type=inline"]
+
+  args = {
+    BASE_IMAGE_REGISTRY = "${BASE_IMAGE_REGISTRY}"
+  }
 
   tags      = ["${BACKEND_REPOSITORY}:${TAG}"]
 }
@@ -48,6 +59,10 @@ target "web" {
     "type=registry,ref=${WEB_SERVER_REPOSITORY}:edge",
   ]
   cache-to   = ["type=inline"]
+
+  args = {
+    BASE_IMAGE_REGISTRY = "${BASE_IMAGE_REGISTRY}"
+  }
 
   tags      = ["${WEB_SERVER_REPOSITORY}:${TAG}"]
 }
@@ -63,6 +78,10 @@ target "model-server" {
   ]
   cache-to   = ["type=inline"]
 
+  args = {
+    BASE_IMAGE_REGISTRY = "${BASE_IMAGE_REGISTRY}"
+  }
+
   tags      = ["${MODEL_SERVER_REPOSITORY}:${TAG}"]
 }
 
@@ -76,6 +95,10 @@ target "cli" {
   ]
   cache-to   = ["type=inline"]
 
+  args = {
+    BASE_IMAGE_REGISTRY = "${BASE_IMAGE_REGISTRY}"
+  }
+
   tags      = ["${CLI_REPOSITORY}:${TAG}"]
 }
 
@@ -88,6 +111,10 @@ target "devcontainer" {
     "type=registry,ref=${DEVCONTAINER_REPOSITORY}:edge",
   ]
   cache-to   = ["type=inline"]
+
+  args = {
+    BASE_IMAGE_REGISTRY = "${BASE_IMAGE_REGISTRY}"
+  }
 
   tags      = ["${DEVCONTAINER_REPOSITORY}:${TAG}"]
 }
