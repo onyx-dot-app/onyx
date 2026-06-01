@@ -52,3 +52,27 @@ def test_mobile_google_oauth_requires_redis_bearer_auth(
     monkeypatch.setattr(main, "MOBILE_OAUTH_REDIRECT_BASE", "https://example.com/api")
 
     assert not main._should_mount_mobile_google_oauth()
+
+
+def test_mobile_bearer_logout_mounts_for_google_oauth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(main, "AUTH_TYPE", AuthType.GOOGLE_OAUTH)
+    monkeypatch.setattr(main, "MULTI_TENANT", False)
+    monkeypatch.setattr(main, "OAUTH_ENABLED", True)
+    monkeypatch.setattr(main, "MOBILE_OAUTH_REDIRECT_BASE", "https://example.com/api")
+
+    assert main._should_mount_mobile_bearer_logout()
+
+
+@pytest.mark.parametrize("auth_type", [AuthType.BASIC, AuthType.CLOUD])
+def test_mobile_bearer_logout_not_duplicated_for_auth_router_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    auth_type: AuthType,
+) -> None:
+    monkeypatch.setattr(main, "AUTH_TYPE", auth_type)
+    monkeypatch.setattr(main, "MULTI_TENANT", False)
+    monkeypatch.setattr(main, "OAUTH_ENABLED", True)
+    monkeypatch.setattr(main, "MOBILE_OAUTH_REDIRECT_BASE", "https://example.com/api")
+
+    assert not main._should_mount_mobile_bearer_logout()

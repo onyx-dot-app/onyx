@@ -199,6 +199,13 @@ def _should_mount_mobile_google_oauth() -> bool:
     )
 
 
+def _should_mount_mobile_bearer_logout() -> bool:
+    return _should_mount_mobile_google_oauth() and AUTH_TYPE not in {
+        AuthType.BASIC,
+        AuthType.CLOUD,
+    }
+
+
 file_handlers = [
     h for h in logger.logger.handlers if isinstance(h, logging.FileHandler)
 ]
@@ -609,8 +616,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     # Native mobile Google OAuth: GET /auth/mobile/oauth/google/authorize -> IdP ->
     # GET /auth/mobile/oauth/google/callback (https) -> 302 onyx://callback?token=.
-    # Issues the redis-bearer token (works single- and multi-tenant). Mounted wherever
-    # Google creds exist: GOOGLE_OAUTH, BASIC+OAUTH_ENABLED, or cloud/multi-tenant.
+    # Issues the redis-bearer token for mobile clients.
     if _should_mount_mobile_google_oauth():
         mobile_google_client = GoogleOAuth2(
             OAUTH_CLIENT_ID,
@@ -630,6 +636,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
                 app_redirect_allowlist=["onyx://"],
             ),
             prefix="/auth/mobile/oauth/google",
+        )
+
+    if _should_mount_mobile_bearer_logout():
+        include_auth_router_with_prefix(
+            application,
+            fastapi_users.get_logout_router(redis_bearer_auth_backend),
+            prefix="/auth/mobile",
         )
 
     # Register Google OAuth when AUTH_TYPE is GOOGLE_OAUTH, or when
