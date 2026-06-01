@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import onyx.auth.users as users
+from onyx.auth.schemas import AuthBackend
 from onyx.auth.users import verify_auth_setting
 from onyx.configs.constants import AuthType
 
@@ -52,3 +53,22 @@ def test_verify_auth_setting_valid_auth_types(
 
     mock_logger.warning.assert_not_called()
     mock_logger.notice.assert_called_once_with("Using Auth Type: %s", auth_type.value)
+
+
+@pytest.mark.parametrize("auth_backend", [AuthBackend.POSTGRES, AuthBackend.JWT])
+def test_redis_bearer_auth_disabled_for_non_redis_auth_backends(
+    auth_backend: AuthBackend,
+) -> None:
+    assert not users.should_enable_redis_bearer_auth(
+        auth_type=AuthType.BASIC,
+        auth_backend=auth_backend,
+        multi_tenant=False,
+    )
+
+
+def test_redis_bearer_auth_enabled_for_redis_mobile_auth_types() -> None:
+    assert users.should_enable_redis_bearer_auth(
+        auth_type=AuthType.BASIC,
+        auth_backend=AuthBackend.REDIS,
+        multi_tenant=False,
+    )

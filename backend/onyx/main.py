@@ -33,6 +33,7 @@ from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
 from onyx.auth.users import redis_bearer_auth_backend
+from onyx.auth.users import should_enable_redis_bearer_auth
 from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
@@ -182,6 +183,19 @@ warnings.filterwarnings(
 )
 
 logger = setup_logger()
+
+
+def _should_mount_mobile_google_oauth() -> bool:
+    if not should_enable_redis_bearer_auth():
+        return False
+
+    return (
+        AUTH_TYPE == AuthType.GOOGLE_OAUTH
+        or (AUTH_TYPE == AuthType.BASIC and OAUTH_ENABLED)
+        or MULTI_TENANT
+        or AUTH_TYPE == AuthType.CLOUD
+    )
+
 
 file_handlers = [
     h for h in logger.logger.handlers if isinstance(h, logging.FileHandler)
@@ -558,15 +572,16 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             prefix="/auth",
         )
 
-        # Native mobile bearer login: POST /auth/mobile/login (form-urlencoded
-        # username/password) -> { access_token, token_type: "bearer" } in the body.
-        # Uses the opaque, tenant-resolving, revocable Redis session token, so it works
-        # for both single-tenant self-hosted (BASIC) and multi-tenant cloud (CLOUD).
-        include_auth_router_with_prefix(
-            application,
-            fastapi_users.get_auth_router(redis_bearer_auth_backend),
-            prefix="/auth/mobile",
-        )
+        if should_enable_redis_bearer_auth():
+            # Native mobile bearer login: POST /auth/mobile/login (form-urlencoded
+            # username/password) -> { access_token, token_type: "bearer" } in the body.
+            # Uses the opaque, tenant-resolving, revocable Redis session token, so it works
+            # for both single-tenant self-hosted (BASIC) and multi-tenant cloud (CLOUD).
+            include_auth_router_with_prefix(
+                application,
+                fastapi_users.get_auth_router(redis_bearer_auth_backend),
+                prefix="/auth/mobile",
+            )
 
         include_auth_router_with_prefix(
             application,
@@ -594,12 +609,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     # GET /auth/mobile/oauth/google/callback (https) -> 302 onyx://callback?token=.
     # Issues the redis-bearer token (works single- and multi-tenant). Mounted wherever
     # Google creds exist: GOOGLE_OAUTH, BASIC+OAUTH_ENABLED, or cloud/multi-tenant.
-    if (
-        AUTH_TYPE == AuthType.GOOGLE_OAUTH
-        or (AUTH_TYPE == AuthType.BASIC and OAUTH_ENABLED)
-        or MULTI_TENANT
-        or AUTH_TYPE == AuthType.CLOUD
-    ):
+    if _should_mount_mobile_google_oauth():
         mobile_google_client = GoogleOAuth2(
             OAUTH_CLIENT_ID,
             OAUTH_CLIENT_SECRET,

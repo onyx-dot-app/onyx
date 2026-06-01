@@ -1515,6 +1515,22 @@ redis_bearer_auth_backend = AuthenticationBackend(
 )
 
 
+def should_enable_redis_bearer_auth(
+    auth_type: AuthType = AUTH_TYPE,
+    auth_backend: AuthBackend = AUTH_BACKEND,
+    multi_tenant: bool = MULTI_TENANT,
+) -> bool:
+    if auth_backend != AuthBackend.REDIS:
+        return False
+
+    return (
+        auth_type == AuthType.BASIC
+        or auth_type == AuthType.GOOGLE_OAUTH
+        or multi_tenant
+        or auth_type == AuthType.CLOUD
+    )
+
+
 class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
     def get_logout_router(
         self,
@@ -1638,14 +1654,11 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
 
 # The native mobile bearer backend must be registered on the authenticator (not only
 # on the login router) so API routes accept `Authorization: Bearer <token>`.
-# Registered wherever mobile login is offered (self-hosted single-tenant + cloud).
+# Registered wherever Redis-backed mobile login is offered. Do not register it for
+# Postgres/JWT auth backends: bearer headers would otherwise trigger Redis lookups
+# on normal API routes before PAT/API-key/JWT fallback can run.
 _auth_backends = [auth_backend]
-if (
-    AUTH_TYPE == AuthType.BASIC
-    or AUTH_TYPE == AuthType.GOOGLE_OAUTH
-    or MULTI_TENANT
-    or AUTH_TYPE == AuthType.CLOUD
-):
+if should_enable_redis_bearer_auth():
     _auth_backends.append(redis_bearer_auth_backend)
 
 fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](
