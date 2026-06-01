@@ -256,3 +256,27 @@ describe("Email/Password Signup Workflow", () => {
     });
   });
 });
+
+describe("Email/Password autofill attributes", () => {
+  // Browsers / password managers (e.g. Firefox) only offer saved passwords on
+  // native `type="password"` fields, and pair the identifier via
+  // autocomplete="username". See issue #11578.
+  test("login form exposes password-manager-friendly attributes", () => {
+    render(<EmailPasswordForm isSignup={false} />);
+
+    const emailInput = screen.getByTestId("email");
+    expect(emailInput).toHaveAttribute("autocomplete", "username");
+
+    const passwordInput = screen.getByTestId("password");
+    expect(passwordInput).toHaveAttribute("type", "password");
+    expect(passwordInput).toHaveAttribute("autocomplete", "current-password");
+  });
+
+  test("signup form requests a new password from the manager", () => {
+    render(<EmailPasswordForm isSignup={true} />);
+
+    const passwordInput = screen.getByTestId("password");
+    expect(passwordInput).toHaveAttribute("type", "password");
+    expect(passwordInput).toHaveAttribute("autocomplete", "new-password");
+  });
+});

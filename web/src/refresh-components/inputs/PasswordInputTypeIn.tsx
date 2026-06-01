@@ -140,6 +140,21 @@ export interface PasswordInputTypeInProps extends Omit<
    * The input remains editable so users can type a new value.
    */
   isNonRevealable?: boolean;
+  /**
+   * When true, render a native password input (`type="password"`, toggled to
+   * `"text"` when revealed) instead of the custom ∗-masked text field.
+   *
+   * Native type lets browsers and password managers recognize the field for
+   * autofill / save-password (e.g. Firefox only offers saved passwords on
+   * `type="password"` inputs). The tradeoff is the browser's default mask
+   * character (•) instead of our custom ∗. Use for real login / signup forms;
+   * leave off for stored-credential fields that rely on the custom mask and
+   * backend-placeholder handling.
+   *
+   * Pair with an `autoComplete` value (e.g. `"current-password"` /
+   * `"new-password"`) so browsers can offer the right autofill.
+   */
+  useNativeType?: boolean;
 }
 
 /**
@@ -158,6 +173,7 @@ export interface PasswordInputTypeInProps extends Omit<
 export default function PasswordInputTypeIn({
   ref,
   isNonRevealable = false,
+  useNativeType = false,
   value,
   onChange,
   onFocus,
@@ -273,6 +289,18 @@ export default function PasswordInputTypeIn({
     [isHidden, realValue, onChange]
   );
 
+  // In native mode the browser handles masking via type="password" (toggled to
+  // "text" when revealed), so we bypass the custom mask logic entirely and pass
+  // the real value / change events straight through. This is what makes the
+  // field discoverable by browser password managers / autofill.
+  const inputValue = useNativeType ? realValue : getDisplayValue();
+  const inputOnChange = useNativeType ? onChange : handleChange;
+  const nativeType: "password" | "text" | undefined = useNativeType
+    ? isHidden
+      ? "password"
+      : "text"
+    : undefined;
+
   const showToggleButton = hasValue || isFocused;
   const isRevealed = isPasswordVisible && !effectiveNonRevealable;
   const toggleLabel = effectiveNonRevealable
@@ -290,8 +318,9 @@ export default function PasswordInputTypeIn({
     >
       <InputTypeIn
         ref={ref}
-        value={getDisplayValue()}
-        onChange={handleChange}
+        {...(nativeType ? { type: nativeType } : {})}
+        value={inputValue}
+        onChange={inputOnChange}
         onFocus={handleFocus}
         onBlur={handleBlur}
         onSelect={captureSelection}
