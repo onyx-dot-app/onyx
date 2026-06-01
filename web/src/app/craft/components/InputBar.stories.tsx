@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { SWRConfig } from "swr";
 import { Button, Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgArrowUp, SvgStop } from "@opal/icons";
+import { SvgArrowUp, SvgStop, SvgLoader } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import InputBar from "@/app/craft/components/InputBar";
 import {
@@ -226,19 +226,18 @@ export const Interrupt: Story = {
 };
 
 /**
- * Candidate treatments for the Stop control (shown next to the send button on
- * the input-bar surface). The shipped default is "Neutral solid + red icon".
+ * The shipped Stop control next to the send button, across its states:
+ * outlined + transparent with a neutral glyph (no red), a subtle neutral fill
+ * when "armed" by the first Esc, and a spinner once an interrupt is requested.
  */
-function StopButtonCandidate({
+function StopButtonState({
   label,
-  className,
-  iconClassName,
-  variant = "main-secondary",
+  armed = false,
+  stopping = false,
 }: {
   label: string;
-  className?: string;
-  iconClassName?: string;
-  variant?: "main-secondary" | "danger-primary";
+  armed?: boolean;
+  stopping?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -247,13 +246,15 @@ function StopButtonCandidate({
       </Text>
       <div className="flex flex-row items-center gap-1 rounded-16 bg-background-neutral-00 shadow-01 p-1 w-fit">
         <IconButton
-          main={variant === "main-secondary"}
-          danger={variant === "danger-primary"}
-          secondary={variant === "main-secondary"}
-          primary={variant === "danger-primary"}
-          icon={SvgStop}
-          className={className}
-          iconClassName={iconClassName}
+          main
+          tertiary
+          icon={stopping ? SvgLoader : SvgStop}
+          iconClassName={stopping ? "animate-spin" : undefined}
+          className={cn(
+            "border-[1.5px] border-border-02",
+            armed && "bg-background-tint-02!"
+          )}
+          disabled={stopping}
           tooltip="Stop · esc esc"
           aria-label="Stop generating"
         />
@@ -266,24 +267,9 @@ function StopButtonCandidate({
 export const StopButtonStyles: Story = {
   render: () => (
     <div className="flex flex-wrap gap-6">
-      <StopButtonCandidate
-        label="Soft-red surface + red icon (default)"
-        className="bg-action-danger-01! hover:bg-action-danger-02!"
-        iconClassName="stroke-action-danger-05!"
-      />
-      <StopButtonCandidate
-        label="Neutral solid + red icon"
-        className="bg-background-neutral-03! hover:bg-background-neutral-04!"
-        iconClassName="stroke-action-danger-05!"
-      />
-      <StopButtonCandidate
-        label="Neutral solid + neutral icon"
-        className="bg-background-neutral-03! hover:bg-background-neutral-04!"
-      />
-      <StopButtonCandidate
-        label="Solid red (danger primary)"
-        variant="danger-primary"
-      />
+      <StopButtonState label="Resting" />
+      <StopButtonState label="Armed (first Esc)" armed />
+      <StopButtonState label="Stopping" stopping />
     </div>
   ),
 };

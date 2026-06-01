@@ -3,13 +3,14 @@ import { cn } from "@opal/utils";
 
 interface KeycapProps {
   children: string;
-  /** "Armed" state — renders as a hot danger-filled cap. */
+  /** "Armed" state — renders as a stronger neutral-filled cap. */
   filled?: boolean;
 }
 
 /**
  * A small boxed keyboard-key glyph (e.g. `esc`, `↵`, `⌫`) for inline shortcut
- * hints. The `filled` state renders a hot danger cap (e.g. an armed shortcut).
+ * hints. The `filled` state renders a stronger neutral cap (e.g. an armed
+ * shortcut).
  */
 export default function Keycap({ children, filled = false }: KeycapProps) {
   return (
@@ -17,14 +18,11 @@ export default function Keycap({ children, filled = false }: KeycapProps) {
       className={cn(
         "inline-flex items-center rounded-08 border px-1 leading-none transition-colors duration-150",
         filled
-          ? "border-action-danger-05 bg-action-danger-05"
+          ? "border-border-03 bg-background-tint-03"
           : "border-border-02 bg-background-tint-02"
       )}
     >
-      <Text
-        font="secondary-body"
-        color={filled ? "text-inverted-05" : "text-02"}
-      >
+      <Text font="secondary-body" color={filled ? "text-04" : "text-02"}>
         {children}
       </Text>
     </span>

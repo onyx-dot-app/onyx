@@ -566,30 +566,25 @@ const InputBar = memo(
               {/* Bottom right controls */}
               <div className="flex flex-row items-center gap-1">
                 {/* Stop: inserts to the LEFT of the fixed send button while
-                    streaming, so the send target never shifts. The IconButton
-                    variant is structural only — the soft-red surface comes from
-                    the className tokens (no "danger secondary" hover-tint look). */}
+                    streaming, so the send target never shifts. Outlined +
+                    transparent with a neutral glyph (no red); the first Esc
+                    "arms" it with a subtle neutral fill. */}
                 <div
                   className={cn(
                     "overflow-hidden transition-[width,opacity] duration-150 ease-out motion-reduce:transition-none",
                     interruptible
-                      ? "w-8 opacity-100"
+                      ? "w-9 opacity-100"
                       : "w-0 opacity-0 pointer-events-none"
                   )}
                 >
                   <IconButton
                     main
-                    secondary
+                    tertiary
                     icon={isInterrupting ? SvgLoader : SvgStop}
-                    iconClassName={cn(
-                      isInterrupting
-                        ? "animate-spin"
-                        : "stroke-action-danger-05!"
-                    )}
+                    iconClassName={isInterrupting ? "animate-spin" : undefined}
                     className={cn(
-                      armed
-                        ? "bg-action-danger-03! hover:bg-action-danger-03!"
-                        : "bg-action-danger-01! hover:bg-action-danger-02!"
+                      "border-[1.5px] border-border-02",
+                      armed && "bg-background-tint-02!"
                     )}
                     disabled={!interruptible || isInterrupting}
                     onClick={handleInterrupt}

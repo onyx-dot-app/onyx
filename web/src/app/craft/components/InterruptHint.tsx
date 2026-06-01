@@ -10,7 +10,7 @@ interface InterruptHintProps {
 
 /**
  * The streaming-only hint that teaches the double-Esc interrupt. At rest it
- * reads `esc esc to stop`; the first Esc lights the first keycap; once an
+ * reads `esc ×2 to interrupt`; the first Esc lights the keycap; once an
  * interrupt is requested it becomes `Stopping…`.
  */
 export default function InterruptHint({
@@ -28,9 +28,8 @@ export default function InterruptHint({
   return (
     <div className="flex items-center gap-1 select-none">
       <Keycap filled={armed}>esc</Keycap>
-      <Keycap>esc</Keycap>
       <Text font="secondary-body" color="text-02">
-        to stop
+        ×2 to interrupt
       </Text>
     </div>
   );
