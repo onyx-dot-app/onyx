@@ -16,6 +16,7 @@ import { clientConfig } from "@/query/client";
 import { queryKeys } from "@/query/keys";
 import { useCreateSession } from "@/query/sessions";
 import { usePersonas } from "@/query/personas";
+import { useProjectChatTarget } from "@/state/projectChatTarget";
 
 export interface ChatSessionLifecycle {
   /** Lazily create a backend chat session (default persona). Returns its id, or null on failure. */
@@ -35,13 +36,26 @@ export function useChatSessionLifecycle(): ChatSessionLifecycle {
     // Default to Onyx's built-in persona (id 0), else the first available.
     const personaId =
       personas?.find((p) => p.id === 0)?.id ?? personas?.[0]?.id ?? 0;
+    // If the user launched this chat from a project (projectChatTarget set on the
+    // project screen), bind the new backend session to that project — web parity:
+    // create-chat-session carries `project_id`. Consume it once, then clear so the
+    // next plain "New Chat" doesn't inherit a stale project.
+    const projectId = useProjectChatTarget.getState().projectId;
     try {
-      const res = await createSessionAsync({ personaId });
+      const res = await createSessionAsync({ personaId, projectId });
+      if (projectId !== null) {
+        useProjectChatTarget.getState().clear();
+        // Refresh the project's chat list so the new session shows under it.
+        queryClient.invalidateQueries({
+          queryKey: [queryKeys.projectDetails(projectId)],
+        });
+        queryClient.invalidateQueries({ queryKey: [queryKeys.userProjects] });
+      }
       return res.chat_session_id;
     } catch {
       return null;
     }
-  }, [personas, createSessionAsync]);
+  }, [personas, createSessionAsync, queryClient]);
 
   const autoNameSession = useCallback(
     async (chatSessionId: string): Promise<void> => {

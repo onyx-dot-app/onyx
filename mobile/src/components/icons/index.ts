@@ -54,6 +54,16 @@ export { SvgImage } from "@/components/icons/SvgImage";
 export { SvgCpu } from "@/components/icons/SvgCpu";
 export { SvgServer } from "@/components/icons/SvgServer";
 
+// Projects icon set (ported 1:1 from web/lib/opal/src/icons).
+export { SvgEdit } from "@/components/icons/SvgEdit";
+export { SvgFolder } from "@/components/icons/SvgFolder";
+export { SvgFolderOpen } from "@/components/icons/SvgFolderOpen";
+export { SvgFolderPlus } from "@/components/icons/SvgFolderPlus";
+export { SvgAddLines } from "@/components/icons/SvgAddLines";
+export { SvgPlusCircle } from "@/components/icons/SvgPlusCircle";
+export { SvgBubbleText } from "@/components/icons/SvgBubbleText";
+export { SvgFiles } from "@/components/icons/SvgFiles";
+
 // Aliases — the Opal curated set has no dedicated glyph for these, so the
 // closest curated icon stands in (documented at the source component).
 export { SvgArrowUp as SvgSend } from "@/components/icons/SvgArrowUp";

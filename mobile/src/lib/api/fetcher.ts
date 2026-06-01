@@ -41,3 +41,32 @@ export async function errorHandlingFetcher<T>(
 
   return (await res.json()) as T;
 }
+
+/**
+ * Same auth + error semantics as `errorHandlingFetcher`, but for endpoints that
+ * return an empty body (HTTP 204) — it does NOT call `res.json()`, which would
+ * throw "Unexpected end of JSON input" on a no-content response. Used for
+ * DELETE routes like delete-project / unlink-file (backend returns 204).
+ */
+export async function errorHandlingFetcherVoid(
+  url: string,
+  config: ClientConfig,
+  init?: RequestInit
+): Promise<void> {
+  const headers = new Headers(init?.headers);
+  new Headers(await config.getAuthHeaders()).forEach((value, key) => {
+    headers.set(key, value);
+  });
+
+  const res = await config.fetchImpl(resolveUrl(config.baseUrl, url), {
+    ...init,
+    headers,
+  });
+
+  if (res.status === 403) {
+    throw new RedirectError(DEFAULT_AUTH_ERROR_MSG, res.status, await res.json());
+  }
+  if (!res.ok) {
+    throw new FetchError(DEFAULT_ERROR_MSG, res.status, await res.json());
+  }
+}

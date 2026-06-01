@@ -10,7 +10,7 @@
 
 export type { ClientConfig } from "./config";
 export { FetchError, RedirectError } from "./errors";
-export { errorHandlingFetcher } from "./fetcher";
+export { errorHandlingFetcher, errorHandlingFetcherVoid } from "./fetcher";
 export { UrlBuilder } from "./url-builder";
 export { handleSSEStream } from "./stream";
 export { SWR_KEYS } from "./endpoints";

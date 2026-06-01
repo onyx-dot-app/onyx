@@ -88,6 +88,19 @@ export const SWR_KEYS = {
 
   // ── Projects & Files ──────────────────────────────────────────────────────
   userProjects: "/user/projects",
+  // Create takes the name as a query param (web parity: POST /create?name=).
+  createProject: (name: string) =>
+    `/user/projects/create?name=${encodeURIComponent(name)}`,
+  // Per-project endpoints. PATCH (rename) / DELETE hit the base; `/details`
+  // returns the project + its files; `/instructions` GET/POST the custom prompt.
+  userProject: (projectId: number) => `/user/projects/${projectId}`,
+  projectDetails: (projectId: number) =>
+    `/user/projects/${projectId}/details`,
+  projectInstructions: (projectId: number) =>
+    `/user/projects/${projectId}/instructions`,
+  // Link (POST) / unlink (DELETE) an existing user file to/from a project.
+  projectFileLink: (projectId: number, fileId: string) =>
+    `/user/projects/${projectId}/files/${encodeURIComponent(fileId)}`,
   recentFiles: "/user/files/recent",
   // Chat attachment upload (multipart) + status polling. The `/chat/file/{id}`
   // download path is built via `chatFileUrl()` in lib/api/files.ts.

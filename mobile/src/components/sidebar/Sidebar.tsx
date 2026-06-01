@@ -1,4 +1,4 @@
-import { Image } from "expo-image";
+import { useState } from "react";
 import { router } from "expo-router";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,11 +8,16 @@ import { useToken } from "@/theme/ThemeProvider";
 import { useAuth } from "@/auth";
 import { useDrawer } from "@/components/drawer/DrawerProvider";
 import { EditBigIcon, SidebarIcon } from "@/components/ui/icons";
-import { SvgLogOut } from "@/components/icons";
+import { OnyxLogo } from "@/components/ui/logos";
+import { SvgFolderPlus, SvgLogOut } from "@/components/icons";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarRow } from "./SidebarRow";
+import { ProjectFolderRow } from "./ProjectFolderRow";
+import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { useChatSessions } from "@/query/sessions";
+import { useProjects } from "@/query/projects";
 import { useChatSessionStore } from "@/state/chatSessionStore";
+import { useProjectChatTarget } from "@/state/projectChatTarget";
 import { useStartNewChat } from "@/chat/useStartNewChat";
 
 // Drawer sidebar. Surface matches the web chat sidebar exactly (bg-background-tint-02,
@@ -28,14 +33,18 @@ export function Sidebar() {
   const insets = useSafeAreaInsets();
   const { close } = useDrawer();
   const collapseColor = useToken("text-03");
+  const logoColor = useToken("theme-primary-05");
 
   const { data: sessions, isLoading } = useChatSessions();
+  const { data: projects } = useProjects();
   const currentSessionId = useChatSessionStore((s) => s.currentSessionId);
   const setCurrentSession = useChatSessionStore((s) => s.setCurrentSession);
   const startNewChat = useStartNewChat();
   const newChatColor = useToken("text-04");
+  const newProjectColor = useToken("text-04");
   const logoutColor = useToken("text-04");
   const { signOut } = useAuth();
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
   // Sign out, then close the drawer. The (app) auth guard redirects to the login
   // screen reactively once status flips to "signedOut" — no manual nav needed.
@@ -62,6 +71,9 @@ export function Sidebar() {
     );
 
   function openSession(id: string) {
+    // Opening an existing chat is not a new project chat — drop any lingering
+    // project target so it can't bind a later draft to the wrong project.
+    useProjectChatTarget.getState().clear();
     // Open in the single chat screen (it loads + hydrates this session's history)
     // rather than pushing a separate [sessionId] route. `navigate` (not `push`)
     // avoids stacking chat screens.
@@ -81,11 +93,7 @@ export function Sidebar() {
         style={{ paddingHorizontal: 12 }}
       >
         <View className="flex-1 flex-row items-center gap-2">
-          <Image
-            source={require("../../../assets/images/icon.png")}
-            style={{ width: 30, height: 30, borderRadius: 8 }}
-            contentFit="cover"
-          />
+          <OnyxLogo size={28} color={logoColor} />
           <View className="flex-1">
             {/* TODO: bind real workspace/tenant name when available */}
             <Text font="main-ui-action" color="text-05">
@@ -125,6 +133,29 @@ export function Sidebar() {
           reliably applies (ScrollView contentContainerStyle padding was dropped). */}
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
         <View style={{ paddingTop: 4, paddingBottom: 16 }}>
+          {/* Projects (web: AppSidebar Projects section above the chat history) */}
+          <SidebarSection title="Projects">
+            <Pressable
+              onPress={() => {
+                // Close the drawer so the modal (and the subsequent project
+                // navigation) isn't left behind the open sidebar.
+                close();
+                setCreateProjectOpen(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="New project"
+              className="mx-2 mb-1 h-10 flex-row items-center gap-2 rounded-[8px] px-2 active:bg-background-tint-03"
+            >
+              <SvgFolderPlus size={18} color={newProjectColor} />
+              <Text font="main-ui-body" color="text-04">
+                New Project
+              </Text>
+            </Pressable>
+            {(projects ?? []).map((project) => (
+              <ProjectFolderRow key={project.id} project={project} />
+            ))}
+          </SidebarSection>
+
           <SidebarSection title="Recents">
             {isLoading ? (
               <RecentsSkeleton />
@@ -162,6 +193,11 @@ export function Sidebar() {
           </Text>
         </Pressable>
       </View>
+
+      <CreateProjectModal
+        visible={createProjectOpen}
+        onClose={() => setCreateProjectOpen(false)}
+      />
     </View>
   );
 }

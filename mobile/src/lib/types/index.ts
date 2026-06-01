@@ -20,3 +20,4 @@ export * from "./chat";
 export * from "./streaming";
 export * from "./llm";
 export * from "./files";
+export * from "./projects";

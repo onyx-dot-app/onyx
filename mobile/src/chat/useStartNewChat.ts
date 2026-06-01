@@ -4,6 +4,7 @@ import {
   DRAFT_SESSION_ID,
   useChatSessionStore,
 } from "@/state/chatSessionStore";
+import { useProjectChatTarget } from "@/state/projectChatTarget";
 
 // Starts a fresh chat — LAZILY, matching web. Clicking "New Chat" creates NO
 // backend session; it just resets the current session to a draft (null). The real
@@ -15,6 +16,9 @@ export function useStartNewChat() {
   const removeSession = useChatSessionStore((s) => s.removeSession);
 
   return useCallback(() => {
+    // A plain "New Chat" is NOT inside a project — clear any project target left
+    // over from a project-screen launcher that was never sent.
+    useProjectChatTarget.getState().clear();
     // Drop leftover draft state (e.g. a model picked but never sent) so the new
     // chat starts clean, then reset to a draft.
     removeSession(DRAFT_SESSION_ID);

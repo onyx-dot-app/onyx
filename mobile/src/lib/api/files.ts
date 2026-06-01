@@ -45,6 +45,7 @@ export function chatFileUrl(baseUrl: string, fileId: string): string {
 export async function uploadChatFiles(
   files: UploadableFile[],
   config: ClientConfig,
+  projectId?: number | null,
 ): Promise<CategorizedFiles> {
   const headers: Record<string, string> = {};
   new Headers(await config.getAuthHeaders()).forEach((value, key) => {
@@ -53,6 +54,13 @@ export async function uploadChatFiles(
 
   const url = `${config.baseUrl}${SWR_KEYS.chatFileUpload}`;
   const merged: CategorizedFiles = { user_files: [], rejected_files: [] };
+  // When a projectId is given, the backend links the uploaded file to that
+  // project (web `uploadFiles` appends a `project_id` form field). Omit it for
+  // plain chat attachments (web parity: message files have no project).
+  const parameters =
+    projectId !== undefined && projectId !== null
+      ? { project_id: String(projectId) }
+      : undefined;
 
   for (const file of files) {
     const response = await LegacyFileSystem.uploadAsync(url, file.uri, {
@@ -61,6 +69,7 @@ export async function uploadChatFiles(
       // Backend reads `files: list[UploadFile]` (projects/api.py upload_user_files).
       fieldName: "files",
       mimeType: file.mimeType,
+      parameters,
       headers,
     });
 
