@@ -1,11 +1,11 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "onyx",
       "devDependencies": {
-        "@typescript/native-preview": "^7.0.0-dev.20260424.2",
+        "@typescript/native-preview": "^7.0.0-dev.20260527.2",
       },
     },
     "desktop": {
