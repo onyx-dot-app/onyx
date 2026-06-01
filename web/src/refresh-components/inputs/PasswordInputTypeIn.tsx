@@ -54,10 +54,10 @@ export interface PasswordInputTypeInProps extends Omit<
  * what lets browsers and password managers recognize the field for autofill /
  * save-password. The browser draws its own mask glyph — a filled dot rendered
  * larger than a literal • bullet (closest to ● U+25CF in Chromium) and much
- * wider than normal text. While masked we shrink the field's font-size so the
- * dots are smaller/tighter, and force the ● placeholder to inherit that same
- * shrunk size so the empty (placeholder) and filled (masked) states match.
- * Callers that show a masked-style placeholder should use ●.
+ * wider than normal text. While masked we shrink the field (and its ●
+ * placeholder) to a smaller font-size so the dots are tighter and the empty
+ * (placeholder) and filled (masked) states match. Callers that show a
+ * masked-style placeholder should use ●.
  *
  * Features:
  * - Show/hide toggle button only visible when input has value or is focused
@@ -112,15 +112,18 @@ export default function PasswordInputTypeIn({
   return (
     <div
       ref={containerRef}
-      // Shrink the masked dots — the native mask glyph is much wider than text.
-      // While hidden, reduce the field's font-size (inherited by the input via
-      // `font: inherit`) and force the ● placeholder to inherit that same shrunk
-      // size (!important, to beat Opal's absolute placeholder font-size) so the
-      // placeholder and mask stay matched. Only while hidden, so revealed text
-      // is full-size and the size stays constant across keystrokes.
+      // The native mask glyph is much wider than text, so while hidden we shrink
+      // the dots to 0.6rem. We set the size on the input itself (and its ●
+      // placeholder) with !important — beating Opal's `font: inherit` / absolute
+      // placeholder size — rather than on `.opal-input`, which carries Opal's
+      // `transition-all`; keeping the change off that element makes toggling
+      // reveal instant instead of animating. rem (not em) avoids compounding, so
+      // the same value matches on both the placeholder and the mask. Only while
+      // hidden, so revealed text is full-size.
       className={cn(
         "contents",
-        isHidden && "text-[0.7em] [&_input::placeholder]:!text-[1em]"
+        isHidden &&
+          "[&_input]:!text-[0.6rem] [&_input::placeholder]:!text-[0.6rem]"
       )}
       onFocus={handleContainerFocus}
       onBlur={handleContainerBlur}

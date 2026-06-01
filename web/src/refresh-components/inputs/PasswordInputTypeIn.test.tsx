@@ -78,10 +78,12 @@ describe("PasswordInputTypeIn", () => {
     // Applied whenever hidden (even before typing) so the size is constant
     // across keystrokes; the placeholder override keeps it matched to the mask.
     const wrapper = screen.getByTestId("pw").closest("div.contents");
-    expect(wrapper?.className).toContain("text-[0.7em]");
-    expect(wrapper?.className).toContain("[&_input::placeholder]:!text-[1em]");
+    expect(wrapper?.className).toContain("[&_input]:!text-[0.6rem]");
+    expect(wrapper?.className).toContain(
+      "[&_input::placeholder]:!text-[0.6rem]"
+    );
 
     await user.click(screen.getByRole("button", { name: "Show password" }));
-    expect(wrapper?.className).not.toContain("text-[0.7em]");
+    expect(wrapper?.className).not.toContain("[&_input]:!text-[0.6rem]");
   });
 });
