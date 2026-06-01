@@ -76,11 +76,9 @@ describe("PasswordInputTypeIn", () => {
     render(<ControlledPassword initialValue="secret" />);
 
     const wrapper = screen.getByTestId("pw").closest("div.contents");
-    expect(wrapper?.className).toContain("[&_.opal-input-field]:text-[0.8em]");
+    expect(wrapper?.className).toContain("text-[0.8em]");
 
     await user.click(screen.getByRole("button", { name: "Show password" }));
-    expect(wrapper?.className).not.toContain(
-      "[&_.opal-input-field]:text-[0.8em]"
-    );
+    expect(wrapper?.className).not.toContain("text-[0.8em]");
   });
 });
