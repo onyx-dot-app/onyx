@@ -104,13 +104,9 @@ def build_action_availability_section(
 
     lines: list[str] = ["These actions are enabled for you:", ""]
     lines.extend(available or ["- (none)"])
-    lines.append("")
-    lines.append(
-        "The following actions are disabled — do not attempt them:"
-        if disabled
-        else "No actions are disabled."
-    )
     if disabled:
+        lines.append("")
+        lines.append("The following actions are disabled — do not attempt them:")
         lines.append("")
         lines.extend(disabled)
     return "\n".join(lines)

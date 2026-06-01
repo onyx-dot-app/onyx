@@ -143,10 +143,10 @@ def test_ask_default_action_rendered_as_available(
     files = build_skills_fileset_for_user(user, db_session)
 
     rendered = files[f"{_SLACK_ID}/SKILL.md"].decode("utf-8")
-    available, _, _ = rendered.partition("No actions are disabled.")
     # Slack's write action defaults to ASK -> available, not disabled.
-    assert "- **Post a message**" in available
-    assert "No actions are disabled." in rendered
+    assert "- **Post a message**" in rendered
+    # No DENY policies -> the disabled section is omitted entirely.
+    assert "disabled" not in rendered
 
 
 def test_disabled_provider_delivers_nothing_even_when_authenticated(
