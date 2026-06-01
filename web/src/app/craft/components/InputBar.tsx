@@ -38,6 +38,7 @@ import {
   SvgAlertCircle,
 } from "@opal/icons";
 import InterruptHint from "@/app/craft/components/InterruptHint";
+import Keycap from "@/refresh-components/Keycap";
 import { useDoubleEscapeInterrupt } from "@/hooks/useDoubleEscapeInterrupt";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import { useUser } from "@/providers/UserProvider";
@@ -532,11 +533,7 @@ const InputBar = memo(
                 aria-multiline={true}
                 aria-disabled={disabled}
                 aria-placeholder={placeholder}
-                data-placeholder={
-                  !message && queueEnabled && queue.length > 0
-                    ? "Press up to edit queued messages"
-                    : placeholder
-                }
+                data-placeholder={placeholder}
                 data-empty={!message ? "" : undefined}
                 onCopy={handleCopy}
                 onCut={handleCut}
@@ -561,14 +558,28 @@ const InputBar = memo(
                 {interruptible && (
                   <InterruptHint armed={armed} interrupting={isInterrupting} />
                 )}
+                {/* Queued messages-only: teaches the Up arrow to edit queued message.*/}
+                {!message && queueEnabled && queue.length > 0 && (
+                  <>
+                    {interruptible && (
+                      <Text font="secondary-body" color="text-02">
+                        ·
+                      </Text>
+                    )}
+                    <div className="flex items-center gap-1 select-none">
+                      <Keycap>↑</Keycap>
+                      <Text font="secondary-body" color="text-02">
+                        to edit queued messages
+                      </Text>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Bottom right controls */}
               <div className="flex flex-row items-center gap-1">
                 {/* Stop: inserts to the LEFT of the fixed send button while
-                    streaming, so the send target never shifts. Outlined +
-                    transparent with a neutral glyph (no red); the first Esc
-                    "arms" it with a subtle neutral fill. */}
+                    streaming. The first Esc "arms" it with a subtle neutral fill. */}
                 <div
                   className={cn(
                     "overflow-hidden transition-[width,opacity] duration-150 ease-out motion-reduce:transition-none",
