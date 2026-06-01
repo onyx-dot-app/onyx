@@ -219,7 +219,7 @@ export default function EmailPasswordForm({
                           }
                           field.onChange(e);
                         }}
-                        placeholder="∗∗∗∗∗∗∗∗∗∗∗∗∗∗"
+                        placeholder="●●●●●●●●●●●●●●"
                         data-testid="password"
                         autoComplete={
                           isSignup ? "new-password" : "current-password"

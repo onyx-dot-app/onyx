@@ -3,7 +3,6 @@
 import * as React from "react";
 import { InputTypeIn, type InputTypeInProps } from "@opal/components";
 import { Button } from "@opal/components";
-import { cn } from "@opal/utils";
 import { noProp } from "@/lib/utils";
 import { SvgEye, SvgEyeClosed } from "@opal/icons";
 
@@ -52,8 +51,10 @@ export interface PasswordInputTypeInProps extends Omit<
  *
  * Using the native type (rather than a custom-masked `type="text"` field) is
  * what lets browsers and password managers recognize the field for autofill /
- * save-password. The browser draws its own mask glyph (•); we shrink its
- * font-size while masked so it reads as a smaller dot.
+ * save-password. The browser draws its own mask glyph — a filled dot rendered
+ * larger than a literal • bullet (closest to ● U+25CF in Chromium). Callers
+ * that show a masked-style placeholder should use ● so the empty (placeholder)
+ * and filled (masked) states line up.
  *
  * Features:
  * - Show/hide toggle button only visible when input has value or is focused
@@ -108,16 +109,7 @@ export default function PasswordInputTypeIn({
   return (
     <div
       ref={containerRef}
-      // The browser's mask glyph (•) is sized by font-size, which we can't set
-      // on the glyph alone. While masked we shrink the font-size so the dots
-      // render smaller, restoring full size when revealed. We set it on this
-      // wrapper (not the field) so it flows in via the field's `font: inherit`
-      // — a utility targeting `.opal-input-field` directly would lose to that
-      // unlayered Opal rule in the cascade. Applied whenever hidden (even when
-      // empty) so the size stays constant across keystrokes; gating it on
-      // "has value" would resize the field on the first character and animate
-      // that change via the input's `transition-all`.
-      className={cn("contents", isHidden && "text-[0.8em]")}
+      className="contents"
       onFocus={handleContainerFocus}
       onBlur={handleContainerBlur}
     >

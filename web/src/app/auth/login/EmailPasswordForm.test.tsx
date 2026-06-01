@@ -41,7 +41,7 @@ describe("Email/Password Login Workflow", () => {
 
     // User fills out the form using placeholder text
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByPlaceholderText(/∗/);
+    const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "test@example.com");
     await user.type(passwordInput, "password123");
@@ -87,7 +87,7 @@ describe("Email/Password Login Workflow", () => {
 
     // User fills out form with invalid credentials
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByPlaceholderText(/∗/);
+    const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "wrong@example.com");
     await user.type(passwordInput, "wrongpassword");
@@ -136,7 +136,7 @@ describe("Email/Password Signup Workflow", () => {
 
     // User fills out the signup form
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByPlaceholderText(/∗/);
+    const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "newuser@example.com");
     await user.type(passwordInput, "securepassword123");
@@ -202,7 +202,7 @@ describe("Email/Password Signup Workflow", () => {
 
     // User fills out form with existing email
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByPlaceholderText(/∗/);
+    const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "existing@example.com");
     await user.type(passwordInput, "password123");
@@ -237,7 +237,7 @@ describe("Email/Password Signup Workflow", () => {
 
     // User fills out form
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByPlaceholderText(/∗/);
+    const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "user@example.com");
     await user.type(passwordInput, "password123");
