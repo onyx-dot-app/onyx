@@ -19,6 +19,7 @@ from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.models import AssistantMessage
 from onyx.llm.models import TextContentPart
 from onyx.llm.models import ToolMessage
@@ -720,3 +721,147 @@ class TestImageCap:
         assert len(translated) == 1
         assert isinstance(translated[0], UserMessage)
         assert len(_attached_image_file_ids(translated[0])) == 5
+
+
+class TestEmptyAnswerRecovery:
+    """Tests for the empty-answer recovery in run_llm_step_pkt_generator.
+
+    When the model emits real text that is entirely consumed by content/citation
+    processing (e.g. an answer dominated by bracketed-numeric text that matches
+    the citation pattern but has no mapping), the raw model output is surfaced
+    instead of returning an empty answer (which would otherwise raise
+    EmptyLLMResponseError downstream).
+    """
+
+    @staticmethod
+    def _make_llm() -> Any:
+        from unittest.mock import MagicMock
+
+        from onyx.llm.interfaces import LLMConfig
+
+        llm = MagicMock()
+        llm.config = LLMConfig(
+            model_provider="litellm_proxy",
+            model_name="claude-4.6-opus",
+            temperature=0.0,
+            max_input_tokens=100_000,
+        )
+        return llm
+
+    @staticmethod
+    def _content_stream(chunks: list[str]) -> Any:
+        from onyx.llm.model_response import Delta
+        from onyx.llm.model_response import ModelResponseStream
+        from onyx.llm.model_response import StreamingChoice
+
+        def _gen(*_args: Any, **_kwargs: Any) -> Any:
+            for i, chunk in enumerate(chunks):
+                yield ModelResponseStream(
+                    id="chunk",
+                    created="0",
+                    choice=StreamingChoice(
+                        finish_reason="stop" if i == len(chunks) - 1 else None,
+                        delta=Delta(content=chunk),
+                    ),
+                )
+
+        return _gen
+
+    def _run(
+        self,
+        chunks: list[str],
+        *,
+        with_citation_processor: bool,
+        tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO,
+    ) -> tuple[Any, list[Any]]:
+        from onyx.chat.citation_processor import CitationMode
+        from onyx.chat.citation_processor import DynamicCitationProcessor
+        from onyx.chat.llm_step import run_llm_step_pkt_generator
+
+        llm = self._make_llm()
+        llm.stream = self._content_stream(chunks)
+
+        citation_processor = (
+            DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+            if with_citation_processor
+            else None
+        )
+
+        gen = run_llm_step_pkt_generator(
+            history=[],
+            tool_definitions=[],
+            tool_choice=tool_choice,
+            llm=llm,
+            placement=Placement(turn_index=0),
+            state_container=None,
+            citation_processor=citation_processor,
+        )
+
+        packets: list[Any] = []
+        result: Any = None
+        while True:
+            try:
+                packets.append(next(gen))
+            except StopIteration as stop:
+                result = stop.value
+                break
+
+        llm_step_result, _ = result
+        return llm_step_result, packets
+
+    def test_recovers_raw_when_citations_strip_entire_answer(self) -> None:
+        """An answer that is entirely an unmapped bracketed number is stripped to
+        empty by the citation processor; recovery surfaces the raw text."""
+        from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+
+        raw = "[1234567890123456789]"
+        llm_step_result, packets = self._run([raw], with_citation_processor=True)
+
+        # Without recovery this would be None -> EmptyLLMResponseError downstream.
+        assert llm_step_result.answer == raw
+        assert llm_step_result.raw_answer == raw
+        assert llm_step_result.tool_calls is None
+
+        # The recovered text is actually streamed to the client.
+        emitted = "".join(
+            p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
+        )
+        assert emitted == raw
+
+    def test_recovers_raw_for_numeric_list_answer(self) -> None:
+        raw = "[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]"
+        llm_step_result, _ = self._run([raw], with_citation_processor=True)
+        assert llm_step_result.answer == raw
+
+    def test_no_recovery_for_normal_answer(self) -> None:
+        """Normal prose is unaffected — answer is the processed text, not a
+        duplicated raw fallback."""
+        from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+
+        chunks = ["The answer ", "is 42."]
+        llm_step_result, packets = self._run(chunks, with_citation_processor=True)
+        assert llm_step_result.answer == "The answer is 42."
+        emitted = "".join(
+            p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
+        )
+        # Streamed exactly once (no duplicate recovery emission).
+        assert emitted == "The answer is 42."
+
+    def test_no_recovery_when_no_content_emitted(self) -> None:
+        """A genuinely empty stream stays empty (so EmptyLLMResponseError can
+        still fire for real provider failures)."""
+        llm_step_result, _ = self._run([""], with_citation_processor=True)
+        assert llm_step_result.answer is None
+        assert llm_step_result.raw_answer is None
+
+    def test_no_recovery_in_required_tool_choice(self) -> None:
+        """In REQUIRED mode pre-tool content is reasoning and an empty answer is
+        expected; recovery must not fire (fallback tool extraction owns it)."""
+        raw = "[1234567890123456789]"
+        llm_step_result, _ = self._run(
+            [raw],
+            with_citation_processor=True,
+            tool_choice=ToolChoiceOptions.REQUIRED,
+        )
+        assert llm_step_result.answer is None
+        assert llm_step_result.raw_answer == raw

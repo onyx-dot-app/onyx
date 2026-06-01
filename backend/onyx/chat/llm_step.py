@@ -1414,6 +1414,51 @@ def run_llm_step_pkt_generator(
     if citation_processor:
         yield from _emit_citation_results(citation_processor.process_token(None))
 
+    # ── Empty-answer recovery ───────────────────────────────────────────────
+    # The model may emit real text that is then entirely consumed by content/
+    # citation processing, leaving an empty displayed answer. The most common
+    # trigger is an answer dominated by bracketed-numeric text that matches the
+    # citation pattern but has no entry in the citation mapping (e.g. a long
+    # bracketed number like "[123456789012345]", an array, or a list of ids):
+    # DynamicCitationProcessor intentionally strips such unmapped markers, which
+    # can reduce the whole answer to nothing even though the provider clearly
+    # responded. Without this guard the empty answer propagates to run_llm_loop
+    # and raises EmptyLLMResponseError ("the provider returned no text or tool
+    # calls"), which is both misleading and silent in logs. Surface the raw
+    # model output instead. Restricted to non-REQUIRED tool choice so the
+    # deep-research / forced-tool flows (where pre-tool content is reasoning and
+    # an empty answer is expected) keep relying on fallback tool extraction.
+    if (
+        tool_choice != ToolChoiceOptions.REQUIRED
+        and not tool_calls
+        and not accumulated_answer.strip()
+        and accumulated_raw_answer.strip()
+    ):
+        logger.warning(
+            "Answer empty after content/citation processing; recovering raw "
+            "model output (%d chars). provider=%s, model=%s, finish_reasons=%s",
+            len(accumulated_raw_answer),
+            llm.config.model_provider,
+            llm.config.model_name,
+            sorted(finish_reasons),
+        )
+        if not answer_start:
+            yield Packet(
+                placement=_current_placement(),
+                obj=AgentResponseStart(
+                    final_documents=final_documents,
+                    pre_answer_processing_seconds=pre_answer_processing_time,
+                ),
+            )
+            answer_start = True
+        yield Packet(
+            placement=_current_placement(),
+            obj=AgentResponseDelta(content=accumulated_raw_answer),
+        )
+        accumulated_answer = accumulated_raw_answer
+        if state_container:
+            state_container.set_answer_tokens(accumulated_answer)
+
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
     if LOG_ONYX_MODEL_INTERACTIONS:
