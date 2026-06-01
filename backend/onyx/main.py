@@ -188,10 +188,12 @@ logger = setup_logger()
 def _should_mount_mobile_google_oauth() -> bool:
     if not should_enable_redis_bearer_auth():
         return False
+    if not OAUTH_ENABLED:
+        return False
 
     return (
         AUTH_TYPE == AuthType.GOOGLE_OAUTH
-        or (AUTH_TYPE == AuthType.BASIC and OAUTH_ENABLED)
+        or AUTH_TYPE == AuthType.BASIC
         or MULTI_TENANT
         or AUTH_TYPE == AuthType.CLOUD
     )
