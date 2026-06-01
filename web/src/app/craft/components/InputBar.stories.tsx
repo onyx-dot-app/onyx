@@ -1,7 +1,10 @@
 import { useRef, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import { SWRConfig } from "swr";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
+import { cn } from "@opal/utils";
+import { SvgArrowUp, SvgStop, SvgLoader } from "@opal/icons";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import InputBar from "@/app/craft/components/InputBar";
 import {
   UploadFilesProvider,
@@ -53,10 +56,32 @@ type Story = StoryObj<typeof InputBar>;
 /** Idle input — typing + Enter (or the send button) submits immediately. */
 export const Default: Story = {};
 
-/** While a response streams, the send button is disabled and nothing submits. */
+/**
+ * While a response streams (empty input): a red Stop control appears to the
+ * left of the fixed send button, and the `esc esc to stop` hint sits next to
+ * the paperclip. The send button is disabled until you type. Press Esc twice
+ * (the first lights the first keycap) to interrupt.
+ */
 export const Running: Story = {
   args: {
     isRunning: true,
+    onInterrupt: () => console.log("interrupt"),
+    queuedMessages: [],
+    onQueueMessage: (text: string) => console.log("queue", text),
+    onRemoveQueuedMessage: (index: number) => console.log("remove", index),
+  },
+};
+
+/**
+ * The bridge state after an interrupt is requested: the Stop control shows a
+ * spinner, the hint reads `Stopping…`, and the send button is disabled so a
+ * queued send can't race the turn terminator.
+ */
+export const Interrupting: Story = {
+  args: {
+    isRunning: true,
+    isInterrupting: true,
+    onInterrupt: () => console.log("interrupt"),
   },
 };
 
@@ -137,6 +162,7 @@ function QueuedMessagesDemo() {
           console.log("onSubmit", { message, files })
         }
         isRunning={isRunning}
+        onInterrupt={() => setIsRunning(false)}
         placeholder="Continue the conversation..."
         queuedMessages={queued}
         onQueueMessage={enqueue}
@@ -148,4 +174,102 @@ function QueuedMessagesDemo() {
 
 export const QueuedMessages: Story = {
   render: () => <QueuedMessagesDemo />,
+};
+
+/**
+ * Interactive interrupt flow. While "streaming", type to see the send button
+ * turn into a Queue affordance alongside the red Stop control. Click Stop (or
+ * press Esc twice — the first Esc lights the first keycap) to request an
+ * interrupt: the control shows a brief `Stopping…` spinner, then the turn ends.
+ * "Restart stream" begins a new turn.
+ */
+function InterruptDemo() {
+  const [isRunning, setIsRunning] = useState(true);
+  const [isInterrupting, setIsInterrupting] = useState(false);
+
+  function handleInterrupt() {
+    setIsInterrupting(true);
+    // Simulate the backend turn-terminator arriving.
+    setTimeout(() => {
+      setIsInterrupting(false);
+      setIsRunning(false);
+    }, 900);
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Button
+        prominence="secondary"
+        disabled={isRunning}
+        onClick={() => setIsRunning(true)}
+      >
+        Restart stream
+      </Button>
+      <InputBar
+        onSubmit={(message, files) =>
+          console.log("onSubmit", { message, files })
+        }
+        isRunning={isRunning}
+        isInterrupting={isInterrupting}
+        onInterrupt={handleInterrupt}
+        placeholder="Continue the conversation..."
+        queuedMessages={[]}
+        onQueueMessage={(text) => console.log("queue", text)}
+        onRemoveQueuedMessage={(index) => console.log("remove", index)}
+      />
+    </div>
+  );
+}
+
+export const Interrupt: Story = {
+  render: () => <InterruptDemo />,
+};
+
+/**
+ * The shipped Stop control next to the send button, across its states:
+ * outlined + transparent with a neutral glyph (no red), a subtle neutral fill
+ * when "armed" by the first Esc, and a spinner once an interrupt is requested.
+ */
+function StopButtonState({
+  label,
+  armed = false,
+  stopping = false,
+}: {
+  label: string;
+  armed?: boolean;
+  stopping?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Text font="secondary-body" color="text-03">
+        {label}
+      </Text>
+      <div className="flex flex-row items-center gap-1 rounded-16 bg-background-neutral-00 shadow-01 p-1 w-fit">
+        <IconButton
+          main
+          tertiary
+          icon={stopping ? SvgLoader : SvgStop}
+          iconClassName={stopping ? "animate-spin" : undefined}
+          className={cn(
+            "border-[1.5px] border-border-02",
+            armed && "bg-background-tint-02!"
+          )}
+          disabled={stopping}
+          tooltip="Stop · esc esc"
+          aria-label="Stop generating"
+        />
+        <IconButton icon={SvgArrowUp} tooltip="Send" aria-label="Send" />
+      </div>
+    </div>
+  );
+}
+
+export const StopButtonStyles: Story = {
+  render: () => (
+    <div className="flex flex-wrap gap-6">
+      <StopButtonState label="Resting" />
+      <StopButtonState label="Armed (first Esc)" armed />
+      <StopButtonState label="Stopping" stopping />
+    </div>
+  ),
 };

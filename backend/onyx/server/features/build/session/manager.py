@@ -14,6 +14,7 @@ import threading
 import time
 import uuid
 import zipfile
+from collections.abc import Callable
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
@@ -25,6 +26,7 @@ import httpx
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
@@ -93,6 +95,9 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
+from onyx.server.features.build.session.interrupt_signal import clear_interrupt
+from onyx.server.features.build.session.interrupt_signal import is_interrupt_requested
+from onyx.server.features.build.session.interrupt_signal import request_interrupt
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
@@ -1427,6 +1432,23 @@ class SessionManager:
             if prompt_slot_cm is not None:
                 prompt_slot_cm.__exit__(None, None, None)
 
+    def interrupt_message(self, session_id: UUID, user_id: UUID) -> bool:
+        """Interrupt the in-flight agent turn for a session.
+
+        Sets the interrupt fence and returns. The active stream's consume loop
+        polls the fence (~1/s) and self-terminates — aborting opencode and
+        emitting its own ``PromptResponse`` rather than waiting on a
+        ``session.idle`` that may never arrive after an abort. Setting a flag
+        (vs. a direct abort) is also what survives the first-turn race, where
+        the opencode session id isn't minted until inside the stream.
+        """
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+
+        request_interrupt(session_id, get_cache_backend())
+        return True
+
     # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
     #
     # `_yield_sandbox_events` is a thin wrapper around the sandbox manager that drives
@@ -1577,6 +1599,8 @@ class SessionManager:
         sandbox_id: UUID,
         session_id: UUID,
         user_message_content: str,
+        opencode_session_id: str | None = None,
+        should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[Any, None, None]:
         """Drain the CLI agent to completion, yielding raw sandbox events.
 
@@ -1590,7 +1614,10 @@ class SessionManager:
         callers should pass them through (interactive) or drop them
         (headless).
         """
-        opencode_session_id = self._ensure_opencode_session_id(sandbox_id, session_id)
+        if opencode_session_id is None:
+            opencode_session_id = self._ensure_opencode_session_id(
+                sandbox_id, session_id
+            )
         agent_provider, agent_model = self._get_session_agent_selection(session_id)
 
         def _persist_resolved_id(new_id: str) -> None:
@@ -1609,6 +1636,7 @@ class SessionManager:
             agent_provider=agent_provider,
             agent_model=agent_model,
             on_opencode_session_resolved=_persist_resolved_id,
+            should_interrupt=should_interrupt,
         )
 
     def _get_session_agent_selection(
@@ -1948,6 +1976,26 @@ class SessionManager:
             # which releases on every exit path.
             prompt_slot_cm = candidate_cm
 
+            # NB: we deliberately do NOT clear the fence here. The finally clears
+            # it before releasing the slot, so a prior turn's fence can never
+            # leak to this one. Clearing at turn start instead would wipe an
+            # interrupt that landed while we were blocked acquiring the slot —
+            # losing the very first-turn interrupt this feature must honor.
+            cache = get_cache_backend()
+
+            def interrupt_requested() -> bool:
+                # A cache blip must never fail a healthy turn — fail open.
+                try:
+                    return is_interrupt_requested(session_id, cache)
+                except CACHE_TRANSIENT_ERRORS:
+                    logger.warning(
+                        "[SANDBOX-SERVE] interrupt fence check failed for "
+                        "session %s; treating as not-interrupted",
+                        session_id,
+                        exc_info=True,
+                    )
+                    return False
+
             # Calculate turn_index BEFORE saving user message
             # turn_index = count of existing USER messages (this will be the Nth user message)
 
@@ -1998,12 +2046,41 @@ class SessionManager:
                 },
             )
 
+            # Resolve the opencode session id up front (a slow create on the
+            # first turn). Honoring the interrupt fence here means an interrupt
+            # that arrived during that creation window stops us before we ever
+            # drive the agent — closing the first-turn race a direct interrupt
+            # can't.
+            opencode_session_id = self._ensure_opencode_session_id(
+                sandbox_id, session_id
+            )
+            if interrupt_requested():
+                clear_interrupt(session_id, cache)
+                logger.info(
+                    "[SANDBOX-SERVE] turn interrupted before start: session=%s",
+                    session_id,
+                )
+                yield self._serialize_sandbox_event(
+                    PromptResponse.model_validate({"stopReason": "cancelled"}),
+                    "prompt_response",
+                )
+                return
+
             # Drive the agent. sandbox events are merged with proxy approval
             # announces onto one SSE stream. `_persist_sandbox_event` applies
             # persistence; SSE formatting + packet-logger book-keeping happen here.
+            # `should_interrupt` lets the consume loop self-terminate on the
+            # fence (abort + its own PromptResponse) within ~1s, even on an
+            # event-less turn — so an interrupt never depends on opencode
+            # emitting session.idle, which can leave the turn (and its slot)
+            # hung until the wall-clock timeout.
             merged_events = self._merge_events_with_announces(
                 self._yield_sandbox_events(
-                    sandbox_id, session_id, user_message_content
+                    sandbox_id,
+                    session_id,
+                    user_message_content,
+                    opencode_session_id=opencode_session_id,
+                    should_interrupt=interrupt_requested,
                 ),
                 session_id=session_id,
                 tenant_id=get_current_tenant_id(),
@@ -2202,6 +2279,20 @@ class SessionManager:
             # and exception flow — without this a long-running turn would
             # leak the lock and permanently block follow-up turns on the
             # same session.
+            # Clear the fence BEFORE releasing the slot: while we still hold it
+            # no next turn can start, so we can't clobber a fence legitimately
+            # set for that turn. Don't let a fence outlive its turn either.
+            # Guard the cache call — a raise here would skip the slot release
+            # below and leak the lock for the rest of the process's life.
+            try:
+                clear_interrupt(session_id, get_cache_backend())
+            except CACHE_TRANSIENT_ERRORS:
+                logger.warning(
+                    "[SANDBOX-SERVE] failed to clear interrupt fence for "
+                    "session %s; releasing slot anyway",
+                    session_id,
+                    exc_info=True,
+                )
             if prompt_slot_cm is not None:
                 prompt_slot_cm.__exit__(None, None, None)
 

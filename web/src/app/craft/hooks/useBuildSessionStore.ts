@@ -471,6 +471,12 @@ export interface BuildSessionData {
    * current run finishes (see the auto-send effect in BuildChatPanel).
    */
   queuedMessages: QueuedMessage[];
+  /**
+   * True between an interrupt request and the turn actually terminating. Drives
+   * the "stopping…" affordance; cleared by each terminal stream handler (and on
+   * a fresh turn / aborted fetch).
+   */
+  isInterrupting: boolean;
   error: string | null;
   webappUrl: string | null;
   /** Sandbox info from backend */
@@ -715,6 +721,7 @@ const createInitialSessionData = (
   toolCalls: [],
   streamItems: [],
   queuedMessages: [],
+  isInterrupting: false,
   error: null,
   webappUrl: null,
   sandbox: null,
@@ -2499,6 +2506,13 @@ export const useIsRunning = () =>
     if (!currentSessionId) return false;
     const session = sessions.get(currentSessionId);
     return session?.status === "running" || session?.status === "creating";
+  });
+
+export const useIsInterrupting = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return false;
+    return sessions.get(currentSessionId)?.isInterrupting ?? false;
   });
 
 export const useMessages = () =>

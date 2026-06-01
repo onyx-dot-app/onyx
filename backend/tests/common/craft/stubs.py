@@ -377,6 +377,7 @@ class StubSandboxManager(SandboxManager):
         agent_provider: str | None = None,
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
+        should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         self.send_message_count += 1
         self.last_send_message_payload = {
@@ -387,6 +388,7 @@ class StubSandboxManager(SandboxManager):
             "agent_provider": agent_provider,
             "agent_model": agent_model,
             "on_opencode_session_resolved": on_opencode_session_resolved,
+            "should_interrupt": should_interrupt,
         }
         if self._send_message_events is None:
             raise _not_configured("send_message")

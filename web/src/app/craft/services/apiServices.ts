@@ -346,6 +346,20 @@ export async function sendMessageStream(
   return res;
 }
 
+/**
+ * Interrupt the in-flight agent turn for a session. The backend interrupts the
+ * sandbox turn; the open /send-message stream then terminates normally.
+ */
+export async function interruptMessageStream(sessionId: string): Promise<void> {
+  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/interrupt`, {
+    method: "POST",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to interrupt message: ${res.status}`);
+  }
+}
+
 // =============================================================================
 // Artifacts API
 // =============================================================================
