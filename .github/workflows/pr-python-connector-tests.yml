@@ -35,7 +35,6 @@ on:
     - cron: "0 16 * * *"
 
 permissions:
-  id-token: write # Required for OIDC-based AWS credential exchange
   contents: read
 
 env:
@@ -91,6 +90,12 @@ jobs:
 
   connectors-check:
     needs: build-backend-image
+    # id-token scoped to this job only -- it's the sole job that exchanges OIDC for AWS
+    # credentials (to fetch connector secrets); build-backend-image authenticates to ECR via
+    # the runner instance role instead.
+    permissions:
+      id-token: write
+      contents: read
     # See https://runs-on.com/runners/linux/
     runs-on:
       [
