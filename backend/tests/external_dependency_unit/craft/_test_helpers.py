@@ -37,6 +37,7 @@ from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import ExternalApp
+from onyx.db.models import ExternalAppPolicy
 from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import Sandbox
 from onyx.db.models import Skill
@@ -218,8 +219,10 @@ def make_external_app(
     organization_credentials: dict[str, Any] | None = None,
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
     upstream_url_patterns: list[str] | None = None,
+    action_policies: dict[str, EndpointPolicy] | None = None,
 ) -> ExternalApp:
-    """Insert an ``ExternalApp`` row backing ``skill``."""
+    """Insert an ``ExternalApp`` row backing ``skill``, plus any per-action
+    policy overrides in ``action_policies`` (``{action_id: policy}``)."""
     app = ExternalApp(
         skill_id=skill.id,
         app_type=app_type,
@@ -228,6 +231,15 @@ def make_external_app(
         organization_credentials=organization_credentials or {},
     )
     db_session.add(app)
+    db_session.flush()
+    for action_id, policy in (action_policies or {}).items():
+        db_session.add(
+            ExternalAppPolicy(
+                external_app_id=app.id,
+                action_id=action_id,
+                policy=policy,
+            )
+        )
     db_session.flush()
     return app
 

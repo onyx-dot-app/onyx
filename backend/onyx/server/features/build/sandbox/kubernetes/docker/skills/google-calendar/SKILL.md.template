@@ -7,6 +7,8 @@ description: Read and manage the connected user's Google Calendar via a light Ca
 
 Call the Google Calendar API as the connected user via the bundled helper.
 
+{{ACTION_AVAILABILITY_SECTION}}
+
 ## Usage
 
     python .opencode/skills/google-calendar/gcal_api.py <command> [args]

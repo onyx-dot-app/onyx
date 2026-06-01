@@ -7,6 +7,8 @@ description: Read, search, and post Slack messages on the connected user's behal
 
 Call the Slack Web API as the connected user via the bundled helper.
 
+{{ACTION_AVAILABILITY_SECTION}}
+
 ## Usage
 
     python .opencode/skills/slack/slack_api.py <command> [args]

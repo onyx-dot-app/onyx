@@ -7,6 +7,8 @@ description: Query and mutate Linear (issues, projects, teams) on the connected 
 
 Call Linear as the connected user via the bundled helper.
 
+{{ACTION_AVAILABILITY_SECTION}}
+
 ## Usage
 
     python .opencode/skills/linear/linear_api.py <command> [args]
