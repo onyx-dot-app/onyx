@@ -73,9 +73,16 @@ describe("PasswordInputTypeIn", () => {
 
   test("shrinks the mask glyph while hidden but not when revealed", async () => {
     const user = setupUser();
-    render(<ControlledPassword initialValue="secret" />);
+    render(<ControlledPassword />);
 
-    const wrapper = screen.getByTestId("pw").closest("div.contents");
+    const input = screen.getByTestId("pw");
+    const wrapper = input.closest("div.contents");
+
+    // Shrunk while masked even before typing, so the font-size doesn't change
+    // on the first keystroke (which would otherwise animate via the input's
+    // transition-all).
+    expect(wrapper?.className).toContain("text-[0.8em]");
+    await user.type(input, "secret");
     expect(wrapper?.className).toContain("text-[0.8em]");
 
     await user.click(screen.getByRole("button", { name: "Show password" }));

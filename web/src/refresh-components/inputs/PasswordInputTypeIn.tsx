@@ -109,12 +109,15 @@ export default function PasswordInputTypeIn({
     <div
       ref={containerRef}
       // The browser's mask glyph (•) is sized by font-size, which we can't set
-      // on the glyph alone. While the value is hidden we shrink the font-size so
-      // the dots render smaller, restoring full size when revealed. We set it on
-      // this wrapper (not the field) so it flows in via the field's `font:
-      // inherit`; a utility targeting `.opal-input-field` directly would lose to
-      // that unlayered Opal rule in the cascade.
-      className={cn("contents", isHidden && hasValue && "text-[0.8em]")}
+      // on the glyph alone. While masked we shrink the font-size so the dots
+      // render smaller, restoring full size when revealed. We set it on this
+      // wrapper (not the field) so it flows in via the field's `font: inherit`
+      // — a utility targeting `.opal-input-field` directly would lose to that
+      // unlayered Opal rule in the cascade. Applied whenever hidden (even when
+      // empty) so the size stays constant across keystrokes; gating it on
+      // "has value" would resize the field on the first character and animate
+      // that change via the input's `transition-all`.
+      className={cn("contents", isHidden && "text-[0.8em]")}
       onFocus={handleContainerFocus}
       onBlur={handleContainerBlur}
     >
