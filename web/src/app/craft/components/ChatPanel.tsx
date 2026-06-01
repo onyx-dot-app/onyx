@@ -471,7 +471,6 @@ export default function BuildChatPanel({
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          // min-h-0 lets this flex child scroll internally instead of growing
           className="flex flex-col flex-1 min-h-0 overflow-auto"
         >
           <AnimatePresence mode="wait" initial={false}>
