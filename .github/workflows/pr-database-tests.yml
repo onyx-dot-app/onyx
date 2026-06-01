@@ -41,6 +41,7 @@ jobs:
               - 'deployment/docker_compose/docker-compose.dev.yml'
               - '.github/workflows/pr-database-tests.yml'
               - '.github/actions/setup-python-and-install-dependencies/**'
+              - '.github/actions/login-ecr-pullthrough-cache/**'
 
   database-tests:
     needs: changes

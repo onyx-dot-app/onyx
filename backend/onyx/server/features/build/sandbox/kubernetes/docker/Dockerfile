@@ -85,10 +85,13 @@ RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     rm -rf /root/.npm; \
     fi
 
-COPY --from=oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 \
+# Re-declare BASE_IMAGE_REGISTRY so the global default/override is in scope for the COPY --from
+# below: a global ARG only applies to FROM lines, not within a stage.
+ARG BASE_IMAGE_REGISTRY
+COPY --from=${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 \
     /usr/local/bin/bun /usr/local/bin/bun
 
-COPY --from=peakcom/s5cmd:v2.3.0@sha256:2ff939e2ee3c76adcadd78dbfc3e2569b18a3743ed9dcfccb1ec589af7fb9903 \
+COPY --from=${BASE_IMAGE_REGISTRY}/peakcom/s5cmd:v2.3.0@sha256:2ff939e2ee3c76adcadd78dbfc3e2569b18a3743ed9dcfccb1ec589af7fb9903 \
     /s5cmd /usr/local/bin/s5cmd
 
 USER sandbox

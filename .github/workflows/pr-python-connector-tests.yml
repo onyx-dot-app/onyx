@@ -26,6 +26,7 @@ on:
       - "uv.lock"
       - ".github/workflows/pr-python-connector-tests.yml"
       - ".github/actions/build-backend-image/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
   push:
     tags:
       - "v*.*.*"

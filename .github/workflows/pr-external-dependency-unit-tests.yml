@@ -14,6 +14,7 @@ on:
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
       - ".github/actions/setup-playwright/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.dev.yml"
   push:

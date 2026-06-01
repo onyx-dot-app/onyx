@@ -28,6 +28,7 @@ on:
       - "backend/tests/external_dependency_unit/craft/conftest.py"
       - ".github/workflows/pr-craft-k8s-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.dev.yml"
       # Watch the whole chart, not just the templates we render — shared

@@ -52,8 +52,10 @@ RUN ln -sf "$(which fdfind)" /usr/local/bin/fd
 # (cmake, libxmlsec1-dev, pkg-config, postgresql-client).
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-# Install bun (JavaScript package manager)
-COPY --from=oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 /usr/local/bin/bun /usr/local/bin/bun
+# Install bun (JavaScript package manager). Re-declare BASE_IMAGE_REGISTRY so the global
+# default/override is in scope for this COPY --from (a global ARG only applies to FROM lines).
+ARG BASE_IMAGE_REGISTRY
+COPY --from=${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 
 # Install Node.js. Bun is the JS package manager, but Playwright's e2e test

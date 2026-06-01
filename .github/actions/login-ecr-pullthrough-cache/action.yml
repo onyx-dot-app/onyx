@@ -36,10 +36,13 @@ runs:
         # it here covers every job that uses this action.
         echo "::add-mask::${ECR_REGISTRY}"
         # The docker-hub/* pull-through-cache permissions are granted to the RunsOn EC2 instance
-        # role, NOT to any OIDC/static credentials a job might also configure. Clear ambient
-        # credential env vars so the AWS CLI falls back to IMDS (the instance role) for this one
-        # call, regardless of what else the job set up.
+        # role, NOT to any OIDC/static credentials a job might also configure. Clear ambient AWS
+        # credential and endpoint-override env vars so the CLI falls back to IMDS (the instance
+        # role) and the real ECR endpoint for this one call -- some jobs (e.g. craft) set static
+        # creds and point AWS_ENDPOINT_URL at an in-cluster MinIO, which would otherwise misdirect
+        # get-login-password.
         env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
+            -u AWS_ENDPOINT_URL -u AWS_ENDPOINT_URL_ECR \
           aws ecr get-login-password --region "${AWS_REGION}" \
           | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
         # Consumed by docker-compose image interpolation (${BASE_IMAGE_REGISTRY:-docker.io}),

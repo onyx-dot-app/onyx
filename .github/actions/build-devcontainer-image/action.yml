@@ -67,7 +67,7 @@ runs:
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache-${{ inputs.github-sha }}
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }}
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache
-          type=registry,ref=onyxdotapp/onyx-devcontainer:latest
+          type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-devcontainer:latest
         cache-to: |
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache-${{ inputs.github-sha }},mode=max
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
