@@ -2,16 +2,10 @@
    ProcessorState is held in a ref and read/reset during render (a legal
    derived-from-props reset) to process packets synchronously with no extra
    render. Ported verbatim from the battle-tested web usePacketProcessor. */
-// usePacketProcessor.ts — React wrapper around the incremental packetProcessor.
-//
 // Mirrors web usePacketProcessor.
-// ProcessorState lives in a ref (synchronous incremental processing, no double
-// render). Only renderComplete/forceShowAnswer are useState. Resets on nodeId
-// change / stream shrink happen during render (legal derived-from-props reset).
-//
-// NOTE (mobile): rawPackets is a NEW array reference each store flush (mobile's
-// applyPacket clones); the index-based cursor is identity-agnostic so this is
-// safe. Keep `rawPackets.length` (not reference) as the change signal.
+// Mobile gotcha: rawPackets is a NEW array reference each store flush (applyPacket
+// clones), so the index-based cursor (identity-agnostic) is the safe signal —
+// gate on `rawPackets.length`, not the array reference.
 
 import { useRef, useState, useMemo, useCallback } from "react";
 import {
@@ -65,7 +59,7 @@ export function usePacketProcessor(
   const [renderComplete, setRenderComplete] = useState(false);
   const [forceShowAnswer, setForceShowAnswer] = useState(false);
 
-  // Reset on nodeId change
+  // Reset on nodeId change.
   if (stateRef.current.nodeId !== nodeId) {
     stateRef.current = createInitialState(nodeId);
     setRenderComplete(false);
@@ -75,19 +69,18 @@ export function usePacketProcessor(
   const prevNextPacketIndex = stateRef.current.nextPacketIndex;
   const prevFinalAnswerComing = stateRef.current.finalAnswerComing;
 
-  // Detect stream reset (packets shrunk)
+  // Stream reset: packets shrunk.
   if (prevNextPacketIndex > rawPackets.length) {
     stateRef.current = createInitialState(nodeId);
     setRenderComplete(false);
     setForceShowAnswer(false);
   }
 
-  // Process packets synchronously (incremental) - only if new packets arrived
   if (rawPackets.length > stateRef.current.nextPacketIndex) {
     stateRef.current = processPackets(stateRef.current, rawPackets);
   }
 
-  // Reset renderComplete on tool-after-message transition
+  // Tool-after-message transition: replay the answer render.
   if (prevFinalAnswerComing && !stateRef.current.finalAnswerComing) {
     setRenderComplete(false);
   }

@@ -10,7 +10,6 @@ export interface MemoryState {
   isComplete: boolean;
 }
 
-/** Constructs the current memory state from memory tool packets. */
 export function constructCurrentMemoryState(
   packets: MemoryToolPacket[]
 ): MemoryState {

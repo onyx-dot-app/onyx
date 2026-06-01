@@ -6,44 +6,17 @@ import { cn } from "@/lib/cn";
 import { Text } from "@/components/opal/Text";
 import { useToken } from "@/theme/ThemeProvider";
 
-// ---------------------------------------------------------------------------
-// Modal — a themed dialog built on @rn-primitives/dialog.
-//
-// API: a simple CONTROLLED component.
-//
-//   <Modal visible={open} onClose={() => setOpen(false)} title="Heading">
-//     ...body...
-//   </Modal>
-//
-// This is the cleaner API for app code (no need to thread Root/Trigger/Content
-// manually). The trigger is owned by the caller — open the Modal by flipping
-// `visible`. For callers who want the unstyled compound primitives (Trigger,
-// Portal positioning, etc.), the raw rn-primitives parts are re-exported as
-// `ModalPrimitive`.
-//
 // Requires a <PortalHost /> (from @rn-primitives/portal) near the app root.
-// ---------------------------------------------------------------------------
 
 interface ModalProps {
-  /** Whether the modal is shown. Controlled by the caller. */
   visible: boolean;
-  /** Called when the user dismisses (overlay press / close button / back). */
   onClose: () => void;
-  /** Optional title rendered with the Opal `Text` heading preset. */
   title?: string;
-  /** Modal body. */
   children?: ReactNode;
-  /** Extra classes merged onto the content card. */
   className?: string;
-  /** Hide the default top-right close affordance. Default: false. */
   hideClose?: boolean;
 }
 
-/**
- * Themed controlled dialog. The overlay is a semi-transparent scrim (the
- * `mask-03` token), the content is a `background-neutral-00` rounded, bordered,
- * padded card. The title uses the Opal `Text` component.
- */
 function Modal({
   visible,
   onClose,
@@ -111,11 +84,6 @@ function Modal({
   );
 }
 
-/**
- * The raw, unstyled rn-primitives dialog parts (Root / Trigger / Portal /
- * Overlay / Content / Title / Close). Use these directly when the simple
- * `<Modal>` controlled API is not flexible enough.
- */
 const ModalPrimitive = DialogPrimitive;
 
 export { Modal, ModalPrimitive, type ModalProps };

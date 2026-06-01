@@ -3,7 +3,6 @@ import { Path } from "react-native-svg";
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
 // Mirrors web x-octagon icon.
-/** X inside an octagon. */
 function SvgXOctagon(props: IconProps) {
   return (
     <Icon viewBox="0 0 15 15" {...props}>

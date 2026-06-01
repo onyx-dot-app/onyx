@@ -1,8 +1,5 @@
-// TimelinePillTabs.tsx — the horizontal tool-pill tab strip shared by
-// ParallelStreamingHeader and ParallelTimelineTabs. A ScrollView of Pressable
-// pills with active background, a per-pill Spinner-when-loading vs TimelineIcon,
-// and the tool name. The only behavioral knob is `loadingPredicate`, which lets
-// each caller decide when a step shows the spinner.
+// Horizontal tool-pill tab strip shared by ParallelStreamingHeader and
+// ParallelTimelineTabs.
 
 import { Pressable, ScrollView, type ViewStyle } from "react-native";
 

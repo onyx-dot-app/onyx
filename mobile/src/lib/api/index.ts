@@ -1,8 +1,5 @@
-// Onyx mobile API client (mobile-owned). Mirrors web's lib/fetcher + utilsSS.
-//
-// The ClientConfig seam injects the fetch impl + auth headers; on mobile this is
-// expo/fetch + a bearer PAT. Web keeps its own copy — the two are independent so
-// they can scale separately.
+// Onyx mobile API client. Mirrors web's lib/fetcher + utilsSS. The ClientConfig
+// seam injects the fetch impl + auth headers (mobile: expo/fetch + bearer PAT).
 
 export type { ClientConfig } from "./config";
 export { FetchError, RedirectError } from "./errors";

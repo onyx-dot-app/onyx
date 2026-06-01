@@ -1,6 +1,4 @@
-// Mirrors web messageTree.ts. Pure module (no React/DOM); the only change is the
-// import path (domain types from "@/lib/types"). Tree is a Map<number, Message>
-// keyed by nodeId.
+// Mirrors web messageTree.ts; only the import path differs.
 import { FileDescriptor, Message } from "@/lib/types";
 
 export const SYSTEM_MESSAGE_ID = -3;

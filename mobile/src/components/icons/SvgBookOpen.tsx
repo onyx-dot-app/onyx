@@ -3,7 +3,6 @@ import { Path } from "react-native-svg";
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
 // Mirrors web book-open icon.
-/** Open book. */
 function SvgBookOpen(props: IconProps) {
   return (
     <Icon viewBox="0 0 16 16" {...props}>

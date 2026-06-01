@@ -1,5 +1,4 @@
-// Current-user query. GET /api/me returns the User, including
-// `preferences.theme_preference` consumed by the theme layer.
+// GET /api/me — User, including the `theme_preference` the theme layer reads.
 import type { User } from "@/lib/types";
 import { queryKeys } from "./keys";
 import { useSimpleQuery } from "./client";

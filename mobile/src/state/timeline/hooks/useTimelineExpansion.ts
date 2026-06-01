@@ -9,10 +9,6 @@ export interface TimelineExpansionState {
   setParallelActiveTab: (tab: string) => void;
 }
 
-/**
- * Manages expansion state for the timeline.
- * Auto-collapses when streaming completes or message content starts, and syncs parallel tab selection.
- */
 export function useTimelineExpansion(
   stopPacketSeen: boolean,
   lastTurnGroup: TurnGroup | undefined,
@@ -27,15 +23,13 @@ export function useTimelineExpansion(
     setIsExpanded((prev) => !prev);
   }, []);
 
-  // Auto-collapse when streaming completes or message content starts
-  // BUT respect user intent - if they've manually toggled, don't auto-collapse
+  // Auto-collapse on completion/display content, unless the user toggled manually.
   useEffect(() => {
     if ((stopPacketSeen || hasDisplayContent) && !userHasToggled.current) {
       setIsExpanded(false);
     }
   }, [stopPacketSeen, hasDisplayContent]);
 
-  // Sync active tab when parallel turn group changes
   useEffect(() => {
     if (lastTurnGroup?.isParallel && lastTurnGroup.steps.length > 0) {
       const validTabs = lastTurnGroup.steps.map((s) => s.key);

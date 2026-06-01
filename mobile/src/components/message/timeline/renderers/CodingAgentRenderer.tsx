@@ -1,7 +1,5 @@
-// CodingAgentRenderer.tsx — coding agent. Functional port: shows the agent's
-// thinking, each bash command + output, and the final response in one
-// collapsible step. The web version renders each sub-step as its own
-// StepContainer; collapsed here into a single step (documented simplification).
+// Native mirror of web CodingAgentRenderer; web renders each sub-step as its own
+// StepContainer, collapsed here into a single step.
 
 import { useMemo } from "react";
 import { View } from "react-native";

@@ -1,12 +1,5 @@
-// CustomToolRenderer.tsx — renders a user-defined ("custom") tool call. Native mirror of web CustomToolRenderer.
-//
-// DEVIATIONS from web:
-//   - No syntax highlighting (web used highlight.js); CodeBlock renders flat
-//     monospace text, matching the mobile CodeBlock contract.
-//   - COMPACT drops the web FadingEdgeContainer (max-h clip + fade); it renders
-//     the same content as FULL.
-//   - The image/file URL is built with `chatFileUrl(appConfig.apiBaseUrl, …)`,
-//     the mobile equivalent of web `buildImgUrl`.
+// Native mirror of web CustomToolRenderer. No syntax highlighting; COMPACT drops
+// the web FadingEdgeContainer and renders the same content as FULL.
 
 import { useMemo } from "react";
 import { Linking, Pressable, View } from "react-native";
@@ -33,10 +26,6 @@ import { appConfig } from "@/lib/config";
 import { useToken } from "@/theme/ThemeProvider";
 import { timelineTokens as T } from "@/theme/timelineTokens";
 import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
-
-// ---------------------------------------------------------------------------
-// State reduction
-// ---------------------------------------------------------------------------
 
 interface CustomToolState {
   toolName: string;
@@ -94,10 +83,6 @@ function constructCustomToolState(packets: CustomToolPacket[]): CustomToolState 
     isComplete,
   };
 }
-
-// ---------------------------------------------------------------------------
-// File link (Open / Download)
-// ---------------------------------------------------------------------------
 
 interface FileLinkProps {
   fileId: string;
@@ -157,10 +142,6 @@ function FileLink({ fileId, index, linkColor }: FileLinkProps) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Renderer
-// ---------------------------------------------------------------------------
-
 export function CustomToolRenderer({
   packets,
   onComplete,
@@ -182,7 +163,6 @@ export function CustomToolRenderer({
 
   useFireOnComplete(isComplete, onComplete);
 
-  // Header/status label — mirrors the web status logic.
   const status = useMemo<string | null>(() => {
     if (isComplete) {
       if (error) {
@@ -215,14 +195,12 @@ export function CustomToolRenderer({
 
   const content = (
     <View style={{ gap: 12 }}>
-      {/* Loading indicator — only before any response has arrived. */}
       {isRunning && !error && !fileIds && !hasData && (
         <Text font="secondary-body" color="text-03">
           Waiting for response...
         </Text>
       )}
 
-      {/* Tool arguments. */}
       {argsJson && (
         <View style={{ gap: 4 }}>
           <IoBlockLabel label="Request" />
@@ -230,7 +208,6 @@ export function CustomToolRenderer({
         </View>
       )}
 
-      {/* Error display. */}
       {error && (
         <View style={{ paddingLeft: T.timelineCommonTextPadding }}>
           <Text font="main-ui-muted" color="text-03">
@@ -239,7 +216,6 @@ export function CustomToolRenderer({
         </View>
       )}
 
-      {/* File responses. */}
       {!error && fileIds && fileIds.length > 0 && (
         <View style={{ gap: 8 }}>
           {fileIds.map((fid, idx) => (
@@ -253,7 +229,6 @@ export function CustomToolRenderer({
         </View>
       )}
 
-      {/* JSON / text responses. */}
       {!error && hasData && (
         <View style={{ gap: 4 }}>
           <IoBlockLabel label="Response" />
@@ -267,7 +242,6 @@ export function CustomToolRenderer({
     </View>
   );
 
-  // Auth error: always render with the error surface, non-collapsible.
   if (error?.is_auth_error) {
     const result: RendererResult = {
       icon: "terminal",
@@ -280,7 +254,6 @@ export function CustomToolRenderer({
     return children([result]);
   }
 
-  // FULL mode — collapsible, no right padding.
   if (renderType === RenderType.FULL) {
     const result: RendererResult = {
       icon: "terminal",
@@ -292,8 +265,7 @@ export function CustomToolRenderer({
     return children([result]);
   }
 
-  // COMPACT (and any other) mode — same content (web wrapped this in a fading
-  // edge container; the mobile port renders the content directly).
+  // COMPACT renders the same content (web wrapped this in a fading-edge container).
   const result: RendererResult = {
     icon: "terminal",
     status,

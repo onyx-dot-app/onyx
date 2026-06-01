@@ -1,16 +1,5 @@
-// Project queries + mutations — the mobile analogue of web's ProjectsContext +
-// projectsService.ts, expressed as TanStack Query hooks (mobile convention).
-//
-// Endpoints (all under /user/projects/*, no /api prefix — see endpoints.ts):
-//   useProjects                  GET   /user/projects                 -> Project[]
-//   useProjectDetails            GET   /user/projects/{id}/details     -> ProjectDetails
-//   useCreateProject             POST  /user/projects/create?name=     -> Project
-//   useRenameProject             PATCH /user/projects/{id} {name}      -> Project   (optimistic)
-//   useDeleteProject             DELETE/user/projects/{id}              (204)        (optimistic)
-//   useUpsertProjectInstructions POST  /user/projects/{id}/instructions {instructions}
-//   useLinkFileToProject         POST  /user/projects/{id}/files/{fileId}           (optimistic)
-//   useUnlinkFileFromProject     DELETE/user/projects/{id}/files/{fileId} (204)     (optimistic)
-//   useUploadProjectFiles        multipart upload with project_id (see lib/api/files.ts)
+// Mirrors web's ProjectsContext + projectsService.ts. All endpoints under
+// /user/projects/* take no /api prefix (see endpoints.ts).
 import {
   useQuery,
   useMutation,
@@ -33,9 +22,6 @@ import {
 import { queryKeys } from "./keys";
 import { clientConfig } from "./client";
 
-// ── List ──────────────────────────────────────────────────────────────────────
-
-/** All of the user's projects (each carries its `chat_sessions` for the sidebar). */
 export function useProjects() {
   return useQuery({
     queryKey: [queryKeys.userProjects],
@@ -44,9 +30,6 @@ export function useProjects() {
   });
 }
 
-// ── Details (with live file-status polling) ─────────────────────────────────────
-
-/** True while a file is still resolving on the backend (web parity: poll until terminal). */
 function hasPendingFile(details: ProjectDetails | undefined): boolean {
   const files = details?.files ?? [];
   return files.some(
@@ -57,10 +40,7 @@ function hasPendingFile(details: ProjectDetails | undefined): boolean {
   );
 }
 
-/**
- * Full details for one project. While any linked file is UPLOADING/PROCESSING/
- * DELETING, this refetches every 3s so statuses go live (web's targeted poller).
- */
+// Poll every 3s while any linked file is still resolving (web's targeted poller).
 export function useProjectDetails(projectId: number | null) {
   return useQuery({
     queryKey: [queryKeys.projectDetails(projectId ?? 0)],
@@ -77,8 +57,6 @@ export function useProjectDetails(projectId: number | null) {
   });
 }
 
-// ── Create ──────────────────────────────────────────────────────────────────────
-
 export function useCreateProject() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -93,8 +71,6 @@ export function useCreateProject() {
     },
   });
 }
-
-// ── Rename (optimistic) ─────────────────────────────────────────────────────────
 
 interface RenameProjectArgs {
   projectId: number;
@@ -164,8 +140,6 @@ export function useRenameProject() {
   });
 }
 
-// ── Delete (optimistic) ──────────────────────────────────────────────────────────
-
 interface DeleteProjectContext {
   previousList?: Project[];
 }
@@ -205,8 +179,6 @@ export function useDeleteProject() {
   });
 }
 
-// ── Instructions ─────────────────────────────────────────────────────────────────
-
 interface ProjectInstructionsResponse {
   instructions: string | null;
 }
@@ -232,8 +204,7 @@ export function useUpsertProjectInstructions(projectId: number) {
   });
 }
 
-// ── Link / Unlink files (optimistic on the details `files` array) ──────────────────
-
+// Link/unlink optimistically patch the details `files` array.
 function setDetailsFiles(
   queryClient: ReturnType<typeof useQueryClient>,
   projectId: number,
@@ -325,8 +296,6 @@ export function useUnlinkFileFromProject(projectId: number) {
     },
   });
 }
-
-// ── Upload (multipart, with project_id) ────────────────────────────────────────────
 
 export function useUploadProjectFiles(projectId: number) {
   const queryClient = useQueryClient();

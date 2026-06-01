@@ -1,13 +1,5 @@
-// PythonToolRenderer.tsx — the code-interpreter (Python) tool block. Native mirror of web PythonToolRenderer.
-//
-// Reduces PythonToolPackets to {code, stdout, stderr, fileIds, isStreaming,
-// isExecuting, isComplete, hasError}.
-//
-// AMENDMENTS vs web:
-//   - Syntax highlighting (highlight.js) is OUT OF SCOPE; CodeBlock renders flat
-//     monospace (matches the rest of the mobile port).
-//   - COMPACT caps the body at maxHeight 96 with overflow hidden instead of the
-//     web FadingEdgeContainer (no fade-mask primitive on RN yet).
+// Native mirror of web PythonToolRenderer. No syntax highlighting (CodeBlock
+// renders flat monospace); COMPACT caps height vs the web FadingEdgeContainer.
 
 import { useEffect, useMemo } from "react";
 import { View } from "react-native";
@@ -40,10 +32,6 @@ import { useToken } from "@/theme/ThemeProvider";
 import { radii } from "@/theme/generated/radii";
 import { useFireOnComplete } from "@/state/timeline/hooks/useFireOnComplete";
 
-// ---------------------------------------------------------------------------
-// State reduction
-// ---------------------------------------------------------------------------
-
 interface PythonState {
   code: string;
   stdout: string;
@@ -57,7 +45,7 @@ interface PythonState {
 
 // Faithful port of web `constructCurrentPythonState`.
 function constructCurrentPythonState(packets: PythonToolPacket[]): PythonState {
-  // Accumulate streaming code from argument deltas (arrives before PythonToolStart).
+  // argument deltas arrive before PythonToolStart.
   const streamingCode = packets
     .filter(
       (packet) =>
@@ -85,7 +73,6 @@ function constructCurrentPythonState(packets: PythonToolPacket[]): PythonState {
         packet.obj.type === PacketType.ERROR
     )?.obj ?? null;
 
-  // Use complete code from PythonToolStart if available, else use streamed code.
   const code = pythonStart?.code || streamingCode;
   const stdout = pythonDeltas
     .map((delta) => delta?.stdout || "")
@@ -113,10 +100,6 @@ function constructCurrentPythonState(packets: PythonToolPacket[]): PythonState {
     hasError,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Loading indicator (3-dot pulse)
-// ---------------------------------------------------------------------------
 
 interface PulseDotProps {
   delay: number;
@@ -181,10 +164,6 @@ function LoadingIndicator({ label }: LoadingIndicatorProps) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Renderer
-// ---------------------------------------------------------------------------
-
 const COMPACT_MAX_HEIGHT = 96;
 
 export function PythonToolRenderer({
@@ -214,26 +193,22 @@ export function PythonToolRenderer({
     return "Python execution";
   }, [isStreaming, isExecuting, isComplete, hasError]);
 
-  // Resolve surface tokens for the output/error boxes.
   const stdoutBg = useToken("background-neutral-02");
   const stderrBg = useToken("status-error-01");
   const stderrBorder = useToken("status-error-02");
 
   const content = (
     <View style={{ gap: 8 }}>
-      {/* Loading indicator while streaming or executing. */}
       {(isStreaming || isExecuting) && (
         <LoadingIndicator
           label={isStreaming ? "Writing code..." : "Running code..."}
         />
       )}
 
-      {/* Code block. */}
       {code.length > 0 && (
         <CodeBlock code={code.trim()} language="python" />
       )}
 
-      {/* stdout. */}
       {stdout.length > 0 && (
         <View
           style={{
@@ -255,7 +230,6 @@ export function PythonToolRenderer({
         </View>
       )}
 
-      {/* stderr. */}
       {stderr.length > 0 && (
         <View
           style={{
@@ -279,7 +253,6 @@ export function PythonToolRenderer({
         </View>
       )}
 
-      {/* Generated file count. */}
       {fileIds.length > 0 && (
         <Text font="secondary-body" color="text-03">
           {`Generated ${fileIds.length} file${
@@ -288,7 +261,6 @@ export function PythonToolRenderer({
         </Text>
       )}
 
-      {/* No-output fallback — only when complete with no output. */}
       {isComplete && stdout.length === 0 && stderr.length === 0 && (
         <View style={{ alignItems: "center", paddingVertical: 8, gap: 4 }}>
           <View style={{ opacity: 0.5 }}>

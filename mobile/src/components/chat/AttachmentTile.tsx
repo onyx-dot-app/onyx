@@ -8,40 +8,26 @@ import { SvgX } from "@/components/icons/SvgX";
 import { useToken } from "@/theme/ThemeProvider";
 import { fileExtensionLabel } from "@/lib/fileTypes";
 
-// ---------------------------------------------------------------------------
-// AttachmentTile — native mirror of web `FileCard`.
-//
-//   • Image  → thumbnail with a translucent spinner scrim while the file uploads
-//              (web shows a spinner only; mobile has the local URI, so the preview
-//              shows underneath the scrim).
-//   • File   → bordered chip: icon (or spinner) + name + type / status label.
-//   • Remove → button shown once the upload POST resolves (status ≠ "uploading").
-//
-// Shared by the composer (removable) and sent message bubbles (read-only).
-// ---------------------------------------------------------------------------
-
+// Native mirror of web FileCard.
 export type AttachmentTileStatus =
   | "uploading"
   | "processing"
   | "uploaded"
   | "failed";
 
-/** Normalized, render-ready attachment model (composer + bubbles map into this). */
 export interface AttachmentTileModel {
-  /** Stable key for list rendering + removal. */
   id: string;
   name: string;
   isImage: boolean;
   status: AttachmentTileStatus;
-  /** expo-image source for image tiles — a local URI or an authed remote URL. */
+  // expo-image source for image tiles — a local URI or an authed remote URL.
   imageSource?: { uri: string; headers?: Record<string, string> };
 }
 
 interface AttachmentTileProps {
   model: AttachmentTileModel;
-  /** Render images at 44×44 instead of 80×80 (web "compact" — 2+ images). */
+  // Render images at 44×44 instead of 80×80 (web "compact" — 2+ images).
   compact?: boolean;
-  /** When provided, renders the remove affordance (hidden while uploading). */
   onRemove?: (id: string) => void;
 }
 
@@ -63,20 +49,18 @@ function AttachmentTileComponent({
   compact = false,
   onRemove,
 }: AttachmentTileProps) {
-  // Remove-button and upload-scrim colours.
   const removeBg = useToken("background-neutral-inverted-01");
   const removeBorder = useToken("border-02");
   const shadow = useToken("shadow-02");
   const scrim = useToken("mask-03");
 
-  // web: remove allowed once the upload POST resolves (status ≠ UPLOADING).
+  // Remove allowed once the upload POST resolves (status ≠ uploading).
   const showRemove = onRemove != null && model.status !== "uploading";
   const inFlight = model.status === "uploading" || model.status === "processing";
 
   const removeButton = showRemove ? (
     <View
-      // Sibling of the (overflow-clipped) tile body so it isn't clipped; offset
-      // -8/-8 over the top-left corner, matching web's `-left-2 -top-2`.
+      // Sibling of the overflow-clipped tile body so it isn't clipped.
       className="absolute -left-2 -top-2 z-10"
       style={{
         shadowColor: shadow,
@@ -134,7 +118,7 @@ function AttachmentTileComponent({
     );
   }
 
-  // Non-image: bordered file chip (web AttachmentItemLayout inside Interactive.Container).
+  // Non-image: bordered file chip.
   return (
     <View className="relative">
       <View className="max-w-[192px] flex-row items-center gap-2 rounded-[8px] border border-border-01 bg-background-neutral-00 px-2 py-1.5">

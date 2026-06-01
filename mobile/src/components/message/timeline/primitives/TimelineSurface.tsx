@@ -1,5 +1,4 @@
-// TimelineSurface.tsx — background + rounded corners for a step. Native mirror of web TimelineSurface.
-// Hover dropped; returns null with no children.
+// Native mirror of web TimelineSurface (hover dropped).
 
 import { Children, type ReactNode } from "react";
 import { View, type ViewStyle } from "react-native";

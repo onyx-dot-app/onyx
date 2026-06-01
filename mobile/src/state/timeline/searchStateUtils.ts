@@ -24,7 +24,6 @@ export interface SearchState {
   isInternetSearch: boolean;
 }
 
-/** Constructs the current search state from search tool packets. */
 export const constructCurrentSearchState = (
   packets: SearchToolPacket[]
 ): SearchState => {
@@ -50,7 +49,7 @@ export const constructCurrentSearchState = (
       packet.obj.type === PacketType.ERROR
   )?.obj as SectionEnd | null;
 
-  // Deduplicate queries using Set for O(n) instead of indexOf which is O(n²)
+  // Set dedup for O(n) instead of indexOf's O(n²).
   const seenQueries = new Set<string>();
   const queries = queryDeltas
     .flatMap((delta) => delta?.queries || [])

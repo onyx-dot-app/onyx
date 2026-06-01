@@ -4,10 +4,8 @@ import { Redirect } from "expo-router";
 import { useAuth } from "@/auth";
 import { Text } from "@/components/opal";
 
-// OAuth redirect target for the COLD-START path: launching the app via
-// onyx://callback#token=<JWT> (or ?token=) mounts this. AuthProvider reads the
-// launch URL on mount and adopts the JWT, so here we just reflect the resolved
-// status. (The warm path resolves inside loginWithGoogle and never mounts this.)
+// OAuth target for the COLD-START path: AuthProvider adopts the JWT from the launch
+// URL, so here we just reflect status. (The warm path never mounts this.)
 export default function Callback() {
   const { status } = useAuth();
 

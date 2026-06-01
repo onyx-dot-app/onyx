@@ -5,8 +5,7 @@ import { Button, Modal, Text } from "@/components/opal";
 import { useUpsertProjectInstructions } from "@/query/projects";
 import { ProjectModalTextInput } from "./ProjectModalTextInput";
 
-// Native mirror of web `AddInstructionModal`: a controlled opal Modal with a
-// multiline instructions field, seeded from the project's current instructions.
+// Native mirror of web AddInstructionModal.
 
 interface AddInstructionModalProps {
   visible: boolean;
@@ -24,9 +23,7 @@ export function AddInstructionModal({
   const [text, setText] = useState(initialInstructions ?? "");
   const upsert = useUpsertProjectInstructions(projectId);
 
-  // Re-seed the field each time the sheet OPENS so it reflects the latest saved
-  // value. Tracking the previous `visible` and setting state during render (not
-  // in an effect) is React's recommended "reset state on prop change" pattern.
+  // Re-seed on open via React's "reset state on prop change" render pattern (not an effect).
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
@@ -38,7 +35,7 @@ export function AddInstructionModal({
       await upsert.mutateAsync(text.trim());
       onClose();
     } catch {
-      // Keep open on failure so the user doesn't lose their text.
+      // Keep open so the user doesn't lose their text.
     }
   }
 

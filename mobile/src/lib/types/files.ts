@@ -1,13 +1,7 @@
-// Mirrors web projectsService.ts (the subset the mobile chat composer needs) plus
-// the backend `CategorizedFilesSnapshot` / `UserFileSnapshot` shapes returned by
-// `POST /user/projects/file/upload` and `POST /user/projects/file/statuses`.
+// Mirrors web projectsService.ts (subset the mobile chat composer needs).
 
 import type { ChatFileType } from "./chat";
 
-/**
- * Lifecycle of an uploaded user file. `UPLOADING` is a FE-only optimistic state
- * (web parity); the rest come from the backend `UserFileStatus`.
- */
 export enum UserFileStatus {
   UPLOADING = "UPLOADING", // UI only — optimistic, before the upload POST resolves
   PROCESSING = "PROCESSING",
@@ -18,11 +12,7 @@ export enum UserFileStatus {
   DELETING = "DELETING",
 }
 
-/**
- * A user file as returned by the upload / statuses / recent-files endpoints
- * (backend `UserFileSnapshot`). `file_id` is the reference sent in chat
- * `file_descriptors`; `id` is the durable DB id (→ `user_file_id`).
- */
+// `file_id` is the reference sent in chat file_descriptors; `id` is the durable DB id.
 export interface ProjectFile {
   id: string;
   name: string;
@@ -39,13 +29,11 @@ export interface ProjectFile {
   temp_id?: string | null;
 }
 
-/** A file the backend refused (oversized, unsupported, …). */
 export interface RejectedFile {
   file_name: string;
   reason: string;
 }
 
-/** Response of `POST /user/projects/file/upload`. */
 export interface CategorizedFiles {
   user_files: ProjectFile[];
   rejected_files: RejectedFile[];

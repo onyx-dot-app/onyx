@@ -1,6 +1,5 @@
-// ShimmerText.tsx — animated "thinking" header label. Approximates web's
-// .shimmer-text CSS animation with a Reanimated opacity pulse (a moving gradient
-// mask would need @react-native-masked-view, deferred).
+// Approximates web's .shimmer-text CSS animation with a Reanimated opacity pulse
+// (a moving gradient mask would need @react-native-masked-view, deferred).
 
 import { useEffect } from "react";
 import Animated, {

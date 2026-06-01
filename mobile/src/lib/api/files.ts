@@ -1,6 +1,5 @@
-// Chat-attachment file transport: multipart upload, status polling, and the
-// authed image-download URL. Mirrors web projectsService.ts (uploadFiles /
-// getUserFileStatuses), but talks to the backend directly (no `/api` prefix).
+// Chat-attachment file transport: multipart upload, status polling, authed download URL.
+// Mirrors web projectsService.ts (uploadFiles / getUserFileStatuses).
 
 import * as LegacyFileSystem from "expo-file-system/legacy";
 
@@ -11,37 +10,25 @@ import type { ClientConfig } from "./config";
 import { SWR_KEYS } from "./endpoints";
 import type { CategorizedFiles, ProjectFile } from "@/lib/types";
 
-/** A locally-picked file ready to upload (from expo-image-picker / -document-picker). */
+// A locally-picked file ready to upload (from expo-image/-document-picker).
 export interface UploadableFile {
-  /** Local file URI (`file://…` / `ph://…`). */
   uri: string;
-  /** Filename incl. extension — the backend keys `chat_file_type` off it. */
+  // Filename incl. extension — the backend keys `chat_file_type` off it.
   name: string;
-  /** MIME type when the picker reports one. */
   mimeType?: string;
 }
 
-/** Absolute, authenticated URL for an uploaded file's bytes (image previews). */
 export function chatFileUrl(baseUrl: string, fileId: string): string {
   return `${baseUrl}/chat/file/${encodeURIComponent(fileId)}`;
 }
 
-/**
- * Upload picked files as `multipart/form-data` to `/user/projects/file/upload`
- * and return the categorized result. Message-only files are uploaded with no
- * `project_id` (web parity).
- *
- * Uses expo-file-system's native `uploadAsync` (MULTIPART) rather than
- * `fetch` + a hand-built FormData part. On Expo SDK 56 / RN 0.85 the WHATWG
- * `fetch` rejects the React-Native-style `{ uri, name, type }` FormData part
- * with "Unsupported FormDataPart implementation", so the upload never reached
- * the backend (no user_file record was ever created). `uploadAsync` reads the
- * `file://` URI and builds the multipart body natively, which works reliably.
- *
- * It uploads one file per request; callers (useComposerAttachments.uploadOne)
- * already upload a single file at a time, so we loop and merge results to keep
- * the array signature.
- */
+// Upload picked files as multipart/form-data to /user/projects/file/upload.
+//
+// Uses expo-file-system's native `uploadAsync` rather than `fetch` + a hand-built
+// FormData part: on Expo SDK 56 / RN 0.85 WHATWG `fetch` rejects the RN-style
+// `{ uri, name, type }` part ("Unsupported FormDataPart implementation"), so the
+// upload silently never reached the backend. uploadAsync builds the body natively.
+// One file per request, so we loop and merge to keep the array signature.
 export async function uploadChatFiles(
   files: UploadableFile[],
   config: ClientConfig,
@@ -51,9 +38,8 @@ export async function uploadChatFiles(
 
   const url = `${config.baseUrl}${SWR_KEYS.chatFileUpload}`;
   const merged: CategorizedFiles = { user_files: [], rejected_files: [] };
-  // When a projectId is given, the backend links the uploaded file to that
-  // project (web `uploadFiles` appends a `project_id` form field). Omit it for
-  // plain chat attachments (web parity: message files have no project).
+  // A projectId links the upload to that project; omit it for plain chat
+  // attachments (web parity: message files have no project).
   const parameters =
     projectId !== undefined && projectId !== null
       ? { project_id: String(projectId) }
@@ -92,11 +78,7 @@ export async function uploadChatFiles(
   return merged;
 }
 
-/**
- * Fetch the latest status of the given uploaded files
- * (`POST /user/projects/file/statuses`). Polled by the composer until every
- * tracked file reaches a terminal status.
- */
+// Polled by the composer until every tracked file reaches a terminal status.
 export async function fetchFileStatuses(
   fileIds: string[],
   config: ClientConfig,

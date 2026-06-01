@@ -1,10 +1,4 @@
-// FileReaderToolRenderer.tsx — the "Read <file>" timeline step. Native mirror of web FileReaderToolRenderer.
-//
-// Reduces FileReaderToolPackets inline to {fileName, charRange, previews,
-// isReading, isComplete}. Status: "Read <name> (chars X–Y of Z)" (en-dash,
-// toLocaleString) or "Reading file". COMPACT => status only, empty content.
-// FULL => filename + char range header, then a bordered preview surface with
-// previewStart…/…previewEnd in monospace. BlinkingBar while still loading.
+// Native mirror of web FileReaderToolRenderer.
 
 import { View } from "react-native";
 

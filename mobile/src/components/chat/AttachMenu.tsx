@@ -14,21 +14,16 @@ import { usePopoverPlacement } from "./usePopoverPlacement";
 import { RecentFileRow } from "./RecentFileRow";
 import { RecentFilesModal } from "./RecentFilesModal";
 
-// AttachMenu — native mirror of web `FilePickerPopover`. An opal Popover anchored
-// to the composer's paperclip with: Photos, Upload File, a divider, the Recent
-// Files quick-list (≤3, re-attach without re-upload), and an "All Recent Files"
-// overflow that opens the full modal. No camera (per product). Opens upward from
-// the bottom-left of the composer.
+// Native mirror of web FilePickerPopover. No camera (per product).
 
-// Web `MAX_FILES_TO_SHOW` — recent files shown inline before the overflow row.
+// Web MAX_FILES_TO_SHOW — recent files shown inline before the overflow row.
 const MAX_FILES_TO_SHOW = 3;
 
 interface AttachMenuProps {
-  /** The paperclip element used as the popover trigger (`asChild`). */
   trigger: ReactNode;
-  /** Whether the active model accepts images (vision gate). */
+  // Whether the active model accepts images (vision gate).
   imagesAllowed: boolean;
-  /** `file_id`s already attached — drives the check mark + pick/unpick toggle. */
+  // file_ids already attached — drives the check mark + pick/unpick toggle.
   attachedFileIds: string[];
   onPickImages: (files: UploadableFile[]) => void;
   onPickDocuments: (files: UploadableFile[]) => void;
@@ -52,8 +47,7 @@ export function AttachMenu({
   const recent = recentFiles ?? [];
   const attachedSet = new Set(attachedFileIds);
 
-  // Vision gate lives in the shared picker: Photos picks and document images are
-  // blocked when the active model can't accept images.
+  // Vision gate lives in the shared picker (blocks image picks for non-vision models).
   const { pickImages: runPickImages, pickDocuments: runPickDocuments } =
     useFilePicker({ imagesAllowed });
 

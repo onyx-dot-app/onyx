@@ -1,5 +1,4 @@
-// Mirrors web utils.ts (`IMAGE_EXTENSIONS` / `isImageFile`). Used to decide
-// whether a recent / document-picked file renders as an image thumbnail.
+// Mirrors web utils.ts (`IMAGE_EXTENSIONS` / `isImageFile`).
 
 export const IMAGE_EXTENSIONS = [
   "png",
@@ -11,22 +10,15 @@ export const IMAGE_EXTENSIONS = [
   "bmp",
 ] as const;
 
-/** True when the filename ends in a known image extension (case-insensitive). */
 export function isImageFile(fileName: string | null | undefined): boolean {
   if (!fileName) return false;
   const lower = String(fileName).toLowerCase();
   return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(`.${ext}`));
 }
 
-/**
- * Short, upper-case extension label for a filename (e.g. "report.pdf" → "PDF").
- * Returns "" when there is no usable extension (no dot, leading dot, trailing
- * dot).
- *
- * By default the `txt` extension maps to "PLAINTEXT" to match web's
- * `FileLineItem`. Pass `{ plaintextForTxt: false }` for call sites that plainly
- * upper-case the extension (web `FileCard.typeLabel` has no special case).
- */
+// `txt` maps to "PLAINTEXT" to match web's `FileLineItem`; pass
+// `{ plaintextForTxt: false }` for call sites that plainly upper-case (web
+// `FileCard.typeLabel` has no special case).
 export function fileExtensionLabel(
   name: string,
   options?: { plaintextForTxt?: boolean },

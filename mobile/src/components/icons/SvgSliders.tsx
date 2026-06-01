@@ -2,9 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Mirrors web sliders icon. Web's full-viewBox clipPath is a no-op, so only the
-// path is kept.
-/** Sliders — actions popover trigger. */
+// Mirrors web sliders icon. Web's no-op full-viewBox clipPath is dropped.
 function SvgSliders(props: IconProps) {
   return (
     <Icon viewBox="0 0 16 16" {...props}>

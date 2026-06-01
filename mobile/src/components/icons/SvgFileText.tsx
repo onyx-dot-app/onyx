@@ -3,7 +3,6 @@ import { Path } from "react-native-svg";
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
 // Mirrors web file-text icon.
-/** Document / file with text lines. */
 function SvgFileText(props: IconProps) {
   return (
     <Icon viewBox="0 0 16 20" {...props}>

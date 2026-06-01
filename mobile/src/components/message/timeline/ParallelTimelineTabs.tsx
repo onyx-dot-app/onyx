@@ -1,6 +1,4 @@
-// ParallelTimelineTabs.tsx — renders a parallel (or coding-agent) turn group as
-// a branch row with a tab strip + the active tab's content. Functional port of
-// web ParallelTimelineTabs (Opal pill Tabs -> horizontal ScrollView).
+// Native mirror of web ParallelTimelineTabs (pill Tabs -> horizontal ScrollView).
 
 import { memo, useEffect, useState } from "react";
 import { View } from "react-native";

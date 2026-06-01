@@ -1,6 +1,4 @@
-// AgentAvatar.tsx — small agent avatar for the timeline header: a tinted circle
-// with the agent's initial (or the Onyx brand mark when no name). Native mirror of
-// web AgentAvatar; per-agent uploaded images/icons are deferred.
+// Native mirror of web AgentAvatar. Per-agent uploaded images/icons are deferred.
 
 import { View } from "react-native";
 
@@ -18,8 +16,7 @@ export function AgentAvatar({ agent, size = 24 }: AgentAvatarProps) {
   const colors = useThemeColors();
   const initial = agent?.name?.trim()?.[0]?.toUpperCase();
 
-  // Named agents keep the tinted-circle initial; the generic assistant shows the
-  // Onyx brand mark (transparent SVG — no circle/background needed).
+  // No name -> Onyx brand mark (transparent SVG, no circle/background).
   if (!initial) {
     return (
       <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>

@@ -1,9 +1,5 @@
-// Chat-session search. Exposed as a mutation (not a declarative query) because the
-// search is user-triggered/imperative.
-//
-// The real Onyx endpoint is `GET /api/chat/search?query=&page=&page_size=` returning
-// ChatSearchResponse (backend/onyx/server/query_and_chat/chat_backend.py::search_chats),
-// so we keep the useMutation shape but call that GET endpoint.
+// A mutation (not a query) because search is user-triggered. Backs onto the
+// GET /api/chat/search endpoint despite the useMutation shape.
 import { useMutation } from "@tanstack/react-query";
 import { errorHandlingFetcher } from "@/lib/api";
 import type { ChatSearchResponse } from "@/lib/types";

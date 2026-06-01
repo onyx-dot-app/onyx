@@ -16,9 +16,7 @@ import { chatDisplayName } from "@/lib/chatLabels";
 import type { Project } from "@/lib/types";
 import { SidebarRow } from "./SidebarRow";
 
-// Sidebar project row — native mirror of web `ProjectFolderButton`. The folder
-// glyph toggles an inline list of the project's chats; the name navigates to the
-// project screen; the ⋯ menu offers Rename (inline) / Delete (confirm).
+// Native mirror of web ProjectFolderButton.
 
 interface ProjectFolderRowProps {
   project: Project;
@@ -40,7 +38,7 @@ export function ProjectFolderRow({ project }: ProjectFolderRowProps) {
   const dangerColor = useToken("action-text-danger-05");
 
   function openProject() {
-    // Enter the project at its landing (fresh project-bound draft → no thread).
+    // Fresh project-bound draft → no thread.
     startProjectChat(project.id);
     close();
     router.navigate(`/(app)/projects/${project.id}` as never);
@@ -150,7 +148,6 @@ export function ProjectFolderRow({ project }: ProjectFolderRowProps) {
         </Popover>
       </View>
 
-      {/* Inline chat sessions (web: expanded ProjectFolderButton lists ChatButtons) */}
       {expanded
         ? project.chat_sessions.map((chat) => (
             <View key={chat.id} style={{ paddingLeft: 16 }}>

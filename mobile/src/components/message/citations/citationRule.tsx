@@ -1,14 +1,9 @@
-// citationRule.tsx — a markdown-display `link` render rule that turns citation
-// markers into pills. NOT a port of web's react-markdown anchor (different
-// engine); authored for @ronradtke/react-native-markdown-display (markdown-it).
+// markdown-display `link` render rule that turns citation markers into pills. NOT
+// a port of web's react-markdown anchor (different engine); authored for
+// @ronradtke/react-native-markdown-display (markdown-it).
 //
-// markdown-it parses `[[N]](url)` into a link node whose child text node is
-// `[N]` (verified empirically). We read node.children[0].content, match
-// /^\[(D|Q)?\s*(\d+)\]$/, resolve the document via citations[n] -> document_id
-// -> documents.find, and render a CitationPill. Unresolved (data still
-// streaming) -> render nothing (web "unresolved-hidden"). [Q n] (sub-question)
-// -> a non-interactive number chip. Non-citation links fall through to a normal
-// pressable link.
+// markdown-it parses `[[N]](url)` into a link node whose child text node is `[N]`
+// (verified empirically); we match that against /^\[(D|Q)?\s*(\d+)\]$/.
 
 import { Pressable, Text, Linking, type TextStyle } from "react-native";
 import type { ASTNode } from "@ronradtke/react-native-markdown-display";

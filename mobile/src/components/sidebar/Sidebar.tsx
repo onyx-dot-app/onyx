@@ -21,11 +21,8 @@ import { useStartNewChat } from "@/chat/useStartNewChat";
 import { useOpenExistingChat } from "@/chat/useOpenExistingChat";
 import { chatDisplayName } from "@/lib/chatLabels";
 
-// Drawer sidebar. Surface matches the web chat sidebar exactly (bg-background-tint-02,
-// generated from the web Opal palette).
-//
-// Horizontal rhythm mirrors the web: the body has 8px side padding (web `px-2`),
-// and the section header + rows add their own 8px, so text sits at 16px and the row
+// Mirrors the web chat sidebar. Horizontal rhythm: body has 8px side padding
+// (web `px-2`), header + rows add another 8px, so text sits at 16px and the row
 // highlight is inset 8px from the drawer edge.
 export function Sidebar() {
   const insets = useSafeAreaInsets();
@@ -41,8 +38,8 @@ export function Sidebar() {
   const { signOut } = useAuth();
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
-  // Sign out, then close the drawer. The (app) auth guard redirects to the login
-  // screen reactively once status flips to "signedOut" — no manual nav needed.
+  // The (app) auth guard redirects to login reactively once status flips to
+  // "signedOut" — no manual nav needed.
   async function handleLogout() {
     close();
     await signOut();
@@ -54,10 +51,9 @@ export function Sidebar() {
     router.navigate("/(app)/(chat)" as never);
   }
 
-  // Most-recent first. We do NOT filter out un-named sessions: web shows them with
-  // a "New Chat" fallback (the backend titles a session shortly after its first
-  // message — see useChatSessionLifecycle.autoNameSession). With lazy creation,
-  // empty/untitled sessions aren't spawned on the "New Chat" tap anyway.
+  // Most-recent first. Don't filter un-named sessions: web shows them with a "New
+  // Chat" fallback (backend titles a session after its first message), and lazy
+  // creation means empty sessions aren't spawned on the "New Chat" tap anyway.
   const recents = useMemo(
     () =>
       (sessions ?? [])
@@ -71,9 +67,7 @@ export function Sidebar() {
   );
 
   function openSession(id: string) {
-    // Clears any lingering project target + makes the session current (hydrates its
-    // history). Open in the single chat screen rather than pushing a separate
-    // [sessionId] route. `navigate` (not `push`) avoids stacking chat screens.
+    // `navigate` (not `push`) reuses the single chat screen instead of stacking.
     openExistingChat(id);
     close();
     router.navigate("/(app)/(chat)" as never);
@@ -84,7 +78,6 @@ export function Sidebar() {
       className="flex-1 bg-background-tint-02"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      {/* Header — logo + workspace name + collapse toggle (web: SidebarWrapper) */}
       <View
         className="flex-row items-center justify-between pb-2 pt-3"
         style={{ paddingHorizontal: 12 }}
@@ -113,7 +106,6 @@ export function Sidebar() {
         </Pressable>
       </View>
 
-      {/* New Chat (web: SidebarTab "New Session", above Recents) */}
       <Pressable
         onPress={handleNewChat}
         accessibilityRole="button"
@@ -126,16 +118,13 @@ export function Sidebar() {
         </Text>
       </Pressable>
 
-      {/* Body — Recents. 8px side padding (web `px-2`) on a real wrapper View so it
-          reliably applies (ScrollView contentContainerStyle padding was dropped). */}
+      {/* Padding lives on a wrapper View; ScrollView contentContainerStyle padding was dropped. */}
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
         <View style={{ paddingTop: 4, paddingBottom: 16 }}>
-          {/* Projects (web: AppSidebar Projects section above the chat history) */}
           <SidebarSection title="Projects">
             <Pressable
               onPress={() => {
-                // Close the drawer so the modal (and the subsequent project
-                // navigation) isn't left behind the open sidebar.
+                // Close the drawer so the modal isn't left behind the open sidebar.
                 close();
                 setCreateProjectOpen(true);
               }}
@@ -176,7 +165,6 @@ export function Sidebar() {
         </View>
       </ScrollView>
 
-      {/* Footer — Log out, pinned at the bottom of the sidebar. */}
       <View className="border-t border-border-01 px-2 pb-1 pt-2">
         <Pressable
           onPress={handleLogout}
@@ -199,7 +187,6 @@ export function Sidebar() {
   );
 }
 
-// Three muted placeholder rows while the session list loads (mirrors web skeletons).
 function RecentsSkeleton() {
   const barColor = useToken("background-tint-03");
   const widths = ["80%", "60%", "70%"] as const;

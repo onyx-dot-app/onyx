@@ -2,10 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Mirrors web copy icon.
-// The web source wraps the path in a <clipPath> bounding to the 16x16 box; that
-// clip is a no-op for rendering and is dropped here.
-/** Copy / duplicate (overlapping sheets). */
+// Mirrors web copy icon. Web's no-op 16x16 clipPath is dropped.
 function SvgCopy(props: IconProps) {
   return (
     <Icon viewBox="0 0 16 16" {...props}>

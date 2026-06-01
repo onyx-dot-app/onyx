@@ -10,11 +10,8 @@ import { useGoogleSignIn } from "@/components/auth/useGoogleSignIn";
 import { Text, Button } from "@/components/opal";
 import { GoogleLogo } from "@/components/ui/logos";
 
-// In-app registration. Mirrors web signup: Onyx-logo card, Google button, "or"
-// divider, email/password form. POSTs JSON { email, password } to
-// the backend register route. We do NOT sign the user in here: the backend may
-// require email verification first, so on success we swap the card to a "check
-// your email, then sign in" confirmation and offer a button back to login.
+// Mirrors web signup. We do NOT sign in here: the backend may require email
+// verification first, so on success we show a "check your email, then sign in" card.
 export default function Register() {
   const { register } = useAuth();
 
@@ -42,8 +39,6 @@ export default function Register() {
     setBusy(true);
     try {
       await register(email.trim(), password);
-      // Whether or not verification is required, the next step is to sign in, so
-      // a single confirmation copy covers both cases.
       setDone(true);
     } catch (e) {
       setError(

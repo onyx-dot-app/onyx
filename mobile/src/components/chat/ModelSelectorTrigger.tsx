@@ -11,35 +11,19 @@ import type { LLMOption } from "@/lib/types";
 import { ModelListContent } from "./ModelListContent";
 import { usePopoverPlacement } from "./usePopoverPlacement";
 
-// Single-model selector in the input bar's right cluster (left of Send). Shows the
-// active model (provider icon + name + chevron); tapping opens an anchored popover
-// (@rn-primitives/popover) with the model list. The popover is anchored to the
-// trigger: rn-primitives measures the trigger on press (Trigger.measure → pageX/
-// pageY/width/height) and positions Content against it — opening upward (side="top")
-// and right-aligned (align="end") since the trigger lives in the bottom-right of the
-// composer, with avoidCollisions + safe-area insets keeping it on screen. Selecting a
-// model stores it on the session (sent as llm_override) and dismisses the popover.
-//
-// Keyboard handling: the card grows upward from a trigger near the very bottom, so
-// when the in-popover search box is focused the soft keyboard would otherwise cover
-// the lower rows. We add the live keyboard height to Content `insets.bottom` while
-// the popover is open — rn-primitives' top clamp (min(max(insetTop, natural),
-// screenH - insetBottom - cardH)) then lifts the whole card above the keyboard.
-//
-// Renders nothing when the workspace has no configured providers.
-
+// Single-model selector (mirror of web ModelListContent). The card grows upward
+// from a trigger near the bottom, so when the search box is focused we fold the
+// live keyboard height into Content insets.bottom — rn-primitives' top clamp then
+// lifts the whole card above the keyboard.
 interface ModelSelectorTriggerProps {
   sessionId: string;
 }
 
 export function ModelSelectorTrigger({ sessionId }: ModelSelectorTriggerProps) {
   const triggerRef = useRef<PopoverTriggerRef>(null);
-  // Track open state so the keyboard listener is only active while the popover is up
-  // (otherwise typing in the main composer would needlessly re-render this control).
+  // Track open state so the keyboard listener is only active while the popover is up.
   const [open, setOpen] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  // Safe-area-aware insets + width clamp. The keyboard height is folded into the
-  // bottom inset so the card lifts above the soft keyboard while open.
   const { insets, contentWidth } = usePopoverPlacement({
     maxWidth: 320,
     widthMargin: 24,
@@ -51,13 +35,11 @@ export function ModelSelectorTrigger({ sessionId }: ModelSelectorTriggerProps) {
   const updateSelectedModel = useChatSessionStore((s) => s.updateSelectedModel);
 
   const labelColor = useToken("text-04");
-  // True once the user explicitly picks a model — after that we stop auto-syncing.
+  // Once the user explicitly picks a model we stop auto-syncing.
   const manualRef = useRef(false);
 
-  // Keep the session's selected model in sync with the resolved default until the
-  // user picks one, so every send carries an explicit llm_override that tracks fresh
-  // provider data (value-compared to avoid an update loop, since defaultModel is a new
-  // object each render).
+  // Sync the session's selected model to the resolved default until the user picks
+  // one. Value-compared to avoid an update loop (defaultModel is a new object each render).
   useEffect(() => {
     if (manualRef.current || !defaultModel) return;
     const same =
@@ -68,8 +50,7 @@ export function ModelSelectorTrigger({ sessionId }: ModelSelectorTriggerProps) {
     if (!same) updateSelectedModel(sessionId, defaultModel);
   }, [defaultModel, selectedModel, sessionId, updateSelectedModel]);
 
-  // While open, subscribe to the keyboard height so the popover can sit above it (see
-  // header). Pure subscription effect — the close-time reset lives in onOpenChange.
+  // Subscribe to keyboard height while open so the popover sits above it (see header).
   useEffect(() => {
     if (!open) return;
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -89,12 +70,10 @@ export function ModelSelectorTrigger({ sessionId }: ModelSelectorTriggerProps) {
     if (!next) setKeyboardHeight(0);
   }
 
-  // Nothing to choose from yet.
   if (!isLoading && providers.length === 0) return null;
 
   const screenWidth = Dimensions.get("window").width;
-  // Label width tracks screen width (web shrink-wraps with no cap); long names still
-  // truncate with an ellipsis, but common ones like "Claude 3.5 Sonnet" fit in full.
+  // Cap label width but track screen size so common names fit; long ones ellipsize.
   const labelMaxWidth = Math.min(180, Math.round(screenWidth * 0.4));
 
   function handleSelect(o: LLMOption) {
@@ -111,20 +90,14 @@ export function ModelSelectorTrigger({ sessionId }: ModelSelectorTriggerProps) {
   return (
     <Popover onOpenChange={handleOpenChange}>
       <Popover.Trigger ref={triggerRef} asChild>
-        {/* h-9 (36px) matches the web `lg` control + the sibling Send button; the
-            label is main-ui-body/14px (web SelectButton `lg`). maxFontSizeMultiplier
-            caps OS text-scaling so the label stays close to the design size without
-            fully disabling Dynamic Type, and hitSlop lifts the tap target to the
-            44pt iOS minimum. */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Select model"
           hitSlop={8}
           className="h-9 flex-row items-center gap-1 rounded-[12px] px-2 active:bg-background-tint-02"
         >
-          {/* getModelIcon returns a stable, module-level logo component; render it
-              via createElement so the linter doesn't read it as a component declared
-              during render (react-hooks/static-components). */}
+          {/* createElement so the linter doesn't read getModelIcon's return as a
+              component declared during render (react-hooks/static-components). */}
           {createElement(
             getModelIcon(
               activeModel?.provider ?? "",

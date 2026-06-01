@@ -1,7 +1,6 @@
-// MessageTextRenderer.tsx — the final assistant answer (markdown + inline
-// citations + streaming caret). Ports web MessageTextRenderer minus the
-// typewriter/voice-sync (we render text as it arrives; store flushes are already
-// rAF-batched, so markdown re-parse runs at frame cadence, not per token).
+// Native mirror of web MessageTextRenderer minus the typewriter/voice-sync: we
+// render text as it arrives. Store flushes are rAF-batched, so markdown re-parse
+// runs at frame cadence, not per token.
 
 import { useMemo } from "react";
 import { View } from "react-native";

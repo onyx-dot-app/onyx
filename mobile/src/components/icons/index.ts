@@ -1,8 +1,5 @@
-// Icons barrel — mirrors the web Opal icon set.
-//
-// Onyx rule: ONLY curated icons (no icon-font libraries). To add more, follow
-// the port recipe documented at the top of `Icon.tsx`, then register the new
-// `Svg*` component below.
+// Icons barrel — mirrors the web Opal icon set. To add icons, follow the port
+// recipe at the top of `Icon.tsx`, then register the `Svg*` component below.
 
 export {
   Icon,
@@ -26,7 +23,7 @@ export { SvgMenu } from "@/components/icons/SvgMenu";
 export { SvgUser } from "@/components/icons/SvgUser";
 export { SvgLogOut } from "@/components/icons/SvgLogOut";
 
-// Timeline / agent-message icon set — mirrors web Opal icons.
+// Timeline / agent-message icon set
 export { SvgCircle } from "@/components/icons/SvgCircle";
 export { SvgSearchMenu } from "@/components/icons/SvgSearchMenu";
 export { SvgGlobe } from "@/components/icons/SvgGlobe";
@@ -50,7 +47,7 @@ export { SvgImage } from "@/components/icons/SvgImage";
 export { SvgCpu } from "@/components/icons/SvgCpu";
 export { SvgServer } from "@/components/icons/SvgServer";
 
-// Projects icon set — mirrors web Opal icons.
+// Projects icon set
 export { SvgEdit } from "@/components/icons/SvgEdit";
 export { SvgFolder } from "@/components/icons/SvgFolder";
 export { SvgFolderOpen } from "@/components/icons/SvgFolderOpen";
@@ -60,6 +57,5 @@ export { SvgPlusCircle } from "@/components/icons/SvgPlusCircle";
 export { SvgBubbleText } from "@/components/icons/SvgBubbleText";
 export { SvgFiles } from "@/components/icons/SvgFiles";
 
-// Aliases — the Opal curated set has no dedicated glyph for these, so the
-// closest curated icon stands in (documented at the source component).
+// Aliases — no curated glyph exists, so the closest icon stands in.
 export { SvgArrowUp as SvgSend } from "@/components/icons/SvgArrowUp";

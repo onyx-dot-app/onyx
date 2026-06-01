@@ -3,7 +3,6 @@ import { Path } from "react-native-svg";
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
 // Mirrors web x-circle icon.
-/** X inside a circle / close in a circle. */
 function SvgXCircle(props: IconProps) {
   return (
     <Icon viewBox="0 0 15 15" {...props}>

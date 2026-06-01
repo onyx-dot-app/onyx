@@ -3,7 +3,6 @@ import { Path } from "react-native-svg";
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
 // Mirrors web loader icon. The arc is the spinner glyph; rotate it via <Spinner/>.
-/** Loader arc (spinner glyph). */
 function SvgLoader(props: IconProps) {
   return (
     <Icon viewBox="0 0 15 15" {...props}>

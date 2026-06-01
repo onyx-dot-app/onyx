@@ -16,15 +16,11 @@ import {
 } from "@/query/projects";
 import { UserFileStatus, type ProjectFile } from "@/lib/types";
 
-// Native mirror of web's `FilePickerPopover` inside ProjectContextPanel: a Popover
-// with Photos / Upload File and a recent-files list. Tapping a recent file LINKS
-// it to (or UNLINKS it from) this project; fresh picks upload with project_id.
+// Native mirror of web's FilePickerPopover inside ProjectContextPanel.
 
 interface ProjectFilePickerProps {
   projectId: number;
-  /** DB ids (`ProjectFile.id`) of files already linked to this project. */
   projectFileDbIds: Set<string>;
-  /** The "Add Files" element used as the popover trigger (`asChild`). */
   trigger: ReactNode;
 }
 

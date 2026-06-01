@@ -3,7 +3,6 @@ import { Path } from "react-native-svg";
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
 // Mirrors web more-horizontal icon.
-/** Three horizontal dots — overflow / "more" affordance. */
 function SvgMoreHorizontal(props: IconProps) {
   return (
     <Icon viewBox="0 0 16 16" {...props}>

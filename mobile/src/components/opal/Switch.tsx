@@ -9,25 +9,10 @@ import Animated, {
 
 import { useToken } from "@/theme/ThemeProvider";
 
-// ---------------------------------------------------------------------------
-// Switch — a themed animated toggle (web-parity).
-//
-//   <Switch value={v} onValueChange={setV} />
-//
-// Dynamic/track colours are resolved through `useToken()` and applied via
-// `style` (never a dynamic className), and animated with Reanimated's
-// `interpolateColor` driven by a shared value (matching the codebase
-// convention in `BlinkingBar.tsx`).
-// ---------------------------------------------------------------------------
-
 export interface SwitchProps {
-  /** Whether the switch is on. Controlled. */
   value: boolean;
-  /** Called with the next value on press. */
   onValueChange: (next: boolean) => void;
-  /** Disable interaction + show the disabled track colour. Default: false. */
   disabled?: boolean;
-  /** Accessibility label for screen readers. */
   accessibilityLabel?: string;
 }
 
@@ -48,9 +33,8 @@ export function Switch({
   const onTrack = useToken("action-link-05");
   const disabledTrack = useToken("background-neutral-04");
 
-  // Drives both the track colour interpolation and the thumb translation. A
-  // shared value updated from a useEffect is the robust Reanimated pattern
-  // (vs. calling withTiming inline in the worklet on every render).
+  // Drive track color + thumb translation from a shared value updated in useEffect —
+  // robust Reanimated pattern vs. calling withTiming inline in the worklet each render.
   const progress = useSharedValue(value ? 1 : 0);
 
   useEffect(() => {

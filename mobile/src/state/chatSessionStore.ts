@@ -1,8 +1,5 @@
-// Mirrors web useChatSessionStore. The store was already DOM-free, so the only
-// change is layering zustand `persist` to persist a SLIM slice to MMKV (see
-// ./persist.ts); the core create() body and all actions are unchanged. The
-// network send loop lives outside the store and calls updateSession*/updateChatState
-// from outside, exactly like web's lib does.
+// Mirrors web useChatSessionStore; the only change is layering zustand `persist`
+// to persist a slim slice to MMKV (see ./persist.ts).
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
@@ -23,9 +20,9 @@ import { chatPersistStorage, PERSIST_VERSION } from "./persist";
 import { createInitialSessionData } from "./sessionDefaults";
 import { useMemo } from "react";
 
-// Local placeholder id for a not-yet-created (draft) chat. The composer keys its
-// pre-session state (selected model, send) under this until the first message
-// creates the real backend session. Never sent to the backend.
+// Placeholder id for a not-yet-created (draft) chat; the composer keys its
+// pre-session state under this until the first message creates the real backend
+// session. Never sent to the backend.
 export const DRAFT_SESSION_ID = "draft";
 
 interface ChatSessionData {
@@ -55,9 +52,8 @@ interface ChatSessionData {
   description?: string;
   personaId?: number;
 
-  // The model chosen for this session via the input-bar selector. Sent as
-  // llm_override on each message; in-memory only (not persisted to the backend
-  // session in v1). Undefined → use the resolved default model.
+  // Input-bar model for this session, sent as llm_override per message. In-memory
+  // only (not persisted to the backend session in v1). Undefined → default model.
   selectedModel?: SelectedModel;
 
   // Streaming duration tracking
@@ -249,8 +245,8 @@ export const useChatSessionStore = create<ChatSessionStore>()(
         });
       },
 
-      // Drop a session entry entirely (e.g. the transient "draft" placeholder once
-      // its real backend session has been created). If it was current, clears current.
+      // Drop a session entry (e.g. the "draft" placeholder once its real session
+      // exists). Clears current if it was current.
       removeSession: (sessionId: string) => {
         set((state) => {
           if (!state.sessions.has(sessionId)) return state;

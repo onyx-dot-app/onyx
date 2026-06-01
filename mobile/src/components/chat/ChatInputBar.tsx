@@ -22,19 +22,15 @@ import { ModelSelectorTrigger } from "./ModelSelectorTrigger";
 import { AttachMenu } from "./AttachMenu";
 import { AttachmentTray } from "./AttachmentTray";
 
-// Chat composer — native mirror of web AppInputBar. The attach [+] icon opens
-// the AttachMenu popover (Photos / Upload File / Recent Files); picked files
-// upload optimistically and show as tiles in the tray, then ride the send as
-// `file_descriptors`.
+// Native mirror of web AppInputBar.
 
-// Text area grows between these (web `useContentEditable` defaults).
+// Text area grows between these (web useContentEditable defaults).
 const MIN_INPUT_HEIGHT = 24;
 const MAX_INPUT_HEIGHT = 184; // 200px row − 16px (py-2) vertical padding
 
 interface ChatInputBarProps {
-  /** Session to send into. Null on a brand-new chat (uses the "draft" key). */
+  // Null on a brand-new chat (uses the "draft" key).
   sessionId?: string | null;
-  /** Disable input + send (e.g. while the session's history is still loading). */
   disabled?: boolean;
 }
 
@@ -44,12 +40,10 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
 
   const { send, stop, isStreaming } = useSendMessage(sid);
 
-  // Resolve the active agent so the ActionsPopover + forced-tool chip can read
-  // its tools. forcedToolIds is ephemeral UI state for the tool forced next.
   const personaId = useCurrentPersonaId();
   const { data: personas } = usePersonas();
-  // Fall back to the default assistant on a fresh/draft chat (no session persona
-  // yet) so the actions trigger appears immediately — mirrors the send path.
+  // Fall back to the default assistant on a fresh/draft chat so the actions
+  // trigger appears immediately — mirrors the send path.
   const agent = resolveAgent(personas, personaId);
   const forcedToolIds = useForcedTools((s) => s.forcedToolIds);
 
@@ -67,9 +61,8 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
     toFileDescriptors,
   } = useComposerAttachments();
 
-  // Vision gate: only allow image picks when the active model accepts images
-  // (web `modelSupportsImageInput`). Default to allowed until providers load so
-  // we never falsely block before we know the model.
+  // Vision gate. Default to allowed until providers load so we never falsely
+  // block before we know the model.
   const { providers, activeModel } = useActiveModel(sid);
   const imagesAllowed = activeModel
     ? modelSupportsImageInput(providers, activeModel.modelName, activeModel.name)
@@ -77,18 +70,15 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
 
   const placeholderColor = useToken("text-03");
   const typedColor = useToken("text-05");
-  // web shadow-01 is colored by --shadow-02, which is a faint WHITE glow in dark
-  // mode (#ffffff1a) and a soft black shadow in light mode — that glow is what
-  // separates the black bar from the black chat surface. The token already bakes
-  // in the alpha, so shadowOpacity stays at 1.
+  // shadow-02 is a faint white glow in dark mode that separates the bar from the
+  // chat surface; the token bakes in the alpha, so shadowOpacity stays at 1.
   const shadowColor = useToken("shadow-02");
 
   const trimmed = message.trim();
   const hasSendableAttachment = attachments.some(
     (a) => a.fileId && a.status !== "failed",
   );
-  // Disabled unless streaming (→ stop). Blocked while the session is loading or
-  // uploading, and when there's neither text nor a ready attachment to send.
+  // Disabled unless streaming (→ stop), while loading/uploading, or with nothing to send.
   const sendDisabled =
     !isStreaming &&
     (disabled ||
@@ -103,8 +93,8 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
     if (disabled || isUploading) return;
     const descriptors = toFileDescriptors();
     if (!trimmed && descriptors.length === 0) return;
-    // Clear the composer only once the message is committed (onAccepted) — so a
-    // failed lazy session-creation never discards the user's text + attachments.
+    // Clear only once committed (onAccepted), so a failed lazy session-creation
+    // never discards the user's text + attachments.
     void send(trimmed, descriptors, () => {
       setMessage("");
       clear();
@@ -115,7 +105,6 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
     <View
       className="w-full rounded-[16px] bg-background-neutral-00"
       style={{
-        // web shadow-01: 0 2 12 + 0 0 4 of --shadow-02 (no border)
         shadowColor,
         shadowOpacity: 1,
         shadowRadius: 12,
@@ -123,14 +112,12 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
         elevation: 4,
       }}
     >
-      {/* Attachment tray (web `:797` — flex-wrap files wrapper above the text) */}
       {tiles.length > 0 ? (
         <View className="px-1 pt-1">
           <AttachmentTray models={tiles} onRemove={remove} />
         </View>
       ) : null}
 
-      {/* Text area (web `:827` — px-3 py-2, grows with content) */}
       <View className="px-3 py-2">
         <TextInput
           value={message}
@@ -152,9 +139,7 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
         />
       </View>
 
-      {/* Bottom toolbar (web `:540` — h-11, p-1, space-between) */}
       <View className="h-11 flex-row items-center justify-between px-1">
-        {/* Left cluster: attach popover + actions popover + forced-tool chip(s) */}
         <View className="flex-row items-center gap-1">
           <AttachMenu
             imagesAllowed={imagesAllowed}
@@ -174,12 +159,9 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
               </Pressable>
             }
           />
-          {/* Actions popover (tool enable/disable + force + sources). Renders its
-              own sliders trigger; only shown when the agent exposes tools. */}
           {agent && agent.tools.length > 0 ? (
             <ActionsPopover agent={agent} personaId={agent.id} />
           ) : null}
-          {/* Forced-tool chip(s) — web shows these bottom-left. Tap to clear. */}
           {forcedToolIds.map((id) => {
             const tool = agent?.tools.find((t) => t.id === id);
             return tool ? (
@@ -192,7 +174,6 @@ export function ChatInputBar({ sessionId, disabled = false }: ChatInputBarProps)
           })}
         </View>
 
-        {/* Right cluster: model selector trigger + send/stop */}
         <View className="flex-row items-center gap-1">
           <ModelSelectorTrigger sessionId={sid} />
           <Button

@@ -3,7 +3,6 @@ import { Path } from "react-native-svg";
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
 // Mirrors web x icon.
-/** Close / dismiss "X". */
 function SvgX(props: IconProps) {
   return (
     <Icon viewBox="0 0 28 28" {...props}>

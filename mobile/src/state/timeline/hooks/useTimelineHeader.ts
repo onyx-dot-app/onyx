@@ -14,10 +14,6 @@ export interface TimelineHeaderResult {
   userStopped: boolean;
 }
 
-/**
- * Hook that determines timeline header state based on current activity.
- * Returns header text, whether there are packets, and whether user stopped.
- */
 export function useTimelineHeader(
   turnGroups: TurnGroup[],
   stopReason?: StopReason,
@@ -27,7 +23,6 @@ export function useTimelineHeader(
     const hasPackets = turnGroups.length > 0;
     const userStopped = stopReason === StopReason.USER_CANCELLED;
 
-    // If generating image with no tool packets, show image generation header
     if (isGeneratingImage && !hasPackets) {
       return { headerText: "Generating image...", hasPackets, userStopped };
     }
@@ -36,7 +31,6 @@ export function useTimelineHeader(
       return { headerText: "Thinking...", hasPackets, userStopped };
     }
 
-    // Get the last (current) turn group
     const currentTurn = turnGroups[turnGroups.length - 1];
     if (!currentTurn) {
       return { headerText: "Thinking...", hasPackets, userStopped };
@@ -54,7 +48,6 @@ export function useTimelineHeader(
 
     const packetType = firstPacket.obj.type;
 
-    // Determine header based on packet type
     if (packetType === PacketType.SEARCH_TOOL_START) {
       const searchState = constructCurrentSearchState(
         currentStep.packets as SearchToolPacket[]

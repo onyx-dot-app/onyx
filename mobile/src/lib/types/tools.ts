@@ -1,8 +1,6 @@
 import type React from "react";
 
-// RN-appropriate replacement for the web `IconProps` (which extended
-// SVGProps<SVGSVGElement>). React Native has no SVG DOM, so we define a
-// minimal local type covering the props tool icon components actually use.
+// RN replacement for web's IconProps — no SVG DOM, so a minimal local type.
 type IconProps = { size?: number; color?: string; className?: string };
 
 // Generic action status for UI components

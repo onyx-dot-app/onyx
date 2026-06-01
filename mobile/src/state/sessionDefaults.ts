@@ -1,10 +1,6 @@
-// Shared default-builder for a ChatSessionData.
-//
-// Extracted out of chatSessionStore.ts so BOTH the store and persist.ts can build
-// a fresh ChatSessionData from the exact same field-by-field defaults, instead of
-// hand-maintaining two parallel copies that must be kept in sync. This module
-// type-only imports ChatSessionData from the store (erased at runtime), so the
-// store can value-import this without creating a runtime import cycle.
+// Shared default-builder for a ChatSessionData so the store and persist.ts build
+// fresh sessions from the same defaults. Type-only imports ChatSessionData (erased
+// at runtime), so the store can value-import this without a runtime import cycle.
 import { ChatState, ChatSessionSharedStatus, Message } from "@/lib/types";
 import type { ChatSessionData } from "./chatSessionStore";
 

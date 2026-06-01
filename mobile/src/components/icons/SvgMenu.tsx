@@ -3,7 +3,6 @@ import { Path } from "react-native-svg";
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
 // Mirrors web menu icon.
-/** Hamburger menu (three lines). */
 function SvgMenu(props: IconProps) {
   return (
     <Icon viewBox="0 0 32 32" {...props}>

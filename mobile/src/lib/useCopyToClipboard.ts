@@ -1,9 +1,7 @@
 import { useCallback, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 
-// Copy-to-clipboard with a transient "copied" flag — shared by CodeBlock and
-// ExpandableTextDisplay. Writes the text, flips `copied` true, then resets it
-// after 2s so the affordance can swap its label/icon back ("Copy" ↔ "Copied!").
+// Copy-to-clipboard with a transient "copied" flag that resets after 2s.
 const COPIED_RESET_MS = 2000;
 
 export interface UseCopyToClipboardResult {

@@ -2,13 +2,9 @@
    all pacing state lives in a ref (mutated during effects/timers, read during
    render via a revealTrigger counter), and paced arrays are reference-stabilized
    in place. Ported verbatim from the battle-tested web usePacedTurnGroups. */
-// usePacedTurnGroups.ts — staggered (200ms) reveal of timeline steps.
-//
-// Mirrors web usePacedTurnGroups.
-// Pacing state in a ref; a single `revealTrigger` counter forces re-derivation.
+// Mirrors web usePacedTurnGroups. Staggered (200ms) reveal of timeline steps.
 // STOP flushes everything; history (stopPacketSeen on first render) bypasses
-// pacing entirely. Output arrays are reference-stabilized so unchanged groups
-// don't re-render. setTimeout/refs/useState all port to RN unchanged.
+// pacing entirely. Output arrays are reference-stabilized to avoid re-renders.
 
 import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { PacketType } from "@/lib/types";
@@ -80,7 +76,7 @@ export function usePacedTurnGroups(
 
   const nodeIdStr = String(nodeId);
 
-  // Reset on nodeId change
+  // Reset on nodeId change.
   if (stateRef.current.nodeId !== nodeIdStr) {
     if (stateRef.current.pacingTimer) {
       clearTimeout(stateRef.current.pacingTimer);
@@ -212,7 +208,6 @@ export function usePacedTurnGroups(
     shouldBypassPacing,
   ]);
 
-  // Cleanup timer on unmount
   useEffect(() => {
     return () => {
       if (stateRef.current.pacingTimer) {

@@ -1,14 +1,5 @@
-// WebSearchToolRenderer.tsx — the web search timeline step. Native mirror of web WebSearchToolRenderer.
-//
-// Icon "globe", status "Searching the web". Shows ONLY queries — results are
-// handled by the fetch tool. Not collapsible (supportsCollapsible false).
-//
-// RenderType modes (mirrors web):
-// - FULL:      query chips timeline step.
-// - HIGHLIGHT: muted in-content "Searching the web" header + query chips,
-//              timelineLayout "content".
-// - INLINE:    query chips under the queries header, timelineLayout "content".
-// Empty (no queries) -> a single step with empty content.
+// Native mirror of web WebSearchToolRenderer. Shows only queries; results are
+// handled by the fetch tool.
 
 import { View } from "react-native";
 
@@ -76,7 +67,6 @@ export function WebSearchToolRenderer({
     />
   );
 
-  // HIGHLIGHT: header embedded in content, no StepContainer (timelineLayout "content").
   if (isHighlight) {
     return children([
       {
@@ -96,7 +86,6 @@ export function WebSearchToolRenderer({
     ]);
   }
 
-  // INLINE: query chips for the collapsed streaming view.
   if (isInline) {
     return children([
       {
@@ -109,7 +98,6 @@ export function WebSearchToolRenderer({
     ]);
   }
 
-  // FULL: query chips timeline step.
   return children([
     {
       icon: "globe",

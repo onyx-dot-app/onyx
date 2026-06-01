@@ -1,12 +1,6 @@
-// packetProcessor.ts — incremental packet → grouped-step reducer for the timeline.
-//
 // Mirrors web packetProcessor.ts.
-// Pure, imperative, ref-friendly. Processes ONLY new packets via a
-// `nextPacketIndex` cursor (so an idle render does no work), groups packets by
-// `${turn_index}-${tab_index}`, splits groups into tool-steps vs display
-// (final-answer) groups, and injects synthetic SECTION_END on turn transitions
-// and STOP. This is identity-agnostic: it indexes rawPackets[i] by position, so
-// it tolerates mobile's new-array-per-packet store reducer (append-only indices).
+// Indexes rawPackets[i] by position (not identity), so it tolerates mobile's
+// new-array-per-packet store reducer where indices are append-only.
 
 import {
   Packet,
@@ -34,45 +28,34 @@ import { parseToolKey } from "@/state/timeline/toolDisplayHelpers";
 
 export { parseToolKey };
 
-// ============================================================================
-// Types
-// ============================================================================
-
 export interface ProcessorState {
   nodeId: number;
   nextPacketIndex: number;
 
-  // Citations
   citations: StreamingCitation[];
   seenCitationDocIds: Set<string>;
   citationMap: CitationMap;
 
-  // Documents
   documentMap: Map<string, OnyxDocument>;
 
-  // Packet grouping
   groupedPacketsMap: Map<string, Packet[]>;
   seenGroupKeys: Set<string>;
   groupKeysWithSectionEnd: Set<string>;
   expectedBranches: Map<number, number>;
 
-  // Pre-categorized groups (populated during packet processing)
   toolGroupKeys: Set<string>;
   displayGroupKeys: Set<string>;
 
-  // Image generation status
   isGeneratingImage: boolean;
   generatedImageCount: number;
 
-  // Streaming status
   finalAnswerComing: boolean;
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
 
-  // Tool processing duration from backend (captured when MESSAGE_START arrives)
+  // Captured from MESSAGE_START's pre_answer_processing_seconds.
   toolProcessingDuration: number | undefined;
 
-  // Result arrays (built at end of processPackets)
   toolGroups: GroupedPacket[];
   potentialDisplayGroups: GroupedPacket[];
 }
@@ -82,10 +65,6 @@ export interface GroupedPacket {
   tab_index: number;
   packets: Packet[];
 }
-
-// ============================================================================
-// State Creation
-// ============================================================================
 
 export function createInitialState(nodeId: number): ProcessorState {
   return {
@@ -111,10 +90,6 @@ export function createInitialState(nodeId: number): ProcessorState {
     potentialDisplayGroups: [],
   };
 }
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
 
 function getGroupKey(packet: Packet): string {
   const turnIndex = packet.placement.turn_index;
@@ -177,10 +152,6 @@ const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.IMAGE_GENERATION_TOOL_START,
   PacketType.IMAGE_GENERATION_TOOL_DELTA,
 ]);
-
-// ============================================================================
-// Packet Handlers
-// ============================================================================
 
 function handleTopLevelBranching(state: ProcessorState, packet: Packet): void {
   const branchingPacket = packet.obj as TopLevelBranching;
@@ -307,10 +278,6 @@ function addPacketToGroup(
   }
 }
 
-// ============================================================================
-// Main Processing Function
-// ============================================================================
-
 function processPacket(state: ProcessorState, packet: Packet): void {
   if (!packet) return;
 
@@ -365,7 +332,7 @@ export function processPackets(
   state: ProcessorState,
   rawPackets: Packet[]
 ): ProcessorState {
-  // Handle reset (packets array shrunk - upstream replaced with shorter list)
+  // Reset if the packets array shrunk (upstream replaced with a shorter list).
   if (state.nextPacketIndex > rawPackets.length) {
     state = createInitialState(state.nodeId);
   }
@@ -392,11 +359,7 @@ export function processPackets(
   return state;
 }
 
-/**
- * Build a GroupedPacket array from group keys: keep only groups with meaningful
- * content, sort by turn then tab. Packets are spread into a NEW array so React
- * detects change in downstream consumers.
- */
+// Packets are spread into a NEW array so React detects change downstream.
 function buildGroupsFromKeys(
   state: ProcessorState,
   keys: Set<string>

@@ -1,6 +1,5 @@
-// Mirrors web actionUtils.ts getIconForAction(). Deviation: OpenURL → SvgExternalLink
-// (mobile has no rotated chain-link SvgLink; the external-link glyph is the
-// closest curated equivalent).
+// Mirrors web actionUtils.ts getIconForAction(). Deviation: OpenURL →
+// SvgExternalLink (mobile has no rotated chain-link SvgLink).
 import type { ComponentType } from "react";
 
 import {
@@ -17,11 +16,7 @@ import type { ToolSnapshot } from "@/lib/types/tools";
 
 type IconComponent = ComponentType<IconProps>;
 
-/**
- * One match rule per known tool, in first-match-wins order (web getIconForAction
- * parity). A tool matches if its `in_code_tool_id` is in `ids`, its `name` is in
- * `names`, or its lowercased `display_name` contains any `displayIncludes` entry.
- */
+// First-match-wins; a tool matches on any of ids / names / displayIncludes.
 interface ActionIconRule {
   icon: IconComponent;
   ids?: string[];
@@ -48,7 +43,6 @@ function matchesRule(tool: ToolSnapshot, rule: ActionIconRule): boolean {
   );
 }
 
-/** Return the icon component for a tool/action (web getIconForAction parity). */
 export function getIconForAction(tool: ToolSnapshot): IconComponent {
   for (const rule of ACTION_ICON_RULES) {
     if (matchesRule(tool, rule)) return rule.icon;

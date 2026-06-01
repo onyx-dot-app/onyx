@@ -13,38 +13,18 @@ import { CodeBlock } from "@/components/markdown/CodeBlock";
 import { makeCitationLinkRule } from "@/components/message/citations/citationRule";
 import type { CitationMap, OnyxDocument } from "@/lib/types";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/**
- * Visual variant:
- *  - "default": full body color (text-05), normal paragraph spacing.
- *  - "muted": muted body color (text-03), tighter spacing (timeline reasoning,
- *    expanded view) — mirrors web mutedTextMarkdownComponents.
- *  - "muted-collapsed": muted, no paragraph spacing — mirrors web
- *    collapsedMarkdownComponents.
- */
+// "muted"/"muted-collapsed" mirror web mutedText/collapsedMarkdownComponents.
 type MarkdownVariant = "default" | "muted" | "muted-collapsed";
 
 interface MarkdownProps {
-  /** The raw markdown source to render. */
   children: string;
   variant?: MarkdownVariant;
-  /** citation_num -> document_id; when provided, inline [[N]](url) become pills. */
+  // citation_num -> document_id; when set, inline [[N]](url) become pills.
   citations?: CitationMap;
-  /** Documents a citation resolves to (matched by document_id). */
   documents?: OnyxDocument[] | null;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Strip the trailing newline the markdown parser appends to fenced/indented
- * code blocks (mirrors the trimming the library's own default rules do).
- */
+// Strip the trailing newline the parser appends to code blocks.
 function trimTrailingNewline(content: string): string {
   if (content.length > 0 && content.charAt(content.length - 1) === "\n") {
     return content.substring(0, content.length - 1);
@@ -52,18 +32,11 @@ function trimTrailingNewline(content: string): string {
   return content;
 }
 
-// EMOJI ON iOS 26 SIMULATOR: model-emitted emoji render as "?" boxes here. This
-// is a React Native bug specific to the iOS 26 simulator's CoreText path
-// (facebook/react-native#56183) — it affects ALL fonts (system included) and
-// both architectures, and Safari on the same simulator renders emoji fine. It is
-// NOT caused by this renderer or the brand font, and there is no JS workaround;
-// it should render on a real device / non-iOS-26 simulator. So we keep the Opal
-// brand font here and don't contort the styles around it.
+// Emoji render as "?" on the iOS 26 simulator only — RN CoreText bug
+// facebook/react-native#56183 (all fonts, real devices unaffected). Not this
+// renderer or the brand font, and there's no JS workaround.
 
-/**
- * Pull the language label off a fence node's info string. markdown-it stores
- * the fence info on `node.sourceInfo`.
- */
+// markdown-it stores the fence info string on node.sourceInfo.
 function extractLanguage(node: ASTNode): string | undefined {
   const sourceInfo = (node as ASTNode & { sourceInfo?: string }).sourceInfo;
   if (typeof sourceInfo === "string" && sourceInfo.trim().length > 0) {
@@ -74,26 +47,9 @@ function extractLanguage(node: ASTNode): string | undefined {
   return undefined;
 }
 
-// ---------------------------------------------------------------------------
-// Markdown
-// ---------------------------------------------------------------------------
-
-/**
- * Chat markdown renderer. Wraps `react-native-markdown-display`'s `<Markdown>`
- * and derives its `styles` + `rules` maps from the Opal token system:
- *   - headings -> `heading-h1..h3` typography presets (resized for chat)
- *   - body / paragraphs -> `main-content-body`
- *   - strong / em -> emphasis preset / italic style
- *   - links -> `action-text-link-05` token color, underlined
- *   - inline code -> `main-content-mono` mono preset on a tinted surface
- *   - blockquotes / lists -> body preset with token borders / colors
- *   - fenced & indented code blocks -> the `<CodeBlock>` component (copy button)
- *
- * Mirrors the FEATURE set of the web `MinimalMarkdown` (GFM, code blocks with
- * copy). Known limitations: syntax highlighting (web uses rehype-highlight) and
- * KaTeX math (web uses remark-math + rehype-katex) are not yet implemented —
- * code renders as flat monospace and `$...$` math renders as plain text.
- */
+// Native mirror of web MinimalMarkdown (GFM + code blocks with copy). Syntax
+// highlighting (web: rehype-highlight) and KaTeX math (remark-math) aren't
+// implemented — code is flat monospace and `$...$` renders as plain text.
 function Markdown({
   children,
   variant = "default",
@@ -106,21 +62,17 @@ function Markdown({
   const paragraphSpacing =
     variant === "muted-collapsed" ? 0 : variant === "muted" ? 4 : 12;
 
-  // Style map keyed by markdown node type. Text-bearing styles cascade onto
-  // descendant text nodes via the library's inheritedStyles mechanism, so the
-  // `body` preset propagates to paragraphs / list items / etc.
+  // Text-bearing styles cascade onto descendant text nodes via the library's
+  // inheritedStyles mechanism, so `body` propagates to paragraphs/list items.
   const styles = useMemo(
     () => ({
-      // Base text color + typography for the whole document.
       body: {
         ...typography["main-content-body"],
         color: bodyColor,
       },
 
-      // Headings — keep the Opal heading font but use chat-appropriate sizes.
-      // The raw Opal `heading-h1` is a 48px hero size (with a tight -0.48
-      // letterSpacing tuned for that size), far too large in a chat answer, so
-      // size + letterSpacing are overridden.
+      // Raw Opal heading-h1 is a 48px hero size, far too large in a chat
+      // answer, so size + letterSpacing are overridden per heading.
       heading1: {
         ...typography["heading-h1"],
         fontSize: 22,
@@ -175,7 +127,7 @@ function Markdown({
         marginBottom: 4,
       },
 
-      // Paragraph spacing (the View wrapper; text color cascades from body).
+      // Wrapper View only; text color cascades from body.
       paragraph: {
         marginTop: 0,
         marginBottom: paragraphSpacing,
@@ -186,7 +138,6 @@ function Markdown({
         width: "100%" as const,
       },
 
-      // Emphasis.
       strong: {
         ...typography["main-content-emphasis"],
       },
@@ -197,13 +148,11 @@ function Markdown({
         textDecorationLine: "line-through" as const,
       },
 
-      // Links — Opal action/link token color.
       link: {
         color: colors["action-text-link-05"],
         textDecorationLine: "underline" as const,
       },
 
-      // Lists.
       bullet_list: {
         marginBottom: 12,
       },
@@ -215,7 +164,6 @@ function Markdown({
         justifyContent: "flex-start" as const,
       },
 
-      // Blockquote — left rule + tinted surface using border/background tokens.
       blockquote: {
         backgroundColor: colors["background-tint-02"],
         borderColor: colors["border-02"],
@@ -226,7 +174,6 @@ function Markdown({
         paddingVertical: 4,
       },
 
-      // Inline code — mono preset on a tinted, bordered chip.
       code_inline: {
         ...typography["main-content-mono"],
         color: colors["code-code"],
@@ -238,14 +185,12 @@ function Markdown({
         paddingVertical: 1,
       },
 
-      // Horizontal rule.
       hr: {
         backgroundColor: colors["border-01"],
         height: 1,
         marginVertical: 12,
       },
 
-      // GFM tables — token-colored borders.
       table: {
         borderWidth: 1,
         borderColor: colors["border-01"],
@@ -271,10 +216,8 @@ function Markdown({
     [colors, bodyColor, paragraphSpacing],
   );
 
-  // Override the fenced / indented code-block rules with our CodeBlock (which
-  // adds the copy affordance). When citation data is provided, also override the
-  // `link` rule so inline [[N]](url) markers render as CitationPills. Everything
-  // else falls back to the library defaults (driven by the `styles` map above).
+  // Override code-block rules with CodeBlock (copy button); when citations are
+  // present, override `link` so [[N]](url) markers render as CitationPills.
   const hasCitationData =
     citations !== undefined || (documents != null && documents.length > 0);
   const rules = useMemo<RenderRules>(
@@ -297,9 +240,8 @@ function Markdown({
   );
 
   return (
-    // The library typing wraps StyleSheet.NamedStyles which is stricter than
-    // our literal style map (it carries token-driven values); the runtime
-    // accepts it fine, so cast through unknown for the style prop.
+    // Library style typing is stricter than our token-driven literal map; the
+    // runtime accepts it fine, so cast for the style prop.
     <RNMarkdown
       style={styles as never}
       rules={rules}

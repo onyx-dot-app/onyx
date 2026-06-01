@@ -1,8 +1,4 @@
-// packetUtils.ts — pure packet classifiers + content extraction.
-//
 // Mirrors web packetUtils.ts.
-// Only the helpers the timeline pipeline needs. Mobile's PacketType enum
-// (src/lib/types/streaming.ts) mirrors the backend, so these port verbatim.
 
 import { Packet, PacketType } from "@/lib/types";
 
@@ -49,9 +45,8 @@ export function isToolPacket(
   return toolPacketTypes.includes(packet.obj.type as PacketType);
 }
 
-// An "actual" tool call (not reasoning) — used to reset finalAnswerComing when
-// a tool starts after message packets (Claude workaround). Reasoning is just
-// thinking, not a content-producing tool call.
+// A content-producing tool call (excludes reasoning) — resets finalAnswerComing
+// when a tool starts after message packets (Claude workaround).
 export function isActualToolCallPacket(packet: Packet): boolean {
   return (
     isToolPacket(packet, false) &&

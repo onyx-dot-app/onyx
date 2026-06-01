@@ -1,6 +1,4 @@
-// HeaderToggle.tsx — the right-side fold/expand control shared by timeline
-// headers (Pressable + optional label + fold/expand icon). Replaces web's Opal
-// Button.
+// Right-side fold/expand control shared by timeline headers (replaces web's Opal Button).
 
 import { Pressable } from "react-native";
 

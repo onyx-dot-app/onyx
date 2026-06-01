@@ -2,10 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Mirrors web plus-circle icon.
-// The web source wraps the path in a decorative clipPath; it's unnecessary here
-// since the artwork fits the viewBox.
-/** Plus in a circle — "Add Files". */
+// Mirrors web plus-circle icon. Web's decorative clipPath is dropped (artwork fits the viewBox).
 function SvgPlusCircle(props: IconProps) {
   return (
     <Icon viewBox="0 0 16 16" {...props}>

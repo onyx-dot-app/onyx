@@ -5,20 +5,11 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/cn";
 import { Text, type TextColor, type TextFont } from "@/components/opal/Text";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 export type ButtonVariant = "default" | "action" | "danger" | "none";
 export type ButtonProminence = "primary" | "secondary" | "tertiary";
 export type ButtonSize = "lg" | "md" | "sm" | "xs";
 
-// ---------------------------------------------------------------------------
-// CVA — STATIC class strings only (NativeWind scans these at build time).
-// `variant` × `prominence` → background/border classes for the container.
-// `size` → height / padding / rounding.
-// ---------------------------------------------------------------------------
-
+// Static class strings only — NativeWind scans these at build time.
 const containerVariants = cva(
   "flex-row items-center justify-center gap-1",
   {
@@ -45,22 +36,17 @@ const containerVariants = cva(
         false: "",
       },
     },
-    // (variant × prominence) → background / border colors. These are the static
-    // strings the NativeWind scanner needs to see verbatim.
+    // (variant × prominence) → bg/border colors; static strings the NativeWind scanner sees verbatim.
     compoundVariants: [
-      // default
       { variant: "default", prominence: "primary", className: "bg-theme-primary-05" },
       { variant: "default", prominence: "secondary", className: "border-border-02" },
       { variant: "default", prominence: "tertiary", className: "" },
-      // action (link/blue)
       { variant: "action", prominence: "primary", className: "bg-action-link-05" },
       { variant: "action", prominence: "secondary", className: "border-action-link-05" },
       { variant: "action", prominence: "tertiary", className: "" },
-      // danger (error/red)
       { variant: "danger", prominence: "primary", className: "bg-status-error-05" },
       { variant: "danger", prominence: "secondary", className: "border-action-danger-05" },
       { variant: "danger", prominence: "tertiary", className: "" },
-      // none (unstyled surface)
       { variant: "none", prominence: "primary", className: "" },
       { variant: "none", prominence: "secondary", className: "border-border-02" },
       { variant: "none", prominence: "tertiary", className: "" },
@@ -74,8 +60,7 @@ const containerVariants = cva(
   },
 );
 
-// Label color token per (variant × prominence). Resolved by `Text` (via
-// style), NOT a dynamic className.
+// Label color token per (variant × prominence) — resolved by Text via style, not a dynamic className.
 const LABEL_COLOR: Record<ButtonVariant, Record<ButtonProminence, TextColor>> = {
   default: {
     primary: "text-inverted-05",
@@ -106,10 +91,6 @@ const LABEL_FONT: Record<ButtonSize, TextFont> = {
   xs: "secondary-body",
 };
 
-// ---------------------------------------------------------------------------
-// Button
-// ---------------------------------------------------------------------------
-
 type ContainerVariantProps = VariantProps<typeof containerVariants>;
 
 interface ButtonProps extends Omit<PressableProps, "children" | "disabled" | "style"> {
@@ -123,12 +104,7 @@ interface ButtonProps extends Omit<PressableProps, "children" | "disabled" | "st
   children?: ReactNode;
 }
 
-/**
- * Native mirror of the Opal `Button`. Built on RN `Pressable`. Variant styling
- * is a fixed small set, so it uses CVA with STATIC NativeWind class strings
- * (those the compiler can scan). The label uses the Opal `Text` component for
- * consistent typography; its color is a token applied via `style`.
- */
+// Native mirror of web Opal Button.
 function Button({
   variant = "default",
   prominence = "primary",

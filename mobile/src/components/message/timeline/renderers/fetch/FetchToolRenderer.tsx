@@ -1,21 +1,5 @@
-// FetchToolRenderer.tsx — renders URL fetch/open ("Reading") tool steps.
-// Native mirror of web FetchToolRenderer.
-//
-// RenderType modes:
-// - FULL / COMPACT: icon "circle", status "Reading". Body is the doc/URL chips
-//   (the timeline shell draws the "Reading" header from `status`).
-// - HIGHLIGHT: header embedded in content as a "Reading" line
-//   (timelineLayout "content"); no StepContainer chrome.
-//
-// Body content priority (mirrors web):
-//   documents present        -> document chips
-//   else complete & has URLs -> URL chips
-//   else                     -> BlinkingBar (while still streaming)
-//
-// AMENDMENT: web reuses `SearchChipList` for the chips; here we render a local
-// inline wrapping row of chips (SourceIcon + truncated title) with the same
-// INITIAL_URLS_TO_SHOW / URLS_PER_EXPANSION "show more" behavior. Docs/URLs open
-// via `Linking.openURL` (web used `window.open(_, "_blank")`).
+// Native mirror of web FetchToolRenderer. Web reuses SearchChipList for the
+// chips; here we render a local inline ChipList with the same show-more behavior.
 
 import { useCallback, useMemo, useState } from "react";
 import { Linking, Pressable, View } from "react-native";
@@ -38,10 +22,6 @@ import { Text } from "@/components/opal";
 import { useToken } from "@/theme/ThemeProvider";
 import { radii } from "@/theme/generated/radii";
 import { timelineTokens as T } from "@/theme/timelineTokens";
-
-// ---------------------------------------------------------------------------
-// Chip — a single document/URL pill (SourceIcon + truncated title).
-// ---------------------------------------------------------------------------
 
 interface ChipProps {
   title: string;
@@ -77,11 +57,6 @@ function Chip({ title, sourceType, isInternet, onPress }: ChipProps) {
     </Pressable>
   );
 }
-
-// ---------------------------------------------------------------------------
-// ChipList — inline wrapping row of chips with "show more" expansion.
-// Mirrors web SearchChipList's INITIAL_URLS_TO_SHOW / URLS_PER_EXPANSION.
-// ---------------------------------------------------------------------------
 
 interface ChipListProps {
   items: ChipProps[];
@@ -119,10 +94,6 @@ function ChipList({ items, emptyState }: ChipListProps) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// FetchToolRenderer
-// ---------------------------------------------------------------------------
-
 const READING_STATUS = "Reading";
 
 export function FetchToolRenderer({
@@ -141,7 +112,6 @@ export function FetchToolRenderer({
 
   const headerColor = useToken("text-02");
 
-  // Fire onComplete once when the tool finishes (mobile timeline-shell contract).
   useFireOnComplete(isComplete, onComplete);
 
   const openDoc = useCallback((doc: OnyxDocument) => {
@@ -176,7 +146,6 @@ export function FetchToolRenderer({
     [urls, openUrl]
   );
 
-  // Not started yet — empty "Reading" placeholder step.
   if (!hasStarted) {
     return children([
       {
@@ -203,7 +172,6 @@ export function FetchToolRenderer({
     !stopPacketSeen && <BlinkingBar />
   );
 
-  // HIGHLIGHT mode: header embedded in content, no StepContainer chrome.
   if (isHighlight) {
     return children([
       {

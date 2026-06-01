@@ -8,10 +8,8 @@ import { formatRelativeTime } from "@/lib/projectUtils";
 import { UNNAMED_CHAT } from "@/lib/chatLabels";
 import type { ChatSession } from "@/lib/types";
 
-// Native mirror of web `ProjectChatSessionList`: a "Recent Chats" header and the
-// project's chat sessions (newest first), each a tappable row with name and a
-// "Last message …" sub-line. Deviation: web shows an agent avatar for non-featured
-// personas; mobile renders the bubble glyph for all.
+// Native mirror of web ProjectChatSessionList.
+// Deviation: web shows an agent avatar for non-featured personas; mobile uses the bubble glyph for all.
 
 interface ProjectChatSessionListProps {
   chats: ChatSession[];

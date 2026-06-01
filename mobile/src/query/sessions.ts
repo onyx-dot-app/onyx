@@ -1,11 +1,4 @@
-// Chat session queries + mutations.
-//
-// - useChatSessions: GET /api/chat/get-user-chat-sessions
-// - useCreateSession / useRenameSession / useDeleteSession: mutations that invalidate
-//   [queryKeys.chatSessions] on success. Rename + delete additionally do optimistic
-//   updates (snapshot in onMutate, rollback in onError).
-//
-// Mirrors web lib.tsx (endpoint URLs + payloads).
+// Mirrors web lib.tsx (endpoint URLs + payloads). Rename + delete are optimistic.
 import {
   useQuery,
   useMutation,
@@ -16,9 +9,8 @@ import type { ChatSessionSummary } from "@/lib/types";
 import { queryKeys } from "./keys";
 import { clientConfig } from "./client";
 
-// The backend wraps the list in { sessions: [...], has_more }.
-// (We type these as ChatSessionSummary; web's paginated hook uses ChatSession, but the
-// fields the mobile list touches — id, name — are shared.)
+// Backend wraps the list in { sessions, has_more }. Typed as ChatSessionSummary
+// (web's paginated hook uses ChatSession, but id/name are shared).
 interface ChatSessionsResponse {
   sessions: ChatSessionSummary[];
   has_more?: boolean;
@@ -36,7 +28,6 @@ export function useChatSessions() {
   });
 }
 
-// ── Create ──────────────────────────────────────────────────────────────────────
 interface CreateSessionArgs {
   personaId: number;
   description?: string | null;
@@ -70,7 +61,6 @@ export function useCreateSession() {
   });
 }
 
-// ── Rename (optimistic) ───────────────────────────────────────────────────────
 interface RenameSessionArgs {
   chatSessionId: string;
   newName: string;
@@ -124,7 +114,6 @@ export function useRenameSession() {
   });
 }
 
-// ── Delete (optimistic) ───────────────────────────────────────────────────────
 interface DeleteMutationContext {
   previous?: ChatSessionsResponse;
 }

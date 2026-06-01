@@ -19,10 +19,6 @@ import {
 import { usePersonas } from "@/query/personas";
 import type { Message, MinimalAgent } from "@/lib/types";
 
-// Renders the current session's message chain (user bubbles + the rich
-// AgentMessage timeline for assistant turns), auto-scrolling to the newest
-// content while the user stays near the bottom.
-
 const ErrorMessage = memo(function ErrorMessage({ text }: { text: string }) {
   return (
     <View className="w-full px-4 py-1">
@@ -35,8 +31,7 @@ const ErrorMessage = memo(function ErrorMessage({ text }: { text: string }) {
   );
 });
 
-// Assistant turn: builds a STABLE per-message chatState (so non-streaming turns
-// don't re-render on every flush) and renders the AgentMessage timeline.
+// Stable per-message chatState so non-streaming turns don't re-render on every flush.
 const AssistantTurn = memo(function AssistantTurn({
   message,
   agent,
@@ -90,7 +85,6 @@ export function MessageThread() {
   const scrollRef = useRef<ScrollView>(null);
   const nearBottomRef = useRef(true);
 
-  // Resolve the agent for the timeline avatar; stable until persona data changes.
   const agent = useMemo<MinimalAgent>(() => {
     const found = personas.data?.find((p) => p.id === personaId);
     return (
@@ -101,8 +95,7 @@ export function MessageThread() {
   const visible = history.filter((m) => m.type !== "system");
   const streaming = chatState === "loading" || chatState === "streaming";
 
-  // Pin to the newest content only when the user is already near the bottom
-  // (so they can scroll up to read history mid-stream without being yanked).
+  // Pin to newest only when near the bottom, so scrolling up mid-stream isn't yanked.
   useEffect(() => {
     if (nearBottomRef.current) {
       scrollRef.current?.scrollToEnd({ animated: !streaming });

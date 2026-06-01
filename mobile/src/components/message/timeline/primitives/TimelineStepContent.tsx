@@ -1,7 +1,5 @@
-// TimelineStepContent.tsx — step header (status + fold/expand) + body.
-// Native mirror of web TimelineStepContent. Web Button -> Pressable + icon; status
-// rendered via Opal Text when it's a string, else the node is rendered directly
-// (RN can't nest arbitrary Views inside <Text>).
+// Native mirror of web TimelineStepContent. A string status renders via Opal
+// Text, else the node renders directly (RN can't nest Views inside <Text>).
 
 import { type ReactNode } from "react";
 import { View, Pressable } from "react-native";

@@ -3,7 +3,6 @@ import { Path } from "react-native-svg";
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
 // Mirrors web external-link icon.
-/** External link / open in new window. */
 function SvgExternalLink(props: IconProps) {
   return (
     <Icon viewBox="0 0 24 24" {...props}>

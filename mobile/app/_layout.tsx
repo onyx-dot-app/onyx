@@ -15,16 +15,10 @@ import { useAppFonts } from "@/theme/fonts";
 import { queryClient, persister, persistMaxAge, persistBuster } from "@/query/client";
 import { AuthProvider } from "@/auth";
 
-// Keep the native splash up until the Opal fonts are loaded so text never
-// flashes in the system fallback face.
+// Hold the splash until Opal fonts load so text never flashes the fallback face.
 SplashScreen.preventAutoHideAsync();
 
-// Root provider tree. Order: GestureHandlerRootView > SafeAreaProvider >
-// ThemeProvider > PersistQueryClientProvider > AuthProvider >
-// BottomSheetModalProvider > <Stack>, with <PortalHost/> inside ThemeProvider so
-// @rn-primitives overlays inherit theme vars. The Zustand chat store hydrates
-// synchronously from MMKV on import (no gate). AuthProvider holds the JWT and
-// drives the (auth) vs (app) redirect.
+// PortalHost sits inside ThemeProvider so @rn-primitives overlays inherit theme vars.
 export default function RootLayout() {
   const fontsLoaded = useAppFonts();
 
@@ -32,7 +26,6 @@ export default function RootLayout() {
     if (fontsLoaded) SplashScreen.hideAsync();
   }, [fontsLoaded]);
 
-  // Native splash stays visible until fonts resolve.
   if (!fontsLoaded) return null;
 
   return (

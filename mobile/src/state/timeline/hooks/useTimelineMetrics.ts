@@ -16,16 +16,11 @@ export interface TimelineMetrics {
   lastStepSupportsCollapsedStreaming: boolean;
 }
 
-/**
- * Memoizes derived metrics from turn groups to avoid recomputation on every render.
- * Single-pass computation where possible for performance with large packet counts.
- */
 export function useTimelineMetrics(
   turnGroups: TurnGroup[],
   userStopped: boolean
 ): TimelineMetrics {
   return useMemo(() => {
-    // Compute in single pass
     let totalSteps = 0;
     for (const tg of turnGroups) {
       totalSteps += tg.steps.length;
@@ -34,7 +29,6 @@ export function useTimelineMetrics(
     const lastTurnGroup = turnGroups[turnGroups.length - 1];
     const lastStep = lastTurnGroup?.steps[lastTurnGroup.steps.length - 1];
 
-    // Analyze last step packets once
     const lastStepIsResearchAgent = lastStep
       ? isResearchAgentPackets(lastStep.packets)
       : false;

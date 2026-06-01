@@ -1,6 +1,4 @@
-// CompletedHeader.tsx — "Thought for {duration}" / "Generated N images" + step
-// count, plus the memory-only branch. Native mirror of web CompletedHeader.
-// MemoriesModal/tooltip -> a simple memory chip.
+// Native mirror of web CompletedHeader (MemoriesModal/tooltip -> a memory chip).
 
 import { memo } from "react";
 import { View, Pressable } from "react-native";

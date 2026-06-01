@@ -2,9 +2,8 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Mirrors web folder-open icon.
-// Web fills the traced outline at 0.8 opacity with a hairline stroke — replicated here.
-/** Open folder — Projects (expanded / project header glyph). */
+// Mirrors web folder-open icon. Web fills the traced outline at 0.8 opacity with
+// a hairline stroke — replicated here.
 function SvgFolderOpen(props: IconProps) {
   return (
     <Icon viewBox="0 0 32 26" {...props}>

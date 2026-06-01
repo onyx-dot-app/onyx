@@ -1,16 +1,5 @@
-// InternalSearchToolRenderer.tsx — the internal document search timeline step.
-// Native mirror of web InternalSearchToolRenderer.
-//
-// Icon "search-menu", status "Searching internal documents".
-//
-// RenderType modes (mirrors web):
-// - FULL:      query chips + a "Reading" label + result chips (one timeline step).
-// - COMPACT:   results only (no queries, no "Reading" label). Header is the status.
-// - HIGHLIGHT: muted in-content header + result chips, timelineLayout "content".
-// - INLINE:    phase1 (no results yet) -> query chips under the queries header;
-//              phase2 (has results) -> status "Reading" + result chips.
-// Empty (no queries) -> a single step with empty content + BlinkingBar deferred
-// to the chip list's empty state once querying begins.
+// Native mirror of web InternalSearchToolRenderer. INLINE is phase-based: query
+// chips before results arrive, then a "Reading" + result-chips step.
 
 import { View } from "react-native";
 
@@ -56,11 +45,7 @@ function resultKey(doc: OnyxDocument, index: number): string {
   return doc.document_id ?? `result-${index}`;
 }
 
-/**
- * Empty-state node for the result chip list. While streaming -> BlinkingBar;
- * once complete -> "No results found" (web used text-03 in FULL/COMPACT and
- * text-04 in HIGHLIGHT/INLINE; `emptyColor` preserves that distinction).
- */
+// emptyColor preserves web's text-03 (FULL/COMPACT) vs text-04 (HIGHLIGHT/INLINE).
 function ResultsEmptyState({
   isComplete,
   emptyColor = "text-04",
@@ -130,7 +115,6 @@ export function InternalSearchToolRenderer({
     />
   );
 
-  // HIGHLIGHT: header embedded in content, no StepContainer (timelineLayout "content").
   if (isHighlight) {
     return children([
       {
@@ -150,7 +134,6 @@ export function InternalSearchToolRenderer({
     ]);
   }
 
-  // INLINE: phase-based content for the collapsed streaming view.
   if (isInline) {
     if (!hasResults) {
       return children([
@@ -175,7 +158,6 @@ export function InternalSearchToolRenderer({
     ]);
   }
 
-  // FULL and COMPACT: single combined step (queries + "Reading" + results).
   return children([
     {
       icon: "search-menu",

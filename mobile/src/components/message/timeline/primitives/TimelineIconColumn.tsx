@@ -1,11 +1,6 @@
-// TimelineIconColumn.tsx — the left rail: vertical connector line + step icon.
-// Native mirror of web TimelineIconColumn.
-//
-// Web draws the 1px line with `w-px`
-// divs + `bg-border-*` and CSS-var heights; here we use Views with numeric
-// tokens and a resolved border color. Hover states are dropped (no pointer on
-// mobile). THREE paths: spacer (width only), default (top-connector + icon +
-// filler), compact (single flex line, no icon — used for hidden-header steps).
+// Native mirror of web TimelineIconColumn; web draws the 1px line with `w-px`
+// divs, here Views with numeric tokens. Three variants: spacer (width only),
+// default (top-connector + icon + filler), compact (single flex line, no icon).
 
 import type { ReactNode } from "react";
 import { View } from "react-native";
@@ -45,9 +40,8 @@ export function TimelineIconColumn({
   });
 
   return (
-    // No explicit height: in a flexDirection:row parent (TimelineRow) with the
-    // default alignItems:'stretch', this column stretches to the row height so
-    // the flex:1 segments below fill the remaining vertical space.
+    // No explicit height: stretches to the row height (parent alignItems
+    // defaults to 'stretch') so the flex:1 segments below fill the rest.
     <View style={{ width: T.railWidth, alignItems: "center" }}>
       <View
         style={{

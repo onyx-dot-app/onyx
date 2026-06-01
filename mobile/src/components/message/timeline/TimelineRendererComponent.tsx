@@ -1,9 +1,7 @@
 /* eslint-disable react-hooks/static-components -- findRenderer returns a STABLE
    module-level renderer fn; rendering it as <Renderer/> is intentional dynamic
    dispatch (each renderer keeps its own hook scope), not a render-time factory. */
-// TimelineRendererComponent.tsx — bridges a step's packets to its renderer,
-// owns per-step expand state, computes RenderType, and enhances results with
-// timeline context. Native mirror of web TimelineRendererComponent.
+// Native mirror of web TimelineRendererComponent.
 
 import { memo, useCallback, useState, type ReactNode } from "react";
 
@@ -95,9 +93,8 @@ export const TimelineRendererComponent = memo(function TimelineRendererComponent
     ]);
   }
 
-  // Render the renderer as a COMPONENT (JSX), not a direct function call, so its
-  // hooks live in their own fiber — calling it as a function would fold its
-  // hooks into this component and break the Rules of Hooks ("fewer hooks").
+  // Render as a COMPONENT (JSX), not a function call, so its hooks live in their
+  // own fiber — calling it directly would break the Rules of Hooks.
   const Renderer = RendererFn;
   return (
     <Renderer

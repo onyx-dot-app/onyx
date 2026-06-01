@@ -12,36 +12,15 @@ import { radii } from "@/theme/generated/radii";
 import { useThemeColors } from "@/theme/ThemeProvider";
 import { useCopyToClipboard } from "@/lib/useCopyToClipboard";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 interface CodeBlockProps {
-  /** The raw code text (already stripped of the trailing newline by the parser). */
   code: string;
-
-  /**
-   * Optional language label (from the fence info string, e.g. ```ts -> "ts").
-   * Shown in the header next to the copy affordance.
-   */
   language?: string;
 }
 
 const CODE_SCROLL_CONTENT_STYLE = { padding: 12 } as const;
 
-// ---------------------------------------------------------------------------
-// CodeBlock
-// ---------------------------------------------------------------------------
-
-/**
- * Native mirror of web `CodeBlock`.
- *
- * Syntax highlighting (rehype-highlight on web) and KaTeX math are not
- * implemented — code renders as flat monospace text. See the note in
- * Markdown.tsx.
- *
- * Wired as the `fence` / `code_block` rule in Markdown.tsx.
- */
+// Native mirror of web CodeBlock; wired as the fence/code_block rule in
+// Markdown.tsx. Flat monospace — no syntax highlighting (see Markdown.tsx).
 function CodeBlock({ code, language }: CodeBlockProps) {
   const colors = useThemeColors();
   const { copied, copy } = useCopyToClipboard();
@@ -76,8 +55,6 @@ function CodeBlock({ code, language }: CodeBlockProps) {
     [colors],
   );
 
-  // `main-content-mono` is the DMMono preset; pair it with the `code-code`
-  // token for the code-foreground color.
   const codeTextStyle = useMemo(
     () => [typography["main-content-mono"], { color: colors["code-code"] }],
     [colors],
@@ -106,8 +83,7 @@ function CodeBlock({ code, language }: CodeBlockProps) {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={CODE_SCROLL_CONTENT_STYLE}
       >
-        {/* RN Text (via Opal would force wrapping props); use a raw style array
-            so the monospace preset + code color cascade onto the code text. */}
+        {/* Raw style array, not Opal Text, to avoid forced wrapping props. */}
         <Text style={codeTextStyle}>{code}</Text>
       </ScrollView>
     </View>

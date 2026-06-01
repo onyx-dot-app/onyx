@@ -2,13 +2,9 @@ import Svg, { Path, G, Defs, ClipPath, Rect } from "react-native-svg";
 
 import type { IconProps } from "@/components/icons/Icon";
 
-// Provider/model brand logos. Mirrors the web Opal logo set. Monochrome marks
-// (OpenAI) honor `color`; brand-colored marks (Claude, Google/Gemini) use their
-// fixed brand colors and ignore `color`.
+// Mirrors the web Opal logo set. Monochrome marks honor `color`; brand-colored
+// marks (Claude, Google/Gemini) ignore it and use fixed brand colors.
 
-// web: lib/opal/src/logos/onyx-logo.tsx — the Onyx brand mark (four diamonds).
-// Monochrome: honors `color` (the web binds it to --theme-primary-05). Default
-// size matches the web auth header (44px).
 export function OnyxLogo({ size = 44, color = "#000" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 64 64" fill="none">
@@ -32,7 +28,6 @@ export function OnyxLogo({ size = 44, color = "#000" }: IconProps) {
   );
 }
 
-// web: lib/opal/src/logos/openai.tsx — monochrome, tinted with `color`.
 export function OpenaiLogo({ size = 16, color = "#000" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
@@ -51,7 +46,6 @@ export function OpenaiLogo({ size = 16, color = "#000" }: IconProps) {
   );
 }
 
-// web: lib/opal/src/logos/claude.tsx — Anthropic/Claude mark, brand orange.
 export function AnthropicLogo({ size = 16 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
@@ -70,7 +64,6 @@ export function AnthropicLogo({ size = 16 }: IconProps) {
   );
 }
 
-// web: lib/opal/src/logos/ollama.tsx — Ollama mark, monochrome (tinted with `color`).
 export function OllamaLogo({ size = 16, color = "#000" }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
@@ -84,7 +77,6 @@ export function OllamaLogo({ size = 16, color = "#000" }: IconProps) {
   );
 }
 
-// web: lib/opal/src/logos/google.tsx — Gemini/Google "G", brand colors.
 export function GoogleLogo({ size = 16 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 52 52" fill="none">

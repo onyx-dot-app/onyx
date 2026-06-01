@@ -12,12 +12,9 @@ import {
   type SharedValue,
 } from "react-native-reanimated";
 
-// Slide-over drawer state (ChatGPT-style left sidebar).
-//
-// `progress` (0 = closed → 1 = open) is a Reanimated shared value driven on the UI
-// thread by BOTH the open/close timing animations and the pan gesture (see
-// Drawer.tsx). `isOpen` mirrors it in React state for non-animated consumers — e.g.
-// gating the backdrop's tap-to-close so it can't swallow touches while closed.
+// `progress` (0 closed → 1 open) is a Reanimated shared value driven on the UI
+// thread by both the timing animations and the pan gesture; `isOpen` mirrors it in
+// React state for non-animated consumers (e.g. gating the backdrop's tap-to-close).
 const DRAWER_ANIM_MS = 240;
 
 interface DrawerContextValue {
@@ -59,7 +56,6 @@ export function DrawerProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** Access the drawer controls. Throws if used outside <DrawerProvider>. */
 export function useDrawer(): DrawerContextValue {
   const ctx = useContext(DrawerContext);
   if (!ctx) {

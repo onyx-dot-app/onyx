@@ -7,13 +7,8 @@ export function usePersonas() {
   return useSimpleQuery<MinimalAgent[]>(queryKeys.personas);
 }
 
-/**
- * Resolve the active agent for a chat. Prefers the session's persona, but falls
- * back to the default assistant when the session has none yet (e.g. a brand-new
- * draft chat where `personaId` is undefined). The default matches
- * useChatSessionLifecycle's new-chat default: persona id 0, else the first.
- * Returns undefined only when personas haven't loaded.
- */
+// Active agent for a chat: the session's persona, else the default assistant
+// (id 0, else the first) — matching useChatSessionLifecycle's new-chat default.
 export function resolveAgent(
   personas: MinimalAgent[] | undefined,
   personaId: number | undefined

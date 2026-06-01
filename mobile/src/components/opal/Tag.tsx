@@ -5,16 +5,9 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/cn";
 import { Text, type TextColor } from "@/components/opal/Text";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 export type TagTone = "neutral" | "info" | "success" | "warning" | "error";
 
-// ---------------------------------------------------------------------------
-// CVA — STATIC class strings (background + border per tone) for NativeWind.
-// ---------------------------------------------------------------------------
-
+// Static class strings (background + border per tone) for NativeWind.
 const tagVariants = cva(
   "flex-row items-center self-start rounded-full border px-2 py-0.5",
   {
@@ -33,7 +26,7 @@ const tagVariants = cva(
   },
 );
 
-// Label color token per tone — applied by `Text` via `style`.
+// Label color token per tone — applied by Text via style, not a dynamic className.
 const TAG_TEXT_COLOR: Record<TagTone, TextColor> = {
   neutral: "text-04",
   info: "status-text-info-05",
@@ -42,21 +35,12 @@ const TAG_TEXT_COLOR: Record<TagTone, TextColor> = {
   error: "status-text-error-05",
 };
 
-// ---------------------------------------------------------------------------
-// Tag
-// ---------------------------------------------------------------------------
-
 interface TagProps extends VariantProps<typeof tagVariants> {
   tone?: TagTone;
   className?: string;
   children?: ReactNode;
 }
 
-/**
- * Small pill / badge. Tone is a fixed small set, so styling uses CVA with
- * STATIC NativeWind classes; the label color is a token applied via `Text`
- * `style`.
- */
 function Tag({ tone = "neutral", className, children }: TagProps) {
   return (
     <View className={cn(tagVariants({ tone }), className)}>

@@ -6,18 +6,13 @@ import { OnyxLogo } from "@/components/ui/logos";
 import { useThemeColors } from "@/theme/ThemeProvider";
 
 interface AuthCardProps {
-  // Card header copy, beneath the Onyx logo.
   title: string;
   subtitle: string;
-  // Card body (Google button, divider, form, etc.).
   children: ReactNode;
-  // Optional navigation row rendered below the card.
   footer?: ReactNode;
 }
 
-// Shared scaffold for the login and register screens: a keyboard-avoiding,
-// centered scroll view wrapping an Onyx-logo-topped card, with an optional
-// footer row beneath. Native mirror of web `AuthFlowContainer`.
+// Native mirror of web AuthFlowContainer.
 export function AuthCard({ title, subtitle, children, footer }: AuthCardProps) {
   const colors = useThemeColors();
 

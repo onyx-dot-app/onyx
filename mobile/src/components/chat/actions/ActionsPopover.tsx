@@ -15,32 +15,18 @@ import { useTools } from "@/query/tools";
 import { useAvailableSourceStrings } from "@/query/connectors";
 import { useSourcePreferences } from "@/lib/sources/useSourcePreferences";
 
-// ---------------------------------------------------------------------------
-// ActionsPopover — the sliders trigger + anchored popover that hosts the tool
-// list and a nested sources sub-view (web parity: ActionsPopover/index.tsx).
+// Sliders trigger + popover hosting the tool list and a sources sub-view (web
+// parity: ActionsPopover/index.tsx). Requires a <PortalHost/> near the app root.
 //
-// It renders its OWN trigger (a sliders Pressable, mirroring the AttachMenu /
-// ModelSelectorTrigger opal-Popover usage), so callers just pass `agent` +
-// `personaId`. Requires a <PortalHost/> near the app root (present in
-// app/_layout.tsx).
-//
-// AVAILABILITY MODEL (web parity): tools have NO per-tool enable switch. A tool
-// is shown greyed/disabled when UNAVAILABLE and normal when available; a tool is
-// available iff its id is in the GLOBAL tool registry (`useTools` -> GET /tool).
-// The search tool is NEVER unavailable. Tapping an available non-search tool
-// FORCES it (toggleForcedTool). Only SOURCES keep enable/disable switches (in
-// the sources sub-view).
-//
-// SOURCE <-> SEARCH FORCE COUPLING: enabling the FIRST source
-// force-pins the Search tool (toggleForcedTool); disabling the LAST source
-// un-forces it. This is how the Search tool gets forced. Guarded on the search
-// tool being present on the agent.
-// ---------------------------------------------------------------------------
+// Availability: tools have no per-tool switch — a tool is greyed when its id is
+// absent from the global registry (useTools -> GET /tool); search is never
+// unavailable. Tapping an available non-search tool forces it. Only sources keep
+// enable/disable switches. Enabling the first source force-pins Search; disabling
+// the last un-forces it — that's how Search gets forced.
 
 interface ActionsPopoverProps {
-  /** The agent whose tools + sources this popover manages. */
   agent: MinimalAgent;
-  /** The persona id (retained for parity with the chat surface API). */
+  // Retained for parity with the chat surface API.
   personaId: number;
 }
 
@@ -53,31 +39,27 @@ export function ActionsPopover({ agent }: ActionsPopoverProps) {
   });
   const [secondaryView, setSecondaryView] = useState<SecondaryView>(null);
 
-  // --- force-tool (ephemeral) ---------------------------------------------
   const forcedToolIds = useForcedTools((s) => s.forcedToolIds);
   const toggleForcedTool = useForcedTools((s) => s.toggleForcedTool);
 
-  // --- global tool registry (availability) --------------------------------
-  // A tool is available iff its id is in this set (web parity: useAvailableTools).
   const { data: availableTools } = useTools();
   const availableToolIdSet = useMemo(
     () => new Set((availableTools ?? []).map((t) => t.id)),
     [availableTools]
   );
 
-  // --- source prefs (MMKV) -------------------------------------------------
   const availableSourceStrings = useAvailableSourceStrings();
   const { configuredSources, isSourceEnabled, toggleSource } =
     useSourcePreferences(availableSourceStrings);
 
-  // --- search tool identity (string in_code_tool_id -> numeric id) ---------
+  // Search tool identity (string in_code_tool_id -> numeric id).
   const searchTool = useMemo(
     () => agent.tools.find((t) => t.in_code_tool_id === SEARCH_TOOL_ID),
     [agent.tools]
   );
   const searchToolId = searchTool?.id;
 
-  // Exclude MCP tools: MCP is out of scope for this feature (web parity).
+  // Exclude MCP tools: out of scope for this feature (web parity).
   const displayTools = useMemo(
     () => agent.tools.filter((t) => t.chat_selectable && !t.mcp_server_id),
     [agent.tools]
@@ -94,8 +76,7 @@ export function ActionsPopover({ agent }: ActionsPopoverProps) {
 
     toggleSource(key);
 
-    // Source -> force-search coupling: first source force-pins Search; last
-    // source un-forces it. Guarded on the search tool being present.
+    // Source -> force-search coupling (see header). Guarded on search being present.
     if (searchToolId !== undefined) {
       if (willEnable && !forcedToolIds.includes(searchToolId)) {
         toggleForcedTool(searchToolId);
@@ -122,14 +103,11 @@ export function ActionsPopover({ agent }: ActionsPopoverProps) {
     )
   );
 
-  // Nothing selectable to show.
   if (displayTools.length === 0) return null;
 
   return (
     <Popover onOpenChange={handleOpenChange}>
       <Popover.Trigger asChild>
-        {/* Sliders trigger — mirrors the AttachMenu / send-cluster icon button
-            (h-8 w-8, rounded, active tint). */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Manage actions"
@@ -149,7 +127,6 @@ export function ActionsPopover({ agent }: ActionsPopoverProps) {
       >
         {secondaryView === "sources" ? (
           <View>
-            {/* Sub-view header with a back button. */}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Back to actions"

@@ -5,11 +5,8 @@ import * as DocumentPicker from "expo-document-picker";
 import { isImageFile } from "@/lib/fileTypes";
 import type { UploadableFile } from "@/lib/api";
 
-// Shared file-picking logic for the composer's AttachMenu and the project file
-// picker. Wraps expo's image/document pickers, maps their assets into
-// `UploadableFile`s, and surfaces the same error Alerts. Each caller passes its
-// own handler for the resulting files (attach optimistically vs. upload to a
-// project) and decides whether to enforce the vision gate.
+// Shared file-picking for the composer AttachMenu + project file picker. Wraps
+// expo's image/document pickers and maps their assets into `UploadableFile`s.
 
 const VISION_MSG =
   "The current model does not support image input. Pick a model with Vision support to attach images.";
@@ -21,18 +18,13 @@ function nameFromUri(uri: string, fallback: string): string {
 }
 
 interface UseFilePickerOptions {
-  /**
-   * Whether the active model accepts images (vision gate). When false, Photos
-   * picks are blocked and any images chosen via the document picker are filtered
-   * out with an explanatory Alert. Defaults to `true` (no gate).
-   */
+  // Vision gate: when false, Photos picks are blocked and document-picked images
+  // are filtered out. Defaults to true.
   imagesAllowed?: boolean;
 }
 
 export interface UseFilePickerResult {
-  /** Open the photo library and forward the picked images to `onFiles`. */
   pickImages: (onFiles: (files: UploadableFile[]) => void) => Promise<void>;
-  /** Open the document picker and forward the picked documents to `onFiles`. */
   pickDocuments: (onFiles: (files: UploadableFile[]) => void) => Promise<void>;
 }
 
@@ -74,8 +66,8 @@ export function useFilePicker({
         name: asset.name,
         mimeType: asset.mimeType,
       }));
-      // The document picker can return images too — enforce the same vision gate
-      // here so it can't bypass the Photos guard (web gates at the upload layer).
+      // Document picker can return images too — enforce the vision gate here so it
+      // can't bypass the Photos guard.
       if (!imagesAllowed) {
         const hadImages = files.some((file) => isImageFile(file.name));
         files = files.filter((file) => !isImageFile(file.name));

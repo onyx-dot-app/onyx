@@ -1,7 +1,6 @@
 /* eslint-disable react-hooks/static-components -- iconComponentFor is a stable name->component lookup, not a per-render component factory. */
-// toolIcon.tsx — maps a pure TimelineIconName (from state/timeline) to a mobile
-// Svg* component. This is the components-layer bridge that keeps the pipeline
-// (state/timeline) free of any component imports.
+// Maps a pure TimelineIconName to an Svg* here so state/timeline stays free of
+// component imports.
 
 import type { IconProps } from "@/components/icons/Icon";
 import {
@@ -59,7 +58,6 @@ interface TimelineIconProps extends IconProps {
   name: TimelineIconName;
 }
 
-/** Renders a timeline icon by name. */
 export function TimelineIcon({ name, ...props }: TimelineIconProps) {
   const Cmp = iconComponentFor(name);
   return <Cmp {...props} />;

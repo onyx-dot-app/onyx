@@ -6,12 +6,8 @@ import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useResetForcedToolsOnSessionChange } from "@/state/useForcedTools";
 import { useHydrateCurrentSession } from "@/chat/useHydrateCurrentSession";
 
-// The single chat screen. It renders whatever session is current — a brand-new
-// draft (currentSessionId null) OR a session opened from Recents. Opening a recent
-// just sets currentSessionId; this screen loads + hydrates that session's history
-// on demand (useHydrateCurrentSession) instead of pushing a separate [sessionId]
-// route. A fresh chat is started lazily via the sidebar "New Chat" (draft → real
-// session on first send; see useChatSessionLifecycle).
+// The single chat screen: renders whatever session is current and hydrates its
+// history on demand, rather than pushing a separate [sessionId] route.
 export default function ChatScreen() {
   const currentSessionId = useChatSessionStore((s) => s.currentSessionId);
   const { isLoading, isError, retry } = useHydrateCurrentSession();

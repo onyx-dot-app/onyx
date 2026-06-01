@@ -12,10 +12,6 @@ interface MemoryStepState {
   isMemoryOnly: boolean;
 }
 
-/**
- * Extracts memory state from the first memory-tool step in turnGroups
- * and determines whether the timeline contains only memory steps.
- */
 export function useTimelineStepState(turnGroups: TurnGroup[]): MemoryStepState {
   return useMemo(() => {
     let memoryText: string | null = null;

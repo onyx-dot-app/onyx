@@ -5,35 +5,15 @@ import { cn } from "@/lib/cn";
 import { Text } from "@/components/opal/Text";
 import { useToken } from "@/theme/ThemeProvider";
 
-// ---------------------------------------------------------------------------
-// Checkbox — a themed checkbox built on @rn-primitives/checkbox.
-//
-//   <Checkbox checked={v} onCheckedChange={setV} label="Remember me" />
-//
-// Checked  → `theme-primary-05` fill + a check glyph (inverted-text color).
-// Unchecked → transparent box with a `border-03` border.
-// Disabled  → dimmed + non-interactive.
-// ---------------------------------------------------------------------------
-
 interface CheckboxProps {
-  /** Whether the box is checked. Controlled. */
   checked: boolean;
-  /** Called with the next checked state on press. */
   onCheckedChange: (checked: boolean) => void;
-  /** Disable interaction + dim. Default: false. */
   disabled?: boolean;
-  /** Optional label rendered next to the box via the Opal `Text` component. */
   label?: string;
-  /** Extra classes merged onto the outer row. */
   className?: string;
 }
 
-/**
- * A small tick drawn with two borders of a rotated View — avoids pulling in an
- * icon/svg dependency. Color comes from the `text-inverted-05` token (resolved
- * through `style`, never a dynamic className) so it reads on the filled box in
- * both light and dark schemes.
- */
+// Tick drawn with two borders of a rotated View — avoids pulling in an icon/svg dependency.
 function CheckGlyph({ color }: { color: string }) {
   return (
     <View
@@ -50,11 +30,7 @@ function CheckGlyph({ color }: { color: string }) {
   );
 }
 
-/**
- * Native mirror of the Opal `Checkbox`. The box background/border is a fixed
- * two-state set, so it uses STATIC NativeWind classes toggled on `checked`; the
- * check glyph color is a token applied via `style`.
- */
+// Native mirror of web Opal Checkbox.
 function Checkbox({
   checked,
   onCheckedChange,

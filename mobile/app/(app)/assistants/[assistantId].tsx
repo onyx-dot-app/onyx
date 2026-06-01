@@ -2,7 +2,6 @@ import { useLocalSearchParams } from "expo-router";
 
 import { PlaceholderScreen } from "@/components/PlaceholderScreen";
 
-// Placeholder for the assistant detail screen.
 export default function AssistantDetail() {
   const { assistantId } = useLocalSearchParams<{ assistantId: string }>();
 

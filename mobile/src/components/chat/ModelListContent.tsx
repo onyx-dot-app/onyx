@@ -18,10 +18,7 @@ import type {
   SelectedModel,
 } from "@/lib/types";
 
-// Popover content for the model selector — native mirror of web ModelListContent:
-// search box, provider groups (flat when single provider), model rows with a
-// capabilities sub-label and a selected check (action-link-05), + loading/empty.
-
+// Native mirror of web ModelListContent.
 const optionKey = (o: {
   name: string;
   provider: string;
@@ -40,9 +37,8 @@ interface ModelListContentProps {
   isLoading: boolean;
   selected: SelectedModel | null;
   onSelect: (option: LLMOption) => void;
-  // Swappable container/input so this renders correctly inside a bottom sheet
-  // (BottomSheetScrollView / BottomSheetTextInput) or a plain surface. Typed loosely
-  // since gorhom's variants have compatible-but-not-identical prop shapes.
+  // Swappable container/input so this renders inside a bottom sheet
+  // (BottomSheetScrollView / BottomSheetTextInput) or a plain surface.
   ScrollComponent?: ComponentType<any>;
   InputComponent?: ComponentType<any>;
 }
@@ -113,7 +109,6 @@ export function ModelListContent({
 
   return (
     <View>
-      {/* Search box (web: InputTypeIn internal, leading search icon) */}
       <View className="mb-2 h-9 flex-row items-center gap-2 rounded-[8px] bg-background-tint-02 px-2">
         <SvgSearch size={16} color={mutedColor} />
         <InputComponent

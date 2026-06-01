@@ -3,7 +3,7 @@ import { View } from "react-native";
 
 import { Text } from "@/components/opal";
 
-// A labelled sidebar section (web: SidebarSection).
+// Mirrors web SidebarSection.
 export function SidebarSection({
   title,
   children,

@@ -8,11 +8,7 @@ import { useToken } from "@/theme/ThemeProvider";
 import { fileExtensionLabel, isImageFile } from "@/lib/fileTypes";
 import { UserFileStatus, type ProjectFile } from "@/lib/types";
 
-// A single "Recent Files" row — mirror of web `FileLineItem`. Loader glyph while
-// the file is still processing, else an image/file icon; the trailing slot shows
-// a check when the file is already attached, otherwise its extension label.
-// Shared by the attach popover (quick list) and the "All Recent Files" modal.
-
+// A single "Recent Files" row — mirror of web FileLineItem.
 interface RecentFileRowProps {
   file: ProjectFile;
   attached: boolean;

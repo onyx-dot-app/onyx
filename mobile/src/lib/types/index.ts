@@ -1,5 +1,4 @@
-// Barrel for the Onyx domain + streaming types. Each module mirrors its web
-// source; only imports/couplings were rewritten for the standalone mobile app:
+// Each module mirrors its web source:
 //   domain.ts    <- web/src/lib/types.ts
 //   agents.ts    <- web/src/lib/agents/types.ts
 //   search.ts    <- web/src/lib/search/interfaces.ts
@@ -8,8 +7,6 @@
 //   streaming.ts <- web/src/app/app/services/streamingModels.ts
 //   llm.ts       <- web/src/lib/languageModels/types.ts (subset)
 //   files.ts     <- web/src/app/app/projects/projectsService.ts (subset)
-//
-// No cross-file export-name collisions exist, so `export *` is safe.
 
 export * from "./domain";
 export * from "./agents";

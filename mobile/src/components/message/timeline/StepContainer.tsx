@@ -1,6 +1,5 @@
-// StepContainer.tsx — visual wrapper for one timeline step (icon rail +
-// connector + header + body). Native mirror of web StepContainer. The step icon
-// is a NAME (TimelineIconName) mapped to an Svg* here.
+// Native mirror of web StepContainer. stepIconName is a TimelineIconName
+// (not a component) mapped to an Svg* via TimelineIcon.
 
 import type { ReactNode } from "react";
 import { View } from "react-native";

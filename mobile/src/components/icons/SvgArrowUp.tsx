@@ -2,9 +2,8 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Mirrors web arrow-up icon. No curated "send" glyph exists, so arrow-up is the
-// composer's send affordance and is exported as the `SvgSend` alias below.
-/** Upward arrow (also used as the chat "send" affordance). */
+// Mirrors web arrow-up icon. No curated "send" glyph exists, so this doubles as
+// the composer's send affordance (exported as the SvgSend alias in index.ts).
 function SvgArrowUp(props: IconProps) {
   return (
     <Icon viewBox="0 0 16 16" {...props}>

@@ -10,12 +10,7 @@ import { useGoogleSignIn } from "@/components/auth/useGoogleSignIn";
 import { Text, Button } from "@/components/opal";
 import { GoogleLogo } from "@/components/ui/logos";
 
-// Sign-in screen. Mirrors web AuthFlowContainer: an Onyx-logo-topped card with a
-// "Continue with Google" button, an "or" divider, and the email/password form.
-// Password creds post to the backend's mobile Bearer login route, which returns
-// a JWT the AuthProvider stores; on success status flips to signedIn and
-// app/index.tsx routes into (app). "Create an Account" pushes the registration
-// screen.
+// Mirrors web AuthFlowContainer. Password creds hit the mobile Bearer login route.
 export default function Login() {
   const { signInWithPassword, error: authError } = useAuth();
 

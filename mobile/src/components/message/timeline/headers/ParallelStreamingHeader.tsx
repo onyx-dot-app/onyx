@@ -1,6 +1,4 @@
-// ParallelStreamingHeader.tsx — horizontal tool-pill tabs (per-tab spinner +
-// active styling) + fold control, shown while parallel tools stream collapsed.
-// Ports web ParallelStreamingHeader (Opal pill Tabs -> horizontal ScrollView).
+// Native mirror of web ParallelStreamingHeader (pill Tabs -> horizontal ScrollView).
 
 import { memo } from "react";
 import { View } from "react-native";

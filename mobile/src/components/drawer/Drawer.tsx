@@ -18,15 +18,8 @@ const EDGE_OPEN_ZONE = 28; // px from the left edge where a swipe starts opening
 const OPEN_THRESHOLD = 0.5; // settle open past this fraction
 const FLING_VELOCITY = 600; // px/s fling to force open/close regardless of position
 
-// ChatGPT-style slide-over drawer. Layers (bottom → top):
-//   1. children            — the route navigator (chat, etc.)
-//   2. backdrop            — animated dim (visual only)
-//   3. tap-catcher         — full-screen Pressable, only while open, closes on tap
-//   4. sidebar             — translates in from the left
-//
-// Open/close via the header toggle (useDrawer) or a horizontal pan. The pan only
-// engages when already open or when starting from the left edge, and yields to
-// vertical scrolls so list/content scrolling is unaffected.
+// Slide-over drawer. The pan only engages when already open or starting from the
+// left edge, and yields to vertical scrolls so content scrolling is unaffected.
 export function Drawer({
   sidebar,
   children,

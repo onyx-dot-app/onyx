@@ -1,9 +1,6 @@
-// sourceInfo.ts — citation/source display helpers.
-//
 // Mirrors web sourceTagUtils.ts. Deviation: mobile lacks the full per-connector
 // source-metadata map, so getDisplayNameForSource humanizes the source_type for
-// internal docs (e.g. "google_drive" -> "Google Drive") instead of looking up a
-// curated connector name — an approximation of web behavior.
+// internal docs instead of looking up a curated connector name.
 
 import type { OnyxDocument } from "@/lib/types";
 
@@ -13,7 +10,6 @@ export interface SourceInfo {
   sourceType: string;
   sourceUrl?: string;
   description?: string;
-  /** Relative or ISO date string. */
   date?: string | null;
   isInternet: boolean;
 }
@@ -25,7 +21,7 @@ export function truncateText(text: string, maxLength = MAX_TITLE_LENGTH): string
   return text.slice(0, Math.max(0, maxLength - 1)).trimEnd() + "…";
 }
 
-/** Humanize a connector source_type token for display, e.g. "google_drive" -> "Google Drive". */
+// "google_drive" -> "Google Drive".
 export function humanizeSourceType(sourceType: string): string {
   if (!sourceType) return "Source";
   return sourceType
@@ -47,12 +43,8 @@ export function documentToSourceInfo(doc: OnyxDocument): SourceInfo {
   };
 }
 
-/**
- * The label shown on an inline citation pill / chip.
- * - Web/internet results: the (truncated) page title.
- * - Internal docs: the humanized connector name (approximation of web's
- *   getSourceDisplayName), falling back to the doc title.
- */
+// Pill/chip label: web results -> page title; internal docs -> humanized
+// connector name (approximates web's getSourceDisplayName).
 export function getDisplayNameForSource(doc: OnyxDocument): string {
   const isWeb = doc.source_type === "web" || doc.is_internet;
   if (isWeb) {

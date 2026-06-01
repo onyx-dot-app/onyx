@@ -1,6 +1,5 @@
-// GenericToolRenderer.tsx — fallback for any tool packet without a dedicated
-// renderer, so the timeline never shows a blank step. Labels the step with the
-// tool name + icon and fires onComplete on completion.
+// Fallback for any tool packet without a dedicated renderer, so the timeline
+// never shows a blank step.
 
 import { useMemo } from "react";
 

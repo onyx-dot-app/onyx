@@ -1,6 +1,5 @@
-// Mirrors web fetcher.ts (FetchError + RedirectError).
-// The SWR-coupled `skipRetryOnAuthError` helper stays in web (it references swr's
-// SWRConfiguration); only these framework-neutral error classes move into the package.
+// Mirrors web fetcher.ts (FetchError + RedirectError). The SWR-coupled
+// `skipRetryOnAuthError` helper stays in web; only these neutral classes move here.
 
 export class FetchError extends Error {
   status: number;

@@ -1,8 +1,5 @@
-// BlinkingBar.tsx — the streaming caret / empty-state placeholder.
-//
-// Native mirror of web BlinkingBar. Used as the MessageText trailing caret AND as
-// the empty-state placeholder in search/fetch renderers while results are still
-// streaming. RN has no CSS animation, so the pulse is a Reanimated opacity loop.
+// Native mirror of web BlinkingBar. RN has no CSS animation, so the pulse is a
+// Reanimated opacity loop.
 
 import { useEffect } from "react";
 import { type ViewStyle } from "react-native";
@@ -19,7 +16,6 @@ import { useToken } from "@/theme/ThemeProvider";
 import { radii } from "@/theme/generated/radii";
 
 interface BlinkingBarProps {
-  /** Adds a small top margin to baseline-align with text (web `addMargin`). */
   addMargin?: boolean;
   style?: ViewStyle;
 }

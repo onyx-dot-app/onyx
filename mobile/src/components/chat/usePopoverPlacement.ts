@@ -1,31 +1,17 @@
 import { Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-// Shared safe-area-aware placement for the composer's anchored popovers
-// (AttachMenu, ModelSelectorTrigger, ActionsPopover). Each of these opens near
-// the bottom edge of the screen, so they pad the rn-primitives collision insets
-// by the safe-area + 8px and clamp their measured width below the screen edge.
-//
-// Kept as a chat-local helper rather than a `PopoverContent` default so the
-// non-chat popover callers (which intentionally pass no insets/width) keep their
-// current behavior.
-
+// Safe-area-aware placement for the composer's anchored popovers, which open
+// near the bottom edge: pads the rn-primitives collision insets and clamps width.
 export interface PopoverPlacement {
-  /** rn-primitives collision insets (safe-area padded). */
   insets: { top: number; bottom: number; left: number; right: number };
-  /** Width clamped so the card never overflows a narrow screen. */
   contentWidth: number;
 }
 
 interface PopoverPlacementOptions {
-  /** Maximum content width before clamping. */
   maxWidth: number;
-  /** Horizontal margin kept clear on each side when clamping the width. */
   widthMargin: number;
-  /**
-   * Extra bottom inset, e.g. the live keyboard height for a popover whose search
-   * box would otherwise sit under the keyboard. Defaults to 0.
-   */
+  // Extra bottom inset, e.g. live keyboard height for a popover with a search box.
   extraBottom?: number;
 }
 

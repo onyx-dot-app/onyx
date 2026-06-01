@@ -17,7 +17,6 @@ export interface FetchState {
   isComplete: boolean;
 }
 
-/** Constructs the current fetch state from fetch tool packets. */
 export const constructCurrentFetchState = (
   packets: FetchToolPacket[]
 ): FetchState => {

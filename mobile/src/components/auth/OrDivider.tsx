@@ -2,8 +2,6 @@ import { View } from "react-native";
 
 import { Text } from "@/components/opal";
 
-// The "or" divider between the Google button and the email/password form on the
-// login and register screens: a thin rule on each side of a centered label.
 export function OrDivider() {
   return (
     <View className="flex-row items-center gap-2">

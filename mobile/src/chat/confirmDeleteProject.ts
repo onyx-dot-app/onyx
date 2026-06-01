@@ -4,12 +4,9 @@ import { Alert } from "react-native";
 import { useDeleteProject } from "@/query/projects";
 import { useProjectChatTarget } from "@/state/projectChatTarget";
 
-// Shared "Delete Project" confirmation. Pops the destructive Alert and, on confirm,
-// drops any pending project-chat launcher that targeted this project (so the next
-// draft can't be sent with a deleted project_id) before firing the optimistic
-// delete mutation. An optional `onDeleted` runs after the mutation is enqueued — the
-// project screen uses it to navigate back to the chat screen; the sidebar folder row
-// passes nothing (it stays put).
+// Shared "Delete Project" confirmation. On confirm, drops any pending project-chat
+// launcher targeting this project (so the next draft can't be sent with a deleted
+// project_id) before the optimistic delete. `onDeleted` runs after enqueue.
 export function useConfirmDeleteProject() {
   const deleteProject = useDeleteProject();
 

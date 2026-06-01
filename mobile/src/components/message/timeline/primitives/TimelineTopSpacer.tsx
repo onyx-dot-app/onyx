@@ -1,4 +1,3 @@
-// TimelineTopSpacer.tsx — vertical spacer at the top of a step body.
 // Native mirror of web TimelineTopSpacer.
 
 import { View } from "react-native";

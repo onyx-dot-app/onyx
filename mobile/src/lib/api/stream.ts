@@ -1,11 +1,10 @@
 // NDJSON streaming reader. Mirrors web streamingUtils.ts (handleSSEStream).
-// Delta vs web: dropped a stray `console.log("aborting")` and renamed the log to "stream".
 //
-// IMPORTANT: despite the legacy "SSE" name, the Onyx chat stream is NDJSON — the backend sends
-// `json.dumps(...) + "\n"` via get_json_line() in backend/onyx/server/utils.py. The line buffer
-// with `lines.pop()` carrying the trailing partial line is LOAD-BEARING: a network chunk boundary
-// does NOT align with a JSON-object boundary, and one read may carry several objects. Do NOT swap
-// this for an EventSource/SSE client — it would silently drop every packet.
+// Despite the legacy "SSE" name, the Onyx chat stream is NDJSON — the backend sends
+// `json.dumps(...) + "\n"` via get_json_line(). The line buffer with `lines.pop()` carrying
+// the trailing partial line is LOAD-BEARING: a chunk boundary does NOT align with a JSON-object
+// boundary, and one read may carry several objects. Do NOT swap for an EventSource/SSE client —
+// it would silently drop every packet.
 
 import type { Packet } from "../types";
 

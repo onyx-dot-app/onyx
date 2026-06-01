@@ -2,11 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Mirrors web settings icon.
-// The web source wraps the paths in a <clipPath>; the clip is a no-op for
-// rendering (it just bounds to the 16x16 box the artwork already fits), so it
-// is dropped here — only the two visible paths are kept.
-/** Gear / settings (cog with center dot). */
+// Mirrors web settings icon. Web's no-op 16x16 clipPath is dropped.
 function SvgSettings(props: IconProps) {
   return (
     <Icon viewBox="0 0 16 16" {...props}>

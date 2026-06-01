@@ -1,7 +1,6 @@
 import { Link, Stack } from "expo-router";
 import { Text, View } from "react-native";
 
-// Fallback route for unmatched paths.
 export default function NotFound() {
   return (
     <>

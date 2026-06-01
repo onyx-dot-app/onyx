@@ -2,8 +2,8 @@ import { Pressable } from "react-native";
 
 import { Text } from "@/components/opal";
 
-// One sidebar chat row — mirrors the web ChatButton/SidebarTab. Spacing uses
-// NativeWind classNames (inline horizontal style is unreliable under NativeWind here).
+// Mirrors web ChatButton/SidebarTab. Spacing via classNames (inline horizontal
+// style is unreliable under NativeWind here).
 export function SidebarRow({
   label,
   selected = false,

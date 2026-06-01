@@ -4,10 +4,7 @@ import { Modal, Text } from "@/components/opal";
 import type { ProjectFile } from "@/lib/types";
 import { RecentFileRow } from "./RecentFileRow";
 
-// "All Recent Files" — opal Modal with the full scrollable recent-files list,
-// opened from the attach popover's overflow row. Pick-only (a simplified mirror
-// of web's `UserFilesModal`; delete/view/search are follow-ups).
-
+// Simplified mirror of web UserFilesModal — pick-only (delete/view/search are follow-ups).
 interface RecentFilesModalProps {
   visible: boolean;
   onClose: () => void;

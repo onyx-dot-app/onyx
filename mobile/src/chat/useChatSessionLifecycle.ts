@@ -1,13 +1,6 @@
-// Chat-session lifecycle for the composer — mirrors web's lazy create + auto-name.
-//
-// Web parity (see web useChatController):
-//   • A new chat creates NO backend session on the "New Chat" tap. The session is
-//     created only when the first message is sent (ensureSession), so the URL/state
-//     can carry a real UUID before streaming.
-//   • After the first response, the frontend asks the backend to auto-title the
-//     session (rename with name=null → backend generates the title from the chat).
-//
-// useSendMessage composes this so the streaming hook owns the full first-message flow.
+// Chat-session lifecycle for the composer — mirrors web's lazy create + auto-name
+// (see web useChatController): the session is created on first send, then auto-titled
+// after the first response (rename with name=null).
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -19,16 +12,14 @@ import { usePersonas } from "@/query/personas";
 import { useProjectChatTarget } from "@/state/projectChatTarget";
 
 export interface ChatSessionLifecycle {
-  /** Lazily create a backend chat session (default persona). Returns its id, or null on failure. */
+  // Lazily create a backend session (default persona); null on failure.
   ensureSession: () => Promise<string | null>;
-  /** Ask the backend to auto-title a session from its first exchange (web parity). */
   autoNameSession: (chatSessionId: string) => Promise<void>;
 }
 
 export function useChatSessionLifecycle(): ChatSessionLifecycle {
   const { data: personas } = usePersonas();
-  // mutateAsync is a stable reference across renders (react-query), so depending on
-  // it keeps ensureSession stable instead of churning every render.
+  // mutateAsync is stable across renders, keeping ensureSession stable.
   const { mutateAsync: createSessionAsync } = useCreateSession();
   const queryClient = useQueryClient();
 
@@ -36,10 +27,8 @@ export function useChatSessionLifecycle(): ChatSessionLifecycle {
     // Default to Onyx's built-in persona (id 0), else the first available.
     const personaId =
       personas?.find((p) => p.id === 0)?.id ?? personas?.[0]?.id ?? 0;
-    // If the user launched this chat from a project (projectChatTarget set on the
-    // project screen), bind the new backend session to that project — web parity:
-    // create-chat-session carries `project_id`. Consume it once, then clear so the
-    // next plain "New Chat" doesn't inherit a stale project.
+    // If launched from a project, bind the session to it (web parity: create-chat-session
+    // carries project_id). Consumed once, then cleared so the next chat isn't stale.
     const projectId = useProjectChatTarget.getState().projectId;
     try {
       const res = await createSessionAsync({ personaId, projectId });
@@ -59,11 +48,11 @@ export function useChatSessionLifecycle(): ChatSessionLifecycle {
 
   const autoNameSession = useCallback(
     async (chatSessionId: string): Promise<void> => {
-      // The backend write can lag the stream-finish signal slightly; web waits 200ms
-      // before naming. Mirror that so the title request sees a persisted session.
+      // Backend write lags the stream-finish signal; web waits 200ms so the title
+      // request sees a persisted session.
       await new Promise((resolve) => setTimeout(resolve, 200));
       try {
-        // name:null tells the backend to auto-generate a title from the conversation.
+        // name:null tells the backend to auto-generate a title.
         await errorHandlingFetcher("/chat/rename-chat-session", clientConfig, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },

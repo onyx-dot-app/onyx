@@ -9,44 +9,14 @@ import type { BottomSheetModalMethods } from "@gorhom/bottom-sheet/lib/typescrip
 
 import { useThemeColors } from "@/theme/ThemeProvider";
 
-// ---------------------------------------------------------------------------
-// BottomSheet — a thin themed wrapper over @gorhom/bottom-sheet's
-// BottomSheetModal.
-//
-//   const ref = useRef<BottomSheetModal>(null);
-//   ...
-//   <BottomSheet ref={ref} snapPoints={["50%"]}>
-//     <View>...content...</View>
-//   </BottomSheet>
-//   // open:  ref.current?.present()
-//   // close: ref.current?.dismiss()
-//
-// The handle indicator + sheet background + backdrop scrim are theme tokens
-// (resolved via useThemeColors, applied through `style` — never a dynamic
-// className).
-//
-// ⚠️ A <BottomSheetModalProvider> (from @gorhom/bottom-sheet) MUST wrap the app
-// for the modal variant to work.
-// ---------------------------------------------------------------------------
+// Requires a <BottomSheetModalProvider> (from @gorhom/bottom-sheet) wrapping the app.
 
-/**
- * Imperative handle for the sheet — `present()` / `dismiss()` / `snapToIndex()`
- * etc. (the methods exposed by the underlying BottomSheetModal). Use this as
- * the type for your `useRef`.
- */
 type BottomSheetRef = BottomSheetModalMethods;
 
 interface BottomSheetProps extends BottomSheetModalProps {
-  /** Show a dimmed, tap-to-dismiss backdrop. Default: true. */
   withBackdrop?: boolean;
 }
 
-/**
- * Themed BottomSheetModal. Callers drive it imperatively via the forwarded ref
- * (`present()` / `dismiss()`). All BottomSheetModal props pass through, so
- * `snapPoints`, `onDismiss`, `enablePanDownToClose`, etc. work as usual; the
- * background/handle/backdrop styling is overridable by the caller.
- */
 const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(function BottomSheet(
   {
     withBackdrop = true,
@@ -75,8 +45,7 @@ const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(function Bottom
 
   return (
     <BottomSheetModal
-      // The component is generic (<T = never>) while our public ref alias uses
-      // the concrete methods interface; bridge the two with a cast here.
+      // Component is generic (<T = never>); our ref alias is the concrete methods interface — bridge with a cast.
       ref={ref as Ref<BottomSheetModalMethods<never>>}
       enablePanDownToClose
       backgroundStyle={[

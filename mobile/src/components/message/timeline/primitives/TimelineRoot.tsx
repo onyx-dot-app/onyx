@@ -1,5 +1,4 @@
-// TimelineRoot.tsx — outer container. Native mirror of web TimelineRoot.
-// CSS vars dropped; tokens are imported numerically by descendants.
+// Native mirror of web TimelineRoot (CSS vars dropped; tokens imported numerically).
 
 import type { ReactNode } from "react";
 import { View } from "react-native";

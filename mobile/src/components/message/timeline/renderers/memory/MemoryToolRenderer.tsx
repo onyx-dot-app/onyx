@@ -1,12 +1,6 @@
-// MemoryToolRenderer.tsx — renders memory tool execution steps. Native mirror of web MemoryToolRenderer.
-// State reducer is shared with web's logic via "@/state/timeline/memoryStateUtils".
-//
-// DEVIATIONS from web:
-//   - Web has no MemoriesModal here; the memory text is rendered through
-//     ExpandableTextDisplay, whose maximize control opens the full text in a
-//     bottom sheet.
-//   - Web does not fire onComplete; the mobile renderer contract requires it, so
-//     a ref-guarded effect fires it when memoryState.isComplete becomes true.
+// Native mirror of web MemoryToolRenderer (shares its reducer via memoryStateUtils).
+// Web has no MemoriesModal here; the text renders through ExpandableTextDisplay,
+// whose maximize control opens the full text in a bottom sheet.
 
 import { useCallback } from "react";
 import { View } from "react-native";
@@ -38,7 +32,7 @@ export function MemoryToolRenderer({
   const { hasStarted, noAccess, memoryText, isComplete } = memoryState;
   const isHighlight = renderType === RenderType.HIGHLIGHT;
 
-  // Fire onComplete once when the tool finishes (mobile contract; web omits this).
+  // Fire onComplete on finish (mobile contract; web omits this).
   useFireOnComplete(isComplete, onComplete);
 
   const renderMemoryText = useCallback(
@@ -50,7 +44,6 @@ export function MemoryToolRenderer({
     []
   );
 
-  // Pre-start: a bare "Memory" step with an empty body.
   if (!hasStarted) {
     return children([
       {
@@ -64,7 +57,6 @@ export function MemoryToolRenderer({
     ]);
   }
 
-  // No access case.
   if (noAccess) {
     const content = (
       <Text font="main-ui-body" color="text-03">
@@ -107,7 +99,6 @@ export function MemoryToolRenderer({
     ]);
   }
 
-  // Streaming / complete: show the memory text (or a BlinkingBar while it loads).
   const memoryContent = (
     <View style={{ flexDirection: "column" }}>
       {memoryText ? (

@@ -3,9 +3,6 @@ import { Pressable, View } from "react-native";
 
 import { Text } from "@/components/opal";
 
-// A tappable two-line row (icon + label + description) used in the composer's
-// AttachMenu and the project file picker popovers.
-
 interface ActionRowProps {
   icon: ReactNode;
   label: string;

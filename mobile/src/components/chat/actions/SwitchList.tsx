@@ -3,24 +3,12 @@ import { View } from "react-native";
 
 import { Switch, Text } from "@/components/opal";
 
-// ---------------------------------------------------------------------------
-// SwitchList — a generic list of toggle rows (web parity `SwitchList`).
-//
-// Each row: optional leading node + label (`Text`) + opal `Switch`. Used by the
-// sources sub-view of the actions popover, but kept fully generic so any
-// enable/disable list can reuse it.
-// ---------------------------------------------------------------------------
-
+// Generic list of toggle rows (web parity SwitchList).
 export interface SwitchListItem {
-  /** Stable key for the row. */
   id: string;
-  /** Row label text. */
   label: string;
-  /** Optional leading node (e.g. a source icon). */
   leading?: ReactNode;
-  /** Whether the row's switch is on. */
   isEnabled: boolean;
-  /** Toggle handler for the switch. */
   onToggle: () => void;
 }
 

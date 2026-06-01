@@ -1,9 +1,5 @@
-// ExpandableTextDisplay.tsx — collapsible long-form text with a maximize -> full
-// bottom-sheet. Ports web ExpandableTextDisplay (Radix modal -> @gorhom sheet;
-// CSS line-clamp/translateY -> measured max-height clamp + translateY).
-//
-// Collapsed content is clipped to `maxLines` of height; overflow is measured via
-// the child's onLayout height. While streaming, the latest lines are
+// Ports web ExpandableTextDisplay. CSS line-clamp/translateY -> measured
+// max-height clamp + onLayout height; while streaming the latest lines are
 // bottom-anchored (content translated up) with a top "…" indicator.
 
 import { useRef, useState, type ReactNode } from "react";
@@ -19,17 +15,11 @@ import { useCopyToClipboard } from "@/lib/useCopyToClipboard";
 const LINE_HEIGHT = 20;
 
 interface ExpandableTextDisplayProps {
-  /** Sheet title. */
   title: string;
-  /** Full content (for the expanded sheet + copy). */
   content: string;
-  /** Collapsed preview content (defaults to `content`). */
   displayContent?: string;
-  /** Max lines shown collapsed. */
   maxLines?: number;
-  /** Render markdown/text for a given string + expanded flag. */
   renderContent: (text: string, isExpanded: boolean) => ReactNode;
-  /** True while the source is still streaming (bottom-anchor + top ellipsis). */
   isStreaming?: boolean;
 }
 

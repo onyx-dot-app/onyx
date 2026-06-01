@@ -1,6 +1,4 @@
-// Mirrors web languageModels/utils.ts + `getModelIcon`. Flatten providers →
-// selectable options, group by provider, resolve the default model, and pick a
-// provider icon.
+// Mirrors web languageModels/utils.ts + `getModelIcon`.
 import type { ComponentType } from "react";
 
 import { SvgCpu } from "@/components/icons/SvgCpu";
@@ -19,12 +17,11 @@ import type {
   SelectedModel,
 } from "@/lib/types";
 
-/** custom_display_name > display_name > name (web parity). */
+// custom_display_name > display_name > name (web parity).
 export function modelDisplayName(m: ModelConfiguration): string {
   return m.custom_display_name || m.display_name || m.name;
 }
 
-/** Flatten every provider's *visible* model_configurations into selectable options. */
 export function buildLlmOptions(
   providers: LLMProviderDescriptor[],
 ): LLMOption[] {
@@ -53,10 +50,8 @@ export interface LLMOptionGroup {
   options: LLMOption[];
 }
 
-/**
- * Group options by provider — or by `provider/vendor` for aggregator providers
- * (e.g. Bedrock) so each underlying vendor reads as its own group. Sorted by name.
- */
+// Aggregator providers (e.g. Bedrock) group by `provider/vendor` so each
+// underlying vendor reads as its own group.
 export function groupLlmOptions(options: LLMOption[]): LLMOptionGroup[] {
   const groups = new Map<string, LLMOptionGroup>();
   for (const o of options) {
@@ -78,10 +73,10 @@ export function groupLlmOptions(options: LLMOption[]): LLMOptionGroup[] {
   );
 }
 
-// Substring matchers (provider kind → vendor → model name), mirroring web's
-// MODEL_ICON_MAP. First match wins; unmatched models fall back to the Cpu glyph.
+// Mirrors web's MODEL_ICON_MAP. First match wins; ordering matters so the
+// provider kind matches before the model name (e.g. "ollama_chat" with a gpt-*
+// model → Ollama, not OpenAI).
 const ICON_MATCHERS: [string, ComponentType<IconProps>][] = [
-  // Provider kind matches first (e.g. "ollama_chat" → Ollama, even for a gpt-* model).
   ["ollama", OllamaLogo],
   ["anthropic", AnthropicLogo],
   ["openai", OpenaiLogo],
@@ -92,10 +87,6 @@ const ICON_MATCHERS: [string, ComponentType<IconProps>][] = [
   ["gpt", OpenaiLogo],
 ];
 
-/**
- * Resolve a provider/model brand logo from the provider kind, optional vendor, and
- * model name (checked as lowercase substrings). Falls back to the generic `Cpu` icon.
- */
 export function getModelIcon(
   provider: string,
   vendor?: string,
@@ -110,11 +101,8 @@ export function getModelIcon(
   return SvgCpu;
 }
 
-/**
- * Pick the default model (mirror web `getFinalLLM`): start from the workspace
- * `default_text` pointer (or the first visible model), then let the persona's
- * `default_model_configuration_id` override it. Returns null when nothing is available.
- */
+// Mirrors web `getFinalLLM`: workspace default, else first visible model, then
+// persona override.
 export function resolveDefaultModel(
   providers: LLMProviderDescriptor[],
   defaultText?: DefaultModel | null,
@@ -122,7 +110,6 @@ export function resolveDefaultModel(
 ): SelectedModel | null {
   let base: { p: LLMProviderDescriptor; mc: ModelConfiguration } | null = null;
 
-  // 1) Workspace default_text (provider_id + model_name).
   if (defaultText) {
     const p = providers.find((x) => x.id === defaultText.provider_id);
     const mc = p?.model_configurations.find(
@@ -131,7 +118,6 @@ export function resolveDefaultModel(
     if (p && mc) base = { p, mc };
   }
 
-  // 2) Fallback: first visible model of the first provider that has one.
   if (!base) {
     for (const p of providers) {
       const mc = p.model_configurations.find((m) => m.is_visible);
@@ -142,7 +128,7 @@ export function resolveDefaultModel(
     }
   }
 
-  // 3) Persona default overrides, by model_configuration id.
+  // Persona default overrides the workspace/fallback choice, by config id.
   if (personaDefaultModelConfigId != null) {
     for (const p of providers) {
       const mc = p.model_configurations.find(
@@ -164,7 +150,6 @@ export function resolveDefaultModel(
   };
 }
 
-/** Find a model_configuration by name within a single provider's list. */
 export function findModelInModelConfigurations(
   modelConfigurations: ModelConfiguration[],
   modelName: string,
@@ -172,11 +157,7 @@ export function findModelInModelConfigurations(
   return modelConfigurations.find((m) => m.name === modelName) || null;
 }
 
-/**
- * Locate a model_configuration across providers (web parity:
- * `findModelConfiguration`). When `providerName` is given, only that provider
- * instance is searched; otherwise the first match wins.
- */
+// `providerName` scopes the search to that provider; otherwise first match wins.
 export function findModelConfiguration(
   providers: LLMProviderDescriptor[],
   modelName: string,
@@ -198,11 +179,7 @@ export function findModelConfiguration(
   return null;
 }
 
-/**
- * Whether the given model accepts image input (web parity:
- * `modelSupportsImageInput`). Used to gate image attachments — when false, the
- * composer refuses image picks and prompts the user to switch to a vision model.
- */
+// Gates image attachments — when false the composer refuses image picks.
 export function modelSupportsImageInput(
   providers: LLMProviderDescriptor[],
   modelName: string,

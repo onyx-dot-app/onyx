@@ -2,9 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Mirrors web cpu icon. Web's full-viewBox clipPath is a no-op, so only the
-// <Path> is kept (matches SvgGlobe).
-/** CPU / processor — default action glyph (also used for the coding agent). */
+// Mirrors web cpu icon. Web's no-op full-viewBox clipPath is dropped.
 function SvgCpu(props: IconProps) {
   return (
     <Icon viewBox="0 0 16 16" {...props}>

@@ -1,20 +1,5 @@
-// SearchChipList.tsx — a wrapping row of source/query chips for the search
-// renderers. Native mirror of web SearchChipList.
-//
-// Web renders each chip via the Opal `SourceTag` (favicon/connector glyph +
-// truncated label, hover details card + tooltip). Mobile has no SourceTag, so a
-// chip is a plain Pressable pill: a SourceIcon (or SvgSearch for query chips) +
-// a truncated title on a tinted pill background. Result chips open `url` via
-// Linking; query chips are not pressable
-// to a doc. The hover details card and tooltip are dropped (no hover on mobile).
-//
-// Expansion: visibleCount starts at `initialCount` and grows by `expansionCount`
-// per "+N more" press, mirroring the web reducer. Newly-added chips fade/slide
-// in via a Reanimated `entering` animation that fires only on MOUNT. Because
-// each chip has a stable `key`, React preserves the instance across re-renders,
-// so existing chips never re-animate when the list grows — the RN-idiomatic
-// equivalent of web's `animatedKeysRef` set (and lint-safe: no ref read during
-// render).
+// Native mirror of web SearchChipList; web's Opal SourceTag (favicon + hover
+// card) becomes a plain Pressable pill (no hover on mobile).
 
 import { useMemo, useState } from "react";
 import { Linking, Pressable, View } from "react-native";
@@ -30,17 +15,11 @@ import { radii } from "@/theme/generated/radii";
 
 const ANIMATION_DELAY_MS = 30;
 
-/** Descriptor for one chip, produced by the renderer's `toSourceInfo`. */
 export interface ChipSource {
-  /** Stable id (unused for layout, kept for parity with web SourceInfo). */
   id: string;
-  /** Display label (truncated before render). */
   title: string;
-  /** Connector source_type, drives the SourceIcon glyph for result chips. */
   sourceType: string;
-  /** Web/internet source — globe glyph. */
   isInternet?: boolean;
-  /** External link opened on press (result chips only). */
   url?: string;
 }
 
@@ -50,11 +29,8 @@ export interface SearchChipListProps<T> {
   expansionCount: number;
   getKey: (item: T, index: number) => string | number;
   toSourceInfo: (item: T, index: number) => ChipSource;
-  /** Result chips: invoked on press (web opened doc.link in a new tab). */
   onClick?: (item: T) => void;
-  /** Rendered when there are no items (e.g. BlinkingBar / "No results found"). */
   emptyState?: React.ReactNode;
-  /** Query chips render the SvgSearch glyph and are not pressable to a doc. */
   isQuery?: boolean;
 }
 
@@ -99,11 +75,9 @@ export function SearchChipList<T>({
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
       {displayList.map((entry) => {
-        // Each chip animates on MOUNT only. React keeps the instance for stable
-        // keys across re-renders, so existing chips never re-animate when the
-        // list grows (the RN equivalent of web's `animatedKeysRef`). The stagger
-        // is derived from the entry index (capped to one expansion batch so a
-        // long list never accrues unbounded delay).
+        // Stable keys = animate on MOUNT only, so existing chips never re-animate
+        // when the list grows (RN equivalent of web's `animatedKeysRef`). Stagger
+        // is capped to one expansion batch to bound the delay.
         const key =
           entry.type === "more"
             ? "more-button"
@@ -164,7 +138,6 @@ interface ChipProps {
   onPress?: () => void;
 }
 
-/** A single pill: leading glyph + truncated label on a tinted rounded surface. */
 function Chip({ label, sourceType, isInternet, isQuery, onPress }: ChipProps) {
   const colors = useThemeColors();
   const iconColor = colors["text-03"];
@@ -194,9 +167,8 @@ function Chip({ label, sourceType, isInternet, isQuery, onPress }: ChipProps) {
           color={iconColor}
         />
       )}
-      {/* Single line + shrink so the icon and label stay on the SAME row; a long
-          query inside the narrow timeline column would otherwise wrap below the
-          (vertically-centered) icon and read as "icon on top, text below". */}
+      {/* Single line + shrink so a long label stays on the same row as the icon
+          instead of wrapping below it. */}
       <Text
         font="secondary-body"
         color="text-04"

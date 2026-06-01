@@ -1,7 +1,5 @@
-// devpreview.tsx — DEV-ONLY harness to visually verify the AgentMessage timeline
-// (thinking + tools) and inline citations with deterministic mock packets, with
-// no backend/auth/streaming dependency. Reach via: mobile://devpreview
-// Safe to delete; not linked from any screen.
+// DEV-ONLY harness for the AgentMessage timeline + citations via mock packets.
+// Reach via mobile://devpreview. Safe to delete; not linked from any screen.
 
 import { ScrollView, View, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -54,8 +52,6 @@ function doc(id: string, name: string, link: string): OnyxDocument {
 const D1 = doc("doc-1", "Onyx Overview", "https://onyx.app");
 const D2 = doc("doc-2", "Onyx Pricing", "https://onyx.app/pricing");
 
-// A completed turn: reasoning (turn 0) -> internal search (turn 1) -> answer with
-// inline [[n]](url) citations (turn 2) -> stop.
 const completedPackets: Packet[] = [
   { placement: { turn_index: 0 }, obj: { type: PacketType.REASONING_START } },
   {
@@ -124,8 +120,7 @@ const completedPackets: Packet[] = [
   { placement: { turn_index: 0 }, obj: { type: PacketType.STOP } },
 ];
 
-// A still-streaming turn: reasoning only, no stop -> shows the live "Thinking"
-// header + collapsed reasoning preview.
+// Reasoning only, no stop -> live "Thinking" header + collapsed preview.
 const streamingPackets: Packet[] = [
   { placement: { turn_index: 0 }, obj: { type: PacketType.REASONING_START } },
   {
@@ -140,8 +135,6 @@ const streamingPackets: Packet[] = [
 
 const chatState: FullChatState = { agent, docs: [D1, D2] };
 
-// Build expanded turn groups (reasoning + search) via the pure pipeline, to
-// render the expanded timeline (rail + step details + search chips) directly.
 const expandedTurnGroups = groupStepsByTurn(
   transformPacketGroups(
     processPackets(

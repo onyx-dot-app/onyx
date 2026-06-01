@@ -1,14 +1,9 @@
-// Shared auth-header merge. Several transports (fetcher, sendMessage, files) all
-// need to layer `config.getAuthHeaders()` (mobile: a bearer PAT; web: {}) on top
-// of any caller-provided headers. This centralizes that merge so the
-// `new Headers(await config.getAuthHeaders()).forEach(...)` dance lives in one place.
+// Shared auth-header merge: layers config.getAuthHeaders() (mobile: bearer PAT;
+// web: {}) on top of any caller-provided headers, in one place.
 
 import type { ClientConfig } from "./config";
 
-/**
- * Build a `Headers` from `init?.headers` (any HeadersInit shape) with the
- * platform auth headers merged in on top (auth wins on key collisions).
- */
+// Auth headers win on key collisions.
 export async function resolveAuthHeaders(
   config: ClientConfig,
   init?: HeadersInit
@@ -20,11 +15,8 @@ export async function resolveAuthHeaders(
   return headers;
 }
 
-/**
- * Record variant of {@link resolveAuthHeaders} for APIs that take a plain
- * `Record<string, string>` rather than a `Headers` (e.g. expo-file-system
- * `uploadAsync`'s `headers` option).
- */
+// Record variant for APIs that take a plain Record rather than Headers (e.g.
+// expo-file-system uploadAsync's `headers` option).
 export async function resolveAuthHeadersRecord(
   config: ClientConfig,
   init?: HeadersInit

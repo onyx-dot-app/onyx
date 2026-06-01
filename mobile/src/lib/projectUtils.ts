@@ -1,6 +1,5 @@
 // Mirrors web project_utils.ts.
 
-/** Human "time ago" label for a chat's last-updated timestamp. */
 export function formatRelativeTime(isoDate: string): string {
   const date = new Date(isoDate);
   const now = new Date();

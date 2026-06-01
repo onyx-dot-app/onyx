@@ -2,9 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Mirrors web server icon.
-// Full-viewBox clipPath in the web source is a no-op and is omitted.
-/** Server / stacked racks — used for the Knowledge Graph action. */
+// Mirrors web server icon. Web's no-op full-viewBox clipPath is dropped.
 function SvgServer(props: IconProps) {
   return (
     <Icon viewBox="0 0 16 16" {...props}>

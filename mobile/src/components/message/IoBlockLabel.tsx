@@ -1,7 +1,4 @@
-// IoBlockLabel.tsx — small "Request" / "Response" label.
-//
-// Native mirror of web IoBlockLabel. Used by tool renderers that show a paired
-// input/output (e.g. CustomTool, CodingAgent's bash step).
+// Native mirror of web IoBlockLabel.
 
 import { View } from "react-native";
 

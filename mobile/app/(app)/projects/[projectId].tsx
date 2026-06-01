@@ -19,15 +19,10 @@ import { ProjectContextPanel } from "@/components/projects/ProjectContextPanel";
 import { ProjectChatSessionList } from "@/components/projects/ProjectChatSessionList";
 import { AddInstructionModal } from "@/components/projects/AddInstructionModal";
 
-// Project screen. Mobile adaptation of web's `?projectId` landing view — and, like
-// web, the SAME screen flips between the project view and the chat view:
-//   • currentSessionId === null  → project draft: show the ProjectContextPanel
-//     (name / instructions / files) + Recent Chats, with the real composer below.
-//   • currentSessionId !== null  → a chat is active (first send created it, or an
-//     existing project chat was opened): the project UI hides and the normal chat
-//     thread takes over IN PLACE. The composer is rendered OUTSIDE the conditional
-//     so its useSendMessage hook stays mounted across the flip (no navigation, no
-//     stream abort) — exactly how the chat screen goes draft→real on first send.
+// Mirrors web's `?projectId` view: the SAME screen flips between project draft
+// (currentSessionId null → context panel + recent chats) and the live chat thread.
+// The composer renders OUTSIDE the conditional so its useSendMessage hook stays
+// mounted across the flip — no navigation, no stream abort.
 export default function ProjectScreen() {
   const params = useLocalSearchParams<{ projectId: string }>();
   const projectId = Number.parseInt(String(params.projectId), 10);
@@ -58,12 +53,9 @@ export default function ProjectScreen() {
   const chats =
     details?.project?.chat_sessions ?? listProject?.chat_sessions ?? [];
 
-  // A chat is active once a session is current (set by the first send via
-  // ensureSession, or by opening an existing project chat). Null = project draft.
   const showThread = currentSessionId !== null;
 
   function newProjectChat() {
-    // Back to a fresh project-bound draft → the project landing reappears.
     startProjectChat(projectId);
   }
 
@@ -76,7 +68,6 @@ export default function ProjectScreen() {
 
   return (
     <View className="flex-1 bg-background-neutral-00">
-      {/* Header — sidebar toggle + project name + new-chat + actions menu */}
       <ScreenHeader>
         <Text
           font="main-ui-action"
@@ -124,8 +115,6 @@ export default function ProjectScreen() {
         </Popover>
       </ScreenHeader>
 
-      {/* Body — project landing (draft) OR the live chat thread (active session).
-          The composer inside ChatThreadBody stays mounted across the flip. */}
       <ChatThreadBody
         isError={isError}
         isLoading={hydrating}

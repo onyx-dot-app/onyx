@@ -1,10 +1,8 @@
 import { chatFileUrl } from "@/lib/api";
 
-// expo-image source for an authed backend image (`GET /chat/file/{id}`). The
-// route requires the bearer header, so we return `undefined` until the headers
-// resolve — that defers loading until auth is ready and avoids firing a
-// guaranteed-401 request on first paint (web rides cookies, so it has no
-// equivalent gate).
+// Returns undefined until the bearer header resolves, deferring the image load
+// until auth is ready — otherwise first paint fires a guaranteed 401 (web rides
+// cookies, so it has no equivalent gate).
 export interface AuthedImageSource {
   uri: string;
   headers: Record<string, string>;

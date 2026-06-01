@@ -7,45 +7,17 @@ import { getIconForAction } from "@/lib/actionIcons";
 import { useToken } from "@/theme/ThemeProvider";
 import type { ToolSnapshot } from "@/lib/types/tools";
 
-// ---------------------------------------------------------------------------
-// ActionLineItem — a single tool row in the actions popover (web parity).
-//
-// Behaviour (mirrors web `ActionLineItem` availability model):
-//   - Tapping an AVAILABLE non-search row FORCES the tool (`onToggleForced`).
-//     A forced tool is indicated by the row highlight only — there is NO
-//     per-tool enable/disable switch (that lives only in the sources sub-view).
-//   - An UNAVAILABLE tool is greyed and not pressable.
-//   - The search tool is NEVER unavailable; tapping it opens the sources
-//     sub-view (`onOpenSources`) and the right side shows a "<enabled> of
-//     <total>" count + chevron affordance.
-//
-// Visual states:
-//   - forced       → label `action-link-05` + row `bg-action-link-01` (fixed bg
-//                    → static class, toggled conditionally),
-//   - unavailable  → muted label/icon (`text-03`), no `active:` affordance,
-//   - default      → label `text-04`.
-//
-// The per-tool glyph comes from `getIconForAction(tool)` — mirrors web's
-// actionUtils mapping (Search→search, WebSearch→globe, ImageGen→image,
-// KnowledgeGraph→server, OpenURL→external-link, CodeInterpreter→terminal,
-// CodingAgent/default→cpu). Dynamic label/icon colours go through `Text color` /
-// `useToken` (never a `text-*` className), per the codebase convention.
-// ---------------------------------------------------------------------------
-
+// A single tool row in the actions popover (web parity). Forced tools are shown
+// by row highlight only (no per-tool switch); unavailable tools are greyed/inert;
+// the search row opens the sources sub-view instead of forcing.
 interface ActionLineItemProps {
-  /** The tool this row represents. */
   tool: ToolSnapshot;
-  /** Whether the tool is forced for the next message. */
   isForced: boolean;
-  /** Whether the tool is unavailable (not in the global registry; greyed). */
+  // Not in the global registry; greyed.
   isUnavailable: boolean;
-  /** Force the tool (tapping the row body) — non-search tools only. */
   onToggleForced: () => void;
-  /** Whether this row is the internal search tool. */
   isSearchTool: boolean;
-  /** Open the sources sub-view (search tool only). */
   onOpenSources?: () => void;
-  /** Source counts shown next to the search tool's chevron. */
   sourceCount?: { enabled: number; total: number };
 }
 
@@ -96,8 +68,8 @@ export function ActionLineItem({
       className={rowClassName}
     >
       <View className="flex-1 flex-row items-center gap-2">
-        {/* createElement (not <ToolIcon/>) so the linter doesn't read the
-            tool-chosen icon as a component declared during render. */}
+        {/* createElement so the linter doesn't read toolIcon as a component
+            declared during render. */}
         {createElement(toolIcon, { size: 16, color: iconColor })}
         <Text
           font="main-ui-body"

@@ -1,6 +1,4 @@
-// CollapsedStreamingContent.tsx — collapsed-while-streaming body: a spacer-rail
-// row + rounded-bottom surface rendering only the live step's content (no step
-// chrome). Native mirror of web CollapsedStreamingContent.
+// Native mirror of web CollapsedStreamingContent.
 
 import { Fragment, memo } from "react";
 

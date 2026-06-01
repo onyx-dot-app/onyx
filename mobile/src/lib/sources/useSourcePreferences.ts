@@ -1,13 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- the init/re-init effects seed selected-source state from the MMKV snapshot (and reset it when the available-source set changes) by design; this is the lazy-initialization-from-an-external-store pattern. */
-// MMKV-backed source enable/disable preferences.
-//
-// Mirrors web useSourcePreferences. Persists enabled/disabled per source
-// `uniqueKey` to MMKV under `selectedInternalSearchSources` (web used
-// localStorage). Behaviour:
-//   - First run: all configured sources enabled.
-//   - New sources (not present in the saved snapshot): enabled by default.
-//   - Stale keys (no longer in the available set): dropped on re-init.
-//   - Re-inits when the available source set changes (e.g. agent switch).
+// Mirrors web useSourcePreferences, persisting per-source `uniqueKey` to MMKV
+// (web used localStorage). New sources default enabled; stale keys drop on
+// re-init; re-inits when the available set changes (e.g. agent switch).
 //
 // IMPORTANT: the web `toggleSource` removal branch has a bug
 // (`filter(s => s.uniqueKey === key)` keeps only the toggled source). This port
@@ -58,24 +52,9 @@ function persistSnapshot(enabled: MobileSource[], all: MobileSource[]) {
   storage.set(LS_KEY, JSON.stringify(snapshot));
 }
 
-/**
- * Pure, synchronous reader of the committed MMKV source-preference snapshot.
- *
- * This is the single source of truth for the seeding logic shared by the hook's
- * init effect and by callers that need the freshest enabled-source set WITHOUT
- * mounting the hook (e.g. the send path — see useSendMessage). Because it reads
- * MMKV fresh on every call it is immune to cross-instance React-state staleness:
- * the popover writes MMKV on toggle, and this reader observes that write.
- *
- * Logic (mirrors the hook's init seeding exactly):
- *   - No valid snapshot           -> all configured sources enabled (first run).
- *   - Snapshot present            -> configured sources whose key is enabled,
- *                                    PLUS any configured source absent from the
- *                                    snapshot (new sources default enabled).
- *
- * Stale keys (no longer in the configured set) are naturally dropped. This
- * function NEVER writes/persists and uses NO hooks.
- */
+// Pure reader shared by the init effect and callers that need the freshest
+// enabled set without mounting the hook (e.g. the send path — see useSendMessage).
+// Reads MMKV fresh each call, so it is immune to cross-instance React staleness.
 export function readEnabledSources(
   availableSourceStrings: string[]
 ): MobileSource[] {
@@ -111,8 +90,7 @@ export function useSourcePreferences(availableSourceStrings: string[]) {
 
   useEffect(() => {
     if (initialized || configured.length === 0) return;
-    // Delegate the seeding logic to the pure reader (single source of truth);
-    // re-persist so any dropped stale keys / new-source defaults are committed.
+    // Re-persist so dropped stale keys / new-source defaults are committed.
     const seeded = readEnabledSources(availableSourceStrings);
     setSelected(seeded);
     persistSnapshot(seeded, configured);

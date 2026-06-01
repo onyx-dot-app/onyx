@@ -3,7 +3,6 @@ import { Path } from "react-native-svg";
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
 // Mirrors web search-menu icon.
-/** Magnifying glass with menu lines / search menu. */
 function SvgSearchMenu(props: IconProps) {
   return (
     <Icon viewBox="0 0 16 16" {...props}>

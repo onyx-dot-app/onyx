@@ -1,18 +1,9 @@
-// packetProcessor.ts — pure packet → message-tree reducer.
+// Pure packet → message-tree reducer. Mirrors web's append-and-derive packet step
+// (services/lib.tsx streaming loop + packetUtils.ts), as a testable reducer.
 //
-// `applyPacket(tree, packet)` appends ONE streaming `Packet` to the assistant message
-// it belongs to and advances that message's cached/derived fields (visible text,
-// documents, citations). It is a pure function: it returns a NEW MessageTreeState and
-// never mutates the input (the target Message and its `packets` array are cloned).
-//
-// Mirrors web's append-and-derive packet step (services/lib.tsx streaming loop +
-// packetUtils.ts), reproduced here as a testable reducer.
-//
-// What this intentionally DROPS:
-//   - web's UI grouping / timeline transform (toolGroups, displayGroups, turn grouping).
-//   - the typewriter pacing hooks (usePacedTurnGroups / usePacedMessageSwitching).
-//   These are presentation concerns layered on top of `packets`; this reducer only owns
-//   the tree's source-of-truth `packets` array + the cheap cached fields read off it.
+// Intentionally drops web's presentation layer (UI grouping/timeline transform,
+// typewriter pacing hooks); those are layered on top of `packets`. This reducer
+// owns only the source-of-truth `packets` array and the cached fields read off it.
 import {
   Packet,
   PacketType,
@@ -28,12 +19,9 @@ import {
 } from "@/lib/types";
 import { MessageTreeState, getLatestMessageChain } from "./messageTree";
 
-// ── Incremental single-packet derivation (perf) ───────────────────────────────
-// `applyPacket` runs once per streamed packet, so deriving cached fields from a
-// single packet (O(1)) rather than re-scanning the whole array (O(n) per packet
-// = O(n²) over a stream) keeps streaming smooth on-device.
-
-/** The visible text contributed by a single MESSAGE_START / MESSAGE_DELTA packet. */
+// applyPacket runs once per streamed packet, so cached fields are derived from a
+// single packet (O(1)) rather than re-scanning the whole array (O(n²) over a
+// stream) to keep streaming smooth on-device.
 function textDeltaOf(packet: Packet): string {
   if (
     packet.obj.type === PacketType.MESSAGE_START ||
@@ -44,7 +32,7 @@ function textDeltaOf(packet: Packet): string {
   return "";
 }
 
-/** Merge a single packet's CITATION_INFO into an existing citation map (new object only when it changes). */
+// New object only when the map actually changes.
 function mergeCitation(
   existing: CitationMap | undefined,
   packet: Packet
@@ -56,7 +44,7 @@ function mergeCitation(
   return { ...base, [info.citation_number]: info.document_id };
 }
 
-/** Merge a single packet's search/fetch documents into an existing list, de-duped by id (last wins, order preserved). */
+// De-dupe by id: last wins, order preserved.
 function mergeDocuments(
   existing: OnyxDocument[] | null | undefined,
   packet: Packet
@@ -87,13 +75,11 @@ function mergeDocuments(
   return next;
 }
 
-// ── Target-node resolution ────────────────────────────────────────────────────
-// Mirrors web's streaming loop, which routes a packet to a specific in-flight
-// assistant message. Resolution order:
-//   1. An explicit target nodeId (the caller already knows which node is streaming).
-//   2. placement.model_index — for multi-model parallel generation, the i-th assistant
-//      child of the latest user message in the current chain.
-//   3. The latest assistant leaf of the current message chain (the single-model case).
+// Routes a packet to a specific in-flight assistant message. Resolution order:
+//   1. explicit target nodeId,
+//   2. placement.model_index — the i-th assistant child of the latest user
+//      message in the chain (multi-model parallel generation),
+//   3. the latest assistant leaf of the chain (single-model).
 function resolveTargetNodeId(
   tree: MessageTreeState,
   packet: Packet,
@@ -108,8 +94,7 @@ function resolveTargetNodeId(
 
   const modelIndex = packet.placement.model_index;
   if (modelIndex !== null && modelIndex !== undefined) {
-    // Find the latest user message in the chain; its assistant children are the
-    // per-model response slots. Pick the one at `model_index`.
+    // The latest user message's assistant children are the per-model slots.
     for (let i = chain.length - 1; i >= 0; i--) {
       const node = chain[i];
       if (node && node.type === "user") {
@@ -120,7 +105,6 @@ function resolveTargetNodeId(
     }
   }
 
-  // Default: the latest assistant message in the chain.
   for (let i = chain.length - 1; i >= 0; i--) {
     const node = chain[i];
     if (node && node.type === "assistant") return node.nodeId;
@@ -128,16 +112,8 @@ function resolveTargetNodeId(
   return undefined;
 }
 
-// ── The reducer ────────────────────────────────────────────────────────────────
-
-/**
- * Append `packet` to its assistant message in `tree` and refresh that message's
- * derived fields. Returns a new tree; the input is never mutated.
- *
- * @param tree           current message tree
- * @param packet         the streaming packet to apply
- * @param targetNodeId   optional explicit target (the caller's known in-flight node)
- */
+// Append `packet` to its assistant message and refresh that message's derived
+// fields. Returns a new tree; the input is never mutated.
 export function applyPacket(
   tree: MessageTreeState,
   packet: Packet,
@@ -152,18 +128,16 @@ export function applyPacket(
   const existing = tree.get(nodeId);
   if (!existing) return tree;
 
-  // Append the packet (clone the array — never mutate the stored one).
+  // Clone the array — never mutate the stored one.
   const packets = [...existing.packets, packet];
 
-  // Derive cached fields INCREMENTALLY from just the new packet (O(1)).
-  // Re-scanning the whole array per packet would be O(n²) over a long stream
-  // (thousands of MESSAGE_DELTA packets) and is the main streaming-jank risk.
+  // Derive incrementally from just the new packet (O(1)). Re-scanning the whole
+  // array per packet would be O(n²) over a long stream and is the main jank risk.
   const delta = textDeltaOf(packet);
   const message = delta ? existing.message + delta : existing.message;
   const citations = mergeCitation(existing.citations, packet);
   const documents = mergeDocuments(existing.documents, packet);
 
-  // Capture stop reason if this packet (or any prior) was a STOP.
   let stopReason: StreamStopReason | null | undefined = existing.stopReason;
   if (packet.obj.type === PacketType.STOP) {
     // streamingModels' StopReason ("finished"|"user_cancelled") overlaps the

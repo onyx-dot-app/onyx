@@ -1,15 +1,5 @@
-// Per-agent tool enable/disable preferences (backend-persisted, web parity).
-//
-//   - useAgentPreferences:      GET   /user/assistant/preferences
-//                               -> UserSpecificAgentPreferences (Record<personaId, pref>)
-//   - useUpdateAgentPreference: PATCH /user/assistant/{personaId}/preferences
-//                               body { disabled_tool_ids: number[] } -> 204
-//
-// The read path lives in the endpoint registry (queryKeys.agentPreferences). The
-// write path is per-persona and NOT in the registry, so it is built inline.
-//
-// The mutation mirrors query/sessions.ts:useRenameSession — optimistic onMutate,
-// rollback onError, invalidate onSettled.
+// Per-agent tool enable/disable preferences (backend-persisted). The write path is
+// per-persona and not in the endpoint registry, so it's built inline.
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { errorHandlingFetcher } from "@/lib/api";

@@ -1,21 +1,15 @@
-// transformers.ts — pure packet-group → step/turn shaping.
-//
 // Mirrors web transformers.ts.
-// Reshapes the processor's GroupedPacket[] into TransformedStep[] and buckets
-// them into TurnGroup[] (parallel tools share a turn_index, differ by tab_index).
+// Parallel tools share a turn_index and differ by tab_index.
 
 import { GroupedPacket } from "@/state/timeline/packetProcessor";
 
-/** Transformed step data ready for rendering. */
 export interface TransformedStep {
-  /** Unique key for rendering: `${turnIndex}-${tabIndex}`. */
-  key: string;
+  key: string; // `${turnIndex}-${tabIndex}`
   turnIndex: number;
   tabIndex: number;
   packets: GroupedPacket["packets"];
 }
 
-/** Steps grouped by turn_index; isParallel when more than one step shares a turn. */
 export interface TurnGroup {
   turnIndex: number;
   steps: TransformedStep[];
@@ -37,7 +31,6 @@ export function transformPacketGroups(
   return groups.map(transformPacketGroup);
 }
 
-/** Group transformed steps by turn_index to detect parallel tools. */
 export function groupStepsByTurn(steps: TransformedStep[]): TurnGroup[] {
   const turnMap = new Map<number, TransformedStep[]>();
 

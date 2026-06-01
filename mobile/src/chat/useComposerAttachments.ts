@@ -1,14 +1,7 @@
-// useComposerAttachments — owns the in-compose attachment list for the chat
-// input bar (mobile analogue of web's ProjectsContext.beginUpload + currentMessageFiles).
-//
-// Lifecycle of an attachment:
-//   1. add* → an optimistic tile (status "uploading", local URI preview for images).
-//   2. upload (multipart, per file) → reconcile temp → real (file_id, status).
-//   3. while backend status is PROCESSING, poll /file/statuses every 3s until terminal.
-//   4. toFileDescriptors() feeds the send request; clear() empties on send.
-//
-// Recent files (already on the backend) are added directly — no upload — and
-// deduped by file_id, mirroring web's onPickRecent.
+// Owns the in-compose attachment list for the chat input bar (mobile analogue of
+// web's ProjectsContext.beginUpload + currentMessageFiles). Each pick → optimistic
+// tile → multipart upload → poll /file/statuses while PROCESSING. Recent files
+// (already on the backend) are added directly and deduped by file_id.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -35,29 +28,22 @@ import {
 } from "@/components/chat/AttachmentTile";
 import { useAuthImageHeaders } from "@/components/chat/useAuthImageHeaders";
 
-/** In-compose attachment — the single source powering the tray + send payload. */
+// In-compose attachment — the single source powering the tray + send payload.
 export interface ComposerAttachment {
-  /** Stable local id (list key + remove). */
   id: string;
   name: string;
   isImage: boolean;
   status: AttachmentTileStatus;
-  /** Local URI for freshly-picked images (instant preview). */
-  localUri?: string;
-  /** Backend file reference — present once uploaded; sent in file_descriptors. */
-  fileId?: string;
-  /** Durable backend file id (→ user_file_id). */
+  localUri?: string; // local URI for freshly-picked images (instant preview)
+  fileId?: string; // backend file reference; sent in file_descriptors once uploaded
   userFileId?: string;
   chatFileType: ChatFileType;
 }
 
 export interface UseComposerAttachmentsResult {
   attachments: ComposerAttachment[];
-  /** Render-ready tiles for `AttachmentTray`. */
   tiles: AttachmentTileModel[];
-  /** `file_id`s currently attached (for the recent-files check / toggle). */
   attachedFileIds: string[];
-  /** True while any file's upload POST is still in flight (gates send). */
   isUploading: boolean;
   addImages: (files: UploadableFile[]) => void;
   addDocuments: (files: UploadableFile[]) => void;
@@ -65,7 +51,6 @@ export interface UseComposerAttachmentsResult {
   removeByFileId: (fileId: string) => void;
   remove: (id: string) => void;
   clear: () => void;
-  /** FileDescriptors for the uploaded (non-failed) attachments. */
   toFileDescriptors: () => FileDescriptor[];
 }
 
@@ -95,9 +80,8 @@ export function useComposerAttachments(): UseComposerAttachmentsResult {
     return `att-${Date.now()}-${counter.current}`;
   }, []);
 
-  // Mark a single attachment failed. Web shows the failure INLINE on the tile
-  // (no modal per file), so we only flip the status — the tile renders "Failed".
-  // Avoids stacking one native Alert per file when a multi-file pick fails.
+  // Web shows failure inline on the tile, so just flip status — avoids stacking one
+  // native Alert per file on a multi-file pick.
   const markFailed = useCallback((id: string) => {
     setAttachments((prev) =>
       prev.map((a) => (a.id === id ? { ...a, status: "failed" } : a)),
@@ -207,10 +191,8 @@ export function useComposerAttachments(): UseComposerAttachmentsResult {
       }));
   }, [attachments]);
 
-  // ── Status polling (web ProjectsContext loop) ──────────────────────────────
-  // While any attachment is PROCESSING on the backend, poll its status every 3s
-  // until terminal. Keyed on the set of processing file_ids so the interval is
-  // recreated when that set changes and torn down when it empties.
+  // Poll status every 3s while any attachment is PROCESSING. Keyed on the processing
+  // file_ids so the interval is recreated when that set changes and torn down when empty.
   const processingKey = attachments
     .filter((a) => a.status === "processing" && a.fileId)
     .map((a) => a.fileId as string)
@@ -240,14 +222,12 @@ export function useComposerAttachments(): UseComposerAttachmentsResult {
     return () => clearInterval(interval);
   }, [processingKey]);
 
-  // ── Derived: render tiles + gating helpers ─────────────────────────────────
   const tiles = useMemo<AttachmentTileModel[]>(() => {
     return attachments.map((a) => {
       let imageSource: AttachmentTileModel["imageSource"];
       if (a.isImage) {
         if (a.localUri) imageSource = { uri: a.localUri };
-        // Remote (recent) images need the bearer header — wait until it resolves
-        // so we never fire a guaranteed-401 unauthenticated request to /chat/file.
+        // Remote images need the bearer header — wait for it or fire a guaranteed 401.
         else if (a.fileId)
           imageSource = authedChatImageSource(
             appConfig.apiBaseUrl,

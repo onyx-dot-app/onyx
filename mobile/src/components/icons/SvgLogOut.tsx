@@ -3,7 +3,6 @@ import { Path } from "react-native-svg";
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
 // Mirrors web log-out icon.
-/** Log out / sign out (door + arrow). */
 function SvgLogOut(props: IconProps) {
   return (
     <Icon viewBox="0 0 24 24" {...props}>

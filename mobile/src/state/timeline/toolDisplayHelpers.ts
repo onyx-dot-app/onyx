@@ -1,14 +1,9 @@
-// toolDisplayHelpers.ts — tool-step presentation helpers (names, icon NAMES,
-// completion/error detection, group-key parsing).
-//
 // Mirrors web toolDisplayHelpers.tsx.
-// getToolIcon returns an icon NAME (a string union), not a React component, so
-// this module stays pure/leaf (no import edge into components/). A
-// `components/message/timeline/toolIcon.tsx` helper maps the name → Svg*.
+// Returns icon NAMES (string union) not components, so this stays a pure leaf
+// (no import edge into components/); toolIcon.tsx maps the name to an Svg*.
 
 import { Packet, PacketType, SearchToolStart } from "@/lib/types";
 
-/** Abstract icon name; mapped to a mobile Svg* component in the components layer. */
 export type TimelineIconName =
   | "circle"
   | "search-menu"
@@ -30,12 +25,8 @@ export type TimelineIconName =
   | "stop-circle"
   | "x-octagon";
 
-/**
- * Whether a tool group is complete.
- * - Research agents: only PARENT-level SECTION_END (sub_turn_index null/undefined).
- * - Coding agents: CODING_AGENT_FINAL (or ERROR).
- * - Others: any SECTION_END / ERROR.
- */
+// Research agents complete only on PARENT-level SECTION_END (sub_turn_index
+// null); coding agents on CODING_AGENT_FINAL/ERROR; others on any SECTION_END.
 export function isToolComplete(packets: Packet[]): boolean {
   const firstPacket = packets[0];
   if (!firstPacket) return false;

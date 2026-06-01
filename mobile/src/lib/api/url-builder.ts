@@ -1,7 +1,5 @@
-// Mirrors web utilsSS.ts (the UrlBuilder class only).
-// The env/cookie-coupled helpers (buildUrl/buildClientUrl/fetchSS — they read
-// HOST_URL/INTERNAL_URL + next/headers) stay in web. Here the base URL comes from
-// ClientConfig.baseUrl, so the static fromInternalUrl/fromClientUrl factories are dropped.
+// Mirrors web utilsSS.ts (UrlBuilder class only). The env/cookie-coupled helpers
+// (buildUrl/fetchSS) stay in web; here the base URL comes from ClientConfig.baseUrl.
 
 export class UrlBuilder {
   private url: URL;

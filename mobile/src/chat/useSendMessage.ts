@@ -1,24 +1,7 @@
-// useSendMessage.ts — orchestrates an optimistic, streaming chat send against the
-// Zustand chat-session store.
-//
-// Flow of a single send():
-//   1. Optimistically insert a user Message + an empty assistant child into the
-//      session's messageTree (so the UI shows the turn instantly), chatState="loading".
-//   2. Create an AbortController, store it via setAbortController.
-//   3. Open the NDJSON stream (streamChatMessage) and iterate it with `for await`.
-//      We NEVER `break` to cancel — stop()/unmount/background calls controller.abort(),
-//      whose signal cancels the reader inside handleSSEStream.
-//   4. Each Packet is reduced into the assistant node via applyPacket. Writes are
-//      BATCHED per animation frame (~rAF / ~50ms fallback) so FlashList re-renders at a
-//      sane cadence instead of once per token.
-//   5. On completion chatState="input"; on AbortError it's a clean user stop; a
-//      FetchError 401/403 is surfaced for the integrator's auth handler; anything else
-//      becomes an error state on the session.
-//
-// AppState lifecycle: while streaming, backgrounding the app aborts the stream and sets
-// a per-session re-fetch flag (sessionId added to a module-level set, readable via
-// `consumePendingRefetch`). We do NOT try to resume the socket — re-fetching the session
-// on foreground is the UI's job. We just abort cleanly and leave the flag.
+// Orchestrates an optimistic, streaming chat send against the Zustand session store.
+// Cancellation is never `break` — stop()/unmount/background call controller.abort().
+// Packet writes are batched per animation frame so FlashList re-renders at a sane
+// cadence instead of once per token.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AppState, type AppStateStatus } from "react-native";
@@ -50,35 +33,25 @@ import { getAuthHeaders } from "@/auth";
 import { useChatSessionLifecycle } from "./useChatSessionLifecycle";
 import { isUuid } from "./uuid";
 
-// ── Default transport config ────────────────────────────────────────────────
-// appConfig + expo/fetch + the real JWT auth headers (from @/auth), so a send is
-// authenticated out of the box. expo/fetch is MANDATORY: the global RN fetch
-// cannot stream. Callers may still pass their own `config`.
+// expo/fetch is MANDATORY: the global RN fetch cannot stream. Callers may override.
 export const defaultStreamConfig: ClientConfig = {
   baseUrl: appConfig.apiBaseUrl,
   fetchImpl: expoFetch as unknown as typeof fetch,
   getAuthHeaders, // injects `Authorization: Bearer <jwt>` from secure-store
 };
 
-// ── Pending re-fetch flags (AppState background handling) ────────────────────
-// Sessions whose stream was interrupted by backgrounding. The UI layer calls
-// consumePendingRefetch(sessionId) on foreground to decide whether to re-fetch the
-// session from the backend (the source of truth) rather than resume the dead socket.
+// Sessions whose stream was interrupted by backgrounding; the UI re-fetches them on
+// foreground rather than resuming the dead socket.
 const pendingRefetch = new Set<string>();
 
-/** True (and clears the flag) if `sessionId`'s stream was aborted by backgrounding. */
 export function consumePendingRefetch(sessionId: string): boolean {
   const had = pendingRefetch.has(sessionId);
   pendingRefetch.delete(sessionId);
   return had;
 }
 
-// ── message_id_info handling ─────────────────────────────────────────────────
-// The backend emits a top-level `message_id_info` object near the start of the
-// stream carrying the real (DB) user + reserved assistant message ids. It is NOT a
-// Packet (no `placement`/`obj`), so applyPacket ignores it. We detect its shape and
-// stamp the real messageIds onto our optimistic nodes so later operations (feedback,
-// regeneration, re-fetch reconciliation) can key off real ids.
+// The backend emits a top-level `message_id_info` (not a Packet) carrying the real DB
+// message ids; we stamp them onto the optimistic nodes so later ops can key off them.
 interface MessageIdInfoLike {
   user_message_id: number | null;
   reserved_assistant_message_id: number;
@@ -110,9 +83,8 @@ function isPacket(value: unknown): value is Packet {
   );
 }
 
-// The backend can emit a top-level error object (not a Packet) when generation fails
-// — e.g. `{ error, error_code, is_retryable }`. Detect it so we can surface it in the
-// thread instead of silently dropping it (which would leave an empty assistant turn).
+// The backend can emit a top-level error object (not a Packet) when generation fails;
+// surface it in the thread instead of leaving an empty assistant turn.
 function asStreamError(value: unknown): string | null {
   if (!value || typeof value !== "object") return null;
   const v = value as Record<string, unknown>;
@@ -127,17 +99,13 @@ function asStreamError(value: unknown): string | null {
   return null;
 }
 
-// Flush cadence fallback when requestAnimationFrame is unavailable. ~50ms keeps the
-// list updating smoothly without re-rendering on every token.
+// Flush cadence fallback when requestAnimationFrame is unavailable.
 const FLUSH_INTERVAL_MS = 50;
 
 export interface UseSendMessageResult {
-  /**
-   * Send `text` with optional uploaded-file attachments (sent as file_descriptors).
-   * `onAccepted` fires once the message is committed to the thread (after the
-   * session is created + optimistic insert) — callers clear the composer there so
-   * a pre-stream failure (e.g. session creation) never discards the user's input.
-   */
+  // `onAccepted` fires once the message is committed to the thread (post session
+  // create + optimistic insert) — callers clear the composer there so a pre-stream
+  // failure never discards the user's input.
   send: (
     text: string,
     files?: FileDescriptor[],
@@ -153,17 +121,14 @@ export function useSendMessage(
 ): UseSendMessageResult {
   const [isStreaming, setIsStreaming] = useState(false);
 
-  // The controller for the in-flight stream (mirrored into the store too). Kept in a
-  // ref so stop()/unmount/background can abort without re-rendering or stale closures.
+  // In-flight stream controller. Ref so stop()/unmount/background can abort without
+  // re-rendering or stale closures.
   const controllerRef = useRef<AbortController | null>(null);
-  // Guards against state writes after unmount.
   const mountedRef = useRef(true);
-  // The session the in-flight stream actually runs under. For a draft chat this
-  // becomes the real UUID created mid-send (before the `sessionId` prop catches up
-  // on re-render), so background-abort tags pendingRefetch with the right key.
+  // Session the stream actually runs under — for a draft this is the real UUID created
+  // mid-send, so background-abort tags pendingRefetch with the right key.
   const activeSessionRef = useRef<string | null>(null);
 
-  // Pending-flush bookkeeping for batched tree writes.
   const dirtyRef = useRef(false);
   const rafRef = useRef<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -173,22 +138,11 @@ export function useSendMessage(
   // Lazy session create + backend auto-naming (web parity).
   const { ensureSession, autoNameSession } = useChatSessionLifecycle();
 
-  // ── Send-request control state (tools / sources / force-tool) ───────────────
-  // These feed three fields of the send request so the actions popover controls
-  // take effect: allowed_tool_ids (agent tools minus disabled), forced_tool_id
-  // (the one-shot forced tool), internal_search_filters (enabled source types).
-  //
-  // `personas` + `agentPrefs` are TanStack Query data: read the latest off `data`
-  // (closing over the variable is fine — the async send() reads it after the hook
-  // re-renders with fresh data; for absolute freshness we'd use queryClient, but
-  // closing over the latest render's value matches how the model selector reads
-  // store state here).
-  //
-  // Source prefs are NOT mounted via useSourcePreferences here: that hook holds
-  // LOCAL React state seeded once from MMKV, so a different instance (the actions
-  // popover) toggling a source would not be observed here → stale filters. Instead
-  // we mirror the available-source strings into a ref and, at send time, call the
-  // pure readEnabledSources() which reads the freshest committed MMKV snapshot.
+  // Tools / sources / force-tool feed the actions-popover controls into the send.
+  // Source prefs are NOT read via useSourcePreferences: that hook holds local state
+  // seeded once from MMKV, so a popover instance toggling a source wouldn't be seen
+  // here. Instead we mirror the source strings into a ref and call readEnabledSources()
+  // at send time against the freshest committed MMKV snapshot.
   const { data: personas } = usePersonas();
   const { data: agentPrefs } = useAgentPreferences();
   const availableSourceStrings = useAvailableSourceStrings();
@@ -226,12 +180,9 @@ export function useSendMessage(
       // Allow a files-only message (no text) when attachments are present.
       if (!trimmed && files.length === 0) return;
 
-      // ── Lazy session creation (web parity) ────────────────────────────────
-      // No backend session is created on the "New Chat" tap; the first message of a
-      // brand-new (draft) chat creates it HERE — before streaming — so we hold a
-      // stable UUID up front (no fragile mid-stream re-keying). The hook instance is
-      // stable across the resulting currentSession change, so stop()/abort keep
-      // working. After the first response completes we ask the backend to auto-title it.
+      // Lazy session creation (web parity): a draft chat's first message creates the
+      // backend session HERE, before streaming, so we hold a stable UUID up front
+      // (no fragile mid-stream re-keying).
       let activeSessionId = sessionId;
       let createdNewSession = false;
       if (!isUuid(sessionId)) {
@@ -244,8 +195,8 @@ export function useSendMessage(
           return;
         }
         createdNewSession = true;
-        // Carry the model picked while drafting onto the real session, then drop the
-        // transient "draft" entry so its model can't leak into the next new chat.
+        // Carry the drafting model onto the real session, then drop the transient
+        // draft so its model can't leak into the next new chat.
         const draft = store.getState().sessions.get(sessionId);
         store.getState().setCurrentSession(realId);
         if (draft?.selectedModel) {
@@ -260,7 +211,7 @@ export function useSendMessage(
 
       const s = store.getState();
 
-      // ── (a) Optimistic insert ────────────────────────────────────────────
+      // Optimistic insert.
       const existing = s.sessions.get(activeSessionId);
       const currentTree: MessageTreeState =
         existing?.messageTree ?? new Map();
@@ -275,10 +226,8 @@ export function useSendMessage(
         files
       );
 
-      // Wire children/latest links from the parent down to the new user node, then
-      // make the new branch the latest chain. upsertMessages handles the parent's
-      // childrenNodeIds + latestChildNodeId; buildImmediateMessages already linked
-      // the user->assistant pair.
+      // Wire children/latest links from the parent down to the new user node and make
+      // the new branch the latest chain (buildImmediateMessages linked user->assistant).
       let tree = new Map(currentTree);
       tree.set(initialUserNode.nodeId, initialUserNode);
       tree.set(initialAgentNode.nodeId, initialAgentNode);
@@ -307,7 +256,6 @@ export function useSendMessage(
       store.getState().setUncaughtError(activeSessionId, null);
       store.getState().setStreamingStartTime(activeSessionId, Date.now());
 
-      // ── (b) AbortController ───────────────────────────────────────────────
       const controller = new AbortController();
       controllerRef.current = controller;
       store.getState().setAbortController(activeSessionId, controller);
@@ -317,10 +265,8 @@ export function useSendMessage(
       // (If session creation above had failed we returned earlier, preserving input.)
       onAccepted?.();
 
-      // ── Batched tree writes ───────────────────────────────────────────────
-      // We mutate a local `tree` synchronously on every packet (cheap immutable map
-      // copies) but only push it into the store on a scheduled flush, so the list
-      // re-renders per frame, not per token.
+      // Mutate the local `tree` synchronously per packet but push into the store only
+      // on a scheduled flush, so the list re-renders per frame, not per token.
       const flush = () => {
         rafRef.current = null;
         if (!dirtyRef.current) return;
@@ -348,21 +294,17 @@ export function useSendMessage(
         .getState()
         .sessions.get(activeSessionId)?.selectedModel;
 
-      // ── Tools / sources / force-tool (read imperatively, no stale closures) ──
-      // allowed_tool_ids = the current agent's tools minus the user's disabled set.
-      // forced_tool_id   = the one-shot forced tool (first id, or null).
-      // internal_search_filters = filters built from the enabled source set.
+      // Tools / sources / force-tool, read imperatively to avoid stale closures.
       const personaId =
         store.getState().sessions.get(activeSessionId)?.personaId;
-      // Resolve with the default-assistant fallback (matches ActionsPopover), so
-      // the send respects the tool prefs of the agent the user actually sees.
+      // Resolve with the default-assistant fallback (matches ActionsPopover).
       const agent = resolveAgent(personasRef.current, personaId);
       const disabledToolIds =
         agent !== undefined
           ? (agentPrefsRef.current?.[agent.id]?.disabled_tool_ids ?? [])
           : [];
-      // agent unresolved (personas not yet loaded) → omit allowed_tool_ids;
-      // backend defaults to all tools (no restriction). Intentional.
+      // Agent unresolved (personas not yet loaded) → omit allowed_tool_ids so the
+      // backend defaults to all tools. Intentional.
       const allowedToolIds = agent
         ? agent.tools
             .filter((t) => !disabledToolIds.includes(t.id))
@@ -372,8 +314,7 @@ export function useSendMessage(
       const forcedIds = useForcedTools.getState().forcedToolIds;
       const forcedToolId = forcedIds.length > 0 ? forcedIds[0] : null;
 
-      // Read the freshest committed MMKV snapshot at send time (no cross-instance
-      // staleness — the popover's toggles are written to MMKV and observed here).
+      // Read the freshest committed MMKV snapshot at send time (no cross-instance staleness).
       const internalSearchFilters = buildFilters(
         readEnabledSources(availableSourcesRef.current)
       );
@@ -457,25 +398,22 @@ export function useSendMessage(
           scheduleFlush();
         }
 
-        // ── (d) Completion ──────────────────────────────────────────────────
         cancelScheduledFlush();
         // Final synchronous flush so the last tokens land immediately.
         store.getState().updateSessionMessageTree(activeSessionId, tree);
         store.getState().updateChatState(activeSessionId, "input");
         store.getState().setStreamingStartTime(activeSessionId, null);
-        // The forced tool is one-shot (web parity): clear it after a SUCCESSFUL
-        // send only — not on abort/error, where the user likely wants to retry.
+        // Forced tool is one-shot (web parity): clear only after a SUCCESSFUL send,
+        // not on abort/error where the user likely wants to retry.
         useForcedTools.getState().clearForcedTools();
       } catch (err) {
         cancelScheduledFlush();
         // Flush whatever streamed before the failure.
         store.getState().updateSessionMessageTree(activeSessionId, tree);
 
-        // Every terminal path resets chatState + streaming clock; the only thing
-        // that varies is the error tag. AbortError is a clean user/lifecycle stop
-        // (no tag). A FetchError 401/403 is surfaced for the integrator's auth
-        // handler (which owns token refresh / re-login) via `auth_error:<status>`.
-        // Anything else becomes a generic error tag.
+        // Every terminal path resets chatState + clock; only the error tag varies.
+        // AbortError is a clean stop (no tag). A FetchError 401/403 is surfaced as
+        // `auth_error:<status>` for the integrator's auth handler. Else a generic tag.
         store.getState().updateChatState(activeSessionId, "input");
         store.getState().setStreamingStartTime(activeSessionId, null);
         if (!isAbortError(err)) {
@@ -494,9 +432,8 @@ export function useSendMessage(
         }
         if (mountedRef.current) setIsStreaming(false);
 
-        // First message of a new chat reached a terminal state → let the backend
-        // auto-title it (web parity: web names after the try/catch, so a stopped or
-        // errored first stream still gets titled instead of stranded as "New Chat").
+        // First message of a new chat reached a terminal state → auto-title it. Web
+        // names after the try/catch, so a stopped/errored first stream still gets titled.
         if (createdNewSession) {
           void autoNameSession(activeSessionId);
         }
@@ -512,22 +449,19 @@ export function useSendMessage(
     ]
   );
 
-  // ── stop(): user-initiated cancel ──────────────────────────────────────────
   const stop = useCallback(() => {
     controllerRef.current?.abort();
   }, []);
 
-  // ── AppState lifecycle: abort + mark for re-fetch on background ─────────────
+  // Backgrounding aborts the stream and marks the session for re-fetch on foreground.
   useEffect(() => {
     const onChange = (next: AppStateStatus) => {
       if (
         (next === "background" || next === "inactive") &&
         controllerRef.current
       ) {
-        // Abort the dead-in-the-water socket and leave a re-fetch flag. We do NOT
-        // attempt to resume the stream — the UI re-fetches the session on foreground.
         // Key the flag to the session the stream actually runs under (the real UUID
-        // for a draft chat whose creation outran the `sessionId` prop re-render).
+        // for a draft whose creation outran the `sessionId` prop re-render).
         pendingRefetch.add(activeSessionRef.current ?? sessionId);
         controllerRef.current.abort();
       }
@@ -536,7 +470,6 @@ export function useSendMessage(
     return () => sub.remove();
   }, [sessionId]);
 
-  // ── Unmount: abort any in-flight stream + cancel scheduled flushes ──────────
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -549,7 +482,6 @@ export function useSendMessage(
   return { send, stop, isStreaming };
 }
 
-// ── helpers ──────────────────────────────────────────────────────────────────
 function isAbortError(err: unknown): boolean {
   return (
     !!err &&

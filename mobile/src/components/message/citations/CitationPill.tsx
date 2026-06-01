@@ -1,6 +1,4 @@
-// CitationPill.tsx — inline citation chip. Mirrors web SourceTag variant
-// "inlineCitation": optional +N count, no leading icon. Press opens the citation
-// detail sheet (mobile press state mirrors web's open state).
+// Mirrors web SourceTag variant "inlineCitation": optional +N count, no leading icon.
 
 import { Pressable, View } from "react-native";
 
@@ -12,11 +10,9 @@ import type { SourceInfo } from "@/components/message/sources/sourceInfo";
 
 interface CitationPillProps {
   label: string;
-  /** Extra-source count for the "+N" suffix (sources beyond the first). */
   extraCount?: number;
-  /** Sources opened in the detail sheet on press. */
   sources?: SourceInfo[];
-  /** When false, renders a static (non-tappable) chip — used for [Q] markers. */
+  // When false, renders a static (non-tappable) chip — used for [Q] markers.
   interactive?: boolean;
 }
 

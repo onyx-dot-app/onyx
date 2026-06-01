@@ -1,9 +1,5 @@
-// CitationSheet.tsx — a singleton bottom-sheet citation detail card + a context
-// to open it from any inline CitationPill.
-//
 // Replaces web's hover SourceTagDetailsCard (Radix tooltip) with a tap-to-open
-// @gorhom/bottom-sheet. Supports multi-source navigation (prev/next + i/N) to
-// match the web card when a citation resolves to multiple sources.
+// bottom-sheet, plus a context to open it from any inline CitationPill.
 
 import {
   createContext,
@@ -43,7 +39,6 @@ export function useCitationSheet(): CitationSheetContextValue {
   return ctx;
 }
 
-/** Human-friendly relative time (e.g. "3 days ago"); falls back to the raw string. */
 function timeAgo(value: string | null | undefined, now: number): string | null {
   if (!value) return null;
   const t = Date.parse(value);
@@ -62,7 +57,6 @@ function timeAgo(value: string | null | undefined, now: number): string | null {
 
 interface CitationSheetProviderProps {
   children: ReactNode;
-  /** Stable "now" (ms) for relative dates; pass Date.now() from a screen if needed. */
   nowMs?: number;
 }
 

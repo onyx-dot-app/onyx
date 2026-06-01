@@ -1,8 +1,5 @@
-// SourceIcon.tsx — glyph for a citation source.
-//
-// Mobile has no per-connector glyph set, so we fall back to: web/internet sources
-// -> globe; everything else -> file. (Web uses favicons + curated connector
-// icons; that fidelity is deferred.)
+// Mobile has no per-connector glyph set: web/internet -> globe, everything else
+// -> file. (Web uses favicons + curated connector icons; deferred.)
 
 import { SvgGlobe, SvgFileText } from "@/components/icons";
 import type { IconProps } from "@/components/icons/Icon";

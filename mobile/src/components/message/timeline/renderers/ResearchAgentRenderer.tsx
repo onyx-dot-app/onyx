@@ -1,7 +1,5 @@
-// ResearchAgentRenderer.tsx — deep-research sub-agent. Functional port: shows the
-// research task and the streamed intermediate report (markdown). The web version
-// also recursively renders nested tool calls (by sub_turn_index); that recursion
-// is simplified here to the report + task (documented functional-coverage gap).
+// Native mirror of web ResearchAgentRenderer; web recursively renders nested tool
+// calls (by sub_turn_index), simplified here to the report + task.
 
 import { useCallback, useMemo } from "react";
 import { View } from "react-native";

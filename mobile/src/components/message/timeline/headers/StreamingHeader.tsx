@@ -1,4 +1,3 @@
-// StreamingHeader.tsx — shimmer activity label + optional elapsed/fold control.
 // Native mirror of web StreamingHeader.
 
 import { memo } from "react";

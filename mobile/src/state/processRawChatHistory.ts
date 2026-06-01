@@ -1,12 +1,9 @@
-// Build the in-memory message tree from a backend chat session's flat message list.
 // Mirrors web processRawChatHistory — keyed by nodeId = message_id, with
 // parent/child links rebuilt from parent_message.
 //
-// Mobile divergence: `toolCall` is set to null here (the mobile Message.toolCall is
+// Mobile divergence: `toolCall` is null here (mobile Message.toolCall is
 // ToolCallMetadata while the backend sends a ToolCallFinalResult, and the mobile
-// thread does not render historical tool calls yet). All other rendered fields
-// (text, type, files, tree links, packets, citations/docs) are carried faithfully.
-
+// thread does not render historical tool calls yet).
 import {
   RetrievalType,
   type BackendMessage,
@@ -82,7 +79,6 @@ export function processRawChatHistory(
     }
   });
 
-  // Populate childrenNodeIds (sorted) on each parent.
   parentChildren.forEach((childrenIds, parentId) => {
     childrenIds.sort((a, b) => a - b);
     const parent = messages.get(parentId);

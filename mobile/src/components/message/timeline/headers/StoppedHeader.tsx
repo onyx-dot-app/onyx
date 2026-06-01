@@ -1,4 +1,4 @@
-// StoppedHeader.tsx — "Interrupted Thinking" + step count. Native mirror of web StoppedHeader.
+// Native mirror of web StoppedHeader.
 
 import { memo } from "react";
 import { View, Pressable } from "react-native";

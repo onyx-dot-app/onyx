@@ -15,15 +15,13 @@ import type { Project, ProjectFile } from "@/lib/types";
 import { ProjectFileRow } from "./ProjectFileRow";
 import { ProjectFilePicker } from "./ProjectFilePicker";
 
-// Native mirror of web `ProjectContextPanel`: folder glyph + editable name, an
-// Instructions section, and a Files section (linked files or an empty prompt).
+// Native mirror of web ProjectContextPanel.
 
 interface ProjectContextPanelProps {
   projectId: number;
   project: Project | undefined;
   files: ProjectFile[];
   isLoading: boolean;
-  /** Opens the Set-Instructions sheet (owned by the screen). */
   onOpenInstructions: () => void;
 }
 
@@ -44,8 +42,7 @@ export function ProjectContextPanel({
   const [isEditingName, setIsEditingName] = useState(false);
   const [draftName, setDraftName] = useState("");
 
-  // Seed the draft from the current name when editing begins; doing it here (not
-  // in an effect) avoids the set-state-in-effect cascade lint.
+  // Seed the draft on edit start here (not in an effect) to dodge the set-state cascade.
   function startEditing() {
     setDraftName(project?.name ?? "");
     setIsEditingName(true);
@@ -65,14 +62,13 @@ export function ProjectContextPanel({
       try {
         await rename.mutateAsync({ projectId, name: next });
       } catch {
-        // Rollback is handled by the mutation; nothing to do here.
+        // Rollback handled by the mutation.
       }
     }
   }
 
   return (
     <View className="gap-6 px-4 pb-2 pt-4">
-      {/* Folder glyph + editable project name */}
       <View className="gap-1">
         <SvgFolderOpen size={32} color={folderColor} />
         {isEditingName ? (

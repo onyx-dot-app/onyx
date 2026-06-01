@@ -2,9 +2,7 @@ import { Path } from "react-native-svg";
 
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
-// Mirror of SvgChevronRight (no curated left chevron); the back glyph in the
-// actions popover's sources sub-view header.
-/** Chevron pointing left (back). */
+// Mirror of SvgChevronRight (no curated left chevron).
 function SvgChevronLeft(props: IconProps) {
   return (
     <Icon viewBox="0 0 16 16" {...props}>

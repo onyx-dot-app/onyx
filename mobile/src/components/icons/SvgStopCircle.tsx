@@ -3,7 +3,6 @@ import { Path } from "react-native-svg";
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
 // Mirrors web stop-circle icon.
-/** Stop sign inside a circle. */
 function SvgStopCircle(props: IconProps) {
   return (
     <Icon viewBox="0 0 15 15" {...props}>

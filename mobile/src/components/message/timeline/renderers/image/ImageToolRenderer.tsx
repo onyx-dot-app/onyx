@@ -1,20 +1,6 @@
-// ImageToolRenderer.tsx — the image-generation tool block.
-// Native mirror of web ImageToolRenderer.
-//
-// Scans IMAGE_GENERATION_TOOL_START + IMAGE_GENERATION_TOOL_DELTA packets
-// (images: { file_id, url, ... }[]). While generating (start, no section end)
-// it shows a "Generating image…" label + a pulsing placeholder. Once complete
-// (start + section end / error) it shows a column of generated images.
-//
-// AMENDMENTS vs web:
-//   • icon is the string name "image" (mobile contract), not the SvgImage
-//     component — the timeline shell maps the name to the glyph.
-//   • Web's `InMessageImage` (next/image + cookie auth, full-image modal,
-//     download-on-hover) collapses to an `expo-image` <Image> with bearer auth
-//     headers from `useAuthImageHeaders` and the `chatFileUrl` route helper —
-//     mirroring `MessageRow` / `AttachmentTile`. No modal / download / hover.
-//   • Web's animated GeneratingImageDisplay collapses to a full-width square
-//     tinted box with a BlinkingBar — RN-idiomatic.
+// Native mirror of web ImageToolRenderer. Web's InMessageImage (next/image +
+// cookie auth, modal, download-on-hover) collapses to an expo-image <Image> with
+// bearer auth headers from useAuthImageHeaders. No modal / download / hover.
 
 import { useMemo } from "react";
 import { View } from "react-native";
@@ -50,9 +36,7 @@ interface ImageState {
   error: boolean;
 }
 
-// Reduce the packet list to the current image-generation state. Mirrors the web
-// `constructCurrentImageState`: find the START packet, flatten DELTA images, and
-// treat SECTION_END / ERROR as the terminal "end" marker.
+// Mirrors web `constructCurrentImageState`.
 function constructCurrentImageState(
   packets: ImageGenerationToolPacket[]
 ): ImageState {
@@ -83,10 +67,6 @@ function constructCurrentImageState(
   };
 }
 
-// ---------------------------------------------------------------------------
-// GeneratedImageTile — one generated image (expo-image + bearer auth headers).
-// ---------------------------------------------------------------------------
-
 interface GeneratedImageTileProps {
   fileId: string;
 }
@@ -94,8 +74,7 @@ interface GeneratedImageTileProps {
 function GeneratedImageTile({ fileId }: GeneratedImageTileProps) {
   const placeholderBg = useToken("background-tint-02");
   const borderColor = useToken("border-01");
-  // Wait for the bearer header before loading the authed /chat/file URL so we
-  // don't fire a guaranteed-401 request on first paint (web rides cookies).
+  // Wait for the bearer header or the first paint fires a guaranteed 401.
   const headers = useAuthImageHeaders();
 
   const source = useMemo(
@@ -130,11 +109,7 @@ function GeneratedImageTile({ fileId }: GeneratedImageTileProps) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// GeneratingImagePlaceholder — full-width, aspect-1 tinted box + BlinkingBar.
 // RN-idiomatic stand-in for web's animated SVG progress ring.
-// ---------------------------------------------------------------------------
-
 function GeneratingImagePlaceholder() {
   const placeholderBg = useToken("background-tint-02");
   const borderColor = useToken("border-01");
@@ -167,11 +142,8 @@ export function ImageToolRenderer({
     [packets]
   );
 
-  // Fire onComplete once, when the tool reaches its terminal state (web parity).
   useFireOnComplete(isComplete, onComplete);
 
-  // Generating: label (text-03) + pulsing placeholder. Web shows the same
-  // "Generating images..." status across all render types.
   if (isGenerating) {
     return children([
       {
@@ -206,7 +178,6 @@ export function ImageToolRenderer({
     ]);
   }
 
-  // Complete: a column of the generated images (full-width, aspect-1, rounded).
   if (isComplete) {
     const count = images.length;
     return children([
@@ -233,7 +204,7 @@ export function ImageToolRenderer({
     ]);
   }
 
-  // Fallback (shouldn't happen in normal flow — neither start nor end seen).
+  // Fallback: neither start nor end seen (shouldn't happen in normal flow).
   return children([
     {
       icon: "image",

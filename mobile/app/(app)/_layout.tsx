@@ -5,10 +5,7 @@ import { Drawer } from "@/components/drawer/Drawer";
 import { DrawerProvider } from "@/components/drawer/DrawerProvider";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 
-// Authenticated flow group. ChatGPT-style: a custom slide-over drawer (Reanimated +
-// gesture-handler) hosts navigation INSTEAD of a bottom tab bar. The drawer wraps the
-// route navigator so the sidebar floats above content and persists across screens.
-//
+// Authenticated group: a slide-over drawer hosts navigation instead of a tab bar.
 // Reactive auth guard (mirrors the (auth) group): bounce to login when signed out.
 export default function AppLayout() {
   const { status } = useAuth();

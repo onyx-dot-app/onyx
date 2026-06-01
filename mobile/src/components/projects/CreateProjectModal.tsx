@@ -7,8 +7,7 @@ import { useCreateProject } from "@/query/projects";
 import { useStartProjectChat } from "@/chat/useStartProjectChat";
 import { ProjectModalTextInput } from "./ProjectModalTextInput";
 
-// Native mirror of web `CreateProjectModal`: a controlled opal Modal with a single
-// "Project Name" field that creates the project and navigates to its detail screen.
+// Native mirror of web CreateProjectModal.
 
 interface CreateProjectModalProps {
   visible: boolean;
@@ -33,11 +32,11 @@ export function CreateProjectModal({ visible, onClose }: CreateProjectModalProps
     try {
       const project = await createProject.mutateAsync(trimmed);
       close();
-      // Open the new project at its landing (fresh project-bound draft).
+      // Seed a fresh project-bound draft before navigating to the landing.
       startProjectChat(project.id);
       router.navigate(`/(app)/projects/${project.id}` as never);
     } catch {
-      // Surface inline; keep the modal open so the user can retry.
+      // Keep the modal open so the user can retry.
     }
   }
 

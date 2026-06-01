@@ -3,7 +3,6 @@ import { Path } from "react-native-svg";
 import { Icon, type IconProps } from "@/components/icons/Icon";
 
 // Mirrors web bubble-text icon.
-/** Chat bubble with text lines — a chat session row glyph. */
 function SvgBubbleText(props: IconProps) {
   return (
     <Icon viewBox="0 0 16 16" {...props}>
