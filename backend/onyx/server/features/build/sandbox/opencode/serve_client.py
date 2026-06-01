@@ -1046,6 +1046,7 @@ class OpencodeServeClient:
         model_provider: str | None = None,
         model_id: str | None = None,
         timeout: float = SANDBOX_TURN_TIMEOUT_SECONDS,
+        should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream one turn of SandboxEvents via the shared per-pod bus.
 
@@ -1114,6 +1115,7 @@ class OpencodeServeClient:
                 directory=directory,
                 parent_resolver=self._event_bus.parent_of,
                 children_resolver=self._event_bus.list_children,
+                should_interrupt=should_interrupt,
             )
 
         except GeneratorExit:
@@ -1133,13 +1135,29 @@ class OpencodeServeClient:
         directory: str,
         parent_resolver: Callable[[str], str | None] | None = None,
         children_resolver: Callable[[str], list[str]] | None = None,
+        should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Drain the bus queue, translate, yield until a
-        :class:`PromptResponse` is emitted. permission.asked → auto-allow."""
+        :class:`PromptResponse` is emitted. permission.asked → auto-allow.
+
+        ``should_interrupt`` (polled ~1/s) lets the caller end the turn
+        deterministically: we abort opencode and emit our own terminating
+        ``PromptResponse`` rather than waiting on a ``session.idle`` that may
+        never arrive after an abort — otherwise an interrupted, event-less turn
+        would pin its slot until ``timeout``."""
         terminated_locally = False
         start = time.monotonic()
         last_event = start
+        last_interrupt_check = start
         while True:
+            now = time.monotonic()
+            if should_interrupt is not None and now - last_interrupt_check >= 1.0:
+                last_interrupt_check = now
+                if should_interrupt():
+                    self.abort(opencode_session_id, directory=directory)
+                    yield PromptResponse.model_validate({"stopReason": "cancelled"})
+                    return
+
             remaining = timeout - (time.monotonic() - start)
             if remaining <= 0:
                 self.abort(opencode_session_id, directory=directory)

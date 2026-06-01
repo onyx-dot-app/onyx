@@ -11,6 +11,7 @@ import {
 
 import {
   sendMessageStream,
+  interruptMessageStream,
   processSSEStream,
   fetchSession,
   RateLimitError,
@@ -143,7 +144,10 @@ export function useBuildStreaming() {
       setAbortController(sessionId, controller);
 
       // Set status to running and clear previous stream items
-      updateSessionData(sessionId, { status: "running" });
+      updateSessionData(sessionId, {
+        status: "running",
+        isInterrupting: false,
+      });
       clearStreamItems(sessionId);
 
       // Track accumulated content for streaming text/thinking
@@ -443,6 +447,7 @@ export function useBuildStreaming() {
               updateSessionData(sessionId, {
                 status: "active",
                 streamItems: [],
+                isInterrupting: false,
               });
               break;
             }
@@ -458,6 +463,7 @@ export function useBuildStreaming() {
               updateSessionData(sessionId, {
                 status: "failed",
                 error: parsed.message,
+                isInterrupting: false,
               });
               break;
             }
@@ -468,18 +474,22 @@ export function useBuildStreaming() {
         });
       } catch (err) {
         if ((err as Error).name === "AbortError") {
-          // User cancelled - no error handling needed
+          // Fetch aborted (session switch, unmount, or a superseding turn).
+          // Clear the flag so it can't wedge the controls "Stopping…".
+          updateSessionData(sessionId, { isInterrupting: false });
         } else if (err instanceof RateLimitError) {
           console.warn("[Streaming] Rate limit exceeded");
           updateSessionData(sessionId, {
             status: "active",
             error: SessionErrorCode.RATE_LIMIT_EXCEEDED,
+            isInterrupting: false,
           });
         } else {
           console.error("[Streaming] Stream error:", err);
           updateSessionData(sessionId, {
             status: "failed",
             error: (err as Error).message,
+            isInterrupting: false,
           });
         }
       } finally {
@@ -505,11 +515,39 @@ export function useBuildStreaming() {
     ]
   );
 
+  /**
+   * Interrupt the in-flight turn for a session. Asks the backend to interrupt
+   * the sandbox turn; the open SSE stream then terminates through its normal
+   * `prompt_response` path, which commits the partial output, flips the status
+   * to "active", and lets the queued-message auto-send drain naturally. We keep
+   * the stream open (rather than aborting the fetch) so that terminator can
+   * arrive — `isInterrupting` bridges the gap for immediate UI feedback.
+   */
+  const interruptStreaming = useCallback(
+    async (sessionId: string): Promise<void> => {
+      const session = useBuildSessionStore.getState().sessions.get(sessionId);
+      if (!session || session.status !== "running" || session.isInterrupting) {
+        return;
+      }
+
+      updateSessionData(sessionId, { isInterrupting: true });
+      try {
+        await interruptMessageStream(sessionId);
+      } catch (err) {
+        // Re-arm so the user can retry; the turn is still streaming.
+        console.error("[Streaming] Failed to interrupt:", err);
+        updateSessionData(sessionId, { isInterrupting: false });
+      }
+    },
+    [updateSessionData]
+  );
+
   return useMemo(
     () => ({
       streamMessage,
+      interruptStreaming,
       abortStream: abortCurrentSession,
     }),
-    [streamMessage, abortCurrentSession]
+    [streamMessage, interruptStreaming, abortCurrentSession]
   );
 }

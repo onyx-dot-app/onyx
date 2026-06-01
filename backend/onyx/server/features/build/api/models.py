@@ -181,6 +181,14 @@ class MessageRequest(BaseModel):
     content: str
 
 
+class MessageInterruptResponse(BaseModel):
+    """Response to an interrupt request. ``interrupted`` is False when there was
+    no directly-interruptible turn (no running sandbox or no opencode session);
+    the interrupt fence is set regardless."""
+
+    interrupted: bool
+
+
 class MessageResponse(BaseModel):
     """Response containing message details.
 

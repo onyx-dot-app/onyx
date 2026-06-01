@@ -15,6 +15,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.server.features.build.api.models import MessageInterruptResponse
 from onyx.server.features.build.api.models import MessageListResponse
 from onyx.server.features.build.api.models import MessageRequest
 from onyx.server.features.build.api.models import MessageResponse
@@ -209,3 +210,19 @@ def send_subagent_message(
             "X-Accel-Buffering": "no",  # Disable nginx buffering
         },
     )
+
+
+@router.post("/sessions/{session_id}/interrupt", tags=PUBLIC_API_TAGS)
+def interrupt_message(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> MessageInterruptResponse:
+    """Interrupt the in-flight agent turn for a session.
+
+    Interrupts the opencode-serve turn inside the sandbox; the corresponding
+    /send-message stream then terminates through its normal completion path.
+    """
+    session_manager = SessionManager(db_session)
+    interrupted = session_manager.interrupt_message(session_id, user.id)
+    return MessageInterruptResponse(interrupted=interrupted)
