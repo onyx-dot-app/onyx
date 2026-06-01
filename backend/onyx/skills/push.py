@@ -81,10 +81,9 @@ def _render_template(
         external_app = get_external_app_by_skill_id(db_session, skill.id)
         rendered = render_external_app_skill(
             db_session,
-            skill.slug,
             app_type,
             external_app,
-            definition.source_dir.parent,
+            definition.source_dir,
         )
         files[f"{skill.slug}/SKILL.md"] = rendered.encode("utf-8")
         return

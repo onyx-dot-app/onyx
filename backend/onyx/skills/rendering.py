@@ -82,16 +82,14 @@ def render_company_search_skill(
 
 
 def build_action_availability_section(
-    db_session: Session,
     app_type: ExternalAppType,
-    external_app: ExternalApp | None,
+    stored: dict[str, EndpointPolicy],
 ) -> str:
     """Render the enabled/disabled action lists from the app's effective policy.
 
-    ``DENY`` actions are disabled; everything else is available. Falls back to the
-    catalog defaults when no app row (and thus no stored override) exists.
+    ``DENY`` actions are disabled; everything else is available. ``stored`` is the
+    app's per-action overrides; an empty map falls back to the catalog defaults.
     """
-    stored = get_policies(db_session, external_app.id) if external_app else {}
     views = action_policy_views(app_type, stored)
     if not views:
         return "No actions are configured for this app."
@@ -114,16 +112,15 @@ def build_action_availability_section(
 
 def render_external_app_skill(
     db_session: Session,
-    slug: str,
     app_type: ExternalAppType,
     external_app: ExternalApp | None,
-    skills_dir: Path,
+    skill_dir: Path,
 ) -> str:
     """Render an external-app SKILL.md with its per-user action availability.
 
-    ``skills_dir`` is the parent directory of ``{slug}/``.
+    ``skill_dir`` is the skill's on-disk directory (holds ``SKILL.md.template``).
     """
-    template_path = skills_dir / slug / "SKILL.md.template"
-    template = template_path.read_text()
-    section = build_action_availability_section(db_session, app_type, external_app)
+    template = (skill_dir / "SKILL.md.template").read_text()
+    stored = get_policies(db_session, external_app.id) if external_app else {}
+    section = build_action_availability_section(app_type, stored)
     return template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)
