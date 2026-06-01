@@ -94,14 +94,6 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
     ),
 }
 
-# Fail fast at import if a code ever ships without prose, so the agent never
-# receives a 403 with an empty message.
-_missing = [code for code in SandboxProxyError if code not in _SANDBOX_ERROR_MESSAGES]
-if _missing:
-    raise RuntimeError(
-        f"SandboxProxyError codes missing a message: {[c.value for c in _missing]}"
-    )
-
 
 def http_403(code: SandboxProxyError) -> http.Response:
     """Build a sandbox-visible 403.

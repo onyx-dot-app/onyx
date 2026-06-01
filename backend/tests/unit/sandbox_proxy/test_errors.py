@@ -23,17 +23,15 @@ def test_http_403_carries_code_and_prose(code: SandboxProxyError) -> None:
     assert response.content is not None
     body = json.loads(response.content)
 
-    # Stable code for tooling, prose for the agent.
     assert body["error"] == code.value
     message = body["message"]
     assert isinstance(message, str)
-    # Prose, not a restated code: non-trivial length and not the bare slug.
+    # Prose, not the bare slug restated.
     assert len(message) > 40
     assert message != code.value
 
 
 def test_every_code_has_a_message() -> None:
-    # Mirrors the import-time guard so the contract is asserted in CI even if the
-    # module is already imported (and thus its guard already passed).
+    # A new code without prose makes `.message` raise KeyError here.
     for code in SandboxProxyError:
         assert code.message

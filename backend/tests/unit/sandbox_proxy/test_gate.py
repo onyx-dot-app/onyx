@@ -127,7 +127,6 @@ def _assert_403(flow: http.HTTPFlow, expected_code: SandboxProxyError) -> None:
     assert content is not None
     body = json.loads(content)
     assert body["error"] == expected_code.value
-    # The agent acts on `message`; it must always be present and non-empty.
     assert body["message"]
 
 
