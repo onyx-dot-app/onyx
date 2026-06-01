@@ -69,6 +69,17 @@ export default function ExternalAppsAdminPage() {
     (descriptors ?? []).map((d) => [d.app_type, d])
   );
 
+  // On cloud, built-in apps are Onyx-managed and pre-provisioned, so they can't
+  // be added by an admin — drop them from the "add" list (the configured row
+  // already covers enable + policies). Self-hosted apps are never managed, so
+  // this leaves the existing multi-instance behaviour untouched.
+  const managedAppTypes = new Set(
+    (apps ?? []).filter((a) => a.is_onyx_managed).map((a) => a.app_type)
+  );
+  const availableDescriptors = (descriptors ?? []).filter(
+    (d) => !managedAppTypes.has(d.app_type)
+  );
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -123,7 +134,7 @@ export default function ExternalAppsAdminPage() {
                 a distinct name.
               </Text>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
-                {descriptors.map((descriptor) => (
+                {availableDescriptors.map((descriptor) => (
                   <AvailableAppCard
                     key={descriptor.app_type}
                     descriptor={descriptor}
@@ -253,14 +264,18 @@ function ConfiguredAppCard({
           >
             {isMutating ? "…" : app.enabled ? "Disable" : "Enable"}
           </Button>
-          <Button
-            prominence="tertiary"
-            variant="danger"
-            icon={SvgTrash}
-            onClick={remove}
-            disabled={isMutating}
-            aria-label={`Delete ${app.name}`}
-          />
+          {/* Onyx-managed built-ins (cloud) are provided by Onyx and can't be
+              deleted — only disabled. */}
+          {!app.is_onyx_managed && (
+            <Button
+              prominence="tertiary"
+              variant="danger"
+              icon={SvgTrash}
+              onClick={remove}
+              disabled={isMutating}
+              aria-label={`Delete ${app.name}`}
+            />
+          )}
         </div>
       </div>
     </Card>

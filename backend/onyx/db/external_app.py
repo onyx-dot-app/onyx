@@ -157,6 +157,29 @@ def get_external_apps(
     return list(db_session.scalars(stmt).all())
 
 
+def get_external_app_by_app_type(
+    db_session: Session,
+    app_type: ExternalAppType,
+) -> ExternalApp | None:
+    """The tenant's built-in external app of the given type, or None.
+
+    Built-in apps are unique per type per tenant (enforced via the built-in
+    skill slug — see ``create_built_in_skill_row__no_commit``), so at most one
+    row matches. Not meaningful for ``CUSTOM``, which can repeat; callers pass a
+    built-in type.
+    """
+    stmt = (
+        select(ExternalApp)
+        .options(
+            selectinload(ExternalApp.skill),
+            selectinload(ExternalApp.policies),
+        )
+        .where(ExternalApp.app_type == app_type)
+        .order_by(ExternalApp.id)
+    )
+    return db_session.scalars(stmt).first()
+
+
 def get_user_credentials_by_app_id(
     db_session: Session,
     user_id: UUID,
@@ -331,6 +354,56 @@ def update_external_app(
 
     db_session.commit()
     return app, old_bundle_file_id
+
+
+def set_external_app_organization_credentials(
+    db_session: Session,
+    app: ExternalApp,
+    organization_credentials: dict[str, str],
+) -> None:
+    """Replace an app's organization credentials and commit. Used by the
+    Onyx-managed provisioning/rotation path — deliberately touches nothing else
+    (enabled state, policies, gateway config are left untouched)."""
+    # EncryptedJson column accepts a plain dict and encrypts on write (same
+    # assignment shape as update_external_app's masked-credential restore).
+    app.organization_credentials = organization_credentials  # ty: ignore[invalid-assignment]
+    db_session.commit()
+
+
+def set_external_app_enablement_and_policies(
+    db_session: Session,
+    external_app_id: int,
+    enabled: bool,
+    action_policies: dict[str, EndpointPolicy] | None,
+    expected_app_type: ExternalAppType,
+) -> ExternalApp:
+    """Update only the enabled flag and per-action policies of an app, and
+    commit. This is the cloud admin path for Onyx-managed built-in apps, which
+    may toggle enablement + set policies but never edit credentials or config.
+
+    ``expected_app_type`` guards against an id/app_type mismatch (which would
+    otherwise let a crafted request write one provider's policies onto another
+    app). Raises ``OnyxError(NOT_FOUND)`` if the app is absent, or
+    ``INVALID_INPUT`` if its stored type differs from ``expected_app_type``.
+    """
+    app = get_external_app_by_id(db_session, external_app_id)
+    if app is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"External app with id {external_app_id} not found.",
+        )
+    if app.app_type != expected_app_type:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"app_type is immutable; cannot change from "
+            f"'{app.app_type.value}' to '{expected_app_type.value}'.",
+        )
+
+    app.skill.enabled = enabled
+    if action_policies is not None:
+        _write_policies__no_commit(db_session, app.id, action_policies)
+    db_session.commit()
+    return app
 
 
 def get_policies(

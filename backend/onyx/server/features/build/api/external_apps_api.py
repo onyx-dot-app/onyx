@@ -19,6 +19,7 @@ from onyx.db.external_app import get_external_apps
 from onyx.db.external_app import get_policies
 from onyx.db.external_app import get_user_credentials_by_app_id
 from onyx.db.external_app import required_user_credential_keys
+from onyx.db.external_app import set_external_app_enablement_and_policies
 from onyx.db.external_app import update_external_app
 from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.external_app import validate_auth_template
@@ -44,6 +45,7 @@ from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
 from onyx.utils.pydantic_util import parse_json_form_field
+from shared_configs.configs import MULTI_TENANT
 
 router = APIRouter()
 
@@ -53,23 +55,35 @@ _STR_LIST_ADAPTER = TypeAdapter(list[str])
 _STR_DICT_ADAPTER: TypeAdapter[dict[str, str]] = TypeAdapter(dict[str, str])
 
 
+def _is_onyx_managed(app_type: ExternalAppType) -> bool:
+    """In cloud, built-in apps are provisioned and owned by Onyx: a tenant admin
+    may only toggle enablement and set action policies — never create, edit
+    credentials/config, or delete them. Custom apps are always tenant-owned, and
+    self-hosted built-ins are admin-owned, so neither is "managed"."""
+    return MULTI_TENANT and app_type != ExternalAppType.CUSTOM
+
+
 def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
     # Display + lifecycle fields live on the linked Skill row.
     stored = {policy.action_id: policy.policy for policy in app.policies}
+    managed = _is_onyx_managed(app.app_type)
     return ExternalAppAdminResponse(
         id=app.id,
         name=app.skill.name,
         description=app.skill.description,
         app_type=app.app_type,
-        upstream_url_patterns=list(app.upstream_url_patterns),
-        auth_template=app.auth_template,
-        # Mask secrets (e.g. client_secret) so they're never sent to the client.
-        # The write path restores masked values the form echoes back unchanged.
-        organization_credentials=app.organization_credentials.get_value(
-            apply_mask=True
+        # Onyx-managed built-ins: the gateway config + credentials are owned by
+        # Onyx and never surfaced to the tenant admin — only identity,
+        # enablement, and policies are shown. Otherwise mask secrets (e.g.
+        # client_secret); the write path restores masked values echoed back.
+        upstream_url_patterns=[] if managed else list(app.upstream_url_patterns),
+        auth_template={} if managed else app.auth_template,
+        organization_credentials=(
+            {} if managed else app.organization_credentials.get_value(apply_mask=True)
         ),
         enabled=app.skill.enabled,
         actions=action_policy_views(app.app_type, stored),
+        is_onyx_managed=managed,
     )
 
 
@@ -123,6 +137,33 @@ def upsert_external_app(
             OnyxErrorCode.INVALID_INPUT,
             "Custom apps must be managed via POST /admin/apps/custom.",
         )
+
+    if _is_onyx_managed(request.app_type):
+        # Cloud: built-in apps are provisioned and owned by Onyx. They can't be
+        # created by an admin (they already exist, one per type), and an update
+        # may only toggle enablement + set policies — credentials and gateway
+        # config are Onyx-owned and never editable here.
+        if request.id is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Built-in apps are provided by Onyx and cannot be created.",
+            )
+        action_policies = build_action_policies(
+            request.app_type,
+            request.action_policies,
+            get_policies(db_session, request.id),
+        )
+        app = set_external_app_enablement_and_policies(
+            db_session=db_session,
+            external_app_id=request.id,
+            enabled=request.enabled,
+            action_policies=action_policies,
+            expected_app_type=request.app_type,
+        )
+        db_session.expire(app, ["policies"])
+        push_skill_to_affected_sandboxes(app.skill, db_session)
+        return _to_admin_response(app)
+
     # Build the complete policy set to persist: one row per catalog action so
     # the stored rows are the full source of truth. The admin's submitted
     # choices win, unmentioned actions keep their stored value, and anything
@@ -406,6 +447,12 @@ def delete_external_app_admin(
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             f"External app with id {external_app_id} not found.",
+        )
+    if _is_onyx_managed(app.app_type):
+        # Cloud built-ins are Onyx-provisioned; an admin disables (not deletes).
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Built-in apps are provided by Onyx and cannot be deleted.",
         )
     affected = affected_user_ids_for_skill(app.skill, db_session)
 

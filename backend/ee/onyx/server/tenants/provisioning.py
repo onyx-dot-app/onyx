@@ -32,6 +32,9 @@ from onyx.configs.app_configs import VERTEXAI_DEFAULT_CREDENTIALS
 from onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.external_app import create_external_app
+from onyx.db.external_app import get_external_app_by_app_type
+from onyx.db.external_app import set_external_app_organization_credentials
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
 from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
 from onyx.db.llm import fetch_existing_llm_provider_by_type_nameless
@@ -42,6 +45,9 @@ from onyx.db.models import AvailableTenant
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
 from onyx.db.models import UserTenantMapping
+from onyx.external_apps.managed_credentials import load_managed_external_app_credentials
+from onyx.external_apps.providers.registry import build_action_policies
+from onyx.external_apps.providers.registry import fetch_available_built_in_apps
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
@@ -539,6 +545,66 @@ def configure_default_api_keys(db_session: Session) -> None:
         )
 
 
+def provision_built_in_external_apps(db_session: Session) -> None:
+    """Provision every built-in external app into the current tenant (disabled),
+    populating Onyx-owned credentials from operator config where available.
+
+    The cloud analogue of :func:`configure_default_api_keys`: it seeds per-tenant
+    rows from deployment config. Idempotent — safe to re-run, which makes it the
+    rotation/backfill primitive (``scripts.reconcile_managed_external_apps``):
+
+    - **New app:** created disabled, with the operator's credentials (or empty if
+      none configured — still provisioned, and self-heals on a later run once
+      credentials exist).
+    - **Existing app:** credentials are refreshed in place; enabled state and
+      action policies are left untouched. Credentials are only overwritten when
+      operator config has an entry for that type, so a re-run never wipes the
+      credentials of an app the config no longer mentions.
+
+    Per-app failures are logged and skipped (one bad provider can't block tenant
+    provisioning), mirroring ``configure_default_api_keys``.
+    """
+    managed_credentials = load_managed_external_app_credentials()
+
+    for descriptor in fetch_available_built_in_apps():
+        app_type = descriptor.app_type
+        credentials = managed_credentials.get(app_type)
+        try:
+            existing = get_external_app_by_app_type(db_session, app_type)
+            if existing is not None:
+                if credentials is not None:
+                    set_external_app_organization_credentials(
+                        db_session, existing, credentials
+                    )
+                    logger.info(
+                        "Refreshed Onyx-managed credentials for built-in app '%s'.",
+                        app_type.value,
+                    )
+                continue
+
+            create_external_app(
+                db_session=db_session,
+                name=descriptor.name,
+                description=descriptor.description,
+                bundle_file_id="",
+                bundle_sha256="",
+                app_type=app_type,
+                upstream_url_patterns=list(descriptor.upstream_url_patterns),
+                auth_template=dict(descriptor.auth_template),
+                organization_credentials=credentials or {},
+                enabled=False,
+                is_public=True,
+                action_policies=build_action_policies(app_type, None, {}),
+            )
+            logger.info(
+                "Provisioned built-in app '%s' (disabled%s).",
+                app_type.value,
+                "" if credentials else "; no credentials configured yet",
+            )
+        except Exception as e:
+            logger.error("Failed to provision built-in app '%s': %s", app_type.value, e)
+
+
 async def submit_to_hubspot(
     email: str, referral_source: str | None, request: Request
 ) -> None:
@@ -695,6 +761,11 @@ async def setup_tenant(tenant_id: str) -> None:
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             # Configure default API keys
             configure_default_api_keys(db_session)
+
+            # Provision Onyx-managed built-in external apps (disabled) with
+            # Onyx-owned credentials, so an admin can enable them without
+            # registering their own OAuth app.
+            provision_built_in_external_apps(db_session)
 
             # Set up Onyx with appropriate settings
             current_search_settings = (

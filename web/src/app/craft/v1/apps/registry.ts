@@ -79,6 +79,10 @@ export interface ExternalAppAdminResponse {
   organization_credentials: Record<string, string>;
   enabled: boolean;
   actions: ActionPolicyView[];
+  // True for Onyx-managed built-in apps (cloud): credentials + gateway config
+  // are owned by Onyx (and blanked in this response). The admin may only
+  // enable/disable and set policies — not edit credentials/config or delete.
+  is_onyx_managed: boolean;
 }
 
 export interface ExternalAppUserResponse {

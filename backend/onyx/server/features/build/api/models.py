@@ -358,6 +358,10 @@ class ExternalAppAdminResponse(BaseModel):
     enabled: bool
     # The merged per-action policy view (built-in apps; empty for custom).
     actions: list[ActionPolicyView]
+    # True for Onyx-managed built-in apps (cloud): credentials + gateway config
+    # are owned by Onyx and blanked above; the admin may only enable/disable and
+    # set policies. The UI uses this to hide credential/config/delete controls.
+    is_onyx_managed: bool = False
 
 
 class UpsertUserCredentialsRequest(BaseModel):

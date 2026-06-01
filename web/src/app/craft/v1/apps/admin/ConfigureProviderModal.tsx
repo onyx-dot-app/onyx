@@ -87,6 +87,11 @@ export default function ConfigureProviderModal({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Onyx-managed built-in (cloud): credentials + config are owned by Onyx, so
+  // the modal only edits action policies — name + credential fields are hidden,
+  // and saving never touches them (the backend ignores them for managed apps).
+  const managed = existingApp?.is_onyx_managed ?? false;
+
   // Re-seed every time the modal opens so admins can tweak one
   // field without re-entering the rest.
   useEffect(() => {
@@ -124,7 +129,8 @@ export default function ConfigureProviderModal({
   const credsFilled = descriptor.required_org_credential_fields.every(
     (f) => (credentialValues[f.key] ?? "").trim().length > 0
   );
-  const canSave = nameFilled && credsFilled && !isSaving;
+  // Managed apps only edit policies, so name/credentials aren't required.
+  const canSave = managed ? !isSaving : nameFilled && credsFilled && !isSaving;
 
   const bulkValue = bulkPolicyOf(descriptor.actions, policies);
 
@@ -155,9 +161,10 @@ export default function ConfigureProviderModal({
         upstream_url_patterns: descriptor.upstream_url_patterns,
         auth_template: descriptor.auth_template,
         organization_credentials: merged,
-        // Saving credentials implies enable; disable is a separate
-        // action on the admin page.
-        enabled: true,
+        // Saving credentials implies enable; disable is a separate action on the
+        // admin page. For a managed app this modal only edits policies, so
+        // preserve the current enabled state rather than force-enabling.
+        enabled: managed && existingApp ? existingApp.enabled : true,
         action_policies: policies,
       });
       onSaved();
@@ -178,43 +185,59 @@ export default function ConfigureProviderModal({
       <Modal.Content width="lg" height="lg">
         <Modal.Header
           title={headerTitle}
-          description={descriptor.setup_instructions}
+          description={
+            managed
+              ? "Provided by Onyx — configure what the agent may do."
+              : descriptor.setup_instructions
+          }
         />
         <Modal.Body>
           <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <Text font="main-ui-action">Name</Text>
-              <InputTypeIn
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={descriptor.name}
-              />
+            {managed ? (
               <Text font="secondary-body" color="text-03">
-                {`A label for this connection. Use a distinct name when adding multiple instances of the same provider (e.g. "${descriptor.name} — Engineering").`}
+                This app is provided by Onyx — credentials are managed for you.
+                Enable it from the apps list, then choose what the agent may do
+                below.
               </Text>
-            </div>
-
-            {descriptor.required_org_credential_fields.map((field) => {
-              const Input = field.secret ? PasswordInputTypeIn : InputTypeIn;
-              return (
-                <div key={field.key} className="flex flex-col gap-1">
-                  <Text font="main-ui-action">{field.label}</Text>
-                  <Input
-                    value={credentialValues[field.key] ?? ""}
-                    onChange={(e) =>
-                      setCredentialValues((prev) => ({
-                        ...prev,
-                        [field.key]: e.target.value,
-                      }))
-                    }
-                    placeholder={field.label}
+            ) : (
+              <>
+                <div className="flex flex-col gap-1">
+                  <Text font="main-ui-action">Name</Text>
+                  <InputTypeIn
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={descriptor.name}
                   />
                   <Text font="secondary-body" color="text-03">
-                    {field.description}
+                    {`A label for this connection. Use a distinct name when adding multiple instances of the same provider (e.g. "${descriptor.name} — Engineering").`}
                   </Text>
                 </div>
-              );
-            })}
+
+                {descriptor.required_org_credential_fields.map((field) => {
+                  const Input = field.secret
+                    ? PasswordInputTypeIn
+                    : InputTypeIn;
+                  return (
+                    <div key={field.key} className="flex flex-col gap-1">
+                      <Text font="main-ui-action">{field.label}</Text>
+                      <Input
+                        value={credentialValues[field.key] ?? ""}
+                        onChange={(e) =>
+                          setCredentialValues((prev) => ({
+                            ...prev,
+                            [field.key]: e.target.value,
+                          }))
+                        }
+                        placeholder={field.label}
+                      />
+                      <Text font="secondary-body" color="text-03">
+                        {field.description}
+                      </Text>
+                    </div>
+                  );
+                })}
+              </>
+            )}
 
             {descriptor.actions.length > 0 && (
               <div className="flex flex-col gap-2 pt-2">
