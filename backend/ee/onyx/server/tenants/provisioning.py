@@ -606,6 +606,8 @@ def provision_built_in_external_apps(db_session: Session) -> None:
                 "" if credentials else "; no credentials configured yet",
             )
         except Exception as e:
+            # Reset the aborted transaction so a failure stays a per-app skip.
+            db_session.rollback()
             logger.error("Failed to provision built-in app '%s': %s", app_type.value, e)
 
 
