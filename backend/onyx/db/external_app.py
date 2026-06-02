@@ -380,11 +380,6 @@ def set_external_app_enablement_and_policies(
     """Update only the enabled flag and per-action policies of an app, and
     commit. This is the cloud admin path for Onyx-managed built-in apps, which
     may toggle enablement + set policies but never edit credentials or config.
-
-    ``expected_app_type`` guards against an id/app_type mismatch (which would
-    otherwise let a crafted request write one provider's policies onto another
-    app). Raises ``OnyxError(NOT_FOUND)`` if the app is absent, or
-    ``INVALID_INPUT`` if its stored type differs from ``expected_app_type``.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
