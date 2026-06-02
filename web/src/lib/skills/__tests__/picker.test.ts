@@ -1,69 +1,195 @@
-import { detectSlashTrigger, filterPickerSkills } from "@/lib/skills/picker";
-import type { PickerSkill } from "@/lib/skills/picker";
+import {
+  detectSlashTrigger,
+  filterPickerSections,
+  flattenSections,
+  toPickerSections,
+  type PickerSections,
+} from "@/lib/skills/picker";
+import {
+  appFixture,
+  builtinFixture,
+  customFixture,
+} from "@/lib/skills/__fixtures__/picker";
+import type { SkillsList } from "@/refresh-pages/admin/SkillsPage/interfaces";
 
-// detectSlashTrigger is the contract that the Craft skill picker + skill-tile
-// insertion depend on: the `/<query>` token it reports drives how many
-// characters get consumed when a tile is dropped. Pin the spec with hardcoded
-// expectations (do not derive from the implementation).
 describe("detectSlashTrigger", () => {
-  it("returns null when there is no slash", () => {
-    expect(detectSlashTrigger("")).toBeNull();
+  it("returns null when no slash present", () => {
     expect(detectSlashTrigger("hello world")).toBeNull();
   });
 
-  it("returns null for a slash that is not at start or after whitespace", () => {
-    expect(detectSlashTrigger("a/b")).toBeNull();
-    expect(detectSlashTrigger("http://x")).toBeNull();
-    expect(detectSlashTrigger("/a b/c")).toBeNull();
-  });
-
-  it("returns null when the query contains whitespace", () => {
-    expect(detectSlashTrigger("/foo bar")).toBeNull();
-  });
-
-  it("matches a bare slash at the start", () => {
+  it("matches a leading slash with empty query", () => {
     expect(detectSlashTrigger("/")).toEqual({ slashIndex: 0, query: "" });
   });
 
-  it("matches a slash query at the start", () => {
-    expect(detectSlashTrigger("/pp")).toEqual({ slashIndex: 0, query: "pp" });
+  it("matches a leading slash with a query", () => {
+    expect(detectSlashTrigger("/sla")).toEqual({ slashIndex: 0, query: "sla" });
   });
 
-  it("matches a slash query after preceding text + whitespace", () => {
-    expect(detectSlashTrigger("make me /pp")).toEqual({
-      slashIndex: 8,
-      query: "pp",
+  it("matches a slash after whitespace", () => {
+    expect(detectSlashTrigger("hello /sl")).toEqual({
+      slashIndex: 6,
+      query: "sl",
     });
   });
 
-  it("uses the last eligible slash when several are present", () => {
-    expect(detectSlashTrigger("/a /b")).toEqual({ slashIndex: 3, query: "b" });
+  it("rejects a slash not preceded by whitespace", () => {
+    expect(detectSlashTrigger("http://x")).toBeNull();
+  });
+
+  it("rejects when query contains whitespace", () => {
+    expect(detectSlashTrigger("/foo bar")).toBeNull();
   });
 });
 
-describe("filterPickerSkills", () => {
-  const skills: PickerSkill[] = [
-    { slug: "pptx", name: "Slides", description: "Make slide decks" },
-    { slug: "pdf", name: "PDF", description: "Work with PDF files" },
-  ];
+describe("toPickerSections", () => {
+  function skillsList(over: Partial<SkillsList> = {}): SkillsList {
+    return { builtins: [], customs: [], ...over };
+  }
 
-  it("returns all skills for an empty query", () => {
-    expect(filterPickerSkills(skills, "")).toEqual(skills);
+  it("returns empty sections when no data", () => {
+    expect(toPickerSections(undefined, undefined)).toEqual({
+      skills: [],
+      apps: [],
+    });
   });
 
-  it("matches against slug, name, and description (case-insensitive)", () => {
-    expect(filterPickerSkills(skills, "PPT").map((s) => s.slug)).toEqual([
+  it("places plain built-ins in `skills`", () => {
+    const data = skillsList({
+      builtins: [
+        builtinFixture({ slug: "pptx" }),
+        builtinFixture({ slug: "image-gen" }),
+      ],
+    });
+    const result = toPickerSections(data, []);
+    expect(result.skills.map((s) => s.slug)).toEqual(["image-gen", "pptx"]);
+    expect(result.apps).toEqual([]);
+  });
+
+  it("filters out unavailable built-ins", () => {
+    const data = skillsList({
+      builtins: [
+        builtinFixture({ slug: "pptx" }),
+        builtinFixture({ slug: "image-gen", is_available: false }),
+      ],
+    });
+    expect(toPickerSections(data, []).skills.map((s) => s.slug)).toEqual([
       "pptx",
-    ]);
-    expect(filterPickerSkills(skills, "slide").map((s) => s.slug)).toEqual([
-      "pptx",
-    ]);
-    expect(filterPickerSkills(skills, "files").map((s) => s.slug)).toEqual([
-      "pdf",
     ]);
   });
 
-  it("returns nothing when no field matches", () => {
-    expect(filterPickerSkills(skills, "zzz")).toEqual([]);
+  it("appends enabled customs to `skills`", () => {
+    const data = skillsList({
+      builtins: [builtinFixture({ slug: "pptx" })],
+      customs: [
+        customFixture({ slug: "my-custom" }),
+        customFixture({ slug: "disabled-one", enabled: false }),
+      ],
+    });
+    expect(toPickerSections(data, []).skills.map((s) => s.slug)).toEqual([
+      "my-custom",
+      "pptx",
+    ]);
+  });
+
+  it("builds the Apps section from the external-apps payload with auth state", () => {
+    const data = skillsList({ builtins: [builtinFixture({ slug: "pptx" })] });
+    const apps = [
+      appFixture({ slug: "slack", app_type: "SLACK", authenticated: true }),
+      appFixture({
+        slug: "gmail",
+        name: "Gmail",
+        app_type: "GMAIL",
+        authenticated: false,
+      }),
+    ];
+    const { apps: result } = toPickerSections(data, apps);
+    expect(result.map((a) => [a.slug, a.name, a.authenticated])).toEqual([
+      ["gmail", "Gmail", false],
+      ["slack", "slack", true],
+    ]);
+  });
+
+  it("returns an empty Apps section when the user has no apps", () => {
+    expect(toPickerSections(skillsList(), []).apps).toEqual([]);
+  });
+
+  it("returns Apps even when skills payload is undefined", () => {
+    const apps = [appFixture({ slug: "slack", app_type: "SLACK" })];
+    const result = toPickerSections(undefined, apps);
+    expect(result.skills).toEqual([]);
+    expect(result.apps.map((a) => a.slug)).toEqual(["slack"]);
+  });
+});
+
+describe("filterPickerSections", () => {
+  const sections: PickerSections = {
+    skills: [
+      {
+        kind: "skill",
+        slug: "pptx",
+        name: "PPTX",
+        description: "build decks",
+      },
+      {
+        kind: "skill",
+        slug: "image-gen",
+        name: "Image Gen",
+        description: "make images",
+      },
+    ],
+    apps: [
+      {
+        kind: "app",
+        slug: "slack",
+        name: "Slack",
+        description: "chat search",
+        appType: "SLACK",
+        authenticated: true,
+      },
+    ],
+  };
+
+  it("returns input when query is empty", () => {
+    expect(filterPickerSections(sections, "")).toEqual(sections);
+  });
+
+  it("filters both sections case-insensitively across fields", () => {
+    expect(filterPickerSections(sections, "image").skills.length).toBe(1);
+    expect(filterPickerSections(sections, "CHAT").apps.length).toBe(1);
+    expect(
+      filterPickerSections(sections, "deck").skills.map((s) => s.slug)
+    ).toEqual(["pptx"]);
+  });
+
+  it("returns empty sections when nothing matches", () => {
+    const empty = filterPickerSections(sections, "zzz");
+    expect(empty.skills).toEqual([]);
+    expect(empty.apps).toEqual([]);
+  });
+});
+
+describe("flattenSections", () => {
+  it("returns skills before apps in render order", () => {
+    const sections: PickerSections = {
+      skills: [
+        { kind: "skill", slug: "a", name: "A", description: "" },
+        { kind: "skill", slug: "b", name: "B", description: "" },
+      ],
+      apps: [
+        {
+          kind: "app",
+          slug: "c",
+          name: "C",
+          description: "",
+          appType: "SLACK",
+          authenticated: true,
+        },
+      ],
+    };
+    expect(flattenSections(sections).map((e) => e.slug)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
   });
 });

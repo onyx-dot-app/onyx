@@ -14,6 +14,7 @@ import {
   type MouseEvent,
   type SyntheticEvent,
 } from "react";
+import { useRouter } from "next/navigation";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { isImageFile } from "@/lib/utils";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
@@ -44,7 +45,8 @@ import Keycap from "@/refresh-components/Keycap";
 import { useDoubleEscapeInterrupt } from "@/hooks/useDoubleEscapeInterrupt";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import useUserSkills from "@/hooks/useUserSkills";
-import { toPickerSkills } from "@/lib/skills/picker";
+import useUserExternalApps from "@/hooks/useUserExternalApps";
+import { toPickerSections, type PickerEntry } from "@/lib/skills/picker";
 import {
   reduceOnInput,
   reduceOnSelection,
@@ -229,10 +231,12 @@ const InputBar = memo(
         hasUploadingFiles,
       } = useUploadFilesContext();
 
+      const router = useRouter();
       const { data: skillsData } = useUserSkills();
-      const pickerSkills = useMemo(
-        () => toPickerSkills(skillsData),
-        [skillsData]
+      const { data: externalAppsData } = useUserExternalApps();
+      const pickerSections = useMemo(
+        () => toPickerSections(skillsData, externalAppsData),
+        [skillsData, externalAppsData]
       );
       const [session, setSession] = useState<PickerSession>(
         INITIAL_PICKER_SESSION
@@ -313,36 +317,35 @@ const InputBar = memo(
       }, [session, getTextBeforeCursor, getCaretRect]);
 
       const handleSkillPickerSelect = useCallback(
-        (slug: string) => {
+        (entry: PickerEntry) => {
           if (!session.open) return;
+          if (entry.kind === "app" && !entry.authenticated) {
+            closeSkillPicker();
+            router.push(`/craft/v1/apps?connect=${entry.slug}`);
+            return;
+          }
           const beforeToken = `/${session.query}`;
-          const name = pickerSkills.find((s) => s.slug === slug)?.name ?? slug;
-          if (insertSkillTile(slug, name, beforeToken)) closeSkillPicker();
+          if (insertSkillTile(entry.slug, entry.name, beforeToken))
+            closeSkillPicker();
         },
-        [
-          session.open,
-          session.query,
-          pickerSkills,
-          insertSkillTile,
-          closeSkillPicker,
-        ]
+        [session.open, session.query, insertSkillTile, closeSkillPicker, router]
       );
 
       const openSkillInfo = useCallback(
         (tile: HTMLElement) => {
           const slug = tile.getAttribute("data-skill-slug") ?? "";
-          const skill = pickerSkills.find((s) => s.slug === slug);
+          const entry =
+            pickerSections.skills.find((s) => s.slug === slug) ??
+            pickerSections.apps.find((a) => a.slug === slug);
           setSkillInfo({
             tile,
-            name: skill?.name ?? slug,
-            description: skill?.description ?? "",
+            name: entry?.name ?? slug,
+            description: entry?.description ?? "",
           });
         },
-        [pickerSkills]
+        [pickerSections]
       );
 
-      // Clicking a skill tile opens an info popover with its name + description.
-      // Other clicks fall through to the paste-tile handler.
       const handleInputClick = useCallback(
         (event: MouseEvent<HTMLDivElement>) => {
           const target = event.target as HTMLElement;
@@ -401,11 +404,16 @@ const InputBar = memo(
           if (!text) return;
 
           // Recreate a skill tile when pasting a lone `/<slug>` for a known
-          // skill (e.g. copied from another tile), mirroring the picker flow.
+          // skill or authenticated app. Unknown / unauth slugs paste as text.
           const slug = text.trim().match(/^\/(\S+)$/)?.[1];
-          const skill = slug && pickerSkills.find((s) => s.slug === slug);
-          if (skill) {
-            insertSkillTile(skill.slug, skill.name, "");
+          const entry =
+            slug &&
+            (pickerSections.skills.find((s) => s.slug === slug) ??
+              pickerSections.apps.find(
+                (a) => a.slug === slug && a.authenticated
+              ));
+          if (entry) {
+            insertSkillTile(entry.slug, entry.name, "");
             closeSkillPicker();
             return;
           }
@@ -416,7 +424,7 @@ const InputBar = memo(
           disabled,
           uploadFiles,
           pasteText,
-          pickerSkills,
+          pickerSections,
           insertSkillTile,
           closeSkillPicker,
         ]
@@ -702,7 +710,7 @@ const InputBar = memo(
             open={session.open}
             anchorRect={anchorRect}
             query={session.query}
-            skills={pickerSkills}
+            sections={pickerSections}
             onSelect={handleSkillPickerSelect}
             onClose={dismissSkillPicker}
           />
