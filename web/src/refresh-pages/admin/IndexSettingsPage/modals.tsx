@@ -423,6 +423,78 @@ function LiteLLMProviderModal({
 }
 
 // ---------------------------------------------------------------------------
+// OpenRouter
+// ---------------------------------------------------------------------------
+
+interface OpenRouterFormValues {
+  apiKey: string;
+  modelName: string;
+  modelDim: number;
+  queryPrefix: string;
+  passagePrefix: string;
+  normalize: boolean;
+}
+function OpenRouterProviderModal({
+  provider,
+  existingCredentials,
+  existingModel,
+  onSubmit,
+}: ProviderModalProps) {
+  const isEditing = !!existingCredentials;
+  const maskedApiKey = existingCredentials?.api_key ?? "";
+
+  const schema = Yup.object({
+    apiKey: isEditing
+      ? Yup.string().trim()
+      : Yup.string().trim().required("API key is required"),
+    ...modelSpecSchemaShape,
+  });
+
+  const initialValues: OpenRouterFormValues = {
+    apiKey: maskedApiKey,
+    modelName: existingModel?.modelName ?? "",
+    modelDim: existingModel?.modelDim ?? 0,
+    queryPrefix: existingModel?.queryPrefix ?? "",
+    passagePrefix: existingModel?.passagePrefix ?? "",
+    normalize: existingModel?.normalize ?? false,
+  };
+
+  return (
+    <Formik<OpenRouterFormValues>
+      initialValues={initialValues}
+      validationSchema={schema}
+      validateOnMount
+      onSubmit={async (values) => {
+        const apiKey =
+          values.apiKey === maskedApiKey ? null : values.apiKey || null;
+        if (
+          await testAndSaveProviderCredentials({
+            provider,
+            apiKey,
+            modelName: values.modelName.trim(),
+          })
+        ) {
+          onSubmit({
+            modelName: values.modelName.trim(),
+            modelDim: values.modelDim,
+            normalize: values.normalize,
+            queryPrefix: values.queryPrefix || null,
+            passagePrefix: values.passagePrefix || null,
+          });
+        }
+      }}
+    >
+      <ModalShell provider={provider} isEditing={isEditing}>
+        <ApiKeyField provider={provider} />
+        <ModelSpecFields
+          modelNameSubDescription="Onyx will connect to this model via the OpenRouter API."
+        />
+      </ModalShell>
+    </Formik>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Custom Self-Hosted
 // ---------------------------------------------------------------------------
 
@@ -476,6 +548,8 @@ export function ProviderCredentialsModal(props: ProviderModalProps) {
       return <AzureProviderModal {...props} />;
     case EmbeddingProviderName.LITELLM:
       return <LiteLLMProviderModal {...props} />;
+    case EmbeddingProviderName.OPENROUTER:
+      return <OpenRouterProviderModal {...props} />;
     case EmbeddingProviderName.CUSTOM:
       return <CustomSelfHostedModal {...props} />;
     default:
