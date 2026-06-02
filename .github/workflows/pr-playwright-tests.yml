@@ -547,7 +547,9 @@ jobs:
           WORKSPACE: ${{ github.workspace }}
         run: |
           cd deployment/docker_compose
-          docker compose logs > docker-compose.log
+          # Pass the same -f overrides as `up` so the mock MCP/IdP services
+          # (defined only in the override files) are included in the logs.
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml logs > docker-compose.log
           mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
