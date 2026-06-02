@@ -337,7 +337,10 @@ async def _proxy_request(
         logger.error("Error proxying request to %s: %s", target_url, e)
         raise HTTPException(status_code=502, detail="Bad gateway")
 
-    # Close on any failure before handing off to StreamingResponse, or the connection leaks.
+    # aclose() is idempotent, so one guarded finally covers every pre-handoff exit
+    # (buffered success/failure, header-building errors). Only a successful handoff to
+    # StreamingResponse transfers ownership to _aiter_and_close, which then closes.
+    handed_off = False
     try:
         response_headers = {
             key: value
@@ -368,8 +371,6 @@ async def _proxy_request(
                 # Surface as 502 so the caller falls back to the offline page.
                 logger.error("Error reading proxied body from %s: %s", target_url, e)
                 raise HTTPException(status_code=502, detail="Bad gateway")
-            finally:
-                await response.aclose()
             content = _rewrite_asset_paths(raw, str(session_id))
             if "text/html" in content_type:
                 content = _inject_hmr_fixer(content, str(session_id))
@@ -380,18 +381,18 @@ async def _proxy_request(
                 media_type=content_type,
             )
 
-        # Binary assets: stream through; generator closes upstream on drain or disconnect.
+        # Binary assets: stream through; _aiter_and_close now owns the connection.
+        stream = _aiter_and_close(response)
+        handed_off = True
         return StreamingResponse(
-            _aiter_and_close(response),
+            stream,
             status_code=response.status_code,
             headers=response_headers,
             media_type=content_type or None,
         )
-    except HTTPException:
-        raise  # buffered branch already closed; nothing to clean up
-    except BaseException:
-        await response.aclose()  # failure after open, before handoff
-        raise
+    finally:
+        if not handed_off:
+            await response.aclose()
 
 
 async def _check_webapp_access(session_id: UUID, user: User | None) -> None:
