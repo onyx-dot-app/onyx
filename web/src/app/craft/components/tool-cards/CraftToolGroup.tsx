@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Tag, Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgAlertCircle, SvgCheckAll, SvgChevronDown } from "@opal/icons";
+import { SvgCheckAll, SvgChevronDown } from "@opal/icons";
 import {
   Collapsible,
   CollapsibleContent,
@@ -37,11 +37,6 @@ function renderStatusIcon(toolCalls: ToolCallState[]) {
       <SvgLoader
         className={cn(baseClass, "stroke-status-info-05 animate-spin")}
       />
-    );
-  }
-  if (aggregate === "failed") {
-    return (
-      <SvgAlertCircle className={cn(baseClass, "stroke-status-error-05")} />
     );
   }
   return <SvgCheckAll className={cn(baseClass, "stroke-text-03")} />;
@@ -83,11 +78,7 @@ export default function CraftToolGroup({
               </Text>
               <span className="ml-auto shrink-0 flex items-center gap-2">
                 {failedCount > 0 && (
-                  <Tag
-                    title={`${failedCount} failed`}
-                    size="sm"
-                    color="amber"
-                  />
+                  <Tag title={`${failedCount} failed`} size="sm" color="red" />
                 )}
                 <Tag
                   title={`${toolCalls.length} calls`}
