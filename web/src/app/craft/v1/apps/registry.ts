@@ -115,9 +115,11 @@ export function findUserAppByName(
  * `app_type` is allowed per deployment (enforced server-side via the built-in
  * skill's unique slug, in cloud and self-hosted alike), so any type that is
  * already configured is dropped from the "Add another" list — offering it would
- * only lead to a duplicate-resource error on submit. Descriptors only cover
- * built-in types, so configured CUSTOM apps (which may repeat) never match and
- * are correctly left untouched.
+ * only lead to a duplicate-resource error on submit. On cloud, Onyx-managed
+ * built-ins are pre-provisioned (always configured) so they never show here;
+ * admin/user-configurable built-ins are not seeded and stay available until
+ * configured. Descriptors only cover built-in types, so configured CUSTOM apps
+ * (which may repeat) never match and are correctly left untouched.
  */
 export function availableBuiltInDescriptors(
   descriptors: BuiltInExternalAppDescriptor[],

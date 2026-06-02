@@ -33,6 +33,7 @@ from onyx.external_apps.providers.registry import action_policy_views
 from onyx.external_apps.providers.registry import build_action_policies
 from onyx.external_apps.providers.registry import fetch_available_built_in_apps
 from onyx.external_apps.providers.registry import fetch_built_in_app
+from onyx.external_apps.providers.registry import is_onyx_managed_app_type
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
@@ -56,11 +57,11 @@ _STR_DICT_ADAPTER: TypeAdapter[dict[str, str]] = TypeAdapter(dict[str, str])
 
 
 def _is_onyx_managed(app_type: ExternalAppType) -> bool:
-    """In cloud, built-in apps are provisioned and owned by Onyx: a tenant admin
-    may only toggle enablement and set action policies — never create, edit
-    credentials/config, or delete them. Custom apps are always tenant-owned, and
-    self-hosted built-ins are admin-owned, so neither is "managed"."""
-    return MULTI_TENANT and app_type != ExternalAppType.CUSTOM
+    """In cloud, Onyx-managed built-ins are owned by Onyx: an admin may only
+    toggle enablement + set policies, never edit credentials/config or delete.
+    Custom, self-hosted built-ins, and ``onyx_managed=False`` built-ins are all
+    tenant/admin-owned, so none is "managed"."""
+    return MULTI_TENANT and is_onyx_managed_app_type(app_type)
 
 
 def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:

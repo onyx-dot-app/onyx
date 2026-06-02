@@ -48,7 +48,7 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import UserTenantMapping
 from onyx.external_apps.managed_credentials import load_managed_external_app_credentials
 from onyx.external_apps.providers.registry import build_action_policies
-from onyx.external_apps.providers.registry import fetch_available_built_in_apps
+from onyx.external_apps.providers.registry import fetch_onyx_managed_built_in_apps
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
@@ -547,8 +547,9 @@ def configure_default_api_keys(db_session: Session) -> None:
 
 
 def provision_built_in_external_apps(db_session: Session) -> None:
-    """Provision every built-in external app into the current tenant (disabled),
-    populating Onyx-owned credentials from operator config where available.
+    """Provision every Onyx-managed built-in external app into the current tenant
+    (disabled), populating Onyx-owned credentials from operator config where
+    available. ``onyx_managed=False`` built-ins are not seeded.
 
     - **New app:** created disabled, with the operator's credentials (or empty if
       none configured — still provisioned, just not enableable until creds exist).
@@ -570,7 +571,7 @@ def provision_built_in_external_apps(db_session: Session) -> None:
 
     managed_credentials = load_managed_external_app_credentials()
 
-    for descriptor in fetch_available_built_in_apps():
+    for descriptor in fetch_onyx_managed_built_in_apps():
         app_type = descriptor.app_type
         credentials = managed_credentials.get(app_type)
         try:

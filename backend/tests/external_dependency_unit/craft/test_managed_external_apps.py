@@ -27,10 +27,12 @@ from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.providers.registry import fetch_onyx_managed_built_in_apps
 from onyx.server.features.build.api.models import UpsertExternalAppRequest
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 
 _BUILT_IN_SLUGS = list(EXTERNAL_APP_BUILT_IN_SKILL_IDS.values())
+_MANAGED_APP_TYPES = [d.app_type for d in fetch_onyx_managed_built_in_apps()]
 _GMAIL_CREDS = {"client_id": "cid", "client_secret": "sec"}
 
 
@@ -89,6 +91,12 @@ def _request(
 # ---------------------------------------------------------------------------
 
 
+def test_all_currently_defined_built_ins_are_onyx_managed() -> None:
+    """For now every built-in is Onyx-managed (seeded per tenant). When a future
+    built-in opts out (``onyx_managed=False``), update this deliberately."""
+    assert set(_MANAGED_APP_TYPES) == set(EXTERNAL_APP_BUILT_IN_SKILL_IDS)
+
+
 def test_provisions_all_built_ins_disabled_with_credentials(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
@@ -98,8 +106,8 @@ def test_provisions_all_built_ins_disabled_with_credentials(
     prov.provision_built_in_external_apps(db_session)
     db_session.expire_all()
 
-    # Every built-in is provisioned, disabled.
-    for app_type in EXTERNAL_APP_BUILT_IN_SKILL_IDS:
+    # Every Onyx-managed built-in is provisioned, disabled.
+    for app_type in _MANAGED_APP_TYPES:
         app = get_external_app_by_app_type(db_session, app_type)
         assert app is not None, f"{app_type} not provisioned"
         assert app.skill.enabled is False
@@ -128,7 +136,7 @@ def test_provisioning_skipped_when_auto_provision_disabled(
     db_session.expire_all()
 
     # The flag short-circuits provisioning: no built-in rows are created.
-    for app_type in EXTERNAL_APP_BUILT_IN_SKILL_IDS:
+    for app_type in _MANAGED_APP_TYPES:
         assert get_external_app_by_app_type(db_session, app_type) is None
 
 

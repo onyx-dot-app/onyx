@@ -160,6 +160,20 @@ def fetch_available_built_in_apps() -> list[BuiltInExternalAppDescriptor]:
     return [_descriptor_for(cls) for cls in _PROVIDER_CLASSES]
 
 
+def is_onyx_managed_app_type(app_type: ExternalAppType) -> bool:
+    """Whether a built-in ``app_type`` has Onyx-owned credentials. False for
+    ``CUSTOM`` (no provider) and for ``onyx_managed=False`` built-ins. Not gated
+    on ``MULTI_TENANT`` — callers add that for the cloud-only lockdown."""
+    provider = PROVIDERS.get(app_type)
+    return provider is not None and provider.spec.onyx_managed
+
+
+def fetch_onyx_managed_built_in_apps() -> list[BuiltInExternalAppDescriptor]:
+    """Built-in providers Onyx owns the credentials for — the apps cloud
+    provisioning seeds per tenant. Excludes ``onyx_managed=False`` built-ins."""
+    return [_descriptor_for(cls) for cls in _PROVIDER_CLASSES if cls.spec.onyx_managed]
+
+
 def fetch_built_in_app(app_type: ExternalAppType) -> BuiltInExternalAppDescriptor:
     for cls in _PROVIDER_CLASSES:
         if cls.spec.app_type == app_type:
