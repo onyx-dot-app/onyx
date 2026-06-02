@@ -104,15 +104,13 @@ export default function AppHealthBanner() {
       user.current_token_created_at !== undefined &&
       user.current_token_expiry_length !== undefined
     ) {
+      const createdAt = new Date(user.current_token_created_at);
       expiries.push(
-        new Date(
-          user.current_token_created_at.getTime() +
-            user.current_token_expiry_length * 1000
-        )
+        new Date(createdAt.getTime() + user.current_token_expiry_length * 1000)
       );
     }
     if (user.oidc_expiry !== undefined) {
-      expiries.push(user.oidc_expiry);
+      expiries.push(new Date(user.oidc_expiry));
     }
     if (expiries.length === 0) return;
     const secondsUntilExpiration = Math.min(
@@ -163,15 +161,18 @@ export default function AppHealthBanner() {
                 updatedUser.current_token_created_at !== undefined &&
                 updatedUser.current_token_expiry_length !== undefined
               ) {
+                const newCreatedAt = new Date(
+                  updatedUser.current_token_created_at
+                );
                 newExpiries.push(
                   new Date(
-                    updatedUser.current_token_created_at.getTime() +
+                    newCreatedAt.getTime() +
                       updatedUser.current_token_expiry_length * 1000
                   )
                 );
               }
               if (updatedUser.oidc_expiry !== undefined) {
-                newExpiries.push(updatedUser.oidc_expiry);
+                newExpiries.push(new Date(updatedUser.oidc_expiry));
               }
               if (newExpiries.length > 0) {
                 const newSecondsUntilExpiration = Math.min(
