@@ -96,6 +96,15 @@ export function isSupportedProviderType(provider: string): boolean {
   return ALLOWED_PROVIDER_TYPES.has(provider);
 }
 
+// True when at least one configured provider is a supported Craft type
+// (anthropic/openai/openrouter). The gate for both onboarding LLM setup and
+// pre-provisioning — an unsupported-only setup (e.g. Azure) can't craft.
+export function hasSupportedCraftProvider(
+  llmProviders: { provider: string }[] | undefined
+): boolean {
+  return !!llmProviders?.some((p) => isSupportedProviderType(p.provider));
+}
+
 export function isRecommendedModel(modelName: string): boolean {
   return RECOMMENDED_MODEL_NAMES.has(modelName);
 }

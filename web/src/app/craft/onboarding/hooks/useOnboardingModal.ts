@@ -10,17 +10,9 @@ import {
 import {
   getCraftOnboardingSeen,
   setCraftOnboardingSeen,
-  isSupportedProviderType,
+  hasSupportedCraftProvider,
 } from "@/app/craft/onboarding/constants";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
-
-import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
-
-function checkHasAnyProvider(
-  llmProviders: LLMProviderDescriptor[] | undefined
-): boolean {
-  return !!llmProviders?.some((p) => isSupportedProviderType(p.provider));
-}
 
 export function useOnboardingModal(): OnboardingModalController {
   const { user, isAdmin } = useUser();
@@ -40,7 +32,7 @@ export function useOnboardingModal(): OnboardingModalController {
   const [hasInitialized, setHasInitialized] = useState(false);
 
   const hasAnyProvider = useMemo(
-    () => checkHasAnyProvider(llmProviders),
+    () => hasSupportedCraftProvider(llmProviders),
     [llmProviders]
   );
 

@@ -6,6 +6,7 @@ import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { usePreProvisionPolling } from "@/app/craft/hooks/usePreProvisionPolling";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
+import { hasSupportedCraftProvider } from "@/app/craft/onboarding/constants";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { checkPreProvisionedSession } from "@/app/craft/services/apiServices";
 
@@ -33,11 +34,13 @@ export function useBuildSessionController({
 }: UseBuildSessionControllerProps) {
   const router = useRouter();
 
-  // Check LLM provider availability. Pre-provisioning gates only on this — if a
-  // provider is configured we start provisioning immediately, even while the
-  // onboarding intro is still open, so the user exits onboarding to a ready sandbox.
+  // Pre-provisioning gates only on having a supported Craft provider
+  // (anthropic/openai/openrouter). When one exists we start provisioning
+  // immediately — even while the onboarding intro is still open — so the user
+  // exits onboarding to a ready sandbox. An unsupported-only setup can't craft,
+  // so we don't spin trying to provision against it.
   const { llmProviders } = useLLMProviders();
-  const hasAnyProvider = !!(llmProviders && llmProviders.length > 0);
+  const hasAnyProvider = hasSupportedCraftProvider(llmProviders);
 
   // Track previous existingSessionId to detect navigation transitions
   const prevExistingSessionIdRef = useRef<string | null>(existingSessionId);
