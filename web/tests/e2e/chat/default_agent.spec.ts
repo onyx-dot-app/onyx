@@ -473,7 +473,9 @@ test.describe("Default Agent Tests", () => {
 
         // Toggle back to the original state
         await imageGenerationToggle.click();
-        await expect(imageGenerationToggle).toBeChecked({ checked: wasChecked });
+        await expect(imageGenerationToggle).toBeChecked({
+          checked: wasChecked,
+        });
       } else {
         // If no toggle found, just click the option itself
         await imageGenerationToolOption.click();
