@@ -31,10 +31,24 @@ try:
 except ImportError:  # pragma: no cover - depends on platform wheel availability
     _re2 = None  # ty: ignore[invalid-assignment]
     USING_RE2 = False
-    logger.warning(
-        "google-re2 is not available; falling back to the stdlib 're' engine for "
-        "linear-time patterns. ReDoS protection is reduced for untrusted input."
-    )
+
+_fallback_warned = False
+
+
+def _warn_fallback_once() -> None:
+    """Log the stdlib-fallback warning the first time it's needed.
+
+    Deferred out of the module-level ImportError handler so we never emit logs as
+    an import-time side effect (which could fire before logging is configured).
+    """
+    global _fallback_warned
+    if not _fallback_warned:
+        _fallback_warned = True
+        logger.warning(
+            "google-re2 is not available; falling back to the stdlib 're' engine "
+            "for linear-time patterns. ReDoS protection is reduced for untrusted "
+            "input."
+        )
 
 
 def compile_linear(pattern: str) -> Any:
@@ -47,4 +61,5 @@ def compile_linear(pattern: str) -> Any:
     """
     if _re2 is not None:
         return _re2.compile(pattern)
+    _warn_fallback_once()
     return re.compile(pattern)

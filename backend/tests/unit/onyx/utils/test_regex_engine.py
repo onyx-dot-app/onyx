@@ -45,3 +45,25 @@ def test_catastrophic_backtracking_pattern_is_linear() -> None:
 
     assert result is None
     assert elapsed < 1.0
+
+
+def test_fallback_warns_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When google-re2 is unavailable, compile_linear falls back to stdlib re and
+    warns exactly once (deferred to first use, not at import time)."""
+    import re
+
+    from onyx.utils import regex_engine
+
+    monkeypatch.setattr(regex_engine, "_re2", None)
+    monkeypatch.setattr(regex_engine, "_fallback_warned", False)
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        regex_engine.logger, "warning", lambda msg, *_a, **_k: warnings.append(msg)
+    )
+
+    first = regex_engine.compile_linear(r"\d+")
+    second = regex_engine.compile_linear(r"\w+")
+
+    assert isinstance(first, re.Pattern)
+    assert isinstance(second, re.Pattern)
+    assert len(warnings) == 1  # warned once, not per call and not at import
