@@ -9,6 +9,7 @@ from typing import cast
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import CitationMapping
+from onyx.chat.citation_processor import CitationMode
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
@@ -110,6 +111,7 @@ def generate_final_report(
     saved_reasoning: str | None = None,
     pre_answer_processing_time: float | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
+    include_citations: bool = True,
 ) -> bool:
     """Generate the final research report.
 
@@ -143,7 +145,14 @@ def generate_final_report(
             all_injected_file_metadata=all_injected_file_metadata,
         )
 
-        citation_processor = DynamicCitationProcessor()
+        # When include_citations is False (the persona has citations disabled),
+        # use REMOVE mode so the final report strips citation markers and emits no
+        # sources, mirroring run_llm_loop's behavior for the non-deep-research path.
+        citation_processor = DynamicCitationProcessor(
+            citation_mode=(
+                CitationMode.HYPERLINK if include_citations else CitationMode.REMOVE
+            )
+        )
         citation_processor.update_citation_mapping(citation_mapping)
 
         # Only passing in the cited documents as the whole list would be too long
@@ -204,6 +213,7 @@ def run_deep_research_llm_loop(
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
+    include_citations: bool = True,
 ) -> None:
     with trace(
         "run_deep_research_llm_loop",
@@ -457,6 +467,7 @@ def run_deep_research_llm_loop(
                         user_identity=user_identity,
                         pre_answer_processing_time=elapsed_seconds,
                         all_injected_file_metadata=all_injected_file_metadata,
+                        include_citations=include_citations,
                     )
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
@@ -561,6 +572,7 @@ def run_deep_research_llm_loop(
                         pre_answer_processing_time=time.monotonic()
                         - processing_start_time,
                         all_injected_file_metadata=all_injected_file_metadata,
+                        include_citations=include_citations,
                     )
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
@@ -583,6 +595,7 @@ def run_deep_research_llm_loop(
                         pre_answer_processing_time=time.monotonic()
                         - processing_start_time,
                         all_injected_file_metadata=all_injected_file_metadata,
+                        include_citations=include_citations,
                     )
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
@@ -656,6 +669,7 @@ def run_deep_research_llm_loop(
                             pre_answer_processing_time=time.monotonic()
                             - processing_start_time,
                             all_injected_file_metadata=all_injected_file_metadata,
+                            include_citations=include_citations,
                         )
                         final_turn_index = report_turn_index + (
                             1 if report_reasoned else 0

@@ -1114,6 +1114,12 @@ def _run_models(
                     f"Forced tool {setup.forced_tool_id} not found in tools"
                 )
 
+            # Citations are emitted only when both the request allows them
+            # and the agent (persona) is configured to include them.
+            include_citations = setup.new_msg_req.include_citations and (
+                setup.persona.include_citations if setup.persona else True
+            )
+
             # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
             if n_models == 1 and setup.new_msg_req.deep_research:
                 if setup.chat_session.project_id:
@@ -1130,6 +1136,7 @@ def _run_models(
                     user_identity=setup.user_identity,
                     chat_session_id=str(setup.chat_session.id),
                     all_injected_file_metadata=setup.all_injected_file_metadata,
+                    include_citations=include_citations,
                 )
             else:
                 run_llm_loop(
@@ -1147,16 +1154,7 @@ def _run_models(
                     user_identity=setup.user_identity,
                     chat_session_id=str(setup.chat_session.id),
                     chat_files=setup.chat_files_for_tools,
-                    # Citations are emitted only when both the request allows them
-                    # and the agent (persona) is configured to include them.
-                    include_citations=(
-                        setup.new_msg_req.include_citations
-                        and (
-                            setup.persona.include_citations
-                            if setup.persona
-                            else True
-                        )
-                    ),
+                    include_citations=include_citations,
                     all_injected_file_metadata=setup.all_injected_file_metadata,
                     inject_memories_in_prompt=user.use_memories,
                 )
