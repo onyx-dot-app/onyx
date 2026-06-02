@@ -2361,9 +2361,7 @@ class SessionManager:
             # outputs/ doesn't exist yet — no artifacts.
             return artifacts
         except Exception:
-            # The sandbox can be transiently unreachable (pod still coming up
-            # after a restore). Degrade to "no artifacts yet" rather than 500;
-            # the frontend re-fetches via SWR.
+            # Sandbox transiently unreachable — degrade to no artifacts, not 500.
             logger.warning(
                 "Could not list artifacts for session %s; sandbox not reachable",
                 session_id,

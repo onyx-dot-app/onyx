@@ -355,7 +355,6 @@ def restore_session(
         )
 
     try:
-        # Re-read: another request may have restored while we waited.
         db_session.refresh(sandbox)
 
         if sandbox.status == SandboxStatus.RUNNING:
@@ -381,14 +380,12 @@ def restore_session(
                 )
                 db_session.commit()
                 db_session.refresh(sandbox)
-                # Fall through to the TERMINATED branch below.
 
         session_manager = SessionManager(db_session)
         llm_config, all_llm_configs = session_manager.build_llm_configs(user)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
-            # PAT before PROVISIONING so a failure here stays retriable. The
-            # sandbox needs it to reach Onyx via onyx-cli.
+            # Mint the PAT before flipping to PROVISIONING so a failure is retriable.
             onyx_pat = ensure_sandbox_pat(db_session, sandbox, user)
 
             update_sandbox_status__no_commit(
@@ -418,7 +415,6 @@ def restore_session(
             if not workspace_exists:
                 if not session.nextjs_port:
                     session.nextjs_port = allocate_nextjs_port(db_session)
-                    # Commit before the long-running restore below.
                     db_session.commit()
 
                 snapshot = get_latest_snapshot_for_session(db_session, session_id)
@@ -481,8 +477,7 @@ def restore_session(
             db_session.rollback()
             stuck = get_sandbox_by_user_id(db_session, user.id)
             if stuck is not None and stuck.status == SandboxStatus.PROVISIONING:
-                # provision() failed — back to SLEEPING so the next attempt
-                # re-provisions instead of staying stuck PROVISIONING forever.
+                # provision() failed — back to SLEEPING so it isn't stuck.
                 update_sandbox_status__no_commit(
                     db_session, stuck.id, SandboxStatus.SLEEPING
                 )
@@ -492,10 +487,8 @@ def restore_session(
                     stuck.id,
                 )
             elif stuck is not None and stuck.status == SandboxStatus.RUNNING:
-                # Provision succeeded but the workspace load failed, possibly
-                # leaving a partial sessions/$id/ dir. Remove it so the next
-                # attempt redoes the load (else session_workspace_exists() sees
-                # the partial dir and falsely reports the session restored).
+                # Workspace load failed after provision — drop the partial dir
+                # so session_workspace_exists() doesn't later report it restored.
                 failed_session = get_build_session(session_id, user.id, db_session)
                 failed_port = (
                     failed_session.nextjs_port if failed_session is not None else None
