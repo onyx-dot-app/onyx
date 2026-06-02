@@ -1,4 +1,5 @@
 import { TAG_COLORS } from "@opal/components/tag/colors";
+import type { TagColor } from "@opal/components/tag/colors";
 
 /** Value stored in a tile's `data-tile-type` for slash-command skill tiles. */
 export const SKILL_TILE_TYPE = "skill";
@@ -58,21 +59,33 @@ interface IconSpec {
   strokeLinecap: "round" | "square";
 }
 
-// Icon per tile type. Keyed by RichTileConfig.type; falls back to "paste".
-const TILE_ICONS: Record<string, IconSpec> = {
+interface TileSpec {
+  /** Opal Tag tint sourcing the tile's fill/text colors (single source of truth). */
+  tagColor: TagColor;
+  icon: IconSpec;
+}
+
+// Spec per tile type. Keyed by RichTileConfig.type; falls back to "paste".
+const TILE_SPECS: Record<string, TileSpec> = {
   paste: {
-    paths: [CLIPBOARD_PATH],
-    viewBox: "0 0 16 16",
-    size: 14,
-    strokeWidth: 1.5,
-    strokeLinecap: "round",
+    tagColor: "gray",
+    icon: {
+      paths: [CLIPBOARD_PATH],
+      viewBox: "0 0 16 16",
+      size: 14,
+      strokeWidth: 1.5,
+      strokeLinecap: "round",
+    },
   },
   skill: {
-    paths: [SPARKLE_PATH],
-    viewBox: "0 0 16 16",
-    size: 14,
-    strokeWidth: 1.5,
-    strokeLinecap: "square",
+    tagColor: "blue",
+    icon: {
+      paths: [SPARKLE_PATH],
+      viewBox: "0 0 16 16",
+      size: 14,
+      strokeWidth: 1.5,
+      strokeLinecap: "square",
+    },
   },
 };
 
@@ -124,8 +137,9 @@ export function createRichInputTileNode(
     tile.setAttribute("data-skill-slug", config.skillSlug);
   }
   tile.className = "rich-input-tile";
-  // Skill tile fill comes from the Opal Tag's blue tint (single source of truth).
-  if (isSkill) tile.classList.add(...TAG_COLORS.blue.bg.split(" "));
+  const spec = TILE_SPECS[config.type] ?? TILE_SPECS.paste!;
+  const tagColor = TAG_COLORS[spec.tagColor];
+  tile.classList.add(...tagColor.bg.split(" "));
   tile.title = isSkill
     ? config.preview
     : config.text.length > 200
@@ -138,21 +152,20 @@ export function createRichInputTileNode(
       : "Pasted text: " + config.preview + ", " + config.meta
   );
 
-  const iconSpec = TILE_ICONS[config.type] ?? TILE_ICONS.paste!;
   const icon = createSvgIcon(
-    iconSpec.paths,
-    iconSpec.viewBox,
-    iconSpec.size,
-    iconSpec.strokeWidth,
-    iconSpec.strokeLinecap
+    spec.icon.paths,
+    spec.icon.viewBox,
+    spec.icon.size,
+    spec.icon.strokeWidth,
+    spec.icon.strokeLinecap
   );
   icon.classList.add("rich-input-tile-icon");
-  if (isSkill) icon.classList.add(...TAG_COLORS.blue.text.split(" "));
+  icon.classList.add(...tagColor.text.split(" "));
   tile.appendChild(icon);
 
   const previewSpan = document.createElement("span");
   previewSpan.className = "rich-input-tile-preview";
-  if (isSkill) previewSpan.classList.add(...TAG_COLORS.blue.text.split(" "));
+  previewSpan.classList.add(...tagColor.text.split(" "));
   previewSpan.textContent = config.preview;
   tile.appendChild(previewSpan);
 
@@ -160,6 +173,7 @@ export function createRichInputTileNode(
   if (config.meta) {
     const metaSpan = document.createElement("span");
     metaSpan.className = "rich-input-tile-meta";
+    metaSpan.classList.add(...tagColor.text.split(" "));
     metaSpan.textContent = config.meta;
     tile.appendChild(metaSpan);
   }
