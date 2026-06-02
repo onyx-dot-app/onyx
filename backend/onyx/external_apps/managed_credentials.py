@@ -3,7 +3,7 @@
 On managed cloud, Onyx owns the OAuth client credentials for built-in apps so
 that tenant admins never have to register their own OAuth application. Operators
 supply those credentials through the ``MANAGED_EXTERNAL_APP_CREDENTIALS`` env
-var (a deployment secret); the provisioning/reconcile path reads them here and
+var (a deployment secret); the tenant-provisioning path reads them here and
 seeds them per tenant.
 
 Format — a JSON object mapping a built-in ``app_type`` value to its credential
@@ -20,16 +20,12 @@ until they are configured.
 """
 
 import json
-import os
 
+from onyx.configs.app_configs import MANAGED_EXTERNAL_APP_CREDENTIALS
 from onyx.db.enums import ExternalAppType
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-MANAGED_EXTERNAL_APP_CREDENTIALS_RAW = os.environ.get(
-    "MANAGED_EXTERNAL_APP_CREDENTIALS", ""
-)
 
 
 def load_managed_external_app_credentials() -> dict[ExternalAppType, dict[str, str]]:
@@ -39,7 +35,7 @@ def load_managed_external_app_credentials() -> dict[ExternalAppType, dict[str, s
     single bad entry can't block tenant provisioning. Returns an empty dict when
     the env var is unset/empty/invalid.
     """
-    raw = MANAGED_EXTERNAL_APP_CREDENTIALS_RAW.strip()
+    raw = MANAGED_EXTERNAL_APP_CREDENTIALS.strip()
     if not raw:
         return {}
 
