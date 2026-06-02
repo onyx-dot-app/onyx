@@ -113,8 +113,15 @@ class OpenSearchDocumentMissingError(Exception):
     """Target chunks don't exist on an _update (404) and the caller opted to
     surface this rather than fail (reindex port: doc not in FUTURE yet)."""
 
-    def __init__(self, missing_chunk_ids: list[str]) -> None:
+    def __init__(
+        self,
+        missing_chunk_ids: list[str],
+        missing_document_ids: list[str] | None = None,
+    ) -> None:
         self.missing_chunk_ids = missing_chunk_ids
+        # Only the layer that built the chunk ids knows the doc mapping; the
+        # client raises with chunks only and the index layer fills doc ids in.
+        self.missing_document_ids = missing_document_ids or []
         super().__init__(
             f"{len(missing_chunk_ids)} document chunk(s) missing during update."
         )

@@ -572,6 +572,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
             len(update_requests),
             self._index_name,
         )
+        # When swallowing, keep going past a missing-doc request so later
+        # requests still update; attribute only the docs that were truly missing.
+        missing_chunk_ids: list[str] = []
+        missing_document_ids: set[str] = set()
         for update_request in update_requests:
             properties_to_update: dict[str, Any] = dict()
             # TODO(andrei): Nit but consider if we can use DocumentChunk here so
@@ -614,6 +618,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 continue
 
             doc_chunk_ids_to_update: list[str] = []
+            chunk_id_to_doc_id: dict[str, str] = {}
             for doc_id in update_request.document_ids:
                 doc_chunk_count = update_request.doc_id_to_chunk_cnt.get(doc_id, -1)
                 if doc_chunk_count < 0:
@@ -645,11 +650,27 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         chunk_index=chunk_index,
                     )
                     doc_chunk_ids_to_update.append(document_chunk_id)
+                    chunk_id_to_doc_id[document_chunk_id] = doc_id
 
-            self._client.bulk_update_documents(
-                document_chunk_ids=doc_chunk_ids_to_update,
-                properties_to_update=properties_to_update,
-                swallow_document_missing=swallow_document_missing,
+            try:
+                self._client.bulk_update_documents(
+                    document_chunk_ids=doc_chunk_ids_to_update,
+                    properties_to_update=properties_to_update,
+                    swallow_document_missing=swallow_document_missing,
+                )
+            except OpenSearchDocumentMissingError as e:
+                # Only raised when swallowing; record the missing docs and keep
+                # processing the remaining requests.
+                missing_chunk_ids.extend(e.missing_chunk_ids)
+                missing_document_ids.update(
+                    chunk_id_to_doc_id[cid]
+                    for cid in e.missing_chunk_ids
+                    if cid in chunk_id_to_doc_id
+                )
+
+        if missing_chunk_ids:
+            raise OpenSearchDocumentMissingError(
+                missing_chunk_ids, sorted(missing_document_ids)
             )
 
     def id_based_retrieval(
@@ -988,16 +1009,12 @@ class OpenSearchIndexPair(DocumentIndex):
     def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
         self._primary.update(update_requests)
         if self._secondary is not None:
-            # FUTURE may not have the doc yet (port); re-raise as a typed signal.
+            # FUTURE may not have the doc yet (port); re-raise as a typed signal
+            # carrying only the docs that were actually missing.
             try:
                 self._secondary.update(update_requests, swallow_document_missing=True)
-            except OpenSearchDocumentMissingError:
-                missing_document_ids = [
-                    doc_id
-                    for request in update_requests
-                    for doc_id in request.document_ids
-                ]
-                raise SecondaryIndexDocumentMissingError(missing_document_ids)
+            except OpenSearchDocumentMissingError as e:
+                raise SecondaryIndexDocumentMissingError(e.missing_document_ids)
 
     def id_based_retrieval(
         self,
