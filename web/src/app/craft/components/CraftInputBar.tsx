@@ -289,11 +289,7 @@ const CraftInputBar = memo(
           {skillInfo && (
             <SkillInfoPopover
               name={skillInfo.entry.name}
-              description={
-                skillInfo.entry.kind === "skill"
-                  ? skillInfo.entry.description
-                  : skillInfo.entry.description
-              }
+              description={skillInfo.entry.description}
               tileElement={skillInfo.chipEl}
               onDismiss={dismissSkillInfo}
             />
