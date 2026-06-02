@@ -38,13 +38,23 @@ env:
   SLACK_CLIENT_ID: ${{ secrets.SLACK_CLIENT_ID }}
   SLACK_CLIENT_SECRET: ${{ secrets.SLACK_CLIENT_SECRET }}
 
-  # for MCP Oauth tests
-  MCP_OAUTH_CLIENT_ID: ${{ secrets.MCP_OAUTH_CLIENT_ID }}
-  MCP_OAUTH_CLIENT_SECRET: ${{ secrets.MCP_OAUTH_CLIENT_SECRET }}
-  MCP_OAUTH_ISSUER: ${{ secrets.MCP_OAUTH_ISSUER }}
-  MCP_OAUTH_JWKS_URI: ${{ secrets.MCP_OAUTH_JWKS_URI }}
-  MCP_OAUTH_USERNAME: ${{ vars.MCP_OAUTH_USERNAME }}
-  MCP_OAUTH_PASSWORD: ${{ secrets.MCP_OAUTH_PASSWORD }}
+  # for MCP Oauth tests — driven by the self-hosted mock OIDC IdP
+  # (deployment/docker_compose/docker-compose.mcp-oauth-test.yml). No Okta
+  # secrets: the IdP auto-issues codes and signs tokens the mock MCP server's
+  # JWTVerifier accepts. The issuer host resolves for the dockerized backend via
+  # host.docker.internal -> host-gateway and for the host-run browser via the
+  # /etc/hosts entry added in the "Make host.docker.internal resolvable" step.
+  MOCK_OIDC_PORT: 8090
+  MCP_OAUTH_ISSUER: http://host.docker.internal:8090
+  MCP_OAUTH_JWKS_URI: http://host.docker.internal:8090/jwks
+  MCP_OAUTH_AUDIENCE: api://mcp
+  MCP_OAUTH_REQUIRED_SCOPES: mcp:use
+  # The auto-issuing IdP ignores client/user credentials, but getMcpOAuthConfig()
+  # requires these to be set, so provide deterministic placeholders.
+  MCP_OAUTH_CLIENT_ID: mock-oauth-client
+  MCP_OAUTH_CLIENT_SECRET: mock-oauth-secret
+  MCP_OAUTH_USERNAME: mock-user@example.com
+  MCP_OAUTH_PASSWORD: mock-password
 
   # for MCP API Key tests
   MCP_API_KEY: test-api-key-12345
@@ -367,6 +377,17 @@ jobs:
         uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      # The MCP OAuth test drives the mock OIDC IdP in the browser at its
+      # advertised issuer (http://host.docker.internal:8090). The dockerized
+      # services reach that host via host-gateway, but the Playwright browser
+      # runs on the runner host, which doesn't resolve host.docker.internal by
+      # default — map it to the loopback where the IdP container publishes 8090.
+      - name: Make host.docker.internal resolvable for the browser
+        run: |
+          if ! grep -q "host.docker.internal" /etc/hosts; then
+            echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+          fi
 
       - name: Start Docker containers
         run: |

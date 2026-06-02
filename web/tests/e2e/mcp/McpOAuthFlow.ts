@@ -294,7 +294,19 @@ export class McpOAuthFlow {
       .waitForLoadState("domcontentloaded", { timeout: 1000 })
       .catch(() => {});
 
-    await this.waitForAnySelector(usernameSelectors, { timeout: 1000 });
+    const sawLoginForm = await this.waitForAnySelector(usernameSelectors, {
+      timeout: 1000,
+    });
+    // The mock OIDC IdP has no login page — /authorize auto-issues a code and
+    // bounces straight back to the app. If no username field appeared and we've
+    // already left the IdP host, there's nothing to drive; return so the caller
+    // proceeds to wait for the OAuth callback instead of timing out on a form
+    // that will never render. The real-IdP path (form present) is unchanged.
+    if (!sawLoginForm && !this.isOnIdpHost(this.page.url())) {
+      this.log("performIdpLogin: no login form (auto-issued); skipping");
+      return;
+    }
+
     const usernameFilled = await this.fillFirstVisible(
       usernameSelectors,
       this.config.idpUsername
