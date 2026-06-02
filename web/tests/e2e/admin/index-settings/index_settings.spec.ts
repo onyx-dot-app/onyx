@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
-import type { Locator, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
+import { IndexSettingsPage } from "./IndexSettingsPage";
 
 const INDEX_SETTINGS_URL = "/admin/configuration/index-settings";
 const EMBEDDING_PROVIDER_API = "**/api/admin/embedding/embedding-provider**";
@@ -366,34 +367,34 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
 // set-new-search-settings with the typed model AND the correct provider_type.
 // ---------------------------------------------------------------------------
 
-interface EmptyRegistryProvider {
+interface EmptyRegistryProviderCase {
   providerType: string;
   displayName: string;
-  // Fills the credential fields unique to this provider (the model-spec
-  // fields are shared and filled by the test body).
-  fillCredentials: (modal: Locator) => Promise<void>;
+  // Fills the credential fields unique to this provider via the page object
+  // (the shared model-spec fields are filled by the test body).
+  fillCredentials: (indexSettings: IndexSettingsPage) => Promise<void>;
 }
 
-const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProvider[] = [
+const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProviderCase[] = [
   {
     providerType: "litellm",
     displayName: "LiteLLM",
-    fillCredentials: async (modal) => {
-      await modal.getByLabel("API Base URL").fill("https://proxy.example.com");
-      await modal.getByLabel("API Key", { exact: true }).fill("sk-test-key");
-    },
+    fillCredentials: (indexSettings) =>
+      indexSettings.fillLiteLLMCredentials({
+        apiBaseUrl: "https://proxy.example.com",
+        apiKey: "sk-test-key",
+      }),
   },
   {
     providerType: "azure",
     displayName: "Azure",
-    fillCredentials: async (modal) => {
-      await modal
-        .getByLabel("Target URL")
-        .fill("https://res.openai.azure.com/openai/v1/embeddings");
-      await modal.getByLabel("API Key", { exact: true }).fill("az-test-key");
-      await modal.getByLabel("API Version").fill("2023-05-15");
-      await modal.getByLabel("Deployment Name").fill("my-deployment");
-    },
+    fillCredentials: (indexSettings) =>
+      indexSettings.fillAzureCredentials({
+        targetUrl: "https://res.openai.azure.com/openai/v1/embeddings",
+        apiKey: "az-test-key",
+        apiVersion: "2023-05-15",
+        deploymentName: "my-deployment",
+      }),
   },
 ];
 
@@ -442,40 +443,24 @@ test.describe("Index Settings — empty-registry providers @exclusive", () => {
         });
       });
 
-      await navigateToIndexSettings(page);
-      await expandModelPicker(page);
-      await switchToCloudTab(page);
+      const indexSettings = new IndexSettingsPage(page);
+      await indexSettings.goto();
+      await indexSettings.expandModelPicker();
+      await indexSettings.switchToCloudTab();
 
       // Empty-registry providers render an "Add Configuration" card instead of
-      // model cards. Open it and confirm the right provider modal appeared.
-      await page
-        .getByText(
-          new RegExp(
-            `add configs for your ${displayName} embedding providers`,
-            "i"
-          )
-        )
-        .click();
-      const modal = page.getByRole("dialog", {
-        name: new RegExp(`set up ${displayName}`, "i"),
+      // model cards. Open it, fill the credentials + model spec, and connect.
+      await indexSettings.openProviderSetup(displayName);
+      await fillCredentials(indexSettings);
+      await indexSettings.fillModelSpec({
+        modelName: "my-embed-model",
+        modelDim: 1024,
       });
-      await expect(modal).toBeVisible({ timeout: 10000 });
-
-      await fillCredentials(modal);
-      await modal.getByLabel("Model Name").fill("my-embed-model");
-      await modal.getByLabel("Model Dimension").fill("1024");
-
-      const connectButton = modal.getByRole("button", { name: /connect/i });
-      await expect(connectButton).toBeEnabled({ timeout: 5000 });
-      await connectButton.click();
-      await expect(modal).not.toBeVisible({ timeout: 15000 });
+      await indexSettings.submitProviderSetup();
 
       // The just-defined model must be staged — Apply & Re-index appears.
-      const applyButton = page.getByRole("button", {
-        name: "Apply & Re-index",
-      });
-      await expect(applyButton).toBeVisible({ timeout: 10000 });
-      await applyButton.click();
+      await indexSettings.expectModelStaged();
+      await indexSettings.applyReindex();
 
       const body = await bodyPromise;
       expect(body.model_name).toBe("my-embed-model");
