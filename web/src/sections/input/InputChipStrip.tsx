@@ -54,7 +54,7 @@ function InputChip({
     >
       {icon}
       <span className="max-w-[120px] truncate">
-        <Text font="main-ui-body" color="inherit" nowrap>
+        <Text font="secondary-body" color="inherit" nowrap>
           {label}
         </Text>
       </span>
