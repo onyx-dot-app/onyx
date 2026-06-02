@@ -49,9 +49,8 @@ logger = setup_logger()
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _WEBAPP_HMR_FIXER_TEMPLATE = (_TEMPLATES_DIR / "webapp_hmr_fixer.js").read_text()
 
-# Shared pooled client: async so a slow sandbox suspends its coroutine rather
-# than holding one of the ~40 shared sync threads. Initialised lazily on first
-# use so tests that import this module don't inherit an unclosed client.
+# Shared pooled async client. Lazy init so importing this module in tests
+# doesn't leave an unclosed client.
 _ASYNC_PROXY_CLIENT: httpx.AsyncClient | None = None
 
 
@@ -66,12 +65,8 @@ def _get_proxy_client() -> httpx.AsyncClient:
     return _ASYNC_PROXY_CLIENT
 
 
-# Per-asset DB-skip caches. Only GRANTS are cached; the 30s access TTL is
-# the max window a viewer keeps access after a session is un-shared.
-# Cache reads and writes are not atomic under concurrent awaits (there may be
-# awaits between a miss check and the subsequent write), so concurrent misses
-# on the same key will each hit the DB — a minor thundering-herd on cold start,
-# not a correctness issue.
+# Per-asset DB-skip caches. Only GRANTs cached; 30s TTL = max stale access
+# after un-sharing. Concurrent misses hit the DB redundantly (not a bug).
 _SANDBOX_URL_CACHE: TTLCache[UUID, str] = TTLCache(maxsize=10_000, ttl=60.0)
 _WEBAPP_ACCESS_CACHE: TTLCache[tuple[UUID, UUID], bool] = TTLCache(
     maxsize=50_000, ttl=30.0
@@ -331,9 +326,6 @@ async def _proxy_request(
         )
     }
 
-    # Stream mode: headers arrive before the body, so we can choose to
-    # buffer-and-rewrite (HTML/CSS/JS) or stream through (binary) without
-    # reading the whole body.
     client = _get_proxy_client()
     req = client.build_request("GET", target_url, headers=forwarded_headers)
     try:
@@ -345,8 +337,7 @@ async def _proxy_request(
         logger.error("Error proxying request to %s: %s", target_url, e)
         raise HTTPException(status_code=502, detail="Bad gateway")
 
-    # Stream is open: close it on any failure before handoff to StreamingResponse
-    # (which then owns it), or the pooled connection leaks.
+    # Close on any failure before handing off to StreamingResponse, or the connection leaks.
     try:
         response_headers = {
             key: value
@@ -357,8 +348,7 @@ async def _proxy_request(
             response_headers, str(session_id)
         )
 
-        # Hashed /_next/static/ assets are immutable; the dev server's no-store
-        # would force a re-proxy on every reload, so cache them in the browser.
+        # Override dev server's no-store so hashed static assets cache in the browser.
         if path.lstrip("/").startswith("_next/static/"):
             response_headers["cache-control"] = "public, max-age=31536000, immutable"
             response_headers.pop("pragma", None)
@@ -366,10 +356,8 @@ async def _proxy_request(
 
         content_type = response.headers.get("content-type", "")
 
-        # HTML/CSS/JS: buffer and rewrite asset paths. _rewrite_asset_paths is
-        # idempotent (already-prefixed URLs are not double-rewritten), so it is
-        # safe for both new sandboxes (assetPrefix emits pre-proxied URLs) and
-        # sandboxes started before this deploy (bare /_next/ refs).
+        # Buffer and rewrite /_next/ refs. Idempotent: already-proxied URLs
+        # (new sandboxes with assetPrefix) are not double-rewritten.
         if any(ct in content_type for ct in REWRITABLE_CONTENT_TYPES):
             try:
                 raw = await response.aread()
@@ -389,8 +377,7 @@ async def _proxy_request(
                 media_type=content_type,
             )
 
-        # Binary assets stream straight through; the generator closes the
-        # upstream when drained or when the client disconnects.
+        # Binary assets: stream through; generator closes upstream on drain or disconnect.
         return StreamingResponse(
             _aiter_and_close(response),
             status_code=response.status_code,
