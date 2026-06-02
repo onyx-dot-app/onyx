@@ -25,7 +25,9 @@ runs:
       env:
         ECR_REGISTRY: ${{ inputs.ecr-registry }}
         AWS_REGION: ${{ inputs.region }}
-      run: |
+      # BASE_IMAGE_REGISTRY is derived from the admin-set ECR_REGISTRY repo variable (a trusted
+      # hostname), not from attacker-controllable input, so the GITHUB_ENV write is safe.
+      run: | # zizmor: ignore[github-env]
         if [ -z "${ECR_REGISTRY}" ]; then
           echo "::error::ecr-registry input is empty. Set the ECR_REGISTRY repository variable to <account>.dkr.ecr.${AWS_REGION}.amazonaws.com." >&2
           exit 1
