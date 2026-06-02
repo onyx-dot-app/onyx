@@ -50,17 +50,28 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _WEBAPP_HMR_FIXER_TEMPLATE = (_TEMPLATES_DIR / "webapp_hmr_fixer.js").read_text()
 
 # Shared pooled client: async so a slow sandbox suspends its coroutine rather
-# than holding one of the ~40 shared sync threads. Lives for the process
-# lifetime (no shared-lifespan close hook, to keep Craft out of all images).
-_ASYNC_PROXY_CLIENT = httpx.AsyncClient(
-    timeout=30.0,
-    follow_redirects=True,
-    limits=httpx.Limits(max_keepalive_connections=50, max_connections=200),
-)
+# than holding one of the ~40 shared sync threads. Initialised lazily on first
+# use so tests that import this module don't inherit an unclosed client.
+_ASYNC_PROXY_CLIENT: httpx.AsyncClient | None = None
 
-# Per-asset DB-skip caches. Lock-free: only touched from the event loop with no
-# await between read and write. Only GRANTS are cached; the 30s access TTL is
+
+def _get_proxy_client() -> httpx.AsyncClient:
+    global _ASYNC_PROXY_CLIENT
+    if _ASYNC_PROXY_CLIENT is None:
+        _ASYNC_PROXY_CLIENT = httpx.AsyncClient(
+            timeout=30.0,
+            follow_redirects=True,
+            limits=httpx.Limits(max_keepalive_connections=50, max_connections=200),
+        )
+    return _ASYNC_PROXY_CLIENT
+
+
+# Per-asset DB-skip caches. Only GRANTS are cached; the 30s access TTL is
 # the max window a viewer keeps access after a session is un-shared.
+# Cache reads and writes are not atomic under concurrent awaits (there may be
+# awaits between a miss check and the subsequent write), so concurrent misses
+# on the same key will each hit the DB — a minor thundering-herd on cold start,
+# not a correctness issue.
 _SANDBOX_URL_CACHE: TTLCache[UUID, str] = TTLCache(maxsize=10_000, ttl=60.0)
 _WEBAPP_ACCESS_CACHE: TTLCache[tuple[UUID, UUID], bool] = TTLCache(
     maxsize=50_000, ttl=30.0
@@ -323,11 +334,10 @@ async def _proxy_request(
     # Stream mode: headers arrive before the body, so we can choose to
     # buffer-and-rewrite (HTML/CSS/JS) or stream through (binary) without
     # reading the whole body.
-    req = _ASYNC_PROXY_CLIENT.build_request(
-        "GET", target_url, headers=forwarded_headers
-    )
+    client = _get_proxy_client()
+    req = client.build_request("GET", target_url, headers=forwarded_headers)
     try:
-        response = await _ASYNC_PROXY_CLIENT.send(req, stream=True)
+        response = await client.send(req, stream=True)
     except httpx.TimeoutException:
         logger.error("Timeout while proxying request to %s", target_url)
         raise HTTPException(status_code=504, detail="Gateway timeout")
@@ -356,8 +366,10 @@ async def _proxy_request(
 
         content_type = response.headers.get("content-type", "")
 
-        # HTML/CSS/JS: buffer and rewrite asset paths. With assetPrefix on, JS/CSS
-        # already point at the proxy, so skip the rewrite and only handle HTML.
+        # HTML/CSS/JS: buffer and rewrite asset paths. _rewrite_asset_paths is
+        # idempotent (already-prefixed URLs are not double-rewritten), so it is
+        # safe for both new sandboxes (assetPrefix emits pre-proxied URLs) and
+        # sandboxes started before this deploy (bare /_next/ refs).
         if any(ct in content_type for ct in REWRITABLE_CONTENT_TYPES):
             try:
                 raw = await response.aread()
@@ -367,13 +379,9 @@ async def _proxy_request(
                 raise HTTPException(status_code=502, detail="Bad gateway")
             finally:
                 await response.aclose()
+            content = _rewrite_asset_paths(raw, str(session_id))
             if "text/html" in content_type:
-                content = _inject_hmr_fixer(
-                    _rewrite_asset_paths(raw, str(session_id)), str(session_id)
-                )
-            else:
-                # JS/CSS: sandbox emits assetPrefix-prefixed URLs, no rewrite needed.
-                content = raw
+                content = _inject_hmr_fixer(content, str(session_id))
             return Response(
                 content=content,
                 status_code=response.status_code,

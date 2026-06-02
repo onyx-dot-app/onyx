@@ -228,7 +228,9 @@ class TestProxyRequestWiring:
             b"<html><head></head><body>ok</body></html>",
         )
         monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
-        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
+        monkeypatch.setattr(
+            api, "_get_proxy_client", lambda: _FakeAsyncClient(upstream)
+        )
 
         request = cast(Request, SimpleNamespace(headers={}, query_params=""))
 
@@ -248,7 +250,9 @@ class TestProxyRequestWiring:
             b"<html><head><title>x</title></head><body></body></html>",
         )
         monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
-        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
+        monkeypatch.setattr(
+            api, "_get_proxy_client", lambda: _FakeAsyncClient(upstream)
+        )
 
         request = cast(Request, SimpleNamespace(headers={}, query_params=""))
 
@@ -270,7 +274,9 @@ class TestProxyRequestWiring:
 
         monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
         monkeypatch.setattr(
-            api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream, forwarded_headers)
+            api,
+            "_get_proxy_client",
+            lambda: _FakeAsyncClient(upstream, forwarded_headers),
         )
 
         # Security spec: every header here must never reach the sandbox,
@@ -367,7 +373,9 @@ class TestProxyRequestWiring:
             b"console.log(1)",
         )
         monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
-        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
+        monkeypatch.setattr(
+            api, "_get_proxy_client", lambda: _FakeAsyncClient(upstream)
+        )
         request = cast(Request, SimpleNamespace(headers={}, query_params=""))
 
         response = await api._proxy_request(
@@ -383,18 +391,22 @@ class TestProxyRequestWiring:
     async def test_proxy_passes_js_through_unrewritten(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """JS bundles pass through unrewritten; the sandbox emits assetPrefix URLs."""
-        js = b'fetch("/_next/static/chunks/x.js")'
+        """JS bundles are rewritten; idempotent for new sandboxes (assetPrefix),
+        and corrects bare /_next/ refs for sandboxes started before this deploy."""
+        js = b'import x from "/_next/static/chunks/dep.js"'
         upstream = _FakeUpstream(200, {"content-type": "application/javascript"}, js)
         monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
-        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
+        monkeypatch.setattr(
+            api, "_get_proxy_client", lambda: _FakeAsyncClient(upstream)
+        )
         request = cast(Request, SimpleNamespace(headers={}, query_params=""))
 
         response = await api._proxy_request(
             "_next/static/chunks/x.js", request, UUID(SESSION_ID)
         )
 
-        assert cast(bytes, response.body) == js
+        body = cast(bytes, response.body).decode()
+        assert f'"/{BASE.lstrip("/")}/_next/static/chunks/dep.js"' in body
 
     @pytest.mark.asyncio
     async def test_proxy_streams_binary_assets(
@@ -404,7 +416,9 @@ class TestProxyRequestWiring:
         body = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
         upstream = _FakeUpstream(200, {"content-type": "image/png"}, body)
         monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
-        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
+        monkeypatch.setattr(
+            api, "_get_proxy_client", lambda: _FakeAsyncClient(upstream)
+        )
         request = cast(Request, SimpleNamespace(headers={}, query_params=""))
 
         response = await api._proxy_request("logo.png", request, UUID(SESSION_ID))
@@ -422,7 +436,9 @@ class TestProxyRequestWiring:
         released (the generator's finally runs on GeneratorExit)."""
         upstream = _FakeUpstream(200, {"content-type": "image/png"}, b"abcdefghijkl")
         monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
-        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
+        monkeypatch.setattr(
+            api, "_get_proxy_client", lambda: _FakeAsyncClient(upstream)
+        )
         request = cast(Request, SimpleNamespace(headers={}, query_params=""))
 
         response = await api._proxy_request("logo.png", request, UUID(SESSION_ID))
@@ -444,7 +460,9 @@ class TestProxyRequestWiring:
             200, {"content-type": "text/html"}, b"<html><head></head></html>"
         )
         monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
-        monkeypatch.setattr(api, "_ASYNC_PROXY_CLIENT", _FakeAsyncClient(upstream))
+        monkeypatch.setattr(
+            api, "_get_proxy_client", lambda: _FakeAsyncClient(upstream)
+        )
         request = cast(Request, SimpleNamespace(headers={}, query_params=""))
 
         await api._proxy_request("", request, UUID(SESSION_ID))
