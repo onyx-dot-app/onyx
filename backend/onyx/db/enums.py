@@ -85,6 +85,33 @@ class PermissionSyncStatus(str, PyEnum):
         )
 
 
+class PortAttemptStatus(str, PyEnum):
+    """Status of a single backlog-port attempt (copy chunks PRESENT -> FUTURE).
+
+    Distinct from IndexingStatus: a port has no COMPLETED_WITH_ERRORS state — a
+    batch either drains or the attempt fails and is retried from its cursor.
+
+    Values are uppercase to match what Enum(native_enum=False) persists (the
+    member name), so the stored string == .value == .name.
+    """
+
+    NOT_STARTED = "NOT_STARTED"
+    IN_PROGRESS = "IN_PROGRESS"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    CANCELED = "CANCELED"
+
+    def is_terminal(self) -> bool:
+        return self in {
+            PortAttemptStatus.SUCCESS,
+            PortAttemptStatus.FAILED,
+            PortAttemptStatus.CANCELED,
+        }
+
+    def is_successful(self) -> bool:
+        return self == PortAttemptStatus.SUCCESS
+
+
 class IndexingMode(str, PyEnum):
     UPDATE = "update"
     REINDEX = "reindex"

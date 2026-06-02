@@ -85,6 +85,7 @@ from onyx.db.enums import OpenSearchTenantMigrationStatus
 from onyx.db.enums import PatType
 from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
+from onyx.db.enums import PortAttemptStatus
 from onyx.db.enums import ProcessingMode
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import ScheduledTaskRunStatus
@@ -995,6 +996,14 @@ class Document(Base):
     last_synced: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+
+    # Set when a metadata sync succeeded on PRESENT but the FUTURE (secondary) index
+    # did not yet contain the doc (404 during a reindex port). The port writes the doc
+    # later with current fields; until then the swap must wait for these to drain.
+    # Default-false; only ever True during an active port.
+    secondary_only_sync_pending: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     # The following are not attached to User because the account/email may not be known
     # within Onyx
     # Something like the document creator
@@ -1075,6 +1084,13 @@ class Document(Base):
             "ix_document_needs_sync",
             "id",
             postgresql_where=text("last_modified > last_synced OR last_synced IS NULL"),
+        ),
+        # Supports the reindex-port swap criterion: "no docs with a pending
+        # FUTURE-only sync remain". Tiny/empty outside an active port.
+        Index(
+            "ix_document_secondary_only_sync_pending",
+            "id",
+            postgresql_where=text("secondary_only_sync_pending IS TRUE"),
         ),
     )
 
@@ -2285,6 +2301,13 @@ class IndexAttempt(Base):
         back_populates="index_attempts",
         primaryjoin="IndexAttempt.targeted_reindex_job_id == TargetedReindexJob.id",
     )
+    # True on the synthetic SUCCESS attempt inserted at FUTURE SearchSettings
+    # creation to seed the resume cursor for the reindex port's FUTURE-incremental
+    # poll. NOT a connector run. Default-false; consumer-query exclusion (get_last_attempt
+    # etc.) is handled in a later port phase.
+    is_synthetic_seed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     status: Mapped[IndexingStatus] = mapped_column(
         Enum(IndexingStatus, native_enum=False, index=True)
     )
@@ -2424,6 +2447,90 @@ class IndexAttempt(Base):
             self.total_batches is not None
             and self.completed_batches >= self.total_batches
         )
+
+
+class PortAttempt(Base):
+    """
+    One attempt to port a cc_pair's existing chunks from the PRESENT index into
+    the FUTURE index, re-embedding under FUTURE settings. Separate from
+    IndexAttempt: different cursor shape (doc-id cursor vs. source-timestamp
+    range) and lifecycle. Reads the index directly — never re-fetches the source.
+
+    A partial unique index allows at most one active (NOT_STARTED/IN_PROGRESS)
+    attempt per (cc_pair, FUTURE search_settings); terminal rows may accumulate.
+    """
+
+    __tablename__ = "port_attempt"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # The FUTURE SearchSettings being filled.
+    search_settings_id: Mapped[int] = mapped_column(
+        ForeignKey("search_settings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    status: Mapped[PortAttemptStatus] = mapped_column(
+        Enum(PortAttemptStatus, native_enum=False, name="portattemptstatus"),
+        nullable=False,
+        default=PortAttemptStatus.NOT_STARTED,
+        index=True,
+    )
+
+    # Resume cursor: last Document.id ported, committed per batch.
+    last_processed_doc_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    docs_ported: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+
+    # Bumped after every batch commit; the stall watchdog fails stale attempts.
+    last_progress_time: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # only filled if status = FAILED (failure reason, including any traceback)
+    error_msg: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+
+    celery_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    time_started: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    time_completed: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+    connector_credential_pair: Mapped["ConnectorCredentialPair"] = relationship(
+        "ConnectorCredentialPair"
+    )
+    search_settings: Mapped["SearchSettings"] = relationship("SearchSettings")
+
+    __table_args__ = (
+        # Enum(native_enum=False) stores the member NAME, so the predicate uses
+        # uppercase 'NOT_STARTED'/'IN_PROGRESS' (NOT the lowercase values).
+        Index(
+            "ix_port_attempt_active_unique",
+            "cc_pair_id",
+            "search_settings_id",
+            unique=True,
+            postgresql_where=text("status IN ('NOT_STARTED', 'IN_PROGRESS')"),
+        ),
+    )
+
+    def is_finished(self) -> bool:
+        return self.status.is_terminal()
 
 
 class HierarchyFetchAttempt(Base):
