@@ -1,0 +1,10 @@
+{
+  "name": "onyx",
+  "version": "0.0.0-private",
+  "private": true,
+  "packageManager": "bun@1.3.13",
+  "workspaces": ["widget", "examples/widget", "desktop"],
+  "devDependencies": {
+    "@typescript/native-preview": "^7.0.0-dev.20260527.2"
+  }
+}

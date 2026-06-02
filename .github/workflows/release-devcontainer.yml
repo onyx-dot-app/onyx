@@ -2,6 +2,11 @@ name: Release Devcontainer
 
 on:
   workflow_dispatch:
+    inputs:
+      no_cache:
+        description: "Disable build cache"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -54,6 +59,7 @@ jobs:
         uses: docker/bake-action@82490499d2e5613fcead7e128237ef0b0ea210f7
         with:
           targets: devcontainer
+          no-cache: ${{ inputs.no_cache }}
           set: |
             devcontainer.platform=linux/amd64
             devcontainer.tags=
@@ -113,6 +119,7 @@ jobs:
         uses: docker/bake-action@82490499d2e5613fcead7e128237ef0b0ea210f7
         with:
           targets: devcontainer
+          no-cache: ${{ inputs.no_cache }}
           set: |
             devcontainer.platform=linux/arm64
             devcontainer.tags=

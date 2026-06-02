@@ -22,14 +22,15 @@ function findCss(dir) {
   return out;
 }
 
-const colorsCss = join(srcDir, "styles", "colors.css");
 const referenceCss = join(srcDir, "_reference.css");
 const rootCss = join(srcDir, "root.css");
+// dbg.css contains dev-only debugging utilities and is excluded from the bundle.
+// It is imported by _reference.css for @apply resolution during authoring only.
+const dbgCss = join(srcDir, "styles", "dbg.css");
 const allCss = findCss(srcDir).sort();
-// colors.css is a standalone artifact (dist/colors.css) — exclude from the main bundle.
 // _reference.css and root.css have fixed positions in the bundle (first and second).
 const leafCss = allCss.filter(
-  (p) => p !== referenceCss && p !== rootCss && p !== colorsCss
+  (p) => p !== referenceCss && p !== rootCss && p !== dbgCss
 );
 // _reference.css carries `@import "tailwindcss"` + `@config` and must come
 // first. root.css follows so design tokens are defined before any rule that
@@ -56,6 +57,9 @@ function stripIntraPackageImports(source, filePath) {
   return source.replace(
     /@import\s+['"]([^'"]+)['"];\s*\n?/gm,
     (match, importPath) => {
+      // Only relative imports (starting with . or ..) can be intra-package.
+      // Bare specifiers like "tailwindcss" are external packages and must be kept.
+      if (!importPath.startsWith(".")) return match;
       const resolved = resolve(fileDir, importPath);
       return resolved.startsWith(srcDir + sep) ? "" : match;
     }
@@ -65,34 +69,17 @@ function stripIntraPackageImports(source, filePath) {
 const parts = order.map((file) => {
   const rel = relative(srcDir, file);
   const raw = readFileSync(file, "utf8");
-  const cleaned =
-    file === referenceCss
-      ? raw
-      : stripIntraPackageImports(stripReferenceDirectives(raw), file);
+  const cleaned = stripIntraPackageImports(
+    file === referenceCss ? raw : stripReferenceDirectives(raw),
+    file
+  );
   return `/* === ${rel} === */\n${cleaned.trimEnd()}\n`;
 });
 
 const bundled = parts.join("\n");
 writeFileSync(join(distDir, "styles.css"), bundled);
+writeFileSync(join(distDir, "root.css"), bundled);
 
 console.log(
-  `bundled ${order.length} css file(s) -> dist/styles.css (${bundled.length} bytes)`
+  `bundled ${order.length} css file(s) -> dist/styles.css + dist/root.css (${bundled.length} bytes)`
 );
-
-// colors.css is a standalone design-token file — copy it verbatim to dist/.
-// Consumers import it separately so they can override with their own theme.
-const colorsRaw = readFileSync(colorsCss, "utf8");
-writeFileSync(join(distDir, "colors.css"), colorsRaw);
-
-console.log(`copied colors.css -> dist/colors.css (${colorsRaw.length} bytes)`);
-
-// root.css = single-import entry point: _reference.css must be first so that
-// @import "tailwindcss" precedes all :root {} declarations (CSS requires @import
-// before any non-@charset/non-@layer rules). Colors are inserted after the
-// reference header; the rest of the bundle follows.
-const [refPart, ...remainingParts] = parts;
-const colorPart = `/* === colors.css === */\n${colorsRaw.trimEnd()}\n`;
-const rootBundled = [refPart, colorPart, ...remainingParts].join("\n");
-writeFileSync(join(distDir, "root.css"), rootBundled);
-
-console.log(`bundled root.css -> dist/root.css (${rootBundled.length} bytes)`);

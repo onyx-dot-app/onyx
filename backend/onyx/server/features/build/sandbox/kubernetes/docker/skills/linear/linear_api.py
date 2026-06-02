@@ -18,6 +18,7 @@ _ENDPOINT = "https://api.linear.app/graphql"
 _PAGE_SIZE = 100
 _DEFAULT_LIMIT = 100
 _IDENT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*-\d+$")
+_HTTP_TIMEOUT_SECONDS = 180
 
 _ISSUE_FIELDS = """
   id identifier title url priority
@@ -48,7 +49,7 @@ def _gql(query: str, variables: dict[str, Any]) -> dict[str, Any]:
         method="POST",
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+    with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_SECONDS) as resp:  # noqa: S310
         return json.loads(resp.read().decode("utf-8"))
 
 

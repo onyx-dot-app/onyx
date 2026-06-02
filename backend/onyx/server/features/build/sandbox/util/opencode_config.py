@@ -1,10 +1,119 @@
-"""Shared opencode configuration generation.
+"""opencode.json builders.
 
-This module provides a centralized way to generate opencode.json configuration
-that is consistent across local and Kubernetes sandbox environments.
+opencode-serve loads config once at startup and does not hot-reload
+(sst/opencode#22213). The K8s + serve path pre-loads every configured
+provider so per-prompt model overrides can cross providers without a
+pod restart; the docker path keeps single-provider per-session config.
 """
 
 from typing import Any
+
+from onyx.server.features.build.sandbox.models import LLMProviderConfig
+
+# 4.6+ supports adaptive thinking; older needs enabled+budgetTokens.
+_ADAPTIVE_THINKING_MODELS = frozenset(
+    {"claude-opus-4-6", "claude-opus-4-7", "claude-sonnet-4-6"}
+)
+
+
+def _model_options(provider: str, model_name: str) -> dict[str, Any]:
+    if provider == "openai":
+        return {"reasoningEffort": "high"}
+    if provider in ("anthropic", "bedrock"):
+        if model_name in _ADAPTIVE_THINKING_MODELS or model_name.startswith(
+            tuple(f"{m}-" for m in _ADAPTIVE_THINKING_MODELS)
+        ):
+            return {"thinking": {"type": "adaptive"}}
+        return {"thinking": {"type": "enabled", "budgetTokens": 16000}}
+    if provider == "google":
+        return {"thinking_budget": 16000, "thinking_level": "high"}
+    if provider == "azure":
+        return {"reasoningEffort": "high"}
+    return {}
+
+
+_PERMISSIONS_TEMPLATE: dict[str, Any] = {
+    "bash": {
+        "rm": "deny",
+        "ssh": "deny",
+        "scp": "deny",
+        "sftp": "deny",
+        "ftp": "deny",
+        "telnet": "deny",
+        "nc": "deny",
+        "netcat": "deny",
+        "tac": "deny",
+        "nl": "deny",
+        "od": "deny",
+        "xxd": "deny",
+        "hexdump": "deny",
+        "strings": "deny",
+        "base64": "deny",
+        "*": "allow",
+    },
+    "edit": {
+        "opencode.json": "deny",
+        "**/opencode.json": "deny",
+        "*": "allow",
+    },
+    "write": {
+        "opencode.json": "deny",
+        "**/opencode.json": "deny",
+        "*": "allow",
+    },
+    "read": {
+        "*": "allow",
+        "opencode.json": "deny",
+        "**/opencode.json": "deny",
+    },
+    "grep": {
+        "*": "allow",
+        "opencode.json": "deny",
+        "**/opencode.json": "deny",
+    },
+    "glob": {
+        "*": "allow",
+        "opencode.json": "deny",
+        "**/opencode.json": "deny",
+    },
+    "list": "allow",
+    "lsp": "allow",
+    "patch": "allow",
+    # Deny opencode's built-in customize-opencode skill (edits opencode.json
+    # via the skill tool, bypassing our edit/write denies). "*" must precede
+    # the named deny — opencode evaluates skill rules with findLast().
+    "skill": {"*": "allow", "customize-opencode": "deny"},
+    "question": "allow",
+    "webfetch": "allow",
+}
+
+
+def _build_permissions(
+    disabled_tools: list[str] | None, dev_mode: bool
+) -> dict[str, Any]:
+    permissions: dict[str, Any] = {
+        k: (v.copy() if isinstance(v, dict) else v)
+        for k, v in _PERMISSIONS_TEMPLATE.items()
+    }
+    permissions["external_directory"] = "allow" if dev_mode else {"*": "deny"}
+    if disabled_tools:
+        for tool in disabled_tools:
+            permissions[tool] = "deny"
+    return permissions
+
+
+def _build_provider_block(
+    provider_config: LLMProviderConfig,
+) -> dict[str, Any]:
+    block: dict[str, Any] = {}
+    if provider_config.api_key:
+        block["options"] = {"apiKey": provider_config.api_key}
+    if provider_config.api_base:
+        block["api"] = provider_config.api_base
+    options = _model_options(provider_config.provider, provider_config.model_name)
+    if options:
+        block["models"] = {provider_config.model_name: {"options": options}}
+    return block
 
 
 def build_opencode_config(
@@ -15,152 +124,68 @@ def build_opencode_config(
     disabled_tools: list[str] | None = None,
     dev_mode: bool = False,
 ) -> dict[str, Any]:
-    """Build opencode.json configuration dict.
+    """Single-provider wrapper around :func:`build_multi_provider_opencode_config`."""
+    return build_multi_provider_opencode_config(
+        providers=[
+            LLMProviderConfig(
+                provider=provider,
+                model_name=model_name,
+                api_key=api_key,
+                api_base=api_base,
+            )
+        ],
+        default_provider=provider,
+        default_model=model_name,
+        disabled_tools=disabled_tools,
+        dev_mode=dev_mode,
+    )
 
-    Creates the configuration structure for the opencode CLI agent with
-    provider-specific settings for thinking/reasoning and tool permissions.
 
-    Args:
-        provider: LLM provider type (e.g., "openai", "anthropic")
-        model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
-        api_key: Optional API key for the provider
-        api_base: Optional custom API base URL
-        disabled_tools: Optional list of tools to disable (e.g., ["question", "webfetch"])
-        dev_mode: If True, allow all external directories. If False (Docker/Kubernetes),
-                  deny all external directories by default.
+def build_multi_provider_opencode_config(
+    providers: list[LLMProviderConfig],
+    default_provider: str,
+    default_model: str,
+    disabled_tools: list[str] | None = None,
+    dev_mode: bool = False,
+    plugins: list[str] | None = None,
+) -> dict[str, Any]:
+    """opencode.json with every provider pre-registered so per-prompt
+    ``body["model"]`` overrides can target any of them.
 
-    Returns:
-        Configuration dict ready to be serialized to JSON
+    ``plugins`` is an optional list of opencode plugin specs (npm names or
+    absolute file paths) loaded once per session Instance.
+
+    Raises:
+        ValueError: If ``providers`` is empty or ``default_provider`` is
+            not in ``providers``.
     """
-    # Build opencode model string: provider/model-name
-    opencode_model = f"{provider}/{model_name}"
+    if not providers:
+        raise ValueError("providers must contain at least one entry")
 
-    # Build configuration with schema
+    seen: set[str] = set()
+    duplicates = [
+        p.provider for p in providers if p.provider in seen or seen.add(p.provider)
+    ]  # type: ignore[func-returns-value]
+    if duplicates:
+        raise ValueError(
+            f"duplicate provider entries: {duplicates!r} — opencode.json "
+            "uses one block per providerID; merge them at the call site"
+        )
+
+    provider_names = {p.provider for p in providers}
+    if default_provider not in provider_names:
+        raise ValueError(
+            f"default_provider={default_provider!r} not in providers"
+            f" {sorted(provider_names)}"
+        )
+
     config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
-        "model": opencode_model,
-        "provider": {},
-        "enabled_providers": [provider],
+        "model": f"{default_provider}/{default_model}",
+        "provider": {p.provider: _build_provider_block(p) for p in providers},
+        "enabled_providers": sorted(provider_names),
+        "permission": _build_permissions(disabled_tools, dev_mode),
     }
-
-    # Build provider configuration
-    provider_config: dict[str, Any] = {}
-
-    # Add API key if provided
-    if api_key:
-        provider_config["options"] = {"apiKey": api_key}
-
-    # Add API base if provided
-    if api_base:
-        provider_config["api"] = api_base
-
-    # Build model configuration with thinking/reasoning options
-    options: dict[str, Any] = {}
-
-    # Models that support adaptive thinking (4.6+). Older models (4.5 and
-    # earlier) require thinking.type: "enabled" with budget_tokens.
-    _ADAPTIVE_THINKING_MODELS = {
-        "claude-opus-4-6",
-        "claude-opus-4-7",
-        "claude-sonnet-4-6",
-    }
-
-    if provider == "openai":
-        options["reasoningEffort"] = "high"
-    elif provider in ("anthropic", "bedrock"):
-        if model_name in _ADAPTIVE_THINKING_MODELS or model_name.startswith(
-            tuple(f"{m}-" for m in _ADAPTIVE_THINKING_MODELS)
-        ):
-            options["thinking"] = {"type": "adaptive"}
-        else:
-            options["thinking"] = {"type": "enabled", "budgetTokens": 16000}
-    elif provider == "google":
-        options["thinking_budget"] = 16000
-        options["thinking_level"] = "high"
-    elif provider == "azure":
-        options["reasoningEffort"] = "high"
-
-    # Add model configuration to provider
-    if options:
-        provider_config["models"] = {
-            model_name: {
-                "options": options,
-            }
-        }
-
-    # Add provider to config
-    config["provider"][provider] = provider_config
-
-    # Set default tool permissions
-    # Order matters: last matching rule wins
-    # Allow all files first, then deny specific files
-    config["permission"] = {
-        "bash": {
-            # Dangerous commands
-            "rm": "deny",
-            "ssh": "deny",
-            "scp": "deny",
-            "sftp": "deny",
-            "ftp": "deny",
-            "telnet": "deny",
-            "nc": "deny",
-            "netcat": "deny",
-            # Block file reading commands to force use of read tool with permissions
-            "tac": "deny",
-            "nl": "deny",
-            "od": "deny",
-            "xxd": "deny",
-            "hexdump": "deny",
-            "strings": "deny",
-            "base64": "deny",
-            "*": "allow",  # Allow other bash commands
-        },
-        "edit": {
-            "opencode.json": "deny",
-            "**/opencode.json": "deny",
-            "*": "allow",
-        },
-        "write": {
-            "opencode.json": "deny",
-            "**/opencode.json": "deny",
-            "*": "allow",
-        },
-        "read": {
-            "*": "allow",
-            "opencode.json": "deny",
-            "**/opencode.json": "deny",
-        },
-        "grep": {
-            "*": "allow",
-            "opencode.json": "deny",
-            "**/opencode.json": "deny",
-        },
-        "glob": {
-            "*": "allow",
-            "opencode.json": "deny",
-            "**/opencode.json": "deny",
-        },
-        "list": "allow",
-        "lsp": "allow",
-        "patch": "allow",
-        "skill": "allow",
-        "question": "allow",
-        "webfetch": "allow",
-        # External directory permissions:
-        # - dev_mode: Allow all external directories for local development
-        # - Docker/Kubernetes: Deny all external directories by default
-        "external_directory": (
-            "allow"
-            if dev_mode
-            else {
-                "*": "deny",  # Deny all external directories by default
-            }
-        ),
-    }
-
-    # Disable specified tools via permissions
-    if disabled_tools:
-        for tool in disabled_tools:
-            config["permission"][tool] = "deny"
-
+    if plugins:
+        config["plugin"] = list(plugins)
     return config

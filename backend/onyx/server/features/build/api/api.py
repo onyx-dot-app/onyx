@@ -1,5 +1,4 @@
 import re
-from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID
 
@@ -20,6 +19,7 @@ from onyx.db.enums import Permission
 from onyx.db.enums import SharingScope
 from onyx.db.models import BuildSession
 from onyx.db.models import User
+from onyx.server.features.build.api.debug_api import router as debug_router
 from onyx.server.features.build.api.external_apps_api import (
     router as external_apps_router,
 )
@@ -31,6 +31,7 @@ from onyx.server.features.build.api.models import RateLimitResponse
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
 from onyx.server.features.build.api.user_library import router as user_library_router
+from onyx.server.features.build.approvals.api import router as approvals_router
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.scheduled_tasks.api import (
@@ -70,6 +71,8 @@ router.include_router(user_library_router, tags=["build"])
 router.include_router(scheduled_tasks_router, tags=["build"])
 router.include_router(external_apps_router, tags=["build"])
 router.include_router(external_apps_oauth_router, tags=["build"])
+router.include_router(debug_router, tags=["build-debug"])
+router.include_router(approvals_router, tags=["build"])
 
 
 # -----------------------------------------------------------------------------
@@ -99,17 +102,9 @@ EXCLUDED_HEADERS = {
 
 # Request headers stripped before forwarding to the sandbox. The sandbox runs
 # LLM-generated webapp code and must never receive the viewer's Onyx
-# credentials, CSRF tokens, or client-identity headers — otherwise a malicious
-# webapp can exfiltrate them (GHSA-v2mx-c9m8-5jrv / GHSA-j6q4-7ghr-53cv).
-#
-# The sandbox webapp is a frontend-only Next.js shell with no callbacks into
-# Onyx, so it does not depend on any of these for correct behavior. The proxy
-# is GET-only; if WebSocket upgrade is ever added, also strip
-# `sec-websocket-protocol`/`sec-websocket-extensions` (can carry bearer tokens).
+# credentials, CSRF tokens, or client-identity headers
 #
 # Entries must be lowercase — the filter compares against `key.lower()`.
-# Any header starting with `x-onyx-` is also stripped (see _is_header_excluded)
-# so future Onyx-internal headers don't silently leak.
 EXCLUDED_REQUEST_HEADERS = {
     # End-to-end but unsafe to forward verbatim.
     "host",
@@ -147,17 +142,6 @@ EXCLUDED_REQUEST_HEADERS = {
     "x-forwarded-email",
     "x-forwarded-preferred-username",
 }
-
-
-def _is_header_excluded(key: str) -> bool:
-    lowered = key.lower()
-    return lowered in EXCLUDED_REQUEST_HEADERS or lowered.startswith("x-onyx-")
-
-
-def _stream_response(response: httpx.Response) -> Iterator[bytes]:
-    """Stream the response content in chunks."""
-    for chunk in response.iter_bytes(chunk_size=8192):
-        yield chunk
 
 
 def _inject_hmr_fixer(content: bytes, session_id: str) -> bytes:
@@ -310,7 +294,10 @@ def _proxy_request(
     forwarded_headers = {
         key: value
         for key, value in request.headers.items()
-        if not _is_header_excluded(key)
+        if not (
+            (lowered := key.lower()) in EXCLUDED_REQUEST_HEADERS
+            or lowered.startswith("x-onyx-")
+        )
     }
 
     try:
@@ -343,7 +330,7 @@ def _proxy_request(
                 )
 
             return StreamingResponse(
-                content=_stream_response(response),
+                content=response.iter_bytes(chunk_size=8192),
                 status_code=response.status_code,
                 headers=response_headers,
                 media_type=content_type or None,

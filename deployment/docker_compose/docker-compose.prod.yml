@@ -34,7 +34,6 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
-      - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
     env_file:
       - path: .env
         required: false
@@ -92,7 +91,6 @@ services:
       # API Server connection for Discord bot message processing
       - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
       - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
-      - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
     env_file:
       - path: .env
         required: false
@@ -328,6 +326,20 @@ services:
       - NGINX_PROXY_CONNECT_TIMEOUT=${NGINX_PROXY_CONNECT_TIMEOUT:-300}
       - NGINX_PROXY_SEND_TIMEOUT=${NGINX_PROXY_SEND_TIMEOUT:-300}
       - NGINX_PROXY_READ_TIMEOUT=${NGINX_PROXY_READ_TIMEOUT:-300}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1/nginx-health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # follows https://pentacent.medium.com/nginx-and-lets-encrypt-with-docker-in-less-than-5-minutes-b4b8a60d3a71
   certbot:

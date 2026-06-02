@@ -4,6 +4,7 @@ import re
 import requests
 from fastapi import APIRouter
 from fastapi import HTTPException
+from fastapi import Response
 
 from onyx import __version__
 from onyx.auth.users import anonymous_user_enabled
@@ -31,7 +32,7 @@ async def healthcheck() -> StatusResponse:
 
 
 @router.get("/auth/type", tags=PUBLIC_API_TAGS)
-async def get_auth_type() -> AuthTypeResponse:
+async def get_auth_type(response: Response) -> AuthTypeResponse:
     # NOTE: This endpoint is critical for the multi-tenant flow and is hit before there is a tenant context
     # The reason is this is used during the login flow, but we don't know which tenant the user is supposed to be
     # associated with until they auth.
@@ -39,6 +40,14 @@ async def get_auth_type() -> AuthTypeResponse:
     if AUTH_TYPE != AuthType.CLOUD:
         user_count = await get_user_count()
         has_users = user_count > 0
+
+    # Cache only after bootstrap; the first user flow depends on a live
+    # has_users flag so avoid serving a stale redirect. no-store in that
+    # case prevents an intermediate CDN with a default TTL from pinning
+    # has_users=false past the first signup.
+    response.headers["Cache-Control"] = (
+        "public, max-age=60" if has_users else "no-store"
+    )
 
     return AuthTypeResponse(
         auth_type=AUTH_TYPE,

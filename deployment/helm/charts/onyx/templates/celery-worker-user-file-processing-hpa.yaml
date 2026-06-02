@@ -2,14 +2,14 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-user-file-processing
+  name: {{ include "onyx.resourceName" (list . "celery-worker-user-file-processing") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "onyx.fullname" . }}-celery-worker-user-file-processing
+    name: {{ include "onyx.resourceName" (list . "celery-worker-user-file-processing") }}
   minReplicas: {{ .Values.celery_worker_user_file_processing.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.celery_worker_user_file_processing.autoscaling.maxReplicas }}
   metrics:

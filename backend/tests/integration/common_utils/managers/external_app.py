@@ -4,6 +4,7 @@ import zipfile
 from typing import Any
 from uuid import uuid4
 
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
@@ -46,6 +47,7 @@ class ExternalAppManager:
         organization_credentials: dict[str, Any],
         enabled: bool = True,
         app_type: ExternalAppType = ExternalAppType.CUSTOM,
+        action_policies: dict[str, EndpointPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
         return ExternalAppManager._upsert(
             user_performing_action,
@@ -57,6 +59,7 @@ class ExternalAppManager:
             auth_template,
             organization_credentials,
             enabled,
+            action_policies,
         )
 
     @staticmethod
@@ -70,6 +73,7 @@ class ExternalAppManager:
         organization_credentials: dict[str, Any],
         enabled: bool = True,
         app_type: ExternalAppType = ExternalAppType.CUSTOM,
+        action_policies: dict[str, EndpointPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
         return ExternalAppManager._upsert(
             user_performing_action,
@@ -81,6 +85,7 @@ class ExternalAppManager:
             auth_template,
             organization_credentials,
             enabled,
+            action_policies,
         )
 
     @staticmethod
@@ -94,6 +99,7 @@ class ExternalAppManager:
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
         enabled: bool,
+        action_policies: dict[str, EndpointPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
         # Custom (bundle-backed) apps go through the multipart endpoint so a
         # bundle can be uploaded; built-in providers use the JSON endpoint.
@@ -118,6 +124,7 @@ class ExternalAppManager:
                 auth_template=auth_template,
                 organization_credentials=organization_credentials,
                 enabled=enabled,
+                action_policies=action_policies,
             )
             response = client.post(
                 f"{_BUILD_PREFIX}/admin/apps",
