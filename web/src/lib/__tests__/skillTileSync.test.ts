@@ -21,14 +21,18 @@ describe("skill tile stays in sync with the Opal Tag + sparkle icon", () => {
     });
   }
 
-  it("mirrors the real SvgSparkle path", () => {
+  it("mirrors the real SvgSparkle path + stroke-linecap", () => {
     const { container } = render(createElement(SvgSparkle));
     const realPath = container.querySelector("path")?.getAttribute("d");
+    const realCap = container
+      .querySelector("[stroke-linecap]")
+      ?.getAttribute("stroke-linecap");
     expect(realPath).toBeTruthy();
-    const tilePath = skillTile()
-      .querySelector(".rich-input-tile-icon path")
-      ?.getAttribute("d");
-    expect(tilePath).toBe(realPath);
+    expect(realCap).toBeTruthy();
+
+    const tileIcon = skillTile().querySelector(".rich-input-tile-icon");
+    expect(tileIcon?.querySelector("path")?.getAttribute("d")).toBe(realPath);
+    expect(tileIcon?.getAttribute("stroke-linecap")).toBe(realCap);
   });
 
   it("sources fill + text colors from TAG_COLORS.blue", () => {

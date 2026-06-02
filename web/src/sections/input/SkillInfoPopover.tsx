@@ -21,6 +21,15 @@ function SkillInfoPopover({
 }: SkillInfoPopoverProps) {
   const [rect, setRect] = useState(() => tileElement.getBoundingClientRect());
   const rafId = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Move focus into the popover on open so screen readers announce it and it's
+  // reachable by keyboard, then restore focus (to the input) on dismiss.
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    containerRef.current?.focus();
+    return () => previous?.focus?.();
+  }, []);
 
   const updateRect = useCallback(() => {
     if (rafId.current !== null) return;
@@ -97,12 +106,16 @@ function SkillInfoPopover({
         onClick={onDismiss}
       />
       <div
+        ref={containerRef}
         role="note"
         aria-label={`Skill: ${name}`}
+        tabIndex={-1}
         data-testid="skill-info-popover"
-        className="fixed z-50 flex flex-col gap-1 bg-background-neutral-00 border border-border-01 rounded-08 shadow-02 p-3 max-w-[320px] max-h-[15rem] overflow-y-auto"
+        className="fixed z-50 flex flex-col gap-1 bg-background-neutral-00 border border-border-01 rounded-08 shadow-02 p-3 overflow-y-auto outline-hidden"
         style={{
           left: Math.max(GAP, left),
+          maxWidth: POPOVER_MAX_W,
+          maxHeight: POPOVER_MAX_H,
           ...(fitsBelow
             ? { top: rect.bottom + GAP }
             : { bottom: window.innerHeight - rect.top + GAP }),

@@ -54,6 +54,8 @@ interface IconSpec {
   viewBox: string;
   size: number;
   strokeWidth: number;
+  /** Mirror the source icon's linecap (e.g. SvgSparkle uses "square"). */
+  strokeLinecap: "round" | "square";
 }
 
 // Icon per tile type. Keyed by RichTileConfig.type; falls back to "paste".
@@ -63,12 +65,14 @@ const TILE_ICONS: Record<string, IconSpec> = {
     viewBox: "0 0 16 16",
     size: 14,
     strokeWidth: 1.5,
+    strokeLinecap: "round",
   },
   skill: {
     paths: [SPARKLE_PATH],
     viewBox: "0 0 16 16",
     size: 14,
     strokeWidth: 1.5,
+    strokeLinecap: "square",
   },
 };
 
@@ -76,7 +80,8 @@ function createSvgIcon(
   paths: string[],
   viewBox: string,
   size: number,
-  strokeWidth: number
+  strokeWidth: number,
+  strokeLinecap: "round" | "square" = "round"
 ): SVGSVGElement {
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
@@ -86,7 +91,7 @@ function createSvgIcon(
   svg.setAttribute("fill", "none");
   svg.setAttribute("stroke", "currentColor");
   svg.setAttribute("stroke-width", String(strokeWidth));
-  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linecap", strokeLinecap);
   svg.setAttribute("stroke-linejoin", "round");
   for (const path of paths) {
     const pathEl = document.createElementNS(ns, "path");
@@ -138,7 +143,8 @@ export function createRichInputTileNode(
     iconSpec.paths,
     iconSpec.viewBox,
     iconSpec.size,
-    iconSpec.strokeWidth
+    iconSpec.strokeWidth,
+    iconSpec.strokeLinecap
   );
   icon.classList.add("rich-input-tile-icon");
   if (isSkill) icon.classList.add(...TAG_COLORS.blue.text.split(" "));

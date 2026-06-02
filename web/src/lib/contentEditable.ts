@@ -128,11 +128,10 @@ export function getTextContent(element: HTMLElement): string {
 }
 
 /**
- * Remove the stray leading `<br>` Chrome inserts when the last text on the
- * first "line" is deleted ahead of an inline contentEditable=false tile,
- * leaving a blank line above it. Scoped to a `<br>` immediately followed by a
- * rich tile so it never touches a user-authored leading newline. Returns
- * whether anything was removed.
+ * Remove the stray leading `<br>` Chrome inserts when the last char before a
+ * leading inline tile is deleted. Scoped to a `<br>` immediately followed by a
+ * rich tile so a normal leading newline (followed by text) is preserved.
+ * Returns whether anything was removed.
  */
 export function stripLeadingBr(el: HTMLElement): boolean {
   const first = el.firstChild;
@@ -151,16 +150,15 @@ export function stripLeadingBr(el: HTMLElement): boolean {
 // ─── Token Deletion (rich-tile insertion) ───────────────────────────────────
 
 /**
- * Delete `text` immediately before (`direction: "before"`) or after the
- * collapsed cursor, but only after verifying the characters to remove equal
- * `text` (else bail + restore the caret). Returns whether they were removed.
+ * Delete `token` immediately before the collapsed cursor, but only after
+ * verifying the characters to remove equal it (else bail + restore the caret).
+ * Returns whether the token was removed.
  */
-function deleteAdjacentText(
+export function deleteTokenBeforeCursor(
   el: HTMLElement,
-  text: string,
-  direction: "before" | "after"
+  token: string
 ): boolean {
-  const n = text.length;
+  const n = token.length;
   if (n <= 0) return false;
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return false;
@@ -168,30 +166,25 @@ function deleteAdjacentText(
   if (!range.collapsed || !el.contains(range.startContainer)) return false;
 
   const { startContainer, startOffset } = range;
-  const before = direction === "before";
 
-  // Fast path: the text lives entirely within the caret's text node.
-  if (startContainer.nodeType === Node.TEXT_NODE) {
-    const tc = startContainer.textContent ?? "";
-    const start = before ? startOffset - n : startOffset;
-    const end = before ? startOffset : startOffset + n;
-    if (start >= 0 && end <= tc.length && tc.slice(start, end) === text) {
-      if (before) range.setStart(startContainer, start);
-      else range.setEnd(startContainer, end);
-      range.deleteContents();
-      sel.removeAllRanges();
-      sel.addRange(range);
-      return true;
-    }
+  // Fast path: the token lives entirely within the caret's text node.
+  if (
+    startContainer.nodeType === Node.TEXT_NODE &&
+    startOffset >= n &&
+    startContainer.textContent?.slice(startOffset - n, startOffset) === token
+  ) {
+    range.setStart(startContainer, startOffset - n);
+    range.deleteContents();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return true;
   }
 
-  // Fallback for node-spanning text; modify is absent in jsdom.
+  // Fallback for node-spanning tokens; modify is absent in jsdom.
   if (typeof sel.modify !== "function") return false;
-  const steps = Array.from(text).length; // code points, not UTF-16 units
-  for (let i = 0; i < steps; i++) {
-    sel.modify("extend", before ? "backward" : "forward", "character");
-  }
-  if (sel.toString() === text) {
+  const steps = Array.from(token).length; // code points, not UTF-16 units
+  for (let i = 0; i < steps; i++) sel.modify("extend", "backward", "character");
+  if (sel.toString() === token) {
     sel.deleteFromDocument();
     return true;
   }
@@ -201,15 +194,4 @@ function deleteAdjacentText(
   sel.removeAllRanges();
   sel.addRange(restored);
   return false;
-}
-
-export function deleteTokenBeforeCursor(
-  el: HTMLElement,
-  token: string
-): boolean {
-  return deleteAdjacentText(el, token, "before");
-}
-
-export function deleteTextAfterCursor(el: HTMLElement, text: string): boolean {
-  return deleteAdjacentText(el, text, "after");
 }

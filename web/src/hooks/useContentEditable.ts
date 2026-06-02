@@ -7,7 +7,6 @@ import {
   insertNodeAtCursor as insertNodeAtCursorUtil,
   getTextContent,
   deleteTokenBeforeCursor,
-  deleteTextAfterCursor,
   stripLeadingBr,
 } from "@/lib/contentEditable";
 import {
@@ -40,17 +39,8 @@ export interface UseContentEditableReturn {
   handleCompositionEnd: () => void;
   insertTextAtCursor: (text: string) => void;
   insertTileAtCursor: (text: string) => void;
-  /**
-   * Insert a skill tile, removing the slash token around the caret: `beforeToken`
-   * (the `/<query>` before the caret) and `afterText` (any remaining token
-   * characters after the caret).
-   */
-  insertSkillTile: (
-    slug: string,
-    name: string,
-    beforeToken: string,
-    afterText: string
-  ) => void;
+  /** Insert a skill tile, replacing `beforeToken` (the `/<query>` before the caret). */
+  insertSkillTile: (slug: string, name: string, beforeToken: string) => boolean;
   pasteText: (text: string) => void;
   handleCopy: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   handleCut: (event: React.ClipboardEvent<HTMLDivElement>) => void;
@@ -288,13 +278,14 @@ export function useContentEditable({
   );
 
   const insertSkillTile = useCallback(
-    (slug: string, name: string, beforeToken: string, afterText: string) => {
+    (slug: string, name: string, beforeToken: string): boolean => {
       const el = ref.current;
-      if (!el) return;
-      // Bail if the `/<query>` can't be removed — the tile serializes back to
-      // `/<slug> `, so inserting over a surviving `/<query>` would duplicate it.
-      if (!deleteTokenBeforeCursor(el, beforeToken)) return;
-      deleteTextAfterCursor(el, afterText);
+      if (!el) return false;
+      // Replacing a typed `/<query>`: bail if it can't be verifiably removed,
+      // since the tile serializes back to `/<slug> ` and would duplicate it. An
+      // empty `beforeToken` (e.g. paste) just inserts at the caret.
+      if (beforeToken && !deleteTokenBeforeCursor(el, beforeToken))
+        return false;
       const tile = createRichInputTileNode({
         type: SKILL_TILE_TYPE,
         text: `/${slug} `,
@@ -302,10 +293,10 @@ export function useContentEditable({
         meta: "",
         skillSlug: slug,
       });
-      insertNodeAtCursorUtil(el, tile);
-      setCursorAfterNode(tile);
+      insertNodeAtCursorUtil(el, tile); // also places the caret after the tile
       syncFromDOM();
       resize();
+      return true;
     },
     [syncFromDOM, resize]
   );
@@ -462,22 +453,11 @@ export function useContentEditable({
         const selected = selectedTileRef.current;
 
         if (isNav) {
-          // Arrow on selected tile → deselect and move cursor past it
-          event.preventDefault();
+          // Deselect; let the native arrow collapse the selection to the right
+          // edge (it renders the caret correctly, unlike a manual tile-boundary
+          // range, which had no caret rect and needed a second press).
           clearTileSelection();
-          if (event.key === "ArrowRight") {
-            setCursorAfterNode(selected);
-          } else {
-            const s = window.getSelection();
-            if (s) {
-              const r = document.createRange();
-              r.setStartBefore(selected);
-              r.collapse(true);
-              s.removeAllRanges();
-              s.addRange(r);
-            }
-          }
-          return true;
+          return false;
         }
 
         if (isDelete) {

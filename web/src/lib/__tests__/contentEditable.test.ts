@@ -5,7 +5,6 @@
 import {
   getTextContent,
   deleteTokenBeforeCursor,
-  deleteTextAfterCursor,
   stripLeadingBr,
 } from "@/lib/contentEditable";
 import {
@@ -275,24 +274,6 @@ describe("deleteTokenBeforeCursor", () => {
     const el = mount("hi");
     caretAt(el.firstChild as Text, 2);
     expect(deleteTokenBeforeCursor(el, "")).toBe(false);
-    el.remove();
-  });
-});
-
-describe("deleteTextAfterCursor", () => {
-  it("removes the exact text after the caret and returns true", () => {
-    const el = mount("/pptx hi");
-    caretAt(el.firstChild as Text, 0);
-    expect(deleteTextAfterCursor(el, "/pptx")).toBe(true);
-    expect(getTextContent(el)).toBe(" hi");
-    el.remove();
-  });
-
-  it("returns false when the text would overrun the node", () => {
-    const el = mount("ab");
-    caretAt(el.firstChild as Text, 0);
-    expect(deleteTextAfterCursor(el, "abc")).toBe(false);
-    expect(getTextContent(el)).toBe("ab");
     el.remove();
   });
 });
