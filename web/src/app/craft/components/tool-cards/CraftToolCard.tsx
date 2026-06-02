@@ -230,10 +230,7 @@ export default function CraftToolCard({
           <CollapsibleTrigger asChild>
             <button className={triggerClass}>{headerRow}</button>
           </CollapsibleTrigger>
-          <CollapsibleContent>
-            {/* Flush, no horizontal padding so the body extends from the trigger. */}
-            <div className="pt-0 pb-2">{renderBody(toolCall)}</div>
-          </CollapsibleContent>
+          <CollapsibleContent>{renderBody(toolCall)}</CollapsibleContent>
         </Collapsible>
       ) : (
         <div className={triggerClass}>{headerRow}</div>

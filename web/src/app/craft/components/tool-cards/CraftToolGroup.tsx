@@ -3,24 +3,22 @@
 import { useEffect, useRef, useState } from "react";
 import { Tag, Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgChevronDown } from "@opal/icons";
+import { SvgCheckAll, SvgChevronDown } from "@opal/icons";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
-import {
-  getStatusDisplay,
-  getToolIcon,
-  SvgLoader,
-} from "@/app/craft/components/tool-cards/helpers";
+import { SvgLoader } from "@/app/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 
 interface CraftToolGroupProps {
   toolCalls: ToolCallState[];
   /** Once an assistant message follows, animate the block closed. */
   autoCollapse?: boolean;
+  /** Override the initial open/closed state (useful in Storybook). */
+  defaultOpen?: boolean;
 }
 
 function aggregateStatus(toolCalls: ToolCallState[]): ToolCallState["status"] {
@@ -36,52 +34,40 @@ function aggregateStatus(toolCalls: ToolCallState[]): ToolCallState["status"] {
 function renderStatusIcon(toolCalls: ToolCallState[]) {
   const baseClass = "size-4 shrink-0";
   const aggregate = aggregateStatus(toolCalls);
-  const display = getStatusDisplay(aggregate);
-  if (display.showSpinner) {
+  if (aggregate === "in_progress") {
     return (
       <SvgLoader
         className={cn(baseClass, "stroke-status-info-05 animate-spin")}
       />
     );
   }
-  const StatusIcon = display.icon;
-  if (StatusIcon) {
-    return <StatusIcon className={cn(baseClass, display.iconClass)} />;
-  }
-  const ToolIcon = getToolIcon(toolCalls[0]!.kind);
-  return <ToolIcon className={cn(baseClass, "stroke-text-03")} />;
+  return <SvgCheckAll className={cn(baseClass, "stroke-text-03")} />;
 }
 
 export default function CraftToolGroup({
   toolCalls,
   autoCollapse = false,
+  defaultOpen,
 }: CraftToolGroupProps) {
   const aggregate = aggregateStatus(toolCalls);
-  const hasFailure = aggregate === "failed";
-  // Open while the run is active (or on failure) so streaming calls stay
-  // visible and nothing collapses as new calls append; settled groups (e.g.
-  // re-rendered history) start collapsed.
+  // Open while the run is active so streaming calls stay visible and nothing
+  // collapses as new calls append; settled groups start collapsed.
   const [isOpen, setIsOpen] = useState(
-    aggregate === "in_progress" || hasFailure
+    defaultOpen ?? aggregate === "in_progress"
   );
   const failedCount = toolCalls.filter((t) => t.status === "failed").length;
 
   // Fold closed once a message follows; fire once so a manual re-open sticks.
   const didAutoCollapse = useRef(false);
   useEffect(() => {
-    if (autoCollapse && !hasFailure && !didAutoCollapse.current) {
+    if (autoCollapse && !didAutoCollapse.current) {
       didAutoCollapse.current = true;
       setIsOpen(false);
     }
-  }, [autoCollapse, hasFailure]);
+  }, [autoCollapse]);
 
   return (
-    <div
-      className={cn(
-        "rounded-08 overflow-hidden",
-        hasFailure && "border border-status-error-03 bg-status-error-00"
-      )}
-    >
+    <div className="rounded-08 overflow-hidden">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger asChild>
           <button
@@ -96,12 +82,8 @@ export default function CraftToolGroup({
                 Working
               </Text>
               <span className="ml-auto shrink-0 flex items-center gap-2">
-                {hasFailure && failedCount > 0 && (
-                  <Tag
-                    title={`${failedCount} failed`}
-                    size="sm"
-                    color="amber"
-                  />
+                {failedCount > 0 && (
+                  <Tag title={`${failedCount} failed`} size="sm" color="red" />
                 )}
                 <Tag
                   title={`${toolCalls.length} calls`}
