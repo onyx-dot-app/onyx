@@ -283,10 +283,6 @@ class TestRestoreFailureRecovery:
             "onyx.server.features.build.api.sessions_api.get_sandbox_manager",
             lambda: stub_sandbox_manager,
         )
-        monkeypatch.setattr(
-            "onyx.server.features.build.session.manager.SessionManager._get_llm_config",
-            lambda _self, *_a, **_kw: default_llm_config(),
-        )
 
         with pytest.raises(HTTPException) as exc_info:
             restore_session(
