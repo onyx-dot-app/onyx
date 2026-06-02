@@ -136,7 +136,7 @@ def _persist_overrides(
     lock = cache.lock(OnyxRedisLocks.SECURITY_SETTINGS, timeout=_LOCK_LEASE_SECONDS)
     if not lock.acquire(blocking=True, blocking_timeout=_LOCK_WAIT_SECONDS):
         raise OnyxError(
-            OnyxErrorCode.INTERNAL_ERROR,
+            OnyxErrorCode.CONFLICT,
             "Another security settings save is in progress, please retry.",
         )
 
