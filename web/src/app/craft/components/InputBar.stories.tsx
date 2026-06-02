@@ -289,7 +289,7 @@ const TILE_PASTE_TEXT = `def fibonacci(n: int) -> int:
 
 /**
  * Shows the inline rich tiles inside the input: a blue skill tile (from the
- * slash-skill picker) and a paste tile (from collapsing a large paste). The
+ * slash-skill picker) and a gray paste tile (from collapsing a large paste). The
  * tiles are real DOM nodes built by `createRichInputTileNode` — the same path
  * the live input uses — injected into the contentEditable and synced via an
  * `input` event so the placeholder clears and the message serializes correctly.
