@@ -134,6 +134,7 @@ const BaseInputBar = memo(
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
         pasteTilesEnabled,
+        disabled,
       });
 
       const queueNav = useQueuedMessageNavigation({
