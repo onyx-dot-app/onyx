@@ -1,4 +1,7 @@
-import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
+import {
+  useBuildSessionStore,
+  waitForWebappReady,
+} from "@/app/craft/hooks/useBuildSessionStore";
 import * as api from "@/app/craft/services/apiServices";
 
 jest.mock("@/app/craft/services/apiServices");
@@ -27,6 +30,10 @@ function runningSession(): unknown {
   };
 }
 
+function webappInfo(has_webapp: boolean, ready: boolean): unknown {
+  return { has_webapp, webapp_url: null, status: "running", ready };
+}
+
 describe("loadSession restore status", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -36,6 +43,10 @@ describe("loadSession restore status", () => {
     } as never);
     mockedApi.fetchMessages.mockResolvedValue([] as never);
     mockedApi.fetchArtifacts.mockResolvedValue([] as never);
+    // Default: webapp already serving, so the readiness gate is a no-op.
+    mockedApi.fetchWebappInfo.mockResolvedValue(
+      webappInfo(true, true) as never
+    );
   });
 
   it("keeps the sandbox running when the post-restore artifact fetch fails", async () => {
@@ -59,5 +70,66 @@ describe("loadSession restore status", () => {
 
     const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
     expect(session?.sandbox?.status).toBe("failed");
+  });
+
+  it("waits for the webapp before flipping to running, then shows running", async () => {
+    mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
+    mockedApi.restoreSession.mockResolvedValue(runningSession() as never);
+    // Webapp not ready on the first poll, ready on the second.
+    mockedApi.fetchWebappInfo
+      .mockResolvedValueOnce(webappInfo(true, false) as never)
+      .mockResolvedValue(webappInfo(true, true) as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    // It consulted webapp readiness, and the final state is running.
+    expect(mockedApi.fetchWebappInfo).toHaveBeenCalled();
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    expect(session?.sandbox?.status).toBe("running");
+  });
+});
+
+describe("waitForWebappReady", () => {
+  afterEach(() => jest.clearAllMocks());
+
+  it("returns immediately when the session has no webapp", async () => {
+    mockedApi.fetchWebappInfo.mockResolvedValue(
+      webappInfo(false, false) as never
+    );
+    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns immediately when the webapp is already ready", async () => {
+    mockedApi.fetchWebappInfo.mockResolvedValue(
+      webappInfo(true, true) as never
+    );
+    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(1);
+  });
+
+  it("polls until the webapp reports ready", async () => {
+    mockedApi.fetchWebappInfo
+      .mockResolvedValueOnce(webappInfo(true, false) as never)
+      .mockResolvedValueOnce(webappInfo(true, false) as never)
+      .mockResolvedValue(webappInfo(true, true) as never);
+    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(3);
+  });
+
+  it("gives up after maxAttempts when the webapp never comes up", async () => {
+    mockedApi.fetchWebappInfo.mockResolvedValue(
+      webappInfo(true, false) as never
+    );
+    await waitForWebappReady(SESSION_ID, { intervalMs: 0, maxAttempts: 3 });
+    expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps polling through transient fetch errors", async () => {
+    mockedApi.fetchWebappInfo
+      .mockRejectedValueOnce(new Error("sandbox not reachable"))
+      .mockResolvedValue(webappInfo(true, true) as never);
+    await waitForWebappReady(SESSION_ID, { intervalMs: 0 });
+    expect(mockedApi.fetchWebappInfo).toHaveBeenCalledTimes(2);
   });
 });

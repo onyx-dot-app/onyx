@@ -42,6 +42,7 @@ import {
   deleteSession as apiDeleteSession,
   fetchMessages,
   fetchArtifacts,
+  fetchWebappInfo,
   restoreSession,
 } from "@/app/craft/services/apiServices";
 
@@ -748,6 +749,34 @@ const createInitialSessionData = (
 // =============================================================================
 // Store
 // =============================================================================
+
+// Restore re-launches the Next.js dev server fire-and-forget, so the backend
+// reports the sandbox RUNNING before the webapp actually serves. Poll
+// webapp-info until it reports ready (or the session has no webapp), so the
+// caller can keep showing "Restoring…" until the preview is live. Bounded by
+// maxAttempts so a webapp that never comes up doesn't pin the chip forever.
+export async function waitForWebappReady(
+  sessionId: string,
+  { intervalMs = 1500, maxAttempts = 20 }: WaitForWebappReadyOptions = {}
+): Promise<void> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let info: Awaited<ReturnType<typeof fetchWebappInfo>> | null = null;
+    try {
+      info = await fetchWebappInfo(sessionId);
+    } catch {
+      // Transient (sandbox not reachable yet) — keep polling.
+    }
+    // Done once we get a definitive answer: no webapp, or it's serving. A
+    // transient error (info null) falls through and we keep polling.
+    if (info && (!info.has_webapp || info.ready)) return;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
+interface WaitForWebappReadyOptions {
+  intervalMs?: number;
+  maxAttempts?: number;
+}
 
 export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   currentSessionId: null,
@@ -1552,14 +1581,23 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           return;
         }
 
-        // Restore succeeded — reflect the real status; bump webappNeedsRefresh
-        // so OutputPanel's SWR refetches webapp-info.
+        // Restore relaunched the webapp dev server fire-and-forget. Keep the
+        // chip on "restoring" and bump webappNeedsRefresh so OutputPanel
+        // refetches webapp-info, then wait for the webapp to actually serve
+        // before flipping the sandbox to its real (running) status.
         updateSessionData(sessionId, {
           status: sessionData.status === "active" ? "active" : "idle",
-          sandbox: sessionData.sandbox,
+          sandbox: sessionData.sandbox
+            ? { ...sessionData.sandbox, status: "restoring" }
+            : sessionData.sandbox,
           webappNeedsRefresh:
             (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
         });
+
+        await waitForWebappReady(sessionId);
+
+        // Webapp is serving (or we timed out) — show the real sandbox status.
+        updateSessionData(sessionId, { sandbox: sessionData.sandbox });
 
         // Artifacts hit the sandbox and can fail transiently right after the
         // pod comes up — that must NOT flip the sandbox to "failed". SWR retries.
