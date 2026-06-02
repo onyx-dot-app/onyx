@@ -4,10 +4,9 @@ import { useMemo, useState } from "react";
 import { Table, createTableColumns } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { Button } from "@opal/components";
-import { SvgDownload } from "@opal/icons";
+import { SvgDownload, SvgSimpleLoader } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
 import { timeAgo } from "@opal/time";
 import Text from "@/refresh-components/texts/Text";
@@ -187,7 +186,7 @@ export default function UsersTable({
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <SimpleLoader className="h-6 w-6" />
+        <SvgSimpleLoader className="h-6 w-6" />
       </div>
     );
   }

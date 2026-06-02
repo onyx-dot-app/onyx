@@ -35,13 +35,18 @@ import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { InputTypeIn } from "@opal/components";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ActionLineItem from "@/refresh-components/popovers/ActionsPopover/ActionLineItem";
 import MCPLineItem, {
   MCPServer,
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
+import {
+  SvgActions,
+  SvgChevronRight,
+  SvgKey,
+  SvgSliders,
+  SvgSimpleLoader,
+} from "@opal/icons";
 import { Button } from "@opal/components";
 
 function buildTooltipMessage(
@@ -716,7 +721,7 @@ export default function ActionsPopover({
   const mcpFooter = showActiveReauthRow ? (
     <LineItem
       onClick={handleFooterReauthClick}
-      icon={selectedMcpServerData?.isLoading ? SimpleLoader : SvgKey}
+      icon={selectedMcpServerData?.isLoading ? SvgSimpleLoader : SvgKey}
       rightChildren={
         <Button icon={SvgChevronRight} prominence="tertiary" size="sm" />
       }

@@ -8,7 +8,6 @@ import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/app/app/projects/projectsService";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import Modal from "@/refresh-components/Modal";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
@@ -21,6 +20,7 @@ import {
   SvgPlusCircle,
   SvgTrash,
   SvgXCircle,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import useFilter from "@/hooks/useFilter";
@@ -31,7 +31,7 @@ function getIcon(
   file: ProjectFile,
   isProcessing: boolean
 ): React.FunctionComponent<IconProps> {
-  if (isProcessing) return SimpleLoader;
+  if (isProcessing) return SvgSimpleLoader;
   const ext = getFileExtension(file.name).toLowerCase();
   if (isImageExtension(ext)) return SvgImage;
   return SvgFileText;
