@@ -997,10 +997,8 @@ class Document(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
 
-    # Set when a metadata sync succeeded on PRESENT but the FUTURE (secondary) index
-    # did not yet contain the doc (404 during a reindex port). The port writes the doc
-    # later with current fields; until then the swap must wait for these to drain.
-    # Default-false; only ever True during an active port.
+    # True when a metadata sync hit PRESENT but the doc wasn't in FUTURE yet
+    # (reindex port). Cleared once a later sync reaches FUTURE; the swap waits on these.
     secondary_only_sync_pending: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
@@ -1085,8 +1083,7 @@ class Document(Base):
             "id",
             postgresql_where=text("last_modified > last_synced OR last_synced IS NULL"),
         ),
-        # Supports the reindex-port swap criterion: "no docs with a pending
-        # FUTURE-only sync remain". Tiny/empty outside an active port.
+        # for the reindex-port swap criterion sweep
         Index(
             "ix_document_secondary_only_sync_pending",
             "id",
@@ -2301,10 +2298,8 @@ class IndexAttempt(Base):
         back_populates="index_attempts",
         primaryjoin="IndexAttempt.targeted_reindex_job_id == TargetedReindexJob.id",
     )
-    # True on the synthetic SUCCESS attempt inserted at FUTURE SearchSettings
-    # creation to seed the resume cursor for the reindex port's FUTURE-incremental
-    # poll. NOT a connector run. Default-false; consumer-query exclusion (get_last_attempt
-    # etc.) is handled in a later port phase.
+    # Marks the synthetic seed attempt for the reindex port's FUTURE poll cursor
+    # (not a connector run).
     is_synthetic_seed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
@@ -2450,15 +2445,8 @@ class IndexAttempt(Base):
 
 
 class PortAttempt(Base):
-    """
-    One attempt to port a cc_pair's existing chunks from the PRESENT index into
-    the FUTURE index, re-embedding under FUTURE settings. Separate from
-    IndexAttempt: different cursor shape (doc-id cursor vs. source-timestamp
-    range) and lifecycle. Reads the index directly — never re-fetches the source.
-
-    A partial unique index allows at most one active (NOT_STARTED/IN_PROGRESS)
-    attempt per (cc_pair, FUTURE search_settings); terminal rows may accumulate.
-    """
+    """One attempt to port a cc_pair's chunks from PRESENT into the FUTURE index,
+    re-embedding under FUTURE settings. Doc-id cursor, distinct from IndexAttempt."""
 
     __tablename__ = "port_attempt"
 
@@ -2469,8 +2457,7 @@ class PortAttempt(Base):
         nullable=False,
         index=True,
     )
-    # The FUTURE SearchSettings being filled.
-    search_settings_id: Mapped[int] = mapped_column(
+    search_settings_id: Mapped[int] = mapped_column(  # the FUTURE settings
         ForeignKey("search_settings.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -2517,9 +2504,8 @@ class PortAttempt(Base):
     )
     search_settings: Mapped["SearchSettings"] = relationship("SearchSettings")
 
+    # at most one active attempt per (cc_pair, FUTURE)
     __table_args__ = (
-        # Enum(native_enum=False) stores the member NAME, so the predicate uses
-        # uppercase 'NOT_STARTED'/'IN_PROGRESS' (NOT the lowercase values).
         Index(
             "ix_port_attempt_active_unique",
             "cc_pair_id",

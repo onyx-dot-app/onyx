@@ -4,11 +4,8 @@ Revision ID: d49e41659191
 Revises: 4d545225fd82
 Create Date: 2026-06-02 15:44:59.857241
 
-Phase 1 (additive only) of the reindexing port feature:
-  - new `port_attempt` table (one attempt per cc_pair to port chunks PRESENT->FUTURE)
-  - `index_attempt.is_synthetic_seed` flag (marks the FUTURE-incremental seed attempt)
-  - `document.secondary_only_sync_pending` flag (FUTURE metadata write deferred)
-All defaults are safe; existing rows read as if the new flow does not exist.
+Reindexing port, phase 1 (additive): port_attempt table +
+index_attempt.is_synthetic_seed + document.secondary_only_sync_pending.
 """
 
 from alembic import op
@@ -67,8 +64,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    # At most one active (NOT_STARTED/IN_PROGRESS) attempt per (cc_pair, FUTURE).
-    # Enum(native_enum=False) stores the member NAME, so the predicate is uppercase.
+    # one active attempt per (cc_pair, FUTURE); predicate is uppercase (stored name)
     op.create_index(
         "ix_port_attempt_active_unique",
         "port_attempt",
