@@ -1,25 +1,38 @@
 "use client";
 
 import { useState, useCallback, type ReactNode } from "react";
-import { Button, Popover, Text } from "@opal/components";
-import {
-  SvgChevronRight,
-  SvgPaperclip,
-  SvgPlus,
-  SvgSparkle,
-} from "@opal/icons";
+import { Button, Popover } from "@opal/components";
+import { SvgChevronRight, SvgPlus } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
-import type { PickerEntry, PickerSections } from "@/lib/skills/picker";
 
-type FlyoutSection = "skills" | "apps";
+// A single entry inside a flyout panel.
+export interface PlusMenuFlyoutItem {
+  key: string;
+  label: string;
+  icon?: IconFunctionComponent;
+  description?: string;
+  /** Right-aligned content (e.g. a shortcut hint or "Connect" label). */
+  rightContent?: ReactNode;
+  onSelect: () => void;
+}
+
+// A top-level menu row. Either a direct action (`onSelect`) or a flyout row
+// (`flyoutItems`) that opens a panel to the right.
+export interface PlusMenuItem {
+  key: string;
+  label: string;
+  icon: IconFunctionComponent;
+  onSelect?: () => void;
+  flyoutItems?: PlusMenuFlyoutItem[];
+}
 
 export interface PlusMenuButtonProps {
-  sections: PickerSections;
-  onSelectEntry: (entry: PickerEntry) => void;
-  onAttachFiles: () => void;
+  /** Menu rows. A `null` entry renders as a divider. */
+  items: Array<PlusMenuItem | null>;
   disabled?: boolean;
+  tooltip?: string;
+  ariaLabel?: string;
 }
 
 interface FlyoutRowProps {
@@ -71,119 +84,71 @@ function FlyoutRow({
 }
 
 export function PlusMenuButton({
-  sections,
-  onSelectEntry,
-  onAttachFiles,
+  items,
   disabled = false,
+  tooltip = "Add",
+  ariaLabel = "Open add menu",
 }: PlusMenuButtonProps) {
   const [open, setOpen] = useState(false);
-  const [openSection, setOpenSection] = useState<FlyoutSection | null>(null);
+  const [openKey, setOpenKey] = useState<string | null>(null);
 
   const close = useCallback(() => {
     setOpen(false);
-    setOpenSection(null);
+    setOpenKey(null);
   }, []);
 
-  const handleSelectEntry = useCallback(
-    (entry: PickerEntry) => {
-      onSelectEntry(entry);
-      close();
-    },
-    [onSelectEntry, close]
-  );
+  // Single flyout open at a time. Functional updates keep the open/close
+  // events from sibling nested popovers from racing each other.
+  const flyoutOpenChange = useCallback((key: string, next: boolean) => {
+    setOpenKey((prev) => (next ? key : prev === key ? null : prev));
+  }, []);
 
-  const handleAttachFiles = useCallback(() => {
-    onAttachFiles();
-    close();
-  }, [onAttachFiles, close]);
+  const menuChildren: ReactNode[] = items.map((item) => {
+    if (item === null) return null;
 
-  // Single section open at a time. Functional updates keep the open/close
-  // events from the two nested popovers from racing each other.
-  const sectionOpenChange = useCallback(
-    (section: FlyoutSection, next: boolean) => {
-      setOpenSection((prev) =>
-        next ? section : prev === section ? null : prev
+    if (item.flyoutItems) {
+      return (
+        <FlyoutRow
+          key={item.key}
+          icon={item.icon}
+          label={item.label}
+          open={openKey === item.key}
+          onOpenChange={(next) => flyoutOpenChange(item.key, next)}
+          onHoverOpen={() => setOpenKey(item.key)}
+        >
+          {item.flyoutItems.map((sub) => (
+            <LineItem
+              key={sub.key}
+              icon={sub.icon}
+              description={sub.description}
+              rightChildren={sub.rightContent}
+              onClick={() => {
+                sub.onSelect();
+                close();
+              }}
+            >
+              {sub.label}
+            </LineItem>
+          ))}
+        </FlyoutRow>
       );
-    },
-    []
-  );
+    }
 
-  const hasSkills = sections.skills.length > 0;
-  const hasApps = sections.apps.length > 0;
-
-  const skillRows = sections.skills.map((skill) => (
-    <LineItem
-      key={`skill-${skill.slug}`}
-      icon={SvgSparkle}
-      description={skill.description}
-      onClick={() => handleSelectEntry(skill)}
-    >
-      {skill.name}
-    </LineItem>
-  ));
-
-  const appRows = sections.apps.map((app) => (
-    <LineItem
-      key={`app-${app.slug}`}
-      icon={getAppTypeLogo(app.appType)}
-      rightChildren={
-        !app.authenticated ? (
-          <Text font="secondary-body" color="text-03">
-            Connect
-          </Text>
-        ) : undefined
-      }
-      onClick={() => handleSelectEntry(app)}
-    >
-      {app.name}
-    </LineItem>
-  ));
-
-  // Flat array so a literal `null` renders as a Popover.Menu divider; a
-  // divider sits between the Files action and the flyout rows when present.
-  const menuChildren: ReactNode[] = [
-    <LineItem
-      key="files"
-      icon={SvgPaperclip}
-      onClick={handleAttachFiles}
-      // Hovering a non-flyout row collapses any open flyout.
-      onPointerEnter={() => setOpenSection(null)}
-    >
-      Add files or photos
-    </LineItem>,
-  ];
-
-  if (hasSkills || hasApps) menuChildren.push(null);
-
-  if (hasSkills) {
-    menuChildren.push(
-      <FlyoutRow
-        key="skills"
-        icon={SvgSparkle}
-        label="Skills"
-        open={openSection === "skills"}
-        onOpenChange={(next) => sectionOpenChange("skills", next)}
-        onHoverOpen={() => setOpenSection("skills")}
+    return (
+      <LineItem
+        key={item.key}
+        icon={item.icon}
+        onClick={() => {
+          item.onSelect?.();
+          close();
+        }}
+        // Hovering a non-flyout row collapses any open flyout.
+        onPointerEnter={() => setOpenKey(null)}
       >
-        {skillRows}
-      </FlyoutRow>
+        {item.label}
+      </LineItem>
     );
-  }
-
-  if (hasApps) {
-    menuChildren.push(
-      <FlyoutRow
-        key="apps"
-        icon={getAppTypeLogo("CUSTOM")}
-        label="Apps"
-        open={openSection === "apps"}
-        onOpenChange={(next) => sectionOpenChange("apps", next)}
-        onHoverOpen={() => setOpenSection("apps")}
-      >
-        {appRows}
-      </FlyoutRow>
-    );
-  }
+  });
 
   return (
     <Popover
@@ -198,8 +163,8 @@ export function PlusMenuButton({
           icon={SvgPlus}
           prominence="tertiary"
           disabled={disabled}
-          tooltip="Add files or skills"
-          aria-label="Open add menu"
+          tooltip={tooltip}
+          aria-label={ariaLabel}
         />
       </Popover.Trigger>
 

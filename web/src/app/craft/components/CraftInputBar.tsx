@@ -17,7 +17,10 @@ import SkillInfoPopover from "@/sections/input/SkillInfoPopover";
 import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
 import InterruptHint from "@/app/craft/components/InterruptHint";
 import { InputChipStrip } from "@/sections/input/InputChipStrip";
-import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
+import {
+  PlusMenuButton,
+  type PlusMenuItem,
+} from "@/sections/input/PlusMenuButton";
 import { useDoubleEscapeInterrupt } from "@/hooks/useDoubleEscapeInterrupt";
 import {
   useUploadFilesContext,
@@ -26,6 +29,9 @@ import {
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { toPickerSections, type PickerEntry } from "@/lib/skills/picker";
+import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
+import { Text } from "@opal/components";
+import { SvgPaperclip, SvgSparkle } from "@opal/icons";
 import {
   reduceOnInput,
   reduceOnDismiss,
@@ -238,13 +244,64 @@ const CraftInputBar = memo(
           />
         ) : undefined;
 
+      // Map skills/apps onto the generic PlusMenuButton model. The menu itself
+      // is domain-agnostic — it just renders action rows and flyout rows.
+      const plusMenuItems = useMemo<Array<PlusMenuItem | null>>(() => {
+        const items: Array<PlusMenuItem | null> = [
+          {
+            key: "files",
+            icon: SvgPaperclip,
+            label: "Add files or photos",
+            onSelect: () => fileInputRef.current?.click(),
+          },
+        ];
+        if (
+          pickerSections.skills.length > 0 ||
+          pickerSections.apps.length > 0
+        ) {
+          items.push(null);
+        }
+        if (pickerSections.skills.length > 0) {
+          items.push({
+            key: "skills",
+            icon: SvgSparkle,
+            label: "Skills",
+            flyoutItems: pickerSections.skills.map((skill) => ({
+              key: skill.slug,
+              icon: SvgSparkle,
+              label: skill.name,
+              description: skill.description,
+              onSelect: () => addSkill(skill),
+            })),
+          });
+        }
+        if (pickerSections.apps.length > 0) {
+          items.push({
+            key: "apps",
+            icon: getAppTypeLogo("CUSTOM"),
+            label: "Apps",
+            flyoutItems: pickerSections.apps.map((app) => ({
+              key: app.slug,
+              icon: getAppTypeLogo(app.appType),
+              label: app.name,
+              rightContent: app.authenticated ? undefined : (
+                <Text font="secondary-body" color="text-03">
+                  Connect
+                </Text>
+              ),
+              onSelect: () => addSkill(app),
+            })),
+          });
+        }
+        return items;
+      }, [pickerSections, addSkill]);
+
       const bottomLeftSlot = (
         <>
           <PlusMenuButton
-            sections={pickerSections}
-            onSelectEntry={addSkill}
-            onAttachFiles={() => fileInputRef.current?.click()}
+            items={plusMenuItems}
             disabled={disabled}
+            tooltip="Add files or skills"
           />
           {interruptible && (
             <InterruptHint armed={armed} interrupting={isInterrupting} />
