@@ -6,7 +6,6 @@ import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { usePreProvisionPolling } from "@/app/craft/hooks/usePreProvisionPolling";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
-import { getCraftOnboardingSeen } from "@/app/craft/onboarding/constants";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { checkPreProvisionedSession } from "@/app/craft/services/apiServices";
 
@@ -34,15 +33,11 @@ export function useBuildSessionController({
 }: UseBuildSessionControllerProps) {
   const router = useRouter();
 
-  // Check LLM provider availability
+  // Check LLM provider availability. Pre-provisioning gates only on this — if a
+  // provider is configured we start provisioning immediately, even while the
+  // onboarding intro is still open, so the user exits onboarding to a ready sandbox.
   const { llmProviders } = useLLMProviders();
   const hasAnyProvider = !!(llmProviders && llmProviders.length > 0);
-
-  // Check if user has dismissed onboarding (seen cookie is set)
-  // Read directly from cookie on every render - cookie reads are cheap and this
-  // ensures we always have the current value, especially important after onboarding
-  // completes when the cookie is set synchronously but other state updates are async
-  const hasCompletedOnboarding = getCraftOnboardingSeen();
 
   // Track previous existingSessionId to detect navigation transitions
   const prevExistingSessionIdRef = useRef<string | null>(existingSessionId);
@@ -117,14 +112,12 @@ export function useBuildSessionController({
         controllerState.lastTriggeredForUrl !== "new-build" &&
         (preProvisioning.status === "idle" ||
           preProvisioning.status === "failed") &&
-        hasCompletedOnboarding &&
         hasAnyProvider;
 
       // Also trigger retry if failed and retry time has passed
       const shouldRetry =
         preProvisioning.status === "failed" &&
         Date.now() >= preProvisioning.retryAt &&
-        hasCompletedOnboarding &&
         hasAnyProvider;
 
       if (canTrigger || shouldRetry) {
@@ -186,7 +179,6 @@ export function useBuildSessionController({
     loadSession,
     preProvisioning,
     ensurePreProvisionedSession,
-    hasCompletedOnboarding,
     hasAnyProvider,
     controllerState.lastTriggeredForUrl,
     controllerState.loadedSessionId,
@@ -202,7 +194,6 @@ export function useBuildSessionController({
     if (
       preProvisioning.status !== "failed" ||
       existingSessionId !== null ||
-      !hasCompletedOnboarding ||
       !hasAnyProvider
     ) {
       return;
@@ -230,7 +221,6 @@ export function useBuildSessionController({
   }, [
     preProvisioning,
     existingSessionId,
-    hasCompletedOnboarding,
     hasAnyProvider,
     ensurePreProvisionedSession,
   ]);
