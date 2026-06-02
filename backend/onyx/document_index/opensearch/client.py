@@ -989,7 +989,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         if fatal:
             raise OpenSearchIndexError(
                 f"Failed to bulk index documents for index {self._index_name}. "
-                f"At least one fatal error occurred: {fatal[0]}"
+                f"{len(fatal)} fatal error(s) occurred: {fatal}"
             )
         return benign
 
