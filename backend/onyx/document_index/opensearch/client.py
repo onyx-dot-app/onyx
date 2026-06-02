@@ -949,8 +949,9 @@ class OpenSearchIndexClient(OpenSearchClient):
 
         if successes + benign_conflicts != len(documents):
             raise OpenSearchIndexError(
-                f"Bulk index for {self._index_name}: successes ({successes}) + benign version "
-                f"conflicts ({benign_conflicts}) != documents ({len(documents)})."
+                f"Bulk index for index {self._index_name}: successful operations ({successes}) "
+                f"plus benign version conflicts ({benign_conflicts}) does not match the number "
+                f"of documents ({len(documents)})."
             )
         logger.debug(
             "Successfully bulk indexed %s documents (%s benign version conflicts).",

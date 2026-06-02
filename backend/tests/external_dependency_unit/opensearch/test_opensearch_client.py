@@ -24,6 +24,7 @@ from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters
 from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.opensearch.client import OpenSearchDocumentMissingError
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.client import OpenSearchIndexError
 from onyx.document_index.opensearch.client import OpenSearchServerSideTimeout
@@ -746,6 +747,91 @@ class TestOpenSearchClient:
         # Under test and postcondition.
         with pytest.raises(OpenSearchIndexError, match="does not match"):
             test_client.bulk_index_documents(documents=docs, tenant_state=tenant_state)
+
+    def test_bulk_index_external_versioning_newest_wins(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """External versioning: a newer doc_updated_at wins; a stale write is a
+        benign no-op (409), not an error. Used by the reindex port."""
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        doc_id = "ext-version-doc"
+        newer = datetime(2026, 6, 2, tzinfo=timezone.utc)
+        older = newer - timedelta(days=1)
+        chunk_id = get_opensearch_doc_chunk_id(
+            tenant_state=tenant_state,
+            document_id=doc_id,
+            chunk_index=0,
+            max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
+        )
+
+        def write(content: str, ts: datetime) -> None:
+            chunk = _create_test_document_chunk(
+                document_id=doc_id,
+                chunk_index=0,
+                content=content,
+                tenant_state=tenant_state,
+                last_updated=ts,
+            )
+            test_client.bulk_index_documents(
+                documents=[chunk],
+                tenant_state=tenant_state,
+                use_external_versioning=True,
+            )
+
+        # New doc is created (op_type forced to index; create + external is rejected).
+        write("newer", newer)
+        assert test_client.get_document(chunk_id).content == "newer"
+
+        # Stale write loses the version comparison -> benign 409, no raise, no change.
+        write("older", older)
+        assert test_client.get_document(chunk_id).content == "newer"
+
+        # A genuinely newer write wins.
+        write("newest", newer + timedelta(days=1))
+        assert test_client.get_document(chunk_id).content == "newest"
+
+    def test_bulk_update_swallow_document_missing(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A 404 document_missing on update is fatal by default, but surfaced as
+        OpenSearchDocumentMissingError when the caller opts in (reindex port)."""
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        missing_id = get_opensearch_doc_chunk_id(
+            tenant_state=tenant_state,
+            document_id="does-not-exist",
+            chunk_index=0,
+            max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
+        )
+
+        # Default: a missing doc is fatal.
+        with pytest.raises(OpenSearchUpdateError):
+            test_client.bulk_update_documents(
+                document_chunk_ids=[missing_id],
+                properties_to_update={"hidden": True},
+            )
+
+        # Opted-in: surfaced as OpenSearchDocumentMissingError instead.
+        with pytest.raises(OpenSearchDocumentMissingError) as exc:
+            test_client.bulk_update_documents(
+                document_chunk_ids=[missing_id],
+                properties_to_update={"hidden": True},
+                swallow_document_missing=True,
+            )
+        assert missing_id in exc.value.missing_chunk_ids
 
     def test_get_document(
         self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
