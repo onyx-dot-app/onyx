@@ -306,9 +306,10 @@ const InputBar = memo(
 
       const handleSelectionChange = useCallback(() => {
         if (!session.open) return;
-        const textBefore = getTextBeforeCursor();
-        setSession((prev) => reduceOnSelection(prev, textBefore));
-      }, [session.open, getTextBeforeCursor]);
+        const next = reduceOnSelection(session, getTextBeforeCursor());
+        if (next.open) setAnchorRect(getCaretRect());
+        setSession(next);
+      }, [session, getTextBeforeCursor, getCaretRect]);
 
       const handleSkillPickerSelect = useCallback(
         (slug: string) => {
