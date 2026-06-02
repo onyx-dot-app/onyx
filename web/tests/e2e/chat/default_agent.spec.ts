@@ -294,7 +294,13 @@ test.describe("Default Agent Tests", () => {
     });
   });
 
-  test.describe("Action Management Toggle", () => {
+  // @exclusive: these tests depend on the singleton default image-generation config
+  // being available and PATCH the global default-assistant `tool_ids`. In the parallel
+  // `admin` project, a concurrent file deleting/recreating the default image-gen config
+  // makes the Image Generation tool intermittently unavailable (disabled in the popover),
+  // and competing default-assistant PATCHes clobber toggle state. Serializing via the
+  // isolated `exclusive` project removes the race.
+  test.describe("Action Management Toggle @exclusive", () => {
     let imageGenConfigId: string | null = null;
 
     test.beforeAll(async ({ browser }) => {
