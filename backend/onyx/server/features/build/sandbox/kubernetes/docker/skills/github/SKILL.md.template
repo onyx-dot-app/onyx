@@ -1,6 +1,6 @@
 ---
 name: github
-description: Read repositories, issues, and pull requests — and open issues and comments — on GitHub as the connected user via a light REST wrapper.
+description: Read repositories, issues, and pull requests, open new issues, and add comments in GitHub on the user's behalf via a light REST wrapper.
 ---
 
 # GitHub

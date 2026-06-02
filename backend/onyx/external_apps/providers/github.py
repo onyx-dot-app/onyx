@@ -114,8 +114,8 @@ class GitHubProvider(OAuthExternalAppProvider):
         ),
         descriptor=AdminDescriptorSpec(
             description=(
-                "Read repositories, issues, and pull requests — and open issues "
-                "and comments — on GitHub as the connected user inside Onyx Craft."
+                "Read repositories, issues, and pull requests, open new issues, "
+                "and add comments in GitHub on the user's behalf."
             ),
             upstream_url_patterns=["https://api\\.github\\.com/.*"],
             auth_template={"Authorization": "Bearer {access_token}"},
