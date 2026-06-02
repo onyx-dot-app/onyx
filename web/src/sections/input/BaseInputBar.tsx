@@ -293,7 +293,7 @@ const BaseInputBar = memo(
               noBottomRounding ? "rounded-t-16 rounded-b-none" : "rounded-16"
             )}
           >
-            {topSlot && <div className="px-2 pt-2">{topSlot}</div>}
+            {topSlot && <div className="px-3 pt-2">{topSlot}</div>}
 
             <div ref={inputWrapperRef} className="flex-1 overflow-hidden">
               <div
