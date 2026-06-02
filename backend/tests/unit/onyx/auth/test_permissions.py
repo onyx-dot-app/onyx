@@ -2,9 +2,12 @@
 Unit tests for onyx.auth.permissions — pure logic and FastAPI dependency.
 """
 
+from types import SimpleNamespace
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
+from fastapi import Request
 
 from onyx.auth.permissions import ALL_PERMISSIONS
 from onyx.auth.permissions import get_effective_permissions
@@ -15,6 +18,19 @@ from onyx.auth.permissions import resolve_effective_permissions
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+
+
+def _request(token_scopes: list[Permission] | None = None) -> Request:
+    """Fake request whose state carries (or omits) token scopes.
+
+    Omitted token_scopes mimics session / API-key auth — getattr returns None,
+    i.e. no token-side restriction.
+    """
+    state = SimpleNamespace()
+    if token_scopes is not None:
+        state.token_scopes = token_scopes
+    return cast(Request, SimpleNamespace(state=state))
+
 
 # ---------------------------------------------------------------------------
 # resolve_effective_permissions
@@ -163,7 +179,7 @@ class TestRequirePermission:
         user.effective_permissions = ["admin"]
 
         dep = require_permission(Permission.MANAGE_CONNECTORS)
-        result = await dep(user=user)
+        result = await dep(request=_request(), user=user)
         assert result is user
 
     @pytest.mark.asyncio
@@ -172,7 +188,7 @@ class TestRequirePermission:
         user.effective_permissions = ["manage:connectors"]
 
         dep = require_permission(Permission.MANAGE_CONNECTORS)
-        result = await dep(user=user)
+        result = await dep(request=_request(), user=user)
         assert result is user
 
     @pytest.mark.asyncio
@@ -182,7 +198,7 @@ class TestRequirePermission:
         user.effective_permissions = ["manage:connectors"]
 
         dep = require_permission(Permission.READ_CONNECTORS)
-        result = await dep(user=user)
+        result = await dep(request=_request(), user=user)
         assert result is user
 
     @pytest.mark.asyncio
@@ -192,7 +208,7 @@ class TestRequirePermission:
 
         dep = require_permission(Permission.MANAGE_CONNECTORS)
         with pytest.raises(OnyxError) as exc_info:
-            await dep(user=user)
+            await dep(request=_request(), user=user)
         assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
     @pytest.mark.asyncio
@@ -202,7 +218,68 @@ class TestRequirePermission:
 
         dep = require_permission(Permission.BASIC_ACCESS)
         with pytest.raises(OnyxError):
-            await dep(user=user)
+            await dep(request=_request(), user=user)
+
+    @pytest.mark.asyncio
+    async def test_pat_scope_within_user_permissions_passes(self) -> None:
+        """A scoped PAT may exercise a permission the user holds and the scope covers."""
+        user = MagicMock()
+        user.effective_permissions = ["basic"]
+
+        dep = require_permission(Permission.READ_SEARCH)
+        result = await dep(request=_request([Permission.READ_SEARCH]), user=user)
+        assert result is user
+
+    @pytest.mark.asyncio
+    async def test_pat_scope_blocks_out_of_scope_permission(self) -> None:
+        """A search-scoped PAT is denied a chat-write endpoint even though the user holds it."""
+        user = MagicMock()
+        user.effective_permissions = ["basic"]
+
+        dep = require_permission(Permission.WRITE_CHAT)
+        with pytest.raises(OnyxError) as exc_info:
+            await dep(request=_request([Permission.READ_SEARCH]), user=user)
+        assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+    @pytest.mark.asyncio
+    async def test_pat_scope_caps_admin(self) -> None:
+        """Token scopes cap even a full admin — a read:admin PAT can't write-admin."""
+        user = MagicMock()
+        user.effective_permissions = ["admin"]
+
+        dep = require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+        with pytest.raises(OnyxError):
+            await dep(request=_request([Permission.READ_ADMIN]), user=user)
+
+    @pytest.mark.asyncio
+    async def test_unrestricted_pat_cannot_exceed_user(self) -> None:
+        """Even an unrestricted token can't grant a permission the user lacks (intersection is min)."""
+        user = MagicMock()
+        user.effective_permissions = ["basic"]
+
+        dep = require_permission(Permission.MANAGE_CONNECTORS)
+        with pytest.raises(OnyxError):
+            await dep(request=_request(None), user=user)
+
+    @pytest.mark.asyncio
+    async def test_pat_scope_closure_applies(self) -> None:
+        """A write:chat-scoped token reaches a read:chat route (write:chat implies read:chat)."""
+        user = MagicMock()
+        user.effective_permissions = ["basic"]
+
+        dep = require_permission(Permission.READ_CHAT)
+        result = await dep(request=_request([Permission.WRITE_CHAT]), user=user)
+        assert result is user
+
+    @pytest.mark.asyncio
+    async def test_empty_pat_scopes_deny_all(self) -> None:
+        """An explicit empty scope set grants nothing — fail-closed."""
+        user = MagicMock()
+        user.effective_permissions = ["basic"]
+
+        dep = require_permission(Permission.READ_SEARCH)
+        with pytest.raises(OnyxError):
+            await dep(request=_request([]), user=user)
 
 
 # ---------------------------------------------------------------------------

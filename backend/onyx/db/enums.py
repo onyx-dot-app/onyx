@@ -475,8 +475,8 @@ class HookFailStrategy(str, PyEnum):
 class Permission(str, PyEnum):
     """
     Permission tokens for group-based authorization and PAT scoping.
-    23 tokens total. full_admin_panel_access is an override —
-    if present, any permission check passes.
+    full_admin_panel_access is an override — if present, any permission
+    check passes.
 
     The read:*/write:* "API-surface scopes" are coarser than the capability
     tokens: they name request surfaces (search, chat, admin-read) rather than
