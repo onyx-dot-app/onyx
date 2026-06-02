@@ -174,15 +174,18 @@ def _find_function_calls_open_marker(text_lower: str) -> int:
 
 
 def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
-    """Detect XML-style marshaled tool calls emitted as plain text."""
+    """Detect XML-style marshaled tool calls emitted as plain text.
+
+    Intentionally does NOT require a <parameter> tag: zero-argument invocations
+    (e.g. <function_calls><invoke name="get_time"></invoke></function_calls>) are
+    valid tool calls that _extract_xml_tool_calls_from_response_text can parse, so
+    requiring <parameter> would both miss them in fallback extraction and let the
+    empty-answer recovery leak the raw markup as an answer.
+    """
     if not text:
         return False
     lowered = text.lower()
-    return (
-        "<function_calls" in lowered
-        and "<invoke" in lowered
-        and "<parameter" in lowered
-    )
+    return "<function_calls" in lowered and "<invoke" in lowered
 
 
 def _try_parse_json_string(value: Any) -> Any:

@@ -928,9 +928,9 @@ class TestEmptyAnswerRecovery:
 
         # A complete <function_calls> block is stripped by the XML content filter,
         # so _emit_content_chunk never runs and answer_start stays False, while the
-        # raw answer retains the text. No <parameter> tag, so it is NOT classified
-        # as a tool-call payload (see test below) and recovery still fires.
-        raw = "<function_calls><invoke>x</invoke></function_calls>"
+        # raw answer retains the text. No <invoke>, so it is NOT classified as a
+        # tool-call payload (see tests below) and recovery still fires.
+        raw = "<function_calls>noop</function_calls>"
         state_container = MagicMock()
         llm_step_result, _ = self._run(
             [raw],
@@ -960,6 +960,22 @@ class TestEmptyAnswerRecovery:
         assert llm_step_result.answer is None
         assert llm_step_result.raw_answer == raw
         # Nothing leaked to the client.
+        emitted = "".join(
+            p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
+        )
+        assert emitted == ""
+
+    def test_no_recovery_for_zero_arg_xml_tool_call(self) -> None:
+        """A zero-argument <invoke> (no <parameter>) is still valid tool-call
+        markup. Recovery must NOT fire — otherwise the raw markup leaks and the
+        fallback extractor can't parse the call."""
+        from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+
+        raw = '<function_calls><invoke name="get_time"></invoke></function_calls>'
+        llm_step_result, packets = self._run([raw], with_citation_processor=True)
+
+        assert llm_step_result.answer is None
+        assert llm_step_result.raw_answer == raw
         emitted = "".join(
             p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
         )
