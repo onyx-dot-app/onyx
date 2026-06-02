@@ -6,7 +6,6 @@ import posthog from "posthog-js";
 export enum AnalyticsEvent {
   CONFIGURED_LLM_PROVIDER = "configured_llm_provider",
   COMPLETED_CRAFT_ONBOARDING = "completed_craft_onboarding",
-  COMPLETED_CRAFT_USER_INFO = "completed_craft_user_info",
   SENT_CRAFT_MESSAGE = "sent_craft_message",
   SAW_CRAFT_INTRO = "saw_craft_intro",
   CLICKED_GO_HOME = "clicked_go_home",
@@ -36,12 +35,6 @@ interface AnalyticsEventProperties {
     source: LLMProviderConfiguredSource;
   };
   [AnalyticsEvent.COMPLETED_CRAFT_ONBOARDING]: void;
-  [AnalyticsEvent.COMPLETED_CRAFT_USER_INFO]: {
-    first_name: string;
-    last_name: string | undefined;
-    work_area: string | undefined;
-    level: string | undefined;
-  };
   [AnalyticsEvent.SENT_CRAFT_MESSAGE]: void;
   [AnalyticsEvent.SAW_CRAFT_INTRO]: void;
   [AnalyticsEvent.CLICKED_GO_HOME]: void;

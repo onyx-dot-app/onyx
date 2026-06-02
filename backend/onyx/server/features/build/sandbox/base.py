@@ -169,7 +169,6 @@ class SandboxManager(_ServeMixin, ABC):
         skills_section: str,
         snapshot_path: str | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -188,7 +187,6 @@ class SandboxManager(_ServeMixin, ABC):
             skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for AGENTS.md.
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
-            user_role: User's role/title for personalization in AGENTS.md
 
         Raises:
             RuntimeError: If workspace setup fails

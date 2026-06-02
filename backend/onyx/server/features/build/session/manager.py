@@ -819,7 +819,6 @@ class SessionManager:
             "Setting up session workspace %s in sandbox %s", session_id, sandbox.id
         )
         user_name = user.personal_name
-        user_role = user.personal_role
 
         skills_section, skills_files = build_user_skills_payload(user, self._db_session)
 
@@ -831,7 +830,6 @@ class SessionManager:
             skills_section=skills_section,
             snapshot_path=None,  # TODO: Support restoring from snapshot
             user_name=user_name,
-            user_role=user_role,
         )
         self._hydrate_skills(sandbox.id, user, files=skills_files)
         self._hydrate_user_library(sandbox.id, user_id)

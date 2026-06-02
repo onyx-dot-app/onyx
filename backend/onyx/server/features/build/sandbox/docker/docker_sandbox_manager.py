@@ -687,7 +687,6 @@ class DockerSandboxManager(SandboxManager):
         nextjs_port: int | None,
         skills_section: str,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> str:
         """Shell-escaped AGENTS.md for ``printf '%s' '...'``."""
         agent_instructions = generate_agent_instructions(
@@ -698,7 +697,6 @@ class DockerSandboxManager(SandboxManager):
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
-            user_role=user_role,
         )
         return agent_instructions.replace("'", "'\\''")
 
@@ -711,7 +709,6 @@ class DockerSandboxManager(SandboxManager):
         skills_section: str,
         snapshot_path: str | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> None:
         if snapshot_path:
             logger.warning(
@@ -729,7 +726,6 @@ class DockerSandboxManager(SandboxManager):
             nextjs_port=nextjs_port,
             skills_section=skills_section,
             user_name=user_name,
-            user_role=user_role,
         )
 
         nextjs_start = (

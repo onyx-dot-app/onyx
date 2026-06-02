@@ -6,7 +6,7 @@ import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { usePreProvisionPolling } from "@/app/craft/hooks/usePreProvisionPolling";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
-import { getBuildUserPersona } from "@/app/craft/onboarding/constants";
+import { getCraftOnboardingSeen } from "@/app/craft/onboarding/constants";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { checkPreProvisionedSession } from "@/app/craft/services/apiServices";
 
@@ -38,11 +38,11 @@ export function useBuildSessionController({
   const { llmProviders } = useLLMProviders();
   const hasAnyProvider = !!(llmProviders && llmProviders.length > 0);
 
-  // Check if user has completed onboarding (persona cookie is set)
+  // Check if user has dismissed onboarding (seen cookie is set)
   // Read directly from cookie on every render - cookie reads are cheap and this
   // ensures we always have the current value, especially important after onboarding
   // completes when the cookie is set synchronously but other state updates are async
-  const hasCompletedOnboarding = getBuildUserPersona() !== null;
+  const hasCompletedOnboarding = getCraftOnboardingSeen();
 
   // Track previous existingSessionId to detect navigation transitions
   const prevExistingSessionIdRef = useRef<string | null>(existingSessionId);

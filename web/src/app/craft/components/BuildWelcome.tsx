@@ -7,8 +7,6 @@ import Logo from "@/refresh-components/Logo";
 import InputBar, { InputBarHandle } from "@/app/craft/components/InputBar";
 import SuggestedPrompts from "@/app/craft/components/SuggestedPrompts";
 import ConnectDataBanner from "@/app/craft/components/ConnectDataBanner";
-import { getBuildUserPersona } from "@/app/craft/onboarding/constants";
-import { workAreaToPersona } from "@/app/craft/constants/exampleBuildPrompts";
 
 interface BuildWelcomeProps {
   onSubmit: (message: string, files: BuildFile[]) => void;
@@ -28,8 +26,6 @@ export default function BuildWelcome({
   sandboxInitializing = false,
 }: BuildWelcomeProps) {
   const inputBarRef = useRef<InputBarHandle>(null);
-  const userPersona = getBuildUserPersona();
-  const persona = workAreaToPersona(userPersona?.workArea);
 
   const handlePromptClick = (promptText: string) => {
     inputBarRef.current?.setMessage(promptText);
@@ -52,7 +48,7 @@ export default function BuildWelcome({
           sandboxInitializing={sandboxInitializing}
         />
         <ConnectDataBanner />
-        <SuggestedPrompts persona={persona} onPromptClick={handlePromptClick} />
+        <SuggestedPrompts onPromptClick={handlePromptClick} />
       </div>
     </div>
   );

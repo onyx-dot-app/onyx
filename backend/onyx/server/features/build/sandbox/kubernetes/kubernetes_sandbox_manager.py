@@ -557,7 +557,6 @@ class KubernetesSandboxManager(SandboxManager):
         nextjs_port: int | None = None,
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> str:
         """Load and populate agent instructions from template file."""
         return generate_agent_instructions(
@@ -568,7 +567,6 @@ class KubernetesSandboxManager(SandboxManager):
             nextjs_port=nextjs_port,
             disabled_tools=disabled_tools,
             user_name=user_name,
-            user_role=user_role,
         )
 
     def _create_sandbox_pod(
@@ -1526,7 +1524,6 @@ class KubernetesSandboxManager(SandboxManager):
         skills_section: str,
         snapshot_path: str | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
@@ -1544,7 +1541,6 @@ class KubernetesSandboxManager(SandboxManager):
             llm_config: LLM provider configuration for opencode.json
             snapshot_path: Optional S3 path - logged but ignored (no S3 access)
             user_name: User's name for personalization in AGENTS.md
-            user_role: User's role/title for personalization in AGENTS.md
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -1570,7 +1566,6 @@ class KubernetesSandboxManager(SandboxManager):
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
-            user_role=user_role,
         )
 
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
@@ -2022,7 +2017,6 @@ echo "Session cleanup complete"
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=None,
-            user_role=None,
         )
 
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
