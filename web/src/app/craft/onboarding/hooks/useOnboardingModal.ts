@@ -3,7 +3,6 @@
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useUser } from "@/providers/UserProvider";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
-import { LLMProviderName } from "@/lib/languageModels/types";
 import {
   OnboardingModalMode,
   OnboardingModalController,
@@ -12,32 +11,17 @@ import {
 import {
   getBuildUserPersona,
   setBuildUserPersona,
+  isSupportedProviderType,
 } from "@/app/craft/onboarding/constants";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 
 import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
 
-// Check if all 3 build mode providers are configured (anthropic, openai, openrouter)
-function checkAllProvidersConfigured(
-  llmProviders: LLMProviderDescriptor[] | undefined
-): boolean {
-  if (!llmProviders || llmProviders.length === 0) {
-    return false;
-  }
-  const configuredProviders = new Set(llmProviders.map((p) => p.provider));
-  return (
-    configuredProviders.has(LLMProviderName.ANTHROPIC) &&
-    configuredProviders.has(LLMProviderName.OPENAI) &&
-    configuredProviders.has(LLMProviderName.OPENROUTER)
-  );
-}
-
-// Check if at least one provider is configured
 function checkHasAnyProvider(
   llmProviders: LLMProviderDescriptor[] | undefined
 ): boolean {
-  return !!(llmProviders && llmProviders.length > 0);
+  return !!llmProviders?.some((p) => isSupportedProviderType(p.provider));
 }
 
 export function useOnboardingModal(): OnboardingModalController {
@@ -78,13 +62,6 @@ export function useOnboardingModal(): OnboardingModalController {
     return !!getBuildUserPersona()?.workArea;
   }, [user]);
 
-  // Check if all providers are configured (skip LLM step entirely if so)
-  const allProvidersConfigured = useMemo(
-    () => checkAllProvidersConfigured(llmProviders),
-    [llmProviders]
-  );
-
-  // Check if at least one provider is configured (allow skipping LLM step)
   const hasAnyProvider = useMemo(
     () => checkHasAnyProvider(llmProviders),
     [llmProviders]
@@ -171,7 +148,6 @@ export function useOnboardingModal(): OnboardingModalController {
     refetchLlmProviders,
     isAdmin,
     hasUserInfo,
-    allProvidersConfigured,
     hasAnyProvider,
     isLoading: isLoadingLlm,
   };

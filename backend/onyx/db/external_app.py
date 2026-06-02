@@ -3,18 +3,23 @@ from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
+from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
+from onyx.db.models import ExternalAppPolicy
 from onyx.db.models import ExternalAppUserCredential
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
+from onyx.utils.encryption import is_masked_credential
 from onyx.utils.logger import setup_logger
+from onyx.utils.sensitive import SensitiveValue
 
 logger = setup_logger()
 
@@ -71,6 +76,29 @@ def validate_auth_template(
             )
 
 
+def resolve_masked_credentials(
+    incoming: dict[str, str],
+    existing: SensitiveValue[dict[str, Any]] | None,
+) -> dict[str, str]:
+    """Restore real secret values when the caller submits masked placeholders."""
+    existing_values = (
+        existing.get_value(apply_mask=False) if existing is not None else {}
+    )
+    resolved: dict[str, str] = {}
+    for key, value in incoming.items():
+        if is_masked_credential(value):
+            if key not in existing_values:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Credential '{key}' was submitted masked but has no stored "
+                    "value to restore — provide the actual value.",
+                )
+            resolved[key] = existing_values[key]
+        else:
+            resolved[key] = value
+    return resolved
+
+
 def is_user_authenticated_for_app(
     app: ExternalApp,
     user_cred: ExternalAppUserCredential | None,
@@ -79,13 +107,14 @@ def is_user_authenticated_for_app(
     ``auth_template`` requires that the org hasn't pre-filled. Apps with no
     user-required keys need no credential row."""
     required = required_user_credential_keys(
-        app.auth_template, app.organization_credentials
+        app.auth_template, app.organization_credentials.get_value(apply_mask=False)
     )
     if not required:
         return True
     if user_cred is None:
         return False
-    return all(k in user_cred.user_credentials for k in required)
+    stored = user_cred.user_credentials.get_value(apply_mask=False)
+    return all(k in stored for k in required)
 
 
 def get_external_app_by_id(
@@ -94,9 +123,23 @@ def get_external_app_by_id(
 ) -> ExternalApp | None:
     stmt = (
         select(ExternalApp)
-        .options(selectinload(ExternalApp.skill))
+        .options(
+            selectinload(ExternalApp.skill),
+            selectinload(ExternalApp.policies),
+        )
         .where(ExternalApp.id == external_app_id)
     )
+    return db_session.scalar(stmt)
+
+
+def get_external_app_by_skill_id(
+    db_session: Session,
+    skill_id: UUID,
+) -> ExternalApp | None:
+    """The external-app gateway backing ``skill_id``, or None if the skill isn't
+    an external app. Returns just the row — callers that need its policies fetch
+    them via ``get_policies``."""
+    stmt = select(ExternalApp).where(ExternalApp.skill_id == skill_id)
     return db_session.scalar(stmt)
 
 
@@ -105,7 +148,10 @@ def get_external_apps(
 ) -> list[ExternalApp]:
     stmt = (
         select(ExternalApp)
-        .options(selectinload(ExternalApp.skill))
+        .options(
+            selectinload(ExternalApp.skill),
+            selectinload(ExternalApp.policies),
+        )
         .order_by(ExternalApp.id)
     )
     return list(db_session.scalars(stmt).all())
@@ -123,6 +169,21 @@ def get_user_credentials_by_app_id(
     return {row.external_app_id: row for row in db_session.scalars(stmt).all()}
 
 
+def get_external_app_user_credential(
+    db_session: Session,
+    *,
+    external_app_id: int,
+    user_id: UUID,
+) -> ExternalAppUserCredential | None:
+    """The calling user's stored credentials for one app, or None if unset."""
+    return db_session.scalar(
+        select(ExternalAppUserCredential).where(
+            ExternalAppUserCredential.external_app_id == external_app_id,
+            ExternalAppUserCredential.user_id == user_id,
+        )
+    )
+
+
 def create_external_app(
     db_session: Session,
     name: str,
@@ -132,11 +193,12 @@ def create_external_app(
     app_type: ExternalAppType,
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
-    organization_credentials: dict[str, Any],
+    organization_credentials: dict[str, str],
     enabled: bool = True,
     is_public: bool = False,
     author_user_id: UUID | None = None,
     slug: str | None = None,
+    action_policies: dict[str, EndpointPolicy] | None = None,
 ) -> ExternalApp:
     """Create the backing Skill row and the ExternalApp that references it,
     committing atomically. The skill owns display metadata + lifecycle; the
@@ -150,6 +212,11 @@ def create_external_app(
     """
     from onyx.db.skill import create_built_in_skill_row__no_commit
     from onyx.db.skill import create_skill__no_commit
+
+    # No existing app to restore from on create, so a masked value is rejected.
+    organization_credentials = resolve_masked_credentials(
+        organization_credentials, None
+    )
 
     built_in_skill_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app_type)
     if built_in_skill_id is not None:
@@ -188,6 +255,9 @@ def create_external_app(
         organization_credentials=organization_credentials,
     )
     db_session.add(app)
+    if action_policies is not None:
+        db_session.flush()  # assign app.id before writing its policy rows
+        _write_policies__no_commit(db_session, app.id, action_policies)
     db_session.commit()
     return app
 
@@ -201,9 +271,10 @@ def update_external_app(
     app_type: ExternalAppType,
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
-    organization_credentials: dict[str, Any],
+    organization_credentials: dict[str, str],
     new_bundle_file_id: str | None = None,
     new_bundle_sha256: str | None = None,
+    action_policies: dict[str, EndpointPolicy] | None = None,
 ) -> tuple[ExternalApp, str | None]:
     """Replace mutable fields on the external app and its linked skill,
     committing atomically. Returns ``(app, old_bundle_file_id)``.
@@ -249,10 +320,56 @@ def update_external_app(
 
     app.upstream_url_patterns = upstream_url_patterns
     app.auth_template = auth_template
-    app.organization_credentials = organization_credentials
+    # Admin responses mask org credentials; restore any masked value the form
+    # echoed back so an unchanged secret isn't overwritten with its mask.
+    app.organization_credentials = resolve_masked_credentials(  # ty: ignore[invalid-assignment]
+        organization_credentials, app.organization_credentials
+    )
+
+    if action_policies is not None:
+        _write_policies__no_commit(db_session, app.id, action_policies)
 
     db_session.commit()
     return app, old_bundle_file_id
+
+
+def get_policies(
+    db_session: Session,
+    external_app_id: int,
+) -> dict[str, EndpointPolicy]:
+    """Return the app's stored per-action policy overrides as
+    ``{action_id: policy}``. Sparse — only actions the admin has set."""
+    rows = db_session.scalars(
+        select(ExternalAppPolicy).where(
+            ExternalAppPolicy.external_app_id == external_app_id
+        )
+    ).all()
+    return {row.action_id: row.policy for row in rows}
+
+
+def _write_policies__no_commit(
+    db_session: Session,
+    external_app_id: int,
+    policies: dict[str, EndpointPolicy],
+) -> None:
+    """Replace the app's per-action policy rows with exactly ``policies`` (full
+    delete + insert). No commit — runs inside the create/update transaction so
+    the app and its policies persist atomically. ``action_id`` validation
+    against the provider catalog is the caller's responsibility.
+    """
+    db_session.execute(
+        delete(ExternalAppPolicy).where(
+            ExternalAppPolicy.external_app_id == external_app_id
+        )
+    )
+    for action_id, policy in policies.items():
+        db_session.add(
+            ExternalAppPolicy(
+                external_app_id=external_app_id,
+                action_id=action_id,
+                policy=policy,
+            )
+        )
 
 
 def delete_external_app(
@@ -310,3 +427,20 @@ def upsert_external_app_user_credential(
     cred = db_session.scalars(stmt).one()
     db_session.commit()
     return cred
+
+
+def delete_external_app_user_credential(
+    db_session: Session,
+    *,
+    external_app_id: int,
+    user_id: UUID,
+) -> None:
+    """Delete the user's stored credentials for one app, and commit (no-op if
+    absent). Used when a refresh terminally fails so the user reconnects."""
+    db_session.execute(
+        delete(ExternalAppUserCredential).where(
+            ExternalAppUserCredential.external_app_id == external_app_id,
+            ExternalAppUserCredential.user_id == user_id,
+        )
+    )
+    db_session.commit()

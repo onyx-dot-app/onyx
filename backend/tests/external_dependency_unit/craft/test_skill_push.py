@@ -94,14 +94,16 @@ class TestSkillPush:
         user_c = cohort["noone"][0]
 
         # Delete sandbox rows created by granted_users (they lack FS
-        # provisioning) and re-provision via handle.provision_for.
-        workspaces: dict[UUID, WorkspaceProxy] = {}
-        for user in (user_a, user_b, user_c):
+        # provisioning) and re-provision via the manager.
+        cohort_users = [user_a, user_b, user_c]
+        for user in cohort_users:
             row = db_session.query(Sandbox).filter(Sandbox.user_id == user.id).one()
             db_session.delete(row)
         db_session.commit()
-        for user in (user_a, user_b, user_c):
-            _, workspaces[user.id] = handle.provision_for(user)
+        provisioned = handle.provision_for_many(cohort_users)
+        workspaces: dict[UUID, WorkspaceProxy] = {
+            user.id: ws for user, (_row, ws) in zip(cohort_users, provisioned)
+        }
 
         public_skill = seeded_skill(
             slug=f"public-skill-{uuid4().hex[:6]}",
@@ -137,13 +139,15 @@ class TestSkillPush:
             db_session.query(UserGroup).filter(UserGroup.name == "engineering").one()
         )
 
-        workspaces: dict[UUID, WorkspaceProxy] = {}
-        for user in (user_a, user_b, user_c):
+        cohort_users = [user_a, user_b, user_c]
+        for user in cohort_users:
             row = db_session.query(Sandbox).filter(Sandbox.user_id == user.id).one()
             db_session.delete(row)
         db_session.commit()
-        for user in (user_a, user_b, user_c):
-            _, workspaces[user.id] = handle.provision_for(user)
+        provisioned = handle.provision_for_many(cohort_users)
+        workspaces: dict[UUID, WorkspaceProxy] = {
+            user.id: ws for user, (_row, ws) in zip(cohort_users, provisioned)
+        }
 
         skill = seeded_skill(
             slug=f"eng-only-{uuid4().hex[:6]}",
@@ -258,8 +262,7 @@ class TestSkillPush:
         add_user_to_group(db_session, user_b, group_y)
         db_session.commit()
 
-        _row_a, ws_a = handle.provision_for(user_a)
-        _row_b, ws_b = handle.provision_for(user_b)
+        (_row_a, ws_a), (_row_b, ws_b) = handle.provision_for_many([user_a, user_b])
 
         skill = seeded_skill(
             slug=f"grants-flip-{uuid4().hex[:6]}",
@@ -346,8 +349,7 @@ class TestSkillPush:
         user_a = make_user(db_session)
         user_b = make_user(db_session)
         db_session.commit()
-        _row_a, ws_a = handle.provision_for(user_a)
-        _row_b, ws_b = handle.provision_for(user_b)
+        (_row_a, ws_a), (_row_b, ws_b) = handle.provision_for_many([user_a, user_b])
 
         skill = seeded_skill(
             slug=f"to-delete-{uuid4().hex[:6]}",
@@ -389,9 +391,9 @@ class TestSkillPush:
         user_b = make_user(db_session)
         user_c = make_user(db_session)
         db_session.commit()
-        _row_a, _ = handle.provision_for(user_a)
-        row_b, _ = handle.provision_for(user_b)
-        _row_c, _ = handle.provision_for(user_c)
+        (_row_a, _), (row_b, _), (_row_c, _) = handle.provision_for_many(
+            [user_a, user_b, user_c]
+        )
 
         # Make user_b's push fatally fail; the other two succeed silently.
         stub = failing_sandbox_manager(
@@ -491,8 +493,7 @@ class TestSkillPush:
         add_user_to_group(db_session, user_b, group_b)
         db_session.commit()
 
-        _, ws_a = handle.provision_for(user_a)
-        _, ws_b = handle.provision_for(user_b)
+        (_, ws_a), (_, ws_b) = handle.provision_for_many([user_a, user_b])
         row_a = db_session.query(Sandbox).filter(Sandbox.user_id == user_a.id).one()
         row_b = db_session.query(Sandbox).filter(Sandbox.user_id == user_b.id).one()
 

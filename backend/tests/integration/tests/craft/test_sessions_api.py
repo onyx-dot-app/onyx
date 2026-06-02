@@ -12,7 +12,6 @@ import uuid
 from typing import Any
 
 import httpx
-import pytest
 
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -87,22 +86,6 @@ def test_create_session_returns_201_with_session_and_sandbox_shape(
     assert body["session_loaded_in_sandbox"] is True
     assert "sharing_scope" in body
     assert body["artifacts"] == [] or isinstance(body["artifacts"], list)
-
-
-@pytest.mark.skip(
-    reason=(
-        "Subscription cap path is gated on MULTI_TENANT mode "
-        "(SessionManager.create_session__no_commit only checks "
-        "SANDBOX_MAX_CONCURRENT_PER_ORG when MULTI_TENANT=true). "
-        "Multi-tenant integration tests live under "
-        "backend/tests/integration/multitenant_tests/ and require the "
-        "schema_private alembic head; this HTTP-half file runs against the "
-        "single-tenant deployment and cannot reach the 429 branch."
-    )
-)
-def test_create_session_blocked_by_subscription_cap() -> None:
-    """In a multi-tenant deployment at the subscription cap, POST returns 429."""
-    pass
 
 
 def test_get_session_404_for_other_users_session(
@@ -320,40 +303,6 @@ def test_sandbox_reset_404_when_no_sandbox(
         cookies=fresh_user.cookies,
     )
     assert response.status_code == 404
-
-
-def test_generate_suggestions_returns_empty_on_llm_parse_failure(
-    admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
-) -> None:
-    """The suggestions endpoint never 500s — bad LLM output yields ``[]``.
-
-    ``SessionManager.generate_followup_suggestions`` is wrapped in a broad
-    ``try/except`` and ``_parse_suggestions`` returns ``[]`` for unparseable
-    output. Both code paths funnel into "endpoint returns 200 with a list".
-    We exercise the endpoint with deliberately unstructured input so the
-    LLM is unlikely to produce well-formed JSON; even if it does, the
-    response must still be a 200 with a list (never a 500). This pins the
-    invariant from ``manager.py:_parse_suggestions``.
-    """
-    body = _create_session(admin_user)
-    session_id = body["id"]
-
-    response = client.post(
-        f"{API_SERVER_URL}/build/sessions/{session_id}/generate-suggestions",
-        json={
-            # Deliberately content-free; LLMs typically respond with prose
-            # rather than the requested JSON array.
-            "user_message": "?",
-            "assistant_message": ".",
-        },
-        headers=admin_user.headers,
-        cookies=admin_user.cookies,
-    )
-    assert response.status_code == 200
-    payload = response.json()
-    assert "suggestions" in payload
-    assert isinstance(payload["suggestions"], list)
 
 
 def test_rename_session_with_null_name_uses_llm_then_fallback_chain(

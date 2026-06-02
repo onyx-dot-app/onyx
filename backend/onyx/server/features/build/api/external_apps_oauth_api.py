@@ -1,13 +1,7 @@
-"""OAuth flow routes for External Apps.
-
-Provider-agnostic — these routes look up the matching `OAuth`
-provider by `app.app_type` and delegate authorize-URL construction
-and response parsing to it.
-"""
-
 import base64
 import uuid
-from typing import Any
+from datetime import datetime
+from datetime import timezone
 from urllib.parse import urlencode
 
 import requests
@@ -26,7 +20,9 @@ from onyx.db.models import ExternalApp
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers import get_provider_or_raise
+from onyx.external_apps.providers.base import OAuthExternalAppProvider
+from onyx.external_apps.providers.registry import get_provider_or_raise
+from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import OAuthCallbackRequest
 from onyx.server.features.build.api.models import OAuthCallbackResponse
@@ -48,8 +44,9 @@ _REDIS_STATE_TTL_SECONDS = 600
 
 
 def _oauth_client_credentials(app: ExternalApp) -> tuple[str, str]:
-    client_id = app.organization_credentials.get("client_id")
-    client_secret = app.organization_credentials.get("client_secret")
+    org_credentials = app.organization_credentials.get_value(apply_mask=False)
+    client_id = org_credentials.get("client_id")
+    client_secret = org_credentials.get("client_secret")
     if not client_id or not client_secret:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -63,16 +60,16 @@ def _frontend_callback_url() -> str:
     return f"{WEB_DOMAIN}{_FRONTEND_CALLBACK_PATH}"
 
 
-def _token_response_is_error(
-    http_response: requests.Response, body: dict[str, Any]
-) -> str | None:
-    """Slack returns 200 + `{"ok": false}` on failure; everyone else
-    uses non-2xx. Returns the error string or None on success."""
-    if http_response.status_code >= 400:
-        return body.get("error_description") or body.get("error") or "unknown"
-    if body.get("ok") is False:
-        return body.get("error") or "unknown"
-    return None
+def _oauth_provider_or_raise(app: ExternalApp) -> OAuthExternalAppProvider:
+    """Resolve the app's provider and assert it authenticates via OAuth, or
+    400. Only the OAuth subset of built-in providers can drive these routes."""
+    provider = get_provider_or_raise(app)
+    if not isinstance(provider, OAuthExternalAppProvider):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"App '{app.skill.name}' does not use an OAuth flow.",
+        )
+    return provider
 
 
 class _OAuthStateRecord(BaseModel):
@@ -99,7 +96,7 @@ def start_external_app_oauth(
             OnyxErrorCode.INVALID_INPUT,
             "This app is currently disabled by an admin.",
         )
-    provider = get_provider_or_raise(app)
+    provider = _oauth_provider_or_raise(app)
     client_id, _client_secret = _oauth_client_credentials(app)
 
     oauth_uuid = uuid.uuid4()
@@ -115,16 +112,17 @@ def start_external_app_oauth(
     )
 
     redirect_uri = _frontend_callback_url()
+    oauth = provider.spec.oauth
     params: dict[str, str] = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
-        provider.scope_param: provider.scope,
+        oauth.scope_param: oauth.scope,
         "state": state,
-        **provider.extra_authorize_params,
+        **oauth.extra_authorize_params,
     }
     # urlencode so URI-shaped scopes (Google) get `:` and `/`
     # percent-encoded.
-    authorize_url = f"{provider.authorize_url}?{urlencode(params)}"
+    authorize_url = f"{oauth.authorize_url}?{urlencode(params)}"
     return OAuthStartResponse(authorize_url=authorize_url)
 
 
@@ -167,14 +165,18 @@ def handle_external_app_oauth_callback(
             f"External app with id {record.external_app_id} no longer exists.",
         )
 
-    provider = get_provider_or_raise(app)
+    provider = _oauth_provider_or_raise(app)
+    oauth = provider.spec.oauth
     # Re-read in case the admin rotated creds between /start and /callback.
     client_id, client_secret = _oauth_client_credentials(app)
 
     try:
         response = requests.post(
-            provider.token_url,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            oauth.token_url,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+            },
             data={
                 "grant_type": "authorization_code",
                 "client_id": client_id,
@@ -210,7 +212,7 @@ def handle_external_app_oauth_callback(
             status_code_override=response.status_code,
         )
 
-    error = _token_response_is_error(response, response_data)
+    error = provider.classify_token_response(response, response_data)
     if error:
         logger.warning(
             "%s OAuth token exchange failed for user %s, app %d: %s",
@@ -224,7 +226,11 @@ def handle_external_app_oauth_callback(
             f"{app.skill.name} OAuth failed: {error}",
         )
 
-    stored_credentials = provider.extract_credentials(response_data)
+    # Stamp an absolute `expires_at` now so the lazy-refresh path can later
+    # decide staleness without "when was this written" bookkeeping.
+    stored_credentials = stamp_expires_at(
+        provider.extract_credentials(response_data), datetime.now(timezone.utc)
+    )
 
     upsert_external_app_user_credential(
         db_session,

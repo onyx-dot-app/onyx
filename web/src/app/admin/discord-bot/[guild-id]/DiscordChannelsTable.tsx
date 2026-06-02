@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { EmptyMessageCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";

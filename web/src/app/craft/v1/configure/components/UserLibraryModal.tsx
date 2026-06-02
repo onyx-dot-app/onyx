@@ -13,9 +13,7 @@ import {
 } from "@/app/craft/services/apiServices";
 import { LibraryEntry } from "@/app/craft/types/user-library";
 import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
-import { ShadowDiv } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import {
   SvgFolder,
@@ -26,9 +24,14 @@ import {
   SvgFileText,
   SvgFolderPlus,
 } from "@opal/icons";
-import Switch from "@/refresh-components/inputs/Switch";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { Tooltip } from "@opal/components";
+import {
+  Button,
+  InputTypeIn,
+  ShadowDiv,
+  Switch,
+  Tooltip,
+} from "@opal/components";
+
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 
@@ -259,7 +262,6 @@ export default function UserLibraryModal({
                     style={{ display: "none" }}
                     onChange={handleFileUpload}
                     disabled={isUploading}
-                    accept=".xlsx,.xls,.docx,.doc,.pptx,.ppt,.csv,.json,.txt,.pdf,.zip"
                   />
                   <Button
                     disabled={isUploading}

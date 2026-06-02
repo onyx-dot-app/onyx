@@ -51,7 +51,6 @@ This is a smoke test. It does not exercise:
 - The approval-required path.
 - Sidebar filtering of scheduled-run sessions.
 - Per-user ownership boundaries on the HTTP API.
-- DST / IANA timezone behavior.
 
 Those properties rely on review and the manual checklist below.
 
@@ -63,8 +62,8 @@ path:
 - **Every-2-min task vs an Onyx-search prompt.** Walk away for 6 minutes,
   come back, confirm three runs with complete sessions and sensible
   `summary` text.
-- **`Europe/London` Mon/Wed/Fri 9 AM.** Verify `next_run_at` is correct
-  across the BST/GMT boundary and a force-tick at 9 AM local fires.
+- **Mon/Wed/Fri 9 AM.** Verify `next_run_at` is correct and a force-tick
+  at 9 AM UTC fires.
 - **Pause mid-fire.** In-flight run completes, no new fire scheduled.
   Resume → next fire is computed forward from `now()` (no backfire).
 - **Approval boundary.** Run sits in `AWAITING_APPROVAL`, the

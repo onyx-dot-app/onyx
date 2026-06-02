@@ -22,6 +22,7 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
+from onyx.db.users import delete_user_from_db
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -234,5 +235,7 @@ def remove_api_key(db_session: Session, api_key_id: int) -> None:
         )
 
     db_session.delete(existing_api_key)
-    db_session.delete(user_associated_with_key)
-    db_session.commit()
+    # The synthetic API-key user has rows in user__user_group (and may have
+    # other FK-bearing associations); route through the canonical user-delete
+    # helper so all of them are cleaned up before the user row is removed.
+    delete_user_from_db(user_associated_with_key, db_session)

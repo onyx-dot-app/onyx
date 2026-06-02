@@ -1,0 +1,96 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   Tabs
+
+   Three visual variants: contained (default), pill, underline.
+   Variant is propagated via data-variant attributes on both the list and
+   each trigger so CSS descendant selectors drive all variant-specific styles.
+   --------------------------------------------------------------------------- */
+
+/* ── List ───────────────────────────────────────────────────────────────────── */
+
+.opal-tabs-list {
+  @apply w-full rounded-08;
+}
+
+.opal-tabs-list[data-variant="contained"] {
+  display: grid;
+  @apply bg-background-tint-03;
+}
+
+.opal-tabs-list[data-variant="pill"],
+.opal-tabs-list[data-variant="underline"] {
+  @apply relative flex items-center overflow-hidden bg-background-tint-00 rounded-none;
+  padding-bottom: 5px;
+}
+
+/* ── Trigger ────────────────────────────────────────────────────────────────── */
+
+.opal-tabs-trigger {
+  @apply inline-flex items-center justify-center whitespace-nowrap rounded-08 cursor-pointer transition-all duration-200 ease-out;
+}
+
+.opal-tabs-trigger[data-variant="contained"] {
+  @apply p-2 gap-2;
+}
+
+.opal-tabs-trigger[data-variant="pill"],
+.opal-tabs-trigger[data-variant="underline"] {
+  @apply p-1 font-secondary-action;
+}
+
+/* contained · active */
+.opal-tabs-trigger[data-variant="contained"][data-state="active"] {
+  @apply bg-background-neutral-00 text-text-04 border border-border-01;
+  box-shadow:
+    0px 2px 12px 0px var(--shadow-02),
+    0px 0px 4px 1px var(--shadow-02);
+}
+
+/* contained · inactive */
+.opal-tabs-trigger[data-variant="contained"][data-state="inactive"] {
+  @apply text-text-03 border border-transparent;
+}
+
+/* pill · active */
+.opal-tabs-trigger[data-variant="pill"][data-state="active"] {
+  @apply bg-background-tint-inverted-03 text-text-inverted-05;
+}
+
+/* pill · inactive */
+.opal-tabs-trigger[data-variant="pill"][data-state="inactive"] {
+  @apply bg-background-tint-00 text-text-03;
+}
+
+/* underline · active */
+.opal-tabs-trigger[data-variant="underline"][data-state="active"] {
+  @apply text-text-05;
+}
+
+/* underline · inactive */
+.opal-tabs-trigger[data-variant="underline"][data-state="inactive"] {
+  @apply text-text-03;
+}
+
+/* ── Trigger icon ───────────────────────────────────────────────────────────── */
+
+.opal-tabs-trigger[data-variant="contained"] .opal-tabs-trigger-icon {
+  @apply stroke-text-03;
+}
+
+.opal-tabs-trigger[data-variant="pill"] .opal-tabs-trigger-icon,
+.opal-tabs-trigger[data-variant="underline"] .opal-tabs-trigger-icon {
+  @apply stroke-current;
+}
+
+/* ── Pill / underline indicator ─────────────────────────────────────────────── */
+
+.opal-tabs-pill-baseline {
+  @apply absolute bottom-0 left-0 h-px bg-border-02 pointer-events-none;
+}
+
+.opal-tabs-pill-indicator {
+  @apply absolute bottom-0 z-10 pointer-events-none bg-background-tint-inverted-03 transition-all duration-200 ease-out;
+  height: 2px;
+}

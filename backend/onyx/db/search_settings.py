@@ -21,6 +21,11 @@ from shared_configs.enums import EmbeddingProvider
 
 logger = setup_logger()
 
+# search_settings columns that are NOT NULL but whose Pydantic source fields are
+# typed str | None. Registry-less cloud providers (e.g. Bedrock/LiteLLM/Azure)
+# can arrive without prefixes; coerce None -> "" to avoid a NotNullViolation.
+_NOT_NULL_STR_FIELDS = {"query_prefix", "passage_prefix"}
+
 
 class ActiveSearchSettings:
     primary: SearchSettings
@@ -42,8 +47,9 @@ def create_search_settings(
         model_name=search_settings.model_name,
         model_dim=search_settings.model_dim,
         normalize=search_settings.normalize,
-        query_prefix=search_settings.query_prefix,
-        passage_prefix=search_settings.passage_prefix,
+        # See _NOT_NULL_STR_FIELDS: coerce None -> "" to avoid a NotNullViolation.
+        query_prefix=search_settings.query_prefix or "",
+        passage_prefix=search_settings.passage_prefix or "",
         status=status,
         index_name=search_settings.index_name,
         provider_type=search_settings.provider_type,
@@ -183,6 +189,10 @@ def update_search_settings(
     mapped_columns = {c.key for c in sa_inspect(SearchSettings).mapper.columns}
     for field, value in updated_settings.model_dump().items():
         if field not in preserved_fields and field in mapped_columns:
+            # A client that explicitly sends null for a NOT NULL prefix column
+            # must not write NULL (NotNullViolation). See _NOT_NULL_STR_FIELDS.
+            if value is None and field in _NOT_NULL_STR_FIELDS:
+                value = ""
             setattr(current_settings, field, value)
 
 

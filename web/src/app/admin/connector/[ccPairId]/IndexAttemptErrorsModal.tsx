@@ -8,7 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { IndexAttemptError } from "./types";
-import { localizeAndPrettify } from "@/lib/time";
+import { localizeAndPrettify } from "@opal/time";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import { PageSelector } from "@/components/PageSelector";

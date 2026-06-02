@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
@@ -28,6 +28,7 @@ import type {
   ScheduledTaskDetail,
   ScheduledTaskStatus,
 } from "@/app/craft/v1/tasks/interfaces";
+import { humanReadableScheduleFromCron } from "@/app/craft/v1/tasks/schedule";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
@@ -46,6 +47,9 @@ export default function ScheduledTaskDetailPage() {
 
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const scheduleDescription = data
+    ? humanReadableScheduleFromCron(data.editor_mode, data.cron_expression)
+    : undefined;
 
   const handleBack = useCallback(() => {
     router.push(TASKS_PATH);
@@ -108,8 +112,7 @@ export default function ScheduledTaskDetailPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title="Scheduled task"
-          backButton
-          onBack={handleBack}
+          backButton={handleBack}
         />
         <SettingsLayouts.Body>
           <Text mainUiBody text03>
@@ -125,9 +128,8 @@ export default function ScheduledTaskDetailPage() {
       <SettingsLayouts.Header
         icon={SvgClock}
         title={data?.name ?? "Scheduled task"}
-        description={data?.human_readable_schedule}
-        backButton
-        onBack={handleBack}
+        description={scheduleDescription}
+        backButton={handleBack}
         rightChildren={
           data ? (
             <div className="flex items-center gap-2">

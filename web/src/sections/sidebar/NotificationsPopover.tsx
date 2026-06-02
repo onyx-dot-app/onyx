@@ -7,7 +7,7 @@ import { track, AnalyticsEvent } from "@/lib/analytics";
 import type { Notification as NotificationData } from "@/lib/notifications/interfaces";
 import { NotificationType } from "@/lib/notifications/interfaces";
 import { getNotificationIcon } from "@/lib/notifications";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import useNotifications from "@/hooks/useNotifications";
 import {
   SvgCheckAll,
@@ -168,6 +168,9 @@ export default function NotificationsPopover({
         return;
       }
 
+      if (!notification.dismissed) {
+        handleDismiss(notification.id);
+      }
       onNavigate();
       router.push(link as Route);
     },

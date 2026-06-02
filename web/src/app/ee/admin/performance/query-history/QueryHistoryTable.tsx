@@ -38,7 +38,7 @@ import {
   PAGES_PER_BATCH,
   PREVIOUS_CSV_TASK_BUTTON_NAME,
 } from "@/app/ee/admin/performance/query-history/constants";
-import { humanReadableFormatWithTime } from "@/lib/time";
+import { humanReadableFormatWithTime } from "@opal/time";
 import Modal from "@/refresh-components/Modal";
 import { Button, Divider } from "@opal/components";
 import { Badge } from "@/components/ui/badge";

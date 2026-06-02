@@ -5,7 +5,7 @@ import { FormField } from "@/refresh-components/form/FormField";
 import InputKeyValue, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Divider } from "@opal/components";
 import type { MCPAuthFormValues } from "@/sections/actions/modals/MCPAuthenticationModal";
@@ -179,7 +179,6 @@ export function PerUserAuthConfig({
                           updateUserCredential(field, e.target.value)
                         }
                         placeholder={`Enter ${field.replace(/_/g, " ")}`}
-                        showClearButton={false}
                       />
                     </FormField.Control>
                   </FormField>

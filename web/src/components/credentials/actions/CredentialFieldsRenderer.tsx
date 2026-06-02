@@ -1,6 +1,6 @@
 "use client";
 
-import Tabs from "@/refresh-components/Tabs";
+import { Tabs } from "@opal/components";
 import { useFormikContext } from "formik";
 import {
   BooleanFormField,
@@ -72,11 +72,7 @@ export function CredentialFieldsRenderer({
           </Tabs.List>
 
           {templateWithAuth.authMethods.map((method) => (
-            <Tabs.Content
-              key={method.value}
-              value={method.value}
-              alignItems="stretch"
-            >
+            <Tabs.Content key={method.value} value={method.value}>
               {/* Show description if method has no fields but has a description */}
               {Object.keys(method.fields).length === 0 &&
                 method.description && (

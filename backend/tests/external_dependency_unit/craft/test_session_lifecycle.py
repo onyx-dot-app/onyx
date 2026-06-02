@@ -37,7 +37,6 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.manager import SessionManager
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import default_llm_config
 from tests.external_dependency_unit.craft._test_helpers import make_sandbox
 from tests.external_dependency_unit.craft._test_helpers import make_user
 from tests.external_dependency_unit.craft.conftest import (
@@ -600,11 +599,6 @@ class TestSandboxReset:
             failing_stub,
         )
         sm_fail = SessionManager(db_session)
-        monkeypatch.setattr(
-            sm_fail,
-            "_get_llm_config",
-            lambda *args, **kwargs: default_llm_config(),  # noqa: ARG005
-        )
         with pytest.raises(RuntimeError):
             sm_fail.terminate_user_sandbox(user_id=other_user.id)
         # Caller would rollback; mirror that here.

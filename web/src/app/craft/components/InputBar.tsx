@@ -11,12 +11,15 @@ import {
   type ChangeEvent,
   type ClipboardEvent,
   type KeyboardEvent,
+  type MouseEvent,
   type SyntheticEvent,
 } from "react";
+import { useRouter } from "next/navigation";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { isImageFile } from "@/lib/utils";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
+import SkillInfoPopover from "@/sections/input/SkillInfoPopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import {
@@ -25,22 +28,42 @@ import {
   UploadFileStatus,
 } from "@/app/craft/contexts/UploadFilesContext";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Button, Tooltip } from "@opal/components";
+import { Button, Text, Tooltip } from "@opal/components";
 import {
   SvgArrowUp,
   SvgClock,
   SvgFileText,
   SvgImage,
   SvgLoader,
+  SvgStop,
   SvgX,
   SvgPaperclip,
   SvgAlertCircle,
 } from "@opal/icons";
+import InterruptHint from "@/app/craft/components/InterruptHint";
+import Keycap from "@/refresh-components/Keycap";
+import { useDoubleEscapeInterrupt } from "@/hooks/useDoubleEscapeInterrupt";
 import { useContentEditable } from "@/hooks/useContentEditable";
-import { useUser } from "@/providers/UserProvider";
 import useUserSkills from "@/hooks/useUserSkills";
-import { detectSlashTrigger, toPickerSkills } from "@/lib/skills/picker";
+import useUserExternalApps from "@/hooks/useUserExternalApps";
+import { toPickerSections, type PickerEntry } from "@/lib/skills/picker";
+import {
+  reduceOnInput,
+  reduceOnSelection,
+  reduceOnDismiss,
+  INITIAL_PICKER_SESSION,
+  type PickerSession,
+} from "@/lib/skills/pickerSession";
 import { getTextContent } from "@/lib/contentEditable";
+import { isSkillTile } from "@/lib/richInputTile";
+import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
+import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
+import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
+import {
+  QueuedMessage,
+  MAX_QUEUED_MESSAGES,
+  EMPTY_QUEUED_MESSAGES,
+} from "@/app/app/interfaces";
 
 export interface InputBarHandle {
   reset: () => void;
@@ -55,6 +78,14 @@ export interface InputBarProps {
   placeholder?: string;
   sandboxInitializing?: boolean;
   noBottomRounding?: boolean;
+  /** Queued messages + callbacks; when wired, submitting mid-stream enqueues. */
+  queuedMessages?: readonly QueuedMessage[];
+  onQueueMessage?: (text: string) => void;
+  onRemoveQueuedMessage?: (index: number) => void;
+  /** Interrupt the in-flight turn; when wired, shows the Stop control + Esc hint. */
+  onInterrupt?: () => void;
+  /** Interrupt requested, awaiting the turn to terminate. */
+  isInterrupting?: boolean;
 }
 
 /**
@@ -92,20 +123,19 @@ function BuildFileCard({
       ) : (
         <SvgFileText className="h-4 w-4 text-text-03" />
       )}
-      <span
-        className={cn(
-          "max-w-[120px] truncate",
-          isFailed && "text-status-error-02"
-        )}
-      >
-        {file.name}
+      <span className="max-w-[120px] truncate">
+        <Text font="main-ui-body" color="text-04" nowrap>
+          {file.name}
+        </Text>
       </span>
-      <button
+      <Button
+        variant="default"
+        prominence="tertiary"
+        size="2xs"
+        icon={SvgX}
         onClick={() => onRemove(file.id)}
-        className="ml-1 p-0.5 hover:bg-background-neutral-02 rounded-sm"
-      >
-        <SvgX className="h-3 w-3 text-text-03" />
-      </button>
+        aria-label={`Remove ${file.name}`}
+      />
     </div>
   );
 
@@ -152,10 +182,17 @@ const InputBar = memo(
         placeholder = "Describe your task...",
         sandboxInitializing = false,
         noBottomRounding = false,
+        queuedMessages,
+        onQueueMessage,
+        onRemoveQueuedMessage,
+        onInterrupt,
+        isInterrupting = false,
       },
       ref
     ) => {
-      const { user } = useUser();
+      // Queueing is enabled only when the parent wires up the callbacks.
+      const queueEnabled = !!onQueueMessage;
+      const queue = queuedMessages ?? EMPTY_QUEUED_MESSAGES;
       const inputWrapperRef = useRef<HTMLDivElement>(null);
       const {
         ref: inputRef,
@@ -166,6 +203,7 @@ const InputBar = memo(
         handleCompositionStart,
         handleCompositionEnd,
         pasteText,
+        insertSkillTile,
         handleCopy,
         handleCut,
         setCursorToEnd,
@@ -177,7 +215,9 @@ const InputBar = memo(
         updateTileText,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
-        pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
+        // Craft always collapses large pastes into tiles, regardless of the
+        // user's paste_as_tile preference.
+        pasteTilesEnabled: true,
       });
 
       const containerRef = useRef<HTMLDivElement>(null);
@@ -191,20 +231,31 @@ const InputBar = memo(
         hasUploadingFiles,
       } = useUploadFilesContext();
 
-      // `/` skill picker state. The picker watches contentEditable input,
-      // shows accessible skills, and on select replaces the `/<query>` token
-      // with `/<slug> `.
+      const router = useRouter();
       const { data: skillsData } = useUserSkills();
-      const pickerSkills = useMemo(
-        () => toPickerSkills(skillsData),
-        [skillsData]
+      const { data: externalAppsData } = useUserExternalApps();
+      const pickerSections = useMemo(
+        () => toPickerSections(skillsData, externalAppsData),
+        [skillsData, externalAppsData]
       );
-      const [skillPicker, setSkillPicker] = useState<{
-        open: boolean;
-        anchorRect: DOMRect | null;
-        query: string;
-        slashIndex: number;
-      }>({ open: false, anchorRect: null, query: "", slashIndex: -1 });
+      const [session, setSession] = useState<PickerSession>(
+        INITIAL_PICKER_SESSION
+      );
+      const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+
+      const [skillInfo, setSkillInfo] = useState<{
+        tile: HTMLElement;
+        name: string;
+        description: string;
+      } | null>(null);
+      const dismissSkillInfo = useCallback(() => setSkillInfo(null), []);
+
+      const queueNav = useQueuedMessageNavigation({
+        messages: queue,
+        inputIsEmpty: !message,
+        onRemove: (index) => onRemoveQueuedMessage?.(index),
+        onEdit: setMessage,
+      });
 
       const getTextBeforeCursor = useCallback((): string | null => {
         const el = inputRef.current;
@@ -238,65 +289,85 @@ const InputBar = memo(
         return rect;
       }, [inputRef]);
 
-      const evaluateSkillPicker = useCallback(() => {
-        const textBefore = getTextBeforeCursor();
-        if (textBefore === null) {
-          setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
-          return;
-        }
-        const trigger = detectSlashTrigger(textBefore);
-        if (!trigger) {
-          setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
-          return;
-        }
-        setSkillPicker({
-          open: true,
-          anchorRect: getCaretRect(),
-          query: trigger.query,
-          slashIndex: trigger.slashIndex,
-        });
-      }, [getCaretRect, getTextBeforeCursor]);
+      const closeSkillPicker = useCallback(
+        () => setSession(INITIAL_PICKER_SESSION),
+        []
+      );
+
+      const dismissSkillPicker = useCallback(
+        () => setSession(reduceOnDismiss),
+        []
+      );
 
       const handleEnhancedInput = useCallback(
         (event: SyntheticEvent<HTMLDivElement>) => {
           onInput(event);
-          evaluateSkillPicker();
+          const next = reduceOnInput(session, getTextBeforeCursor());
+          if (next.open) setAnchorRect(getCaretRect());
+          setSession(next);
         },
-        [onInput, evaluateSkillPicker]
+        [onInput, session, getTextBeforeCursor, getCaretRect]
       );
 
-      // Re-evaluate the slash trigger when the caret moves without input
-      // (arrow keys, Home/End, mouse clicks). Without this, the picker can
-      // hold a stale `slashIndex`/`query` from a previous position and
-      // replace the wrong text on select.
       const handleSelectionChange = useCallback(() => {
-        evaluateSkillPicker();
-      }, [evaluateSkillPicker]);
-
-      const closeSkillPicker = useCallback(() => {
-        setSkillPicker((s) => ({ ...s, open: false }));
-      }, []);
+        if (!session.open) return;
+        const next = reduceOnSelection(session, getTextBeforeCursor());
+        if (next.open) setAnchorRect(getCaretRect());
+        setSession(next);
+      }, [session, getTextBeforeCursor, getCaretRect]);
 
       const handleSkillPickerSelect = useCallback(
-        (slug: string) => {
-          setSkillPicker((prev) => {
-            if (!prev.open) return prev;
-            const replacement = `/${slug} `;
-            const newText =
-              message.slice(0, prev.slashIndex) +
-              replacement +
-              message.slice(prev.slashIndex + 1 + prev.query.length);
-            setMessage(newText);
-            return { ...prev, open: false };
+        (entry: PickerEntry) => {
+          if (!session.open) return;
+          if (entry.kind === "app" && !entry.authenticated) {
+            closeSkillPicker();
+            router.push(`/craft/v1/apps?connect=${entry.slug}`);
+            return;
+          }
+          const beforeToken = `/${session.query}`;
+          if (insertSkillTile(entry.slug, entry.name, beforeToken))
+            closeSkillPicker();
+        },
+        [session.open, session.query, insertSkillTile, closeSkillPicker, router]
+      );
+
+      const openSkillInfo = useCallback(
+        (tile: HTMLElement) => {
+          const slug = tile.getAttribute("data-skill-slug") ?? "";
+          const entry =
+            pickerSections.skills.find((s) => s.slug === slug) ??
+            pickerSections.apps.find((a) => a.slug === slug);
+          setSkillInfo({
+            tile,
+            name: entry?.name ?? slug,
+            description: entry?.description ?? "",
           });
         },
-        [message, setMessage]
+        [pickerSections]
+      );
+
+      const handleInputClick = useCallback(
+        (event: MouseEvent<HTMLDivElement>) => {
+          const target = event.target as HTMLElement;
+          const tile = target.closest("[data-rich-tile]") as HTMLElement | null;
+          if (
+            tile &&
+            isSkillTile(tile) &&
+            !target.closest("[data-rich-tile-remove]")
+          ) {
+            openSkillInfo(tile);
+            return;
+          }
+          handleTileClick(event);
+        },
+        [openSkillInfo, handleTileClick]
       );
 
       useImperativeHandle(ref, () => ({
         reset: () => {
           clearMessage();
           clearFiles();
+          closeSkillPicker();
         },
         focus: () => {
           inputRef.current?.focus();
@@ -332,20 +403,59 @@ const InputBar = memo(
           const text = event.clipboardData.getData("text/plain");
           if (!text) return;
 
+          // Recreate a skill tile when pasting a lone `/<slug>` for a known
+          // skill or authenticated app. Unknown / unauth slugs paste as text.
+          const slug = text.trim().match(/^\/(\S+)$/)?.[1];
+          const entry =
+            slug &&
+            (pickerSections.skills.find((s) => s.slug === slug) ??
+              pickerSections.apps.find(
+                (a) => a.slug === slug && a.authenticated
+              ));
+          if (entry) {
+            insertSkillTile(entry.slug, entry.name, "");
+            closeSkillPicker();
+            return;
+          }
+
           pasteText(text);
         },
-        [disabled, uploadFiles, pasteText]
+        [
+          disabled,
+          uploadFiles,
+          pasteText,
+          pickerSections,
+          insertSkillTile,
+          closeSkillPicker,
+        ]
       );
 
       const handleSubmit = useCallback(() => {
-        if (disabled || isRunning || hasUploadingFiles || sandboxInitializing)
+        // File uploads / sandbox init / a pending interrupt are hard blockers
+        // regardless of queueing — keep this in sync with `canSubmit` so the
+        // keyboard (Enter) path can't bypass what the button disables.
+        if (
+          disabled ||
+          hasUploadingFiles ||
+          sandboxInitializing ||
+          isInterrupting
+        )
           return;
 
-        const hasMessage = message.trim().length > 0;
-        const hasFiles = currentMessageFiles.length > 0;
+        const text = message.trim();
 
-        if (hasMessage) {
-          onSubmit(message.trim(), currentMessageFiles);
+        // While streaming, queue the message; the parent auto-sends it later.
+        if (isRunning) {
+          if (onQueueMessage && text && queue.length < MAX_QUEUED_MESSAGES) {
+            onQueueMessage(text);
+            clearMessage();
+          }
+          return;
+        }
+
+        const hasFiles = currentMessageFiles.length > 0;
+        if (text) {
+          onSubmit(text, currentMessageFiles);
           clearMessage();
           clearFiles({ suppressRefetch: true });
         } else if (hasFiles) {
@@ -355,9 +465,12 @@ const InputBar = memo(
         message,
         disabled,
         isRunning,
+        isInterrupting,
         hasUploadingFiles,
         sandboxInitializing,
         onSubmit,
+        onQueueMessage,
+        queue,
         currentMessageFiles,
         clearFiles,
         clearMessage,
@@ -365,30 +478,68 @@ const InputBar = memo(
 
       const handleKeyDown = useCallback(
         (event: KeyboardEvent<HTMLDivElement>) => {
-          if (handleTileKeyDown(event)) return;
-
-          // Shift+Enter falls through to browser default: inserts <br>
-          if (
+          // Shift+Enter falls through to browser default (inserts <br>).
+          const isSubmitEnter =
             event.key === "Enter" &&
             !event.shiftKey &&
-            !(event.nativeEvent as any).isComposing
-          ) {
+            !event.nativeEvent.isComposing;
+
+          // Enter on an arrow-selected skill tile opens its info popover.
+          if (isSubmitEnter) {
+            const selected = inputRef.current?.querySelector(
+              '[data-rich-tile][data-tile-type="skill"].rich-input-tile-selected'
+            ) as HTMLElement | null;
+            if (selected) {
+              event.preventDefault();
+              openSkillInfo(selected);
+              return;
+            }
+          }
+          if (handleInputNavKeys(event, queueNav, handleTileKeyDown)) return;
+
+          if (isSubmitEnter) {
             event.preventDefault();
             handleSubmit();
           }
         },
-        [handleSubmit, handleTileKeyDown]
+        [handleSubmit, handleTileKeyDown, queueNav, openSkillInfo]
       );
 
       const canSubmit =
         message.trim().length > 0 &&
         !disabled &&
-        !isRunning &&
         !hasUploadingFiles &&
-        !sandboxInitializing;
+        !sandboxInitializing &&
+        !isInterrupting &&
+        (!isRunning || (queueEnabled && queue.length < MAX_QUEUED_MESSAGES));
+
+      // The Stop control + double-Esc shortcut are live only while a turn is
+      // streaming and no popover is claiming Esc for itself.
+      const interruptible = !!onInterrupt && isRunning;
+      const handleInterrupt = useCallback(() => {
+        if (interruptible && !isInterrupting) onInterrupt?.();
+      }, [interruptible, isInterrupting, onInterrupt]);
+      const { armed } = useDoubleEscapeInterrupt({
+        enabled:
+          interruptible &&
+          !isInterrupting &&
+          !session.open &&
+          !tilePopover &&
+          !skillInfo,
+        onInterrupt: handleInterrupt,
+      });
 
       return (
         <Disabled disabled={disabled}>
+          {queueEnabled && (
+            <QueuedMessageBar
+              messages={queue}
+              highlightedIndex={queueNav.highlightedIndex}
+              awaitingPreferredSelection={false}
+              onDiscard={(index) => onRemoveQueuedMessage?.(index)}
+              onHighlight={queueNav.setHighlightedIndex}
+            />
+          )}
           <div
             ref={containerRef}
             className={cn(
@@ -403,7 +554,6 @@ const InputBar = memo(
               className="hidden"
               multiple
               onChange={handleFileSelect}
-              accept="*/*"
             />
 
             {/* Attached Files */}
@@ -432,6 +582,7 @@ const InputBar = memo(
                 onKeyDown={handleKeyDown}
                 onKeyUp={handleSelectionChange}
                 onMouseUp={handleSelectionChange}
+                onBlur={() => queueNav.setHighlightedIndex(null)}
                 className={cn(
                   "w-full",
                   "h-full",
@@ -461,14 +612,14 @@ const InputBar = memo(
                 onCopy={handleCopy}
                 onCut={handleCut}
                 onMouseDown={handleTileMouseDown}
-                onClick={handleTileClick}
+                onClick={handleInputClick}
               />
             </div>
 
             {/* Bottom controls */}
             <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
               {/* Bottom left controls */}
-              <div className="flex flex-row items-center gap-1">
+              <div className="flex flex-row items-center gap-2">
                 {/* (+) button for file upload */}
                 <Button
                   disabled={disabled}
@@ -477,19 +628,69 @@ const InputBar = memo(
                   prominence="tertiary"
                   onClick={() => fileInputRef.current?.click()}
                 />
+                {/* Streaming-only: teaches the double-Esc interrupt. */}
+                {interruptible && (
+                  <InterruptHint armed={armed} interrupting={isInterrupting} />
+                )}
+                {/* Queued messages-only: teaches the Up arrow to edit queued message.*/}
+                {!message && queueEnabled && queue.length > 0 && (
+                  <>
+                    {interruptible && (
+                      <Text font="secondary-body" color="text-02">
+                        ·
+                      </Text>
+                    )}
+                    <div className="flex items-center gap-1 select-none">
+                      <Keycap>↑</Keycap>
+                      <Text font="secondary-body" color="text-02">
+                        to edit queued messages
+                      </Text>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Bottom right controls */}
               <div className="flex flex-row items-center gap-1">
-                {/* Submit button */}
+                {/* Stop: inserts to the LEFT of the fixed send button while
+                    streaming. The first Esc "arms" it with a subtle neutral fill. */}
+                <div
+                  className={cn(
+                    "overflow-hidden transition-[width,opacity] duration-150 ease-out motion-reduce:transition-none",
+                    interruptible
+                      ? "w-9 opacity-100"
+                      : "w-0 opacity-0 pointer-events-none"
+                  )}
+                >
+                  <IconButton
+                    main
+                    tertiary
+                    icon={isInterrupting ? SvgLoader : SvgStop}
+                    iconClassName={isInterrupting ? "animate-spin" : undefined}
+                    className={cn(
+                      "border-[1.5px] border-border-02",
+                      armed && "bg-background-tint-02!"
+                    )}
+                    disabled={!interruptible || isInterrupting}
+                    onClick={handleInterrupt}
+                    tooltip="Stop · esc esc"
+                    aria-label="Stop generating"
+                  />
+                </div>
+                {/* Submit button — fixed rightmost in every state. */}
                 {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <IconButton
                   icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
                   onClick={handleSubmit}
                   disabled={!canSubmit}
                   tooltip={
-                    sandboxInitializing ? "Initializing sandbox..." : "Send"
+                    sandboxInitializing
+                      ? "Initializing sandbox..."
+                      : isRunning
+                        ? "Queue message"
+                        : "Send"
                   }
+                  aria-label={isRunning ? "Queue message" : "Send"}
                   iconClassName={
                     sandboxInitializing ? "animate-spin" : undefined
                   }
@@ -506,13 +707,21 @@ const InputBar = memo(
             />
           )}
           <SkillPickerPopover
-            open={skillPicker.open}
-            anchorRect={skillPicker.anchorRect}
-            query={skillPicker.query}
-            skills={pickerSkills}
+            open={session.open}
+            anchorRect={anchorRect}
+            query={session.query}
+            sections={pickerSections}
             onSelect={handleSkillPickerSelect}
-            onClose={closeSkillPicker}
+            onClose={dismissSkillPicker}
           />
+          {skillInfo && (
+            <SkillInfoPopover
+              name={skillInfo.name}
+              description={skillInfo.description}
+              tileElement={skillInfo.tile}
+              onDismiss={dismissSkillInfo}
+            />
+          )}
         </Disabled>
       );
     }
