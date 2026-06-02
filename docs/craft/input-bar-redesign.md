@@ -11,7 +11,7 @@ Redesign of the Craft chat composer with three goals:
 | Component | Path | Responsibility |
 |---|---|---|
 | `BaseInputBar` | `web/src/sections/input/BaseInputBar.tsx` | Shared shell: container, contentEditable textarea (`useContentEditable`), submit/queue/interrupt logic, paste-tile popover. Exposes `topSlot` / `bottomLeftSlot` / `bottomRightSlot` plus extension hooks (`onBeforeKeyDown`, `onPasteText`, `onPasteFiles`, `onInputCallback`) and an imperative handle (`focus`, `setMessage`, `getTextBeforeCursor`, `getCaretRect`, `deleteBeforeToken`). |
-| `SkillChipStrip` | `web/src/sections/input/SkillChipStrip.tsx` | Single flush-left row of chips. Skills/apps lead, files follow. Both use one `InputChip` primitive so sizing matches. |
+| `InputChipStrip` | `web/src/sections/input/InputChipStrip.tsx` | Single flush-left row of chips. Skills/apps lead, files follow. Both use one `InputChip` primitive so sizing matches. |
 | `PlusMenuButton` | `web/src/sections/input/PlusMenuButton.tsx` | `+` popover. Files is a direct action; Skills and Apps are nested Popovers opening to the right. |
 | `CraftInputBar` | `web/src/app/craft/components/CraftInputBar.tsx` | Composes `BaseInputBar`. Owns `activeSkills` state, the `/` skill picker, and the skill-info popover. |
 

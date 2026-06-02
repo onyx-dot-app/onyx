@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { SkillChipStrip } from "@/sections/input/SkillChipStrip";
+import { InputChipStrip } from "@/sections/input/InputChipStrip";
 import { UploadFileStatus } from "@/app/craft/contexts/UploadFilesContext";
 import type { PickerEntry } from "@/lib/skills/picker";
 
-const meta: Meta<typeof SkillChipStrip> = {
-  title: "Apps/Craft/Input Bar/Skill Chip Strip",
-  component: SkillChipStrip,
+const meta: Meta<typeof InputChipStrip> = {
+  title: "Apps/Craft/Input Bar/Input Chip Strip",
+  component: InputChipStrip,
   tags: ["autodocs"],
   decorators: [
     (Story) => (
@@ -24,7 +24,7 @@ const meta: Meta<typeof SkillChipStrip> = {
 };
 
 export default meta;
-type Story = StoryObj<typeof SkillChipStrip>;
+type Story = StoryObj<typeof InputChipStrip>;
 
 const SKILL_PPTX: PickerEntry = {
   kind: "skill",

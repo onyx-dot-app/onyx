@@ -16,7 +16,7 @@ import BaseInputBar, {
 import SkillInfoPopover from "@/sections/input/SkillInfoPopover";
 import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
 import InterruptHint from "@/app/craft/components/InterruptHint";
-import { SkillChipStrip } from "@/sections/input/SkillChipStrip";
+import { InputChipStrip } from "@/sections/input/InputChipStrip";
 import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
 import { useDoubleEscapeInterrupt } from "@/hooks/useDoubleEscapeInterrupt";
 import {
@@ -224,7 +224,7 @@ const CraftInputBar = memo(
 
       const topSlot =
         currentMessageFiles.length > 0 || activeSkills.length > 0 ? (
-          <SkillChipStrip
+          <InputChipStrip
             files={currentMessageFiles}
             skills={activeSkills}
             onRemoveFile={removeFile}

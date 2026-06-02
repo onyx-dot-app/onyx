@@ -153,7 +153,7 @@ function SkillChip({ entry, onRemove, onClick }: SkillChipProps) {
 
 // ── Strip ─────────────────────────────────────────────────────────────────────
 
-export interface SkillChipStripProps {
+export interface InputChipStripProps {
   files: BuildFile[];
   skills: PickerEntry[];
   onRemoveFile: (id: string) => void;
@@ -161,13 +161,13 @@ export interface SkillChipStripProps {
   onClickSkill?: (entry: PickerEntry, chipEl: HTMLElement) => void;
 }
 
-export function SkillChipStrip({
+export function InputChipStrip({
   files,
   skills,
   onRemoveFile,
   onRemoveSkill,
   onClickSkill,
-}: SkillChipStripProps) {
+}: InputChipStripProps) {
   if (files.length === 0 && skills.length === 0) return null;
 
   // Single wrapping row. Skills/apps lead (flush left), files follow.
@@ -188,4 +188,4 @@ export function SkillChipStrip({
   );
 }
 
-export default SkillChipStrip;
+export default InputChipStrip;
