@@ -28,6 +28,7 @@ from onyx.document_index.interfaces_new import DocumentInsertionRecord
 from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.client import OpenSearchDocumentMissingError
@@ -920,17 +921,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # OpenSearch transition period.
         self._client.bulk_index_documents(
             documents=chunks, tenant_state=self._tenant_state, update_if_exists=True
-        )
-
-
-class SecondaryIndexDocumentMissingError(Exception):
-    """PRESENT update succeeded but the doc isn't in the FUTURE (secondary) index
-    yet (reindex port). Carries the doc ids so the caller can defer the FUTURE sync."""
-
-    def __init__(self, document_ids: list[str]) -> None:
-        self.document_ids = document_ids
-        super().__init__(
-            f"{len(document_ids)} document(s) missing from the secondary index."
         )
 
 

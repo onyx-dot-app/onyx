@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchDocumentMissingError
 from onyx.document_index.opensearch.client import OpenSearchUpdateError
@@ -22,9 +23,6 @@ from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
 from onyx.document_index.opensearch.opensearch_document_index import OpenSearchIndexPair
-from onyx.document_index.opensearch.opensearch_document_index import (
-    SecondaryIndexDocumentMissingError,
-)
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 

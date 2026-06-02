@@ -51,9 +51,7 @@ from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
-from onyx.document_index.opensearch.opensearch_document_index import (
-    SecondaryIndexDocumentMissingError,
-)
+from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
