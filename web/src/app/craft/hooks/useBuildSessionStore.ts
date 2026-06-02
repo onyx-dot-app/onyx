@@ -42,6 +42,7 @@ import {
   deleteSession as apiDeleteSession,
   fetchMessages,
   fetchArtifacts,
+  fetchWebappInfo,
   restoreSession,
 } from "@/app/craft/services/apiServices";
 
@@ -748,6 +749,30 @@ const createInitialSessionData = (
 // =============================================================================
 // Store
 // =============================================================================
+
+// The dev server is started fire-and-forget, so the backend reports RUNNING
+// before the webapp serves. Poll webapp-info until ready (bounded by maxAttempts).
+export async function waitForWebappReady(
+  sessionId: string,
+  { intervalMs = 1500, maxAttempts = 20 }: WaitForWebappReadyOptions = {}
+): Promise<void> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let info: Awaited<ReturnType<typeof fetchWebappInfo>> | null = null;
+    try {
+      info = await fetchWebappInfo(sessionId);
+    } catch {
+      // keep polling
+    }
+    // Done on a definitive answer (no webapp or serving); errors keep polling.
+    if (info && (!info.has_webapp || info.ready)) return;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
+interface WaitForWebappReadyOptions {
+  intervalMs?: number;
+  maxAttempts?: number;
+}
 
 export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   currentSessionId: null,
@@ -1537,26 +1562,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         isLoaded: true,
       });
 
-      // Now restore the sandbox if needed (messages are already visible).
-      // The backend enforces a timeout and returns an error if restore
-      // takes too long, so no frontend timeout needed here.
       if (needsRestore) {
         try {
           sessionData = await restoreSession(sessionId);
-
-          // Sandbox is now running - fetch artifacts
-          const restoredArtifacts = await fetchArtifacts(sessionId);
-
-          updateSessionData(sessionId, {
-            status: sessionData.status === "active" ? "active" : "idle",
-            artifacts: restoredArtifacts,
-            sandbox: sessionData.sandbox,
-            // Bump so OutputPanel's SWR refetches webapp-info (which
-            // derives the actual webappUrl from the backend).
-            webappNeedsRefresh:
-              (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
-          });
         } catch (restoreErr) {
+          // Only a genuine restore failure marks the sandbox failed.
           console.error("Sandbox restore failed:", restoreErr);
           updateSessionData(sessionId, {
             status: "idle",
@@ -1564,6 +1574,32 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
               ? { ...sessionData.sandbox, status: "failed" }
               : null,
           });
+          return;
+        }
+
+        // Hold the chip on "restoring" (and refresh the preview) until the
+        // webapp actually serves, then flip to the real status below.
+        updateSessionData(sessionId, {
+          status: sessionData.status === "active" ? "active" : "idle",
+          sandbox: sessionData.sandbox
+            ? { ...sessionData.sandbox, status: "restoring" }
+            : sessionData.sandbox,
+          webappNeedsRefresh:
+            (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
+        });
+
+        await waitForWebappReady(sessionId);
+        updateSessionData(sessionId, { sandbox: sessionData.sandbox });
+
+        // An artifact-fetch failure must NOT flip the sandbox to "failed".
+        try {
+          const restoredArtifacts = await fetchArtifacts(sessionId);
+          updateSessionData(sessionId, { artifacts: restoredArtifacts });
+        } catch (artifactsErr) {
+          console.warn(
+            "Failed to fetch artifacts after restore:",
+            artifactsErr
+          );
         }
       }
     } catch (err) {

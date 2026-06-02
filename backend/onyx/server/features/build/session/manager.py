@@ -2351,7 +2351,6 @@ class SessionManager:
         artifacts: list[dict[str, Any]] = []
         now = datetime.now(timezone.utc)
 
-        # Check for outputs directory using sandbox manager
         try:
             output_entries = self._sandbox_manager.list_directory(
                 sandbox_id=sandbox.id,
@@ -2359,7 +2358,15 @@ class SessionManager:
                 path="outputs",
             )
         except ValueError:
-            # Directory doesn't exist
+            # outputs/ doesn't exist yet — no artifacts.
+            return artifacts
+        except Exception:
+            # Sandbox transiently unreachable — degrade to no artifacts, not 500.
+            logger.warning(
+                "Could not list artifacts for session %s; sandbox not reachable",
+                session_id,
+                exc_info=True,
+            )
             return artifacts
 
         # Check for webapp (web directory in outputs)
