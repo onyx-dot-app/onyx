@@ -45,27 +45,34 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
         Permission.READ_AGENTS.value,
         Permission.READ_USERS.value,
     },
+    # basic grants the search/chat surfaces; admin grants read:admin (and the
+    # rest) via the FULL_ADMIN_PANEL_ACCESS short-circuit in
+    # resolve_effective_permissions.
+    Permission.BASIC_ACCESS.value: {
+        Permission.READ_SEARCH.value,
+        Permission.READ_CHAT.value,
+        Permission.WRITE_CHAT.value,
+    },
+    Permission.WRITE_CHAT.value: {Permission.READ_CHAT.value},
 }
 
 # Permissions that cannot be toggled via the group-permission API.
 # BASIC_ACCESS is always granted, FULL_ADMIN_PANEL_ACCESS is too broad,
-# and READ_* permissions are implied (never stored directly).
+# and implied permissions (READ_* and the API-surface scopes) are never
+# stored directly.
 NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
     {
         Permission.BASIC_ACCESS,
         Permission.FULL_ADMIN_PANEL_ACCESS,
-        Permission.READ_CONNECTORS,
-        Permission.READ_DOCUMENT_SETS,
-        Permission.READ_AGENTS,
-        Permission.READ_USERS,
     }
+    | Permission.IMPLIED
 )
 
 
 def resolve_effective_permissions(granted: set[str]) -> set[str]:
     """Expand granted permissions with their implied permissions.
 
-    If "admin" is present, returns all 19 permissions.
+    If "admin" is present, returns all permissions.
     """
     if Permission.FULL_ADMIN_PANEL_ACCESS.value in granted:
         return set(ALL_PERMISSIONS)

@@ -8,6 +8,8 @@ import pytest
 
 from onyx.auth.permissions import ALL_PERMISSIONS
 from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import IMPLIED_PERMISSIONS
+from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
 from onyx.auth.permissions import require_permission
 from onyx.auth.permissions import resolve_effective_permissions
 from onyx.db.enums import Permission
@@ -23,9 +25,25 @@ class TestResolveEffectivePermissions:
     def test_empty_set(self) -> None:
         assert resolve_effective_permissions(set()) == set()
 
-    def test_basic_no_implications(self) -> None:
+    def test_basic_implies_api_surface_scopes(self) -> None:
         result = resolve_effective_permissions({"basic"})
-        assert result == {"basic"}
+        assert result == {"basic", "read:search", "read:chat", "write:chat"}
+
+    def test_write_chat_implies_read_chat(self) -> None:
+        result = resolve_effective_permissions({"write:chat"})
+        assert result == {"write:chat", "read:chat"}
+
+    def test_read_search_no_implications(self) -> None:
+        result = resolve_effective_permissions({"read:search"})
+        assert result == {"read:search"}
+
+    def test_basic_does_not_imply_read_admin(self) -> None:
+        """read:admin is admin-only — basic principals must never gain it."""
+        assert "read:admin" not in resolve_effective_permissions({"basic"})
+
+    def test_write_chat_does_not_imply_search(self) -> None:
+        """The chat write surface must not leak into the search surface."""
+        assert "read:search" not in resolve_effective_permissions({"write:chat"})
 
     def test_single_implication(self) -> None:
         result = resolve_effective_permissions({"add:agents"})
@@ -72,6 +90,9 @@ class TestResolveEffectivePermissions:
         )
         assert result == {
             "basic",
+            "read:search",
+            "read:chat",
+            "write:chat",
             "add:agents",
             "read:agents",
             "manage:connectors",
@@ -86,6 +107,10 @@ class TestResolveEffectivePermissions:
     def test_all_permissions_for_admin(self) -> None:
         result = resolve_effective_permissions({"admin"})
         assert len(result) == len(ALL_PERMISSIONS)
+
+    def test_admin_includes_api_surface_scopes(self) -> None:
+        result = resolve_effective_permissions({"admin"})
+        assert {"read:search", "read:chat", "write:chat", "read:admin"} <= result
 
 
 # ---------------------------------------------------------------------------
@@ -107,11 +132,16 @@ class TestGetEffectivePermissions:
         result = get_effective_permissions(user)
         assert result == set(Permission)
 
-    def test_basic_stays_basic(self) -> None:
+    def test_basic_expands_to_api_surface_scopes(self) -> None:
         user = MagicMock()
         user.effective_permissions = ["basic"]
         result = get_effective_permissions(user)
-        assert result == {Permission.BASIC_ACCESS}
+        assert result == {
+            Permission.BASIC_ACCESS,
+            Permission.READ_SEARCH,
+            Permission.READ_CHAT,
+            Permission.WRITE_CHAT,
+        }
 
     def test_empty_column(self) -> None:
         user = MagicMock()
@@ -173,3 +203,40 @@ class TestRequirePermission:
         dep = require_permission(Permission.BASIC_ACCESS)
         with pytest.raises(OnyxError):
             await dep(user=user)
+
+
+# ---------------------------------------------------------------------------
+# API-surface scope registration (pins the spec, not the impl)
+# ---------------------------------------------------------------------------
+
+
+class TestApiSurfaceScopeRegistration:
+    # Hardcoded spec: the complete implied-only set (4 READ_* capability reads
+    # + 4 API-surface scopes). Equality, not subset, so an accidentally
+    # over-broad set (a real capability made un-grantable) is also caught.
+    EXPECTED_IMPLIED = {
+        "read:connectors",
+        "read:document_sets",
+        "read:agents",
+        "read:users",
+        "read:search",
+        "read:chat",
+        "write:chat",
+        "read:admin",
+    }
+
+    def test_implied_set_matches_spec(self) -> None:
+        assert {p.value for p in Permission.IMPLIED} == self.EXPECTED_IMPLIED
+
+    def test_non_toggleable_is_implied_plus_basic_and_admin(self) -> None:
+        assert {p.value for p in NON_TOGGLEABLE_PERMISSIONS} == (
+            self.EXPECTED_IMPLIED | {"basic", "admin"}
+        )
+
+    def test_implication_edges_match_spec(self) -> None:
+        assert IMPLIED_PERMISSIONS["basic"] == {
+            "read:search",
+            "read:chat",
+            "write:chat",
+        }
+        assert IMPLIED_PERMISSIONS["write:chat"] == {"read:chat"}

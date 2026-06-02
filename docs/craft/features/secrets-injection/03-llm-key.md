@@ -23,7 +23,7 @@ type:
 `claims()` matches `request.host` against this table; no DB session is opened.
 
 **Row resolution.** Tenancy is per-PostgreSQL-schema, so the resolver opens a
-session via `ctx.db_session_factory(ctx.sandbox.tenant_id)`, loads the sandbox
+session via `get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id)`, loads the sandbox
 owner (`fetch_user_by_id`), and calls `fetch_all_supported_build_llm_providers`
 — the same access-scoped fetch provisioning uses. It then takes the first
 provider of the claimed type, matching how provisioning picks the key
