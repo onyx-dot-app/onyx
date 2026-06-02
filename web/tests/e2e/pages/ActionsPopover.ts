@@ -192,11 +192,11 @@ export class ActionsPopover {
   /** Drill into a server to reveal its individual tools. */
   async openServer(serverName: string): Promise<void> {
     await this.open();
-    // The popover's server list re-renders as MCP/OAuth auth-status polls
-    // resolve, which can detach the row mid-click (notably for OAuth servers,
-    // whose status is polled continuously). A plain click loses that race and
-    // can burn the whole test timeout, so retry a force-click until the
-    // tool-list view actually appears.
+    // The popover fetches its server list when it opens, so the row can mount a
+    // beat after the popover is visible and a plain click can land before the
+    // row is interactive. Retry a force-click until the tool-list view actually
+    // appears. (Callers must ensure the server is authenticated first;
+    // clicking an unauthenticated server starts OAuth instead of drilling in.)
     const toolListView = this.popover
       .getByText(/(Enable|Disable) All/i)
       .first();

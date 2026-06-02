@@ -44,17 +44,6 @@ function buildMcpServerUrl(baseUrl: string): string {
   return trimmed.endsWith("/mcp") ? trimmed : `${trimmed}/mcp`;
 }
 
-/** Stub the OAuth status endpoint so cached statuses don't skip the flow. */
-async function mockEmptyOauthStatus(page: Page): Promise<void> {
-  await page.route("**/api/mcp/oauth/status*", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ statuses: [] }),
-    })
-  );
-}
-
 /** Confirm the current session belongs to the expected user + role. */
 async function verifySessionUser(
   page: Page,
@@ -297,7 +286,6 @@ test.describe("MCP OAuth flows", () => {
       testInfo.project.name !== "admin",
       "MCP OAuth flows run only in admin project"
     );
-    await mockEmptyOauthStatus(page);
 
     await page.context().clearCookies();
     await loginAs(page, "admin");
@@ -341,9 +329,12 @@ test.describe("MCP OAuth flows", () => {
       toolName: TOOL_NAMES.admin,
       toolId: adminToolId,
     };
-    await verifyToolUsableFromChat(page, artifacts, agentId);
 
-    // Re-authenticate from chat and confirm the tool still works.
+    // Per-user OAuth servers require the user to authenticate from chat before
+    // their tools become usable: the admin-page "connect" only stores the
+    // server's client config, not a per-user token for this user
+    // (backend mcp/api.py: user_authenticated = get_user_connection_config(...)
+    // is not None). So authenticate from chat first, then verify the tool runs.
     const actions = new ActionsPopover(page);
     await oauthFlow.reauthenticateFromChat(
       actions,
@@ -388,7 +379,6 @@ test.describe("MCP OAuth flows", () => {
       !curatorCredentials || !curatorTwoCredentials,
       "Curator credentials were not initialized"
     );
-    await mockEmptyOauthStatus(page);
 
     await page.context().clearCookies();
     await apiLogin(
@@ -441,9 +431,12 @@ test.describe("MCP OAuth flows", () => {
 
       await page.goto(`/app?agentId=${agentId}`, { waitUntil: "load" });
 
+      // Per-user OAuth: the curator must authenticate from chat before the
+      // server's tools are reachable (their admin-page connect only stores the
+      // server client config, not a per-user token). Confirm the server is
+      // listed, authenticate, then confirm the tool row.
       const actions = new ActionsPopover(page);
       await actions.ensureServerVisible(serverName, { agentId });
-      await actions.expectToolRowVisible(serverName, TOOL_NAMES.curator);
 
       await oauthFlow.reauthenticateFromChat(
         actions,
@@ -494,7 +487,6 @@ test.describe("MCP OAuth flows", () => {
       "MCP OAuth flows run only in admin project"
     );
     test.skip(!adminArtifacts, "Admin flow must complete before user test");
-    await mockEmptyOauthStatus(page);
 
     await page.context().clearCookies();
     await loginAsWorkerUser(page, testInfo.workerIndex);
