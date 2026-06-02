@@ -161,9 +161,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
 
-      # Pull base images via the ECR Docker Hub pull-through cache instead of Docker Hub
-      # directly, avoiding the "Unauthenticated users" rate limit. Exports BASE_IMAGE_REGISTRY
-      # for docker compose / buildx.
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
@@ -283,9 +280,6 @@ jobs:
         with:
           aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
-      # Pull base images via the ECR Docker Hub pull-through cache instead of Docker Hub
-      # directly, avoiding the "Unauthenticated users" rate limit. Exports BASE_IMAGE_REGISTRY
-      # for docker compose / buildx.
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache
         with:

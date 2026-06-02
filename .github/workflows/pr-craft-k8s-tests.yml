@@ -119,9 +119,6 @@ jobs:
             backend/requirements/dev.txt
             backend/requirements/ee.txt
 
-      # Pull base images (registry:2, the sandbox/backend Dockerfile FROMs) via the ECR
-      # Docker Hub pull-through cache instead of Docker Hub directly, avoiding the
-      # "Unauthenticated users" rate limit. Exports BASE_IMAGE_REGISTRY for the steps below.
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache
         with:

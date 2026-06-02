@@ -116,9 +116,6 @@ jobs:
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
 
-      # Pull the OpenSearch/Redis/Postgres/MinIO base images via the ECR Docker Hub
-      # pull-through cache instead of Docker Hub directly, avoiding the "Unauthenticated
-      # users" rate limit. Exports BASE_IMAGE_REGISTRY for docker compose.
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
