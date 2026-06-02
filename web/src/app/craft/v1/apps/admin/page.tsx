@@ -10,6 +10,7 @@ import Card from "@/refresh-components/cards/Card";
 import { SvgPlug, SvgPlus, SvgTrash } from "@opal/icons";
 import { useUser } from "@/providers/UserProvider";
 import {
+  availableBuiltInDescriptors,
   BuiltInExternalAppDescriptor,
   ExternalAppAdminResponse,
   getAppTypeLogo,
@@ -69,15 +70,13 @@ export default function ExternalAppsAdminPage() {
     (descriptors ?? []).map((d) => [d.app_type, d])
   );
 
-  // On cloud, built-in apps are Onyx-managed and pre-provisioned, so they can't
-  // be added by an admin — drop them from the "add" list (the configured row
-  // already covers enable + policies). Self-hosted apps are never managed, so
-  // this leaves the existing multi-instance behaviour untouched.
-  const managedAppTypes = new Set(
-    (apps ?? []).filter((a) => a.is_onyx_managed).map((a) => a.app_type)
-  );
-  const availableDescriptors = (descriptors ?? []).filter(
-    (d) => !managedAppTypes.has(d.app_type)
+  // At most one built-in app per type is allowed (every deployment), so a
+  // built-in whose type is already configured is dropped from the "add" list —
+  // offering it would only error on submit. This also covers cloud, where
+  // built-ins are Onyx-managed and pre-provisioned (hence always configured).
+  const availableDescriptors = availableBuiltInDescriptors(
+    descriptors ?? [],
+    apps ?? []
   );
 
   return (
@@ -129,9 +128,9 @@ export default function ExternalAppsAdminPage() {
                 {hasConfigured ? "Add another" : "Available apps"}
               </Text>
               <Text font="secondary-body" color="text-03">
-                Add a built-in integration. You can configure multiple instances
-                of the same provider (e.g. two Slack workspaces) by giving each
-                a distinct name.
+                Add a built-in integration. Each provider can be configured
+                once; connected providers no longer appear here. Use a custom
+                app for anything not listed.
               </Text>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
                 {availableDescriptors.map((descriptor) => (

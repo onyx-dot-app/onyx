@@ -109,3 +109,20 @@ export function findUserAppByName(
 ): ExternalAppUserResponse | null {
   return apps.find((a) => a.name === name) ?? null;
 }
+
+/**
+ * Built-in descriptors still available to add. At most one built-in app per
+ * `app_type` is allowed per deployment (enforced server-side via the built-in
+ * skill's unique slug, in cloud and self-hosted alike), so any type that is
+ * already configured is dropped from the "Add another" list — offering it would
+ * only lead to a duplicate-resource error on submit. Descriptors only cover
+ * built-in types, so configured CUSTOM apps (which may repeat) never match and
+ * are correctly left untouched.
+ */
+export function availableBuiltInDescriptors(
+  descriptors: BuiltInExternalAppDescriptor[],
+  configuredApps: ExternalAppAdminResponse[]
+): BuiltInExternalAppDescriptor[] {
+  const configuredAppTypes = new Set(configuredApps.map((app) => app.app_type));
+  return descriptors.filter((d) => !configuredAppTypes.has(d.app_type));
+}
