@@ -865,6 +865,24 @@ def mark_document_as_synced(document_id: str, db_session: Session) -> None:
 
     # update last_synced
     doc.last_synced = datetime.now(timezone.utc)
+    # reaching here means every index synced, so clear any deferred FUTURE write
+    doc.secondary_only_sync_pending = False
+    db_session.commit()
+
+
+def mark_document_synced_secondary_pending(
+    document_id: str, db_session: Session
+) -> None:
+    """Reindex-port: PRESENT synced but the doc wasn't in FUTURE yet. Clear
+    needs-sync and flag the deferred FUTURE write, in one commit. Cleared later by
+    mark_document_as_synced once a sync reaches FUTURE."""
+    stmt = select(DbDocument).where(DbDocument.id == document_id)
+    doc = db_session.scalar(stmt)
+    if doc is None:
+        raise ValueError(f"No document with ID: {document_id}")
+
+    doc.last_synced = datetime.now(timezone.utc)
+    doc.secondary_only_sync_pending = True
     db_session.commit()
 
 

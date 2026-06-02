@@ -3,6 +3,7 @@ import logging
 import time
 from contextlib import AbstractContextManager
 from contextlib import nullcontext
+from http import HTTPStatus
 from typing import Any
 from typing import Generic
 from typing import TypeVar
@@ -106,6 +107,31 @@ class OpenSearchIndexError(Exception):
     was caught by OpenSearchIndexClient. This exception is not exhaustive of all
     exceptions index calls can raise.
     """
+
+
+class OpenSearchDocumentMissingError(Exception):
+    """Target chunks don't exist on an _update (404) and the caller opted to
+    surface this rather than fail (reindex port: doc not in FUTURE yet)."""
+
+    def __init__(self, missing_chunk_ids: list[str]) -> None:
+        self.missing_chunk_ids = missing_chunk_ids
+        super().__init__(
+            f"{len(missing_chunk_ids)} document chunk(s) missing during update."
+        )
+
+
+# Server-side error.type strings (not exposed as enums by opensearch-py; cf.
+# _RETRYABLE_UPDATE_ERROR_TYPES above). Status codes use http.HTTPStatus.
+_DOCUMENT_MISSING_ERROR_TYPE = "document_missing_exception"
+_VERSION_CONFLICT_ERROR_TYPE = "version_conflict_engine_exception"
+
+
+def _external_version_ms(document: DocumentChunk) -> int | None:
+    # FUTURE write version = source doc_updated_at in epoch-ms (newest wins);
+    # None -> write without versioning.
+    if document.last_updated is None:
+        return None
+    return int(document.last_updated.timestamp() * 1000)
 
 
 class OpenSearchServerSideTimeout(Exception):
@@ -822,6 +848,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             "documents": len,
             "tenant_state": str,
             "update_if_exists": str,
+            "use_external_versioning": str,
         },
     )
     def bulk_index_documents(
@@ -829,6 +856,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         documents: list[DocumentChunk],
         tenant_state: TenantState,
         update_if_exists: bool = False,
+        use_external_versioning: bool = False,
     ) -> None:
         """Bulk indexes documents.
 
@@ -846,6 +874,11 @@ class OpenSearchIndexClient(OpenSearchClient):
             update_if_exists: Whether to update the document if it already
                 exists. If False, will raise an exception if the document
                 already exists. Defaults to False.
+            use_external_versioning: When True, write each chunk with
+                version_type=external / version=doc_updated_at (epoch-ms) and
+                treat a 409 version_conflict as benign, so the newest source
+                version wins between two FUTURE writers. Forces _op_type=index.
+                Default False leaves the write path unchanged.
 
         Raises:
             Exception: There was an error during the bulk index. This
@@ -860,10 +893,12 @@ class OpenSearchIndexClient(OpenSearchClient):
         if not documents:
             return
         logger.debug(
-            "Bulk indexing %s documents for tenant %s. update_if_exists=%s.",
+            "Bulk indexing %s documents for tenant %s. update_if_exists=%s "
+            "use_external_versioning=%s.",
             len(documents),
             tenant_state.tenant_id,
             update_if_exists,
+            use_external_versioning,
         )
         data = []
         for document in documents:
@@ -880,23 +915,75 @@ class OpenSearchIndexClient(OpenSearchClient):
                 "_op_type": "index" if update_if_exists else "create",
                 "_source": body,
             }
+            if use_external_versioning:
+                version_ms = _external_version_ms(document)
+                if version_ms is not None:
+                    # external versioning needs an index op (create ignores version)
+                    data_for_document["_op_type"] = "index"
+                    data_for_document["_version"] = version_ms
+                    data_for_document["_version_type"] = "external"
             data.append(data_for_document)
-        # max_retries is the number of times to retry a request if we get a 429.
-        # Explicitly raise on error and exception; we will not attempt retries.
-        successes, _ = bulk(
-            self._client,
-            data,
-            max_retries=3,
-            raise_on_error=True,
-            raise_on_exception=True,
-        )
-        if successes != len(documents):
-            raise OpenSearchIndexError(
-                "OpenSearch reported no errors during bulk index but the number of successful "
-                f"operations ({successes}) does not match the number of documents "
-                f"({len(documents)})."
+
+        if use_external_versioning:
+            # a stale write loses to a newer one with a benign 409, so inspect the
+            # per-item errors instead of failing the whole batch
+            successes, errors = bulk(
+                self._client,
+                data,
+                max_retries=3,
+                raise_on_error=False,
+                raise_on_exception=True,
             )
-        logger.debug("Successfully bulk indexed %s documents.", len(documents))
+            benign_conflicts = self._benign_version_conflict_count(errors)
+        else:
+            # legacy path: any error fails the batch (the caller may refresh-retry
+            # on the BulkIndexError that bulk raises)
+            successes, _ = bulk(
+                self._client,
+                data,
+                max_retries=3,
+                raise_on_error=True,
+                raise_on_exception=True,
+            )
+            benign_conflicts = 0
+
+        if successes + benign_conflicts != len(documents):
+            raise OpenSearchIndexError(
+                f"Bulk index for {self._index_name}: successes ({successes}) + benign version "
+                f"conflicts ({benign_conflicts}) != documents ({len(documents)})."
+            )
+        logger.debug(
+            "Successfully bulk indexed %s documents (%s benign version conflicts).",
+            len(documents),
+            benign_conflicts,
+        )
+
+    def _benign_version_conflict_count(self, errors: list[dict[str, Any]]) -> int:
+        """Count benign 409 version conflicts (a newer external-versioned chunk
+        already won); raise OpenSearchIndexError on any other error.
+
+        opensearch-py exposes no typed model for bulk per-item errors (bulk() ->
+        Any, BulkIndexError.errors -> List[Any]); they are raw {op_type: {...}}
+        dicts, so we read the fields directly.
+        """
+        benign = 0
+        fatal: list[dict[str, Any]] = []
+        for error in errors:
+            item = error.get("index") or {}
+            err_type = (item.get("error") or {}).get("type", "")
+            if (
+                item.get("status") == HTTPStatus.CONFLICT
+                and err_type == _VERSION_CONFLICT_ERROR_TYPE
+            ):
+                benign += 1
+            else:
+                fatal.append(error)
+        if fatal:
+            raise OpenSearchIndexError(
+                f"Failed to bulk index documents for index {self._index_name}. "
+                f"At least one fatal error occurred: {fatal[0]}"
+            )
+        return benign
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
     def delete_document(self, document_chunk_id: str) -> bool:
@@ -1066,7 +1153,10 @@ class OpenSearchIndexClient(OpenSearchClient):
         },
     )
     def bulk_update_documents(
-        self, document_chunk_ids: list[str], properties_to_update: dict[str, Any]
+        self,
+        document_chunk_ids: list[str],
+        properties_to_update: dict[str, Any],
+        swallow_document_missing: bool = False,
     ) -> None:
         """Bulk updates OpenSearch document chunks' properties.
 
@@ -1078,6 +1168,9 @@ class OpenSearchIndexClient(OpenSearchClient):
                 update.
             properties_to_update: The properties of the document to update. Each
                 property should exist in the schema.
+            swallow_document_missing: When True and the only fatal errors are 404
+                document_missing, raise OpenSearchDocumentMissingError instead of
+                OpenSearchUpdateError (FUTURE write during a reindex port).
 
         Raises:
             Exception: There was an error during the bulk update.
@@ -1088,6 +1181,8 @@ class OpenSearchIndexClient(OpenSearchClient):
                 by OpenSearch does not match the number of document chunks to
                 update, or there was at least one other kind of fatal error for
                 a particular document chunk.
+            OpenSearchDocumentMissingError: ``swallow_document_missing`` was set
+                and the only fatal errors were 404 document_missing.
         """
         if not document_chunk_ids:
             return
@@ -1120,6 +1215,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             raise_on_exception=True,
         )
 
+        missing_chunk_ids: list[str] = []
         if errors:
             retryable_ids = []
             fatal_errors = []
@@ -1135,7 +1231,14 @@ class OpenSearchIndexClient(OpenSearchClient):
                 err_obj = info.get("error", {})
                 err_type = err_obj.get("type", "") if isinstance(err_obj, dict) else ""
 
-                if status >= 500 and err_type in _RETRYABLE_UPDATE_ERROR_TYPES:
+                if (
+                    swallow_document_missing
+                    and status == HTTPStatus.NOT_FOUND
+                    and err_type == _DOCUMENT_MISSING_ERROR_TYPE
+                ):
+                    # doc not in this index yet; surface instead of failing
+                    missing_chunk_ids.append(info.get("_id", ""))
+                elif status >= 500 and err_type in _RETRYABLE_UPDATE_ERROR_TYPES:
                     # We have seen a bug in OpenSearch version 3.4.0 when using
                     # the knn plugin and when derived_source is enabled (the
                     # default), when OpenSearch is under load sometimes updates
@@ -1195,12 +1298,15 @@ class OpenSearchIndexClient(OpenSearchClient):
                 )
             successes += new_successes
 
-        if successes != len(document_chunk_ids):
+        # missing chunks are accounted for separately, not counted as successes
+        if successes + len(missing_chunk_ids) != len(document_chunk_ids):
             raise OpenSearchUpdateError(
                 f"OpenSearch reported no errors during bulk update but the number of successful "
-                f"operations ({successes}) does not match the number of document chunks "
-                f"({len(document_chunk_ids)})."
+                f"operations ({successes}) plus missing ({len(missing_chunk_ids)}) does not match "
+                f"the number of document chunks ({len(document_chunk_ids)})."
             )
+        if missing_chunk_ids:
+            raise OpenSearchDocumentMissingError(missing_chunk_ids)
         logger.debug(
             "Successfully bulk updated %s document chunks.", len(document_chunk_ids)
         )

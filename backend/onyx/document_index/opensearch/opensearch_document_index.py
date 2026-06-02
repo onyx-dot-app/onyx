@@ -30,6 +30,7 @@ from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
+from onyx.document_index.opensearch.client import OpenSearchDocumentMissingError
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.client import SearchHit
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
@@ -542,6 +543,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def update(
         self,
         update_requests: list[MetadataUpdateRequest],
+        swallow_document_missing: bool = False,
     ) -> None:
         """Updates some set of chunks.
 
@@ -647,6 +649,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             self._client.bulk_update_documents(
                 document_chunk_ids=doc_chunk_ids_to_update,
                 properties_to_update=properties_to_update,
+                swallow_document_missing=swallow_document_missing,
             )
 
     def id_based_retrieval(
@@ -899,6 +902,17 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
 
+class SecondaryIndexDocumentMissingError(Exception):
+    """PRESENT update succeeded but the doc isn't in the FUTURE (secondary) index
+    yet (reindex port). Carries the doc ids so the caller can defer the FUTURE sync."""
+
+    def __init__(self, document_ids: list[str]) -> None:
+        self.document_ids = document_ids
+        super().__init__(
+            f"{len(document_ids)} document(s) missing from the secondary index."
+        )
+
+
 class OpenSearchIndexPair(DocumentIndex):
     """Pair wrapper that fans operations out to a primary OpenSearch index and
     an optional secondary one.
@@ -974,7 +988,16 @@ class OpenSearchIndexPair(DocumentIndex):
     def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
         self._primary.update(update_requests)
         if self._secondary is not None:
-            self._secondary.update(update_requests)
+            # FUTURE may not have the doc yet (port); re-raise as a typed signal.
+            try:
+                self._secondary.update(update_requests, swallow_document_missing=True)
+            except OpenSearchDocumentMissingError:
+                missing_document_ids = [
+                    doc_id
+                    for request in update_requests
+                    for doc_id in request.document_ids
+                ]
+                raise SecondaryIndexDocumentMissingError(missing_document_ids)
 
     def id_based_retrieval(
         self,
