@@ -674,6 +674,9 @@ def upsert_documents(
                     from_ingestion_api=doc.from_ingestion_api,
                     boost=initial_boost,
                     hidden=False,
+                    # set explicitly: model_to_dict reads the unflushed object, so a
+                    # Python-side default isn't applied yet and would insert NULL.
+                    secondary_only_sync_pending=False,
                     semantic_id=doc.semantic_identifier,
                     link=doc.first_link,
                     doc_updated_at=None,  # this is intentional
