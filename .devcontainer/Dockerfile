@@ -52,6 +52,21 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 COPY --from=oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 
+# Install Node.js. Bun is the JS package manager, but Playwright's e2e test
+# runner (web/tests/e2e) forks worker processes that require Node — running it
+# under bun alone hangs the runner. Daily JS tooling (Claude Code, opencode)
+# still runs under bun; Node is here only as the runtime for the test runner.
+# The chromium browser binary is installed at test time (web global-setup), not
+# baked here, so its version tracks web/package.json's floating @playwright/test.
+ARG NODE_VERSION=24.16.0
+RUN NODE_ARCH=$(case $(dpkg --print-architecture) in amd64) echo x64 ;; arm64) echo arm64 ;; esac) \
+  && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz" \
+     | tar -xz -C /opt \
+  && ln -sf "/opt/node-v${NODE_VERSION}-linux-${NODE_ARCH}/bin/node" /usr/local/bin/node \
+  && ln -sf "/opt/node-v${NODE_VERSION}-linux-${NODE_ARCH}/bin/npm" /usr/local/bin/npm \
+  && ln -sf "/opt/node-v${NODE_VERSION}-linux-${NODE_ARCH}/bin/npx" /usr/local/bin/npx \
+  && node --version
+
 # Install the apt packages Playwright needs to run headless Chromium for
 # the web-search open_url tool. The browser binary itself is downloaded
 # from the integration test conftest's _install_playwright fixture so
