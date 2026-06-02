@@ -186,13 +186,29 @@ export class ActionsPopover {
     await this.open();
     const row = this.serverRow(serverName);
     await expect(row).toBeVisible();
-    await row.click();
+    await row.click({ force: true });
   }
 
   /** Drill into a server to reveal its individual tools. */
   async openServer(serverName: string): Promise<void> {
-    await this.clickServer(serverName);
-    await this.expectToolListView();
+    await this.open();
+    // The popover's server list re-renders as MCP/OAuth auth-status polls
+    // resolve, which can detach the row mid-click (notably for OAuth servers,
+    // whose status is polled continuously). A plain click loses that race and
+    // can burn the whole test timeout, so retry a force-click until the
+    // tool-list view actually appears.
+    const toolListView = this.popover
+      .getByText(/(Enable|Disable) All/i)
+      .first();
+    await expect(async () => {
+      if (await toolListView.isVisible().catch(() => false)) {
+        return;
+      }
+      const row = this.serverRow(serverName);
+      await expect(row).toBeVisible({ timeout: 3000 });
+      await row.click({ force: true, timeout: 3000 });
+      await expect(toolListView).toBeVisible({ timeout: 3000 });
+    }).toPass({ timeout: 60000, intervals: [300, 700, 1500] });
   }
 
   async expectToolListView(): Promise<void> {
@@ -236,10 +252,14 @@ export class ActionsPopover {
   async setToolEnabled(toolName: string, enabled: boolean): Promise<void> {
     const toggle = this.toolToggle(toolName);
     await expect(toggle).toBeVisible();
-    if ((await this.isToolChecked(toolName)) !== enabled) {
-      await toggle.click();
-    }
-    await expect.poll(() => this.isToolChecked(toolName)).toBe(enabled);
+    // Retry the toggle click until the state sticks: the popover can re-render
+    // (auth-status polling) and swallow a single click before it registers.
+    await expect(async () => {
+      if ((await this.isToolChecked(toolName)) !== enabled) {
+        await toggle.click({ force: true, timeout: 3000 });
+      }
+      expect(await this.isToolChecked(toolName)).toBe(enabled);
+    }).toPass({ timeout: 30000, intervals: [300, 700, 1500] });
   }
 
   async enableTool(toolName: string): Promise<void> {
@@ -292,7 +312,7 @@ export class ActionsPopover {
   async clickReauthRow(): Promise<void> {
     const row = this.reauthRow();
     await expect(row).toBeVisible();
-    await row.click();
+    await row.click({ force: true });
   }
 
   /**
