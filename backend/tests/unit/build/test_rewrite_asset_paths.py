@@ -418,7 +418,7 @@ class TestProxyRequestWiring:
         assert "immutable" not in response.headers["cache-control"]
 
     @pytest.mark.asyncio
-    async def test_proxy_passes_js_through_unrewritten(
+    async def test_proxy_rewrites_js_asset_paths(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """JS bundles are rewritten; idempotent for new sandboxes (assetPrefix),

@@ -1,5 +1,5 @@
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from uuid import UUID
 
@@ -295,7 +295,7 @@ async def _get_sandbox_url(session_id: UUID) -> str:
     return url
 
 
-async def _aiter_and_close(response: httpx.Response) -> AsyncIterator[bytes]:
+async def _aiter_and_close(response: httpx.Response) -> AsyncGenerator[bytes, None]:
     # finally runs on client disconnect (GeneratorExit) too, so a cancelled
     # stream can't leak its pooled connection — a BackgroundTask wouldn't.
     try:
