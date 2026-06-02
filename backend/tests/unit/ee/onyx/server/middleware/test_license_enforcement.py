@@ -39,7 +39,10 @@ class TestPathAllowlist:
     as the source of truth to ensure tests stay in sync with production code.
     """
 
-    @pytest.mark.parametrize("path", list(LICENSE_ENFORCEMENT_ALLOWED_PREFIXES))
+    # Sorted so the parametrization order is deterministic across pytest-xdist
+    # workers; iterating the frozenset directly varies with per-process hash
+    # randomization, which makes xdist abort on a collection mismatch.
+    @pytest.mark.parametrize("path", sorted(LICENSE_ENFORCEMENT_ALLOWED_PREFIXES))
     def test_allowed_paths_are_allowed(self, path: str) -> None:
         """All paths in LICENSE_ENFORCEMENT_ALLOWED_PREFIXES should be allowed."""
         assert _is_path_allowed(path) is True

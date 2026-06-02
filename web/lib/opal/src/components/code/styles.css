@@ -1,0 +1,20 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   Code — inline code block with optional hover-to-reveal copy button.
+   --------------------------------------------------------------------------- */
+
+.opal-code-root {
+  @apply relative w-full;
+}
+
+.opal-code {
+  @apply block p-2 w-full;
+  @apply bg-background-tint-00 border border-border-01 rounded-12;
+  @apply break-all whitespace-pre-wrap;
+  @apply font-secondary-mono text-text-03;
+}
+
+.opal-code-copy {
+  @apply absolute top-2 right-2;
+}

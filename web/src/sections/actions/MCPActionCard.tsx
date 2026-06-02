@@ -25,7 +25,7 @@ import { SvgRefreshCw, SvgServer, SvgTrash } from "@opal/icons";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import { cn } from "@opal/utils";
 import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
 

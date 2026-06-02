@@ -11,9 +11,9 @@ import { markdown } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Card from "@/refresh-components/cards/Card";
 import SvgNoResult from "@opal/illustrations/no-result";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -387,8 +387,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                         ? "Search users and accounts..."
                         : "Search members..."
                     }
-                    leftSearchIcon
-                    className="flex-1"
+                    searchIcon
                   />
                   {isAddingMembers ? (
                     <Button

@@ -13,6 +13,15 @@ export interface QueuedMessage {
   text: string;
 }
 
+/**
+ * Maximum number of messages that can be queued while a response streams.
+ * Shared by both the main chat and Craft input bars / stores.
+ */
+export const MAX_QUEUED_MESSAGES = 5;
+
+/** Stable empty reference for selectors/props; `readonly` guards the singleton. */
+export const EMPTY_QUEUED_MESSAGES: readonly QueuedMessage[] = [];
+
 export type ChatState =
   | "input"
   | "loading"

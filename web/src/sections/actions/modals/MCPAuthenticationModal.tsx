@@ -7,11 +7,16 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import {
+  Button,
+  CopyButton,
+  Divider,
+  InputTypeIn,
+  MessageCard,
+  Tabs,
+} from "@opal/components";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { Button, Divider, MessageCard } from "@opal/components";
 import { markdown } from "@opal/utils";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
@@ -24,7 +29,6 @@ import {
   MCPServer,
   MCPServersResponse,
 } from "@/lib/tools/interfaces";
-import Tabs from "@/refresh-components/Tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import { toast } from "@/hooks/useToast";
@@ -219,10 +223,33 @@ export default function MCPAuthenticationModal({
     };
   };
 
+  // Per-key analogue of `computeOAuthChangedFlags` for the
+  // `admin_credentials` dict (per-user API_TOKEN only).
+  const computeAdminCredentialsChangedFlags = (
+    values: MCPAuthFormValues
+  ): Record<string, boolean> => {
+    if (
+      values.auth_type !== MCPAuthenticationType.API_TOKEN ||
+      values.auth_performer !== MCPAuthenticationPerformer.PER_USER
+    ) {
+      return {};
+    }
+    const current = values.user_credentials || {};
+    const initial = initialValues.user_credentials || {};
+    const flags: Record<string, boolean> = {};
+    for (const key of Object.keys(current)) {
+      flags[key] = current[key] !== initial[key];
+    }
+    return flags;
+  };
+
   const constructServerData = (values: MCPAuthFormValues) => {
     if (!mcpServer) return null;
     const authType = values.auth_type;
     const oauthChangedFlags = computeOAuthChangedFlags(values);
+    const isPerUserApiToken =
+      values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+      authType === MCPAuthenticationType.API_TOKEN;
 
     return {
       name: mcpServer.name,
@@ -236,16 +263,13 @@ export default function MCPAuthenticationModal({
         values.auth_performer === MCPAuthenticationPerformer.ADMIN
           ? values.api_token
           : undefined,
-      auth_template:
-        values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-        authType === MCPAuthenticationType.API_TOKEN
-          ? values.auth_template
-          : undefined,
-      admin_credentials:
-        values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-        authType === MCPAuthenticationType.API_TOKEN
-          ? values.user_credentials || {}
-          : undefined,
+      auth_template: isPerUserApiToken ? values.auth_template : undefined,
+      admin_credentials: isPerUserApiToken
+        ? values.user_credentials || {}
+        : undefined,
+      admin_credentials_changed: isPerUserApiToken
+        ? computeAdminCredentialsChangedFlags(values)
+        : undefined,
       oauth_client_id:
         authType === MCPAuthenticationType.OAUTH
           ? values.oauth_client_id
@@ -478,7 +502,6 @@ export default function MCPAuthenticationModal({
                             value={values.oauth_client_id}
                             onChange={handleChange}
                             placeholder=" "
-                            showClearButton={false}
                           />
                         </FormField.Control>
                         <FormField.Message
@@ -508,7 +531,6 @@ export default function MCPAuthenticationModal({
                             value={values.oauth_client_secret}
                             onChange={handleChange}
                             placeholder=" "
-                            showClearButton={false}
                           />
                         </FormField.Control>
                         <FormField.Message
@@ -552,7 +574,7 @@ export default function MCPAuthenticationModal({
                           >
                             {redirectUri}
                           </Text>
-                          <CopyIconButton
+                          <CopyButton
                             getCopyText={() => redirectUri}
                             tooltip="Copy redirect URI"
                             prominence="tertiary"
@@ -616,7 +638,6 @@ export default function MCPAuthenticationModal({
                                   value={values.api_token}
                                   onChange={handleChange}
                                   placeholder="Shared API key for your organization"
-                                  showClearButton={false}
                                 />
                               </FormField.Control>
                               <FormField.Description>

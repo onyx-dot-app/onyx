@@ -1,61 +1,132 @@
 from typing import Any
-from typing import ClassVar
 
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.base import OAuth
+from onyx.external_apps.providers.actions import EndpointSpec
+from onyx.external_apps.providers.actions import ExternalAppAction
+from onyx.external_apps.providers.actions import RestRoute
+from onyx.external_apps.providers.base import AdminDescriptorSpec
+from onyx.external_apps.providers.base import OAuthExternalAppProvider
+from onyx.external_apps.providers.base import OAuthFlowSpec
+from onyx.external_apps.providers.base import OAuthProviderSpec
 from onyx.external_apps.providers.base import OrgCredentialField
 
 
-class SlackOAuth(OAuth):
-    app_type = ExternalAppType.SLACK
-    app_name = "Slack"
-    authorize_url = "https://slack.com/oauth/v2/authorize"
-    token_url = "https://slack.com/api/oauth.v2.access"
-    scope = ",".join(
-        [
-            "chat:write",
-            "channels:history",
-            "channels:read",
-            "groups:history",
-            "groups:read",
-            "im:history",
-            "im:read",
-            "users:read",
-        ]
-    )
-    scope_param = "user_scope"
-    extra_authorize_params: ClassVar[dict[str, str]] = {}
+class SlackAction(ExternalAppAction):
+    """Strongly-typed catalog ids for the Slack provider."""
 
-    description = "Read your Slack messages and channels as context inside Onyx Craft."
-    upstream_url_patterns = ["https://slack\\.com/api/.*"]
-    auth_template = {"Authorization": "Bearer {access_token}"}
-    required_org_credential_fields = [
-        OrgCredentialField(
-            key="client_id",
-            label="Client ID",
+    CHANNELS_READ = "slack.channels.read"
+    MESSAGES_READ = "slack.messages.read"
+    USERS_READ = "slack.users.read"
+    SEARCH_READ = "slack.search.read"
+    MESSAGES_WRITE = "slack.messages.write"
+
+
+# Slack Web API calls are POST to https://slack.com/api/<method>; the action is
+# the method segment of the path.
+_ENDPOINTS: list[EndpointSpec] = [
+    EndpointSpec(
+        id=SlackAction.CHANNELS_READ,
+        normalised_name="List channels",
+        description="List the workspace's channels and conversations.",
+        matches=(RestRoute(method="POST", path="/api/conversations.list"),),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=SlackAction.MESSAGES_READ,
+        normalised_name="Read channel messages",
+        description="Read messages and thread replies in a channel.",
+        matches=(
+            RestRoute(method="POST", path="/api/conversations.history"),
+            RestRoute(method="POST", path="/api/conversations.replies"),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=SlackAction.USERS_READ,
+        normalised_name="Read users",
+        description="List workspace users and look up individual profiles.",
+        matches=(
+            RestRoute(method="POST", path="/api/users.list"),
+            RestRoute(method="POST", path="/api/users.info"),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=SlackAction.SEARCH_READ,
+        normalised_name="Search messages",
+        description="Full-text search across messages the user can see.",
+        matches=(RestRoute(method="POST", path="/api/search.messages"),),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=SlackAction.MESSAGES_WRITE,
+        normalised_name="Post a message",
+        description="Post a message to a channel or conversation.",
+        matches=(RestRoute(method="POST", path="/api/chat.postMessage"),),
+    ),
+]
+
+
+class SlackProvider(OAuthExternalAppProvider):
+    spec = OAuthProviderSpec(
+        app_type=ExternalAppType.SLACK,
+        app_name="Slack",
+        oauth=OAuthFlowSpec(
+            authorize_url="https://slack.com/oauth/v2/authorize",
+            token_url="https://slack.com/api/oauth.v2.access",
+            scope=",".join(
+                [
+                    "chat:write",
+                    "channels:history",
+                    "channels:read",
+                    "groups:history",
+                    "groups:read",
+                    "im:history",
+                    "im:read",
+                    "users:read",
+                ]
+            ),
+            scope_param="user_scope",
+        ),
+        descriptor=AdminDescriptorSpec(
             description=(
-                "Found under your Slack app's Basic Information → App Credentials."
+                "Read your Slack messages and channels as context inside Onyx Craft."
+            ),
+            upstream_url_patterns=["https://slack\\.com/api/.*"],
+            auth_template={"Authorization": "Bearer {access_token}"},
+            required_org_credential_fields=[
+                OrgCredentialField(
+                    key="client_id",
+                    label="Client ID",
+                    description=(
+                        "Found under your Slack app's Basic Information → "
+                        "App Credentials."
+                    ),
+                ),
+                OrgCredentialField(
+                    key="client_secret",
+                    label="Client Secret",
+                    description=(
+                        "Found under your Slack app's Basic Information → "
+                        "App Credentials. Treat this like a password."
+                    ),
+                    secret=True,
+                ),
+            ],
+            setup_instructions=(
+                "Create a Slack app at api.slack.com/apps. Under OAuth & "
+                "Permissions, add this Onyx instance's callback URL "
+                "(/craft/v1/apps/oauth/callback) to Redirect URLs, and add the "
+                "User Token Scopes you want the agent to use (e.g. chat:write, "
+                "channels:history, channels:read, im:history, users:read). No "
+                "bot user is required. Then paste the app's Client ID and "
+                "Client Secret below."
             ),
         ),
-        OrgCredentialField(
-            key="client_secret",
-            label="Client Secret",
-            description=(
-                "Found under your Slack app's Basic Information → "
-                "App Credentials. Treat this like a password."
-            ),
-            secret=True,
-        ),
-    ]
-    setup_instructions = (
-        "Create a Slack app at api.slack.com/apps. Under OAuth & Permissions, "
-        "add this Onyx instance's callback URL (/craft/v1/apps/oauth/callback) "
-        "to Redirect URLs, and add the User Token Scopes you want the agent "
-        "to use (e.g. chat:write, channels:history, channels:read, im:history, "
-        "users:read). No bot user is required. Then paste the app's Client ID "
-        "and Client Secret below."
+        endpoint_catalog=_ENDPOINTS,
     )
 
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:

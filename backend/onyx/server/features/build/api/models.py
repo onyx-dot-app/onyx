@@ -1,5 +1,4 @@
 from datetime import datetime
-from enum import Enum
 from typing import Any
 from typing import TYPE_CHECKING
 from typing import Union
@@ -9,6 +8,7 @@ from pydantic import BaseModel
 from onyx.configs.constants import MessageType
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SharingScope
@@ -181,10 +181,18 @@ class MessageRequest(BaseModel):
     content: str
 
 
+class MessageInterruptResponse(BaseModel):
+    """Response to an interrupt request. ``interrupted`` is False when there was
+    no directly-interruptible turn (no running sandbox or no opencode session);
+    the interrupt fence is set regardless."""
+
+    interrupted: bool
+
+
 class MessageResponse(BaseModel):
     """Response containing message details.
 
-    All message data is stored in message_metadata as JSON (the raw ACP packet).
+    All message data is stored in message_metadata as JSON (the raw sandbox event packet).
     The turn_index groups all assistant responses under the user prompt they respond to.
 
     Packet types in message_metadata:
@@ -290,34 +298,6 @@ class PreProvisionedCheckResponse(BaseModel):
     session_id: str | None = None  # Session ID if valid, None otherwise
 
 
-# ===== Suggestion Bubble Models =====
-class SuggestionTheme(str, Enum):
-    """Theme/category of a follow-up suggestion."""
-
-    ADD = "add"
-    QUESTION = "question"
-
-
-class SuggestionBubble(BaseModel):
-    """A single follow-up suggestion bubble."""
-
-    theme: SuggestionTheme
-    text: str
-
-
-class GenerateSuggestionsRequest(BaseModel):
-    """Request to generate follow-up suggestions."""
-
-    user_message: str  # First user message
-    assistant_message: str  # First assistant text response (accumulated)
-
-
-class GenerateSuggestionsResponse(BaseModel):
-    """Response containing generated suggestions."""
-
-    suggestions: list[SuggestionBubble]
-
-
 class PptxPreviewResponse(BaseModel):
     """Response with PPTX slide preview metadata."""
 
@@ -348,7 +328,21 @@ class UpsertExternalAppRequest(BaseModel):
     app_type: ExternalAppType
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
-    organization_credentials: dict[str, Any]
+    organization_credentials: dict[str, str]
+    # Per-action overrides by catalog action id (built-in apps); validated on
+    # upsert. A map full-replaces stored overrides (empty clears); None leaves
+    # them untouched, so a partial update can't wipe the admin's choices.
+    action_policies: dict[str, EndpointPolicy] | None = None
+
+
+class ActionPolicyView(BaseModel):
+    """One action of a built-in app, with its effective policy — the admin's
+    stored override if set, otherwise the action's ``default_policy``."""
+
+    action_id: str
+    normalised_name: str
+    description: str
+    state: EndpointPolicy
 
 
 class ExternalAppAdminResponse(BaseModel):
@@ -362,6 +356,8 @@ class ExternalAppAdminResponse(BaseModel):
     auth_template: dict[str, Any]
     organization_credentials: dict[str, Any]
     enabled: bool
+    # The merged per-action policy view (built-in apps; empty for custom).
+    actions: list[ActionPolicyView]
 
 
 class UpsertUserCredentialsRequest(BaseModel):
@@ -389,6 +385,7 @@ class ExternalAppUserResponse(BaseModel):
     id: int
     name: str
     description: str
+    slug: str
     app_type: ExternalAppType
     credential_keys: list[str]
     credential_values: dict[str, Any]
@@ -419,6 +416,18 @@ class OrgCredentialFieldDescriptor(BaseModel):
     secret: bool
 
 
+class EndpointDescriptor(BaseModel):
+    """One action in a built-in provider's catalog, flattened for the admin UI.
+    The admin picks a policy per action; recognition rules stay backend-side."""
+
+    action_id: str
+    normalised_name: str
+    description: str
+    # The policy a new app's instance of this action defaults to; the create
+    # form seeds each action's selector with it (the admin can still override).
+    default_policy: EndpointPolicy
+
+
 class BuiltInExternalAppDescriptor(BaseModel):
     """Backend-defined preset for a built-in OAuth provider. The admin
     UI fetches these and uses them to render the Configure modal +
@@ -431,3 +440,6 @@ class BuiltInExternalAppDescriptor(BaseModel):
     auth_template: dict[str, str]
     required_org_credential_fields: list[OrgCredentialFieldDescriptor]
     setup_instructions: str
+    # The catalog of actions an admin can govern (empty for providers without
+    # a catalog).
+    actions: list[EndpointDescriptor]

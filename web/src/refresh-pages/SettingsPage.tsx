@@ -23,11 +23,11 @@ import {
 } from "@opal/icons";
 import { getSourceMetadata } from "@/lib/sources";
 import Card from "@/refresh-components/cards/Card";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, ThemePreference } from "@/lib/types";
@@ -49,8 +49,7 @@ import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
-import Code from "@/refresh-components/Code";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { Code, CopyButton } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/interfaces";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
@@ -124,12 +123,12 @@ function PATModal({
           <Modal.Footer>
             <BasicModalFooter
               submit={
-                <CopyIconButton
+                <CopyButton
                   getCopyText={() => createdToken.token}
                   prominence="primary"
                 >
                   Copy Token
-                </CopyIconButton>
+                </CopyButton>
               }
             />
           </Modal.Footer>
@@ -1481,7 +1480,7 @@ function AccountsAccessSettings() {
                         placeholder="Search..."
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        leftSearchIcon
+                        searchIcon
                         variant="internal"
                       />
                     )}

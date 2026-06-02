@@ -6,7 +6,7 @@ import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import type { MinimalAgent, Agent } from "@/lib/agents/types";
@@ -151,7 +151,7 @@ export default function AgentsTable() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search agents..."
-          leftSearchIcon
+          searchIcon
         />
         <Section gap={0.25} flexDirection="row" justifyContent="start">
           {filterBar}

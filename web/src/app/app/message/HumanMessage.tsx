@@ -7,7 +7,7 @@ import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 import { Button } from "@opal/components";
 import { SvgEdit } from "@opal/icons";
 import { Hoverable } from "@opal/core";
@@ -174,7 +174,7 @@ const HumanMessage = React.memo(function HumanMessage({
   const copyEditButtonContent = useMemo(
     () => (
       <div className="flex flex-row shrink px-1">
-        <CopyIconButton
+        <CopyButton
           getCopyText={() => content}
           prominence="tertiary"
           data-testid="HumanMessage/copy-button"

@@ -1,14 +1,18 @@
 "use client";
 
 import { FormField } from "@/refresh-components/form/FormField";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Tabs from "@/refresh-components/Tabs";
+import {
+  Button,
+  Divider,
+  InputTypeIn,
+  Switch,
+  Tabs,
+  Tag,
+} from "@opal/components";
 import { Preview } from "./Preview";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import Switch from "@/refresh-components/inputs/Switch";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import InputImage from "@/refresh-components/inputs/InputImage";
-import { Button, Divider, Tag } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { useFormikContext } from "formik";
 import {
@@ -233,7 +237,7 @@ export const AppearanceThemeSettings = forwardRef<
               <InputTypeIn
                 ref={applicationNameInputRef}
                 data-label="application-name-input"
-                showClearButton
+                clearButton
                 variant={errors.application_name ? "error" : undefined}
                 value={values.application_name}
                 {...getPreviewHandlers("sidebar")}
@@ -365,7 +369,7 @@ export const AppearanceThemeSettings = forwardRef<
           <InputTypeIn
             ref={greetingMessageInputRef}
             data-label="greeting-message-input"
-            showClearButton
+            clearButton
             variant={errors.custom_greeting_message ? "error" : undefined}
             value={values.custom_greeting_message}
             {...getPreviewHandlers("greeting")}
@@ -397,7 +401,7 @@ export const AppearanceThemeSettings = forwardRef<
           <InputTypeIn
             ref={headerContentInputRef}
             data-label="chat-header-input"
-            showClearButton
+            clearButton
             variant={errors.custom_header_content ? "error" : undefined}
             value={values.custom_header_content}
             {...getPreviewHandlers("chat_header")}
@@ -467,7 +471,7 @@ export const AppearanceThemeSettings = forwardRef<
               <InputTypeIn
                 ref={customHelpLinkUrlInputRef}
                 data-label="custom-help-link-url-input"
-                showClearButton
+                clearButton
                 placeholder="https://docs.onyx.app"
                 variant={
                   !enterpriseTier
@@ -498,7 +502,7 @@ export const AppearanceThemeSettings = forwardRef<
               <InputTypeIn
                 aria-label="Custom Help Link Label"
                 data-label="custom-help-link-label-input"
-                showClearButton
+                clearButton
                 placeholder="Link label"
                 variant={!enterpriseTier ? "disabled" : undefined}
                 value={values.custom_help_link_label}
@@ -582,7 +586,7 @@ export const AppearanceThemeSettings = forwardRef<
                 <InputTypeIn
                   ref={noticeHeaderInputRef}
                   data-label="notice-header-input"
-                  showClearButton
+                  clearButton
                   variant={errors.custom_popup_header ? "error" : undefined}
                   value={values.custom_popup_header}
                   onChange={(e) =>

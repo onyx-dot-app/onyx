@@ -41,6 +41,7 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { Button } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import TypewriterText from "@/app/craft/components/TypewriterText";
+import OpencodeDebugLogsButton from "@/app/craft/components/OpencodeDebugLogs";
 import {
   DELETE_SUCCESS_DISPLAY_DURATION_MS,
   DELETE_MESSAGE_ROTATION_INTERVAL_MS,
@@ -346,6 +347,9 @@ const MemoizedBuildSidebarInner = memo(
     const refreshSessionHistory = useBuildSessionStore(
       (state) => state.refreshSessionHistory
     );
+    const returnToMainAgent = useBuildSessionStore(
+      (state) => state.returnToMainAgent
+    );
     const { limits, isEnabled } = useUsageLimits();
 
     // Fetch session history on mount
@@ -369,11 +373,14 @@ const MemoizedBuildSidebarInner = memo(
 
     const handleLoadSession = useCallback(
       (sessionId: string) => {
+        // Clicking a session in the sidebar always lands on the main-agent view
+        // (one click back from any subagent transcript you were viewing).
+        returnToMainAgent(sessionId);
         router.push(
           `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${sessionId}`
         );
       },
-      [router]
+      [router, returnToMainAgent]
     );
 
     const newBuildButton = useMemo(
@@ -473,6 +480,7 @@ const MemoizedBuildSidebarInner = memo(
       () => (
         <div>
           {backToChatButton}
+          <OpencodeDebugLogsButton folded={folded} />
           <AccountPopover folded={folded} />
         </div>
       ),

@@ -59,6 +59,7 @@ export {
 /* Tag */
 export {
   Tag,
+  TAG_COLORS,
   type TagProps,
   type TagColor,
 } from "@opal/components/tag/components";
@@ -108,12 +109,6 @@ export { Table } from "@opal/components/table/components";
 export { createTableColumns } from "@opal/components/table/columns";
 export type { DataTableProps } from "@opal/components/table/components";
 
-/* Separator */
-export {
-  Separator,
-  type SeparatorProps,
-} from "@opal/components/separator/components";
-
 /* ShadowDiv */
 export {
   ShadowDiv,
@@ -126,3 +121,35 @@ export {
   PopoverMenu,
   type PopoverMenuProps,
 } from "@opal/components/popover/components";
+
+/* InputTypeIn */
+export {
+  default as InputTypeIn,
+  type InputTypeInProps,
+} from "@opal/components/inputs/input-typein/components";
+
+/* Spacer */
+export { Spacer, type SpacerProps } from "@opal/components/spacer/components";
+
+/* Switch */
+export {
+  Switch,
+  type SwitchProps,
+} from "@opal/components/inputs/switch/components";
+
+/* CopyButton */
+export {
+  CopyButton,
+  type CopyButtonProps,
+} from "@opal/components/buttons/copy-button/components";
+
+/* Code */
+export { Code } from "@opal/components/code/components";
+
+/* Tabs */
+export {
+  Tabs,
+  type TabsRootProps,
+  type TabsListProps,
+  type TabsTriggerProps,
+} from "@opal/components/tabs/components";

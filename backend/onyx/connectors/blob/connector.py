@@ -8,6 +8,7 @@ from io import BytesIO
 from numbers import Integral
 from typing import Any
 from typing import Optional
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 import boto3
@@ -17,7 +18,6 @@ from botocore.exceptions import ClientError
 from botocore.exceptions import NoCredentialsError
 from botocore.exceptions import PartialCredentialsError
 from botocore.session import get_session
-from mypy_boto3_s3 import S3Client
 
 from onyx.configs.app_configs import BLOB_STORAGE_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -54,6 +54,9 @@ from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
 
+if TYPE_CHECKING:
+    from mypy_boto3_s3 import S3Client
+
 logger = setup_logger()
 
 
@@ -74,7 +77,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self.bucket_name = bucket_name.strip()
         self.prefix = prefix if not prefix or prefix.endswith("/") else prefix + "/"
         self.batch_size = batch_size
-        self.s3_client: Optional[S3Client] = None
+        self.s3_client: Optional["S3Client"] = None
         self._allow_images: bool | None = None
         self.size_threshold: int | None = BLOB_STORAGE_SIZE_THRESHOLD
         self.bucket_region: Optional[str] = None

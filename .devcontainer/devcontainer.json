@@ -1,6 +1,6 @@
 {
   "name": "Onyx Dev Sandbox",
-  "image": "onyxdotapp/onyx-devcontainer@sha256:7e52868187d1aa4eb2f6e2df3d2f1d6f7fa355066a556d9116df157cdb08bf99",
+  "image": "onyxdotapp/onyx-devcontainer@sha256:616f411af60ef8e868d3b486c00484d539096e7012bb4ac173ace15979f6950e",
   "runArgs": [
     "--cap-add=NET_ADMIN",
     "--cap-add=NET_RAW",
@@ -27,6 +27,7 @@
     "REDIS_HOST": "cache",
     "S3_ENDPOINT_URL": "http://minio:9000",
     "SSH_AUTH_SOCK": "/tmp/ssh-agent.sock",
+    "UV_LINK_MODE": "copy",
     "VESPA_HOST": "index"
   },
   "remoteUser": "${localEnv:DEVCONTAINER_REMOTE_USER:dev}",

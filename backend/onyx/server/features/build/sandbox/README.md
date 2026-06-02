@@ -44,7 +44,7 @@ The Docker backend is intentionally the closest single-VM analogue of the Kubern
 | ------------------------------------- | ----------------------------------------------------------- |
 | Sandbox pod (`sandbox-<id>`)          | Sandbox container (`sandbox-<id8>`)                         |
 | Pod `emptyDir` workspace volume       | Named volume mounted at `/workspace/sessions`               |
-| `kubectl exec` for setup/file ops/ACP | `docker exec` over the Docker Engine API                    |
+| `kubectl exec` for setup + file ops   | `docker exec` over the Docker Engine API                    |
 | Sidecar container for snapshots/IRSA  | api_server tar-streams via `docker exec` → `FileStore`      |
 | `Service` + DNS for Next.js preview   | Container IP on `onyx_craft_sandbox` bridge, proxied        |
 | `NetworkPolicy` for egress isolation  | Dedicated bridge network + host `DOCKER-USER` iptables rule |
@@ -231,7 +231,7 @@ SANDBOX_SERVICE_ACCOUNT_NAME=sandbox-file-sync  # Has S3 access via IRSA for sna
 
 ```bash
 # Container image (defaults to a pinned tag in docker-compose.yml)
-SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:v0.1.44
+SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:v0.1.50
 
 # Public URL the sandbox agent uses to reach Onyx (HTTPS, externally resolvable —
 # compose hostnames like http://api_server:8080 will not resolve from inside the

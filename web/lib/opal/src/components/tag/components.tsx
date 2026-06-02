@@ -2,12 +2,11 @@ import "@opal/components/tag/styles.css";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
+import { TAG_COLORS, type TagColor } from "@opal/components/tag/colors";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-type TagColor = "green" | "purple" | "blue" | "gray" | "amber";
 
 type TagSize = "sm" | "md";
 
@@ -26,23 +25,11 @@ interface TagProps {
 }
 
 // ---------------------------------------------------------------------------
-// Color config
-// ---------------------------------------------------------------------------
-
-const COLOR_CONFIG: Record<TagColor, { bg: string; text: string }> = {
-  green: { bg: "bg-theme-green-01", text: "text-theme-green-05" },
-  blue: { bg: "bg-theme-blue-01", text: "text-theme-blue-05" },
-  purple: { bg: "bg-theme-purple-01", text: "text-theme-purple-05" },
-  amber: { bg: "bg-theme-amber-01", text: "text-theme-amber-05" },
-  gray: { bg: "bg-background-tint-02", text: "text-text-03" },
-};
-
-// ---------------------------------------------------------------------------
 // Tag
 // ---------------------------------------------------------------------------
 
 function Tag({ icon: Icon, title, color = "gray", size = "sm" }: TagProps) {
-  const config = COLOR_CONFIG[color];
+  const config = TAG_COLORS[color];
 
   return (
     <div
@@ -65,4 +52,5 @@ function Tag({ icon: Icon, title, color = "gray", size = "sm" }: TagProps) {
   );
 }
 
-export { Tag, type TagProps, type TagColor, type TagSize };
+export { Tag, type TagProps, type TagSize };
+export { TAG_COLORS, type TagColor } from "@opal/components/tag/colors";

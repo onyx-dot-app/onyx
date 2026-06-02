@@ -6,7 +6,7 @@ import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import { FilterButton } from "@opal/components";
 import { Popover } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 import { ShadowDiv } from "@opal/components";
@@ -224,7 +224,7 @@ export default function UserFilters({
               value={groupSearch}
               onChange={(e) => setGroupSearch(e.target.value)}
               placeholder="Search groups..."
-              leftSearchIcon
+              searchIcon
               variant="internal"
             />
             <LineItem

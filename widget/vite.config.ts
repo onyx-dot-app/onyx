@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
       },
       rollupOptions: {
         output: {
-          inlineDynamicImports: true,
+          codeSplitting: false,
         },
       },
       sourcemap: false,

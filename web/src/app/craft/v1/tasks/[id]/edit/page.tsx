@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import Text from "@/refresh-components/texts/Text";
@@ -12,8 +12,7 @@ import ScheduleTaskForm, {
 } from "@/app/craft/v1/tasks/components/ScheduleTaskForm";
 import type { ScheduledTaskDetail } from "@/app/craft/v1/tasks/interfaces";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
-import { decodeCronToPayload } from "@/app/craft/v1/tasks/schedule";
-import { getBrowserTimezone } from "@/app/craft/v1/tasks/utils";
+import { decodeUtcCronToLocalPayload } from "@/app/craft/v1/tasks/schedule";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
@@ -35,12 +34,12 @@ export default function EditScheduledTaskPage() {
 
   if (!taskId) {
     return (
-      <SettingsLayouts.Root width="lg">
+      <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgClock}
           title="Edit scheduled task"
-          backButton
-          onBack={handleBack}
+          backButton={handleBack}
+          divider
         />
         <SettingsLayouts.Body>
           <Text mainUiBody text03>
@@ -51,28 +50,37 @@ export default function EditScheduledTaskPage() {
     );
   }
 
+  if (isLoading || error || !data) {
+    return (
+      <SettingsLayouts.Root>
+        <SettingsLayouts.Header
+          icon={SvgClock}
+          title={data ? `Edit "${data.name}"` : "Edit scheduled task"}
+          backButton={handleBack}
+          divider
+        />
+        <SettingsLayouts.Body>
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <SimpleLoader className="h-6 w-6" />
+            </div>
+          ) : (
+            <Text mainUiBody text03>
+              Failed to load scheduled task.
+            </Text>
+          )}
+        </SettingsLayouts.Body>
+      </SettingsLayouts.Root>
+    );
+  }
+
   return (
-    <SettingsLayouts.Root width="lg">
-      <SettingsLayouts.Header
-        icon={SvgClock}
-        title={data ? `Edit "${data.name}"` : "Edit scheduled task"}
-        backButton
-        onBack={handleBack}
-      />
-      <SettingsLayouts.Body>
-        {isLoading ? (
-          <div className="flex justify-center py-12">
-            <SimpleLoader className="h-6 w-6" />
-          </div>
-        ) : error || !data ? (
-          <Text mainUiBody text03>
-            Failed to load scheduled task.
-          </Text>
-        ) : (
-          <ScheduleTaskForm initial={toFormInitial(data)} isEdit />
-        )}
-      </SettingsLayouts.Body>
-    </SettingsLayouts.Root>
+    <ScheduleTaskForm
+      initial={toFormInitial(data)}
+      isEdit
+      title={`Edit "${data.name}"`}
+      onBack={handleBack}
+    />
   );
 }
 
@@ -82,7 +90,7 @@ function toFormInitial(detail: ScheduledTaskDetail): ScheduleTaskFormInitial {
   // cron can't be decoded back into the chosen mode (rare, e.g. someone
   // hand-edited via the API), we fall back to ``advanced`` mode so the user
   // sees the raw expression.
-  const { mode, payload } = decodeCronToPayload(
+  const { mode, payload } = decodeUtcCronToLocalPayload(
     detail.editor_mode,
     detail.cron_expression
   );
@@ -92,6 +100,5 @@ function toFormInitial(detail: ScheduledTaskDetail): ScheduleTaskFormInitial {
     prompt: detail.prompt,
     mode,
     payload,
-    timezone: detail.timezone || getBrowserTimezone(),
   };
 }
