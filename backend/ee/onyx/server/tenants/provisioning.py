@@ -575,7 +575,7 @@ def provision_built_in_external_apps(db_session: Session) -> None:
         credentials = managed_credentials.get(app_type)
         try:
             existing = get_external_app_by_app_type(db_session, app_type)
-            if existing is not None:
+            if existing:
                 if credentials is not None:
                     set_external_app_organization_credentials(
                         db_session, existing, credentials

@@ -420,16 +420,22 @@ def _write_policies__no_commit(
 ) -> None:
     """Replace ``app``'s per-action policy rows with exactly ``policies``.
 
-    Writes through the ``app.policies`` relationship (``cascade="all,
-    delete-orphan"``) rather than a bulk table delete + insert, so the in-memory
-    collection stays consistent with what's persisted.
+    Reconciles ``app.policies`` in place (update survivors, delete dropped,
+    insert new) so the in-memory collection stays consistent and no surviving
+    ``action_id`` is re-inserted before its old row is deleted — which would
+    violate the ``(external_app_id, action_id)`` unique constraint, since the
+    ORM flushes inserts before deletes. No commit — runs inside the caller's
+    transaction. ``action_id`` validation is the caller's responsibility.
     """
-    # Reassigning the collection orphans the old rows (deleted on flush) and
-    # cascades the new ones in; the FK is populated from app.id on flush.
-    app.policies = [
-        ExternalAppPolicy(action_id=action_id, policy=policy)
-        for action_id, policy in policies.items()
-    ]
+    desired = dict(policies)
+    for existing_policy in list(app.policies):
+        new_policy = desired.pop(existing_policy.action_id, None)
+        if new_policy is not None:
+            existing_policy.policy = new_policy
+        else:
+            app.policies.remove(existing_policy)
+    for action_id, policy in desired.items():
+        app.policies.append(ExternalAppPolicy(action_id=action_id, policy=policy))
 
 
 def delete_external_app(
