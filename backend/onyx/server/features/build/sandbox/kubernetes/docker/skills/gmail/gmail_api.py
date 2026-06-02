@@ -20,6 +20,7 @@ from typing import Any
 _BASE = "https://gmail.googleapis.com/gmail/v1/users/me/"
 _PAGE_SIZE = 100
 _DEFAULT_LIMIT = 25
+_HTTP_TIMEOUT_SECONDS = 180
 # Each listed message needs its own metadata GET (Gmail's list returns only
 # id/threadId), so fan them out concurrently rather than N sequential calls.
 _MAX_FETCH_WORKERS = 8
@@ -62,7 +63,7 @@ def _req(
     req = urllib.request.Request(  # noqa: S310 — fixed https base url
         url, data=data, method=method, headers=headers
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+    with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_SECONDS) as resp:  # noqa: S310
         raw = resp.read().decode("utf-8")
     return json.loads(raw) if raw.strip() else {}
 

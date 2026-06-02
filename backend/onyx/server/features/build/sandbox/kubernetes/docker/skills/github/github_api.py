@@ -18,6 +18,7 @@ from typing import Any
 _BASE = "https://api.github.com"
 _PER_PAGE = 100
 _DEFAULT_LIMIT = 100
+_HTTP_TIMEOUT_SECONDS = 180
 # GitHub requires a User-Agent and recommends pinning the API version.
 _HEADERS = {
     "Accept": "application/vnd.github+json",
@@ -60,7 +61,7 @@ def _request(
             _HEADERS, **({"Content-Type": "application/json"} if data else {})
         ),
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+    with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_SECONDS) as resp:  # noqa: S310
         raw = resp.read().decode("utf-8")
         parsed = json.loads(raw) if raw else None
         return parsed, {k.lower(): v for k, v in resp.headers.items()}
