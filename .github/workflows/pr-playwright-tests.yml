@@ -91,6 +91,12 @@ jobs:
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # ratchet:dorny/paths-filter@v3
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        # In the merge queue, GitHub can delete the ephemeral
+        # `gh-readonly-queue/*` branch mid-run (e.g. when an entry ahead in the
+        # queue fails and the queue is rebuilt), after which paths-filter fails
+        # fetching that now-missing ref. Tolerate it: on failure the step's
+        # outputs go empty and the `|| 'true'` fallback above runs everything.
+        continue-on-error: true
         with:
           filters: |
             playwright:
