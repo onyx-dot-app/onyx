@@ -1,4 +1,4 @@
-import { SvgSlack, SvgLinear, SvgGmail } from "@opal/logos";
+import { SvgSlack, SvgLinear, SvgGmail, SvgGithub } from "@opal/logos";
 import { SvgCalendar, SvgPlug } from "@opal/icons";
 import { IconFunctionComponent } from "@opal/types";
 
@@ -8,6 +8,7 @@ export type ExternalAppType =
   | "GOOGLE_CALENDAR"
   | "GMAIL"
   | "LINEAR"
+  | "GITHUB"
   | "CUSTOM";
 
 const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
@@ -16,6 +17,7 @@ const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
     GOOGLE_CALENDAR: SvgCalendar,
     GMAIL: SvgGmail,
     LINEAR: SvgLinear,
+    GITHUB: SvgGithub,
   };
 
 /** Logo for a known `app_type`, with a generic fallback for CUSTOM /
