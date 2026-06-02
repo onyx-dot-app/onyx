@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, type ReactNode } from "react";
 import { Button, Popover, Text } from "@opal/components";
 import {
   SvgChevronDown,
@@ -56,6 +56,72 @@ export function PlusMenuButton({
   const hasSkills = sections.skills.length > 0;
   const hasApps = sections.apps.length > 0;
 
+  // Built as a flat array so a literal `null` between groups renders as a
+  // Popover.Menu divider — a Fragment-wrapped null is passed as one non-null
+  // child and never produces a separator.
+  const menuChildren: ReactNode[] = [
+    <LineItem key="files" icon={SvgPaperclip} onClick={handleAttachFiles}>
+      Files
+    </LineItem>,
+  ];
+
+  if (hasSkills) {
+    menuChildren.push(null);
+    menuChildren.push(
+      <LineItem
+        key="skills"
+        icon={SvgSparkle}
+        rightChildren={
+          expandedSection === "skills" ? (
+            <SvgChevronDown className="h-4 w-4 text-text-03" />
+          ) : (
+            <SvgChevronRight className="h-4 w-4 text-text-03" />
+          )
+        }
+        onClick={() => toggleSection("skills")}
+      >
+        Skills
+      </LineItem>
+    );
+    if (expandedSection === "skills") {
+      for (const skill of sections.skills) {
+        menuChildren.push(
+          <LineItem
+            key={`skill-${skill.slug}`}
+            description={skill.description}
+            muted
+            onClick={() => handleSelectEntry(skill)}
+          >
+            {skill.name}
+          </LineItem>
+        );
+      }
+    }
+  }
+
+  if (hasApps) {
+    menuChildren.push(null);
+    for (const app of sections.apps) {
+      const Logo = getAppTypeLogo(app.appType);
+      menuChildren.push(
+        <LineItem
+          key={`app-${app.slug}`}
+          icon={Logo}
+          rightChildren={
+            !app.authenticated ? (
+              <Text font="secondary-body" color="text-03">
+                Connect
+              </Text>
+            ) : undefined
+          }
+          onClick={() => handleSelectEntry(app)}
+        >
+          {app.name}
+        </LineItem>
+      );
+    }
+  }
+
   return (
     <Popover
       open={open}
@@ -75,65 +141,7 @@ export function PlusMenuButton({
       </Popover.Trigger>
 
       <Popover.Content side="top" align="start" width="lg">
-        <Popover.Menu>
-          <LineItem icon={SvgPaperclip} onClick={handleAttachFiles}>
-            Files
-          </LineItem>
-
-          {hasSkills && (
-            <>
-              <LineItem
-                icon={SvgSparkle}
-                rightChildren={
-                  expandedSection === "skills" ? (
-                    <SvgChevronDown className="h-4 w-4 text-text-03" />
-                  ) : (
-                    <SvgChevronRight className="h-4 w-4 text-text-03" />
-                  )
-                }
-                onClick={() => toggleSection("skills")}
-              >
-                Skills
-              </LineItem>
-              {expandedSection === "skills" &&
-                sections.skills.map((skill) => (
-                  <LineItem
-                    key={skill.slug}
-                    description={skill.description}
-                    muted
-                    onClick={() => handleSelectEntry(skill)}
-                  >
-                    {skill.name}
-                  </LineItem>
-                ))}
-            </>
-          )}
-
-          {hasApps && (
-            <>
-              {null /* divider */}
-              {sections.apps.map((app) => {
-                const Logo = getAppTypeLogo(app.appType);
-                return (
-                  <LineItem
-                    key={app.slug}
-                    icon={Logo}
-                    rightChildren={
-                      !app.authenticated ? (
-                        <Text font="secondary-body" color="text-03">
-                          Connect
-                        </Text>
-                      ) : undefined
-                    }
-                    onClick={() => handleSelectEntry(app)}
-                  >
-                    {app.name}
-                  </LineItem>
-                );
-              })}
-            </>
-          )}
-        </Popover.Menu>
+        <Popover.Menu>{menuChildren}</Popover.Menu>
       </Popover.Content>
     </Popover>
   );
