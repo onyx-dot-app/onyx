@@ -95,6 +95,10 @@ const CraftInputBar = memo(
       const [session, setSession] = useState<PickerSession>(
         INITIAL_PICKER_SESSION
       );
+      // Mirror `session` into a ref so the callbacks handed to the memoized
+      // BaseInputBar keep a stable identity across picker-query changes.
+      const sessionRef = useRef(session);
+      sessionRef.current = session;
       const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
       const [skillInfo, setSkillInfo] = useState<{
         entry: PickerEntry;
@@ -147,10 +151,10 @@ const CraftInputBar = memo(
 
       const handleInputCallback = useCallback(() => {
         const text = baseRef.current?.getTextBeforeCursor() ?? null;
-        const next = reduceOnInput(session, text);
+        const next = reduceOnInput(sessionRef.current, text);
         if (next.open) setAnchorRect(baseRef.current?.getCaretRect() ?? null);
         setSession(next);
-      }, [session]);
+      }, []);
 
       const handleSkillPickerSelect = useCallback(
         (entry: PickerEntry) => {
@@ -165,17 +169,18 @@ const CraftInputBar = memo(
       // ── Extension hooks ───────────────────────────────────────────────────
 
       const onBeforeKeyDown = useCallback(
-        (event: KeyboardEvent<HTMLDivElement>): boolean => {
-          if (session.open) {
+        (_event: KeyboardEvent<HTMLDivElement>): boolean => {
+          const current = sessionRef.current;
+          if (current.open) {
             const text = baseRef.current?.getTextBeforeCursor() ?? null;
-            const next = reduceOnSelection(session, text);
+            const next = reduceOnSelection(current, text);
             if (next.open)
               setAnchorRect(baseRef.current?.getCaretRect() ?? null);
             setSession(next);
           }
           return false;
         },
-        [session]
+        []
       );
 
       const onPasteText = useCallback(
