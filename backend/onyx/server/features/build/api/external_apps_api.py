@@ -160,7 +160,6 @@ def upsert_external_app(
             action_policies=action_policies,
             expected_app_type=request.app_type,
         )
-        db_session.expire(app, ["policies"])
         push_skill_to_affected_sandboxes(app.skill, db_session)
         return _to_admin_response(app)
 
@@ -207,12 +206,6 @@ def upsert_external_app(
             organization_credentials=request.organization_credentials,
             action_policies=action_policies,
         )
-
-    # create/update wrote the rows out-of-band (bulk delete + insert) within
-    # their own commit, so the app's loaded ``policies`` collection is stale.
-    # With ``expire_on_commit=False`` the commit won't refresh it; expire so the
-    # response reflects what was just persisted.
-    db_session.expire(app, ["policies"])
 
     # Refresh already-running sandboxes so an enable/disable (or content/grant
     # change) takes effect live, not just on the next sandbox. The rebuilt

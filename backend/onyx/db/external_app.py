@@ -279,8 +279,7 @@ def create_external_app(
     )
     db_session.add(app)
     if action_policies is not None:
-        db_session.flush()  # assign app.id before writing its policy rows
-        _write_policies__no_commit(db_session, app.id, action_policies)
+        _write_policies__no_commit(app, action_policies)
     db_session.commit()
     return app
 
@@ -350,7 +349,7 @@ def update_external_app(
     )
 
     if action_policies is not None:
-        _write_policies__no_commit(db_session, app.id, action_policies)
+        _write_policies__no_commit(app, action_policies)
 
     db_session.commit()
     return app, old_bundle_file_id
@@ -396,7 +395,7 @@ def set_external_app_enablement_and_policies(
 
     app.skill.enabled = enabled
     if action_policies is not None:
-        _write_policies__no_commit(db_session, app.id, action_policies)
+        _write_policies__no_commit(app, action_policies)
     db_session.commit()
     return app
 
@@ -416,28 +415,21 @@ def get_policies(
 
 
 def _write_policies__no_commit(
-    db_session: Session,
-    external_app_id: int,
+    app: ExternalApp,
     policies: dict[str, EndpointPolicy],
 ) -> None:
-    """Replace the app's per-action policy rows with exactly ``policies`` (full
-    delete + insert). No commit — runs inside the create/update transaction so
-    the app and its policies persist atomically. ``action_id`` validation
-    against the provider catalog is the caller's responsibility.
+    """Replace ``app``'s per-action policy rows with exactly ``policies``.
+
+    Writes through the ``app.policies`` relationship (``cascade="all,
+    delete-orphan"``) rather than a bulk table delete + insert, so the in-memory
+    collection stays consistent with what's persisted.
     """
-    db_session.execute(
-        delete(ExternalAppPolicy).where(
-            ExternalAppPolicy.external_app_id == external_app_id
-        )
-    )
-    for action_id, policy in policies.items():
-        db_session.add(
-            ExternalAppPolicy(
-                external_app_id=external_app_id,
-                action_id=action_id,
-                policy=policy,
-            )
-        )
+    # Reassigning the collection orphans the old rows (deleted on flush) and
+    # cascades the new ones in; the FK is populated from app.id on flush.
+    app.policies = [
+        ExternalAppPolicy(action_id=action_id, policy=policy)
+        for action_id, policy in policies.items()
+    ]
 
 
 def delete_external_app(
