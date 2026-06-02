@@ -3,21 +3,60 @@
 import { useState, useCallback, type ReactNode } from "react";
 import { Button, Popover, Text } from "@opal/components";
 import {
-  SvgChevronDown,
   SvgChevronRight,
   SvgPaperclip,
   SvgPlus,
   SvgSparkle,
 } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import type { PickerEntry, PickerSections } from "@/lib/skills/picker";
+
+type FlyoutSection = "skills" | "apps";
 
 export interface PlusMenuButtonProps {
   sections: PickerSections;
   onSelectEntry: (entry: PickerEntry) => void;
   onAttachFiles: () => void;
   disabled?: boolean;
+}
+
+interface FlyoutRowProps {
+  icon: IconFunctionComponent;
+  label: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: ReactNode[];
+}
+
+// A menu row that opens a flyout panel anchored to its right. The panel is its
+// own Popover nested inside the main menu's content; Radix treats nested
+// portaled content as a dismissable-layer "branch", so interacting with the
+// flyout doesn't close the main menu.
+function FlyoutRow({
+  icon,
+  label,
+  open,
+  onOpenChange,
+  children,
+}: FlyoutRowProps) {
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <Popover.Trigger asChild>
+        <LineItem
+          icon={icon}
+          selected={open}
+          rightChildren={<SvgChevronRight className="h-4 w-4 text-text-03" />}
+        >
+          {label}
+        </LineItem>
+      </Popover.Trigger>
+      <Popover.Content side="right" align="start" sideOffset={8} width="lg">
+        <Popover.Menu>{children}</Popover.Menu>
+      </Popover.Content>
+    </Popover>
+  );
 }
 
 export function PlusMenuButton({
@@ -27,13 +66,11 @@ export function PlusMenuButton({
   disabled = false,
 }: PlusMenuButtonProps) {
   const [open, setOpen] = useState(false);
-  const [expandedSection, setExpandedSection] = useState<
-    "skills" | "apps" | null
-  >(null);
+  const [openSection, setOpenSection] = useState<FlyoutSection | null>(null);
 
   const close = useCallback(() => {
     setOpen(false);
-    setExpandedSection(null);
+    setOpenSection(null);
   }, []);
 
   const handleSelectEntry = useCallback(
@@ -49,77 +86,84 @@ export function PlusMenuButton({
     close();
   }, [onAttachFiles, close]);
 
-  const toggleSection = useCallback((section: "skills" | "apps") => {
-    setExpandedSection((prev) => (prev === section ? null : section));
-  }, []);
+  // Single section open at a time. Functional updates keep the open/close
+  // events from the two nested popovers from racing each other.
+  const sectionOpenChange = useCallback(
+    (section: FlyoutSection, next: boolean) => {
+      setOpenSection((prev) =>
+        next ? section : prev === section ? null : prev
+      );
+    },
+    []
+  );
 
   const hasSkills = sections.skills.length > 0;
   const hasApps = sections.apps.length > 0;
 
-  // Built as a flat array so a literal `null` between groups renders as a
-  // Popover.Menu divider — a Fragment-wrapped null is passed as one non-null
-  // child and never produces a separator.
+  const skillRows = sections.skills.map((skill) => (
+    <LineItem
+      key={`skill-${skill.slug}`}
+      icon={SvgSparkle}
+      description={skill.description}
+      onClick={() => handleSelectEntry(skill)}
+    >
+      {skill.name}
+    </LineItem>
+  ));
+
+  const appRows = sections.apps.map((app) => (
+    <LineItem
+      key={`app-${app.slug}`}
+      icon={getAppTypeLogo(app.appType)}
+      rightChildren={
+        !app.authenticated ? (
+          <Text font="secondary-body" color="text-03">
+            Connect
+          </Text>
+        ) : undefined
+      }
+      onClick={() => handleSelectEntry(app)}
+    >
+      {app.name}
+    </LineItem>
+  ));
+
+  // Flat array so a literal `null` renders as a Popover.Menu divider; a
+  // divider sits between the Files action and the flyout rows when present.
   const menuChildren: ReactNode[] = [
     <LineItem key="files" icon={SvgPaperclip} onClick={handleAttachFiles}>
-      Files
+      Add files or photos
     </LineItem>,
   ];
 
+  if (hasSkills || hasApps) menuChildren.push(null);
+
   if (hasSkills) {
-    menuChildren.push(null);
     menuChildren.push(
-      <LineItem
+      <FlyoutRow
         key="skills"
         icon={SvgSparkle}
-        rightChildren={
-          expandedSection === "skills" ? (
-            <SvgChevronDown className="h-4 w-4 text-text-03" />
-          ) : (
-            <SvgChevronRight className="h-4 w-4 text-text-03" />
-          )
-        }
-        onClick={() => toggleSection("skills")}
+        label="Skills"
+        open={openSection === "skills"}
+        onOpenChange={(next) => sectionOpenChange("skills", next)}
       >
-        Skills
-      </LineItem>
+        {skillRows}
+      </FlyoutRow>
     );
-    if (expandedSection === "skills") {
-      for (const skill of sections.skills) {
-        menuChildren.push(
-          <LineItem
-            key={`skill-${skill.slug}`}
-            description={skill.description}
-            muted
-            onClick={() => handleSelectEntry(skill)}
-          >
-            {skill.name}
-          </LineItem>
-        );
-      }
-    }
   }
 
   if (hasApps) {
-    menuChildren.push(null);
-    for (const app of sections.apps) {
-      const Logo = getAppTypeLogo(app.appType);
-      menuChildren.push(
-        <LineItem
-          key={`app-${app.slug}`}
-          icon={Logo}
-          rightChildren={
-            !app.authenticated ? (
-              <Text font="secondary-body" color="text-03">
-                Connect
-              </Text>
-            ) : undefined
-          }
-          onClick={() => handleSelectEntry(app)}
-        >
-          {app.name}
-        </LineItem>
-      );
-    }
+    menuChildren.push(
+      <FlyoutRow
+        key="apps"
+        icon={getAppTypeLogo("CUSTOM")}
+        label="Apps"
+        open={openSection === "apps"}
+        onOpenChange={(next) => sectionOpenChange("apps", next)}
+      >
+        {appRows}
+      </FlyoutRow>
+    );
   }
 
   return (
