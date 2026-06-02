@@ -170,29 +170,20 @@ export function SkillChipStrip({
 }: SkillChipStripProps) {
   if (files.length === 0 && skills.length === 0) return null;
 
+  // Single wrapping row. Skills/apps lead (flush left), files follow.
   return (
-    <div className="flex flex-col gap-1">
-      {files.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {files.map((file) => (
-            <BuildFileCard key={file.id} file={file} onRemove={onRemoveFile} />
-          ))}
-        </div>
-      )}
-      {skills.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {skills.map((entry) => (
-            <SkillChip
-              key={entry.slug}
-              entry={entry}
-              onRemove={() => onRemoveSkill(entry.slug)}
-              onClick={
-                onClickSkill ? (el) => onClickSkill(entry, el) : undefined
-              }
-            />
-          ))}
-        </div>
-      )}
+    <div className="flex flex-wrap gap-1">
+      {skills.map((entry) => (
+        <SkillChip
+          key={entry.slug}
+          entry={entry}
+          onRemove={() => onRemoveSkill(entry.slug)}
+          onClick={onClickSkill ? (el) => onClickSkill(entry, el) : undefined}
+        />
+      ))}
+      {files.map((file) => (
+        <BuildFileCard key={file.id} file={file} onRemove={onRemoveFile} />
+      ))}
     </div>
   );
 }
