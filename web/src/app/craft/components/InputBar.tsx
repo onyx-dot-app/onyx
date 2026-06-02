@@ -55,6 +55,7 @@ import {
 import { getTextContent } from "@/lib/contentEditable";
 import { isSkillTile } from "@/lib/richInputTile";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
+import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import {
   QueuedMessage,
@@ -486,17 +487,14 @@ const InputBar = memo(
               return;
             }
           }
-          // Queue nav owns keys while a message is highlighted, so it must run
-          // before tile handling (whose Backspace guard would otherwise win).
-          if (queueEnabled && queueNav.handleKeyDown(event)) return;
-          if (handleTileKeyDown(event)) return;
+          if (handleInputNavKeys(event, queueNav, handleTileKeyDown)) return;
 
           if (isSubmitEnter) {
             event.preventDefault();
             handleSubmit();
           }
         },
-        [handleSubmit, handleTileKeyDown, queueEnabled, queueNav, openSkillInfo]
+        [handleSubmit, handleTileKeyDown, queueNav, openSkillInfo]
       );
 
       const canSubmit =

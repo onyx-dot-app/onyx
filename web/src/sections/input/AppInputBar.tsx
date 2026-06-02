@@ -69,6 +69,7 @@ import {
   useChatSessionStore,
 } from "@/app/app/stores/useChatSessionStore";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
+import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
 
 export interface AppInputBarHandle {
   reset: () => void;
@@ -866,11 +867,10 @@ const AppInputBar = React.memo(
                       }
                       data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {
-                        // Queue nav owns keys while a message is highlighted, so
-                        // it must run before tile handling (whose Backspace guard
-                        // would otherwise win).
-                        if (queueNav.handleKeyDown(event)) return;
-                        if (handleTileKeyDown(event)) return;
+                        if (
+                          handleInputNavKeys(event, queueNav, handleTileKeyDown)
+                        )
+                          return;
 
                         // Enter to submit or queue (Shift+Enter falls through to browser default: inserts <br>)
                         if (

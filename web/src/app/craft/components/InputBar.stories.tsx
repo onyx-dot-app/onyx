@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import { SWRConfig } from "swr";
 import { Button, Text } from "@opal/components";
@@ -12,6 +12,11 @@ import {
 } from "@/app/craft/contexts/UploadFilesContext";
 import { UserProvider } from "@/providers/UserProvider";
 import { QueuedMessage } from "@/app/app/interfaces";
+import {
+  createRichInputTileNode,
+  getPasteTilePreview,
+  getPasteTileMeta,
+} from "@/lib/richInputTile";
 
 // InputBar mounts UserProvider/UploadFilesContext and calls useUserSkills,
 // which fetch /api/me, /api/auth/type and /api/skills. There's no backend in
@@ -26,7 +31,7 @@ const SWR_NO_FETCH = {
 };
 
 const meta: Meta<typeof InputBar> = {
-  title: "Apps/Craft/Input Bar",
+  title: "Apps/Craft/Input Bar/Input Bar",
   component: InputBar,
   tags: ["autodocs"],
   decorators: [
@@ -272,4 +277,70 @@ export const StopButtonStyles: Story = {
       <StopButtonState label="Stopping" stopping />
     </div>
   ),
+};
+
+const TILE_PASTE_TEXT = `def fibonacci(n: int) -> int:
+    if n < 2:
+        return n
+    a, b = 0, 1
+    for _ in range(n - 1):
+        a, b = b, a + b
+    return b`;
+
+/**
+ * Shows the inline rich tiles inside the input: a blue skill tile (from the
+ * slash-skill picker) and a paste tile (from collapsing a large paste). The
+ * tiles are real DOM nodes built by `createRichInputTileNode` — the same path
+ * the live input uses — injected into the contentEditable and synced via an
+ * `input` event so the placeholder clears and the message serializes correctly.
+ */
+function TilesDemo() {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const editable =
+      wrapperRef.current?.querySelector<HTMLDivElement>('[role="textbox"]');
+    if (!editable || editable.childNodes.length > 0) return;
+
+    editable.appendChild(document.createTextNode("Refactor "));
+    editable.appendChild(
+      createRichInputTileNode({
+        type: "skill",
+        text: "/deep-research ",
+        preview: "Skill: deep-research",
+        meta: "",
+        skillSlug: "deep-research",
+      })
+    );
+    editable.appendChild(document.createTextNode(" using this snippet "));
+    editable.appendChild(
+      createRichInputTileNode({
+        type: "paste",
+        text: TILE_PASTE_TEXT,
+        preview: getPasteTilePreview(TILE_PASTE_TEXT),
+        meta: getPasteTileMeta(TILE_PASTE_TEXT),
+      })
+    );
+    editable.appendChild(document.createTextNode(" "));
+
+    // Mirror the live paths: fire an input event so the hook syncs state from
+    // the DOM (clears the placeholder, serializes tile text into the message).
+    editable.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  }, []);
+
+  return (
+    <div ref={wrapperRef}>
+      <InputBar
+        onSubmit={(message, files) =>
+          console.log("onSubmit", { message, files })
+        }
+        isRunning={false}
+        placeholder="Continue the conversation..."
+      />
+    </div>
+  );
+}
+
+export const Tiles: Story = {
+  render: () => <TilesDemo />,
 };
