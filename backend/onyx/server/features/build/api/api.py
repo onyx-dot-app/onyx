@@ -102,17 +102,9 @@ EXCLUDED_HEADERS = {
 
 # Request headers stripped before forwarding to the sandbox. The sandbox runs
 # LLM-generated webapp code and must never receive the viewer's Onyx
-# credentials, CSRF tokens, or client-identity headers — otherwise a malicious
-# webapp can exfiltrate them (GHSA-v2mx-c9m8-5jrv / GHSA-j6q4-7ghr-53cv).
-#
-# The sandbox webapp is a frontend-only Next.js shell with no callbacks into
-# Onyx, so it does not depend on any of these for correct behavior. The proxy
-# is GET-only; if WebSocket upgrade is ever added, also strip
-# `sec-websocket-protocol`/`sec-websocket-extensions` (can carry bearer tokens).
+# credentials, CSRF tokens, or client-identity headers
 #
 # Entries must be lowercase — the filter compares against `key.lower()`.
-# Any header starting with `x-onyx-` is also stripped, so future Onyx-internal
-# headers don't silently leak.
 EXCLUDED_REQUEST_HEADERS = {
     # End-to-end but unsafe to forward verbatim.
     "host",
