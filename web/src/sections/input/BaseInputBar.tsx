@@ -79,6 +79,8 @@ export interface BaseInputBarProps {
   onPasteFiles?: (files: File[]) => void;
   /** Called after every input event; variant uses it for picker state. */
   onInputCallback?: () => void;
+  /** Called on caret moves (key up / mouse up); variant uses it for picker state. */
+  onSelectionChange?: () => void;
 }
 
 const BaseInputBar = memo(
@@ -106,6 +108,7 @@ const BaseInputBar = memo(
         onPasteText,
         onPasteFiles,
         onInputCallback,
+        onSelectionChange,
       },
       ref
     ) => {
@@ -261,7 +264,9 @@ const BaseInputBar = memo(
         [handleSubmit, handleTileKeyDown, queueNav, onBeforeKeyDown]
       );
 
-      const handleSelectionChange = useCallback(() => {}, []);
+      const handleSelectionChange = useCallback(() => {
+        onSelectionChange?.();
+      }, [onSelectionChange]);
 
       const canSubmit =
         message.trim().length > 0 &&

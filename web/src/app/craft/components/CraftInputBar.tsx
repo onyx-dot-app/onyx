@@ -173,19 +173,24 @@ const CraftInputBar = memo(
 
       // ── Extension hooks ───────────────────────────────────────────────────
 
+      // Re-evaluate the slash trigger after the caret moves (arrow keys, click,
+      // selection). Keeps the picker query in sync or closes it when the caret
+      // leaves the token.
+      const syncPickerSelection = useCallback(() => {
+        const current = sessionRef.current;
+        if (!current.open) return;
+        const text = baseRef.current?.getTextBeforeCursor() ?? null;
+        const next = reduceOnSelection(current, text);
+        if (next.open) setAnchorRect(baseRef.current?.getCaretRect() ?? null);
+        setSession(next);
+      }, []);
+
       const onBeforeKeyDown = useCallback(
         (_event: KeyboardEvent<HTMLDivElement>): boolean => {
-          const current = sessionRef.current;
-          if (current.open) {
-            const text = baseRef.current?.getTextBeforeCursor() ?? null;
-            const next = reduceOnSelection(current, text);
-            if (next.open)
-              setAnchorRect(baseRef.current?.getCaretRect() ?? null);
-            setSession(next);
-          }
+          syncPickerSelection();
           return false;
         },
-        []
+        [syncPickerSelection]
       );
 
       const onPasteText = useCallback(
@@ -282,6 +287,7 @@ const CraftInputBar = memo(
             onPasteText={onPasteText}
             onPasteFiles={uploadFiles}
             onInputCallback={handleInputCallback}
+            onSelectionChange={syncPickerSelection}
           />
           <SkillPickerPopover
             open={session.open}
