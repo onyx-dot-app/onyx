@@ -144,8 +144,12 @@ async function verifyToolUsableFromChat(
 ): Promise<void> {
   const actions = new ActionsPopover(page);
   await actions.ensureServerVisible(artifacts.serverName, { agentId });
-  await actions.expectToolRowVisible(artifacts.serverName, artifacts.toolName);
-  await actions.enableServerTool(artifacts.serverName, artifacts.toolName);
+  // Drill into the server once to both confirm the tool row and enable it,
+  // rather than opening the popover twice.
+  await actions.openServer(artifacts.serverName);
+  await expect(actions.toolToggle(artifacts.toolName)).toBeVisible();
+  await actions.enableTool(artifacts.toolName);
+  await actions.close();
   await expectMcpToolInvoked(page, artifacts.toolName, artifacts.toolId);
 }
 

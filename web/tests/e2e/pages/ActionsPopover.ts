@@ -278,13 +278,6 @@ export class ActionsPopover {
     await this.close();
   }
 
-  /** Open the popover, drill into the server, and enable a specific tool. */
-  async enableServerTool(serverName: string, toolName: string): Promise<void> {
-    await this.openServer(serverName);
-    await this.enableTool(toolName);
-    await this.close();
-  }
-
   // ---------------------------------------------------------------------------
   // Re-authentication (OAuth + per-user)
   // ---------------------------------------------------------------------------
