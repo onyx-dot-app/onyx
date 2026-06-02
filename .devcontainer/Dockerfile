@@ -3,9 +3,10 @@
 # Hub rate limits.
 ARG BASE_IMAGE_REGISTRY=docker.io
 
-# bun binary source. Pinned via the registry prefix in its own stage because buildx
+# bun + node binary sources. Pinned via the registry prefix in their own stages because buildx
 # rejects variable expansion directly in `COPY --from=` -- the ARG is only expandable in a FROM.
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
+FROM ${BASE_IMAGE_REGISTRY}/library/node:24.16.0-trixie-slim@sha256:05c08ce4291e9a58f59456a7985176defb12cdd42271f35ff81a3e167ea61d4c AS node_source
 
 FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:cc925e589b7543b910fea57a240468940003fbfc0515245a495dd0ad8fe7cef1
 
@@ -68,13 +69,13 @@ RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 # The chromium browser binary is installed at test time (web global-setup), not
 # baked here, so its version tracks web/package.json's floating @playwright/test.
 #
-# Copied from the official node image (digest-pinned like bun above) instead of
-# fetched from nodejs.org, so a compromised mirror or MITM can't swap the binary
-# and buildkit resolves the right arch from the manifest list. Keep both COPY
-# refs in sync when bumping the version. npm/npx are scripts under
-# node_modules/npm; recreate their PATH symlinks since we copy the bare binary.
-COPY --from=node:24.16.0-trixie-slim@sha256:05c08ce4291e9a58f59456a7985176defb12cdd42271f35ff81a3e167ea61d4c /usr/local/bin/node /usr/local/bin/node
-COPY --from=node:24.16.0-trixie-slim@sha256:05c08ce4291e9a58f59456a7985176defb12cdd42271f35ff81a3e167ea61d4c /usr/local/lib/node_modules /usr/local/lib/node_modules
+# Copied from the official node image (digest-pinned in the node_source stage at the
+# top, routed through BASE_IMAGE_REGISTRY) instead of fetched from nodejs.org, so a
+# compromised mirror or MITM can't swap the binary and buildkit resolves the right arch
+# from the manifest list. npm/npx are scripts under node_modules/npm; recreate their
+# PATH symlinks since we copy the bare binary.
+COPY --from=node_source /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_source /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
   && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
   && node --version
