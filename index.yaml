@@ -3,6 +3,65 @@ entries:
   onyx:
   - annotations:
       artifacthub.io/changes: |
+        - kind: added
+          description: Allow disabling the bundled `redis-operator` subchart
+            independently of the Redis instance via `redisOperator.enabled`. Leave it
+            unset to keep the existing behavior (operator follows `redis.enabled`);
+            set it to `false` to skip the bundled operator and have an existing
+            cluster-wide redis-operator reconcile the chart's Redis CR.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+    apiVersion: v2
+    appVersion: latest
+    created: "2026-06-02T23:04:34.562831736Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.3
+    description: A Helm chart for Kubernetes
+    digest: 8a2110b75ba72ac02c1f1cf8e19894830996d16be2e1dd457c17424bd27b88df
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://onyx-dot-app.github.io/onyx/onyx-0.5.16.tgz
+    version: 0.5.16
+  - annotations:
+      artifacthub.io/changes: |
         - kind: changed
           description: Bump the `code-interpreter` subchart from 0.4.2 to 0.4.3.
       category: Productivity
@@ -4267,4 +4326,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-06-02T22:41:01.148929274Z"
+generated: "2026-06-02T23:04:34.534128522Z"
