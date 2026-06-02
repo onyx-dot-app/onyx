@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Tag, Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgCheckAll, SvgChevronDown } from "@opal/icons";
+import { SvgAlertCircle, SvgCheckAll, SvgChevronDown } from "@opal/icons";
 import {
   Collapsible,
   CollapsibleContent,
@@ -32,11 +32,16 @@ function aggregateStatus(toolCalls: ToolCallState[]): ToolCallState["status"] {
 function renderStatusIcon(toolCalls: ToolCallState[]) {
   const baseClass = "size-4 shrink-0";
   const aggregate = aggregateStatus(toolCalls);
-  if (aggregate === "in_progress" || aggregate === "pending") {
+  if (aggregate === "in_progress") {
     return (
       <SvgLoader
         className={cn(baseClass, "stroke-status-info-05 animate-spin")}
       />
+    );
+  }
+  if (aggregate === "failed") {
+    return (
+      <SvgAlertCircle className={cn(baseClass, "stroke-status-error-05")} />
     );
   }
   return <SvgCheckAll className={cn(baseClass, "stroke-text-03")} />;
