@@ -170,8 +170,9 @@ export async function startNewChat(page: Page) {
 export async function ensureOnboardingComplete(page: Page): Promise<void> {
   await page.request
     .patch("/api/user/personalization", { data: { name: "Playwright User" } })
-    .catch(() => {
-      // ignore personalization failures — the prompt is best-effort dismissed
+    .catch((error) => {
+      // Best-effort, but surface the failure so a broken setup is visible.
+      console.warn(`Failed to set display name during onboarding: ${error}`);
     });
   await page.reload();
   await page.waitForLoadState("networkidle");

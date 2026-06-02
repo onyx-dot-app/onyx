@@ -436,11 +436,16 @@ export class McpOAuthFlow {
       throw finalResult.error;
     };
 
-    if (
-      matchesReturnPath(this.page.url()) &&
-      (await tryConfirmConnected(true))
-    ) {
-      return;
+    if (matchesReturnPath(this.page.url())) {
+      // Already on the return path. With no confirmConnected check there is
+      // nothing left to wait for, so a finished round-trip can exit here
+      // instead of waiting out the (now-impossible) IdP redirect.
+      if (!options.confirmConnected) {
+        return;
+      }
+      if (await tryConfirmConnected(true)) {
+        return;
+      }
     }
 
     if (

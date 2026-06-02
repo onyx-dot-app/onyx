@@ -71,9 +71,9 @@ export class ChatPreferencesPage {
     await expect(card).toBeVisible();
     await card.scrollIntoViewIfNeeded();
 
-    const expandButton = this.page
-      .getByRole("button", { name: "Expand" })
-      .first();
+    // Scope the Expand control to this server's card so it can't toggle a
+    // different expandable card on the page.
+    const expandButton = card.getByRole("button", { name: "Expand" }).first();
     if (await expandButton.isVisible().catch(() => false)) {
       await expandButton.click();
     }
