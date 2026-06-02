@@ -11,7 +11,7 @@
 
 import { type Page, expect } from "@playwright/test";
 import { logPageState } from "@tests/e2e/utils/pageStateLogger";
-import { ActionsPopover } from "@tests/e2e/mcp/ActionsPopover";
+import { ActionsPopover } from "@tests/e2e/pages/ActionsPopover";
 
 const REQUIRED_ENV_VARS = [
   "MCP_OAUTH_CLIENT_ID",

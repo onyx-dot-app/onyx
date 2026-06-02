@@ -6,8 +6,8 @@ import {
   startMcpPerUserKeyServer,
   McpServerProcess,
 } from "@tests/e2e/utils/mcpServer";
-import { AdminMcpServersPage } from "@tests/e2e/mcp/AdminMcpServersPage";
-import { ActionsPopover } from "@tests/e2e/mcp/ActionsPopover";
+import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
+import { ActionsPopover } from "@tests/e2e/pages/ActionsPopover";
 
 // API keys baked into run_mcp_server_per_user_key.py. The script's middleware
 // also requires every /mcp/* request to carry a non-empty `X-Username` header

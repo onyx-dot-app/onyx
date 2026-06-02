@@ -7,8 +7,8 @@ import {
   McpServerProcess,
 } from "@tests/e2e/utils/mcpServer";
 import { TEST_ADMIN_CREDENTIALS } from "@tests/e2e/constants";
-import { AdminMcpServersPage } from "@tests/e2e/mcp/AdminMcpServersPage";
-import { ActionsPopover } from "@tests/e2e/mcp/ActionsPopover";
+import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
+import { ActionsPopover } from "@tests/e2e/pages/ActionsPopover";
 import {
   McpOAuthFlow,
   getMcpOAuthConfig,

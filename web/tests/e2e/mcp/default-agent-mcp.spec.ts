@@ -6,10 +6,10 @@ import {
   startMcpApiKeyServer,
   McpServerProcess,
 } from "@tests/e2e/utils/mcpServer";
-import { AdminMcpServersPage } from "@tests/e2e/mcp/AdminMcpServersPage";
-import { ChatPreferencesPage } from "@tests/e2e/mcp/ChatPreferencesPage";
-import { ActionsPopover } from "@tests/e2e/mcp/ActionsPopover";
-import { AgentEditorPage } from "@tests/e2e/mcp/AgentEditorPage";
+import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
+import { ChatPreferencesPage } from "@tests/e2e/pages/ChatPreferencesPage";
+import { ActionsPopover } from "@tests/e2e/pages/ActionsPopover";
+import { AgentEditorPage } from "@tests/e2e/pages/AgentEditorPage";
 import {
   expectMcpToolInvoked,
   expectMcpToolNotInvoked,
