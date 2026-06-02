@@ -195,6 +195,7 @@ export default function EmailPasswordForm({
                         }}
                         placeholder="email@yourcompany.com"
                         data-testid="email"
+                        autoComplete="username"
                         variant={apiStatus === "error" ? "error" : undefined}
                       />
                     </FormField.Control>
@@ -218,8 +219,11 @@ export default function EmailPasswordForm({
                           }
                           field.onChange(e);
                         }}
-                        placeholder="∗∗∗∗∗∗∗∗∗∗∗∗∗∗"
+                        placeholder="●●●●●●●●●●●●●●"
                         data-testid="password"
+                        autoComplete={
+                          isSignup ? "new-password" : "current-password"
+                        }
                         error={apiStatus === "error"}
                       />
                     </FormField.Control>
