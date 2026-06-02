@@ -427,13 +427,18 @@ def _write_policies__no_commit(
     ORM flushes inserts before deletes. No commit — runs inside the caller's
     transaction. ``action_id`` validation is the caller's responsibility.
     """
+    # Mutable copy we drain as we match rows; whatever's left is genuinely new.
     desired = dict(policies)
+    # Snapshot the collection since we mutate it inside the loop.
     for existing_policy in list(app.policies):
         new_policy = desired.pop(existing_policy.action_id, None)
         if new_policy is not None:
+            # action_id survives → update in place (no delete + re-insert).
             existing_policy.policy = new_policy
         else:
+            # action_id dropped → orphan it; delete-orphan cascade emits a DELETE.
             app.policies.remove(existing_policy)
+    # Action ids with no existing row → insert (FK set from app.id on flush).
     for action_id, policy in desired.items():
         app.policies.append(ExternalAppPolicy(action_id=action_id, policy=policy))
 
