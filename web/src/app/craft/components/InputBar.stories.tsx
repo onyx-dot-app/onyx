@@ -17,11 +17,17 @@ import {
   getPasteTilePreview,
   getPasteTileMeta,
 } from "@/lib/richInputTile";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import {
+  appFixture,
+  builtinFixture as builtin,
+  customFixture as custom,
+} from "@/lib/skills/__fixtures__/picker";
+import type { SkillsList } from "@/refresh-pages/admin/SkillsPage/interfaces";
+import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 
-// InputBar mounts UserProvider/UploadFilesContext and calls useUserSkills,
-// which fetch /api/me, /api/auth/type and /api/skills. There's no backend in
-// standalone Storybook, so disable SWR revalidation (with an isolated cache) to
-// keep the stories self-contained — hooks fall back to their empty defaults.
+// No backend in Storybook — isolate the SWR cache and skip revalidation so
+// hooks fall back to empty defaults or the per-story `fallback` seed.
 const SWR_NO_FETCH = {
   provider: () => new Map(),
   revalidateOnMount: false,
@@ -30,22 +36,46 @@ const SWR_NO_FETCH = {
   revalidateOnReconnect: false,
 };
 
+interface SkillPickerFixture {
+  skills?: SkillsList;
+  apps?: ExternalAppUserResponse[];
+}
+
+function fixtureToFallback(
+  fixture: SkillPickerFixture
+): Record<string, unknown> {
+  const fallback: Record<string, unknown> = {};
+  if (fixture.skills !== undefined) {
+    fallback[SWR_KEYS.userSkills] = fixture.skills;
+  }
+  if (fixture.apps !== undefined) {
+    fallback[SWR_KEYS.buildExternalApps] = fixture.apps;
+  }
+  return fallback;
+}
+
 const meta: Meta<typeof InputBar> = {
   title: "Apps/Craft/Input Bar/Input Bar",
   component: InputBar,
   tags: ["autodocs"],
   decorators: [
-    (Story) => (
-      <SWRConfig value={SWR_NO_FETCH}>
-        <UserProvider>
-          <UploadFilesProvider>
-            <div className="w-[640px]">
-              <Story />
-            </div>
-          </UploadFilesProvider>
-        </UserProvider>
-      </SWRConfig>
-    ),
+    (Story, context) => {
+      const fixture = context.parameters?.skillPicker as
+        | SkillPickerFixture
+        | undefined;
+      const fallback = fixture ? fixtureToFallback(fixture) : {};
+      return (
+        <SWRConfig value={{ ...SWR_NO_FETCH, fallback }}>
+          <UserProvider>
+            <UploadFilesProvider>
+              <div className="w-[640px]">
+                <Story />
+              </div>
+            </UploadFilesProvider>
+          </UserProvider>
+        </SWRConfig>
+      );
+    },
   ],
   args: {
     onSubmit: (message: string, files: BuildFile[]) =>
@@ -343,4 +373,114 @@ function TilesDemo() {
 
 export const Tiles: Story = {
   render: () => <TilesDemo />,
+};
+
+const SLASH_PICKER_DESCRIPTION =
+  "Type `/` in the input below to open the skill picker.";
+
+export const SlashPickerSkillsOnly: Story = {
+  parameters: {
+    docs: { description: { story: SLASH_PICKER_DESCRIPTION } },
+    skillPicker: {
+      skills: {
+        builtins: [
+          builtin({ slug: "pptx", name: "PPTX" }),
+          builtin({
+            slug: "image-generation",
+            name: "Image Generation",
+            description: "Generate images from a prompt.",
+          }),
+          builtin({
+            slug: "company-search",
+            name: "Company Search",
+            description: "Search the company knowledge base.",
+          }),
+        ],
+        customs: [custom()],
+      },
+      apps: [],
+    } satisfies SkillPickerFixture,
+  },
+};
+
+export const SlashPickerAppsOnly: Story = {
+  parameters: {
+    docs: { description: { story: SLASH_PICKER_DESCRIPTION } },
+    skillPicker: {
+      skills: { builtins: [], customs: [] },
+      apps: [
+        appFixture({
+          slug: "slack",
+          name: "Slack",
+          description: "Search Slack messages.",
+          app_type: "SLACK",
+          authenticated: true,
+        }),
+        appFixture({
+          slug: "gmail",
+          name: "Gmail",
+          description: "Search Gmail threads.",
+          app_type: "GMAIL",
+          authenticated: false,
+        }),
+      ],
+    } satisfies SkillPickerFixture,
+  },
+};
+
+export const SlashPickerSkillsAndApps: Story = {
+  parameters: {
+    docs: { description: { story: SLASH_PICKER_DESCRIPTION } },
+    skillPicker: {
+      skills: {
+        builtins: [
+          builtin({ slug: "pptx", name: "PPTX" }),
+          builtin({
+            slug: "image-generation",
+            name: "Image Generation",
+            description: "Generate images from a prompt.",
+          }),
+          builtin({
+            slug: "company-search",
+            name: "Company Search",
+            description: "Search the company knowledge base.",
+          }),
+        ],
+        customs: [custom()],
+      },
+      apps: [
+        appFixture({
+          slug: "slack",
+          name: "Slack",
+          description: "Search Slack messages.",
+          app_type: "SLACK",
+          authenticated: true,
+        }),
+        appFixture({
+          slug: "gmail",
+          name: "Gmail",
+          description: "Search Gmail threads.",
+          app_type: "GMAIL",
+          authenticated: false,
+        }),
+        appFixture({
+          slug: "linear",
+          name: "Linear",
+          description: "Read & comment on Linear issues.",
+          app_type: "LINEAR",
+          authenticated: true,
+        }),
+      ],
+    } satisfies SkillPickerFixture,
+  },
+};
+
+export const SlashPickerEmpty: Story = {
+  parameters: {
+    docs: { description: { story: SLASH_PICKER_DESCRIPTION } },
+    skillPicker: {
+      skills: { builtins: [], customs: [] },
+      apps: [],
+    } satisfies SkillPickerFixture,
+  },
 };

@@ -385,6 +385,7 @@ class ExternalAppUserResponse(BaseModel):
     id: int
     name: str
     description: str
+    slug: str
     app_type: ExternalAppType
     credential_keys: list[str]
     credential_values: dict[str, Any]

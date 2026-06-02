@@ -85,6 +85,7 @@ export interface ExternalAppUserResponse {
   id: number;
   name: string;
   description: string;
+  slug: string;
   app_type: ExternalAppType;
   credential_keys: string[];
   credential_values: Record<string, string>;
