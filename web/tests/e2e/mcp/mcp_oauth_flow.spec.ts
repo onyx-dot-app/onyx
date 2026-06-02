@@ -114,7 +114,15 @@ async function configureOauthServer(
     oauthConfig.clientId,
     oauthConfig.clientSecret
   );
-  await adminMcp.clickConnect();
+  // Wait for the connect click to actually start the OAuth navigation before
+  // handing off to completeFlow. Otherwise the page is still on
+  // /admin/actions/mcp (which matches the return path) with the server name
+  // already visible, and completeFlow's "already returned" early-out fires
+  // before the IdP handshake even begins.
+  await oauthFlow.clickAndWaitForPossibleUrlChange(
+    () => adminMcp.clickConnect(),
+    "OAuth connect click"
+  );
 
   await oauthFlow.completeFlow({
     expectReturnPathContains: "/admin/actions/mcp",
