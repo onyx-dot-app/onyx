@@ -1,0 +1,364 @@
+"use client";
+
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useImperativeHandle,
+  useRef,
+  type ClipboardEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  type SyntheticEvent,
+} from "react";
+import { getPastedFilesIfNoText } from "@/lib/clipboard";
+import PasteTilePopover from "@/sections/input/PasteTilePopover";
+import { cn } from "@opal/utils";
+import { Disabled } from "@opal/core";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import { Text } from "@opal/components";
+import { SvgArrowUp, SvgLoader, SvgStop } from "@opal/icons";
+import Keycap from "@/refresh-components/Keycap";
+import { useContentEditable } from "@/hooks/useContentEditable";
+import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
+import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
+import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
+import {
+  EMPTY_QUEUED_MESSAGES,
+  MAX_QUEUED_MESSAGES,
+  type QueuedMessage,
+} from "@/app/app/interfaces";
+
+export interface BaseInputBarHandle {
+  reset: () => void;
+  focus: () => void;
+  setMessage: (message: string) => void;
+  pasteText: (text: string) => void;
+}
+
+export interface BaseInputBarProps {
+  onSubmit: (message: string) => void;
+  isRunning: boolean;
+  disabled?: boolean;
+  placeholder?: string;
+  noBottomRounding?: boolean;
+  pasteTilesEnabled?: boolean;
+  sandboxInitializing?: boolean;
+  /** Blocks submit without applying disabled visual (e.g. files still uploading). */
+  submitBlocked?: boolean;
+  /** Applies armed styling to the Stop button (set by variant from useDoubleEscapeInterrupt). */
+  stopArmed?: boolean;
+
+  // Queue
+  queuedMessages?: readonly QueuedMessage[];
+  onQueueMessage?: (text: string) => void;
+  onRemoveQueuedMessage?: (index: number) => void;
+
+  // Interrupt
+  onInterrupt?: () => void;
+  isInterrupting?: boolean;
+
+  // Slots
+  topSlot?: ReactNode;
+  bottomLeftSlot?: ReactNode;
+  bottomRightSlot?: ReactNode;
+
+  // Extension hooks
+  /** Return true to consume the event (skips BaseInputBar key handling). */
+  onBeforeKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => boolean;
+  /** Return true to consume the pasted text (skips pasteText). */
+  onPasteText?: (text: string) => boolean;
+  /** Called when files are pasted. */
+  onPasteFiles?: (files: File[]) => void;
+  /** Called after every input event; variant uses it for picker state. */
+  onInputCallback?: () => void;
+}
+
+const BaseInputBar = memo(
+  forwardRef<BaseInputBarHandle, BaseInputBarProps>(
+    (
+      {
+        onSubmit,
+        isRunning,
+        disabled = false,
+        placeholder = "Describe your task...",
+        noBottomRounding = false,
+        pasteTilesEnabled = false,
+        sandboxInitializing = false,
+        submitBlocked = false,
+        stopArmed = false,
+        queuedMessages,
+        onQueueMessage,
+        onRemoveQueuedMessage,
+        onInterrupt,
+        isInterrupting = false,
+        topSlot,
+        bottomLeftSlot,
+        bottomRightSlot,
+        onBeforeKeyDown,
+        onPasteText,
+        onPasteFiles,
+        onInputCallback,
+      },
+      ref
+    ) => {
+      const queueEnabled = !!onQueueMessage;
+      const queue = queuedMessages ?? EMPTY_QUEUED_MESSAGES;
+
+      const inputWrapperRef = useRef<HTMLDivElement>(null);
+      const {
+        ref: inputRef,
+        message,
+        setMessage,
+        clearMessage,
+        handleInput: onInput,
+        handleCompositionStart,
+        handleCompositionEnd,
+        pasteText,
+        handleCopy,
+        handleCut,
+        setCursorToEnd,
+        handleTileMouseDown,
+        handleTileClick,
+        handleTileKeyDown,
+        tilePopover,
+        dismissTilePopover,
+        updateTileText,
+      } = useContentEditable({
+        wrapperRef: inputWrapperRef,
+        pasteTilesEnabled,
+      });
+
+      const queueNav = useQueuedMessageNavigation({
+        messages: queue,
+        inputIsEmpty: !message,
+        onRemove: (index) => onRemoveQueuedMessage?.(index),
+        onEdit: setMessage,
+      });
+
+      useImperativeHandle(ref, () => ({
+        reset: () => {
+          clearMessage();
+        },
+        focus: () => {
+          inputRef.current?.focus();
+          setCursorToEnd();
+        },
+        setMessage: (msg: string) => setMessage(msg),
+        pasteText: (text: string) => pasteText(text),
+      }));
+
+      const handlePaste = useCallback(
+        (event: ClipboardEvent) => {
+          if (disabled) return;
+          const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
+          if (pastedFiles.length > 0) {
+            event.preventDefault();
+            onPasteFiles?.(pastedFiles);
+            return;
+          }
+          event.preventDefault();
+          const text = event.clipboardData.getData("text/plain");
+          if (!text) return;
+          if (onPasteText?.(text)) return;
+          pasteText(text);
+        },
+        [disabled, onPasteFiles, onPasteText, pasteText]
+      );
+
+      const handleSubmit = useCallback(() => {
+        if (disabled || submitBlocked || sandboxInitializing || isInterrupting)
+          return;
+        const text = message.trim();
+        if (isRunning) {
+          if (onQueueMessage && text && queue.length < MAX_QUEUED_MESSAGES) {
+            onQueueMessage(text);
+            clearMessage();
+          }
+          return;
+        }
+        if (text) {
+          onSubmit(text);
+          clearMessage();
+        }
+      }, [
+        message,
+        disabled,
+        submitBlocked,
+        isRunning,
+        isInterrupting,
+        sandboxInitializing,
+        onSubmit,
+        onQueueMessage,
+        queue,
+        clearMessage,
+      ]);
+
+      const handleInput = useCallback(
+        (event: SyntheticEvent<HTMLDivElement>) => {
+          onInput(event);
+          onInputCallback?.();
+        },
+        [onInput, onInputCallback]
+      );
+
+      const handleKeyDown = useCallback(
+        (event: KeyboardEvent<HTMLDivElement>) => {
+          if (onBeforeKeyDown?.(event)) return;
+          const isSubmitEnter =
+            event.key === "Enter" &&
+            !event.shiftKey &&
+            !event.nativeEvent.isComposing;
+          if (handleInputNavKeys(event, queueNav, handleTileKeyDown)) return;
+          if (isSubmitEnter) {
+            event.preventDefault();
+            handleSubmit();
+          }
+        },
+        [handleSubmit, handleTileKeyDown, queueNav, onBeforeKeyDown]
+      );
+
+      const handleSelectionChange = useCallback(() => {}, []);
+
+      const canSubmit =
+        message.trim().length > 0 &&
+        !disabled &&
+        !submitBlocked &&
+        !sandboxInitializing &&
+        !isInterrupting &&
+        (!isRunning || (queueEnabled && queue.length < MAX_QUEUED_MESSAGES));
+
+      const interruptible = !!onInterrupt && isRunning;
+      const handleInterrupt = useCallback(() => {
+        if (interruptible && !isInterrupting) onInterrupt?.();
+      }, [interruptible, isInterrupting, onInterrupt]);
+
+      return (
+        <Disabled disabled={disabled}>
+          {queueEnabled && (
+            <QueuedMessageBar
+              messages={queue}
+              highlightedIndex={queueNav.highlightedIndex}
+              awaitingPreferredSelection={false}
+              onDiscard={(index) => onRemoveQueuedMessage?.(index)}
+              onHighlight={queueNav.setHighlightedIndex}
+            />
+          )}
+          <div
+            className={cn(
+              "w-full flex flex-col shadow-01 bg-background-neutral-00",
+              noBottomRounding ? "rounded-t-16 rounded-b-none" : "rounded-16"
+            )}
+          >
+            {topSlot && <div className="px-2 pt-2">{topSlot}</div>}
+
+            <div ref={inputWrapperRef} className="flex-1 overflow-hidden">
+              <div
+                ref={inputRef}
+                contentEditable={!disabled}
+                suppressContentEditableWarning
+                onPaste={handlePaste}
+                onInput={handleInput}
+                onCompositionStart={handleCompositionStart}
+                onCompositionEnd={handleCompositionEnd}
+                onKeyDown={handleKeyDown}
+                onKeyUp={handleSelectionChange}
+                onMouseUp={handleSelectionChange}
+                onBlur={() => queueNav.setHighlightedIndex(null)}
+                className={cn(
+                  "w-full h-full min-h-[44px] outline-hidden bg-transparent",
+                  "whitespace-pre-wrap wrap-break-word overscroll-contain",
+                  "overflow-y-auto px-3 pb-2 pt-3"
+                )}
+                tabIndex={disabled ? -1 : 0}
+                style={{
+                  scrollbarWidth: "thin",
+                  scrollbarColor: "var(--border-02) transparent",
+                }}
+                role="textbox"
+                aria-label="Message input"
+                aria-multiline={true}
+                aria-disabled={disabled}
+                aria-placeholder={placeholder}
+                data-placeholder={placeholder}
+                data-empty={!message ? "" : undefined}
+                onCopy={handleCopy}
+                onCut={handleCut}
+                onMouseDown={handleTileMouseDown}
+                onClick={handleTileClick}
+              />
+            </div>
+
+            <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
+              <div className="flex flex-row items-center gap-2">
+                {bottomLeftSlot}
+                {!message && queueEnabled && queue.length > 0 && (
+                  <div className="flex items-center gap-1 select-none">
+                    <Keycap>↑</Keycap>
+                    <Text font="secondary-body" color="text-02">
+                      to edit queued messages
+                    </Text>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-row items-center gap-1">
+                {bottomRightSlot}
+                <div
+                  className={cn(
+                    "overflow-hidden transition-[width,opacity] duration-150 ease-out motion-reduce:transition-none",
+                    interruptible
+                      ? "w-9 opacity-100"
+                      : "w-0 opacity-0 pointer-events-none"
+                  )}
+                >
+                  <IconButton
+                    main
+                    tertiary
+                    icon={isInterrupting ? SvgLoader : SvgStop}
+                    iconClassName={isInterrupting ? "animate-spin" : undefined}
+                    className={cn(
+                      "border-[1.5px] border-border-02",
+                      stopArmed && "bg-background-tint-02!"
+                    )}
+                    disabled={!interruptible || isInterrupting}
+                    onClick={handleInterrupt}
+                    tooltip="Stop · esc esc"
+                    aria-label="Stop generating"
+                  />
+                </div>
+                <IconButton
+                  icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
+                  onClick={handleSubmit}
+                  disabled={!canSubmit}
+                  tooltip={
+                    sandboxInitializing
+                      ? "Initializing sandbox..."
+                      : isRunning
+                        ? "Queue message"
+                        : "Send"
+                  }
+                  aria-label={isRunning ? "Queue message" : "Send"}
+                  iconClassName={
+                    sandboxInitializing ? "animate-spin" : undefined
+                  }
+                />
+              </div>
+            </div>
+          </div>
+          {tilePopover && (
+            <PasteTilePopover
+              text={tilePopover.text}
+              tileElement={tilePopover.tile}
+              onDismiss={dismissTilePopover}
+              onTextChange={updateTileText}
+            />
+          )}
+        </Disabled>
+      );
+    }
+  )
+);
+
+BaseInputBar.displayName = "BaseInputBar";
+
+export default BaseInputBar;
