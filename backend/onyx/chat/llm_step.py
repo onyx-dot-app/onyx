@@ -173,6 +173,18 @@ def _find_function_calls_open_marker(text_lower: str) -> int:
         search_from = idx + 1
 
 
+def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
+    """Detect XML-style marshaled tool calls emitted as plain text."""
+    if not text:
+        return False
+    lowered = text.lower()
+    return (
+        "<function_calls" in lowered
+        and "<invoke" in lowered
+        and "<parameter" in lowered
+    )
+
+
 def _try_parse_json_string(value: Any) -> Any:
     """Attempt to parse a JSON string value into its Python equivalent.
 
@@ -1389,11 +1401,15 @@ def run_llm_step_pkt_generator(
         # raw output instead of returning an empty answer, which would raise a
         # misleading EmptyLLMResponseError downstream. Skipped for REQUIRED tool
         # choice, where empty pre-tool content is expected (fallback extraction).
+        # Also skipped when the raw output is XML tool-call markup: run_llm_loop's
+        # fallback extraction will parse it into a real tool call, so surfacing it
+        # as an answer would leak raw markup to the client and pollute context.
         if (
             tool_choice != ToolChoiceOptions.REQUIRED
             and not tool_calls
             and not accumulated_answer.strip()
             and accumulated_raw_answer.strip()
+            and not _looks_like_xml_tool_call_payload(accumulated_raw_answer)
         ):
             logger.warning(
                 "Answer empty after content/citation processing; recovering raw "
