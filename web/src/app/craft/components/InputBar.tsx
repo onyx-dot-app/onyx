@@ -486,8 +486,10 @@ const InputBar = memo(
               return;
             }
           }
-          if (handleTileKeyDown(event)) return;
+          // Queue nav owns keys while a message is highlighted, so it must run
+          // before tile handling (whose Backspace guard would otherwise win).
           if (queueEnabled && queueNav.handleKeyDown(event)) return;
+          if (handleTileKeyDown(event)) return;
 
           if (isSubmitEnter) {
             event.preventDefault();
