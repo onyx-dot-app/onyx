@@ -13,7 +13,7 @@ import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { getSourceMetadata } from "@/lib/sources";
 import { Tag, ValidSources } from "@/lib/types";
-import { getTimeFilterDate, TimeFilter } from "@/lib/time";
+import { getTimeFilterDate, TimeFilter } from "@opal/time";
 import useTags from "@/hooks/useTags";
 import { SourceIcon } from "@/components/SourceIcon";
 import Text from "@/refresh-components/texts/Text";

@@ -9,7 +9,7 @@ import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
 import { toast } from "@/hooks/useToast";

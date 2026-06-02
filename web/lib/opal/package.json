@@ -49,6 +49,10 @@
       "types": "./dist/logos/index.d.ts",
       "import": "./dist/logos/index.js"
     },
+    "./time": {
+      "types": "./dist/time.d.ts",
+      "import": "./dist/time.js"
+    },
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
