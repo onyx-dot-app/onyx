@@ -44,7 +44,7 @@ function InputChip({
     <div
       ref={chipRef}
       className={cn(
-        "flex items-center gap-1.5 px-2 py-1 rounded-08 border",
+        "flex items-center gap-1 px-1.5 py-0.5 rounded-08 border",
         colorClassName,
         onClick && "cursor-pointer"
       )}
@@ -88,15 +88,15 @@ function BuildFileCard({
   const isFailed = file.status === UploadFileStatus.FAILED;
 
   const icon = isUploading ? (
-    <SvgLoader className="h-4 w-4 shrink-0 animate-spin" />
+    <SvgLoader className="h-3.5 w-3.5 shrink-0 animate-spin" />
   ) : isPending ? (
-    <SvgClock className="h-4 w-4 shrink-0" />
+    <SvgClock className="h-3.5 w-3.5 shrink-0" />
   ) : isFailed ? (
-    <SvgAlertCircle className="h-4 w-4 shrink-0 text-status-error-02" />
+    <SvgAlertCircle className="h-3.5 w-3.5 shrink-0 text-status-error-02" />
   ) : isImage ? (
-    <SvgImage className="h-4 w-4 shrink-0" />
+    <SvgImage className="h-3.5 w-3.5 shrink-0" />
   ) : (
-    <SvgFileText className="h-4 w-4 shrink-0" />
+    <SvgFileText className="h-3.5 w-3.5 shrink-0" />
   );
 
   const chip = (
@@ -142,7 +142,7 @@ function SkillChip({ entry, onRemove, onClick }: SkillChipProps) {
 
   return (
     <InputChip
-      icon={<Icon className="h-4 w-4 shrink-0" />}
+      icon={<Icon className="h-3.5 w-3.5 shrink-0" />}
       label={entry.name}
       colorClassName="bg-theme-blue-01 border-theme-blue-03 text-theme-blue-05"
       onRemove={onRemove}
