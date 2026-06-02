@@ -20,6 +20,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import UpsertExternalAppRequest
+from onyx.utils.encryption import is_masked_credential
 
 _AUTH_TEMPLATE = {"Authorization": "Bearer {api_key}"}
 _UPSTREAM = ["https://api.example.com/*"]
@@ -105,7 +106,10 @@ def test_create_persists_skill_and_app(
     app = db_session.scalar(select(ExternalApp).where(ExternalApp.skill_id == skill.id))
     assert app is not None
     assert app.auth_template == _AUTH_TEMPLATE
-    assert app.organization_credentials == {"api_key": "sk-test"}
+    # organization_credentials is encrypted at rest -> decrypt to compare.
+    assert app.organization_credentials.get_value(apply_mask=False) == {
+        "api_key": "sk-test"
+    }
 
     db_session.execute(delete(Skill).where(Skill.slug == slug))
     db_session.commit()
@@ -175,6 +179,58 @@ def test_edit_updates_config_and_replaces_bundle(
     assert skill.name == "Renamed App"
     assert skill.bundle_file_id
     assert skill.bundle_file_id != original_bundle_id
+
+    db_session.execute(delete(Skill).where(Skill.slug == slug))
+    db_session.commit()
+
+
+def test_admin_response_masks_secret_and_edit_preserves_it(
+    db_session: Session,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Org credential secrets are masked in the admin response, and re-saving the
+    masked placeholder (an edit that doesn't touch the secret) preserves the real
+    stored value rather than overwriting it with the mask."""
+    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
+    slug = f"custom-test-{uuid4().hex[:8]}"
+    raw_secret = "super-secret-client-value-1234567890"
+
+    created = _create(
+        db_session,
+        test_user,
+        slug,
+        organization_credentials=json.dumps({"api_key": raw_secret}),
+    )
+
+    # The response must not echo the raw secret back to the client.
+    returned = created.organization_credentials["api_key"]
+    assert returned != raw_secret
+    assert is_masked_credential(returned)
+
+    # Edit, echoing the masked value back (the form was populated from the
+    # masked response and the admin didn't change it).
+    edited = api.upsert_custom_external_app(
+        name="My Form Name",
+        description="",
+        upstream_url_patterns=json.dumps(_UPSTREAM),
+        auth_template=json.dumps(_AUTH_TEMPLATE),
+        organization_credentials=json.dumps({"api_key": returned}),
+        app_id=created.id,
+        enabled=True,
+        bundle=None,
+        _=test_user,
+        db_session=db_session,
+    )
+    assert is_masked_credential(edited.organization_credentials["api_key"])
+
+    db_session.expire_all()
+    app = db_session.scalar(select(ExternalApp).where(ExternalApp.id == created.id))
+    assert app is not None
+    # The stored secret is unchanged — the mask never overwrote it.
+    assert app.organization_credentials.get_value(apply_mask=False) == {
+        "api_key": raw_secret
+    }
 
     db_session.execute(delete(Skill).where(Skill.slug == slug))
     db_session.commit()

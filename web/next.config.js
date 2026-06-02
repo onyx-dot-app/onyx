@@ -25,6 +25,12 @@ const nextConfig = {
   transpilePackages: ["@onyx-ai/opal"],
   typedRoutes: true,
   reactCompiler: true,
+  // Pin the workspace root to this directory so Turbopack resolves modules
+  // against web/bun.lock. Without this, Next.js detects multiple lockfiles
+  // (the repo-root bun.lock and web/bun.lock) and infers the wrong root.
+  turbopack: {
+    root: __dirname,
+  },
   images: {
     // Used to fetch favicons
     remotePatterns: [

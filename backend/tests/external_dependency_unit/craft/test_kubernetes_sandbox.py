@@ -30,17 +30,11 @@ import httpx
 import pytest
 from kubernetes import client
 from kubernetes.client.rest import ApiException
-from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import Sandbox
-from onyx.db.models import User
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
 from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
@@ -115,7 +109,8 @@ def _read_pod_file(k8s: client.CoreV1Api, pod_name: str, path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Fixtures: k8s_manager and live_pod are provided by conftest.py
+# Fixtures: k8s_manager, pool_session, live_pod, provisioned_sandbox, and
+# k8s_client are provided by conftest.py.
 # ---------------------------------------------------------------------------
 
 
@@ -127,6 +122,7 @@ def _read_pod_file(k8s: client.CoreV1Api, pod_name: str, path: str) -> str:
 def test_provisioned_pod_has_sandbox_image_directories(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """After ``provision()``, the baked-in workspace directories exist.
 
@@ -135,38 +131,29 @@ def test_provisioned_pod_has_sandbox_image_directories(
     answer ``health_check``. Also doubles as the merged ``health_check_returns_true``
     coverage per the plan note.
     """
-    sandbox_id = uuid4()
-    try:
-        _provisioned_sandbox(k8s_manager, sandbox_id)
+    sandbox_id, _, pod_name = pool_session
 
-        pod_name = k8s_manager._get_pod_name(sandbox_id)
-        pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
-        assert pod.status.phase == "Running"
+    pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
+    assert pod.status.phase == "Running"
 
-        for required in (
-            "/workspace/templates",
-            "/workspace/managed",
-            "/workspace/sessions",
-        ):
-            resp = pod_exec(
-                k8s_client,
-                pod_name,
-                SANDBOX_NAMESPACE,
-                f"test -d {required} && echo OK || echo MISSING",
-            )
-            assert "OK" in resp, (
-                f"{required} should exist in the provisioned pod. Got: {resp!r}"
-            )
-
-        # Health-check verification is merged with this provision test.
-        assert k8s_manager.health_check(sandbox_id, timeout=5.0), (
-            "health_check() should return True for a freshly provisioned pod"
+    for required in (
+        "/workspace/templates",
+        "/workspace/managed",
+        "/workspace/sessions",
+    ):
+        resp = pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            f"test -d {required} && echo OK || echo MISSING",
         )
-    finally:
-        k8s_manager.terminate(sandbox_id)
-        wait_for_pod_deletion(
-            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
+        assert "OK" in resp, (
+            f"{required} should exist in the provisioned pod. Got: {resp!r}"
         )
+
+    assert k8s_manager.health_check(sandbox_id, timeout=5.0), (
+        "health_check() should return True for a freshly provisioned pod"
+    )
 
 
 def test_session_workspace_setup_creates_expected_tree(
@@ -175,8 +162,9 @@ def test_session_workspace_setup_creates_expected_tree(
     pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """After ``setup_session_workspace``, the session dir contains the
-    canonical tree: ``outputs/``, ``attachments/``, ``AGENTS.md``,
-    ``opencode.json``, and the ``.opencode/skills`` symlink.
+    canonical tree: ``outputs/``, ``attachments/``, ``AGENTS.md``, and the
+    ``.opencode/skills`` symlink. (opencode config is pod-level under the
+    serve transport, not a per-session file.)
     """
     _, session_id, pod_name = pool_session
     session_path = f"/workspace/sessions/{session_id}"
@@ -192,7 +180,7 @@ def test_session_workspace_setup_creates_expected_tree(
         assert "OK" in resp, f"{session_path}/{sub} should exist: {resp!r}"
 
     # Files
-    for fname in ("AGENTS.md", "opencode.json"):
+    for fname in ("AGENTS.md",):
         resp = pod_exec(
             k8s_client,
             pod_name,
@@ -204,14 +192,6 @@ def test_session_workspace_setup_creates_expected_tree(
     # AGENTS.md content has non-zero bytes
     agents_md = _read_pod_file(k8s_client, pod_name, f"{session_path}/AGENTS.md")
     assert agents_md, "AGENTS.md should not be empty"
-
-    # opencode.json is valid JSON-ish (starts with `{`)
-    opencode_json = _read_pod_file(
-        k8s_client, pod_name, f"{session_path}/opencode.json"
-    )
-    assert opencode_json.lstrip().startswith("{"), (
-        f"opencode.json should be JSON-formatted, got: {opencode_json[:60]!r}"
-    )
 
     # .opencode/skills must be a symlink targeting /workspace/managed/skills
     link_target = pod_exec(
@@ -394,34 +374,26 @@ def test_health_check_returns_false_for_missing_pod(
 
 
 def test_pod_runs_sandbox_and_sidecar_containers(
-    k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """After provision, the pod has both `sandbox` and `sidecar` containers
     and the sidecar reports ready (its `/health` probe is what gates this).
     """
-    sandbox_id = uuid4()
-    try:
-        _provisioned_sandbox(k8s_manager, sandbox_id)
-        pod_name = k8s_manager._get_pod_name(sandbox_id)
-        pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
+    _, _, pod_name = pool_session
+    pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
 
-        statuses = {c.name: c for c in pod.status.container_statuses or []}
-        assert set(statuses) == {"sandbox", "sidecar"}, (
-            f"pod should have exactly 2 containers, got {set(statuses)}"
-        )
-        assert statuses["sidecar"].ready, "sidecar should be ready via /health probe"
-        assert statuses["sandbox"].ready, "sandbox container should be ready"
-    finally:
-        k8s_manager.terminate(sandbox_id)
-        wait_for_pod_deletion(
-            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
-        )
+    statuses = {c.name: c for c in pod.status.container_statuses or []}
+    assert set(statuses) == {"sandbox", "sidecar"}, (
+        f"pod should have exactly 2 containers, got {set(statuses)}"
+    )
+    assert statuses["sidecar"].ready, "sidecar should be ready via /health probe"
+    assert statuses["sandbox"].ready, "sandbox container should be ready"
 
 
 def test_irsa_credentials_stripped_from_sandbox_container(
-    k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """The sandbox container must never see IRSA credentials.
 
@@ -434,51 +406,41 @@ def test_irsa_credentials_stripped_from_sandbox_container(
     IRSA") depends on the EKS pod-identity webhook plus SA annotations
     that don't exist on a kind cluster, so it lives elsewhere.
     """
-    sandbox_id = uuid4()
-    try:
-        _provisioned_sandbox(k8s_manager, sandbox_id)
-        pod_name = k8s_manager._get_pod_name(sandbox_id)
+    _, _, pod_name = pool_session
 
-        # Check each var independently so partial leakage (one set, one unset)
-        # cannot pass as "all unset". The shell expansion ${VAR:-} substitutes
-        # an empty string when the var is unset OR empty; we then explicitly
-        # report which (if any) is non-empty.
-        sandbox_env = pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            (
-                "for v in AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE; do "
-                '  eval "val=\\${${v}:-}"; '
-                '  if [ -n "$val" ]; then echo "LEAK:$v=$val"; fi; '
-                "done; echo DONE"
-            ),
-            container="sandbox",
-        )
-        assert "LEAK:" not in sandbox_env, (
-            f"sandbox container leaked IRSA env vars: {sandbox_env!r}"
-        )
-        assert "DONE" in sandbox_env, (
-            f"env-leak probe did not run to completion: {sandbox_env!r}"
-        )
+    # Check each var independently so partial leakage (one set, one unset)
+    # cannot pass as "all unset". The shell expansion ${VAR:-} substitutes
+    # an empty string when the var is unset OR empty; we then explicitly
+    # report which (if any) is non-empty.
+    sandbox_env = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        (
+            "for v in AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE; do "
+            '  eval "val=\\${${v}:-}"; '
+            '  if [ -n "$val" ]; then echo "LEAK:$v=$val"; fi; '
+            "done; echo DONE"
+        ),
+        container="sandbox",
+    )
+    assert "LEAK:" not in sandbox_env, (
+        f"sandbox container leaked IRSA env vars: {sandbox_env!r}"
+    )
+    assert "DONE" in sandbox_env, (
+        f"env-leak probe did not run to completion: {sandbox_env!r}"
+    )
 
-        # Belt to the env-var suspenders: confirm the projected token mount
-        # path doesn't exist in the sandbox container.
-        token_mount = pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            "[ -d /var/run/secrets/eks.amazonaws.com ] && echo PRESENT || echo MISSING",
-            container="sandbox",
-        )
-        assert "MISSING" in token_mount, (
-            f"IRSA token mount leaked into sandbox container: {token_mount!r}"
-        )
-    finally:
-        k8s_manager.terminate(sandbox_id)
-        wait_for_pod_deletion(
-            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
-        )
+    token_mount = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        "[ -d /var/run/secrets/eks.amazonaws.com ] && echo PRESENT || echo MISSING",
+        container="sandbox",
+    )
+    assert "MISSING" in token_mount, (
+        f"IRSA token mount leaked into sandbox container: {token_mount!r}"
+    )
 
 
 def test_managed_directory_is_read_only_from_sandbox_container(
@@ -539,112 +501,73 @@ def test_managed_directory_is_read_only_from_sandbox_container(
 # ---------------------------------------------------------------------------
 
 
-_proxy_required = pytest.mark.skipif(
-    not SANDBOX_PROXY_HOST,
-    reason="SANDBOX_PROXY_HOST not set; proxy not deployed in this env",
-)
-
-
-@_proxy_required
 def test_sandbox_etc_hosts_resolves_proxy_alias(
-    k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """The main container's /etc/hosts must contain the `sandbox-proxy` alias.
 
     kubelet manages /etc/hosts per-container so initContainer writes don't
     propagate; host_aliases on the PodSpec is the only path that works.
     """
-    sandbox_id = uuid4()
-    try:
-        _provisioned_sandbox(k8s_manager, sandbox_id)
-        pod_name = k8s_manager._get_pod_name(sandbox_id)
-        hosts = pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            "cat /etc/hosts",
-            container="sandbox",
-        )
-        assert "sandbox-proxy" in hosts, (
-            f"main container /etc/hosts missing sandbox-proxy alias: {hosts!r}"
-        )
-    finally:
-        k8s_manager.terminate(sandbox_id)
-        wait_for_pod_deletion(
-            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
-        )
+    _, _, pod_name = pool_session
+    hosts = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        "cat /etc/hosts",
+        container="sandbox",
+    )
+    assert "sandbox-proxy" in hosts, (
+        f"main container /etc/hosts missing sandbox-proxy alias: {hosts!r}"
+    )
 
 
-@_proxy_required
 def test_sandbox_egress_only_flows_via_proxy(
-    k8s_manager: KubernetesSandboxManager,
+    provisioned_sandbox: tuple[UUID, str],
     k8s_client: client.CoreV1Api,
-    db_session: Session,
-    test_user: User,
-    tenant_context: None,  # noqa: ARG001
 ) -> None:
     """End-to-end: TLS through the proxy reaches the internet while direct
     egress is blocked by iptables. Catches missing host_aliases, broken CA
     trust, iptables misconfiguration, or proxy-listen-port drift.
 
-    The proxy gates egress on identity (pod IP -> Sandbox row -> owning user),
-    so a Sandbox row matching this pod's id must exist; otherwise the gate
-    fail-closes with 403 ``unidentified_sandbox`` even for non-gated hosts.
+    Uses the ``provisioned_sandbox`` fixture, which provisions through the
+    app's own path (committed Sandbox + User rows), so the proxy can resolve
+    the pod's identity; without a backing row the gate fail-closes with 403
+    ``unidentified_sandbox`` even for non-gated hosts.
     """
-    # Create the Sandbox DB row the way the app does (create_sandbox__no_commit,
-    # as SessionManager._provision_sandbox uses), then provision the pod for that
-    # id with an explicit test llm_config. The proxy gates egress on identity
-    # (pod -> Sandbox row -> owner), so the row must exist or the gate fail-closes
-    # (403 unidentified_sandbox) even for non-gated hosts. We avoid
-    # SessionManager.ensure_sandbox_running because it resolves a DB-configured
-    # default LLM provider, which the K8s CI database doesn't have.
-    sandbox = create_sandbox__no_commit(db_session, test_user.id)
-    sandbox_id = sandbox.id
-    db_session.commit()
-    try:
-        _provisioned_sandbox(k8s_manager, sandbox_id)
-        update_sandbox_status__no_commit(db_session, sandbox_id, SandboxStatus.RUNNING)
-        db_session.commit()
-        pod_name = k8s_manager._get_pod_name(sandbox_id)
+    _sandbox_id, pod_name = provisioned_sandbox
 
-        # Proxied egress: exercises HTTPS_PROXY, /etc/hosts, CA bundle, and proxy.
-        proxied = pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            "curl -s -o /dev/null -w '%{http_code}' https://www.example.com",
-            container="sandbox",
-        )
-        assert proxied.strip() == "200", (
-            f"proxied egress should return 200, got {proxied!r}"
-        )
+    # Proxied egress: exercises HTTPS_PROXY, /etc/hosts, CA bundle, and proxy.
+    proxied = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        "curl -s -o /dev/null -w '%{http_code}' https://www.example.com",
+        container="sandbox",
+    )
+    assert proxied.strip() == "200", (
+        f"proxied egress should return 200, got {proxied!r}"
+    )
 
-        # Direct egress: --noproxy bypasses HTTPS_PROXY; iptables must block it
-        # (curl exits non-zero and writes 000 on failure).
-        direct = pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            (
-                "curl --noproxy '*' -s -o /dev/null --max-time 5 "
-                "-w '%{http_code}' https://1.1.1.1 || echo BLOCKED:$?"
-            ),
-            container="sandbox",
-        )
-        assert "200" not in direct, (
-            f"direct egress should be blocked, but got HTTP 200: {direct!r}"
-        )
-        assert "BLOCKED:" in direct or direct.strip().startswith("000"), (
-            f"direct egress should fail closed, got {direct!r}"
-        )
-    finally:
-        db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).delete()
-        db_session.commit()
-        k8s_manager.terminate(sandbox_id)
-        wait_for_pod_deletion(
-            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
-        )
+    # Direct egress: --noproxy bypasses HTTPS_PROXY; iptables must block it
+    # (curl exits non-zero and writes 000 on failure).
+    direct = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        (
+            "curl --noproxy '*' -s -o /dev/null --max-time 5 "
+            "-w '%{http_code}' https://1.1.1.1 || echo BLOCKED:$?"
+        ),
+        container="sandbox",
+    )
+    assert "200" not in direct, (
+        f"direct egress should be blocked, but got HTTP 200: {direct!r}"
+    )
+    assert "BLOCKED:" in direct or direct.strip().startswith("000"), (
+        f"direct egress should fail closed, got {direct!r}"
+    )
 
 
 def test_terminate_removes_pod_and_marks_db(

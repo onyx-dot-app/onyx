@@ -1,7 +1,6 @@
 import React, { useMemo } from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
-import Tabs from "@/refresh-components/Tabs";
-import { Button } from "@opal/components";
+import { Button, Tabs } from "@opal/components";
 import { TurnGroup } from "../transformers";
 import {
   getToolIcon,
@@ -41,11 +40,10 @@ export const ParallelStreamingHeader = React.memo(
     );
 
     return (
-      <Tabs value={activeTab} onValueChange={onTabChange}>
+      <Tabs value={activeTab} onValueChange={onTabChange} variant="pill">
         <Tabs.List
-          variant="pill"
           enableScrollArrows
-          rightContent={
+          rightChildren={
             collapsible ? (
               <Button
                 prominence="tertiary"
@@ -59,13 +57,11 @@ export const ParallelStreamingHeader = React.memo(
               />
             ) : undefined
           }
-          className="bg-transparent"
         >
           {steps.map((step) => (
             <Tabs.Trigger
               key={step.key}
               value={step.key}
-              variant="pill"
               isLoading={loadingStates.get(step.key)}
             >
               <span className="flex items-center gap-1.5">

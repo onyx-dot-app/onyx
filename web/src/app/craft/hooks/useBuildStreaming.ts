@@ -11,9 +11,9 @@ import {
 
 import {
   sendMessageStream,
+  interruptMessageStream,
   processSSEStream,
   fetchSession,
-  generateFollowupSuggestions,
   RateLimitError,
 } from "@/app/craft/services/apiServices";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -23,6 +23,12 @@ import { StreamItem } from "@/app/craft/types/displayTypes";
 
 import { genId } from "@/app/craft/utils/streamItemHelpers";
 import { parsePacket } from "@/app/craft/utils/parsePacket";
+import {
+  classifySubagentEvent,
+  toolCallStateFromProgress,
+  subagentNameFromTask,
+  cleanTaskOutput,
+} from "@/app/craft/utils/subagentRouting";
 
 /**
  * Hook for handling message streaming in build sessions.
@@ -78,11 +84,16 @@ export function useBuildStreaming() {
   const openMarkdownPreview = useBuildSessionStore(
     (state) => state.openMarkdownPreview
   );
-  const setFollowupSuggestions = useBuildSessionStore(
-    (state) => state.setFollowupSuggestions
+
+  // Subagent routing actions
+  const recordSubagentToolCall = useBuildSessionStore(
+    (state) => state.recordSubagentToolCall
   );
-  const setSuggestionsLoading = useBuildSessionStore(
-    (state) => state.setSuggestionsLoading
+  const seedSubagentMeta = useBuildSessionStore(
+    (state) => state.seedSubagentMeta
+  );
+  const markSubagentComplete = useBuildSessionStore(
+    (state) => state.markSubagentComplete
   );
 
   // ── Output file detector registry ──────────────────────────────────────
@@ -133,7 +144,10 @@ export function useBuildStreaming() {
       setAbortController(sessionId, controller);
 
       // Set status to running and clear previous stream items
-      updateSessionData(sessionId, { status: "running" });
+      updateSessionData(sessionId, {
+        status: "running",
+        isInterrupting: false,
+      });
       clearStreamItems(sessionId);
 
       // Track accumulated content for streaming text/thinking
@@ -224,6 +238,16 @@ export function useBuildStreaming() {
               accumulatedText = "";
               accumulatedThinking = "";
 
+              // Child (subagent-internal) start: do NOT add to main transcript.
+              // The subagent's pill is created from its progress events.
+              if (
+                parsed.parentSessionId !== null &&
+                parsed.sessionId !== null
+              ) {
+                lastItemType = "tool";
+                break;
+              }
+
               // Skip tool_call_start for TodoWrite — pill created on first progress
               if (parsed.isTodo) {
                 lastItemType = "tool";
@@ -236,7 +260,8 @@ export function useBuildStreaming() {
                 toolCall: {
                   id: parsed.toolCallId,
                   kind: parsed.kind,
-                  title: "",
+                  toolName: parsed.toolName,
+                  title: parsed.title,
                   status: "pending",
                   description: "",
                   command: "",
@@ -253,6 +278,65 @@ export function useBuildStreaming() {
 
             // Tool call progress
             case "tool_call_progress": {
+              const subagentClass = classifySubagentEvent(parsed);
+
+              // Child (subagent-internal) event: route to the subagent's own
+              // tool-call list, NOT the main transcript.
+              if (subagentClass.kind === "child") {
+                recordSubagentToolCall(
+                  sessionId,
+                  subagentClass.subagentSessionId,
+                  // parentToolCallId/name are seeded from the parent task
+                  // event; pass empty sentinels (store ignores them).
+                  "",
+                  toolCallStateFromProgress(parsed),
+                  null,
+                  ""
+                );
+                // Subagent edits hit the same sandbox — refresh preview/files.
+                if (parsed.filePath && parsed.kind) {
+                  for (const detector of OUTPUT_FILE_DETECTORS) {
+                    if (detector.match(parsed.filePath, parsed.kind)) {
+                      detector.onDetect(sessionId, parsed.filePath);
+                      break;
+                    }
+                  }
+                }
+                break;
+              }
+
+              // Parent `task` event: keep the transcript task card (below) AND
+              // seed/update the subagent meta + drive its completion state.
+              if (subagentClass.kind === "parentTask") {
+                seedSubagentMeta(
+                  sessionId,
+                  subagentClass.subagentSessionId,
+                  parsed.toolCallId,
+                  parsed.subagentType,
+                  subagentNameFromTask(parsed),
+                  parsed.command
+                );
+                if (parsed.status === "completed") {
+                  markSubagentComplete(
+                    sessionId,
+                    subagentClass.subagentSessionId,
+                    "done",
+                    cleanTaskOutput(parsed.taskOutput)
+                  );
+                } else if (
+                  parsed.status === "failed" ||
+                  parsed.status === "cancelled"
+                ) {
+                  markSubagentComplete(
+                    sessionId,
+                    subagentClass.subagentSessionId,
+                    "failed",
+                    cleanTaskOutput(parsed.taskOutput)
+                  );
+                }
+                // Fall through to the normal transcript dispatch below.
+              }
+
               if (parsed.isTodo) {
                 upsertTodoListStreamItem(sessionId, parsed.toolCallId, {
                   id: parsed.toolCallId,
@@ -268,7 +352,10 @@ export function useBuildStreaming() {
                 description: parsed.description,
                 command: parsed.command,
                 rawOutput: parsed.rawOutput,
+                toolName: parsed.toolName,
                 subagentType: parsed.subagentType ?? undefined,
+                skillName: parsed.skillName ?? undefined,
+                taskOutput: parsed.taskOutput ?? undefined,
                 ...(parsed.kind === "edit" && {
                   isNewFile: parsed.isNewFile,
                   oldContent: parsed.oldContent,
@@ -286,17 +373,8 @@ export function useBuildStreaming() {
                 }
               }
 
-              // Task completion → emit text StreamItem
-              if (parsed.taskOutput) {
-                appendStreamItem(sessionId, {
-                  type: "text",
-                  id: genId("task-output"),
-                  content: parsed.taskOutput,
-                  isStreaming: false,
-                });
-                lastItemType = "text";
-                accumulatedText = "";
-              }
+              // Task completion: taskOutput is now stored on the tool call
+              // itself (rendered by TaskBody) — no separate text item.
               break;
             }
 
@@ -350,31 +428,6 @@ export function useBuildStreaming() {
                   .map((item) => item.content)
                   .join("");
 
-                const isFirstAgentMessage =
-                  session.messages.filter((m) => m.type === "assistant")
-                    .length === 0;
-
-                const firstUserMessage = session.messages.find(
-                  (m) => m.type === "user"
-                );
-
-                if (isFirstAgentMessage && firstUserMessage && textContent) {
-                  (async () => {
-                    try {
-                      setSuggestionsLoading(sessionId, true);
-                      const suggestions = await generateFollowupSuggestions(
-                        sessionId,
-                        firstUserMessage.content,
-                        textContent
-                      );
-                      setFollowupSuggestions(sessionId, suggestions);
-                    } catch (err) {
-                      console.error("Failed to generate suggestions:", err);
-                      setFollowupSuggestions(sessionId, null);
-                    }
-                  })();
-                }
-
                 appendMessageToSession(sessionId, {
                   id: genId("agent-msg"),
                   type: "assistant",
@@ -394,6 +447,7 @@ export function useBuildStreaming() {
               updateSessionData(sessionId, {
                 status: "active",
                 streamItems: [],
+                isInterrupting: false,
               });
               break;
             }
@@ -409,6 +463,7 @@ export function useBuildStreaming() {
               updateSessionData(sessionId, {
                 status: "failed",
                 error: parsed.message,
+                isInterrupting: false,
               });
               break;
             }
@@ -419,18 +474,22 @@ export function useBuildStreaming() {
         });
       } catch (err) {
         if ((err as Error).name === "AbortError") {
-          // User cancelled - no error handling needed
+          // Fetch aborted (session switch, unmount, or a superseding turn).
+          // Clear the flag so it can't wedge the controls "Stopping…".
+          updateSessionData(sessionId, { isInterrupting: false });
         } else if (err instanceof RateLimitError) {
           console.warn("[Streaming] Rate limit exceeded");
           updateSessionData(sessionId, {
             status: "active",
             error: SessionErrorCode.RATE_LIMIT_EXCEEDED,
+            isInterrupting: false,
           });
         } else {
           console.error("[Streaming] Stream error:", err);
           updateSessionData(sessionId, {
             status: "failed",
             error: (err as Error).message,
+            isInterrupting: false,
           });
         }
       } finally {
@@ -449,17 +508,46 @@ export function useBuildStreaming() {
       addArtifactToSession,
       appendMessageToSession,
       OUTPUT_FILE_DETECTORS,
-      setFollowupSuggestions,
-      setSuggestionsLoading,
       globalMutate,
+      recordSubagentToolCall,
+      seedSubagentMeta,
+      markSubagentComplete,
     ]
+  );
+
+  /**
+   * Interrupt the in-flight turn for a session. Asks the backend to interrupt
+   * the sandbox turn; the open SSE stream then terminates through its normal
+   * `prompt_response` path, which commits the partial output, flips the status
+   * to "active", and lets the queued-message auto-send drain naturally. We keep
+   * the stream open (rather than aborting the fetch) so that terminator can
+   * arrive — `isInterrupting` bridges the gap for immediate UI feedback.
+   */
+  const interruptStreaming = useCallback(
+    async (sessionId: string): Promise<void> => {
+      const session = useBuildSessionStore.getState().sessions.get(sessionId);
+      if (!session || session.status !== "running" || session.isInterrupting) {
+        return;
+      }
+
+      updateSessionData(sessionId, { isInterrupting: true });
+      try {
+        await interruptMessageStream(sessionId);
+      } catch (err) {
+        // Re-arm so the user can retry; the turn is still streaming.
+        console.error("[Streaming] Failed to interrupt:", err);
+        updateSessionData(sessionId, { isInterrupting: false });
+      }
+    },
+    [updateSessionData]
   );
 
   return useMemo(
     () => ({
       streamMessage,
+      interruptStreaming,
       abortStream: abortCurrentSession,
     }),
-    [streamMessage, abortCurrentSession]
+    [streamMessage, interruptStreaming, abortCurrentSession]
   );
 }

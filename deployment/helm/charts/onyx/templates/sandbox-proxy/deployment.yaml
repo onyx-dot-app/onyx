@@ -1,4 +1,4 @@
-{{- if eq (include "onyx.sandboxProxyEnabled" .) "true" }}
+{{- if eq (include "onyx.craftEnabled" .) "true" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -82,6 +82,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           resources:
             {{- toYaml .Values.sandboxProxy.resources | nindent 12 }}
           readinessProbe:

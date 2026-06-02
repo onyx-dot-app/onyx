@@ -11,13 +11,13 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentThoughtChunk
-from acp.schema import Error
-from acp.schema import PromptResponse
-from acp.schema import ToolCallProgress
-from acp.schema import ToolCallStart
 
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
+from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.opencode.serve_client import (
     _synthesize_tool_content,
 )
@@ -752,8 +752,8 @@ def test_tool_first_sighting_with_running_emits_start_and_progress() -> None:
     """When the first sighting carries status=running (out-of-order publish),
     follow up with a progress event so the consumer sees both stages.
 
-    Note: opencode's "running" maps to ACP's "in_progress" — the consumer
-    sees ACP enum values, not opencode raw ones.
+    Note: opencode's "running" maps to the schema's "in_progress" — the consumer
+    sees sandbox-event enum values, not opencode raw ones.
     """
     s = _state()
     out = _drain(
@@ -909,7 +909,7 @@ def test_edit_tool_propagates_through_translation() -> None:
 
 
 @pytest.mark.parametrize(
-    "opencode_status, acp_status",
+    "opencode_status, schema_status",
     [
         ("pending", "pending"),
         ("running", "in_progress"),
@@ -923,8 +923,8 @@ def test_edit_tool_propagates_through_translation() -> None:
         (42, "pending"),
     ],
 )
-def test_tool_status_mapping(opencode_status: Any, acp_status: str) -> None:
-    assert _tool_status(opencode_status) == acp_status
+def test_tool_status_mapping(opencode_status: Any, schema_status: str) -> None:
+    assert _tool_status(opencode_status) == schema_status
 
 
 # ───────────────────────── raw_output wrapping ────────────────────
@@ -1216,3 +1216,169 @@ def test_non_string_session_id_skips_match() -> None:
     # session.idle without explicit sessionID still fires terminator
     assert len(out) == 1
     assert isinstance(out[0], PromptResponse)
+
+
+# ───────────────────────── subagent routing ───────────────────────
+# ``parent_resolver`` (child→parent) lets descendant subagent tool events be
+# forwarded and tagged with routing metadata. ``children_resolver``
+# (parent→children) lets the parent's ``task`` tool event be tagged with the
+# subagent session it spawned. Both default to None (old "drop other-session"
+# behavior preserved).
+
+PARENT = "ses_PARENT"
+CHILD = "ses_CHILD"
+
+
+def _parent_state() -> _TurnState:
+    return _TurnState(session_id=PARENT)
+
+
+def _child_tool_event(call_id: str = "toolu_x") -> dict[str, Any]:
+    """A ``message.part.updated`` tool event emitted by the CHILD session."""
+    return {
+        "type": "message.part.updated",
+        "properties": {
+            "sessionID": CHILD,
+            "part": {
+                "type": "tool",
+                "tool": "bash",
+                "callID": call_id,
+                "state": {
+                    "status": "completed",
+                    "input": {"command": "echo hi", "description": "d"},
+                    "output": "hi\n",
+                    "metadata": {"exit": 0},
+                },
+                "id": "prt_x",
+                "sessionID": CHILD,
+                "messageID": "msg_x",
+            },
+        },
+    }
+
+
+def _child_parent_resolver(sess_id: str) -> str | None:
+    return PARENT if sess_id == CHILD else None
+
+
+def test_child_tool_event_forwarded_and_tagged() -> None:
+    """A completed tool event from a descendant subagent session is forwarded
+    and tagged with sessionId + parentSessionId routing metadata."""
+    s = _parent_state()
+    out = _drain(
+        translate_opencode_event(
+            _child_tool_event(),
+            s,
+            parent_resolver=_child_parent_resolver,
+        )
+    )
+    # First sighting of a completed tool → ToolCallStart then ToolCallProgress.
+    assert len(out) == 2
+    assert isinstance(out[0], ToolCallStart)
+    assert isinstance(out[1], ToolCallProgress)
+    assert out[1].status == "completed"
+    for event in out:
+        meta = event.field_meta
+        assert meta is not None
+        assert meta["sessionId"] == CHILD
+        assert meta["parentSessionId"] == PARENT
+        # Existing toolName tag is preserved (merge, not overwrite).
+        assert meta["toolName"] == "bash"
+
+
+def test_child_tool_event_dropped_when_not_descendant() -> None:
+    """If parent_resolver doesn't link the child to our session, the event is
+    dropped (preserving the old other-session behavior)."""
+    s = _parent_state()
+    out = _drain(
+        translate_opencode_event(
+            _child_tool_event(),
+            s,
+            parent_resolver=lambda _s: None,
+        )
+    )
+    assert out == []
+
+
+def test_other_session_tool_event_dropped_without_parent_resolver() -> None:
+    """With parent_resolver omitted (default None), descendant detection is
+    impossible → other-session events drop exactly as before."""
+    s = _parent_state()
+    out = _drain(translate_opencode_event(_child_tool_event(), s))
+    assert out == []
+
+
+def test_parent_task_tool_event_tagged_with_subagent_session() -> None:
+    """The parent's own ``task`` tool event is tagged with the subagent session
+    it spawned via children_resolver."""
+    s = _parent_state()
+    out = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.part.updated",
+                "properties": {
+                    "sessionID": PARENT,
+                    "part": {
+                        "type": "tool",
+                        "tool": "task",
+                        "callID": "toolu_t",
+                        "state": {
+                            "status": "completed",
+                            "input": {
+                                "description": "explore",
+                                "prompt": "Explore the auth code",
+                                "subagent_type": "general",
+                            },
+                        },
+                        "id": "prt_t",
+                        "sessionID": PARENT,
+                        "messageID": "msg_t",
+                    },
+                },
+            },
+            s,
+            children_resolver=lambda p: [CHILD] if p == PARENT else [],
+        )
+    )
+    assert len(out) >= 1
+    for event in out:
+        meta = event.field_meta
+        assert meta is not None
+        assert meta["subagentSessionId"] == CHILD
+        assert meta["toolName"] == "task"
+
+
+def test_parent_non_task_tool_event_not_tagged() -> None:
+    """A normal (non-task) parent tool event translates unchanged — no
+    subagentSessionId tag even when a children_resolver is supplied."""
+    s = _parent_state()
+    out = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.part.updated",
+                "properties": {
+                    "sessionID": PARENT,
+                    "part": {
+                        "type": "tool",
+                        "tool": "bash",
+                        "callID": "toolu_b",
+                        "state": {
+                            "status": "completed",
+                            "input": {"command": "ls"},
+                        },
+                        "id": "prt_b",
+                        "sessionID": PARENT,
+                        "messageID": "msg_b",
+                    },
+                },
+            },
+            s,
+            children_resolver=lambda _p: [CHILD],
+        )
+    )
+    assert len(out) >= 1
+    for event in out:
+        meta = event.field_meta
+        assert meta is not None
+        assert "subagentSessionId" not in meta
+        assert meta["toolName"] == "bash"

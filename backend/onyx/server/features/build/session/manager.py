@@ -10,12 +10,11 @@ import io
 import json
 import mimetypes
 import queue as queue_lib
-import re
-import tempfile
 import threading
 import time
 import uuid
 import zipfile
+from collections.abc import Callable
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
@@ -24,28 +23,21 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-import pypandoc
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentPlanUpdate
-from acp.schema import AgentThoughtChunk
-from acp.schema import CurrentModeUpdate
-from acp.schema import Error as ACPError
-from acp.schema import PromptResponse
-from acp.schema import ToolCallProgress
-from acp.schema import ToolCallStart
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SessionOrigin
-from onyx.db.llm import fetch_default_llm_model
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.db.users import fetch_user_by_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.factory import get_default_llm
 from onyx.llm.models import LanguageModelInput
@@ -62,6 +54,8 @@ from onyx.server.features.build.api.packets import ApprovalRequestedPacket
 from onyx.server.features.build.api.packets import BuildPacket
 from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
+from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
+from onyx.server.features.build.configs import BUILD_MODE_RECOMMENDED_MODEL_BY_TYPE
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
@@ -70,10 +64,7 @@ from onyx.server.features.build.db.build_session import create_build_session__no
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import delete_build_session__no_commit
 from onyx.server.features.build.db.build_session import (
-    fetch_all_build_mode_llm_providers,
-)
-from onyx.server.features.build.db.build_session import (
-    fetch_llm_provider_by_type_for_build_mode,
+    fetch_all_supported_build_llm_providers,
 )
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import get_empty_session_for_user
@@ -90,17 +81,27 @@ from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
-from onyx.server.features.build.sandbox.base import SSEKeepalive
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentPlanUpdate
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
+from onyx.server.features.build.sandbox.event_schema import CurrentModeUpdate
+from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
+from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
+from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
+from onyx.server.features.build.session.interrupt_signal import clear_interrupt
+from onyx.server.features.build.session.interrupt_signal import is_interrupt_requested
+from onyx.server.features.build.session.interrupt_signal import request_interrupt
+from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
-from onyx.server.features.build.session.prompts import (
-    FOLLOWUP_SUGGESTIONS_SYSTEM_PROMPT,
-)
-from onyx.server.features.build.session.prompts import FOLLOWUP_SUGGESTIONS_USER_PROMPT
+from onyx.server.manage.llm.models import LLMProviderView
 from onyx.skills.push import build_user_skills_payload
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.tracing.flows import LLMFlow
@@ -114,28 +115,41 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
+def _model_for_provider(provider: LLMProviderView) -> str | None:
+    """The Craft model to register for ``provider``: the type's recommended
+    model when defined, else the first visible model. None if the provider has
+    no usable (visible) model."""
+    visible_models = [m for m in provider.model_configurations if m.is_visible]
+    if not visible_models:
+        return None
+    return BUILD_MODE_RECOMMENDED_MODEL_BY_TYPE.get(
+        provider.provider, visible_models[0].name
+    )
+
+
 def get_all_build_mode_llm_configs(
-    db_session: DBSession,
+    providers: list[LLMProviderView],
     default: LLMProviderConfig,
 ) -> list[LLMProviderConfig]:
-    """``default`` first, then every other ``build-mode-*`` provider with a
-    visible model. Used at sandbox provision time so every configured
-    provider is pre-registered in opencode.json and per-prompt model
-    overrides can cross providers without a pod restart.
+    """``default`` first, then one config per other supported provider type
+    from ``providers`` (an already-fetched, access-filtered list). Used at
+    sandbox provision time so every configured provider is pre-registered in
+    opencode.json and per-prompt model overrides can cross providers without a
+    pod restart.
     """
     configs: list[LLMProviderConfig] = [default]
     seen_providers: set[str] = {default.provider}
-    for provider in fetch_all_build_mode_llm_providers(db_session):
+    for provider in providers:
         if provider.provider in seen_providers:
             continue
-        seen_providers.add(provider.provider)
-        visible_models = [m for m in provider.model_configurations if m.is_visible]
-        if not visible_models:
+        model_name = _model_for_provider(provider)
+        if model_name is None:
             continue
+        seen_providers.add(provider.provider)
         configs.append(
             LLMProviderConfig(
                 provider=provider.provider,
-                model_name=visible_models[0].name,
+                model_name=model_name,
                 api_key=provider.api_key,
                 api_base=provider.api_base,
             )
@@ -152,9 +166,9 @@ class SandboxProvisioningError(RuntimeError):
 
 
 class BuildStreamingState:
-    """Container for accumulating state during ACP streaming.
+    """Container for accumulating state during sandbox-event streaming.
 
-    Similar to ChatStateContainer but adapted for ACP packet types.
+    Similar to ChatStateContainer but adapted for sandbox event packet types.
     Accumulates chunks and tracks pending tool calls until completion.
 
     Usage:
@@ -199,8 +213,13 @@ class BuildStreamingState:
         self.thought_chunks.append(text)
         self._last_chunk_type = "thought"
 
-    def finalize_message_chunks(self) -> dict[str, Any] | None:
+    def finalize_message_chunks(
+        self, routing_meta: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
         """Build a synthetic packet with accumulated message text.
+
+        ``routing_meta`` (when set) is merged into the packet's ACP ``_meta``
+        field so a persisted subagent follow-up reloads under its subagent.
 
         Returns:
             A synthetic agent_message packet or None if no chunks accumulated
@@ -209,16 +228,23 @@ class BuildStreamingState:
             return None
 
         full_text = "".join(self.message_chunks)
-        result = {
+        result: dict[str, Any] = {
             "type": "agent_message",
             "content": {"type": "text", "text": full_text},
             "sessionUpdate": "agent_message",
         }
+        if routing_meta:
+            result["_meta"] = dict(routing_meta)
         self.message_chunks.clear()
         return result
 
-    def finalize_thought_chunks(self) -> dict[str, Any] | None:
+    def finalize_thought_chunks(
+        self, routing_meta: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
         """Build a synthetic packet with accumulated thought text.
+
+        ``routing_meta`` (when set) is merged into the packet's ACP ``_meta``
+        field.
 
         Returns:
             A synthetic agent_thought packet or None if no chunks accumulated
@@ -227,11 +253,13 @@ class BuildStreamingState:
             return None
 
         full_text = "".join(self.thought_chunks)
-        result = {
+        result: dict[str, Any] = {
             "type": "agent_thought",
             "content": {"type": "text", "text": full_text},
             "sessionUpdate": "agent_thought",
         }
+        if routing_meta:
+            result["_meta"] = dict(routing_meta)
         self.thought_chunks.clear()
         return result
 
@@ -355,62 +383,72 @@ class SessionManager:
     # LLM Configuration
     # =========================================================================
 
-    def _get_llm_config(
+    def build_llm_configs(
         self,
+        user: User,
+        requested_provider_type: str | None = None,
+        requested_model_name: str | None = None,
+    ) -> tuple[LLMProviderConfig, list[LLMProviderConfig]]:
+        """Single access-scoped fetch → (default config, all pre-registered
+        configs). ``configs[0]`` is the default. Used at provision time so the
+        default and the cross-provider override list share one DB read.
+
+        Raises:
+            OnyxError: If no accessible supported provider is configured.
+        """
+        providers = fetch_all_supported_build_llm_providers(self._db_session, user)
+        default = self._select_default_llm_config(
+            providers, requested_provider_type, requested_model_name
+        )
+        return default, get_all_build_mode_llm_configs(providers, default)
+
+    @staticmethod
+    def _select_default_llm_config(
+        providers: list[LLMProviderView],
         requested_provider_type: str | None,
         requested_model_name: str | None,
     ) -> LLMProviderConfig:
-        """Get LLM config for sandbox provisioning.
-
-        Resolution priority:
-        1. User's requested provider/model (from cookie)
-        2. System default provider
-
-        Args:
-            requested_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
-            requested_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
-
-        Returns:
-            LLMProviderConfig for sandbox provisioning
+        """Resolution priority over an already-fetched accessible list:
+        1. The user's requested provider/model (cookie), if the type is present.
+           The model is used verbatim — the provider's API rejects invalid
+           models, so this also allows models not marked "visible".
+        2. Highest-priority supported provider with its recommended model.
 
         Raises:
-            ValueError: If no LLM provider is configured
+            OnyxError: If no accessible supported provider is configured.
         """
         if requested_provider_type and requested_model_name:
-            # Look up provider by type (e.g., "anthropic", "openai", "openrouter")
-            provider = fetch_llm_provider_by_type_for_build_mode(
-                self._db_session, requested_provider_type
+            for provider in providers:
+                if provider.provider == requested_provider_type:
+                    return LLMProviderConfig(
+                        provider=provider.provider,
+                        model_name=requested_model_name,
+                        api_key=provider.api_key,
+                        api_base=provider.api_base,
+                    )
+            logger.warning(
+                "Requested provider type %s not accessible, falling back",
+                requested_provider_type,
             )
-            if provider:
-                # Use the requested model directly - the provider's API will
-                # reject invalid models. This allows users to use models that
-                # aren't explicitly configured as "visible" in the admin UI.
+
+        for provider_type in BUILD_MODE_ALLOWED_PROVIDER_TYPES:
+            for provider in providers:
+                if provider.provider != provider_type:
+                    continue
+                model_name = _model_for_provider(provider)
+                if model_name is None:
+                    continue
                 return LLMProviderConfig(
                     provider=provider.provider,
-                    model_name=requested_model_name,
+                    model_name=model_name,
                     api_key=provider.api_key,
                     api_base=provider.api_base,
                 )
-            else:
-                logger.warning(
-                    "Requested provider type %s not found, falling back to default",
-                    requested_provider_type,
-                )
 
-        # Fallback to system default
-        default_model = fetch_default_llm_model(self._db_session)
-        if not default_model:
-            raise ValueError("No default LLM model found")
-
-        return LLMProviderConfig(
-            provider=default_model.llm_provider.provider,
-            model_name=default_model.name,
-            api_key=(
-                default_model.llm_provider.api_key.get_value(apply_mask=False)
-                if default_model.llm_provider.api_key
-                else None
-            ),
-            api_base=default_model.llm_provider.api_base,
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "No accessible LLM provider of a supported type "
+            f"({', '.join(BUILD_MODE_ALLOWED_PROVIDER_TYPES)}) is configured.",
         )
 
     # =========================================================================
@@ -455,20 +493,17 @@ class SessionManager:
         user: User,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
+        all_llm_configs: list[LLMProviderConfig],
     ) -> None:
-        """Ensure PAT, then provision the pod with every configured
-        provider pre-loaded so per-prompt model overrides can cross
-        providers without a pod restart."""
+        """Ensure PAT, then provision the pod with every configured provider
+        pre-loaded so per-prompt model overrides can cross providers without a
+        pod restart. ``all_llm_configs[0]`` is the default model."""
         onyx_pat = ensure_sandbox_pat(self._db_session, sandbox, user)
-        all_llm_configs = get_all_build_mode_llm_configs(
-            self._db_session, default=llm_config
-        )
         sandbox_info = self._sandbox_manager.provision(
             sandbox_id=sandbox.id,
             user_id=user_id,
             tenant_id=tenant_id,
-            llm_config=llm_config,
+            llm_config=all_llm_configs[0],
             onyx_pat=onyx_pat,
             all_llm_configs=all_llm_configs,
         )
@@ -556,7 +591,7 @@ class SessionManager:
         if user is None:
             raise ValueError(f"User {user_id} not found")
 
-        llm_config = self._get_llm_config(None, None)
+        _, all_llm_configs = self.build_llm_configs(user)
 
         if sandbox is None:
             sandbox = create_sandbox__no_commit(
@@ -576,7 +611,7 @@ class SessionManager:
                 user_id,
             )
 
-        self._provision_sandbox(sandbox, user, user_id, tenant_id, llm_config)
+        self._provision_sandbox(sandbox, user, user_id, tenant_id, all_llm_configs)
         return sandbox
 
     def _wait_for_provisioning_to_complete(
@@ -665,8 +700,15 @@ class SessionManager:
                     f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) reached"
                 )
 
-        # Get LLM config (uses user's selection or falls back to default)
-        llm_config = self._get_llm_config(llm_provider_type, llm_model_name)
+        # Fetch user early — needed for provider access checks, PAT, AGENTS.md.
+        user = fetch_user_by_id(self._db_session, user_id)
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
+        # Resolve the default + all pre-registered provider configs in one read.
+        llm_config, all_llm_configs = self.build_llm_configs(
+            user, llm_provider_type, llm_model_name
+        )
 
         # Allocate port for this session (per-session port allocation).
         # Both LOCAL and KUBERNETES backends use the same port allocation
@@ -698,11 +740,6 @@ class SessionManager:
             nextjs_port,
         )
 
-        # Fetch user early — needed for PAT provisioning and AGENTS.md personalization
-        user = fetch_user_by_id(self._db_session, user_id)
-        if not user:
-            raise ValueError(f"User {user_id} not found")
-
         # Check if user already has a sandbox (one sandbox per user model)
         existing_sandbox = get_sandbox_by_user_id(self._db_session, user_id)
 
@@ -723,7 +760,9 @@ class SessionManager:
                     sandbox_id,
                     user_id,
                 )
-                self._provision_sandbox(sandbox, user, user_id, tenant_id, llm_config)
+                self._provision_sandbox(
+                    sandbox, user, user_id, tenant_id, all_llm_configs
+                )
             elif sandbox.status.is_active():
                 # Verify pod is healthy before reusing (use short timeout for quick check)
                 if not self._sandbox_manager.health_check(sandbox_id, timeout=5.0):
@@ -744,7 +783,7 @@ class SessionManager:
                         "Re-provisioning sandbox %s for user %s", sandbox_id, user_id
                     )
                     self._provision_sandbox(
-                        sandbox, user, user_id, tenant_id, llm_config
+                        sandbox, user, user_id, tenant_id, all_llm_configs
                     )
                 else:
                     logger.info(
@@ -773,7 +812,7 @@ class SessionManager:
                 "Created sandbox record %s for session %s", sandbox_id, session_id
             )
 
-            self._provision_sandbox(sandbox, user, user_id, tenant_id, llm_config)
+            self._provision_sandbox(sandbox, user, user_id, tenant_id, all_llm_configs)
 
         # Set up session workspace within the sandbox
         logger.info(
@@ -1095,124 +1134,6 @@ class SessionManager:
             # Fallback to simple truncation
             return user_message[:40].strip() + ("..." if len(user_message) > 40 else "")
 
-    def generate_followup_suggestions(
-        self,
-        user_message: str,
-        assistant_message: str,
-    ) -> list[dict[str, str]]:
-        """
-        Generate follow-up suggestions based on the first exchange.
-
-        Args:
-            user_message: The first user message content
-            assistant_message: The first assistant response (text only, no tool calls)
-
-        Returns:
-            List of suggestion dicts with "theme" and "text" keys, or empty list on failure
-        """
-        if not user_message or not assistant_message:
-            return []
-
-        try:
-            llm = get_default_llm()
-            prompt_messages: LanguageModelInput = [
-                SystemMessage(content=FOLLOWUP_SUGGESTIONS_SYSTEM_PROMPT),
-                UserMessage(
-                    content=FOLLOWUP_SUGGESTIONS_USER_PROMPT.format(
-                        user_message=user_message[:1000],  # Limit input size
-                        assistant_message=assistant_message[:2000],
-                    )
-                ),
-            ]
-            # Call LLM with Braintrust tracing
-            with ensure_trace("build_followup_suggestions"):
-                with llm_generation_span(
-                    llm=llm,
-                    flow=LLMFlow.BUILD_FOLLOWUP_SUGGESTIONS,
-                    input_messages=prompt_messages,
-                ) as span_generation:
-                    response = llm.invoke(
-                        prompt_messages,
-                        reasoning_effort=ReasoningEffort.OFF,
-                        max_tokens=500,
-                    )
-                    record_llm_response(span_generation, response)
-                    raw_output = llm_response_to_string(response).strip()
-
-            return self._parse_suggestions(raw_output)
-        except Exception as e:
-            logger.warning("Failed to generate follow-up suggestions with LLM: %s", e)
-            return []
-
-    def _parse_suggestions(self, raw_output: str) -> list[dict[str, str]]:
-        """
-        Parse suggestions from LLM output with multiple fallback strategies.
-
-        Args:
-            raw_output: Raw LLM response string
-
-        Returns:
-            List of suggestion dicts or empty list on parse failure
-        """
-        # Strategy 1: Try direct JSON parse
-        try:
-            # Strip common LLM artifacts (code fences, etc.)
-            cleaned = raw_output.strip()
-            if cleaned.startswith("```"):
-                # Extract content between code fences
-                parts = cleaned.split("```")
-                if len(parts) >= 2:
-                    cleaned = parts[1]
-                    if cleaned.startswith("json"):
-                        cleaned = cleaned[4:]
-                    cleaned = cleaned.strip()
-
-            data = json.loads(cleaned)
-            if isinstance(data, list) and len(data) >= 2:
-                suggestions = []
-                for item in data[:2]:
-                    if isinstance(item, dict) and "theme" in item and "text" in item:
-                        theme = item["theme"].lower()
-                        if theme in ("add", "question"):
-                            text = str(item["text"])[:150]  # Truncate to max length
-                            suggestions.append({"theme": theme, "text": text})
-                if len(suggestions) == 2:
-                    return suggestions
-        except (json.JSONDecodeError, KeyError, TypeError):
-            pass
-
-        # Strategy 2: Regex extraction for common patterns
-        # Handles: "theme": "add", "text": "..." patterns
-        suggestions = []
-        for theme in ["add", "question"]:
-            # Match "theme": "add" followed by "text": "..."
-            pattern = rf'"theme"\s*:\s*"{theme}"[^}}]*"text"\s*:\s*"([^"]+)"'
-            match = re.search(pattern, raw_output, re.IGNORECASE | re.DOTALL)
-            if match:
-                text = match.group(1)[:150]
-                suggestions.append({"theme": theme, "text": text})
-
-        if len(suggestions) == 2:
-            return suggestions
-
-        # Strategy 3: Alternative pattern - theme and text in any order
-        suggestions = []
-        for theme in ["add", "question"]:
-            pattern = rf'"text"\s*:\s*"([^"]+)"[^}}]*"theme"\s*:\s*"{theme}"'
-            match = re.search(pattern, raw_output, re.IGNORECASE | re.DOTALL)
-            if match:
-                text = match.group(1)[:150]
-                suggestions.append({"theme": theme, "text": text})
-
-        if len(suggestions) == 2:
-            return suggestions
-
-        # Silent fail - return empty list
-        logger.warning(
-            "Failed to parse suggestions from LLM output: %s", raw_output[:200]
-        )
-        return []
-
     def delete_session(
         self,
         session_id: UUID,
@@ -1323,18 +1244,223 @@ class SessionManager:
         """
         yield from self._stream_cli_agent_response(session_id, content, user_id)
 
+    def send_subagent_message(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        subagent_opencode_session_id: str,
+        content: str,
+    ) -> Generator[str, None, None]:
+        """Send a follow-up message to a subagent's child opencode session
+        and stream its response as SSE events.
+
+        Mirrors the SSE-yielding behavior of :meth:`_stream_cli_agent_response`
+        but targets an existing child opencode session (the subagent) that was
+        spawned under this build session. The child runs in the parent build
+        session's directory, so we anchor the turn there and resolve the
+        sandbox + parent opencode session from the build session.
+
+        Every tool + agent-message event is tagged with routing ``_meta``
+        (``{"sessionId": <child>, "parentSessionId": <parent>}``) so the
+        frontend routes them to the subagent, and the persisted assistant
+        message carries the same ``_meta`` so reloads reconstruct the
+        follow-up under the subagent.
+        """
+        yield from self._stream_subagent_response(
+            session_id, subagent_opencode_session_id, content, user_id
+        )
+
+    def _stream_subagent_response(
+        self,
+        session_id: UUID,
+        subagent_opencode_session_id: str,
+        content: str,
+        user_id: UUID,
+    ) -> Generator[str, None, None]:
+        """SSE stream of a follow-up turn against a subagent child session.
+
+        Focused parallel of :meth:`_stream_cli_agent_response`: it reuses the
+        same persistence (`_persist_sandbox_event`) and SSE serialization
+        (`_serialize_sandbox_event`) helpers, but drives the child session via
+        ``sandbox_manager.send_subagent_message`` and tags routing ``_meta``.
+        It does not re-run the parent's first-turn opencode-session preflight
+        or model selection (the child session already exists with its own
+        default model).
+        """
+        packet_logger = get_packet_logger()
+        events_emitted = 0
+        state = BuildStreamingState(turn_index=0)
+        prompt_slot_cm: contextlib.AbstractContextManager[bool] | None = None
+        # parentSessionId is filled in once we resolve the build session.
+        routing_meta: dict[str, Any] = {"sessionId": subagent_opencode_session_id}
+
+        try:
+            session = get_build_session(session_id, user_id, self._db_session)
+            if session is None:
+                error_packet = ErrorPacket(message="Session not found")
+                yield self._format_packet_event(error_packet)
+                return
+
+            parent_opencode_session_id = session.opencode_session_id
+            if not parent_opencode_session_id:
+                error_packet = ErrorPacket(
+                    message="Parent session has no opencode session yet."
+                )
+                yield self._format_packet_event(error_packet)
+                return
+
+            sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+            if not sandbox or sandbox.status != SandboxStatus.RUNNING:
+                error_packet = ErrorPacket(
+                    message="Sandbox is not running. Please wait for it to start."
+                )
+                yield self._format_packet_event(error_packet)
+                return
+
+            sandbox_id = sandbox.id
+            update_session_activity(session_id, self._db_session)
+
+            # Serialize against concurrent turns on the same build session
+            # (the parent turn and a subagent follow-up share the same pod
+            # directory + event bus).
+            candidate_cm = self._sandbox_manager.prompt_slot(sandbox_id, session_id)
+            if not candidate_cm.__enter__():
+                candidate_cm.__exit__(None, None, None)
+                error_packet = ErrorPacket(
+                    message=(
+                        "This session is busy with a previous turn. "
+                        "Please wait for it to finish before sending "
+                        "another message."
+                    )
+                )
+                yield self._format_packet_event(error_packet)
+                return
+            prompt_slot_cm = candidate_cm
+
+            # Routing metadata merged into every forwarded subagent event and
+            # the persisted assistant message.
+            routing_meta["parentSessionId"] = parent_opencode_session_id
+
+            state = BuildStreamingState(turn_index=0)
+
+            # Use the parent session's model so the subagent follow-up runs on
+            # the same model as the parent (not the child session's default).
+            agent_provider, agent_model = self._get_session_agent_selection(session_id)
+
+            for sandbox_event in self._sandbox_manager.send_subagent_message(
+                sandbox_id,
+                session_id,
+                subagent_opencode_session_id,
+                content,
+                agent_provider=agent_provider,
+                agent_model=agent_model,
+            ):
+                # Keepalives + terminators pass through untagged.
+                if isinstance(sandbox_event, SSEKeepalive):
+                    yield ": keepalive\n\n"
+                    continue
+
+                # Tag tool + agent-message events with routing _meta BEFORE
+                # persistence so model_dump(by_alias=True) lands _meta in the
+                # persisted row and the SSE frame.
+                if isinstance(
+                    sandbox_event,
+                    (
+                        ToolCallStart,
+                        ToolCallProgress,
+                        AgentMessageChunk,
+                        AgentThoughtChunk,
+                    ),
+                ):
+                    _merge_field_meta(sandbox_event, routing_meta)
+
+                self._persist_sandbox_event(
+                    session_id, state, sandbox_event, routing_meta
+                )
+                events_emitted += 1
+
+                if isinstance(sandbox_event, AgentMessageChunk):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "agent_message_chunk"
+                    )
+                elif isinstance(sandbox_event, AgentThoughtChunk):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "agent_thought_chunk"
+                    )
+                elif isinstance(sandbox_event, ToolCallStart):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "tool_call_start"
+                    )
+                elif isinstance(sandbox_event, ToolCallProgress):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "tool_call_progress"
+                    )
+                elif isinstance(sandbox_event, AgentPlanUpdate):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "agent_plan_update"
+                    )
+                elif isinstance(sandbox_event, CurrentModeUpdate):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "current_mode_update"
+                    )
+                elif isinstance(sandbox_event, PromptResponse):
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "prompt_response"
+                    )
+                elif isinstance(sandbox_event, SandboxError):
+                    yield self._serialize_sandbox_event(sandbox_event, "error")
+
+            # Flush the accumulated assistant message tagged with routing _meta.
+            self._finalize_persist(session_id, state, routing_meta)
+            update_sandbox_heartbeat(self._db_session, sandbox_id)
+
+        except GeneratorExit:
+            logger.warning(
+                "Subagent stream closed for session %s after %d events "
+                "(client disconnected mid-stream)",
+                session_id,
+                events_emitted,
+            )
+            self._finalize_persist(session_id, state, routing_meta)
+            return
+        except Exception as e:
+            error_packet = ErrorPacket(message=str(e))
+            packet_logger.log("error", error_packet.model_dump())
+            logger.exception("Error in subagent message streaming")
+            yield self._format_packet_event(error_packet)
+        finally:
+            if prompt_slot_cm is not None:
+                prompt_slot_cm.__exit__(None, None, None)
+
+    def interrupt_message(self, session_id: UUID, user_id: UUID) -> bool:
+        """Interrupt the in-flight agent turn for a session.
+
+        Sets the interrupt fence and returns. The active stream's consume loop
+        polls the fence (~1/s) and self-terminates — aborting opencode and
+        emitting its own ``PromptResponse`` rather than waiting on a
+        ``session.idle`` that may never arrive after an abort. Setting a flag
+        (vs. a direct abort) is also what survives the first-turn race, where
+        the opencode session id isn't minted until inside the stream.
+        """
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+
+        request_interrupt(session_id, get_cache_backend())
+        return True
+
     # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
     #
-    # `_yield_acp_events` is a thin wrapper around the sandbox manager that drives
-    # the agent to completion and yields raw ACP events. It does NO database
+    # `_yield_sandbox_events` is a thin wrapper around the sandbox manager that drives
+    # the agent to completion and yields raw sandbox events. It does NO database
     # writes, no SSE formatting — making it composable: the SSE endpoint wraps
-    # it with `_persist_acp_event` + an SSE formatter, and the headless
-    # scheduled-tasks executor reuses `_persist_acp_event` directly so the
+    # it with `_persist_sandbox_event` + an SSE formatter, and the headless
+    # scheduled-tasks executor reuses `_persist_sandbox_event` directly so the
     # persisted transcript is identical to an interactive run.
 
     @staticmethod
     def _extract_text_from_content(content: Any) -> str:
-        """Extract text from ACP content structure."""
+        """Extract text from event content structure."""
         if content is None:
             return ""
         if hasattr(content, "type") and content.type == "text":
@@ -1348,8 +1474,8 @@ class SessionManager:
         return ""
 
     @staticmethod
-    def _serialize_acp_event(event: Any, event_type: str) -> str:
-        """Serialize an ACP event to SSE format, preserving ALL ACP data."""
+    def _serialize_sandbox_event(event: Any, event_type: str) -> str:
+        """Serialize a sandbox event to SSE format, preserving all fields."""
         if hasattr(event, "model_dump"):
             data = event.model_dump(mode="json", by_alias=True, exclude_none=False)
         else:
@@ -1366,14 +1492,14 @@ class SessionManager:
         return f"event: message\ndata: {packet.model_dump_json(by_alias=True)}\n\n"
 
     @staticmethod
-    def _merge_acp_with_announces(
-        acp_iter: Generator[Any, None, None],
+    def _merge_events_with_announces(
+        event_iter: Generator[Any, None, None],
         session_id: UUID,
         tenant_id: str,
     ) -> Generator[Any, None, None]:
-        """Merge ACP events and approval announces into one stream.
+        """Merge sandbox events and approval announces into one stream.
 
-        Two producer threads feed a shared queue: the ACP iterator, and a
+        Two producer threads feed a shared queue: the sandbox-event iterator, and a
         BLPOP poller that emits `ApprovalRequestedPacket` when the proxy
         signals a new approval. Announce latency is bounded by the 1s BLPOP.
         """
@@ -1381,9 +1507,9 @@ class SessionManager:
         stop = threading.Event()
         done_sentinel = object()
 
-        def drive_acp() -> None:
+        def drive_events() -> None:
             try:
-                for evt in acp_iter:
+                for evt in event_iter:
                     output.put(evt)
             except Exception as e:
                 output.put(e)
@@ -1411,15 +1537,15 @@ class SessionManager:
                     )
                 )
 
-        acp_thread = threading.Thread(
-            target=drive_acp, name=f"acp-pump-{session_id}", daemon=True
+        events_thread = threading.Thread(
+            target=drive_events, name=f"events-pump-{session_id}", daemon=True
         )
         announce_thread = threading.Thread(
             target=drive_announces,
             name=f"announce-pump-{session_id}",
             daemon=True,
         )
-        acp_thread.start()
+        events_thread.start()
         announce_thread.start()
         try:
             while True:
@@ -1436,13 +1562,17 @@ class SessionManager:
         self,
         session_id: UUID,
         state: BuildStreamingState,
+        routing_meta: dict[str, Any] | None = None,
     ) -> None:
         """Flush any pending accumulated message/thought chunks to the DB.
 
-        Called when the next ACP event is of a different type than the chunks
+        Called when the next sandbox event is of a different type than the chunks
         currently being accumulated, and once more at end of stream.
+
+        ``routing_meta`` tags the persisted packets' ACP ``_meta`` so subagent
+        follow-up turns reload under their subagent (None for the parent path).
         """
-        message_packet = state.finalize_message_chunks()
+        message_packet = state.finalize_message_chunks(routing_meta)
         if message_packet:
             create_message(
                 session_id=session_id,
@@ -1452,7 +1582,7 @@ class SessionManager:
                 db_session=self._db_session,
             )
 
-        thought_packet = state.finalize_thought_chunks()
+        thought_packet = state.finalize_thought_chunks(routing_meta)
         if thought_packet:
             create_message(
                 session_id=session_id,
@@ -1464,25 +1594,30 @@ class SessionManager:
 
         state.clear_last_chunk_type()
 
-    def _yield_acp_events(
+    def _yield_sandbox_events(
         self,
         sandbox_id: UUID,
         session_id: UUID,
         user_message_content: str,
+        opencode_session_id: str | None = None,
+        should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[Any, None, None]:
-        """Drain the CLI agent to completion, yielding raw ACP events.
+        """Drain the CLI agent to completion, yielding raw sandbox events.
 
-        Pure ACP generator — minimal DB work (one preflight on first
-        message under AGENT_TRANSPORT=serve to resolve+persist the
-        opencode session id). No SSE formatting. Callers compose this
-        with `_persist_acp_event` (to apply persistence side effects)
-        and, in the SSE case, an SSE serializer.
+        Pure sandbox-event generator — minimal DB work (one preflight on first
+        message to resolve+persist the opencode session id). No SSE
+        formatting. Callers compose this with `_persist_sandbox_event` (to
+        apply persistence side effects) and, in the SSE case, an SSE
+        serializer.
 
         The events include `SSEKeepalive` markers from the sandbox client;
         callers should pass them through (interactive) or drop them
         (headless).
         """
-        opencode_session_id = self._ensure_opencode_session_id(sandbox_id, session_id)
+        if opencode_session_id is None:
+            opencode_session_id = self._ensure_opencode_session_id(
+                sandbox_id, session_id
+            )
         agent_provider, agent_model = self._get_session_agent_selection(session_id)
 
         def _persist_resolved_id(new_id: str) -> None:
@@ -1501,6 +1636,7 @@ class SessionManager:
             agent_provider=agent_provider,
             agent_model=agent_model,
             on_opencode_session_resolved=_persist_resolved_id,
+            should_interrupt=should_interrupt,
         )
 
     def _get_session_agent_selection(
@@ -1523,16 +1659,7 @@ class SessionManager:
         session_id: UUID,
     ) -> str | None:
         """Return BuildSession.opencode_session_id; lazily populate on
-        first turn under ``AGENT_TRANSPORT=serve``.
-
-        Returns ``None`` for the ACP transport (the sandbox manager
-        ignores the value in that mode)."""
-        from onyx.server.features.build.configs import AGENT_TRANSPORT
-        from onyx.server.features.build.configs import AgentTransport
-
-        if AGENT_TRANSPORT != AgentTransport.SERVE:
-            return None
-
+        first turn."""
         build_session = (
             self._db_session.query(BuildSession)
             .filter(BuildSession.id == session_id)
@@ -1614,13 +1741,14 @@ class SessionManager:
             session_id,
         )
 
-    def _persist_acp_event(
+    def _persist_sandbox_event(
         self,
         session_id: UUID,
         state: BuildStreamingState,
-        acp_event: Any,
+        sandbox_event: Any,
+        routing_meta: dict[str, Any] | None = None,
     ) -> None:
-        """Apply persistence side effects for a single ACP event.
+        """Apply persistence side effects for a single sandbox event.
 
         This is the persistence half of the old `_stream_cli_agent_response`
         method. It is intentionally synchronous and free of SSE / logging
@@ -1641,32 +1769,32 @@ class SessionManager:
         - current_mode_update / prompt_response / error / unrecognized: not
           persisted by the interactive path; preserved here for parity.
         """
-        if isinstance(acp_event, SSEKeepalive):
+        if isinstance(sandbox_event, SSEKeepalive):
             return
 
         # Flush any pending chunks if the event type changed.
-        event_type = self._get_event_type(acp_event)
+        event_type = self._get_event_type(sandbox_event)
         if state.should_finalize_chunks(event_type):
-            self._save_pending_chunks(session_id, state)
+            self._save_pending_chunks(session_id, state, routing_meta)
 
-        if isinstance(acp_event, AgentMessageChunk):
-            text = self._extract_text_from_content(acp_event.content)
+        if isinstance(sandbox_event, AgentMessageChunk):
+            text = self._extract_text_from_content(sandbox_event.content)
             if text:
                 state.add_message_chunk(text)
             return
 
-        if isinstance(acp_event, AgentThoughtChunk):
-            text = self._extract_text_from_content(acp_event.content)
+        if isinstance(sandbox_event, AgentThoughtChunk):
+            text = self._extract_text_from_content(sandbox_event.content)
             if text:
                 state.add_thought_chunk(text)
             return
 
-        if isinstance(acp_event, ToolCallStart):
+        if isinstance(sandbox_event, ToolCallStart):
             # Stream-only; persistence happens on `completed` progress.
             return
 
-        if isinstance(acp_event, ToolCallProgress):
-            event_data = acp_event.model_dump(
+        if isinstance(sandbox_event, ToolCallProgress):
+            event_data = sandbox_event.model_dump(
                 mode="json", by_alias=True, exclude_none=False
             )
             event_data["type"] = "tool_call_progress"
@@ -1682,7 +1810,7 @@ class SessionManager:
                 or raw_input.get("subagentType") is not None
             )
 
-            if is_todo_write or acp_event.status == "completed":
+            if is_todo_write or sandbox_event.status == "completed":
                 create_message(
                     session_id=session_id,
                     message_type=MessageType.ASSISTANT,
@@ -1691,7 +1819,7 @@ class SessionManager:
                     db_session=self._db_session,
                 )
 
-            if is_task_tool and acp_event.status == "completed":
+            if is_task_tool and sandbox_event.status == "completed":
                 raw_output = event_data.get("rawOutput") or {}
                 task_output = raw_output.get("output")
                 if task_output and isinstance(task_output, str):
@@ -1715,8 +1843,8 @@ class SessionManager:
                         )
             return
 
-        if isinstance(acp_event, AgentPlanUpdate):
-            event_data = acp_event.model_dump(
+        if isinstance(sandbox_event, AgentPlanUpdate):
+            event_data = sandbox_event.model_dump(
                 mode="json", by_alias=True, exclude_none=False
             )
             event_data["type"] = "agent_plan_update"
@@ -1731,7 +1859,7 @@ class SessionManager:
             state.plan_message_id = plan_msg.id
             return
 
-        # CurrentModeUpdate, PromptResponse, ACPError, and unrecognized
+        # CurrentModeUpdate, PromptResponse, SandboxError, and unrecognized
         # packets are not persisted (parity with prior behavior).
         return
 
@@ -1739,9 +1867,10 @@ class SessionManager:
         self,
         session_id: UUID,
         state: BuildStreamingState,
+        routing_meta: dict[str, Any] | None = None,
     ) -> None:
         """End-of-stream persistence hook. Flushes any pending chunks."""
-        self._save_pending_chunks(session_id, state)
+        self._save_pending_chunks(session_id, state, routing_meta)
 
     def _stream_cli_agent_response(
         self,
@@ -1847,6 +1976,26 @@ class SessionManager:
             # which releases on every exit path.
             prompt_slot_cm = candidate_cm
 
+            # NB: we deliberately do NOT clear the fence here. The finally clears
+            # it before releasing the slot, so a prior turn's fence can never
+            # leak to this one. Clearing at turn start instead would wipe an
+            # interrupt that landed while we were blocked acquiring the slot —
+            # losing the very first-turn interrupt this feature must honor.
+            cache = get_cache_backend()
+
+            def interrupt_requested() -> bool:
+                # A cache blip must never fail a healthy turn — fail open.
+                try:
+                    return is_interrupt_requested(session_id, cache)
+                except CACHE_TRANSIENT_ERRORS:
+                    logger.warning(
+                        "[SANDBOX-SERVE] interrupt fence check failed for "
+                        "session %s; treating as not-interrupted",
+                        session_id,
+                        exc_info=True,
+                    )
+                    return False
+
             # Calculate turn_index BEFORE saving user message
             # turn_index = count of existing USER messages (this will be the Nth user message)
 
@@ -1897,26 +2046,57 @@ class SessionManager:
                 },
             )
 
-            # Drive the agent. ACP events are merged with proxy approval
-            # announces onto one SSE stream. `_persist_acp_event` applies
+            # Resolve the opencode session id up front (a slow create on the
+            # first turn). Honoring the interrupt fence here means an interrupt
+            # that arrived during that creation window stops us before we ever
+            # drive the agent — closing the first-turn race a direct interrupt
+            # can't.
+            opencode_session_id = self._ensure_opencode_session_id(
+                sandbox_id, session_id
+            )
+            if interrupt_requested():
+                clear_interrupt(session_id, cache)
+                logger.info(
+                    "[SANDBOX-SERVE] turn interrupted before start: session=%s",
+                    session_id,
+                )
+                yield self._serialize_sandbox_event(
+                    PromptResponse.model_validate({"stopReason": "cancelled"}),
+                    "prompt_response",
+                )
+                return
+
+            # Drive the agent. sandbox events are merged with proxy approval
+            # announces onto one SSE stream. `_persist_sandbox_event` applies
             # persistence; SSE formatting + packet-logger book-keeping happen here.
-            merged_events = self._merge_acp_with_announces(
-                self._yield_acp_events(sandbox_id, session_id, user_message_content),
+            # `should_interrupt` lets the consume loop self-terminate on the
+            # fence (abort + its own PromptResponse) within ~1s, even on an
+            # event-less turn — so an interrupt never depends on opencode
+            # emitting session.idle, which can leave the turn (and its slot)
+            # hung until the wall-clock timeout.
+            merged_events = self._merge_events_with_announces(
+                self._yield_sandbox_events(
+                    sandbox_id,
+                    session_id,
+                    user_message_content,
+                    opencode_session_id=opencode_session_id,
+                    should_interrupt=interrupt_requested,
+                ),
                 session_id=session_id,
                 tenant_id=get_current_tenant_id(),
             )
-            for acp_event in merged_events:
-                if isinstance(acp_event, ApprovalRequestedPacket):
+            for sandbox_event in merged_events:
+                if isinstance(sandbox_event, ApprovalRequestedPacket):
                     packet_logger.log(
                         "approval_requested",
-                        acp_event.model_dump(mode="json"),
+                        sandbox_event.model_dump(mode="json"),
                     )
                     packet_logger.log_sse_emit("approval_requested", session_id)
-                    yield self._format_packet_event(acp_event)
+                    yield self._format_packet_event(sandbox_event)
                     continue
 
                 # Handle SSE keepalive - send comment to keep connection alive.
-                if isinstance(acp_event, SSEKeepalive):
+                if isinstance(sandbox_event, SSEKeepalive):
                     # SSE comments start with : and are ignored by EventSource
                     # but keep the HTTP connection alive.
                     packet_logger.log_sse_emit("keepalive", session_id)
@@ -1925,86 +2105,100 @@ class SessionManager:
 
                 # Persistence first so DB writes precede the SSE emit (matches
                 # the prior in-loop ordering, which interleaved them).
-                self._persist_acp_event(session_id, state, acp_event)
+                self._persist_sandbox_event(session_id, state, sandbox_event)
                 events_emitted += 1
 
                 # SSE-only branches: log + serialize for the HTTP client.
-                if isinstance(acp_event, AgentMessageChunk):
-                    event_data = acp_event.model_dump(
+                if isinstance(sandbox_event, AgentMessageChunk):
+                    event_data = sandbox_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = "agent_message_chunk"
                     packet_logger.log("agent_message_chunk", event_data)
                     packet_logger.log_sse_emit("agent_message_chunk", session_id)
-                    yield self._serialize_acp_event(acp_event, "agent_message_chunk")
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "agent_message_chunk"
+                    )
 
-                elif isinstance(acp_event, AgentThoughtChunk):
+                elif isinstance(sandbox_event, AgentThoughtChunk):
                     packet_logger.log(
                         "agent_thought_chunk",
-                        acp_event.model_dump(mode="json", by_alias=True),
+                        sandbox_event.model_dump(mode="json", by_alias=True),
                     )
                     packet_logger.log_sse_emit("agent_thought_chunk", session_id)
-                    yield self._serialize_acp_event(acp_event, "agent_thought_chunk")
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "agent_thought_chunk"
+                    )
 
-                elif isinstance(acp_event, ToolCallStart):
+                elif isinstance(sandbox_event, ToolCallStart):
                     packet_logger.log(
                         "tool_call_start",
-                        acp_event.model_dump(mode="json", by_alias=True),
+                        sandbox_event.model_dump(mode="json", by_alias=True),
                     )
                     packet_logger.log_sse_emit("tool_call_start", session_id)
-                    yield self._serialize_acp_event(acp_event, "tool_call_start")
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "tool_call_start"
+                    )
 
-                elif isinstance(acp_event, ToolCallProgress):
-                    event_data = acp_event.model_dump(
+                elif isinstance(sandbox_event, ToolCallProgress):
+                    event_data = sandbox_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = "tool_call_progress"
                     event_data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
                     packet_logger.log("tool_call_progress", event_data)
                     packet_logger.log_sse_emit("tool_call_progress", session_id)
-                    yield self._serialize_acp_event(acp_event, "tool_call_progress")
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "tool_call_progress"
+                    )
 
-                elif isinstance(acp_event, AgentPlanUpdate):
-                    event_data = acp_event.model_dump(
+                elif isinstance(sandbox_event, AgentPlanUpdate):
+                    event_data = sandbox_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = "agent_plan_update"
                     event_data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
                     packet_logger.log("agent_plan_update", event_data)
                     packet_logger.log_sse_emit("agent_plan_update", session_id)
-                    yield self._serialize_acp_event(acp_event, "agent_plan_update")
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "agent_plan_update"
+                    )
 
-                elif isinstance(acp_event, CurrentModeUpdate):
-                    event_data = acp_event.model_dump(
+                elif isinstance(sandbox_event, CurrentModeUpdate):
+                    event_data = sandbox_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = "current_mode_update"
                     packet_logger.log("current_mode_update", event_data)
                     packet_logger.log_sse_emit("current_mode_update", session_id)
-                    yield self._serialize_acp_event(acp_event, "current_mode_update")
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "current_mode_update"
+                    )
 
-                elif isinstance(acp_event, PromptResponse):
-                    event_data = acp_event.model_dump(
+                elif isinstance(sandbox_event, PromptResponse):
+                    event_data = sandbox_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = "prompt_response"
                     packet_logger.log("prompt_response", event_data)
                     packet_logger.log_sse_emit("prompt_response", session_id)
-                    yield self._serialize_acp_event(acp_event, "prompt_response")
+                    yield self._serialize_sandbox_event(
+                        sandbox_event, "prompt_response"
+                    )
 
-                elif isinstance(acp_event, ACPError):
-                    event_data = acp_event.model_dump(
+                elif isinstance(sandbox_event, SandboxError):
+                    event_data = sandbox_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = "error"
                     packet_logger.log("error", event_data)
                     packet_logger.log_sse_emit("error", session_id)
-                    yield self._serialize_acp_event(acp_event, "error")
+                    yield self._serialize_sandbox_event(sandbox_event, "error")
 
                 else:
                     # Unrecognized packet type - log it but don't stream to frontend.
-                    event_type_name = type(acp_event).__name__
-                    event_data = acp_event.model_dump(
+                    event_type_name = type(sandbox_event).__name__
+                    event_data = sandbox_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = f"unrecognized_{event_type_name.lower()}"
@@ -2085,28 +2279,42 @@ class SessionManager:
             # and exception flow — without this a long-running turn would
             # leak the lock and permanently block follow-up turns on the
             # same session.
+            # Clear the fence BEFORE releasing the slot: while we still hold it
+            # no next turn can start, so we can't clobber a fence legitimately
+            # set for that turn. Don't let a fence outlive its turn either.
+            # Guard the cache call — a raise here would skip the slot release
+            # below and leak the lock for the rest of the process's life.
+            try:
+                clear_interrupt(session_id, get_cache_backend())
+            except CACHE_TRANSIENT_ERRORS:
+                logger.warning(
+                    "[SANDBOX-SERVE] failed to clear interrupt fence for "
+                    "session %s; releasing slot anyway",
+                    session_id,
+                    exc_info=True,
+                )
             if prompt_slot_cm is not None:
                 prompt_slot_cm.__exit__(None, None, None)
 
     @staticmethod
-    def _get_event_type(acp_event: Any) -> str:
-        """SSE ``type`` string for an ACP event. ACP schema classes
+    def _get_event_type(sandbox_event: Any) -> str:
+        """SSE ``type`` string for a sandbox event. Sandbox-event schema classes
         don't expose ``.type`` directly, so callers go through here."""
-        if isinstance(acp_event, AgentMessageChunk):
+        if isinstance(sandbox_event, AgentMessageChunk):
             return "agent_message_chunk"
-        elif isinstance(acp_event, AgentThoughtChunk):
+        elif isinstance(sandbox_event, AgentThoughtChunk):
             return "agent_thought_chunk"
-        elif isinstance(acp_event, ToolCallStart):
+        elif isinstance(sandbox_event, ToolCallStart):
             return "tool_call_start"
-        elif isinstance(acp_event, ToolCallProgress):
+        elif isinstance(sandbox_event, ToolCallProgress):
             return "tool_call_progress"
-        elif isinstance(acp_event, AgentPlanUpdate):
+        elif isinstance(sandbox_event, AgentPlanUpdate):
             return "agent_plan_update"
-        elif isinstance(acp_event, CurrentModeUpdate):
+        elif isinstance(sandbox_event, CurrentModeUpdate):
             return "current_mode_update"
-        elif isinstance(acp_event, PromptResponse):
+        elif isinstance(sandbox_event, PromptResponse):
             return "prompt_response"
-        elif isinstance(acp_event, ACPError):
+        elif isinstance(sandbox_event, SandboxError):
             return "error"
         return "unknown"
 
@@ -2237,7 +2445,7 @@ class SessionManager:
         """
         Export a markdown file as DOCX.
 
-        Reads the markdown file and converts it to DOCX using pypandoc.
+        Reads the markdown file and converts it to DOCX.
 
         Args:
             session_id: The session UUID
@@ -2261,9 +2469,7 @@ class SessionManager:
 
         md_text = content_bytes.decode("utf-8")
 
-        with tempfile.NamedTemporaryFile(suffix=".docx", delete=True) as tmp:
-            pypandoc.convert_text(md_text, "docx", format="md", outputfile=tmp.name)
-            docx_bytes = tmp.read()
+        docx_bytes = markdown_to_docx_bytes(md_text)
 
         docx_filename = filename.rsplit(".", 1)[0] + ".docx"
         return (docx_bytes, docx_filename)

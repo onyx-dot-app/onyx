@@ -14,15 +14,18 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
+from onyx.sandbox_proxy.action_matcher import ActionMatcher
+from onyx.sandbox_proxy.addons.gate import _IdentityResolver
 from onyx.sandbox_proxy.addons.gate import GateAddon
+from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.craft._test_helpers import action_entry
 
 
 def _seed_build_session(db_session: Session) -> UUID:
@@ -49,7 +52,14 @@ def _seed_action_approval(
     """Insert one action_approval row with optional pre-recorded decision."""
     row = ActionApproval(
         session_id=session_id,
-        action_type="slack.post_message",
+        actions=[
+            action_entry(
+                "slack.messages.write",
+                display_name="Post a message",
+                description="Post a message to a channel or conversation.",
+            )
+        ],
+        app_name="Slack",
         payload={"text": "hi"},
         decision=decision,
         decided_at=(dt.datetime.now(dt.timezone.utc) if decision is not None else None),
@@ -60,7 +70,7 @@ def _seed_action_approval(
     return row
 
 
-class _UnusedResolver:
+class _UnusedResolver(_IdentityResolver):
     """Obvious-fail stub for the arbiter tests; none of these are called."""
 
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None:  # noqa: ARG002
@@ -75,26 +85,25 @@ class _UnusedResolver:
         raise AssertionError("identity.resolve_session_by_id unexpectedly used")
 
 
-class _UnusedMatcher:
-    def match(self, request: Any) -> Any:  # noqa: ARG002
+class _UnusedMatcher(ActionMatcher):
+    def match(self, request: Any, tenant_id: str) -> Any:  # noqa: ARG002
         raise AssertionError("action_matcher.match unexpectedly used")
 
 
 def _build_addon() -> GateAddon:
-    """`GateAddon` with only `db_session_factory` wired; the arbiter doesn't
-    touch the others, so they're obvious-fail stubs."""
+    """`GateAddon` for the claim arbiter; it opens its own tenant session via
+    `get_session_with_tenant`, so the identity/matcher/cache deps are
+    obvious-fail stubs the arbiter never touches."""
 
     def _factory_raises(tenant_id: str) -> Any:  # noqa: ARG001
         raise AssertionError("cache_factory unexpectedly used")
 
     return GateAddon(
         identity=_UnusedResolver(),
-        action_matcher=_UnusedMatcher(),  # type: ignore[arg-type]
-        db_session_factory=lambda tenant_id: get_session_with_tenant(
-            tenant_id=tenant_id
-        ),
+        action_matcher=_UnusedMatcher(),
         cache_factory=_factory_raises,
         proxy_instance_id="proxy-test",
+        credential_dispatcher=CredentialInjectionDispatcher([]),
     )
 
 

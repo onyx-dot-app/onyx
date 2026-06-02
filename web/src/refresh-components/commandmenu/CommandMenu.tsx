@@ -13,7 +13,7 @@ import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import useContainerCenter from "@/hooks/useContainerCenter";
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Button } from "@opal/components";
@@ -493,13 +493,12 @@ function CommandMenuHeader({
       {/* Search input - arrow/enter keys bubble up to Content for centralized handling */}
       <div className="px-2 pb-2 pt-0.5">
         <InputTypeIn
+          variant="internal"
           placeholder={placeholder}
           value={value}
           onChange={(e) => onValueChange?.(e.target.value)}
           onKeyDown={handleInputKeyDown}
           autoFocus
-          className="w-full bg-transparent! border-transparent! [:hover,:active,:focus,:focus-within]:bg-background-neutral-00! [:hover]:border-border-01! [:focus,:focus-within]:shadow-none!"
-          showClearButton={false}
         />
       </div>
     </div>

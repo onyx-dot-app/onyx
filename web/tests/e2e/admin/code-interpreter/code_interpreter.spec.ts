@@ -52,14 +52,18 @@ async function mockCodeInterpreterApi(
 }
 
 /**
- * The disconnect icon button is an icon-only opal Button whose tooltip text
- * is not exposed as an accessible name. Locate it by finding the first
- * icon-only button (no label span) inside the card area.
+ * The disconnect icon button is an icon-only opal Button hidden inside a
+ * `Hoverable.Item` (opacity: 0 at rest). Hover over the card first to reveal
+ * it, then click it.
  */
-function getDisconnectIconButton(page: Page) {
-  return page
+async function clickDisconnectIconButton(page: Page) {
+  // The disconnect button is inside a Hoverable.Item (opacity: 0 at rest).
+  // Scope to the card and use force: true to bypass the opacity-0 visibility check.
+  await page
+    .locator('[data-hover-group="code-interpreter/Card"]')
     .locator("button:has(.interactive-foreground-icon):not(:has(span))")
-    .first();
+    .first()
+    .click({ force: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +123,7 @@ test.describe("Code Interpreter Admin Page", () => {
     await expect(page.getByText("Connected")).toBeVisible({ timeout: 10000 });
 
     // Click the disconnect icon button
-    await getDisconnectIconButton(page).click();
+    await clickDisconnectIconButton(page);
 
     // Modal should appear
     await expect(page.getByText("Disconnect Code Interpreter")).toBeVisible();
@@ -146,7 +150,7 @@ test.describe("Code Interpreter Admin Page", () => {
     await expect(page.getByText("Connected")).toBeVisible({ timeout: 10000 });
 
     // Open modal
-    await getDisconnectIconButton(page).click();
+    await clickDisconnectIconButton(page);
     await expect(page.getByText("Disconnect Code Interpreter")).toBeVisible();
 
     // Close modal via Cancel button
@@ -231,7 +235,7 @@ test.describe("Code Interpreter Admin Page", () => {
     await expect(page.getByText("Connected")).toBeVisible({ timeout: 10000 });
 
     // Open modal and click disconnect
-    await getDisconnectIconButton(page).click();
+    await clickDisconnectIconButton(page);
     const modal = page.getByRole("dialog");
     await modal.getByRole("button", { name: "Disconnect" }).click();
 

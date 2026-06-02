@@ -1,13 +1,78 @@
 from typing import Any
 
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.providers.actions import EndpointSpec
+from onyx.external_apps.providers.actions import ExternalAppAction
+from onyx.external_apps.providers.actions import GraphQLOp
 from onyx.external_apps.providers.base import AdminDescriptorSpec
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.base import OAuthFlowSpec
 from onyx.external_apps.providers.base import OAuthProviderSpec
 from onyx.external_apps.providers.base import OrgCredentialField
+
+
+class LinearAction(ExternalAppAction):
+    """Strongly-typed catalog ids for the Linear provider."""
+
+    VIEWER_READ = "linear.viewer.read"
+    TEAMS_READ = "linear.teams.read"
+    ISSUES_READ = "linear.issues.read"
+    PROJECTS_READ = "linear.projects.read"
+    ISSUES_CREATE = "linear.issues.create"
+    COMMENTS_CREATE = "linear.comments.create"
+
+
+# Linear is a single GraphQL endpoint (POST https://api.linear.app/graphql); the
+# action is the root field of the operation in the request body.
+_ENDPOINTS: list[EndpointSpec] = [
+    EndpointSpec(
+        id=LinearAction.VIEWER_READ,
+        normalised_name="Read the connected user",
+        description="Read the authenticated user's profile (viewer).",
+        matches=(GraphQLOp(operation_type="query", field="viewer"),),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=LinearAction.TEAMS_READ,
+        normalised_name="Read teams",
+        description="List the workspace's teams.",
+        matches=(GraphQLOp(operation_type="query", field="teams"),),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=LinearAction.ISSUES_READ,
+        normalised_name="Read issues",
+        description="List, fetch, and search issues.",
+        matches=(
+            GraphQLOp(operation_type="query", field="issues"),
+            GraphQLOp(operation_type="query", field="issue"),
+            GraphQLOp(operation_type="query", field="issueSearch"),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=LinearAction.PROJECTS_READ,
+        normalised_name="Read projects",
+        description="List projects.",
+        matches=(GraphQLOp(operation_type="query", field="projects"),),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=LinearAction.ISSUES_CREATE,
+        normalised_name="Create an issue",
+        description="Create a new issue.",
+        matches=(GraphQLOp(operation_type="mutation", field="issueCreate"),),
+    ),
+    EndpointSpec(
+        id=LinearAction.COMMENTS_CREATE,
+        normalised_name="Comment on an issue",
+        description="Add a comment to an issue.",
+        matches=(GraphQLOp(operation_type="mutation", field="commentCreate"),),
+    ),
+]
 
 
 class LinearProvider(OAuthExternalAppProvider):
@@ -60,6 +125,7 @@ class LinearProvider(OAuthExternalAppProvider):
                 "be granted read+write access to issues, projects, and comments."
             ),
         ),
+        endpoint_catalog=_ENDPOINTS,
     )
 
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:

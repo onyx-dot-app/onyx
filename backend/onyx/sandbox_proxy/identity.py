@@ -14,14 +14,11 @@ with no verifiable session tag fails closed rather than routing to a
 guessed session.
 """
 
-from collections.abc import Callable
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import BuildSession
@@ -71,6 +68,16 @@ class SessionContext:
     sandbox_name: str
     sandbox_ip: str
 
+    def without_session(self) -> ResolvedSandbox:
+        """Inverse of `ResolvedSandbox.with_session(...)` — drops the session id."""
+        return ResolvedSandbox(
+            sandbox_id=self.sandbox_id,
+            user_id=self.user_id,
+            tenant_id=self.tenant_id,
+            sandbox_name=self.sandbox_name,
+            sandbox_ip=self.sandbox_ip,
+        )
+
 
 class SandboxIPLookup(Protocol):
     """Backend-specific IP → SandboxIdentity resolver.
@@ -90,25 +97,9 @@ class SandboxIPLookup(Protocol):
     def stop(self) -> None: ...
 
 
-DBSessionFactory = Callable[[str], AbstractContextManager[Session]]
-
-
-def _default_session_factory(tenant_id: str) -> AbstractContextManager[Session]:
-    return get_session_with_tenant(tenant_id=tenant_id)
-
-
 class IdentityResolver:
-    def __init__(
-        self,
-        ip_lookup: SandboxIPLookup,
-        db_session_factory: DBSessionFactory | None = None,
-    ) -> None:
+    def __init__(self, ip_lookup: SandboxIPLookup) -> None:
         self._ip_lookup = ip_lookup
-        self._session_factory = (
-            db_session_factory
-            if db_session_factory is not None
-            else _default_session_factory
-        )
 
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None:
         """Pod IP → owning user + tenant; `None` if IP unknown or sandbox has no owner.
@@ -119,8 +110,10 @@ class IdentityResolver:
         if identity is None:
             return None
 
-        with self._session_factory(identity.tenant_id) as db:
-            user_id = self._fetch_sandbox_user(db, identity.sandbox_id)
+        with get_session_with_tenant(tenant_id=identity.tenant_id) as db:
+            user_id = db.scalar(
+                select(Sandbox.user_id).where(Sandbox.id == identity.sandbox_id)
+            )
             if user_id is None:
                 return None
 
@@ -146,14 +139,10 @@ class IdentityResolver:
         Status is intentionally not filtered: this is the session that
         originated the egress regardless of its current status.
         """
-        with self._session_factory(tenant_id) as db:
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
             stmt = (
                 select(BuildSession.id)
                 .where(BuildSession.id == session_id)
                 .where(BuildSession.user_id == user_id)
             )
             return db.scalar(stmt)
-
-    def _fetch_sandbox_user(self, db: Session, sandbox_id: UUID) -> UUID | None:
-        stmt = select(Sandbox.user_id).where(Sandbox.id == sandbox_id)
-        return db.scalar(stmt)

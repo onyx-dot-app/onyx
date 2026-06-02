@@ -25,22 +25,33 @@ import {
   UploadFileStatus,
 } from "@/app/craft/contexts/UploadFilesContext";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Button, Tooltip } from "@opal/components";
+import { Button, Text, Tooltip } from "@opal/components";
 import {
   SvgArrowUp,
   SvgClock,
   SvgFileText,
   SvgImage,
   SvgLoader,
+  SvgStop,
   SvgX,
   SvgPaperclip,
   SvgAlertCircle,
 } from "@opal/icons";
+import InterruptHint from "@/app/craft/components/InterruptHint";
+import Keycap from "@/refresh-components/Keycap";
+import { useDoubleEscapeInterrupt } from "@/hooks/useDoubleEscapeInterrupt";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import { useUser } from "@/providers/UserProvider";
 import useUserSkills from "@/hooks/useUserSkills";
 import { detectSlashTrigger, toPickerSkills } from "@/lib/skills/picker";
 import { getTextContent } from "@/lib/contentEditable";
+import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
+import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
+import {
+  QueuedMessage,
+  MAX_QUEUED_MESSAGES,
+  EMPTY_QUEUED_MESSAGES,
+} from "@/app/app/interfaces";
 
 export interface InputBarHandle {
   reset: () => void;
@@ -55,6 +66,14 @@ export interface InputBarProps {
   placeholder?: string;
   sandboxInitializing?: boolean;
   noBottomRounding?: boolean;
+  /** Queued messages + callbacks; when wired, submitting mid-stream enqueues. */
+  queuedMessages?: readonly QueuedMessage[];
+  onQueueMessage?: (text: string) => void;
+  onRemoveQueuedMessage?: (index: number) => void;
+  /** Interrupt the in-flight turn; when wired, shows the Stop control + Esc hint. */
+  onInterrupt?: () => void;
+  /** Interrupt requested, awaiting the turn to terminate. */
+  isInterrupting?: boolean;
 }
 
 /**
@@ -92,20 +111,19 @@ function BuildFileCard({
       ) : (
         <SvgFileText className="h-4 w-4 text-text-03" />
       )}
-      <span
-        className={cn(
-          "max-w-[120px] truncate",
-          isFailed && "text-status-error-02"
-        )}
-      >
-        {file.name}
+      <span className="max-w-[120px] truncate">
+        <Text font="main-ui-body" color="text-04" nowrap>
+          {file.name}
+        </Text>
       </span>
-      <button
+      <Button
+        variant="default"
+        prominence="tertiary"
+        size="2xs"
+        icon={SvgX}
         onClick={() => onRemove(file.id)}
-        className="ml-1 p-0.5 hover:bg-background-neutral-02 rounded-sm"
-      >
-        <SvgX className="h-3 w-3 text-text-03" />
-      </button>
+        aria-label={`Remove ${file.name}`}
+      />
     </div>
   );
 
@@ -152,9 +170,17 @@ const InputBar = memo(
         placeholder = "Describe your task...",
         sandboxInitializing = false,
         noBottomRounding = false,
+        queuedMessages,
+        onQueueMessage,
+        onRemoveQueuedMessage,
+        onInterrupt,
+        isInterrupting = false,
       },
       ref
     ) => {
+      // Queueing is enabled only when the parent wires up the callbacks.
+      const queueEnabled = !!onQueueMessage;
+      const queue = queuedMessages ?? EMPTY_QUEUED_MESSAGES;
       const { user } = useUser();
       const inputWrapperRef = useRef<HTMLDivElement>(null);
       const {
@@ -205,6 +231,14 @@ const InputBar = memo(
         query: string;
         slashIndex: number;
       }>({ open: false, anchorRect: null, query: "", slashIndex: -1 });
+
+      // Shared queued-message keyboard navigation + highlight state.
+      const queueNav = useQueuedMessageNavigation({
+        messages: queue,
+        inputIsEmpty: !message,
+        onRemove: (index) => onRemoveQueuedMessage?.(index),
+        onEdit: setMessage,
+      });
 
       const getTextBeforeCursor = useCallback((): string | null => {
         const el = inputRef.current;
@@ -338,14 +372,31 @@ const InputBar = memo(
       );
 
       const handleSubmit = useCallback(() => {
-        if (disabled || isRunning || hasUploadingFiles || sandboxInitializing)
+        // File uploads / sandbox init / a pending interrupt are hard blockers
+        // regardless of queueing — keep this in sync with `canSubmit` so the
+        // keyboard (Enter) path can't bypass what the button disables.
+        if (
+          disabled ||
+          hasUploadingFiles ||
+          sandboxInitializing ||
+          isInterrupting
+        )
           return;
 
-        const hasMessage = message.trim().length > 0;
-        const hasFiles = currentMessageFiles.length > 0;
+        const text = message.trim();
 
-        if (hasMessage) {
-          onSubmit(message.trim(), currentMessageFiles);
+        // While streaming, queue the message; the parent auto-sends it later.
+        if (isRunning) {
+          if (onQueueMessage && text && queue.length < MAX_QUEUED_MESSAGES) {
+            onQueueMessage(text);
+            clearMessage();
+          }
+          return;
+        }
+
+        const hasFiles = currentMessageFiles.length > 0;
+        if (text) {
+          onSubmit(text, currentMessageFiles);
           clearMessage();
           clearFiles({ suppressRefetch: true });
         } else if (hasFiles) {
@@ -355,9 +406,12 @@ const InputBar = memo(
         message,
         disabled,
         isRunning,
+        isInterrupting,
         hasUploadingFiles,
         sandboxInitializing,
         onSubmit,
+        onQueueMessage,
+        queue,
         currentMessageFiles,
         clearFiles,
         clearMessage,
@@ -366,6 +420,7 @@ const InputBar = memo(
       const handleKeyDown = useCallback(
         (event: KeyboardEvent<HTMLDivElement>) => {
           if (handleTileKeyDown(event)) return;
+          if (queueEnabled && queueNav.handleKeyDown(event)) return;
 
           // Shift+Enter falls through to browser default: inserts <br>
           if (
@@ -377,18 +432,40 @@ const InputBar = memo(
             handleSubmit();
           }
         },
-        [handleSubmit, handleTileKeyDown]
+        [handleSubmit, handleTileKeyDown, queueEnabled, queueNav]
       );
 
       const canSubmit =
         message.trim().length > 0 &&
         !disabled &&
-        !isRunning &&
         !hasUploadingFiles &&
-        !sandboxInitializing;
+        !sandboxInitializing &&
+        !isInterrupting &&
+        (!isRunning || (queueEnabled && queue.length < MAX_QUEUED_MESSAGES));
+
+      // The Stop control + double-Esc shortcut are live only while a turn is
+      // streaming and no popover is claiming Esc for itself.
+      const interruptible = !!onInterrupt && isRunning;
+      const handleInterrupt = useCallback(() => {
+        if (interruptible && !isInterrupting) onInterrupt?.();
+      }, [interruptible, isInterrupting, onInterrupt]);
+      const { armed } = useDoubleEscapeInterrupt({
+        enabled:
+          interruptible && !isInterrupting && !skillPicker.open && !tilePopover,
+        onInterrupt: handleInterrupt,
+      });
 
       return (
         <Disabled disabled={disabled}>
+          {queueEnabled && (
+            <QueuedMessageBar
+              messages={queue}
+              highlightedIndex={queueNav.highlightedIndex}
+              awaitingPreferredSelection={false}
+              onDiscard={(index) => onRemoveQueuedMessage?.(index)}
+              onHighlight={queueNav.setHighlightedIndex}
+            />
+          )}
           <div
             ref={containerRef}
             className={cn(
@@ -403,7 +480,6 @@ const InputBar = memo(
               className="hidden"
               multiple
               onChange={handleFileSelect}
-              accept="*/*"
             />
 
             {/* Attached Files */}
@@ -432,6 +508,7 @@ const InputBar = memo(
                 onKeyDown={handleKeyDown}
                 onKeyUp={handleSelectionChange}
                 onMouseUp={handleSelectionChange}
+                onBlur={() => queueNav.setHighlightedIndex(null)}
                 className={cn(
                   "w-full",
                   "h-full",
@@ -468,7 +545,7 @@ const InputBar = memo(
             {/* Bottom controls */}
             <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
               {/* Bottom left controls */}
-              <div className="flex flex-row items-center gap-1">
+              <div className="flex flex-row items-center gap-2">
                 {/* (+) button for file upload */}
                 <Button
                   disabled={disabled}
@@ -477,19 +554,69 @@ const InputBar = memo(
                   prominence="tertiary"
                   onClick={() => fileInputRef.current?.click()}
                 />
+                {/* Streaming-only: teaches the double-Esc interrupt. */}
+                {interruptible && (
+                  <InterruptHint armed={armed} interrupting={isInterrupting} />
+                )}
+                {/* Queued messages-only: teaches the Up arrow to edit queued message.*/}
+                {!message && queueEnabled && queue.length > 0 && (
+                  <>
+                    {interruptible && (
+                      <Text font="secondary-body" color="text-02">
+                        ·
+                      </Text>
+                    )}
+                    <div className="flex items-center gap-1 select-none">
+                      <Keycap>↑</Keycap>
+                      <Text font="secondary-body" color="text-02">
+                        to edit queued messages
+                      </Text>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Bottom right controls */}
               <div className="flex flex-row items-center gap-1">
-                {/* Submit button */}
+                {/* Stop: inserts to the LEFT of the fixed send button while
+                    streaming. The first Esc "arms" it with a subtle neutral fill. */}
+                <div
+                  className={cn(
+                    "overflow-hidden transition-[width,opacity] duration-150 ease-out motion-reduce:transition-none",
+                    interruptible
+                      ? "w-9 opacity-100"
+                      : "w-0 opacity-0 pointer-events-none"
+                  )}
+                >
+                  <IconButton
+                    main
+                    tertiary
+                    icon={isInterrupting ? SvgLoader : SvgStop}
+                    iconClassName={isInterrupting ? "animate-spin" : undefined}
+                    className={cn(
+                      "border-[1.5px] border-border-02",
+                      armed && "bg-background-tint-02!"
+                    )}
+                    disabled={!interruptible || isInterrupting}
+                    onClick={handleInterrupt}
+                    tooltip="Stop · esc esc"
+                    aria-label="Stop generating"
+                  />
+                </div>
+                {/* Submit button — fixed rightmost in every state. */}
                 {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <IconButton
                   icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
                   onClick={handleSubmit}
                   disabled={!canSubmit}
                   tooltip={
-                    sandboxInitializing ? "Initializing sandbox..." : "Send"
+                    sandboxInitializing
+                      ? "Initializing sandbox..."
+                      : isRunning
+                        ? "Queue message"
+                        : "Send"
                   }
+                  aria-label={isRunning ? "Queue message" : "Send"}
                   iconClassName={
                     sandboxInitializing ? "animate-spin" : undefined
                   }

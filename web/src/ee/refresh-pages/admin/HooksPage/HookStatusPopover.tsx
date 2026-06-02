@@ -16,7 +16,7 @@ import {
   SvgMaximize2,
   SvgXOctagon,
 } from "@opal/icons";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
 import HookLogsModal from "@/ee/refresh-pages/admin/HooksPage/HookLogsModal";
@@ -56,10 +56,7 @@ function ErrorLogRow({
             </Text>
           </span>
           <Hoverable.Item group={group} variant="appear-on-hover">
-            <CopyIconButton
-              size="xs"
-              getCopyText={() => log.error_message ?? ""}
-            />
+            <CopyButton size="xs" getCopyText={() => log.error_message ?? ""} />
           </Hoverable.Item>
         </Section>
         <span className="break-all">

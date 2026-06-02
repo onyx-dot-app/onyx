@@ -79,9 +79,9 @@ env:
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
   BACKEND_IMAGE: "localhost:5001/onyx-backend:ci"
   # Fail fast on opencode hangs (default is 900s). Without this, CI
-  # waits 15 min for ACP timeout while the 20-min workflow timeout
+  # waits 15 min for the per-turn timeout while the 20-min workflow timeout
   # kills the job first — losing failure logs and giving zero signal.
-  ACP_MESSAGE_TIMEOUT: "120"
+  SANDBOX_TURN_TIMEOUT_SECONDS: "120"
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
 
@@ -348,11 +348,88 @@ jobs:
                   protocol: TCP
           EOF
 
+      - name: Expose Postgres inside the kind cluster
+        run: |
+          set -eo pipefail
+          PG_ID=$(cd deployment/docker_compose && \
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q relational_db)
+          # Attach the postgres container to kind's docker network so the
+          # in-cluster sandbox-proxy can route to it.
+          docker network connect kind "$PG_ID" --alias relational_db
+          PG_IP=$(docker inspect "$PG_ID" \
+            --format '{{ (index .NetworkSettings.Networks "kind").IPAddress }}')
+          echo "postgres on kind network at $PG_IP"
+
+          # The sandbox-proxy is the only in-cluster component that reads the
+          # DB; the chart renders its POSTGRES_HOST as `onyx-pg-rw` (the
+          # release-name + "-pg-rw"). CloudNativePG isn't deployed in this
+          # lane (only the proxy/configmap templates are rendered), so expose
+          # the docker-compose Postgres under that name via a selector-less
+          # Service + manual Endpoints pointing at the container's IP on
+          # kind's docker network. Without this the proxy's identity lookups
+          # raise (DNS for `onyx-pg-rw` fails) and every egress fail-closes 403.
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: onyx-pg-rw
+            namespace: onyx
+          spec:
+            ports:
+              - port: 5432
+                targetPort: 5432
+                protocol: TCP
+          ---
+          apiVersion: v1
+          kind: Endpoints
+          metadata:
+            name: onyx-pg-rw
+            namespace: onyx
+          subsets:
+            - addresses:
+                - ip: ${PG_IP}
+              ports:
+                - port: 5432
+                  protocol: TCP
+          EOF
+
       - name: Run migrations
         run: |
           cd backend
           alembic upgrade head
           alembic heads --verbose
+
+      # Sandbox pods are torn down on failure before `kind export logs` runs,
+      # so kubelet GCs their opencode-serve logs. Stream them to disk live (one
+      # follower per pod, retrying the attach) so failures leave a trail.
+      - name: Start sandbox pod log capture
+        run: |
+          mkdir -p sandbox-logs
+          # The inner `bash -c` body is single-quoted on purpose: its $vars
+          # expand at runtime inside that shell, not here.
+          # shellcheck disable=SC2016
+          nohup bash -c '
+            while true; do
+              for name in $(kubectl -n onyx-sandboxes get pods \
+                  -o jsonpath="{.items[*].metadata.name}" 2>/dev/null); do
+                if mkdir "sandbox-logs/.lock-${name}" 2>/dev/null; then
+                  (
+                    for _ in $(seq 1 120); do
+                      kubectl -n onyx-sandboxes logs --all-containers=true \
+                        --prefix=true -f "$name" \
+                        >> "sandbox-logs/${name}.log" 2>&1 && break
+                      kubectl -n onyx-sandboxes get pod "$name" \
+                        >/dev/null 2>&1 || break
+                      sleep 1
+                    done
+                  ) &
+                fi
+              done
+              sleep 1
+            done
+          ' > sandbox-logs/_watcher.log 2>&1 &
+          disown || true
+          echo "sandbox pod log capture started (pid $!)"
 
       - name: Run Craft K8s tests
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
@@ -375,6 +452,21 @@ jobs:
             backend/tests/external_dependency_unit/craft/test_ensure_sandbox_running.py \
             backend/tests/external_dependency_unit/craft/test_scheduled_task_executor.py
 
+      # Surface the live-captured sandbox pod logs inline so the serve
+      # startup output is visible in the run without downloading artifacts.
+      - name: Dump captured sandbox pod logs on failure
+        if: failure()
+        run: |
+          echo "=== captured sandbox pod logs ==="
+          if compgen -G "sandbox-logs/*.log" > /dev/null; then
+            for f in sandbox-logs/*.log; do
+              echo "----- ${f} -----"
+              cat "${f}" || true
+            done
+          else
+            echo "no sandbox pod logs were captured"
+          fi
+
       - name: Disk and docker status on failure
         if: failure()
         run: |
@@ -382,6 +474,35 @@ jobs:
           echo "=== docker system df ==="; docker system df || true
           echo "=== docker images ==="; docker images || true
           echo "=== /tmp contents ==="; ls -lah /tmp || true
+
+      - name: MinIO snapshot diagnostics on failure
+        if: failure()
+        run: |
+          MINIO_ID=$(cd deployment/docker_compose && \
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q minio)
+          docker exec "$MINIO_ID" \
+            mc alias set local http://localhost:9000 minioadmin minioadmin || true
+          echo "=== buckets in docker-compose minio (container view) ==="
+          docker exec "$MINIO_ID" mc ls local/ || true
+          echo "=== recursive listing of every bucket (container view) ==="
+          docker exec "$MINIO_ID" mc ls --recursive local/ || true
+          echo "=== host boto3 view via S3_ENDPOINT_URL ==="
+          python - <<'PY' || true
+          import os, boto3
+          from botocore.config import Config
+          s3 = boto3.client(
+              "s3",
+              endpoint_url=os.environ.get("S3_ENDPOINT_URL"),
+              aws_access_key_id=os.environ.get("S3_AWS_ACCESS_KEY_ID"),
+              aws_secret_access_key=os.environ.get("S3_AWS_SECRET_ACCESS_KEY"),
+              region_name=os.environ.get("AWS_REGION") or "us-east-1",
+              config=Config(s3={"addressing_style": "path"}),
+          )
+          print("buckets:", [b["Name"] for b in s3.list_buckets().get("Buckets", [])])
+          for b in s3.list_buckets().get("Buckets", []):
+              objs = s3.list_objects_v2(Bucket=b["Name"]).get("Contents", [])
+              print(b["Name"], "->", [o["Key"] for o in objs][:20])
+          PY
 
       - name: Collect kind logs on failure
         if: failure()
@@ -412,4 +533,5 @@ jobs:
           path: |
             kind-logs/
             docker-logs/
+            sandbox-logs/
           retention-days: 7

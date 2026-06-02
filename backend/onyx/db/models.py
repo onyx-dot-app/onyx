@@ -66,6 +66,7 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import DefaultAppMode
 from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import GrantSource
 from onyx.db.enums import HierarchyNodeType
@@ -5245,9 +5246,9 @@ class BuildSession(Base):
         default=SessionOrigin.INTERACTIVE,
         server_default="INTERACTIVE",
     )
-    # opencode-serve session id (populated lazily on first message
-    # under AGENT_TRANSPORT=serve) + user's LLM choice (sent as the
-    # per-prompt model override on opencode's prompt_async).
+    # opencode-serve session id (populated lazily on first message) +
+    # user's LLM choice (sent as the per-prompt model override on
+    # opencode's prompt_async).
     opencode_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_provider: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_model: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -5390,7 +5391,7 @@ class Snapshot(Base):
 class BuildMessage(Base):
     """Stores messages exchanged in build sessions.
 
-    All message data is stored in message_metadata as JSON (the raw ACP packet).
+    All message data is stored in message_metadata as JSON (the raw sandbox event packet).
     The turn_index groups all assistant responses under the user prompt they respond to.
 
     Packet types stored in message_metadata:
@@ -5433,10 +5434,11 @@ class BuildMessage(Base):
 
 
 class ActionApproval(Base):
-    """One agent-initiated gated action and its decision.
+    """One agent-initiated gated request and its decision.
 
-    `decision IS NULL` is pending (or an orphan left by a proxy crash).
-    Liveness vs. orphan is tracked by the `approval:live:{id}` Redis key, not the DB.
+    ``actions`` is a non-empty JSONB list of :class:`ActionMatch`-shaped
+    dicts, sorted strictest-policy-first; ``actions[0]`` drove the gating
+    decision. ``decision IS NULL`` is pending (or a proxy-crash orphan).
     """
 
     __tablename__ = "action_approval"
@@ -5449,7 +5451,8 @@ class ActionApproval(Base):
         ForeignKey("build_session.id", ondelete="CASCADE"),
         nullable=False,
     )
-    action_type: Mapped[str] = mapped_column(String, nullable=False)
+    actions: Mapped[list[dict[str, Any]]] = mapped_column(PGJSONB, nullable=False)
+    app_name: Mapped[str] = mapped_column(String, nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -5488,8 +5491,6 @@ class ScheduledTask(Base):
     # Canonical 5-field cron expression. The three UI editor modes (interval,
     # daily/weekly, advanced) all compile to this string on save.
     cron_expression: Mapped[str] = mapped_column(String, nullable=False)
-    # IANA timezone name (e.g. "America/Los_Angeles"). ZoneInfo handles DST.
-    timezone: Mapped[str] = mapped_column(String, nullable=False)
     # UI hint for which editor mode produced this schedule; the cron string
     # is the source of truth for execution.
     editor_mode: Mapped[str] = mapped_column(String, nullable=False)
@@ -5501,7 +5502,7 @@ class ScheduledTask(Base):
         server_default="ACTIVE",
     )
     # The dispatcher's only read field. NULL when paused; recomputed on
-    # every fire and every schedule/timezone edit. Stored UTC.
+    # every fire and every schedule edit. Stored UTC.
     next_run_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -5584,7 +5585,7 @@ class ScheduledTaskRun(Base):
     # run was still in flight, or by the stuck-run sweeper for stuck rows.
     skip_reason: Mapped[str | None] = mapped_column(String, nullable=True)
     # On `failed`: short classifier (e.g. "executor_crash", "budget",
-    # "acp_error", "stuck"). Full traceback / message lives in error_detail.
+    # "stuck"). Full traceback / message lives in error_detail.
     error_class: Mapped[str | None] = mapped_column(String, nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -5871,11 +5872,10 @@ class ExternalApp(Base):
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
-    organization_credentials: Mapped[dict[str, Any]] = mapped_column(
-        postgresql.JSONB(),
+    organization_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
+        EncryptedJson(),
         nullable=False,
         default=dict,
-        server_default=text("'{}'::jsonb"),
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -5892,6 +5892,11 @@ class ExternalApp(Base):
     skill: Mapped["Skill"] = relationship("Skill")
     user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
         "ExternalAppUserCredential",
+        back_populates="external_app",
+        cascade="all, delete-orphan",
+    )
+    policies: Mapped[list["ExternalAppPolicy"]] = relationship(
+        "ExternalAppPolicy",
         back_populates="external_app",
         cascade="all, delete-orphan",
     )
@@ -5912,8 +5917,10 @@ class ExternalAppUserCredential(Base):
         nullable=False,
         index=True,
     )
-    user_credentials: Mapped[dict[str, Any]] = mapped_column(
-        postgresql.JSONB(), nullable=False, default=dict
+    # Encrypted at rest: the calling user's credential values for this app.
+    # Read via .get_value(apply_mask=False).
+    user_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
+        EncryptedJson(), nullable=False, default=dict
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -5936,5 +5943,55 @@ class ExternalAppUserCredential(Base):
             "external_app_id",
             "user_id",
             name="uq_external_app_user_credential_app_user",
+        ),
+    )
+
+
+class ExternalAppPolicy(Base):
+    """Admin's per-action policy override for an external app.
+
+    Sparse: only actions the admin has set are stored; an action without a row
+    resolves to ``ASK`` (the default ask-approval behaviour).
+
+    ``action_id`` is a catalog id; display (name/description) comes from the code
+    catalog. Admin-authored custom-app rules will add their own action
+    name/description/match columns when that feature lands.
+    """
+
+    __tablename__ = "external_app_policy"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Hierarchical action id, e.g. "slack.messages.read".
+    action_id: Mapped[str] = mapped_column(Text, nullable=False)
+    policy: Mapped[EndpointPolicy] = mapped_column(
+        Enum(EndpointPolicy, native_enum=False),
+        nullable=False,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    external_app: Mapped["ExternalApp"] = relationship(
+        "ExternalApp", back_populates="policies"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "external_app_id",
+            "action_id",
+            name="uq_external_app_policy_app_action",
         ),
     )

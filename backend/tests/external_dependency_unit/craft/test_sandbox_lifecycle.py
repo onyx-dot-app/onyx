@@ -68,7 +68,7 @@ class TestProvisionTransitions:
             user=test_user,
             user_id=test_user.id,
             tenant_id=TEST_TENANT_ID,
-            llm_config=default_llm_config(),
+            all_llm_configs=[default_llm_config()],
         )
         db_session.commit()
         db_session.refresh(sandbox)
@@ -100,7 +100,7 @@ class TestProvisionFailureRollback:
                 user=test_user,
                 user_id=test_user.id,
                 tenant_id=TEST_TENANT_ID,
-                llm_config=default_llm_config(),
+                all_llm_configs=[default_llm_config()],
             )
 
         # The endpoint's exception handler rolls back. Simulate that here.
@@ -212,11 +212,6 @@ class TestHealthCheckFailureRecovery:
         monkeypatch.setattr(
             "onyx.server.features.build.api.sessions_api.get_sandbox_manager",
             lambda: stub_sandbox_manager,
-        )
-        # Bypass LLM provider lookup (no real provider in ext-dep CI).
-        monkeypatch.setattr(
-            "onyx.server.features.build.session.manager.SessionManager._get_llm_config",
-            lambda _self, *_a, **_kw: default_llm_config(),
         )
 
         restore_session(

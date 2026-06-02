@@ -454,7 +454,7 @@ def test_read_one_stream_passes_directory_as_query_param(
 
 def test_dispatch_handles_session_error_event(bus: PodEventBus) -> None:
     """session.error carries sessionID + error.data.message — bus must
-    deliver it so the consumer's translator can yield an Error ACPEvent."""
+    deliver it so the consumer's translator can yield an Error SandboxEvent."""
     sub = bus.subscribe("ses_A")
     bus._dispatch(
         {

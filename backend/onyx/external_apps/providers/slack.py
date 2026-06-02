@@ -1,13 +1,73 @@
 from typing import Any
 
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.providers.actions import EndpointSpec
+from onyx.external_apps.providers.actions import ExternalAppAction
+from onyx.external_apps.providers.actions import RestRoute
 from onyx.external_apps.providers.base import AdminDescriptorSpec
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.base import OAuthFlowSpec
 from onyx.external_apps.providers.base import OAuthProviderSpec
 from onyx.external_apps.providers.base import OrgCredentialField
+
+
+class SlackAction(ExternalAppAction):
+    """Strongly-typed catalog ids for the Slack provider."""
+
+    CHANNELS_READ = "slack.channels.read"
+    MESSAGES_READ = "slack.messages.read"
+    USERS_READ = "slack.users.read"
+    SEARCH_READ = "slack.search.read"
+    MESSAGES_WRITE = "slack.messages.write"
+
+
+# Slack Web API calls are POST to https://slack.com/api/<method>; the action is
+# the method segment of the path.
+_ENDPOINTS: list[EndpointSpec] = [
+    EndpointSpec(
+        id=SlackAction.CHANNELS_READ,
+        normalised_name="List channels",
+        description="List the workspace's channels and conversations.",
+        matches=(RestRoute(method="POST", path="/api/conversations.list"),),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=SlackAction.MESSAGES_READ,
+        normalised_name="Read channel messages",
+        description="Read messages and thread replies in a channel.",
+        matches=(
+            RestRoute(method="POST", path="/api/conversations.history"),
+            RestRoute(method="POST", path="/api/conversations.replies"),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=SlackAction.USERS_READ,
+        normalised_name="Read users",
+        description="List workspace users and look up individual profiles.",
+        matches=(
+            RestRoute(method="POST", path="/api/users.list"),
+            RestRoute(method="POST", path="/api/users.info"),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=SlackAction.SEARCH_READ,
+        normalised_name="Search messages",
+        description="Full-text search across messages the user can see.",
+        matches=(RestRoute(method="POST", path="/api/search.messages"),),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=SlackAction.MESSAGES_WRITE,
+        normalised_name="Post a message",
+        description="Post a message to a channel or conversation.",
+        matches=(RestRoute(method="POST", path="/api/chat.postMessage"),),
+    ),
+]
 
 
 class SlackProvider(OAuthExternalAppProvider):
@@ -66,6 +126,7 @@ class SlackProvider(OAuthExternalAppProvider):
                 "Client Secret below."
             ),
         ),
+        endpoint_catalog=_ENDPOINTS,
     )
 
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:

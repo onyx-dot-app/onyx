@@ -19,9 +19,8 @@ function taggedProxyUrl(
   if (!base) return undefined;
   try {
     const url = new URL(base);
-    // Empty password: the proxy's src-IP anchor already bounds tag
-    // tampering to within the same user.
-    return `${url.protocol}//${encodeURIComponent(sessionId)}@${url.host}`;
+    // The proxy treats the username as the session tag and discards the password
+    return `${url.protocol}//${encodeURIComponent(sessionId)}:x@${url.host}`;
   } catch {
     return undefined;
   }

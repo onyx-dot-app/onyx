@@ -31,6 +31,20 @@ Create chart name and version as used by the chart label.
 {{- end }}
 
 {{/*
+Build a child resource name as `<fullname>-<suffix>`, truncated to 63 chars to
+satisfy the Kubernetes DNS-1123 label limit that applies to Services, Pods,
+Deployments, HPAs, etc. Use this in place of
+  {{ include "onyx.fullname" . }}-<suffix>
+whenever the suffix could push the rendered name over 63 chars for a long
+release name. Callers must pass `(list . "<suffix>")`.
+*/}}
+{{- define "onyx.resourceName" -}}
+{{- $ctx := index . 0 -}}
+{{- $suffix := index . 1 -}}
+{{- printf "%s-%s" (include "onyx.fullname" $ctx) $suffix | trunc 63 | trimSuffix "-" -}}
+{{- end }}
+
+{{/*
 Common labels
 */}}
 {{- define "onyx.labels" -}}
@@ -174,8 +188,8 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- end }}
 
 {{/*
-True when the sandbox proxy stack should render (Craft enabled + proxy enabled).
+"true" when ENABLE_CRAFT is set in configMap, empty otherwise.
 */}}
-{{- define "onyx.sandboxProxyEnabled" -}}
-{{- and (eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true") (.Values.sandboxProxy | default dict).enabled -}}
+{{- define "onyx.craftEnabled" -}}
+{{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
 {{- end }}

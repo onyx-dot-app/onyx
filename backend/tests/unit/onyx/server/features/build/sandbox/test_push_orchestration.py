@@ -177,33 +177,3 @@ def test_push_to_many_aggregates_per_sandbox_results(
     assert len(result.failures) == 1
     assert result.failures[0].sandbox_id == SB_FAIL
     assert result.failures[0].reason == "write_error"
-
-
-@pytest.mark.skip(
-    reason=(
-        "needs freezegun-style fake-clock infrastructure to assert observable "
-        "backoff growth without sleeping in wall-clock; freezegun is not in "
-        "backend/requirements/dev.txt."
-    )
-)
-def test_push_retry_delay_grows_between_attempts() -> None:
-    """Under fake clock: time between attempt 1→2 < time between attempt 2→3.
-
-    Observable backoff effect, not "mock.sleep called with X."
-    """
-    pass
-
-
-@pytest.mark.skip(
-    reason=(
-        "needs freezegun-style fake-clock infrastructure to assert observable "
-        "parallel-vs-serial timing; freezegun is not in "
-        "backend/requirements/dev.txt."
-    )
-)
-def test_push_to_many_completes_in_parallel_time() -> None:
-    """Push to 20 sandboxes where each push takes 100ms; under fake clock, total wall-clock < 1s.
-
-    Observable parallelism (would be ~2s if serial), not a count of workers.
-    """
-    pass

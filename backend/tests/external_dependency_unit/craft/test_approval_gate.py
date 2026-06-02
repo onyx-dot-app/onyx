@@ -25,7 +25,6 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
-from fastapi_users.password import PasswordHelper
 from kubernetes import client
 from sqlalchemy import select
 from sqlalchemy import text
@@ -34,14 +33,13 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import NotificationType
-from onyx.db.enums import AccountType
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
 from onyx.db.models import Notification
+from onyx.db.models import Sandbox
 from onyx.db.models import User
-from onyx.db.models import UserRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.sandbox_proxy import approval_cache
@@ -55,7 +53,7 @@ from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.utils.logger import setup_logger
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft.conftest import K8S_TEST_USER_ID
+from tests.external_dependency_unit.craft._test_helpers import action_entry
 from tests.external_dependency_unit.craft.conftest import pod_exec_async
 from tests.external_dependency_unit.craft.conftest import wait_for_pod_exec_output
 from tests.external_dependency_unit.craft.conftest import wait_for_proxy_redeploy
@@ -70,7 +68,7 @@ pytestmark = pytest.mark.skipif(
 # Label the helm chart attaches to the proxy Deployment + pods.
 _PROXY_COMPONENT_LABEL = "app.kubernetes.io/component=sandbox-proxy"
 
-# Matches the gate's SlackPostMessageMatcher (case-insensitive URL prefix).
+# Matches catalog action ``slack.messages.write``.
 _SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 
 # Spec value for approval_cache.WAIT_TIMEOUT_S; pinned by
@@ -205,35 +203,24 @@ def gated_session(
     db_session: Session,
     live_pod: tuple[UUID, UUID, str],
 ) -> Generator[tuple[User, UUID, str], None, None]:
-    """Seed a ``User`` + ACTIVE ``BuildSession`` matching ``live_pod``'s ids.
+    """Seed an ACTIVE ``BuildSession`` matching ``live_pod``'s ids.
 
-    ``live_pod`` provisions a sandbox under ``K8S_TEST_USER_ID`` but creates no
-    user/session rows. Teardown deletes the user; FK ``ondelete=CASCADE`` drops
-    the related build_session/action_approval/notification rows.
+    ``live_pod`` provisions a sandbox backed by committed ``User`` + ``Sandbox``
+    rows (see ``_provisioned_sandbox``), so the owner is read from the sandbox
+    row rather than seeded here. ``live_pod``'s teardown deletes those rows; FK
+    ``ondelete=CASCADE`` drops the related build_session / action_approval /
+    notification rows, so this fixture has nothing to tear down.
 
     No explicit ``tenant_context`` dependency: ``k8s_manager`` (via ``live_pod``)
     already sets ``CURRENT_TENANT_ID_CONTEXTVAR`` before this body runs. If that
     behaviour is removed this fixture breaks silently.
     """
-    _, session_id, pod_name = live_pod
+    sandbox_id, session_id, pod_name = live_pod
 
-    user = db_session.get(User, K8S_TEST_USER_ID)
-    if user is None:
-        password_helper = PasswordHelper()
-        password = password_helper.generate()
-        user = User(
-            id=K8S_TEST_USER_ID,
-            email=f"k8s_approval_gate_{K8S_TEST_USER_ID.hex[:8]}@example.com",
-            hashed_password=password_helper.hash(password),
-            is_active=True,
-            is_superuser=False,
-            is_verified=True,
-            role=UserRole.BASIC,
-            account_type=AccountType.STANDARD,
-        )
-        db_session.add(user)
-        db_session.commit()
-        db_session.refresh(user)
+    sandbox = db_session.get(Sandbox, sandbox_id)
+    assert sandbox is not None, "live_pod must back its sandbox with a committed row"
+    user = db_session.get(User, sandbox.user_id)
+    assert user is not None
 
     # Drop stale BuildSession rows so the seeded row is the single deterministic
     # one the gate resolves the curl's session tag against.
@@ -252,23 +239,7 @@ def gated_session(
     db_session.commit()
     db_session.refresh(row)
 
-    try:
-        yield user, session_id, pod_name
-    finally:
-        # Late import to dodge engine-init ordering if the test session is
-        # already torn down by pytest finalisers.
-        from onyx.db.engine.sql_engine import get_session_with_current_tenant
-        from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
-        try:
-            with get_session_with_current_tenant() as cleanup:
-                existing = cleanup.get(User, K8S_TEST_USER_ID)
-                if existing is not None:
-                    cleanup.delete(existing)
-                    cleanup.commit()
-        finally:
-            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    yield user, session_id, pod_name
 
 
 def test_rejected_decision_returns_403_user_rejected(
@@ -388,8 +359,6 @@ def test_expired_on_wait_timeout(
     refreshed = db_session.get(ActionApproval, pending.approval_id)
     assert refreshed is not None
     assert refreshed.decision == ApprovalDecision.EXPIRED
-
-    assert user.id == K8S_TEST_USER_ID  # confirm we used the real seed user
 
 
 def test_wait_timeout_constant_matches_spec() -> None:
@@ -628,7 +597,7 @@ def test_approval_requested_notification_is_created(
     while time.monotonic() < deadline:
         db_session.expire_all()
         # dismissed=False so a stale notification from an earlier crashed test
-        # (same K8S_TEST_USER_ID) doesn't shadow this run's row.
+        # (same user) doesn't shadow this run's row.
         notif = (
             db_session.query(Notification)
             .filter(Notification.user_id == user.id)
@@ -697,11 +666,19 @@ def test_list_live_excludes_aged_pending_rows(
     now = datetime.now(timezone.utc)
     just_live_id = uuid4()
     just_expired_id = uuid4()
+    slack_actions = [
+        action_entry(
+            "slack.messages.write",
+            display_name="Post a message",
+            description="Post a message to a channel or conversation.",
+        )
+    ]
     db_session.add(
         ActionApproval(
             approval_id=just_live_id,
             session_id=session_id,
-            action_type="slack.chat.postMessage",
+            actions=slack_actions,
+            app_name="Slack",
             payload={"boundary": "just_live"},
             created_at=now - timedelta(seconds=_WAIT_TIMEOUT_S_SPEC - 5),
         )
@@ -710,7 +687,8 @@ def test_list_live_excludes_aged_pending_rows(
         ActionApproval(
             approval_id=just_expired_id,
             session_id=session_id,
-            action_type="slack.chat.postMessage",
+            actions=slack_actions,
+            app_name="Slack",
             payload={"boundary": "just_expired"},
             created_at=now - timedelta(seconds=_WAIT_TIMEOUT_S_SPEC + 5),
         )

@@ -6,7 +6,7 @@ import { Tooltip } from "@opal/components";
 import { SvgFiles } from "@opal/icons";
 import { Interactive } from "@opal/core";
 import { AttachmentItemLayout } from "@/layouts/general-layouts";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 
 export interface DocumentSetCardProps {
   documentSet: DocumentSetSummary;
@@ -60,7 +60,7 @@ export default function DocumentSetCard({
                 )
               }
             />
-            <Spacer horizontal rem={0.5} />
+            <Spacer orientation="horizontal" rem={0.5} />
           </Interactive.Container>
         </Interactive.Simple>
       </div>
