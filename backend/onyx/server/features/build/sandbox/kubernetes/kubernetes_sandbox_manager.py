@@ -157,8 +157,6 @@ _PROXY_DNS_RETRY_BACKOFF_S = 0.5
 
 
 def _resolve_proxy_ip() -> str:
-    if not SANDBOX_PROXY_HOST:
-        raise RuntimeError("_resolve_proxy_ip called without SANDBOX_PROXY_HOST")
     last_err: OSError | None = None
     for attempt in range(_PROXY_DNS_RETRY_ATTEMPTS):
         try:
@@ -196,8 +194,6 @@ def _placeholder_llm_configs(
 
 
 def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
-    if not SANDBOX_PROXY_HOST:
-        return []
     proxy_url = f"http://{_PROXY_ALIAS}:{SANDBOX_PROXY_PORT}"
     no_proxy = _NO_PROXY
     return [
@@ -635,16 +631,10 @@ class KubernetesSandboxManager(SandboxManager):
                 client.V1VolumeMount(
                     name="managed", mount_path="/workspace/managed", read_only=True
                 ),
-                *(
-                    [
-                        client.V1VolumeMount(
-                            name=_PROXY_CA_BUNDLE_VOLUME,
-                            mount_path=_PROXY_CA_BUNDLE_DIR,
-                            read_only=True,
-                        )
-                    ]
-                    if SANDBOX_PROXY_HOST
-                    else []
+                client.V1VolumeMount(
+                    name=_PROXY_CA_BUNDLE_VOLUME,
+                    mount_path=_PROXY_CA_BUNDLE_DIR,
+                    read_only=True,
                 ),
             ],
             resources=client.V1ResourceRequirements(
@@ -720,16 +710,10 @@ class KubernetesSandboxManager(SandboxManager):
                     name="workspace", mount_path="/workspace/sessions"
                 ),
                 client.V1VolumeMount(name="managed", mount_path="/workspace/managed"),
-                *(
-                    [
-                        client.V1VolumeMount(
-                            name=_PROXY_CA_BUNDLE_VOLUME,
-                            mount_path=_PROXY_CA_BUNDLE_DIR,
-                            read_only=True,
-                        )
-                    ]
-                    if SANDBOX_PROXY_HOST
-                    else []
+                client.V1VolumeMount(
+                    name=_PROXY_CA_BUNDLE_VOLUME,
+                    mount_path=_PROXY_CA_BUNDLE_DIR,
+                    read_only=True,
                 ),
             ],
             resources=client.V1ResourceRequirements(
@@ -766,34 +750,30 @@ class KubernetesSandboxManager(SandboxManager):
             ),
         ]
 
-        init_containers: list[client.V1Container] = []
-        host_aliases: list[client.V1HostAlias] | None = None
-        if SANDBOX_PROXY_HOST:
-            init_containers.append(_proxy_init_container())
-            volumes.extend(
-                [
-                    client.V1Volume(
-                        name=_PROXY_CA_SOURCE_VOLUME,
-                        config_map=client.V1ConfigMapVolumeSource(
-                            name=SANDBOX_PROXY_CA_CONFIGMAP,
-                            optional=False,
-                        ),
+        volumes.extend(
+            [
+                client.V1Volume(
+                    name=_PROXY_CA_SOURCE_VOLUME,
+                    config_map=client.V1ConfigMapVolumeSource(
+                        name=SANDBOX_PROXY_CA_CONFIGMAP,
+                        optional=False,
                     ),
-                    client.V1Volume(
-                        name=_PROXY_CA_BUNDLE_VOLUME,
-                        empty_dir=client.V1EmptyDirVolumeSource(),
-                    ),
-                ]
-            )
-            # kubelet injects hostAliases into every container's /etc/hosts;
-            # initContainer mutations don't propagate, so we set it here.
-            host_aliases = [
-                client.V1HostAlias(ip=_resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
+                ),
+                client.V1Volume(
+                    name=_PROXY_CA_BUNDLE_VOLUME,
+                    empty_dir=client.V1EmptyDirVolumeSource(),
+                ),
             ]
+        )
+        # kubelet injects hostAliases into every container's /etc/hosts;
+        # initContainer mutations don't propagate, so we set it here.
+        host_aliases = [
+            client.V1HostAlias(ip=_resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
+        ]
 
         pod_spec = client.V1PodSpec(
             service_account_name=self._service_account,
-            init_containers=init_containers or None,
+            init_containers=[_proxy_init_container()],
             containers=[sandbox_container, sidecar_container],
             host_aliases=host_aliases,
             share_process_namespace=False,
@@ -1258,6 +1238,17 @@ class KubernetesSandboxManager(SandboxManager):
 
         pod_name = self._get_pod_name(str(sandbox_id))
 
+        if not onyx_pat:
+            raise ValueError("onyx_pat is required for Kubernetes sandbox provisioning")
+        if not SANDBOX_API_SERVER_URL:
+            raise ValueError(
+                "SANDBOX_API_SERVER_URL must be set for Kubernetes sandbox provisioning"
+            )
+        if not SANDBOX_PROXY_HOST:
+            raise ValueError(
+                "SANDBOX_PROXY_HOST must be set for Kubernetes sandbox provisioning"
+            )
+
         # Check if pod already exists and is healthy (idempotency check)
         if self._pod_exists_and_healthy(pod_name):
             logger.info(
@@ -1288,13 +1279,6 @@ class KubernetesSandboxManager(SandboxManager):
                 last_heartbeat=None,
             )
 
-        if not onyx_pat:
-            raise ValueError("onyx_pat is required for Kubernetes sandbox provisioning")
-        if not SANDBOX_API_SERVER_URL:
-            raise ValueError(
-                "SANDBOX_API_SERVER_URL must be set for Kubernetes sandbox provisioning"
-            )
-
         try:
             # Re-provision: clear tombstone + cached info so subscribes
             # build a fresh bus with the new Secret's password.
@@ -1306,18 +1290,13 @@ class KubernetesSandboxManager(SandboxManager):
             # provider for cross-provider model overrides; keys are swapped for
             # the proxy placeholder so the pod never holds them.
             providers = _placeholder_llm_configs(all_llm_configs or [llm_config])
-            # Only register the egress-tagging plugin when the proxy is
-            # deployed; otherwise it would no-op (no HTTP(S)_PROXY to re-tag).
-            session_tag_plugins = (
-                [_OPENCODE_SESSION_TAG_PLUGIN_PATH] if SANDBOX_PROXY_HOST else None
-            )
             opencode_config_json = json.dumps(
                 build_multi_provider_opencode_config(
                     providers=providers,
                     default_provider=llm_config.provider,
                     default_model=llm_config.model_name,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
-                    plugins=session_tag_plugins,
+                    plugins=[_OPENCODE_SESSION_TAG_PLUGIN_PATH],
                 )
             )
             self._provision_opencode_secret(str(sandbox_id), opencode_config_json)

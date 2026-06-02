@@ -34,7 +34,6 @@ from kubernetes.client.rest import ApiException
 from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
@@ -502,13 +501,6 @@ def test_managed_directory_is_read_only_from_sandbox_container(
 # ---------------------------------------------------------------------------
 
 
-_proxy_required = pytest.mark.skipif(
-    not SANDBOX_PROXY_HOST,
-    reason="SANDBOX_PROXY_HOST not set; proxy not deployed in this env",
-)
-
-
-@_proxy_required
 def test_sandbox_etc_hosts_resolves_proxy_alias(
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
@@ -531,7 +523,6 @@ def test_sandbox_etc_hosts_resolves_proxy_alias(
     )
 
 
-@_proxy_required
 def test_sandbox_egress_only_flows_via_proxy(
     provisioned_sandbox: tuple[UUID, str],
     k8s_client: client.CoreV1Api,

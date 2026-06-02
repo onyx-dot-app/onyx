@@ -1460,9 +1460,8 @@ configMap:
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
 
-# -- Sandbox egress proxy. Only deployed when ENABLE_CRAFT=true.
+# -- Sandbox egress proxy.
 sandboxProxy:
-  enabled: true
   replicaCount: 2
   containerPorts:
     proxy: 8080
