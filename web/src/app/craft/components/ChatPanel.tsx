@@ -29,7 +29,9 @@ import {
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { toast } from "@/hooks/useToast";
-import InputBar, { InputBarHandle } from "@/app/craft/components/InputBar";
+import CraftInputBar, {
+  CraftInputBarHandle,
+} from "@/app/craft/components/CraftInputBar";
 import ScheduledRunBanner from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
@@ -152,7 +154,7 @@ export default function BuildChatPanel({
   }, [session?.webappUrl, sessionId, maybeAutoOpenPanelForPreview]);
 
   // Ref to access InputBar methods
-  const inputBarRef = useRef<InputBarHandle>(null);
+  const inputBarRef = useRef<CraftInputBarHandle>(null);
 
   // Scroll detection for auto-scroll "magnet"
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -546,7 +548,7 @@ export default function BuildChatPanel({
               )}
               {/* The composer stays in view for subagents (layout consistency)
                   but is disabled — replying to subagents is not supported. */}
-              <InputBar
+              <CraftInputBar
                 ref={inputBarRef}
                 onSubmit={handleSubmit}
                 isRunning={isRunning}
