@@ -22,6 +22,7 @@ from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
 from ee.onyx.server.tenants.user_mapping import user_owns_a_tenant
 from onyx.auth.users import exceptions
 from onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
+from onyx.configs.app_configs import AUTO_PROVISION_DEFAULT_EXTERNAL_APPS
 from onyx.configs.app_configs import AUTO_PROVISION_DEFAULT_LLM_PROVIDERS
 from onyx.configs.app_configs import COHERE_DEFAULT_API_KEY
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
@@ -549,21 +550,24 @@ def provision_built_in_external_apps(db_session: Session) -> None:
     """Provision every built-in external app into the current tenant (disabled),
     populating Onyx-owned credentials from operator config where available.
 
-    The cloud analogue of :func:`configure_default_api_keys`: it seeds per-tenant
-    rows from deployment config. Idempotent — safe to re-run, which makes it the
-    rotation/backfill primitive (``scripts.reconcile_managed_external_apps``):
-
     - **New app:** created disabled, with the operator's credentials (or empty if
-      none configured — still provisioned, and self-heals on a later run once
-      credentials exist).
+      none configured — still provisioned, just not enableable until creds exist).
     - **Existing app:** credentials are refreshed in place; enabled state and
       action policies are left untouched. Credentials are only overwritten when
       operator config has an entry for that type, so a re-run never wipes the
       credentials of an app the config no longer mentions.
 
-    Per-app failures are logged and skipped (one bad provider can't block tenant
-    provisioning), mirroring ``configure_default_api_keys``.
+    Per-app failures are logged and skipped. Gated by
+    ``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS`` (the external-app analogue of
+    ``AUTO_PROVISION_DEFAULT_LLM_PROVIDERS``); when disabled, nothing is seeded.
     """
+    if not AUTO_PROVISION_DEFAULT_EXTERNAL_APPS:
+        logger.info(
+            "Skipping built-in external app provisioning "
+            "(AUTO_PROVISION_DEFAULT_EXTERNAL_APPS=false)"
+        )
+        return
+
     managed_credentials = load_managed_external_app_credentials()
 
     for descriptor in fetch_available_built_in_apps():
@@ -763,8 +767,7 @@ async def setup_tenant(tenant_id: str) -> None:
             configure_default_api_keys(db_session)
 
             # Provision Onyx-managed built-in external apps (disabled) with
-            # Onyx-owned credentials, so an admin can enable them without
-            # registering their own OAuth app.
+            # Onyx-owned credentials
             provision_built_in_external_apps(db_session)
 
             # Set up Onyx with appropriate settings

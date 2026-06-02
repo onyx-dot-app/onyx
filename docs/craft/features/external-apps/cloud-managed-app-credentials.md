@@ -137,21 +137,24 @@ is safe for the current providers.
     (`MANAGED_EXTERNAL_APP_CREDENTIALS` env JSON keyed by `app_type`, parsed in
     `onyx/external_apps/managed_credentials.py`), encrypted at rest;
   - `enabled=False`.
-  Idempotent upsert means it's safe to re-run (it doubles as the
-  backfill/rotation primitive); per-app failures are logged and skipped.
-- Called from `setup_tenant` (same file), alongside `configure_default_api_keys`.
-  New tenants get every built-in, disabled, with Onyx creds populated.
-- **Backfill + rotation (manual ops script).** Run the same reconcile across
-  existing tenants via a re-runnable `backend/scripts` management script that
-  loops over `get_all_tenant_ids()`. This is the rollout-backfill, the
-  rotation mechanism, and the way newly-added built-in providers reach
-  already-provisioned tenants. **Decided:** rotation is a manual script we run;
-  no automated beat task and no rotation-overlap handling in scope (re-running
-  the script updates creds in place).
+  Idempotent upsert means a `setup_tenant` retry is safe; per-app failures are
+  logged and skipped.
+- Called from `setup_tenant` (same file), alongside `configure_default_api_keys`,
+  and only there — exactly like `configure_default_api_keys`. New tenants get
+  every built-in, disabled, with Onyx creds populated.
+- Gated by `AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` (default `true`), the
+  external-app analogue of `AUTO_PROVISION_DEFAULT_LLM_PROVIDERS`. Set `false` to
+  skip provisioning built-ins entirely.
+- **No separate backfill/rotation script.** This mirrors
+  `configure_default_api_keys`, which is also only invoked at tenant creation.
+  Cross-tenant credential rotation and backfilling tenants that predate a
+  newly-added built-in are **out of scope** here; if needed later they would be
+  handled the same way LLM keys are (a dedicated ops script), not baked into the
+  provisioning seed.
 - **Decided — provision even without creds.** A built-in with no operator creds
   configured is **still provisioned** (disabled). It simply can't be
-  meaningfully enabled/used until creds are seeded, and self-heals on the next
-  reconcile once creds exist. We always provision the full set of built-ins.
+  meaningfully enabled/used until creds are seeded. We always provision the full
+  set of built-ins.
 
 ### 3. Cloud write-path lockdown (built-in apps)
 
@@ -203,9 +206,10 @@ toggling the cloud flag); one **integration** test for the admin happy path.
 - **External dependency unit:**
   - Uniqueness: a second built-in of the same `app_type` is rejected; two
     `CUSTOM` apps are allowed.
-  - `reconcile_built_in_external_apps`: provisions every registry built-in as
-    `enabled=False` with creds from operator config; is idempotent (second run
-    no-ops); populates encrypted creds.
+  - `provision_built_in_external_apps`: provisions every registry built-in as
+    `enabled=False` with creds from operator config; is idempotent (a re-run
+    refreshes creds in place, preserves enabled state, and never wipes creds for
+    an app the config no longer mentions); populates encrypted creds.
   - Cloud guards (with the cloud flag on): create/delete/credential-edit of a
     built-in are rejected; enable-toggle and policy update succeed; `CUSTOM`
     apps are unaffected.
@@ -225,10 +229,11 @@ toggling the cloud flag); one **integration** test for the admin happy path.
 - **Provision built-ins even without creds.** We always provision the full set
   of built-in apps per tenant (disabled). One lacking operator creds is present
   but un-enableable until creds are seeded.
-- **Rotation = manual ops script.** Credential rotation/backfill is a
-  re-runnable management script over `get_all_tenant_ids()` that we run by hand;
-  it upserts creds in place. No automated reconcile task and no rotation-overlap
-  handling in scope.
+- **No backfill/rotation tooling.** Provisioning happens only at tenant
+  creation, exactly like `configure_default_api_keys`. Cross-tenant credential
+  rotation and backfilling tenants provisioned before a new built-in existed are
+  out of scope; there is no management script or beat task. If needed later, it
+  would be a dedicated ops script (as with LLM keys), not part of the seed.
 - **Single OAuth client, one redirect URI.** Cloud uses **no per-tenant
   subdomains** — all tenants share one app domain — so a single Onyx-owned OAuth
   client with the one fixed callback `{WEB_DOMAIN}/craft/v1/apps/oauth/callback`
@@ -240,10 +245,10 @@ toggling the cloud flag); one **integration** test for the admin happy path.
 - **Operator config** — `onyx/external_apps/managed_credentials.py`
   (`MANAGED_EXTERNAL_APP_CREDENTIALS` env JSON → `{app_type: {field: value}}`,
   case-insensitive keys, malformed entries skipped).
-- **Provisioning/reconcile** — `provision_built_in_external_apps` in
+- **Provisioning** — `provision_built_in_external_apps` in
   `ee/onyx/server/tenants/provisioning.py` (the cloud analogue of, and beside,
   `configure_default_api_keys`; idempotent — creates disabled, refreshes creds
-  in place, never wipes), called from `setup_tenant` in the same file.
+  in place, never wipes), called only from `setup_tenant` in the same file.
 - **DB helpers** — `onyx/db/external_app.py`: `get_external_app_by_app_type`,
   `set_external_app_organization_credentials`,
   `set_external_app_enablement_and_policies`.
@@ -251,7 +256,6 @@ toggling the cloud flag); one **integration** test for the admin happy path.
   (`_is_onyx_managed`; create/credential-edit/delete blocked; admin response
   blanks creds + config) and `is_onyx_managed` on `ExternalAppAdminResponse`
   (`api/models.py`).
-- **Backfill/rotation script** — `scripts/reconcile_managed_external_apps.py`.
 - **Frontend** — `web/src/app/craft/v1/apps/{registry.ts,admin/page.tsx,admin/ConfigureProviderModal.tsx}`
   (hide add/delete/credential controls for managed built-ins; policies-only edit).
 - **Tests** — `tests/external_dependency_unit/craft/test_managed_external_apps.py`.

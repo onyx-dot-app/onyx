@@ -1,7 +1,7 @@
 """Onyx-managed (cloud) built-in external apps: provisioning + cloud guards.
 
 Covers ``provision_built_in_external_apps`` in ``ee.onyx.server.tenants.provisioning``
-(per-tenant provisioning / rotation) and the cloud lockdown in
+(per-tenant provisioning; idempotent re-run) and the cloud lockdown in
 ``external_apps_api`` (admins may only enable/disable
 + set policies on built-in apps; never create, edit credentials/config, or
 delete them). See
@@ -115,6 +115,21 @@ def test_provisions_all_built_ins_disabled_with_credentials(
     assert slack is not None
     assert slack.organization_credentials.get_value(apply_mask=False) == {}
     assert len(slack.policies) >= 1
+
+
+def test_provisioning_skipped_when_auto_provision_disabled(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_managed_creds(monkeypatch, {ExternalAppType.GMAIL: _GMAIL_CREDS})
+    monkeypatch.setattr(prov, "AUTO_PROVISION_DEFAULT_EXTERNAL_APPS", False)
+
+    prov.provision_built_in_external_apps(db_session)
+    db_session.expire_all()
+
+    # The flag short-circuits provisioning: no built-in rows are created.
+    for app_type in EXTERNAL_APP_BUILT_IN_SKILL_IDS:
+        assert get_external_app_by_app_type(db_session, app_type) is None
 
 
 def test_reconcile_is_idempotent_rotates_and_preserves_enabled(
