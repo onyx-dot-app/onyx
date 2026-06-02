@@ -68,7 +68,6 @@ export interface BaseInputBarProps {
   // Slots
   topSlot?: ReactNode;
   bottomLeftSlot?: ReactNode;
-  bottomRightSlot?: ReactNode;
 
   // Extension hooks
   /** Return true to consume the event (skips BaseInputBar key handling). */
@@ -103,7 +102,6 @@ const BaseInputBar = memo(
         isInterrupting = false,
         topSlot,
         bottomLeftSlot,
-        bottomRightSlot,
         onBeforeKeyDown,
         onPasteText,
         onPasteFiles,
@@ -350,7 +348,6 @@ const BaseInputBar = memo(
                 )}
               </div>
               <div className="flex flex-row items-center gap-1">
-                {bottomRightSlot}
                 <div
                   className={cn(
                     "overflow-hidden transition-[width,opacity] duration-150 ease-out motion-reduce:transition-none",
