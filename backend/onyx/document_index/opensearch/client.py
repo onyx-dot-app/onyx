@@ -936,7 +936,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
             benign_conflicts = self._benign_version_conflict_count(errors)
         else:
-            # legacy path: any error fails the batch (the caller may refresh-retry
+            # any error fails the batch (the caller may refresh-retry
             # on the BulkIndexError that bulk raises)
             successes, _ = bulk(
                 self._client,
