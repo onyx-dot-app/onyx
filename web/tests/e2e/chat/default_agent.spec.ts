@@ -449,33 +449,34 @@ test.describe("Default Agent Tests", () => {
         timeout: 5000,
       });
 
-      // Find a checkbox/toggle within the image-generation tool option
-      const imageGenerationToolOption = await page.$(
+      // Find the image-generation tool option
+      const imageGenerationToolOption = page.locator(
         TOOL_IDS.imageGenerationOption
       );
-      expect(imageGenerationToolOption).toBeTruthy();
+      await expect(imageGenerationToolOption).toBeVisible();
 
       // Look for a checkbox or switch within the tool option
-      const imageGenerationToggle = await imageGenerationToolOption?.$(
+      const imageGenerationToggle = imageGenerationToolOption.locator(
         TOOL_IDS.toggleInput
       );
 
-      if (imageGenerationToggle) {
-        const initialState = await imageGenerationToggle.isChecked();
-        await imageGenerationToggle.click();
+      if ((await imageGenerationToggle.count()) > 0) {
+        const wasChecked = await imageGenerationToggle.isChecked();
 
-        // Verify state changed
-        const newState = await imageGenerationToggle.isChecked();
-        expect(newState).toBe(!initialState);
-
-        // Toggle it back
+        // Toggle, then assert with auto-retrying matchers — the React toggle
+        // updates its checked state asynchronously after the click, so a
+        // one-shot isChecked() read can race ahead of the DOM change.
         await imageGenerationToggle.click();
-        const finalState = await imageGenerationToggle.isChecked();
-        expect(finalState).toBe(initialState);
+        await expect(imageGenerationToggle).toBeChecked({
+          checked: !wasChecked,
+        });
+
+        // Toggle back to the original state
+        await imageGenerationToggle.click();
+        await expect(imageGenerationToggle).toBeChecked({ checked: wasChecked });
       } else {
         // If no toggle found, just click the option itself
-        await imageGenerationToolOption?.click();
-        // Check if the option has some visual state change
+        await imageGenerationToolOption.click();
         // This is a fallback behavior if toggles work differently
       }
     });
