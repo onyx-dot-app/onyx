@@ -91,14 +91,17 @@ export class IndexSettingsPage {
     this.currentSetupModal = modal;
   }
 
+  // Fields are targeted by input id (which equals the Formik field name) rather
+  // than by label: Opal's InputVertical folds each field's subDescription into
+  // its accessible name, so a label match like "Deployment Name" also matches
+  // the Model Name field whose description mentions "deployment name".
+
   async fillLiteLLMCredentials(creds: {
     apiBaseUrl: string;
     apiKey: string;
   }): Promise<void> {
-    await this.activeSetupModal
-      .getByLabel("API Base URL")
-      .fill(creds.apiBaseUrl);
-    await this.activeSetupModal.getByLabel(/api key/i).fill(creds.apiKey);
+    await this.activeSetupModal.locator("#apiUrl").fill(creds.apiBaseUrl);
+    await this.activeSetupModal.locator("#apiKey").fill(creds.apiKey);
   }
 
   async fillAzureCredentials(creds: {
@@ -107,13 +110,11 @@ export class IndexSettingsPage {
     apiVersion: string;
     deploymentName: string;
   }): Promise<void> {
-    await this.activeSetupModal.getByLabel("Target URL").fill(creds.targetUrl);
-    await this.activeSetupModal.getByLabel(/api key/i).fill(creds.apiKey);
+    await this.activeSetupModal.locator("#apiUrl").fill(creds.targetUrl);
+    await this.activeSetupModal.locator("#apiKey").fill(creds.apiKey);
+    await this.activeSetupModal.locator("#apiVersion").fill(creds.apiVersion);
     await this.activeSetupModal
-      .getByLabel("API Version")
-      .fill(creds.apiVersion);
-    await this.activeSetupModal
-      .getByLabel("Deployment Name")
+      .locator("#deploymentName")
       .fill(creds.deploymentName);
   }
 
@@ -121,9 +122,9 @@ export class IndexSettingsPage {
     modelName: string;
     modelDim: number;
   }): Promise<void> {
-    await this.activeSetupModal.getByLabel("Model Name").fill(spec.modelName);
+    await this.activeSetupModal.locator("#modelName").fill(spec.modelName);
     await this.activeSetupModal
-      .getByLabel("Model Dimension")
+      .locator("#modelDim")
       .fill(String(spec.modelDim));
   }
 
