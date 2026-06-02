@@ -1,4 +1,4 @@
-{{- if and (eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true") (gt (int ((.Values.sandboxProxy | default dict).replicaCount | default 1)) 1) }}
+{{- if and (eq (include "onyx.craftEnabled" .) "true") (gt (int ((.Values.sandboxProxy | default dict).replicaCount | default 1)) 1) }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

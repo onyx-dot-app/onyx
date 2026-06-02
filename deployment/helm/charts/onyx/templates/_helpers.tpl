@@ -186,3 +186,10 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- $engine := default "hpa" .Values.autoscaling.engine -}}
 {{- $engine | lower -}}
 {{- end }}
+
+{{/*
+"true" when ENABLE_CRAFT is set in configMap, empty otherwise.
+*/}}
+{{- define "onyx.craftEnabled" -}}
+{{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
+{{- end }}

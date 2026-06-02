@@ -1,4 +1,4 @@
-{{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" }}
+{{- if eq (include "onyx.craftEnabled" .) "true" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
