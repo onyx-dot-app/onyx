@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAs, loginAsWorkerUser, apiLogin } from "@tests/e2e/utils/auth";
+import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import {
   startMcpOauthServer,
@@ -431,6 +432,10 @@ test.describe("MCP OAuth flows", () => {
       );
 
       await page.goto(`/app?agentId=${agentId}`, { waitUntil: "load" });
+      // The curator is a freshly-registered user, so dismiss the "What should
+      // Onyx call you?" onboarding modal before driving the chat UI (the admin
+      // and worker users are already onboarded via global-setup).
+      await ensureOnboardingComplete(page);
 
       // Per-user OAuth: the curator must authenticate from chat before the
       // server is usable (their admin-page connect only stores the server
