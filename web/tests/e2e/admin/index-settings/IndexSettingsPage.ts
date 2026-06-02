@@ -98,9 +98,7 @@ export class IndexSettingsPage {
     await this.activeSetupModal
       .getByLabel("API Base URL")
       .fill(creds.apiBaseUrl);
-    await this.activeSetupModal
-      .getByLabel("API Key", { exact: true })
-      .fill(creds.apiKey);
+    await this.activeSetupModal.getByLabel(/api key/i).fill(creds.apiKey);
   }
 
   async fillAzureCredentials(creds: {
@@ -110,9 +108,7 @@ export class IndexSettingsPage {
     deploymentName: string;
   }): Promise<void> {
     await this.activeSetupModal.getByLabel("Target URL").fill(creds.targetUrl);
-    await this.activeSetupModal
-      .getByLabel("API Key", { exact: true })
-      .fill(creds.apiKey);
+    await this.activeSetupModal.getByLabel(/api key/i).fill(creds.apiKey);
     await this.activeSetupModal
       .getByLabel("API Version")
       .fill(creds.apiVersion);
