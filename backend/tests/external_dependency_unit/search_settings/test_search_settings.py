@@ -299,3 +299,46 @@ def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
     mock_get_llm.assert_not_called()
+
+
+def test_create_search_settings_coerces_none_prefixes(
+    tenant_context: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    """Registry-less cloud providers (e.g. Bedrock/LiteLLM/Azure) can arrive
+    without query/passage prefixes. The search_settings DB columns are NOT
+    NULL, so create_search_settings must coerce None -> "" instead of raising
+    a NotNullViolation. Regression test for the v4.0.x embedding-switch bug."""
+    saved = _make_saved_search_settings(enable_contextual_rag=False)
+    # Explicitly force the None path the failing customer hit.
+    saved.query_prefix = None
+    saved.passage_prefix = None
+
+    created = create_search_settings(
+        search_settings=saved,
+        db_session=db_session,
+        status=IndexModelStatus.FUTURE,
+    )
+
+    assert created.query_prefix == ""
+    assert created.passage_prefix == ""
+
+
+def test_creation_request_defaults_blank_prefixes() -> None:
+    """When the client omits query/passage prefixes entirely, the Pydantic
+    request model should default them to "" rather than leaving them unset/None."""
+    request = SearchSettingsCreationRequest(
+        model_name="bedrock-titan-embed-text-2",
+        model_dim=1024,
+        normalize=False,
+        provider_type=None,
+        index_name=None,
+        multipass_indexing=False,
+        embedding_precision=EmbeddingPrecision.FLOAT,
+        reduced_dimension=None,
+        enable_contextual_rag=False,
+        contextual_rag_model_configuration_id=None,
+    )
+
+    assert request.query_prefix == ""
+    assert request.passage_prefix == ""

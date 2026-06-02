@@ -42,8 +42,11 @@ def create_search_settings(
         model_name=search_settings.model_name,
         model_dim=search_settings.model_dim,
         normalize=search_settings.normalize,
-        query_prefix=search_settings.query_prefix,
-        passage_prefix=search_settings.passage_prefix,
+        # These DB columns are NOT NULL. Registry-less cloud providers (e.g.
+        # Bedrock/LiteLLM/Azure) can arrive without prefixes, so coerce None to
+        # the empty-string "no prefix" sentinel to avoid a NotNullViolation.
+        query_prefix=search_settings.query_prefix or "",
+        passage_prefix=search_settings.passage_prefix or "",
         status=status,
         index_name=search_settings.index_name,
         provider_type=search_settings.provider_type,
