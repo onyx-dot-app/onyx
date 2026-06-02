@@ -52,6 +52,24 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 COPY --from=oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 
+# Install Node.js. Bun is the JS package manager, but Playwright's e2e test
+# runner (web/tests/e2e) forks worker processes that require Node — running it
+# under bun alone hangs the runner. Daily JS tooling (Claude Code, opencode)
+# still runs under bun; Node is here only as the runtime for the test runner.
+# The chromium browser binary is installed at test time (web global-setup), not
+# baked here, so its version tracks web/package.json's floating @playwright/test.
+#
+# Copied from the official node image (digest-pinned like bun above) instead of
+# fetched from nodejs.org, so a compromised mirror or MITM can't swap the binary
+# and buildkit resolves the right arch from the manifest list. Keep both COPY
+# refs in sync when bumping the version. npm/npx are scripts under
+# node_modules/npm; recreate their PATH symlinks since we copy the bare binary.
+COPY --from=node:24.16.0-trixie-slim@sha256:05c08ce4291e9a58f59456a7985176defb12cdd42271f35ff81a3e167ea61d4c /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:24.16.0-trixie-slim@sha256:05c08ce4291e9a58f59456a7985176defb12cdd42271f35ff81a3e167ea61d4c /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+  && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+  && node --version
+
 # Install the apt packages Playwright needs to run headless Chromium for
 # the web-search open_url tool. The browser binary itself is downloaded
 # from the integration test conftest's _install_playwright fixture so
@@ -97,8 +115,8 @@ WORKDIR /workspace
 ARG CLAUDE_CODE_VERSION=latest
 RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
-# Install opencode CLI for Craft agent functionality. Bun runs it directly,
-# so we don't need a separate Node.js install.
+# Install opencode CLI for Craft agent functionality. Like Claude Code, it
+# runs under bun (the Node.js install above exists only for Playwright's runner).
 ARG OPENCODE_VERSION=latest
 RUN BUN_INSTALL=/usr/local bun install -g opencode-ai@${OPENCODE_VERSION}
 
