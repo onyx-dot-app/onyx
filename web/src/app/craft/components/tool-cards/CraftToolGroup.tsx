@@ -17,6 +17,8 @@ interface CraftToolGroupProps {
   toolCalls: ToolCallState[];
   /** Once an assistant message follows, animate the block closed. */
   autoCollapse?: boolean;
+  /** Override the initial open/closed state (useful in Storybook). */
+  defaultOpen?: boolean;
 }
 
 function aggregateStatus(toolCalls: ToolCallState[]): ToolCallState["status"] {
@@ -45,11 +47,14 @@ function renderStatusIcon(toolCalls: ToolCallState[]) {
 export default function CraftToolGroup({
   toolCalls,
   autoCollapse = false,
+  defaultOpen,
 }: CraftToolGroupProps) {
   const aggregate = aggregateStatus(toolCalls);
   // Open while the run is active so streaming calls stay visible and nothing
   // collapses as new calls append; settled groups start collapsed.
-  const [isOpen, setIsOpen] = useState(aggregate === "in_progress");
+  const [isOpen, setIsOpen] = useState(
+    defaultOpen ?? aggregate === "in_progress"
+  );
   const failedCount = toolCalls.filter((t) => t.status === "failed").length;
 
   // Fold closed once a message follows; fire once so a manual re-open sticks.
