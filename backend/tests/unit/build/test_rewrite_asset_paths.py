@@ -358,17 +358,49 @@ class TestProxyRequestWiring:
         assert f"<{BASE}/_next/static/media/font.woff2>" in result["link"]
 
     @pytest.mark.asyncio
-    async def test_proxy_sets_immutable_cache_control_on_next_static(
+    async def test_proxy_sets_immutable_cache_control_on_next_static_media(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Hashed /_next/static/ assets get a long immutable cache, overriding
-        the dev server's no-store so the browser skips re-proxying on reload."""
+        """Content-hashed /_next/static/media/* assets (fonts, images) get a long
+        immutable cache, overriding the dev server's no-store so the browser skips
+        re-proxying on reload."""
+        upstream = _FakeUpstream(
+            200,
+            {
+                "content-type": "font/woff2",
+                "cache-control": "no-store, must-revalidate",
+                "pragma": "no-cache",
+            },
+            b"\x00\x01font",
+        )
+        monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
+        monkeypatch.setattr(
+            api, "_get_proxy_client", lambda: _FakeAsyncClient(upstream)
+        )
+        request = cast(Request, SimpleNamespace(headers={}, query_params=""))
+
+        response = await api._proxy_request(
+            "_next/static/media/font.woff2", request, UUID(SESSION_ID)
+        )
+
+        assert (
+            response.headers["cache-control"] == "public, max-age=31536000, immutable"
+        )
+        assert "pragma" not in response.headers
+
+    @pytest.mark.asyncio
+    async def test_proxy_preserves_no_cache_on_next_static_chunks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Dev chunk/CSS URLs are path-stable but content-volatile, so the dev server
+        marks them no-cache. The proxy must NOT override that to immutable — doing so
+        serves stale code after an edit + full reload (Turbopack dev does not
+        content-hash chunk filenames)."""
         upstream = _FakeUpstream(
             200,
             {
                 "content-type": "application/javascript",
-                "cache-control": "no-store, must-revalidate",
-                "pragma": "no-cache",
+                "cache-control": "no-cache, must-revalidate",
             },
             b"console.log(1)",
         )
@@ -382,10 +414,8 @@ class TestProxyRequestWiring:
             "_next/static/chunks/main.js", request, UUID(SESSION_ID)
         )
 
-        assert (
-            response.headers["cache-control"] == "public, max-age=31536000, immutable"
-        )
-        assert "pragma" not in response.headers
+        assert response.headers["cache-control"] == "no-cache, must-revalidate"
+        assert "immutable" not in response.headers["cache-control"]
 
     @pytest.mark.asyncio
     async def test_proxy_passes_js_through_unrewritten(

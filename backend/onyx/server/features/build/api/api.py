@@ -348,8 +348,11 @@ async def _proxy_request(
             response_headers, str(session_id)
         )
 
-        # Override dev server's no-store so hashed static assets cache in the browser.
-        if path.lstrip("/").startswith("_next/static/"):
+        # Only /_next/static/media/* (fonts, images) has content-hashed filenames safe
+        # to cache forever. In dev, chunk/CSS URLs are path-stable but their content
+        # changes on every edit, so the dev server marks them no-cache — overriding that
+        # to immutable serves stale code after an edit + full reload. Preserve it.
+        if path.lstrip("/").startswith("_next/static/media/"):
             response_headers["cache-control"] = "public, max-age=31536000, immutable"
             response_headers.pop("pragma", None)
             response_headers.pop("expires", None)
