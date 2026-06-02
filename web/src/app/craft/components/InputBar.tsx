@@ -11,12 +11,14 @@ import {
   type ChangeEvent,
   type ClipboardEvent,
   type KeyboardEvent,
+  type MouseEvent,
   type SyntheticEvent,
 } from "react";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { isImageFile } from "@/lib/utils";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
+import SkillInfoPopover from "@/sections/input/SkillInfoPopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import {
@@ -41,10 +43,17 @@ import InterruptHint from "@/app/craft/components/InterruptHint";
 import Keycap from "@/refresh-components/Keycap";
 import { useDoubleEscapeInterrupt } from "@/hooks/useDoubleEscapeInterrupt";
 import { useContentEditable } from "@/hooks/useContentEditable";
-import { useUser } from "@/providers/UserProvider";
 import useUserSkills from "@/hooks/useUserSkills";
-import { detectSlashTrigger, toPickerSkills } from "@/lib/skills/picker";
+import { toPickerSkills } from "@/lib/skills/picker";
+import {
+  reduceOnInput,
+  reduceOnSelection,
+  reduceOnDismiss,
+  INITIAL_PICKER_SESSION,
+  type PickerSession,
+} from "@/lib/skills/pickerSession";
 import { getTextContent } from "@/lib/contentEditable";
+import { isSkillTile } from "@/lib/richInputTile";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import {
@@ -181,7 +190,6 @@ const InputBar = memo(
       // Queueing is enabled only when the parent wires up the callbacks.
       const queueEnabled = !!onQueueMessage;
       const queue = queuedMessages ?? EMPTY_QUEUED_MESSAGES;
-      const { user } = useUser();
       const inputWrapperRef = useRef<HTMLDivElement>(null);
       const {
         ref: inputRef,
@@ -192,6 +200,7 @@ const InputBar = memo(
         handleCompositionStart,
         handleCompositionEnd,
         pasteText,
+        insertSkillTile,
         handleCopy,
         handleCut,
         setCursorToEnd,
@@ -203,7 +212,9 @@ const InputBar = memo(
         updateTileText,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
-        pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
+        // Craft always collapses large pastes into tiles, regardless of the
+        // user's paste_as_tile preference.
+        pasteTilesEnabled: true,
       });
 
       const containerRef = useRef<HTMLDivElement>(null);
@@ -217,22 +228,23 @@ const InputBar = memo(
         hasUploadingFiles,
       } = useUploadFilesContext();
 
-      // `/` skill picker state. The picker watches contentEditable input,
-      // shows accessible skills, and on select replaces the `/<query>` token
-      // with `/<slug> `.
       const { data: skillsData } = useUserSkills();
       const pickerSkills = useMemo(
         () => toPickerSkills(skillsData),
         [skillsData]
       );
-      const [skillPicker, setSkillPicker] = useState<{
-        open: boolean;
-        anchorRect: DOMRect | null;
-        query: string;
-        slashIndex: number;
-      }>({ open: false, anchorRect: null, query: "", slashIndex: -1 });
+      const [session, setSession] = useState<PickerSession>(
+        INITIAL_PICKER_SESSION
+      );
+      const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
 
-      // Shared queued-message keyboard navigation + highlight state.
+      const [skillInfo, setSkillInfo] = useState<{
+        tile: HTMLElement;
+        name: string;
+        description: string;
+      } | null>(null);
+      const dismissSkillInfo = useCallback(() => setSkillInfo(null), []);
+
       const queueNav = useQueuedMessageNavigation({
         messages: queue,
         inputIsEmpty: !message,
@@ -272,65 +284,86 @@ const InputBar = memo(
         return rect;
       }, [inputRef]);
 
-      const evaluateSkillPicker = useCallback(() => {
-        const textBefore = getTextBeforeCursor();
-        if (textBefore === null) {
-          setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
-          return;
-        }
-        const trigger = detectSlashTrigger(textBefore);
-        if (!trigger) {
-          setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
-          return;
-        }
-        setSkillPicker({
-          open: true,
-          anchorRect: getCaretRect(),
-          query: trigger.query,
-          slashIndex: trigger.slashIndex,
-        });
-      }, [getCaretRect, getTextBeforeCursor]);
+      const closeSkillPicker = useCallback(
+        () => setSession(INITIAL_PICKER_SESSION),
+        []
+      );
+
+      const dismissSkillPicker = useCallback(
+        () => setSession(reduceOnDismiss),
+        []
+      );
 
       const handleEnhancedInput = useCallback(
         (event: SyntheticEvent<HTMLDivElement>) => {
           onInput(event);
-          evaluateSkillPicker();
+          const next = reduceOnInput(session, getTextBeforeCursor());
+          if (next.open) setAnchorRect(getCaretRect());
+          setSession(next);
         },
-        [onInput, evaluateSkillPicker]
+        [onInput, session, getTextBeforeCursor, getCaretRect]
       );
 
-      // Re-evaluate the slash trigger when the caret moves without input
-      // (arrow keys, Home/End, mouse clicks). Without this, the picker can
-      // hold a stale `slashIndex`/`query` from a previous position and
-      // replace the wrong text on select.
       const handleSelectionChange = useCallback(() => {
-        evaluateSkillPicker();
-      }, [evaluateSkillPicker]);
-
-      const closeSkillPicker = useCallback(() => {
-        setSkillPicker((s) => ({ ...s, open: false }));
-      }, []);
+        if (!session.open) return;
+        const next = reduceOnSelection(session, getTextBeforeCursor());
+        if (next.open) setAnchorRect(getCaretRect());
+        setSession(next);
+      }, [session, getTextBeforeCursor, getCaretRect]);
 
       const handleSkillPickerSelect = useCallback(
         (slug: string) => {
-          setSkillPicker((prev) => {
-            if (!prev.open) return prev;
-            const replacement = `/${slug} `;
-            const newText =
-              message.slice(0, prev.slashIndex) +
-              replacement +
-              message.slice(prev.slashIndex + 1 + prev.query.length);
-            setMessage(newText);
-            return { ...prev, open: false };
+          if (!session.open) return;
+          const beforeToken = `/${session.query}`;
+          const name = pickerSkills.find((s) => s.slug === slug)?.name ?? slug;
+          if (insertSkillTile(slug, name, beforeToken)) closeSkillPicker();
+        },
+        [
+          session.open,
+          session.query,
+          pickerSkills,
+          insertSkillTile,
+          closeSkillPicker,
+        ]
+      );
+
+      const openSkillInfo = useCallback(
+        (tile: HTMLElement) => {
+          const slug = tile.getAttribute("data-skill-slug") ?? "";
+          const skill = pickerSkills.find((s) => s.slug === slug);
+          setSkillInfo({
+            tile,
+            name: skill?.name ?? slug,
+            description: skill?.description ?? "",
           });
         },
-        [message, setMessage]
+        [pickerSkills]
+      );
+
+      // Clicking a skill tile opens an info popover with its name + description.
+      // Other clicks fall through to the paste-tile handler.
+      const handleInputClick = useCallback(
+        (event: MouseEvent<HTMLDivElement>) => {
+          const target = event.target as HTMLElement;
+          const tile = target.closest("[data-rich-tile]") as HTMLElement | null;
+          if (
+            tile &&
+            isSkillTile(tile) &&
+            !target.closest("[data-rich-tile-remove]")
+          ) {
+            openSkillInfo(tile);
+            return;
+          }
+          handleTileClick(event);
+        },
+        [openSkillInfo, handleTileClick]
       );
 
       useImperativeHandle(ref, () => ({
         reset: () => {
           clearMessage();
           clearFiles();
+          closeSkillPicker();
         },
         focus: () => {
           inputRef.current?.focus();
@@ -366,9 +399,26 @@ const InputBar = memo(
           const text = event.clipboardData.getData("text/plain");
           if (!text) return;
 
+          // Recreate a skill tile when pasting a lone `/<slug>` for a known
+          // skill (e.g. copied from another tile), mirroring the picker flow.
+          const slug = text.trim().match(/^\/(\S+)$/)?.[1];
+          const skill = slug && pickerSkills.find((s) => s.slug === slug);
+          if (skill) {
+            insertSkillTile(skill.slug, skill.name, "");
+            closeSkillPicker();
+            return;
+          }
+
           pasteText(text);
         },
-        [disabled, uploadFiles, pasteText]
+        [
+          disabled,
+          uploadFiles,
+          pasteText,
+          pickerSkills,
+          insertSkillTile,
+          closeSkillPicker,
+        ]
       );
 
       const handleSubmit = useCallback(() => {
@@ -419,20 +469,34 @@ const InputBar = memo(
 
       const handleKeyDown = useCallback(
         (event: KeyboardEvent<HTMLDivElement>) => {
-          if (handleTileKeyDown(event)) return;
-          if (queueEnabled && queueNav.handleKeyDown(event)) return;
-
-          // Shift+Enter falls through to browser default: inserts <br>
-          if (
+          // Shift+Enter falls through to browser default (inserts <br>).
+          const isSubmitEnter =
             event.key === "Enter" &&
             !event.shiftKey &&
-            !(event.nativeEvent as any).isComposing
-          ) {
+            !event.nativeEvent.isComposing;
+
+          // Enter on an arrow-selected skill tile opens its info popover.
+          if (isSubmitEnter) {
+            const selected = inputRef.current?.querySelector(
+              '[data-rich-tile][data-tile-type="skill"].rich-input-tile-selected'
+            ) as HTMLElement | null;
+            if (selected) {
+              event.preventDefault();
+              openSkillInfo(selected);
+              return;
+            }
+          }
+          // Queue nav owns keys while a message is highlighted, so it must run
+          // before tile handling (whose Backspace guard would otherwise win).
+          if (queueEnabled && queueNav.handleKeyDown(event)) return;
+          if (handleTileKeyDown(event)) return;
+
+          if (isSubmitEnter) {
             event.preventDefault();
             handleSubmit();
           }
         },
-        [handleSubmit, handleTileKeyDown, queueEnabled, queueNav]
+        [handleSubmit, handleTileKeyDown, queueEnabled, queueNav, openSkillInfo]
       );
 
       const canSubmit =
@@ -451,7 +515,11 @@ const InputBar = memo(
       }, [interruptible, isInterrupting, onInterrupt]);
       const { armed } = useDoubleEscapeInterrupt({
         enabled:
-          interruptible && !isInterrupting && !skillPicker.open && !tilePopover,
+          interruptible &&
+          !isInterrupting &&
+          !session.open &&
+          !tilePopover &&
+          !skillInfo,
         onInterrupt: handleInterrupt,
       });
 
@@ -538,7 +606,7 @@ const InputBar = memo(
                 onCopy={handleCopy}
                 onCut={handleCut}
                 onMouseDown={handleTileMouseDown}
-                onClick={handleTileClick}
+                onClick={handleInputClick}
               />
             </div>
 
@@ -633,13 +701,21 @@ const InputBar = memo(
             />
           )}
           <SkillPickerPopover
-            open={skillPicker.open}
-            anchorRect={skillPicker.anchorRect}
-            query={skillPicker.query}
+            open={session.open}
+            anchorRect={anchorRect}
+            query={session.query}
             skills={pickerSkills}
             onSelect={handleSkillPickerSelect}
-            onClose={closeSkillPicker}
+            onClose={dismissSkillPicker}
           />
+          {skillInfo && (
+            <SkillInfoPopover
+              name={skillInfo.name}
+              description={skillInfo.description}
+              tileElement={skillInfo.tile}
+              onDismiss={dismissSkillInfo}
+            />
+          )}
         </Disabled>
       );
     }

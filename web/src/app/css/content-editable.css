@@ -80,3 +80,16 @@
   background: var(--background-neutral-02);
   color: var(--text-05);
 }
+
+/* Skill tile — colors come from the Opal Tag (TAG_COLORS.blue), applied as
+   classes in richInputTile.ts. Only layout lives here. */
+.rich-input-tile[data-tile-type="skill"] {
+  border-color: transparent;
+  align-items: baseline;
+}
+
+/* Keep icon + remove button centered while the label sets the baseline. */
+.rich-input-tile[data-tile-type="skill"] .rich-input-tile-icon,
+.rich-input-tile[data-tile-type="skill"] .rich-input-tile-remove {
+  align-self: center;
+}
