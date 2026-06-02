@@ -93,7 +93,10 @@ export class ChatPreferencesPage {
     const toggle = this.toolSwitch(toolName);
     await expect(toggle).toBeVisible();
     await toggle.scrollIntoViewIfNeeded();
-    await toggle.click();
+    // Force the click: the switch is actionable, but the card's expand
+    // animation (a clipping/height-transition wrapper) can intercept the
+    // hit-test on slower runners, leaving a plain click retrying until timeout.
+    await toggle.click({ force: true });
     await this.expectToast("Tools updated");
   }
 
