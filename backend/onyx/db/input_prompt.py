@@ -11,8 +11,6 @@ from sqlalchemy.orm import Session
 from onyx.db.models import InputPrompt
 from onyx.db.models import InputPrompt__User
 from onyx.db.models import User
-from onyx.server.features.input_prompt.models import InputPromptSnapshot
-from onyx.server.manage.models import UserInfo
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -97,10 +95,8 @@ def update_input_prompt(
 
 
 def validate_user_prompt_authorization(user: User, input_prompt: InputPrompt) -> bool:
-    prompt = InputPromptSnapshot.from_model(input_prompt=input_prompt)
-
     # Public prompts cannot be modified via the user API (only admins via admin endpoints)
-    if prompt.is_public or prompt.user_id is None:
+    if input_prompt.is_public or input_prompt.user_id is None:
         return False
 
     # Anonymous users cannot modify user-owned prompts
@@ -108,8 +104,7 @@ def validate_user_prompt_authorization(user: User, input_prompt: InputPrompt) ->
         return False
 
     # User must own the prompt
-    user_details = UserInfo.from_model(user)
-    return str(user_details.id) == str(prompt.user_id)
+    return str(user.id) == str(input_prompt.user_id)
 
 
 def remove_public_input_prompt(input_prompt_id: int, db_session: Session) -> None:

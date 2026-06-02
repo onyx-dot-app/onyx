@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
 import {
@@ -51,8 +51,11 @@ export default function BuildConfigPage() {
 
   const isPreProvisioning = useIsPreProvisioning();
 
-  const { selection: llmSelection, updateSelection: updateLlmSelection } =
-    useBuildLlmSelection(llmProviders);
+  const {
+    selection: llmSelection,
+    updateSelection: updateLlmSelection,
+    isFromCookie: llmSelectionFromCookie,
+  } = useBuildLlmSelection(llmProviders);
 
   const clearPreProvisionedSession = useBuildSessionStore(
     (state) => state.clearPreProvisionedSession
@@ -61,12 +64,17 @@ export default function BuildConfigPage() {
     (state) => state.ensurePreProvisionedSession
   );
 
+  // No cookie → leave the dropdown empty so the user makes an explicit choice.
   useEffect(() => {
-    if (llmSelection && pendingLlmSelection === null) {
+    if (
+      llmSelectionFromCookie &&
+      llmSelection &&
+      pendingLlmSelection === null
+    ) {
       setPendingLlmSelection(llmSelection);
       setOriginalLlmSelection(llmSelection);
     }
-  }, [llmSelection, pendingLlmSelection]);
+  }, [llmSelectionFromCookie, llmSelection, pendingLlmSelection]);
 
   const hasChanges = useMemo(() => {
     const llmChanged =
@@ -107,8 +115,9 @@ export default function BuildConfigPage() {
   const handleLlmSelectionChange = useCallback(
     (newSelection: BuildLlmSelection) => {
       setPendingLlmSelection(newSelection);
+      updateLlmSelection(newSelection);
     },
-    []
+    [updateLlmSelection]
   );
 
   const handleRestoreChanges = useCallback(() => {

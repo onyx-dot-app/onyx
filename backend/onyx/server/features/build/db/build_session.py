@@ -11,16 +11,21 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
+from onyx.db.llm import can_user_access_llm_provider
+from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Artifact
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Sandbox
+from onyx.db.models import User
+from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.manage.llm.models import LLMProviderView
@@ -34,25 +39,21 @@ def create_build_session__no_commit(
     db_session: Session,
     name: str | None = None,
     origin: SessionOrigin = SessionOrigin.INTERACTIVE,
+    agent_provider: str | None = None,
+    agent_model: str | None = None,
 ) -> BuildSession:
-    """Create a new build session for the given user.
+    """``flush()`` only — caller commits.
 
-    NOTE: This function uses flush() instead of commit(). The caller is
-    responsible for committing the transaction when ready.
-
-    Args:
-        user_id: The user ID
-        db_session: Database session
-        name: Optional session name
-        origin: How the session was started. Defaults to INTERACTIVE
-            (user-driven via the Craft UI); the scheduled-tasks executor
-            passes SCHEDULED so the row is filtered out of the sidebar.
+    ``agent_provider`` / ``agent_model`` are nullable for legacy rows;
+    the send-message path then falls back to opencode's startup default.
     """
     session = BuildSession(
         user_id=user_id,
         name=name,
         status=BuildSessionStatus.ACTIVE,
         origin=origin,
+        agent_provider=agent_provider,
+        agent_model=agent_model,
     )
     db_session.add(session)
     db_session.flush()
@@ -308,7 +309,7 @@ def create_message(
         session_id: Session UUID
         message_type: Type of message (USER, ASSISTANT, SYSTEM)
         turn_index: 0-indexed user message number this message belongs to
-        message_metadata: Required structured data (the raw ACP packet JSON)
+        message_metadata: Required structured data (the raw sandbox event packet JSON)
         db_session: Database session
     """
     message = BuildMessage(
@@ -560,42 +561,29 @@ def clear_nextjs_ports_for_user(db_session: Session, user_id: UUID) -> int:
     return result
 
 
-def fetch_llm_provider_by_type_for_build_mode(
-    db_session: Session, provider_type: str
-) -> LLMProviderView | None:
-    """Fetch an LLM provider by its provider type (e.g., "anthropic", "openai").
-
-    Resolution priority:
-    1. First try to find a provider named "build-mode-{type}" (e.g., "build-mode-anthropic")
-    2. If not found, fall back to any provider that matches the type
-
-    Args:
-        db_session: Database session
-        provider_type: The provider type (e.g., "anthropic", "openai", "openrouter")
-
-    Returns:
-        LLMProviderView if found, None otherwise
-    """
-    from onyx.db.llm import fetch_existing_llm_provider
-
-    # First try to find a "build-mode-{type}" provider
-    build_mode_name = f"build-mode-{provider_type}"
-    provider_model = fetch_existing_llm_provider(
-        name=build_mode_name, db_session=db_session
-    )
-
-    # If not found, fall back to any provider that matches the type
-    if not provider_model:
-        provider_model = db_session.scalar(
-            select(LLMProviderModel)
-            .where(LLMProviderModel.provider == provider_type)
-            .options(
-                selectinload(LLMProviderModel.model_configurations),
-                selectinload(LLMProviderModel.groups),
-                selectinload(LLMProviderModel.personas),
-            )
+def fetch_all_supported_build_llm_providers(
+    db_session: Session, user: User
+) -> list[LLMProviderView]:
+    """Every provider of a Craft-supported type (anthropic, openai, openrouter)
+    that the ``user`` can access. Respects is_public / group restrictions so a
+    user never gets a sandbox keyed with a provider they can't use."""
+    provider_models = db_session.scalars(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.provider.in_(BUILD_MODE_ALLOWED_PROVIDER_TYPES))
+        .options(
+            selectinload(LLMProviderModel.model_configurations),
+            selectinload(LLMProviderModel.groups),
+            selectinload(LLMProviderModel.personas),
         )
-
-    if not provider_model:
-        return None
-    return LLMProviderView.from_model(provider_model)
+    )
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    is_admin = user.role == UserRole.ADMIN
+    # persona=None: Craft has no persona context, so a provider restricted to
+    # specific personas is intentionally excluded even when otherwise public.
+    return [
+        LLMProviderView.from_model(p)
+        for p in provider_models
+        if can_user_access_llm_provider(
+            p, user_group_ids, persona=None, is_admin=is_admin
+        )
+    ]

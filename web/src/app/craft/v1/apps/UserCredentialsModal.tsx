@@ -89,7 +89,6 @@ export default function UserCredentialsModal({
                 <div key={key} className="flex flex-col gap-1 w-full">
                   <Text font="main-ui-action">{humanizeKey(key)}</Text>
                   <PasswordInputTypeIn
-                    className="w-full"
                     value={values[key] ?? ""}
                     onChange={(e) =>
                       setValues((prev) => ({ ...prev, [key]: e.target.value }))

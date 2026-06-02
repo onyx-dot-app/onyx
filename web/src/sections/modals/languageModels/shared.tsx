@@ -16,11 +16,11 @@ import type {
 } from "@/lib/languageModels/types";
 import { Checkbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Button, LineItemButton } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
@@ -273,7 +273,7 @@ export function ModelAccessField() {
               onValueChange={handleSelect}
               options={availableOptions}
               strict
-              leftSearchIcon
+              searchIcon
             />
 
             <Card background="heavy" border="none" padding="sm">
@@ -636,7 +636,6 @@ export function ModelSelectionField({
                     }
                   }
                 }}
-                showClearButton={false}
               />
             </div>
             <Button

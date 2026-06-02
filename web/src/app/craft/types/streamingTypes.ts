@@ -74,7 +74,7 @@ export interface BuildMessage {
   type: "user" | "assistant" | "system";
   content: string;
   timestamp: Date;
-  /** Structured ACP event data (tool calls, thinking, plans) */
+  /** Structured sandbox event data (tool calls, thinking, plans) */
   message_metadata?: Record<string, any> | null;
   /** Tool calls associated with this message (for agent messages) */
   toolCalls?: ToolCall[];
@@ -104,11 +104,11 @@ export interface ToolCall {
   status: ToolCallStatus;
   /** Tool input parameters */
   input?: Record<string, unknown>;
-  /** Raw input from ACP (complete command/parameters) */
+  /** Raw input from sandbox (complete command/parameters) */
   raw_input?: Record<string, any> | null;
-  /** Raw output from ACP (complete result) */
+  /** Raw output from sandbox (complete result) */
   raw_output?: Record<string, any> | null;
-  /** Content block from ACP (description text) */
+  /** Content block from sandbox (description text) */
   content?: any | null;
   /** Result content (when completed) */
   result?: string;
@@ -394,10 +394,10 @@ export interface PermissionResponsePacket {
 }
 
 // =============================================================================
-// Raw ACP Packets (sent directly from backend with ALL ACP fields)
+// Raw sandbox-event packets (sent directly from backend with all fields)
 // =============================================================================
 
-// Content block types from ACP
+// Content block types from sandbox
 export interface TextContentBlock {
   type: "text";
   text: string;
@@ -414,28 +414,28 @@ export type ContentBlock =
   | ImageContentBlock
   | Record<string, any>;
 
-// Base ACP event fields
-export interface ACPBaseEvent {
+// Base sandbox event fields
+export interface SandboxEventBase {
   field_meta?: Record<string, any> | null; // _meta field for extensibility
   timestamp: string;
 }
 
-// ACP: agent_message_chunk - Agent's text/content output
-export interface AgentMessageChunkPacket extends ACPBaseEvent {
+// agent_message_chunk - Agent's text/content output
+export interface AgentMessageChunkPacket extends SandboxEventBase {
   type: "agent_message_chunk";
   content: ContentBlock;
   session_update?: string;
 }
 
-// ACP: agent_thought_chunk - Agent's internal reasoning
-export interface AgentThoughtChunkPacket extends ACPBaseEvent {
+// agent_thought_chunk - Agent's internal reasoning
+export interface AgentThoughtChunkPacket extends SandboxEventBase {
   type: "agent_thought_chunk";
   content: ContentBlock;
   session_update?: string;
 }
 
-// ACP: tool_call_start - Tool invocation started
-export interface ToolCallStartPacket extends ACPBaseEvent {
+// tool_call_start - Tool invocation started
+export interface ToolCallStartPacket extends SandboxEventBase {
   type: "tool_call_start";
   tool_call_id: string;
   kind: string | null;
@@ -448,8 +448,8 @@ export interface ToolCallStartPacket extends ACPBaseEvent {
   session_update?: string;
 }
 
-// ACP: tool_call_progress - Tool execution progress/completion
-export interface ToolCallProgressPacket extends ACPBaseEvent {
+// tool_call_progress - Tool execution progress/completion
+export interface ToolCallProgressPacket extends SandboxEventBase {
   type: "tool_call_progress";
   tool_call_id: string;
   kind: string | null;
@@ -462,8 +462,8 @@ export interface ToolCallProgressPacket extends ACPBaseEvent {
   session_update?: string;
 }
 
-// ACP: agent_plan_update - Agent's execution plan
-export interface AgentPlanUpdatePacket extends ACPBaseEvent {
+// agent_plan_update - Agent's execution plan
+export interface AgentPlanUpdatePacket extends SandboxEventBase {
   type: "agent_plan_update";
   entries: Array<{
     id: string;
@@ -474,21 +474,21 @@ export interface AgentPlanUpdatePacket extends ACPBaseEvent {
   session_update?: string;
 }
 
-// ACP: current_mode_update - Agent mode change
-export interface CurrentModeUpdatePacket extends ACPBaseEvent {
+// current_mode_update - Agent mode change
+export interface CurrentModeUpdatePacket extends SandboxEventBase {
   type: "current_mode_update";
   current_mode_id: string | null;
   session_update?: string;
 }
 
-// ACP: prompt_response - Agent finished processing
-export interface PromptResponsePacket extends ACPBaseEvent {
+// prompt_response - Agent finished processing
+export interface PromptResponsePacket extends SandboxEventBase {
   type: "prompt_response";
   stop_reason: string | null;
 }
 
-// ACP: error - Error from ACP
-export interface ACPErrorPacket {
+// error - Sandbox-event error
+export interface SandboxErrorPacket {
   type: "error";
   code: string | null;
   message: string;
@@ -496,9 +496,9 @@ export interface ACPErrorPacket {
   timestamp: string;
 }
 
-// Union type for all packets (including raw ACP packets)
+// Union type for all packets (including raw sandbox-event packets)
 export type StreamPacket =
-  // Raw ACP packets with ALL fields
+  // Sandbox-event packets
   | AgentMessageChunkPacket
   | AgentThoughtChunkPacket
   | ToolCallStartPacket
@@ -506,7 +506,7 @@ export type StreamPacket =
   | AgentPlanUpdatePacket
   | CurrentModeUpdatePacket
   | PromptResponsePacket
-  | ACPErrorPacket
+  | SandboxErrorPacket
   // Custom Onyx packets
   | StepStartPacket
   | StepDeltaPacket

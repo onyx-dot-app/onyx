@@ -1,6 +1,11 @@
 #!/bin/bash
 
-set -euo pipefail
+# This script must remain compatible with bash 3.2 — macOS still ships
+# 3.2.57 by default and the curl-pipe installer is invoked with /bin/bash.
+# Avoid bash 4+ features (associative arrays, ${var,,}, etc.). Notably,
+# do not re-enable `set -u`: on bash 3.2, `"${arr[@]}"` errors as
+# "unbound variable" when arr is an explicitly-declared empty array.
+set -eo pipefail
 
 # Expected resource requirements (overridden below if --lite)
 EXPECTED_DOCKER_RAM_GB=10
@@ -209,6 +214,41 @@ detect_compose_cmd() {
 }
 detect_compose_cmd || true
 
+# --- Docker daemon access detection ---
+# On Linux, a non-root user can only talk to /var/run/docker.sock when they're
+# in the "docker" group. Group membership doesn't apply to the current shell,
+# so when we add the user to the group mid-script we instead prefix subsequent
+# docker commands with sudo to finish this run. Future runs (after the user
+# logs out and back in) won't need it.
+#
+# Trailing ``env`` anchors the splat with a literal command so bash 3.2's
+# single-pass parser doesn't misclassify the inline ``VAR=val`` prefixes, and
+# so sudo's ``env_reset`` can't strip them (they're positional args to ``env``).
+DOCKER_SUDO=(env)
+refresh_docker_sudo() {
+    DOCKER_SUDO=(env)
+    if ! command -v docker &> /dev/null; then
+        return
+    fi
+    if [[ "$(id -u)" -eq 0 ]]; then
+        return
+    fi
+    if docker info &> /dev/null; then
+        return
+    fi
+    if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
+        DOCKER_SUDO=(sudo env)
+    fi
+}
+refresh_docker_sudo
+
+# 0 iff DOCKER_SUDO runs commands under sudo. Wrapped so callers don't
+# open-code the [0]-element check (the ``env``-anchor workaround above
+# precludes the cleaner `${#DOCKER_SUDO[@]} > 0` form).
+is_using_sudo() {
+    [[ "${DOCKER_SUDO[0]}" == "sudo" ]]
+}
+
 # Ensures a required file is present. With --local, verifies the file exists on
 # disk. Otherwise, downloads it from the given URL. Returns 0 on success, 1 on
 # failure (caller should handle the exit).
@@ -342,7 +382,8 @@ if [ "$SHUTDOWN_MODE" = true ]; then
 
             # Stop containers (without removing them)
             build_compose_file_args true
-            if (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" stop); then
+            # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+            if (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="${HOST_PORT:-3000}" IMAGE_TAG="${IMAGE_TAG:-edge}" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" stop); then
                 print_success "Onyx containers stopped (paused)"
             else
                 print_error "Failed to stop containers"
@@ -395,7 +436,8 @@ if [ "$DELETE_DATA_MODE" = true ]; then
 
             # Stop and remove containers with volumes
             build_compose_file_args true
-            if (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" down -v); then
+            # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+            if (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="${HOST_PORT:-3000}" IMAGE_TAG="${IMAGE_TAG:-edge}" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" down -v); then
                 print_success "Onyx containers and volumes removed"
             else
                 print_error "Failed to remove containers and volumes"
@@ -534,25 +576,22 @@ if command -v docker &> /dev/null \
     fi
 fi
 
-# On Linux, ensure the current user can talk to the Docker daemon without
-# sudo.  If necessary, add them to the "docker" group and re-exec the
-# script under that group so the rest of the install proceeds normally.
-if command -v docker &> /dev/null \
-    && { [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; } \
-    && [[ "$(id -u)" -ne 0 ]] \
-    && ! docker info &> /dev/null; then
-    if [[ "${_ONYX_REEXEC:-}" = "1" ]]; then
-        print_error "Cannot connect to Docker after group re-exec."
-        print_info "Log out and back in, then run the script again."
-        exit 1
+# On Linux, ensure docker commands can talk to the daemon. If `docker info`
+# fails, fall back to sudo for the rest of this run. Add the user to the
+# "docker" group only when they aren't already a member — `docker info` also
+# fails when the daemon is stopped, and we don't want to silently mutate
+# group membership in that case. The downstream daemon check will exit with
+# a clearer message if the daemon really is down.
+refresh_docker_sudo
+if is_using_sudo; then
+    if ! id -nG "$USER" | grep -qw docker; then
+        if ! getent group docker &> /dev/null; then
+            sudo groupadd docker
+        fi
+        print_info "Adding $USER to the docker group (effective on next login)..."
+        sudo usermod -aG docker "$USER"
     fi
-    if ! getent group docker &> /dev/null; then
-        sudo groupadd docker
-    fi
-    print_info "Adding $USER to the docker group..."
-    sudo usermod -aG docker "$USER"
-    print_info "Re-launching with docker group active..."
-    exec sg docker -c "_ONYX_REEXEC=1 bash $(printf '%q ' "$0" "$@")"
+    print_info "Using sudo for docker commands in this run."
 fi
 
 # ASCII Art Banner
@@ -661,7 +700,7 @@ version_compare() {
 }
 
 # Check Docker daemon
-if ! docker info &> /dev/null; then
+if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker info &> /dev/null; then
     if [[ "$OSTYPE" == "darwin"* ]]; then
         print_info "Docker daemon is not running. Starting Docker Desktop..."
         open -a Docker
@@ -902,7 +941,8 @@ ENV_TEMPLATE="${INSTALL_ROOT}/deployment/env.template"
 # Check if services are already running
 if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
     build_compose_file_args true
-    RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps -q 2>/dev/null | wc -l)
+    # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+    RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps -q 2>/dev/null | wc -l)
     if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
         print_error "Onyx services are currently running!"
         echo ""
@@ -930,8 +970,8 @@ if [ -f "$ENV_FILE" ]; then
             # --include-craft requires the craft-tagged backend image (Node.js
             # + opencode CLI are only built into that image), so the tag is
             # forced rather than prompted for.
-            VERSION="craft-latest"
-            print_info "Update selected. Using craft-latest (required by --include-craft)."
+            VERSION="craft-edge"
+            print_info "Update selected. Using craft-edge (required by --include-craft)."
         else
             print_info "Update selected. Which tag would you like to deploy?"
             echo ""
@@ -978,8 +1018,8 @@ else
     # Ask for version (skipped when --include-craft forces the craft-tagged
     # backend image, which is the only image that ships Node.js + opencode CLI).
     if [ "$INCLUDE_CRAFT" = true ]; then
-        VERSION="craft-latest"
-        print_info "Using craft-latest (required by --include-craft)."
+        VERSION="craft-edge"
+        print_info "Using craft-edge (required by --include-craft)."
     else
         print_info "Which tag would you like to deploy?"
         echo ""
@@ -1072,18 +1112,6 @@ else
         fi
         print_success "Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=docker)"
 
-        # Pre-create the dedicated sandbox bridge. docker-compose references
-        # it as external=true so it must exist before `compose up`.
-        SANDBOX_NET="${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}"
-        if ! docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
-            if docker network create "$SANDBOX_NET" >/dev/null 2>&1; then
-                print_success "Created sandbox bridge network: $SANDBOX_NET"
-            else
-                print_warning "Could not create sandbox network $SANDBOX_NET — create it manually:"
-                echo "    docker network create $SANDBOX_NET"
-            fi
-        fi
-
         # Trust boundary warning. api_server + background mount the host
         # Docker socket so they can drive sandbox containers. Anything that
         # can talk to that socket is effectively root on the host.
@@ -1107,6 +1135,19 @@ else
     echo "  • Domain settings (for production)"
     echo "  • Onyx Craft (set ENABLE_CRAFT=true)"
     echo ""
+fi
+
+# Pre-create the sandbox bridge — compose overlay references it as external.
+if [ "$INCLUDE_CRAFT" = true ]; then
+    SANDBOX_NET="${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}"
+    if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
+        if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network create "$SANDBOX_NET" >/dev/null 2>&1; then
+            print_success "Created sandbox bridge network: $SANDBOX_NET"
+        else
+            print_warning "Could not create sandbox network $SANDBOX_NET — create it manually:"
+            echo "    docker network create $SANDBOX_NET"
+        fi
+    fi
 fi
 
 # Function to check if a port is available
@@ -1237,7 +1278,8 @@ print_info "Downloading Docker images (this may take a while)..."
 # substitution prefers shell env over .env, so without this an exported
 # IMAGE_TAG in the user's shellrc would silently swap the images being pulled.
 build_compose_file_args
-if (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" pull --quiet); then
+# shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+if (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" pull --quiet); then
     print_success "Docker images downloaded successfully"
 else
     print_error "Failed to download Docker images"
@@ -1262,18 +1304,21 @@ echo ""
 UP_EXIT=0
 if [ "$USE_LATEST" = true ]; then
     print_info "Force pulling latest images and recreating containers..."
-    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
+    # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+    (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 else
-    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
+    # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+    (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 fi
 if [ $UP_EXIT -ne 0 ]; then
     print_error "Failed to start Onyx services"
     echo ""
     print_info "Current container status:"
-    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps)
+    # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+    (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps)
     echo ""
     print_info "Check the logs of any unhealthy service:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $(is_using_sudo && echo "sudo ")$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
     exit 1
@@ -1291,7 +1336,7 @@ else
     echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers started  ⚠️${NC}"
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     print_info "Services may still be initializing. Check status with:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} ps)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $(is_using_sudo && echo "sudo ")$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} ps)"
 fi
 echo ""
 print_info "Access Onyx at:"

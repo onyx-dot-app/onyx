@@ -1,15 +1,11 @@
 "use client";
 
 import { useState } from "react";
-
-import { MessageCard } from "@opal/components";
-
+import { MessageCard, Tabs } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import Tabs from "@/refresh-components/Tabs";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { IndexAttemptSnapshot } from "@/lib/types";
-
 import { DocPermissionSyncAttemptsTable } from "./DocPermissionSyncAttemptsTable";
 import { ExternalGroupSyncAttemptsTable } from "./ExternalGroupSyncAttemptsTable";
 import { IndexAttemptsTable } from "./IndexAttemptsTable";
@@ -50,10 +46,8 @@ import useSyncAttemptsPaginatedFetch from "./useSyncAttemptsPaginatedFetch";
 
 const ITEMS_PER_PAGE = 8;
 const PAGES_PER_BATCH = 4;
-
 const NOT_APPLICABLE_DOC_PERMISSIONS_MESSAGE =
   "This connector does not use a separate document-permission syncing job.";
-
 const NOT_APPLICABLE_GROUP_MEMBERSHIP_MESSAGE =
   "This connector does not use a separate group-membership syncing job.";
 
@@ -90,7 +84,7 @@ export function SyncAttemptsTabs({
       value={tab}
       onValueChange={(value) => setTab(value as SyncAttemptsTab)}
     >
-      <Tabs.List variant="contained">
+      <Tabs.List>
         <Tabs.Trigger value={SyncAttemptsTab.INDEXING}>Indexing</Tabs.Trigger>
         <Tabs.Trigger value={SyncAttemptsTab.DOC_PERMISSIONS}>
           Document Permission Sync

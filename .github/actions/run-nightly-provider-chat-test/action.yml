@@ -129,8 +129,13 @@ runs:
             -e OPENSEARCH_HOST=opensearch \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
+            -e MODEL_SERVER_HOST=inference_model_server \
+            -e INDEXING_MODEL_SERVER_HOST=inference_model_server \
             -e TEST_WEB_HOSTNAME=test-runner \
             -e AWS_REGION_NAME=us-west-2 \
+            -e S3_ENDPOINT_URL=http://minio:9000 \
+            -e S3_AWS_ACCESS_KEY_ID=minioadmin \
+            -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
             -e NIGHTLY_LLM_PROVIDER="${NIGHTLY_LLM_PROVIDER}" \
             -e NIGHTLY_LLM_MODELS="${MODELS}" \
             -e NIGHTLY_LLM_API_KEY="${NIGHTLY_LLM_API_KEY}" \

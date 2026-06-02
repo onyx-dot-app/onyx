@@ -6,7 +6,7 @@ import { SvgUserSync } from "@opal/icons";
 import { toast } from "@/hooks/useToast";
 import { useScimToken } from "@/hooks/useScimToken";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { ThreeDotsLoader } from "@/components/Loading";
 

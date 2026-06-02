@@ -36,7 +36,7 @@ Lives under `/craft/v1/tasks` (new section in the existing Craft left nav).
 The landing page. A table of the user's tasks:
 
 - Name
-- Schedule (human-readable: "Every hour", "Mondays at 9:00 AM PT")
+- Schedule (human-readable: "Every hour", "Mondays at 9:00 AM")
 - Status (active / paused)
 - Last run (relative time + success/failure indicator)
 - Next run (relative time)
@@ -56,10 +56,8 @@ A single form, not a wizard. Fields:
   Craft chat input (multi-line, attachments come later).
 - **Schedule** — three modes via a tab/segmented control:
   - *Interval* — "Every N minutes/hours/days."
-  - *Daily/weekly* — pick days of week + time of day + timezone.
+  - *Daily/weekly* — pick days of week + time of day.
   - *Advanced* — raw cron expression with a live human-readable preview.
-- **Timezone** — defaults to the user's timezone; explicit so weekly tasks behave
-  predictably across DST.
 - **Status** — active / paused toggle. Defaults to active.
 
 Save → returns to the list. Save and run now → returns to the list and immediately
@@ -98,7 +96,7 @@ No new run-detail page is needed — the existing session view is the run detail
 
 1. User clicks **Scheduled Tasks** in the Craft nav.
 2. Clicks **Create scheduled task**.
-3. Fills in name, prompt, schedule, timezone. Saves.
+3. Fills in name, prompt, schedule. Saves.
 4. Lands back on the list with the new task at the top and a next-run time computed.
 
 ### Editing a task

@@ -13,7 +13,11 @@ export function useDocumentSets(getEditable: boolean = false) {
     : SWR_KEYS.documentSets;
 
   const swrResponse = useSWR<DocumentSetSummary[]>(url, errorHandlingFetcher, {
-    refreshInterval: 5000, // 5 seconds
+    // Fast poll while a set is syncing, slow background poll otherwise so we
+    // still pick up syncs kicked off in another admin tab without hammering
+    // the endpoint at 5 s intervals when nothing is happening.
+    refreshInterval: (data) =>
+      data && data.some((ds) => !ds.is_up_to_date) ? 5000 : 30000,
   });
 
   return {

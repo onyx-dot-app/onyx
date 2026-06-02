@@ -43,7 +43,7 @@ export default function BuildWelcome({
           What shall we craft today?
         </Text>
       </div>
-      <div className="w-full max-w-2xl">
+      <div className="w-full max-w-[720px]">
         <InputBar
           ref={inputBarRef}
           onSubmit={onSubmit}

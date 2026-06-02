@@ -8,7 +8,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Tooltip } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
-import { formatDurationSeconds } from "@/lib/time";
+import { formatDurationSeconds } from "@opal/time";
 import { noProp } from "@/lib/utils";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";

@@ -35,4 +35,13 @@ spec:
       ports:
         - protocol: TCP
           port: 8731
+        # opencode serve — driven by OpencodeServeClient.
+        - protocol: TCP
+          port: 4096
+        # Next.js dev servers, one per session. PORT_END is exclusive
+        # (Python range() — see build_session.py); k8s endPort is inclusive,
+        # hence sub 1.
+        - protocol: TCP
+          port: {{ .Values.configMap.SANDBOX_NEXTJS_PORT_START | default 3010 }}
+          endPort: {{ sub (int (.Values.configMap.SANDBOX_NEXTJS_PORT_END | default 3100)) 1 }}
 {{- end }}

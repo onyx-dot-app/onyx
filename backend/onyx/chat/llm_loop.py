@@ -12,6 +12,7 @@ from onyx.chat.citation_processor import CitationMode
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
+from onyx.chat.llm_step import _looks_like_xml_tool_call_payload
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.chat.llm_step import run_llm_step
 from onyx.chat.models import ChatMessageSimple
@@ -131,18 +132,6 @@ def _build_empty_llm_response_error(
             "completed. No text or tool calls were received from the upstream "
             "provider."
         ),
-    )
-
-
-def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
-    """Detect XML-style marshaled tool calls emitted as plain text."""
-    if not text:
-        return False
-    lowered = text.lower()
-    return (
-        "<function_calls" in lowered
-        and "<invoke" in lowered
-        and "<parameter" in lowered
     )
 
 

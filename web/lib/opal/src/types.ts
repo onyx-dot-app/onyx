@@ -82,6 +82,13 @@ export type ExtremaSizeVariants = Extract<SizeVariants, "fit" | "full">;
 export type OverridableExtremaSizeVariants = ExtremaSizeVariants | number;
 
 // ---------------------------------------------------------------------------
+// Orientation Variants
+// ---------------------------------------------------------------------------
+
+/** Axis orientation — `"horizontal"` or `"vertical"`. */
+export type OrientationVariants = "horizontal" | "vertical";
+
+// ---------------------------------------------------------------------------
 // Border Variants
 // ---------------------------------------------------------------------------
 
@@ -187,6 +194,26 @@ export interface RichStr {
   readonly __brand: "RichStr";
   readonly raw: string;
 }
+
+// ---------------------------------------------------------------------------
+// Input Variants
+// ---------------------------------------------------------------------------
+
+/**
+ * Visual state variants for text input components.
+ *
+ * - `"primary"` — default editable state
+ * - `"internal"` — subtle/borderless style for inline use
+ * - `"error"` — error state with red border
+ * - `"disabled"` — non-interactive, grayed out
+ * - `"readOnly"` — visually transparent, not editable
+ */
+export type InputVariants =
+  | "primary"
+  | "internal"
+  | "error"
+  | "disabled"
+  | "readOnly";
 
 /**
  * HTML button `type` attribute values.

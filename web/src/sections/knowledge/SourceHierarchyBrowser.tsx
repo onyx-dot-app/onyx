@@ -13,7 +13,7 @@ import { Button, Divider as OpalDivider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { Checkbox } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { Popover } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
@@ -44,8 +44,8 @@ import {
   fetchHierarchyNodeDocuments,
 } from "@/lib/hierarchy/svc";
 import { AgentAttachedDocument } from "@/lib/agents/types";
-import { timeAgo } from "@/lib/time";
-import Spacer from "@/refresh-components/Spacer";
+import { timeAgo } from "@opal/time";
+import { Spacer } from "@opal/components";
 
 // ============================================================================
 // HIERARCHY BREADCRUMB - Navigation path for folder hierarchy
@@ -683,7 +683,7 @@ export default function SourceHierarchyBrowser({
       >
         <GeneralLayouts.Section height="auto" width="fit">
           <InputTypeIn
-            leftSearchIcon
+            searchIcon
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
             placeholder="Search..."
