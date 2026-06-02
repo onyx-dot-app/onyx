@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.15
+version: 0.5.16
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,8 +16,12 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: Bump the `code-interpreter` subchart from 0.4.2 to 0.4.3.
+    - kind: added
+      description: Allow disabling the bundled `redis-operator` subchart
+        independently of the Redis instance via `redisOperator.enabled`. Leave it
+        unset to keep the existing behavior (operator follows `redis.enabled`);
+        set it to `false` to skip the bundled operator and have an existing
+        cluster-wide redis-operator reconcile the chart's Redis CR.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0
@@ -33,11 +37,13 @@ dependencies:
     repository: https://kubernetes.github.io/ingress-nginx
     condition: nginx.enabled
     alias: nginx
-  # Installs the Redis CRD that the 'redis' subchart's CR binds to.
+  # Helm uses the first condition path that exists: `redisOperator.enabled` is
+  # unset by default, so this falls through to `redis.enabled`. Set it false to
+  # skip the bundled operator and reuse an existing one (see values.yaml).
   - name: redis-operator
     version: 0.24.0
     repository: https://ot-container-kit.github.io/helm-charts
-    condition: redis.enabled
+    condition: redisOperator.enabled,redis.enabled
   - name: redis
     version: 0.16.6
     repository: https://ot-container-kit.github.io/helm-charts
