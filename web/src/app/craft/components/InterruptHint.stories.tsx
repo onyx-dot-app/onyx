@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import InterruptHint from "@/app/craft/components/InterruptHint";
 
 const meta: Meta<typeof InterruptHint> = {
-  title: "Apps/Craft/Interrupt Hint",
+  title: "Apps/Craft/Input Bar/Interrupt Hint",
   component: InterruptHint,
   tags: ["autodocs"],
   args: {
