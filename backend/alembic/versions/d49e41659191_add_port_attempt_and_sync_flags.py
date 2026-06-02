@@ -45,14 +45,14 @@ def upgrade() -> None:
         sa.Column(
             "time_created",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.func.now(),
             nullable=False,
         ),
         sa.Column("time_started", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "time_updated",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.func.now(),
             nullable=False,
         ),
         sa.Column("time_completed", sa.DateTime(timezone=True), nullable=True),
@@ -96,7 +96,7 @@ def upgrade() -> None:
         sa.Column(
             "is_synthetic_seed",
             sa.Boolean(),
-            server_default=sa.text("false"),
+            server_default=sa.false(),
             nullable=False,
         ),
     )
@@ -106,7 +106,7 @@ def upgrade() -> None:
         sa.Column(
             "secondary_only_sync_pending",
             sa.Boolean(),
-            server_default=sa.text("false"),
+            server_default=sa.false(),
             nullable=False,
         ),
     )
