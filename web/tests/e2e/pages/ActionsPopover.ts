@@ -217,6 +217,16 @@ export class ActionsPopover {
     ).toBeVisible();
   }
 
+  /** Non-throwing: whether the drilled-in tool-list view appears within `timeoutMs`. */
+  async toolListVisible(timeoutMs = 3000): Promise<boolean> {
+    return this.popover
+      .getByText(/(Enable|Disable) All/i)
+      .first()
+      .waitFor({ state: "visible", timeout: timeoutMs })
+      .then(() => true)
+      .catch(() => false);
+  }
+
   // ---------------------------------------------------------------------------
   // Tool rows
   // ---------------------------------------------------------------------------

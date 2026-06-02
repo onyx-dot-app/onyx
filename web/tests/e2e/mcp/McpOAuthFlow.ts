@@ -529,16 +529,23 @@ export class McpOAuthFlow {
     returnSubstring: string
   ): Promise<void> {
     const outcome = await actions.clickServerRowDetectingNavigation(serverName);
-    if (outcome === "navigated") {
-      await this.completeFlow({ expectReturnPathContains: returnSubstring });
-      return;
+
+    // An already-authenticated server drills into its tool list, where a
+    // "Re-Authenticate" footer row kicks off OAuth. Only take that path if the
+    // tool list actually appears.
+    if (outcome === "drilled" && (await actions.toolListVisible(3000))) {
+      await this.clickAndWaitForPossibleUrlChange(
+        () => actions.clickReauthRow(),
+        "Re-authenticate click"
+      );
     }
 
-    await actions.expectToolListView();
-    await this.clickAndWaitForPossibleUrlChange(
-      () => actions.clickReauthRow(),
-      "Re-authenticate click"
-    );
+    // For an unauthenticated server the row click already started OAuth. With
+    // the auto-issuing mock IdP the round-trip can complete before any url
+    // change is observable, so clickServerRowDetectingNavigation may report a
+    // false "drilled". completeFlow drives the redirect chain and tolerates an
+    // already-completed round-trip (it returns immediately if we are back on
+    // the return path), so it handles both the navigated and false-drilled cases.
     await this.completeFlow({ expectReturnPathContains: returnSubstring });
   }
 }
