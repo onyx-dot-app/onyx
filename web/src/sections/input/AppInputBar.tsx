@@ -866,8 +866,11 @@ const AppInputBar = React.memo(
                       }
                       data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {
-                        if (handleTileKeyDown(event)) return;
+                        // Queue nav owns keys while a message is highlighted, so
+                        // it must run before tile handling (whose Backspace guard
+                        // would otherwise win).
                         if (queueNav.handleKeyDown(event)) return;
+                        if (handleTileKeyDown(event)) return;
 
                         // Enter to submit or queue (Shift+Enter falls through to browser default: inserts <br>)
                         if (
