@@ -27,18 +27,21 @@ interface FlyoutRowProps {
   label: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onHoverOpen: () => void;
   children: ReactNode[];
 }
 
 // A menu row that opens a flyout panel anchored to its right. The panel is its
 // own Popover nested inside the main menu's content; Radix treats nested
 // portaled content as a dismissable-layer "branch", so interacting with the
-// flyout doesn't close the main menu.
+// flyout doesn't close the main menu. Opens on hover (and click), matching the
+// Anthropic composer menu.
 function FlyoutRow({
   icon,
   label,
   open,
   onOpenChange,
+  onHoverOpen,
   children,
 }: FlyoutRowProps) {
   return (
@@ -47,12 +50,20 @@ function FlyoutRow({
         <LineItem
           icon={icon}
           selected={open}
+          onPointerEnter={onHoverOpen}
           rightChildren={<SvgChevronRight className="h-4 w-4 text-text-03" />}
         >
           {label}
         </LineItem>
       </Popover.Trigger>
-      <Popover.Content side="right" align="start" sideOffset={8} width="lg">
+      <Popover.Content
+        side="right"
+        align="start"
+        sideOffset={8}
+        width="lg"
+        // Hover-opening shouldn't yank focus out of the textarea.
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <Popover.Menu>{children}</Popover.Menu>
       </Popover.Content>
     </Popover>
@@ -131,7 +142,13 @@ export function PlusMenuButton({
   // Flat array so a literal `null` renders as a Popover.Menu divider; a
   // divider sits between the Files action and the flyout rows when present.
   const menuChildren: ReactNode[] = [
-    <LineItem key="files" icon={SvgPaperclip} onClick={handleAttachFiles}>
+    <LineItem
+      key="files"
+      icon={SvgPaperclip}
+      onClick={handleAttachFiles}
+      // Hovering a non-flyout row collapses any open flyout.
+      onPointerEnter={() => setOpenSection(null)}
+    >
       Add files or photos
     </LineItem>,
   ];
@@ -146,6 +163,7 @@ export function PlusMenuButton({
         label="Skills"
         open={openSection === "skills"}
         onOpenChange={(next) => sectionOpenChange("skills", next)}
+        onHoverOpen={() => setOpenSection("skills")}
       >
         {skillRows}
       </FlyoutRow>
@@ -160,6 +178,7 @@ export function PlusMenuButton({
         label="Apps"
         open={openSection === "apps"}
         onOpenChange={(next) => sectionOpenChange("apps", next)}
+        onHoverOpen={() => setOpenSection("apps")}
       >
         {appRows}
       </FlyoutRow>
