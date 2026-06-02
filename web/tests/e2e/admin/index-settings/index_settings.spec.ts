@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 
 const INDEX_SETTINGS_URL = "/admin/configuration/index-settings";
@@ -352,4 +352,138 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
 
     await expect.poll(() => setNewSettingsCalled, { timeout: 5000 }).toBe(true);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Empty-registry cloud providers (LiteLLM / Azure)
+//
+// These providers ship no pre-registered models, so their connect modal
+// collects the model spec (name + dimension) itself. Regression coverage for
+// the bug where that spec was dropped after the provider row was saved: the
+// model was never staged (so no search-settings row was ever created), and
+// even when staged it was misresolved as self-hosted (provider_type=null),
+// bypassing the saved cloud credentials. Both must reach
+// set-new-search-settings with the typed model AND the correct provider_type.
+// ---------------------------------------------------------------------------
+
+interface EmptyRegistryProvider {
+  providerType: string;
+  displayName: string;
+  // Fills the credential fields unique to this provider (the model-spec
+  // fields are shared and filled by the test body).
+  fillCredentials: (modal: Locator) => Promise<void>;
+}
+
+const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProvider[] = [
+  {
+    providerType: "litellm",
+    displayName: "LiteLLM",
+    fillCredentials: async (modal) => {
+      await modal.getByLabel("API Base URL").fill("https://proxy.example.com");
+      await modal.getByLabel("API Key", { exact: true }).fill("sk-test-key");
+    },
+  },
+  {
+    providerType: "azure",
+    displayName: "Azure",
+    fillCredentials: async (modal) => {
+      await modal
+        .getByLabel("Target URL")
+        .fill("https://res.openai.azure.com/openai/v1/embeddings");
+      await modal.getByLabel("API Key", { exact: true }).fill("az-test-key");
+      await modal.getByLabel("API Version").fill("2023-05-15");
+      await modal.getByLabel("Deployment Name").fill("my-deployment");
+    },
+  },
+];
+
+test.describe("Index Settings — empty-registry providers @exclusive", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+  });
+
+  for (const {
+    providerType,
+    displayName,
+    fillCredentials,
+  } of EMPTY_REGISTRY_PROVIDERS) {
+    test(`connecting ${displayName} stages its model and applies with provider_type="${providerType}"`, async ({
+      page,
+    }) => {
+      // Stub the credential test + save so no real endpoint/key is needed.
+      await page.route(TEST_EMBEDDING_API, async (route) => {
+        await route.fulfill({ status: 200, body: JSON.stringify({}) });
+      });
+      await page.route(EMBEDDING_PROVIDER_API, async (route) => {
+        const method = route.request().method();
+        if (method === "PUT") {
+          await route.fulfill({
+            status: 200,
+            body: JSON.stringify({ provider_type: providerType }),
+          });
+        } else if (method === "GET") {
+          await route.fulfill({ status: 200, body: JSON.stringify([]) });
+        } else {
+          await route.continue();
+        }
+      });
+
+      // Capture the search-settings request body — this is what the bug broke.
+      const bodyPromise = new Promise<Record<string, unknown>>((resolve) => {
+        void page.route(SET_NEW_SETTINGS_API, async (route) => {
+          resolve(
+            JSON.parse(route.request().postData() ?? "{}") as Record<
+              string,
+              unknown
+            >
+          );
+          await route.fulfill({ status: 200, body: JSON.stringify({}) });
+        });
+      });
+
+      await navigateToIndexSettings(page);
+      await expandModelPicker(page);
+      await switchToCloudTab(page);
+
+      // Empty-registry providers render an "Add Configuration" card instead of
+      // model cards. Open it and confirm the right provider modal appeared.
+      await page
+        .getByText(
+          new RegExp(
+            `add configs for your ${displayName} embedding providers`,
+            "i"
+          )
+        )
+        .click();
+      const modal = page.getByRole("dialog", {
+        name: new RegExp(`set up ${displayName}`, "i"),
+      });
+      await expect(modal).toBeVisible({ timeout: 10000 });
+
+      await fillCredentials(modal);
+      await modal.getByLabel("Model Name").fill("my-embed-model");
+      await modal.getByLabel("Model Dimension").fill("1024");
+
+      const connectButton = modal.getByRole("button", { name: /connect/i });
+      await expect(connectButton).toBeEnabled({ timeout: 5000 });
+      await connectButton.click();
+      await expect(modal).not.toBeVisible({ timeout: 15000 });
+
+      // The just-defined model must be staged — Apply & Re-index appears.
+      const applyButton = page.getByRole("button", {
+        name: "Apply & Re-index",
+      });
+      await expect(applyButton).toBeVisible({ timeout: 10000 });
+      await applyButton.click();
+
+      const body = await bodyPromise;
+      expect(body.model_name).toBe("my-embed-model");
+      expect(Number(body.model_dim)).toBe(1024);
+      // The core regression: the model is bound to its cloud provider, NOT
+      // sent as provider_type=null (which the backend treats as self-hosted
+      // and would ignore the credentials we just saved).
+      expect(body.provider_type).toBe(providerType);
+    });
+  }
 });
