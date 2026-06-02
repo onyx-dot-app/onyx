@@ -11,6 +11,8 @@ import {
   customFixture,
 } from "@/lib/skills/__fixtures__/picker";
 import type { SkillsList } from "@/refresh-pages/admin/SkillsPage/interfaces";
+import type { PickerEntry } from "@/lib/skills/picker";
+import type { ExternalAppType } from "@/app/craft/v1/apps/registry";
 
 const SWR_NO_FETCH = {
   provider: () => new Map(),
@@ -34,6 +36,26 @@ const fullFallback = {
   [SWR_KEYS.userSkills]: skillsList,
   [SWR_KEYS.buildExternalApps]: apps,
 };
+
+const skillEntry = (slug: string, name: string): PickerEntry => ({
+  kind: "skill",
+  slug,
+  name,
+  description: "",
+});
+
+const appEntry = (
+  slug: string,
+  name: string,
+  appType: ExternalAppType
+): PickerEntry => ({
+  kind: "app",
+  slug,
+  name,
+  description: "",
+  appType,
+  authenticated: true,
+});
 
 const meta: Meta<typeof CraftInputBar> = {
   title: "Apps/Craft/Input Bar/Craft Input Bar",
@@ -96,4 +118,30 @@ export const SandboxInitializing: Story = {
 
 export const NoBottomRounding: Story = {
   args: { noBottomRounding: true },
+};
+
+/** Active skill + app chips shown in the strip above the textarea. */
+export const WithSkillChips: Story = {
+  args: {
+    initialSkills: [
+      skillEntry("pptx", "PPTX"),
+      skillEntry("report-writer", "Report Writer"),
+      appEntry("slack", "Slack", "SLACK"),
+    ],
+  },
+};
+
+/** Many chips wrap within the single flush-left row. */
+export const WithManySkillChips: Story = {
+  args: {
+    initialSkills: [
+      skillEntry("pptx", "PPTX"),
+      skillEntry("pdf", "PDF"),
+      skillEntry("report-writer", "Report Writer"),
+      skillEntry("data-analysis", "Data Analysis"),
+      appEntry("slack", "Slack", "SLACK"),
+      appEntry("gmail", "Gmail", "GMAIL"),
+      appEntry("github", "GitHub", "GITHUB"),
+    ],
+  },
 };

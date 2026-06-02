@@ -53,6 +53,8 @@ export interface CraftInputBarProps {
   onRemoveQueuedMessage?: (index: number) => void;
   onInterrupt?: () => void;
   isInterrupting?: boolean;
+  /** Seed the active skill chips. For stories/tests; production callers leave unset. */
+  initialSkills?: PickerEntry[];
 }
 
 const CraftInputBar = memo(
@@ -70,6 +72,7 @@ const CraftInputBar = memo(
         onRemoveQueuedMessage,
         onInterrupt,
         isInterrupting = false,
+        initialSkills,
       },
       ref
     ) => {
@@ -91,7 +94,9 @@ const CraftInputBar = memo(
         [skillsData, appsData]
       );
 
-      const [activeSkills, setActiveSkills] = useState<PickerEntry[]>([]);
+      const [activeSkills, setActiveSkills] = useState<PickerEntry[]>(
+        initialSkills ?? []
+      );
       const [session, setSession] = useState<PickerSession>(
         INITIAL_PICKER_SESSION
       );
