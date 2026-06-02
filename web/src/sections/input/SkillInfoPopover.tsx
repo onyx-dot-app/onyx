@@ -107,7 +107,8 @@ function SkillInfoPopover({
       />
       <div
         ref={containerRef}
-        role="note"
+        role="dialog"
+        aria-modal="true"
         aria-label={`Skill: ${name}`}
         tabIndex={-1}
         data-testid="skill-info-popover"

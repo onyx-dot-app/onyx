@@ -44,7 +44,14 @@ import Keycap from "@/refresh-components/Keycap";
 import { useDoubleEscapeInterrupt } from "@/hooks/useDoubleEscapeInterrupt";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import useUserSkills from "@/hooks/useUserSkills";
-import { detectSlashTrigger, toPickerSkills } from "@/lib/skills/picker";
+import { toPickerSkills } from "@/lib/skills/picker";
+import {
+  reduceOnInput,
+  reduceOnSelection,
+  reduceOnDismiss,
+  INITIAL_PICKER_SESSION,
+  type PickerSession,
+} from "@/lib/skills/pickerSession";
 import { getTextContent } from "@/lib/contentEditable";
 import { isSkillTile } from "@/lib/richInputTile";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
@@ -226,15 +233,10 @@ const InputBar = memo(
         () => toPickerSkills(skillsData),
         [skillsData]
       );
-      const [skillPicker, setSkillPicker] = useState<{
-        open: boolean;
-        anchorRect: DOMRect | null;
-        query: string;
-      }>({ open: false, anchorRect: null, query: "" });
-      // `sessionSlash` is the `/` index of the tracked token; `suppressed` hides
-      // the picker within it after Esc. Both reset when that slash is gone.
-      const suppressedRef = useRef(false);
-      const sessionSlashRef = useRef<number | null>(null);
+      const [session, setSession] = useState<PickerSession>(
+        INITIAL_PICKER_SESSION
+      );
+      const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
 
       const [skillInfo, setSkillInfo] = useState<{
         tile: HTMLElement;
@@ -282,77 +284,46 @@ const InputBar = memo(
         return rect;
       }, [inputRef]);
 
-      const closeSkillPicker = useCallback(() => {
-        sessionSlashRef.current = null;
-        suppressedRef.current = false;
-        setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
-      }, []);
+      const closeSkillPicker = useCallback(
+        () => setSession(INITIAL_PICKER_SESSION),
+        []
+      );
 
-      // Esc keeps the picker closed within this token until its slash is gone.
-      const dismissSkillPicker = useCallback(() => {
-        suppressedRef.current = true;
-        setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
-      }, []);
+      const dismissSkillPicker = useCallback(
+        () => setSession(reduceOnDismiss),
+        []
+      );
 
       const handleEnhancedInput = useCallback(
         (event: SyntheticEvent<HTMLDivElement>) => {
           onInput(event);
-          const textBefore = getTextBeforeCursor();
-          const trigger =
-            textBefore === null ? null : detectSlashTrigger(textBefore);
-          if (!trigger) {
-            // Keep a dismissed session alive while its slash survives (so deleting
-            // back into the token doesn't reopen it); reset once the slash is gone.
-            const slash = sessionSlashRef.current;
-            if (slash === null || textBefore?.[slash] !== "/") {
-              closeSkillPicker();
-            } else {
-              setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
-            }
-            return;
-          }
-          if (trigger.slashIndex !== sessionSlashRef.current) {
-            sessionSlashRef.current = trigger.slashIndex;
-            suppressedRef.current = false;
-          }
-          if (suppressedRef.current) return;
-          setSkillPicker({
-            open: true,
-            anchorRect: getCaretRect(),
-            query: trigger.query,
-          });
+          const next = reduceOnInput(session, getTextBeforeCursor());
+          if (next.open) setAnchorRect(getCaretRect());
+          setSession(next);
         },
-        [onInput, getTextBeforeCursor, getCaretRect, closeSkillPicker]
+        [onInput, session, getTextBeforeCursor, getCaretRect]
       );
 
-      // Caret moves never open the picker; they only close it or sync its query.
       const handleSelectionChange = useCallback(() => {
-        if (!skillPicker.open) return;
+        if (!session.open) return;
         const textBefore = getTextBeforeCursor();
-        const trigger =
-          textBefore === null ? null : detectSlashTrigger(textBefore);
-        if (!trigger || trigger.slashIndex !== sessionSlashRef.current) {
-          closeSkillPicker();
-          return;
-        }
-        if (trigger.query !== skillPicker.query) {
-          setSkillPicker((s) => ({ ...s, query: trigger.query }));
-        }
-      }, [
-        skillPicker.open,
-        skillPicker.query,
-        getTextBeforeCursor,
-        closeSkillPicker,
-      ]);
+        setSession((prev) => reduceOnSelection(prev, textBefore));
+      }, [session.open, getTextBeforeCursor]);
 
       const handleSkillPickerSelect = useCallback(
         (slug: string) => {
-          if (!skillPicker.open) return;
-          const beforeToken = `/${skillPicker.query}`;
+          if (!session.open) return;
+          const beforeToken = `/${session.query}`;
           const name = pickerSkills.find((s) => s.slug === slug)?.name ?? slug;
           if (insertSkillTile(slug, name, beforeToken)) closeSkillPicker();
         },
-        [skillPicker, pickerSkills, insertSkillTile, closeSkillPicker]
+        [
+          session.open,
+          session.query,
+          pickerSkills,
+          insertSkillTile,
+          closeSkillPicker,
+        ]
       );
 
       const openSkillInfo = useCallback(
@@ -391,6 +362,7 @@ const InputBar = memo(
         reset: () => {
           clearMessage();
           clearFiles();
+          closeSkillPicker();
         },
         focus: () => {
           inputRef.current?.focus();
@@ -432,12 +404,20 @@ const InputBar = memo(
           const skill = slug && pickerSkills.find((s) => s.slug === slug);
           if (skill) {
             insertSkillTile(skill.slug, skill.name, "");
+            closeSkillPicker();
             return;
           }
 
           pasteText(text);
         },
-        [disabled, uploadFiles, pasteText, pickerSkills, insertSkillTile]
+        [
+          disabled,
+          uploadFiles,
+          pasteText,
+          pickerSkills,
+          insertSkillTile,
+          closeSkillPicker,
+        ]
       );
 
       const handleSubmit = useCallback(() => {
@@ -534,7 +514,7 @@ const InputBar = memo(
         enabled:
           interruptible &&
           !isInterrupting &&
-          !skillPicker.open &&
+          !session.open &&
           !tilePopover &&
           !skillInfo,
         onInterrupt: handleInterrupt,
@@ -718,9 +698,9 @@ const InputBar = memo(
             />
           )}
           <SkillPickerPopover
-            open={skillPicker.open}
-            anchorRect={skillPicker.anchorRect}
-            query={skillPicker.query}
+            open={session.open}
+            anchorRect={anchorRect}
+            query={session.query}
             skills={pickerSkills}
             onSelect={handleSkillPickerSelect}
             onClose={dismissSkillPicker}

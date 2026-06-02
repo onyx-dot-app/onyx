@@ -276,6 +276,38 @@ describe("deleteTokenBeforeCursor", () => {
     expect(deleteTokenBeforeCursor(el, "")).toBe(false);
     el.remove();
   });
+
+  it("returns false when fewer chars than the token precede the caret", () => {
+    const el = mount("/x");
+    caretAt(el.firstChild as Text, 1);
+    expect(deleteTokenBeforeCursor(el, "/x")).toBe(false);
+    expect(getTextContent(el)).toBe("/x");
+    el.remove();
+  });
+
+  it("returns false (no mutation) for a non-collapsed selection", () => {
+    const el = mount("hi /pptx");
+    const text = el.firstChild as Text;
+    const sel = window.getSelection()!;
+    const r = document.createRange();
+    r.setStart(text, 3);
+    r.setEnd(text, text.length);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    expect(deleteTokenBeforeCursor(el, "/pptx")).toBe(false);
+    expect(getTextContent(el)).toBe("hi /pptx");
+    el.remove();
+  });
+
+  it("returns false when the caret is outside the element", () => {
+    const el = mount("hi /pptx");
+    const outside = mount("/pptx");
+    caretAt(outside.firstChild as Text, 5);
+    expect(deleteTokenBeforeCursor(el, "/pptx")).toBe(false);
+    expect(getTextContent(el)).toBe("hi /pptx");
+    el.remove();
+    outside.remove();
+  });
 });
 
 describe("stripLeadingBr", () => {
@@ -300,6 +332,13 @@ describe("stripLeadingBr", () => {
   it("returns false when the first child is not a <br>", () => {
     const el = mount(`${tileHtml()}`);
     expect(stripLeadingBr(el)).toBe(false);
+    el.remove();
+  });
+
+  it("leaves a leading <br> that precedes a non-tile element untouched", () => {
+    const el = mount("<br><span>text</span>");
+    expect(stripLeadingBr(el)).toBe(false);
+    expect(el.firstChild?.nodeName).toBe("BR");
     el.remove();
   });
 });
