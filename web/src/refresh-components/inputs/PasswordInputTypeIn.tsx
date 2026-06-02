@@ -137,10 +137,11 @@ export default function PasswordInputTypeIn({
         onBlur={onBlur}
         variant={disabled ? "disabled" : error ? "error" : undefined}
         clearButton={showToggleButton ? false : clearButton}
-        // Default off so admin credential fields don't get the user's login
-        // password autofilled into them; real login/signup forms override this
-        // with current-password / new-password.
-        autoComplete="off"
+        // Default to "new-password" so managers don't autofill the user's saved
+        // login into secret fields (connector creds, API keys, …). "off" won't
+        // do it — browsers deliberately ignore autocomplete="off" on password
+        // inputs. The login form overrides this with "current-password".
+        autoComplete="new-password"
         data-ph-no-capture
         rightChildren={
           showToggleButton ? (
