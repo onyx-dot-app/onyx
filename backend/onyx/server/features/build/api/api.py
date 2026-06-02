@@ -4,7 +4,6 @@ from pathlib import Path
 from uuid import UUID
 
 import httpx
-from cachetools import TTLCache
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -16,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import optional_user
+from onyx.cache.factory import get_cache_backend
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -65,12 +65,19 @@ def _get_proxy_client() -> httpx.AsyncClient:
     return _ASYNC_PROXY_CLIENT
 
 
-# Per-asset DB-skip caches. Only GRANTs cached; 30s TTL = max stale access
-# after un-sharing. Concurrent misses hit the DB redundantly (not a bug).
-_SANDBOX_URL_CACHE: TTLCache[UUID, str] = TTLCache(maxsize=10_000, ttl=60.0)
-_WEBAPP_ACCESS_CACHE: TTLCache[tuple[UUID, UUID], bool] = TTLCache(
-    maxsize=50_000, ttl=30.0
-)
+# Per-asset DB-skip caches, backed by the shared cache (Redis) so the entry is
+# shared across api_server pods rather than per-process. Only GRANTs are cached;
+# the access TTL bounds how long a grant outlives an un-share.
+_SANDBOX_URL_TTL = 60
+_WEBAPP_ACCESS_TTL = 30
+
+
+def _sandbox_url_cache_key(session_id: UUID) -> str:
+    return f"craft:webapp:url:{session_id}"
+
+
+def _webapp_access_cache_key(session_id: UUID, user_id: UUID) -> str:
+    return f"craft:webapp:access:{session_id}:{user_id}"
 
 
 def require_onyx_craft_enabled(
@@ -275,9 +282,10 @@ REWRITABLE_CONTENT_TYPES = {
 
 async def _get_sandbox_url(session_id: UUID) -> str:
     """Resolve a session's Next.js server URL; cache hits open no DB connection."""
-    cached = _SANDBOX_URL_CACHE.get(session_id)
+    cache = get_cache_backend()
+    cached = cache.get(_sandbox_url_cache_key(session_id))
     if cached is not None:
-        return cached
+        return cached.decode()
 
     async with get_async_session_context_manager() as db_session:
         target = await get_webapp_target_async(db_session, session_id)
@@ -291,7 +299,7 @@ async def _get_sandbox_url(session_id: UUID) -> str:
         raise HTTPException(status_code=404, detail="Sandbox not found")
 
     url = get_sandbox_manager().get_webapp_url(sandbox_id, nextjs_port)
-    _SANDBOX_URL_CACHE[session_id] = url
+    cache.set(_sandbox_url_cache_key(session_id), url, ex=_SANDBOX_URL_TTL)
     return url
 
 
@@ -398,7 +406,8 @@ async def _proxy_request(
 async def _check_webapp_access(session_id: UUID, user: User | None) -> None:
     # Cached grants short-circuit before the DB fetch; 404 (missing session)
     # must still beat 401 (unauthenticated), so only grants are cached.
-    if user is not None and _WEBAPP_ACCESS_CACHE.get((session_id, user.id)):
+    cache = get_cache_backend()
+    if user is not None and cache.get(_webapp_access_cache_key(session_id, user.id)):
         return
 
     async with get_async_session_context_manager() as db_session:
@@ -412,7 +421,9 @@ async def _check_webapp_access(session_id: UUID, user: User | None) -> None:
     if sharing_scope == SharingScope.PRIVATE and owner_id != user.id:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    _WEBAPP_ACCESS_CACHE[(session_id, user.id)] = True
+    cache.set(
+        _webapp_access_cache_key(session_id, user.id), b"1", ex=_WEBAPP_ACCESS_TTL
+    )
 
 
 _OFFLINE_HTML = (_TEMPLATES_DIR / "webapp_offline.html").read_text()
@@ -452,7 +463,7 @@ async def get_webapp(
         if e.status_code in (502, 503, 504):
             # The cached URL may point at a dead/recreated pod; drop it so the
             # next request re-resolves from the DB.
-            _SANDBOX_URL_CACHE.pop(session_id, None)
+            get_cache_backend().delete(_sandbox_url_cache_key(session_id))
             return _offline_html_response()
         raise
 

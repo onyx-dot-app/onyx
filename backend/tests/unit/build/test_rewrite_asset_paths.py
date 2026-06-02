@@ -500,13 +500,28 @@ class TestProxyRequestWiring:
         assert upstream.close_count == 1
 
 
+class _FakeCacheBackend:
+    """In-memory stand-in for the Redis-backed CacheBackend (get/set/delete)."""
+
+    def __init__(self) -> None:
+        self._store: dict[str, bytes] = {}
+
+    def get(self, key: str) -> bytes | None:
+        return self._store.get(key)
+
+    def set(self, key: str, value: str | bytes, **_kwargs: object) -> None:
+        self._store[key] = value.encode() if isinstance(value, str) else value
+
+    def delete(self, key: str) -> None:
+        self._store.pop(key, None)
+
+
 class TestWebappAccessCache:
     @pytest.mark.asyncio
     async def test_grant_is_cached_skipping_db_on_repeat(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A granted (session, viewer) pair skips the DB on subsequent assets."""
-        api._WEBAPP_ACCESS_CACHE.clear()
         viewer = SimpleNamespace(id=UUID("11111111-1111-1111-1111-111111111111"))
         calls = {"n": 0}
 
@@ -522,6 +537,10 @@ class TestWebappAccessCache:
             api, "get_async_session_context_manager", lambda: _FakeACM()
         )
 
+        # Shared backend across both calls so the grant persists like Redis would.
+        shared = _FakeCacheBackend()
+        monkeypatch.setattr(api, "get_cache_backend", lambda: shared)
+
         await api._check_webapp_access(UUID(SESSION_ID), cast(api.User, viewer))
         await api._check_webapp_access(UUID(SESSION_ID), cast(api.User, viewer))
 
@@ -533,7 +552,8 @@ class TestWebappAccessCache:
     ) -> None:
         """Non-owner gets 404 on a private session, and the denial is re-queried
         (denials are never cached, so re-sharing takes effect immediately)."""
-        api._WEBAPP_ACCESS_CACHE.clear()
+        shared = _FakeCacheBackend()
+        monkeypatch.setattr(api, "get_cache_backend", lambda: shared)
         owner_id = UUID("22222222-2222-2222-2222-222222222222")
         viewer = SimpleNamespace(id=UUID("33333333-3333-3333-3333-333333333333"))
         calls = {"n": 0}
