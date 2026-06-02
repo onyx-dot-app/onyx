@@ -144,11 +144,13 @@ async function verifyToolUsableFromChat(
 ): Promise<void> {
   const actions = new ActionsPopover(page);
   await actions.ensureServerVisible(artifacts.serverName, { agentId });
-  // Drill into the server once to both confirm the tool row and enable it,
-  // rather than opening the popover twice.
+  // Drill in and confirm the tool row is present. We deliberately do NOT toggle
+  // the switch here: the tool is attached to the agent via API (and enabled by
+  // default), and the invocation below is forced (forced_tool_id), so toggling
+  // is redundant — and clicking it races the OAuth server's auth-status
+  // re-render in the popover, which otherwise burns the whole test timeout.
   await actions.openServer(artifacts.serverName);
   await expect(actions.toolToggle(artifacts.toolName)).toBeVisible();
-  await actions.enableTool(artifacts.toolName);
   await actions.close();
   await expectMcpToolInvoked(page, artifacts.toolName, artifacts.toolId);
 }
