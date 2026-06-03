@@ -21,7 +21,7 @@ import {
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import { cn } from "@opal/utils";
 
-interface SkillPickerPopoverProps {
+interface EntryPickerPopoverProps {
   open: boolean;
   anchorRect: DOMRect | null;
   query: string;
@@ -30,14 +30,14 @@ interface SkillPickerPopoverProps {
   onClose: () => void;
 }
 
-function SkillPickerPopover({
+function EntryPickerPopover({
   open,
   anchorRect,
   query,
   sections,
   onSelect,
   onClose,
-}: SkillPickerPopoverProps) {
+}: EntryPickerPopoverProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -315,4 +315,4 @@ function AppRow({ app, selected, onHover, onPick, rowIndex }: AppRowProps) {
   );
 }
 
-export default memo(SkillPickerPopover);
+export default memo(EntryPickerPopover);
