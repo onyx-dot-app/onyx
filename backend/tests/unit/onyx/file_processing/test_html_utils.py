@@ -1,13 +1,9 @@
-"""Baseline coverage for BeautifulSoup-backed HTML parsing.
+"""Coverage for the HTML-parsing helpers in ``onyx.file_processing.html_utils``
+and the ``UnicodeDammit``-backed decoding in ``onyx.utils.web_content``.
 
-These tests pin the *current* observable behavior of the HTML-parsing helpers in
-``onyx.file_processing.html_utils`` and the ``UnicodeDammit``-backed decoding in
-``onyx.utils.web_content``. They exist to catch behavioral drift when the
-``beautifulsoup4`` dependency is upgraded -- the asserted strings are the literal
-output produced by the pinned baseline version, not aspirational formatting.
-
-If a future bs4 upgrade changes one of these outputs, that is a signal to review
-the diff against real connector content, not to blindly update the expected value.
+Asserted strings are the literal output of the pinned ``beautifulsoup4`` version.
+If an upgrade changes one, review the diff against real connector content before
+updating the expected value.
 """
 
 import onyx.file_processing.html_utils as html_utils
@@ -52,11 +48,9 @@ def test_links_become_markdown_under_markdown_strategy(monkeypatch) -> None:  # 
         "HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY",
         HtmlBasedConnectorTransformLinksStrategy.MARKDOWN,
     )
-    # NOTE: the trailing " now." also gets wrapped as a link. The formatter only
-    # clears link_href when it sees an "/a" tag, but bs4 never emits a closing
-    # pseudo-tag in .descendants, so the href leaks onto following text. This is a
-    # latent quirk in format_document_soup -- pinned here so a bs4 upgrade that
-    # changes descendant iteration is caught rather than silently altering output.
+    # The trailing " now." is also wrapped as a link: format_document_soup only
+    # clears link_href on an "/a" tag, but bs4 never emits a closing pseudo-tag in
+    # .descendants, so the href leaks onto text following the anchor.
     html = '<html><body><p>See <a href="https://example.com">this link</a> now.</p></body></html>'
     assert (
         parse_html_page_basic(html)
@@ -89,6 +83,53 @@ def test_format_document_soup_accepts_prebuilt_soup() -> None:
 
     soup = bs4.BeautifulSoup("<p>hello</p><p>world</p>", "lxml")
     assert format_document_soup(soup) == "hello\nworld"
+
+
+def test_div_blocks_are_newline_separated() -> None:
+    html = "<html><body><div>one</div><div>two</div></body></html>"
+    assert parse_html_page_basic(html) == "one\ntwo"
+
+
+def test_ordered_list_items_also_get_hyphen_prefix() -> None:
+    # <ol> shares the <li> handling with <ul>, so items are hyphenated rather
+    # than numbered -- ordinal information is lost.
+    html = "<html><body><ol><li>one</li><li>two</li></ol></body></html>"
+    assert parse_html_page_basic(html) == "- one\n- two"
+
+
+def test_nested_lists_are_flattened() -> None:
+    # Nested <ul> nesting is not represented; every <li> is hyphenated at the
+    # same level regardless of depth.
+    html = "<html><body><ul><li>a<ul><li>b</li></ul></li></ul></body></html>"
+    assert parse_html_page_basic(html) == "- a\n- b"
+
+
+def test_adjacent_inline_elements_get_separating_space() -> None:
+    # Sibling inline elements with no whitespace between them are joined with a
+    # single space so their text doesn't run together.
+    html = "<html><body><span>a</span><span>b</span></body></html>"
+    assert parse_html_page_basic(html) == "a b"
+
+
+def test_pre_block_collapses_internal_newlines() -> None:
+    # Despite format_document_soup's docstring listing <pre> as verbatim, the
+    # verbatim counter is off by one for a single text child, so internal
+    # newlines are flattened to spaces like any other text.
+    html = "<html><body><pre>line one\nline two</pre></body></html>"
+    assert parse_html_page_basic(html) == "line one line two"
+
+
+def test_repeated_whitespace_and_blank_lines_are_collapsed() -> None:
+    html = (
+        "<html><body><p>lots    of     space</p>\n\n\n"
+        "<p>and    newlines</p></body></html>"
+    )
+    assert parse_html_page_basic(html) == "lots of space\nand newlines"
+
+
+def test_blank_input_returns_empty_string() -> None:
+    assert parse_html_page_basic("") == ""
+    assert parse_html_page_basic("   \n  ") == ""
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +185,31 @@ def test_web_html_cleanup_additional_element_types_discarded() -> None:
     assert cleaned == "body text"
 
 
+def test_web_html_cleanup_returns_none_title_when_absent() -> None:
+    result = web_html_cleanup("<html><body><p>hi</p></body></html>")
+    assert result.title is None
+    assert result.cleaned_text == "hi"
+
+
+def test_web_html_cleanup_matches_whole_class_tokens_only() -> None:
+    # Ignored classes are matched against whitespace-split tokens, so "sidebar"
+    # drops an element only when it's a standalone class, not a substring.
+    html = (
+        "<html><head><title>T</title></head><body>"
+        '<div class="sidebarwide">substring kept</div>'
+        '<div class="main sidebar extra">token dropped</div>'
+        "<p>body</p>"
+        "</body></html>"
+    )
+    assert web_html_cleanup(html).cleaned_text == "substring kept\nbody"
+
+
+def test_web_html_cleanup_strips_zero_width_spaces() -> None:
+    # U+200B (zero-width space) is dropped from the cleaned text.
+    html = "<html><head><title>T</title></head><body><p>a\u200bb</p></body></html>"
+    assert web_html_cleanup(html).cleaned_text == "ab"
+
+
 # ---------------------------------------------------------------------------
 # decode_html_bytes (bs4.dammit.UnicodeDammit)
 # ---------------------------------------------------------------------------
@@ -173,3 +239,28 @@ def test_decode_respects_html_meta_charset() -> None:
     html = b'<html><head><meta charset="iso-8859-1"></head><body>caf\xe9</body></html>'
     decoded = decode_html_bytes(html)
     assert "café" in decoded
+
+
+def test_decode_content_type_charset_overrides_meta_charset() -> None:
+    # content_type charset is registered as an override encoding, so it wins over
+    # a conflicting <meta charset>. Here the bytes are iso-8859-1 but meta lies
+    # and claims utf-8; the iso-8859-1 hint from content_type decodes correctly.
+    html = '<html><head><meta charset="utf-8"></head><body>café</body></html>'.encode(
+        "iso-8859-1"
+    )
+    decoded = decode_html_bytes(html, content_type="text/html; charset=iso-8859-1")
+    assert "café" in decoded
+
+
+def test_decode_empty_bytes_returns_empty_string() -> None:
+    assert decode_html_bytes(b"") == ""
+
+
+def test_decode_unknown_charset_falls_back_to_sniffing() -> None:
+    # An unusable charset hint is ignored rather than raising; UnicodeDammit
+    # sniffs the actual (utf-8) encoding.
+    content = "café".encode("utf-8")
+    assert (
+        decode_html_bytes(content, content_type="text/html; charset=not-a-real-charset")
+        == "café"
+    )
