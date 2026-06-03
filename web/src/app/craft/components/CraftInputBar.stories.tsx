@@ -123,7 +123,7 @@ export const NoBottomRounding: Story = {
 /** Active skill + app chips shown in the strip above the textarea. */
 export const WithSkillChips: Story = {
   args: {
-    initialSkills: [
+    initialEntries: [
       skillEntry("pptx", "PPTX"),
       skillEntry("report-writer", "Report Writer"),
       appEntry("slack", "Slack", "SLACK"),
@@ -134,7 +134,7 @@ export const WithSkillChips: Story = {
 /** Many chips wrap within the single flush-left row. */
 export const WithManySkillChips: Story = {
   args: {
-    initialSkills: [
+    initialEntries: [
       skillEntry("pptx", "PPTX"),
       skillEntry("pdf", "PDF"),
       skillEntry("report-writer", "Report Writer"),

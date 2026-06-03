@@ -16,10 +16,10 @@ const meta: Meta<typeof InputChipStrip> = {
   ],
   args: {
     onRemoveFile: (id) => console.log("remove file", id),
-    onRemoveSkill: (slug) => console.log("remove skill", slug),
-    onClickSkill: (entry, el) => console.log("click skill", entry.slug, el),
+    onRemoveEntry: (slug) => console.log("remove skill", slug),
+    onClickEntry: (entry, el) => console.log("click skill", entry.slug, el),
     files: [],
-    skills: [],
+    entries: [],
   },
 };
 
@@ -74,7 +74,7 @@ export const FilesOnly: Story = {
 
 export const SkillsOnly: Story = {
   args: {
-    skills: [SKILL_PPTX, SKILL_REPORT, APP_SLACK],
+    entries: [SKILL_PPTX, SKILL_REPORT, APP_SLACK],
   },
 };
 
@@ -90,12 +90,12 @@ export const Mixed: Story = {
         created_at: "",
       },
     ],
-    skills: [SKILL_PPTX, APP_SLACK],
+    entries: [SKILL_PPTX, APP_SLACK],
   },
 };
 
 export const Empty: Story = {
-  args: { files: [], skills: [] },
+  args: { files: [], entries: [] },
 };
 
 export const WithFailedFile: Story = {

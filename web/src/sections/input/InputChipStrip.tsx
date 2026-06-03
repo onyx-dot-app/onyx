@@ -130,13 +130,13 @@ function BuildFileCard({
 
 // ── Skill / app chip ──────────────────────────────────────────────────────────
 
-interface SkillChipProps {
+interface EntryChipProps {
   entry: PickerEntry;
   onRemove: () => void;
   onClick?: (chipEl: HTMLElement) => void;
 }
 
-function SkillChip({ entry, onRemove, onClick }: SkillChipProps) {
+function EntryChip({ entry, onRemove, onClick }: EntryChipProps) {
   const Logo = entry.kind === "app" ? getAppTypeLogo(entry.appType) : null;
   const Icon = Logo ?? SvgSparkle;
 
@@ -155,30 +155,30 @@ function SkillChip({ entry, onRemove, onClick }: SkillChipProps) {
 
 export interface InputChipStripProps {
   files: BuildFile[];
-  skills: PickerEntry[];
+  entries: PickerEntry[];
   onRemoveFile: (id: string) => void;
-  onRemoveSkill: (slug: string) => void;
-  onClickSkill?: (entry: PickerEntry, chipEl: HTMLElement) => void;
+  onRemoveEntry: (slug: string) => void;
+  onClickEntry?: (entry: PickerEntry, chipEl: HTMLElement) => void;
 }
 
 export function InputChipStrip({
   files,
-  skills,
+  entries,
   onRemoveFile,
-  onRemoveSkill,
-  onClickSkill,
+  onRemoveEntry,
+  onClickEntry,
 }: InputChipStripProps) {
-  if (files.length === 0 && skills.length === 0) return null;
+  if (files.length === 0 && entries.length === 0) return null;
 
   // Single wrapping row. Skills/apps lead (flush left), files follow.
   return (
     <div className="flex flex-wrap gap-1">
-      {skills.map((entry) => (
-        <SkillChip
+      {entries.map((entry) => (
+        <EntryChip
           key={entry.slug}
           entry={entry}
-          onRemove={() => onRemoveSkill(entry.slug)}
-          onClick={onClickSkill ? (el) => onClickSkill(entry, el) : undefined}
+          onRemove={() => onRemoveEntry(entry.slug)}
+          onClick={onClickEntry ? (el) => onClickEntry(entry, el) : undefined}
         />
       ))}
       {files.map((file) => (

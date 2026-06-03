@@ -13,8 +13,8 @@ import {
 import BaseInputBar, {
   type BaseInputBarHandle,
 } from "@/sections/input/BaseInputBar";
-import SkillInfoPopover from "@/sections/input/SkillInfoPopover";
-import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
+import EntryInfoPopover from "@/sections/input/EntryInfoPopover";
+import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import InterruptHint from "@/app/craft/components/InterruptHint";
 import { InputChipStrip } from "@/sections/input/InputChipStrip";
 import {
@@ -59,8 +59,8 @@ export interface CraftInputBarProps {
   onRemoveQueuedMessage?: (index: number) => void;
   onInterrupt?: () => void;
   isInterrupting?: boolean;
-  /** Seed the active skill chips. For stories/tests; production callers leave unset. */
-  initialSkills?: PickerEntry[];
+  /** Seed the active entry chips. For stories/tests; production callers leave unset. */
+  initialEntries?: PickerEntry[];
 }
 
 const CraftInputBar = memo(
@@ -78,7 +78,7 @@ const CraftInputBar = memo(
         onRemoveQueuedMessage,
         onInterrupt,
         isInterrupting = false,
-        initialSkills,
+        initialEntries,
       },
       ref
     ) => {
@@ -100,8 +100,8 @@ const CraftInputBar = memo(
         [skillsData, appsData]
       );
 
-      const [activeSkills, setActiveSkills] = useState<PickerEntry[]>(
-        initialSkills ?? []
+      const [activeEntries, setActiveEntries] = useState<PickerEntry[]>(
+        initialEntries ?? []
       );
       const [session, setSession] = useState<PickerSession>(
         INITIAL_PICKER_SESSION
@@ -111,11 +111,11 @@ const CraftInputBar = memo(
       const sessionRef = useRef(session);
       sessionRef.current = session;
       const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
-      const [skillInfo, setSkillInfo] = useState<{
+      const [entryInfo, setEntryInfo] = useState<{
         entry: PickerEntry;
         chipEl: HTMLElement;
       } | null>(null);
-      const dismissSkillInfo = useCallback(() => setSkillInfo(null), []);
+      const dismissEntryInfo = useCallback(() => setEntryInfo(null), []);
 
       const interruptible = !!onInterrupt && isRunning;
       const handleInterrupt = useCallback(() => {
@@ -124,24 +124,24 @@ const CraftInputBar = memo(
 
       const { armed } = useDoubleEscapeInterrupt({
         enabled:
-          interruptible && !isInterrupting && !session.open && !skillInfo,
+          interruptible && !isInterrupting && !session.open && !entryInfo,
         onInterrupt: handleInterrupt,
       });
 
-      const addSkill = useCallback((entry: PickerEntry) => {
-        setActiveSkills((prev) =>
+      const addEntry = useCallback((entry: PickerEntry) => {
+        setActiveEntries((prev) =>
           prev.some((e) => e.slug === entry.slug) ? prev : [...prev, entry]
         );
       }, []);
 
-      const removeSkill = useCallback((slug: string) => {
-        setActiveSkills((prev) => prev.filter((e) => e.slug !== slug));
+      const removeEntry = useCallback((slug: string) => {
+        setActiveEntries((prev) => prev.filter((e) => e.slug !== slug));
       }, []);
 
       useImperativeHandle(ref, () => ({
         reset: () => {
           baseRef.current?.reset();
-          setActiveSkills([]);
+          setActiveEntries([]);
           clearFiles();
           setSession(INITIAL_PICKER_SESSION);
         },
@@ -171,10 +171,10 @@ const CraftInputBar = memo(
         (entry: PickerEntry) => {
           if (!session.open) return;
           baseRef.current?.deleteBeforeToken(`/${session.query}`);
-          addSkill(entry);
+          addEntry(entry);
           closeSkillPicker();
         },
-        [session, addSkill, closeSkillPicker]
+        [session, addEntry, closeSkillPicker]
       );
 
       // ── Extension hooks ───────────────────────────────────────────────────
@@ -208,39 +208,41 @@ const CraftInputBar = memo(
               ) ?? null)
             : null;
           if (entry) {
-            addSkill(entry);
+            addEntry(entry);
             return true;
           }
           return false;
         },
-        [pickerSections, addSkill]
+        [pickerSections, addEntry]
       );
 
       // ── Submit ────────────────────────────────────────────────────────────
 
       const handleSubmit = useCallback(
         (message: string) => {
-          const skillPrefixes = activeSkills.map((e) => `/${e.slug}`).join(" ");
+          const skillPrefixes = activeEntries
+            .map((e) => `/${e.slug}`)
+            .join(" ");
           const fullMessage = skillPrefixes
             ? `${skillPrefixes} ${message}`
             : message;
           onSubmit(fullMessage, currentMessageFiles);
-          setActiveSkills([]);
+          setActiveEntries([]);
           clearFiles({ suppressRefetch: true });
         },
-        [activeSkills, currentMessageFiles, onSubmit, clearFiles]
+        [activeEntries, currentMessageFiles, onSubmit, clearFiles]
       );
 
       // ── Slots ─────────────────────────────────────────────────────────────
 
       const topSlot =
-        currentMessageFiles.length > 0 || activeSkills.length > 0 ? (
+        currentMessageFiles.length > 0 || activeEntries.length > 0 ? (
           <InputChipStrip
             files={currentMessageFiles}
-            skills={activeSkills}
+            entries={activeEntries}
             onRemoveFile={removeFile}
-            onRemoveSkill={removeSkill}
-            onClickSkill={(entry, chipEl) => setSkillInfo({ entry, chipEl })}
+            onRemoveEntry={removeEntry}
+            onClickEntry={(entry, chipEl) => setEntryInfo({ entry, chipEl })}
           />
         ) : undefined;
 
@@ -271,7 +273,7 @@ const CraftInputBar = memo(
               icon: SvgSparkle,
               label: skill.name,
               description: skill.description,
-              onSelect: () => addSkill(skill),
+              onSelect: () => addEntry(skill),
             })),
           });
         }
@@ -289,12 +291,12 @@ const CraftInputBar = memo(
                   Connect
                 </Text>
               ),
-              onSelect: () => addSkill(app),
+              onSelect: () => addEntry(app),
             })),
           });
         }
         return items;
-      }, [pickerSections, addSkill]);
+      }, [pickerSections, addEntry]);
 
       const bottomLeftSlot = (
         <>
@@ -346,7 +348,7 @@ const CraftInputBar = memo(
             onInputCallback={handleInputCallback}
             onSelectionChange={syncPickerSelection}
           />
-          <SkillPickerPopover
+          <EntryPickerPopover
             open={session.open}
             anchorRect={anchorRect}
             query={session.query}
@@ -354,12 +356,12 @@ const CraftInputBar = memo(
             onSelect={handleSkillPickerSelect}
             onClose={dismissSkillPicker}
           />
-          {skillInfo && (
-            <SkillInfoPopover
-              name={skillInfo.entry.name}
-              description={skillInfo.entry.description}
-              tileElement={skillInfo.chipEl}
-              onDismiss={dismissSkillInfo}
+          {entryInfo && (
+            <EntryInfoPopover
+              name={entryInfo.entry.name}
+              description={entryInfo.entry.description}
+              tileElement={entryInfo.chipEl}
+              onDismiss={dismissEntryInfo}
             />
           )}
         </>
