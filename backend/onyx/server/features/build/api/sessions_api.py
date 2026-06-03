@@ -381,8 +381,7 @@ def restore_session(
                 db_session.commit()
                 db_session.refresh(sandbox)
 
-        session_manager = SessionManager(db_session)
-        llm_config, all_llm_configs = session_manager.build_llm_configs(user)
+        llm_config, all_llm_configs = SessionManager(db_session).build_llm_configs(user)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
             # Mint the PAT before flipping to PROVISIONING so a failure is retriable.

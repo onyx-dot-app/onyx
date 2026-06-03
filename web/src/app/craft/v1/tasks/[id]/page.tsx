@@ -7,7 +7,6 @@ import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import {
   SvgClock,
@@ -15,6 +14,7 @@ import {
   SvgPauseCircle,
   SvgPlayCircle,
   SvgTrash,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import {
   deleteScheduledTask,
@@ -180,7 +180,7 @@ export default function ScheduledTaskDetailPage() {
       <SettingsLayouts.Body>
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <SimpleLoader className="h-6 w-6" />
+            <SvgSimpleLoader className="h-6 w-6" />
           </div>
         ) : error || !data ? (
           <Text mainUiBody text03>

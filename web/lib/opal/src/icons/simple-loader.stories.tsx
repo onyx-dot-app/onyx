@@ -1,14 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import SimpleLoader from "./SimpleLoader";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 
-const meta: Meta<typeof SimpleLoader> = {
-  title: "refresh-components/loaders/SimpleLoader",
-  component: SimpleLoader,
+const meta: Meta<typeof SvgSimpleLoader> = {
+  title: "opal/icons/SimpleLoader",
+  component: SvgSimpleLoader,
   tags: ["autodocs"],
 };
 
 export default meta;
-type Story = StoryObj<typeof SimpleLoader>;
+type Story = StoryObj<typeof SvgSimpleLoader>;
 
 export const Default: Story = {
   args: {},

@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { Button } from "@opal/components";
-import { SvgMicrophone } from "@opal/icons";
+import { SvgMicrophone, SvgSimpleLoader } from "@opal/icons";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { toast } from "@/hooks/useToast";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { ChatState } from "@/app/app/interfaces";
 
 interface MicrophoneButtonProps {
@@ -314,7 +313,7 @@ function MicrophoneButton({
   }, [error]);
 
   // Icon: show loader when processing, otherwise mic
-  const icon = isProcessing ? SimpleLoader : SvgMicrophone;
+  const icon = isProcessing ? SvgSimpleLoader : SvgMicrophone;
 
   // Disable when processing or TTS is playing (don't want to pick up TTS audio)
   const isDisabled =

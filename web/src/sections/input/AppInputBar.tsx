@@ -52,10 +52,10 @@ import {
   SvgSearch,
   SvgStop,
   SvgX,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import { Button, SelectButton } from "@opal/components";
 import { Popover } from "@opal/components";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { Section } from "@/layouts/general-layouts";
 import { Spacer } from "@opal/components";
@@ -710,7 +710,7 @@ const AppInputBar = React.memo(
             id="onyx-chat-input-send-button"
             icon={
               isClassifying
-                ? SimpleLoader
+                ? SvgSimpleLoader
                 : (chatState !== "input" || awaitingPreferredSelection) &&
                     message.trim()
                   ? SvgArrowUp
@@ -957,7 +957,7 @@ const AppInputBar = React.memo(
                   <Button
                     disabled={!message || isClassifying || hasUploadingFiles}
                     id="onyx-chat-input-send-button"
-                    icon={isClassifying ? SimpleLoader : SvgSearch}
+                    icon={isClassifying ? SvgSimpleLoader : SvgSearch}
                     onClick={() => {
                       if (chatState == "streaming") {
                         stopGenerating();

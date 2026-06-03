@@ -29,6 +29,15 @@ await expect(page.locator(".message")).toContainText("hello");
 
 **Why:** specs that read like a description of user behavior are easier to scan, review, and refactor. Locator churn changes one POM method, not every spec that touched the surface.
 
+**Locator priority** — when defining locators on a page object, prefer in this order:
+
+1. `data-testid` / `aria-label` (`getByTestId`, `getByLabel`) — preferred for Onyx components.
+2. Role-based (`getByRole`) — standard HTML elements.
+3. Text / label (`getByText`, `getByLabel`) — visible text content.
+4. CSS selectors (`locator(...)`) — last resort, only when nothing above works.
+
+Never reach for complex CSS/XPath when a built-in locator fits.
+
 ## 2. Use auto-retrying matchers — never `getAttribute` / `evaluate` for async state
 
 Playwright's `expect(locator).*` matchers retry until the assertion passes or the timeout expires. `locator.getAttribute()` and `page.evaluate()` are single snapshots — they read the DOM exactly once and fail immediately on a stale read.

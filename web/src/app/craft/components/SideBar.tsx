@@ -36,10 +36,10 @@ import {
   SvgCheckCircle,
   SvgPlug,
   SvgLink,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { Button } from "@opal/components";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import TypewriterText from "@/app/craft/components/TypewriterText";
 import OpencodeDebugLogsButton from "@/app/craft/components/OpencodeDebugLogs";
 import {
@@ -295,7 +295,7 @@ function BuildSessionButton({
                 disabled={isDeleting}
                 variant="danger"
                 onClick={handleConfirmDelete}
-                icon={isDeleting ? SimpleLoader : undefined}
+                icon={isDeleting ? SvgSimpleLoader : undefined}
               >
                 {isDeleting ? "Deleting..." : "Delete"}
               </Button>

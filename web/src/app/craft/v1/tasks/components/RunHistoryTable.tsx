@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Table, Tooltip, createTableColumns } from "@opal/components";
 import SvgLock from "@opal/icons/lock";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { SvgSimpleLoader } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { listScheduledTaskRuns } from "@/app/craft/v1/tasks/api";
 import { RunStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
@@ -217,7 +217,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   if (isLoading && !data) {
     return (
       <div className="flex justify-center py-8">
-        <SimpleLoader className="h-6 w-6" />
+        <SvgSimpleLoader className="h-6 w-6" />
       </div>
     );
   }

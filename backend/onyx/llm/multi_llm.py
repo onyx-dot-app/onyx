@@ -1,3 +1,4 @@
+import copy
 import os
 import threading
 from collections.abc import Iterator
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING
 from typing import Union
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
@@ -657,6 +659,38 @@ class LitellmLLM(LLM):
             model_kwargs=self._model_kwargs,
             user_identity=user_identity,
         )
+
+        # OpenRouter sticky routing: inject session_id into extra_body so that
+        # OpenRouter pins all turns of a conversation to the same upstream provider,
+        # enabling prompt cache hits across turns.
+        # Without this, OpenRouter may alternate between e.g. Anthropic and Google
+        # for the same model, causing cache misses on every other turn.
+        # See: https://openrouter.ai/docs/features/provider-routing#session-id
+        #
+        # Gated on SEND_USER_METADATA_TO_LLM_PROVIDER for consistency with the
+        # user/session metadata handled in build_litellm_passthrough_kwargs: an
+        # operator who opted out of sending session identifiers to providers
+        # should not have the session_id forwarded to OpenRouter either.
+        if (
+            SEND_USER_METADATA_TO_LLM_PROVIDER
+            and self._model_provider == LlmProviderNames.OPENROUTER
+            and user_identity is not None
+            and user_identity.session_id
+        ):
+            if passthrough_kwargs is self._model_kwargs:
+                passthrough_kwargs = copy.deepcopy(self._model_kwargs)
+            existing_extra_body = passthrough_kwargs.get("extra_body") or {}
+            if isinstance(existing_extra_body, dict):
+                passthrough_kwargs["extra_body"] = {
+                    **existing_extra_body,
+                    "session_id": user_identity.session_id,
+                }
+            else:
+                logger.warning(
+                    "OpenRouter sticky routing: extra_body is not a dict (%s), "
+                    "skipping session_id injection",
+                    type(existing_extra_body).__name__,
+                )
 
         try:
             # NOTE: must pass in None instead of empty strings otherwise litellm

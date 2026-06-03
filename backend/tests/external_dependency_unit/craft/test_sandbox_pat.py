@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
 from onyx.db.enums import PatType
+from onyx.db.enums import Permission
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import PersonalAccessToken
 from onyx.db.models import Sandbox
@@ -59,6 +60,7 @@ class TestEnsureSandboxPat:
         pat = db_session.query(PersonalAccessToken).filter_by(hashed_token=hashed).one()
         assert pat.pat_type == PatType.CRAFT
         assert pat.user_id == test_user.id
+        assert pat.scopes == [Permission.READ_SEARCH.value]
 
     def test_second_call_reuses_token(
         self,

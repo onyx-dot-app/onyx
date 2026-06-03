@@ -252,7 +252,6 @@ class StubSandboxManager(SandboxManager):
         skills_section: str,
         snapshot_path: str | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> None:
         self.setup_session_workspace_count += 1
         self.last_setup_session_workspace_payload = {
@@ -263,7 +262,6 @@ class StubSandboxManager(SandboxManager):
             "skills_section": skills_section,
             "snapshot_path": snapshot_path,
             "user_name": user_name,
-            "user_role": user_role,
         }
         if not self.setup_session_workspace_silent:
             raise _not_configured("setup_session_workspace")

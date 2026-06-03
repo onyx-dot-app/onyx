@@ -11,15 +11,14 @@ from collections.abc import Coroutine
 from typing import Any
 
 from fastapi import Depends
+from fastapi import Request
 
 from onyx.auth.users import current_user
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.db.permissions import parse_permission_values
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 ALL_PERMISSIONS: frozenset[str] = frozenset(p.value for p in Permission)
 
@@ -91,12 +90,7 @@ def resolve_effective_permissions(granted: set[str]) -> set[str]:
 
 def get_effective_permissions(user: User) -> set[Permission]:
     """Read granted permissions from the column and expand implied permissions."""
-    granted: set[Permission] = set()
-    for p in user.effective_permissions:
-        try:
-            granted.add(Permission(p))
-        except ValueError:
-            logger.warning("Skipping unknown permission '%s' for user %s", p, user.id)
+    granted = set(parse_permission_values(user.effective_permissions))
     if Permission.FULL_ADMIN_PANEL_ACCESS in granted:
         return set(Permission)
     expanded = resolve_effective_permissions({p.value for p in granted})
@@ -108,19 +102,29 @@ def require_permission(
 ) -> Callable[..., Coroutine[Any, Any, User]]:
     """FastAPI dependency factory for permission-based access control.
 
+    Effective authority is the user's permissions intersected with the
+    authenticating token's scopes. A restricted PAT carries its scopes on
+    ``request.state.token_scopes``; an unrestricted PAT, session, and API-key
+    auth leave it None, meaning no token-side restriction.
+
     Usage:
         @router.get("/endpoint")
         def endpoint(user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS))):
             ...
     """
 
-    async def dependency(user: User = Depends(current_user)) -> User:
-        effective = get_effective_permissions(user)
+    async def dependency(request: Request, user: User = Depends(current_user)) -> User:
+        effective_user_permissions = get_effective_permissions(user)
+        permitted_by_user = required in effective_user_permissions
 
-        if Permission.FULL_ADMIN_PANEL_ACCESS in effective:
-            return user
+        token_scopes: list[Permission] | None = getattr(
+            request.state, "token_scopes", None
+        )
+        permitted_by_token = token_scopes is None or required.value in (
+            resolve_effective_permissions({s.value for s in token_scopes})
+        )
 
-        if required not in effective:
+        if not (permitted_by_user and permitted_by_token):
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "You do not have the required permissions for this action.",

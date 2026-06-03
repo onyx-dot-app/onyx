@@ -21,8 +21,12 @@ import {
 import useServerTools from "@/hooks/useServerTools";
 import { KeyedMutator } from "swr";
 import type { IconProps } from "@opal/types";
-import { SvgRefreshCw, SvgServer, SvgTrash } from "@opal/icons";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import {
+  SvgRefreshCw,
+  SvgServer,
+  SvgTrash,
+  SvgSimpleLoader,
+} from "@opal/icons";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { timeAgo } from "@opal/time";
@@ -248,7 +252,7 @@ export default function MCPActionCard({
     return (
       <div className="flex items-center gap-2">
         <Button
-          icon={isToolsRefreshing ? SimpleLoader : SvgRefreshCw}
+          icon={isToolsRefreshing ? SvgSimpleLoader : SvgRefreshCw}
           prominence="internal"
           onClick={handleRefreshTools}
           tooltip="Refresh tools"

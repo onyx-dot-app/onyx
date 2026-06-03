@@ -16,7 +16,7 @@ import {
   compileLocalPayloadToUtcCron,
   localPayloadToUtcPayload,
 } from "@/app/craft/v1/tasks/schedule";
-import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
+import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import {
@@ -329,7 +329,7 @@ export default function ScheduleTaskForm({
               data-testid="task-prompt-input"
               variant={shownPromptError ? "error" : undefined}
             />
-            <SkillPickerPopover
+            <EntryPickerPopover
               open={skillPicker.open}
               anchorRect={skillPicker.anchorRect}
               query={skillPicker.query}

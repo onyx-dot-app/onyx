@@ -82,6 +82,19 @@ repos:
         args: ["ruff", "format"]
         pass_filenames: true
         types_or: [python]
+      - id: uv-run
+        alias: zizmor
+        name: zizmor
+        # Run zizmor in an isolated overlay (`--no-project --with`) so the hook
+        # never resyncs the dev `.venv` or pulls in the backend toolchain — the
+        # same dependency-isolation goal as .github/workflows/zizmor.yml (which
+        # uses `uv sync --only-group zizmor`). `--offline` keeps it fast and
+        # token-free locally; CI runs the online audits. Keep the pinned version
+        # in sync with the `zizmor` dependency group in pyproject.toml.
+        args:
+          ["--no-project", "--with=zizmor==1.25.2", "zizmor", "--offline"]
+        pass_filenames: true
+        files: ^\.github/(workflows/.+\.ya?ml|actions/.+/action\.ya?ml)$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
