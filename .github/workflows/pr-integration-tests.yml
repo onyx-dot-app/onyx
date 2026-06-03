@@ -304,6 +304,9 @@ jobs:
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
           INTEGRATION_TESTS_MODE=true
           MCP_SERVER_ENABLED=true
+          # The MCP client tests register a mock MCP server on a private/loopback
+          # host (TEST_WEB_HOSTNAME); opt in so the SSRF guard allows it.
+          MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
           AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
           ENABLE_CRAFT=true
           # Lowered upload/bundle caps so cap-enforcement tests can use

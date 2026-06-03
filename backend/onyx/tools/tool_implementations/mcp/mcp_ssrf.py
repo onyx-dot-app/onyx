@@ -19,16 +19,17 @@ _MCP_DEFAULT_TIMEOUT = 30.0
 _MCP_DEFAULT_SSE_READ_TIMEOUT = 300.0
 
 
-def validate_mcp_outbound_url(url: str) -> str:
-    """Validate a URL the backend is about to fetch as part of an MCP flow.
-
-    Private/internal targets are gated behind ``MCP_SERVER_ALLOW_PRIVATE_NETWORK``;
-    loopback/unspecified/link-local (cloud-metadata) are always blocked.
-    """
+def validate_mcp_outbound_url(url: str, *, resolve_dns: bool = True) -> str:
+    """SSRF guard for a URL the backend fetches in an MCP flow. Private targets
+    gated behind ``MCP_SERVER_ALLOW_PRIVATE_NETWORK`` (loopback reachable on
+    opt-in for local/sidecar servers; cloud-metadata always blocked).
+    ``resolve_dns=False`` skips the DNS lookup at store time — the transport
+    guard re-validates with DNS on every fetch."""
     return validate_outbound_http_url(
         url,
         allow_private_network=MCP_SERVER_ALLOW_PRIVATE_NETWORK,
-        block_loopback_and_link_local=True,
+        block_link_local_only=True,
+        resolve_dns=resolve_dns,
     )
 
 

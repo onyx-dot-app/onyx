@@ -101,10 +101,10 @@ logger = setup_logger()
 
 
 def _ssrf_error_hint(url: str, error: Exception) -> str:
-    """Guidance for a blocked MCP URL: only point at the private-network opt-in
-    when it would actually unblock the host. Loopback/localhost/link-local are
-    never reachable regardless of the flag, so don't suggest it for them; scheme
-    errors (e.g. http for an OAuth endpoint) get no address hint at all."""
+    """Suffix steering the operator to the right remedy: point at the opt-in only
+    when it would actually unblock the host. Link-local/metadata, unspecified, and
+    BLOCKED_HOSTNAMES (e.g. localhost) are never reachable, so suggest a different
+    address instead; scheme errors get no address hint."""
     if "scheme" in str(error).lower():
         return ""
     host = (urlparse(url).hostname or "").lower()
@@ -112,18 +112,19 @@ def _ssrf_error_hint(url: str, error: Exception) -> str:
     if not never_allowed:
         try:
             ip = ipaddress.ip_address(host)
-            never_allowed = ip.is_loopback or ip.is_unspecified or ip.is_link_local
+            never_allowed = ip.is_unspecified or ip.is_link_local
         except ValueError:
             pass
     if never_allowed:
         return (
-            " Loopback, localhost, and link-local/cloud-metadata addresses are "
-            "never permitted; bind the MCP server to a private-network IP instead."
+            " localhost, unspecified, and link-local/cloud-metadata addresses "
+            "are never permitted; use a loopback or private-network address "
+            "instead."
         )
     if not MCP_SERVER_ALLOW_PRIVATE_NETWORK:
         return (
-            " To allow an MCP server on a private network, set "
-            "MCP_SERVER_ALLOW_PRIVATE_NETWORK=true (loopback and cloud-metadata "
+            " To allow an MCP server on a loopback or private network, set "
+            "MCP_SERVER_ALLOW_PRIVATE_NETWORK=true (cloud-metadata and link-local "
             "addresses remain blocked)."
         )
     return ""
@@ -132,18 +133,20 @@ def _ssrf_error_hint(url: str, error: Exception) -> str:
 def _validate_mcp_server_url(
     url: str | None, field: str, *, require_https: bool
 ) -> None:
-    """Store-time SSRF guard for a curator-supplied URL; raises ``OnyxError``
-    for a field-level frontend error. ``require_https`` routes OAuth endpoints
-    through the same validator the token exchange uses at fetch time, so a URL
-    that saves cleanly can't be rejected later. Fetch-time guards (mcp_client,
-    oauth_token_manager) still cover SDK-followed redirects and DNS rebinding."""
+    """Store-time SSRF guard for a curator-supplied URL; raises ``OnyxError`` as
+    a field-level frontend error. ``require_https`` routes OAuth endpoints through
+    the same validator the token exchange uses, so a URL that saves can't be
+    rejected later. Structural-only (``resolve_dns=False``): rejects bad
+    scheme/credentials/blocked hosts and literal internal IPs but doesn't resolve
+    hostnames, so a transient/internal-DNS host doesn't block a save; fetch-time
+    guards resolve DNS and cover SDK redirects/rebinding."""
     if not url:
         return
     validator = (
         validate_oauth_endpoint_url if require_https else validate_mcp_outbound_url
     )
     try:
-        validator(url)
+        validator(url, resolve_dns=False)
     except (SSRFException, ValueError) as e:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,

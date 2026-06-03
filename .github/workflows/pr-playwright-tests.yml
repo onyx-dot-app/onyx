@@ -377,6 +377,10 @@ jobs:
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
+          # MCP E2E tests register mock servers on host.docker.internal (a private
+          # host-gateway address); opt in so the SSRF guard allows it. Cloud-
+          # metadata/link-local stays blocked regardless.
+          MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
           ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
@@ -664,6 +668,10 @@ jobs:
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
+          # MCP E2E tests register mock servers on host.docker.internal (a private
+          # host-gateway address); opt in so the SSRF guard allows it. Cloud-
+          # metadata/link-local stays blocked regardless.
+          MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
           ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
@@ -816,6 +824,10 @@ jobs:
           MOCK_LLM_RESPONSE=true
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
+          # MCP E2E tests register mock servers on host.docker.internal (a private
+          # host-gateway address); opt in so the SSRF guard allows it. Cloud-
+          # metadata/link-local stays blocked regardless.
+          MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
           ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
           EOF
