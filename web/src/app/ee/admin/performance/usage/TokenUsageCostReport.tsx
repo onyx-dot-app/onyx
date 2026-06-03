@@ -59,12 +59,6 @@ function toDateParam(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function addDays(date: Date, days: number): Date {
-  const copy = new Date(date);
-  copy.setDate(copy.getDate() + days);
-  return copy;
-}
-
 const numberFormatter = new Intl.NumberFormat("en-US");
 
 function formatTokens(value: number): string {
@@ -82,10 +76,10 @@ interface TokenUsageCostReportProps {
 export function TokenUsageCostReport({ timeRange }: TokenUsageCostReportProps) {
   const [expandedEmail, setExpandedEmail] = useState<string | null>(null);
 
-  // Range is half-open [start, end); add a day so the `to` date is included.
+  // start/end are inclusive bare dates; the endpoint covers the full `end` day.
   const url = buildApiPath("/api/admin/usage/export", {
     start: timeRange.from ? toDateParam(timeRange.from) : undefined,
-    end: timeRange.to ? toDateParam(addDays(timeRange.to, 1)) : undefined,
+    end: timeRange.to ? toDateParam(timeRange.to) : undefined,
   });
   const { data, isLoading, error } = useSWR<UsageExportResponse>(
     url,
