@@ -69,6 +69,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         prefix: str = "",
         batch_size: int = INDEX_BATCH_SIZE,
         european_residency: bool = False,
+        region_name: str | None = None,
     ) -> None:
         self.bucket_type: BlobType = BlobType(bucket_type)
         self.bucket_name = bucket_name.strip()
@@ -79,6 +80,12 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self.size_threshold: int | None = BLOB_STORAGE_SIZE_THRESHOLD
         self.bucket_region: Optional[str] = None
         self.european_residency: bool = european_residency
+        # Explicit AWS region for the S3 (and STS) clients. Required for buckets in
+        # non-default partitions (e.g. GovCloud's us-gov-west-1) — without it boto3
+        # falls back to the commercial partition and credentials fail to validate.
+        self.region_name: str | None = (
+            region_name.strip() if region_name and region_name.strip() else None
+        )
 
     def set_allow_images(  # ty: ignore[invalid-method-override]
         self, allow_images: bool
@@ -170,7 +177,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     aws_access_key_id=credentials["aws_access_key_id"],
                     aws_secret_access_key=credentials["aws_secret_access_key"],
                 )
-                self.s3_client = session.client("s3")
+                self.s3_client = session.client("s3", region_name=self.region_name)
             elif authentication_method == "iam_role":
                 # If using IAM roles, we assume the role and let boto3 handle the credentials.
                 role_arn = credentials.get("aws_role_arn")
@@ -182,7 +189,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
                 def _refresh_credentials() -> dict[str, str]:
                     """Refreshes the credentials for the assumed role."""
-                    sts_client = boto3.client("sts")
+                    # STS endpoints are partition-specific, so the region must be
+                    # forwarded here as well or GovCloud role assumption fails.
+                    sts_client = boto3.client("sts", region_name=self.region_name)
                     assumed_role_object = sts_client.assume_role(
                         RoleArn=role_arn,
                         RoleSessionName=f"onyx_blob_storage_{int(time.time())}",
@@ -205,11 +214,11 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     refreshable
                 )
                 session = boto3.Session(botocore_session=botocore_session)
-                self.s3_client = session.client("s3")
+                self.s3_client = session.client("s3", region_name=self.region_name)
             elif authentication_method == "assume_role":
                 # We will assume the instance role to access S3.
                 logger.debug("Using instance role authentication for S3 bucket.")
-                self.s3_client = boto3.client("s3")
+                self.s3_client = boto3.client("s3", region_name=self.region_name)
             else:
                 raise ConnectorValidationError("Invalid authentication method for S3. ")
 
@@ -323,6 +332,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
         elif self.bucket_type == BlobType.S3:
             region = self.bucket_region or self.s3_client.meta.region_name
+            # GovCloud has its own console domain
+            if region and region.startswith("us-gov-"):
+                return f"https://console.amazonaws-us-gov.com/s3/object/{self.bucket_name}?region={region}&prefix={encoded_key}"
             return f"https://s3.console.aws.amazon.com/s3/object/{self.bucket_name}?region={region}&prefix={encoded_key}"
 
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
@@ -627,10 +639,20 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             error_code = e.response["Error"].get("Code", "")
             status_code = e.response["ResponseMetadata"].get("HTTPStatusCode")
 
+            # Credential rejections. These commonly mean the request reached the
+            # wrong AWS partition (e.g. a GovCloud bucket addressed through the
+            # commercial endpoint due to a missing/incorrect region) rather than
+            # a bucket-policy problem, so don't lump them in with AccessDenied.
+            if error_code in ["InvalidAccessKeyId", "InvalidToken"]:
+                raise CredentialExpiredError(
+                    f"Blob storage credentials were rejected (code={error_code}). "
+                    "Verify the credentials and that the configured AWS region matches "
+                    "the bucket's partition (e.g. us-gov-west-1 for GovCloud buckets)."
+                )
+
             # Most common S3 error cases
             if error_code in [
                 "AccessDenied",
-                "InvalidAccessKeyId",
                 "SignatureDoesNotMatch",
             ]:
                 if status_code == 403 or error_code == "AccessDenied":
