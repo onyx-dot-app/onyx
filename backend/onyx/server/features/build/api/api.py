@@ -49,8 +49,7 @@ logger = setup_logger()
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _WEBAPP_HMR_FIXER_TEMPLATE = (_TEMPLATES_DIR / "webapp_hmr_fixer.js").read_text()
 
-# Shared pooled async client. Lazy init so importing this module in tests
-# doesn't leave an unclosed client.
+# Lazy-init so importing this module (e.g. in tests) doesn't leak an open client.
 _ASYNC_PROXY_CLIENT: httpx.AsyncClient | None = None
 
 
@@ -65,9 +64,7 @@ def _get_proxy_client() -> httpx.AsyncClient:
     return _ASYNC_PROXY_CLIENT
 
 
-# Per-asset DB-skip caches, backed by the shared cache (Redis) so the entry is
-# shared across api_server pods rather than per-process. Only GRANTs are cached;
-# the access TTL bounds how long a grant outlives an un-share.
+# Redis-backed so cache entries are shared across pods. Only grants are cached.
 _SANDBOX_URL_TTL = 60
 _WEBAPP_ACCESS_TTL = 30
 
@@ -304,8 +301,7 @@ async def _get_sandbox_url(session_id: UUID) -> str:
 
 
 async def _aiter_and_close(response: httpx.Response) -> AsyncGenerator[bytes, None]:
-    # finally runs on client disconnect (GeneratorExit) too, so a cancelled
-    # stream can't leak its pooled connection — a BackgroundTask wouldn't.
+    # Runs on client disconnect (GeneratorExit) too, so the connection can't leak.
     try:
         async for chunk in response.aiter_bytes(chunk_size=8192):
             yield chunk
@@ -345,9 +341,8 @@ async def _proxy_request(
         logger.error("Error proxying request to %s: %s", target_url, e)
         raise HTTPException(status_code=502, detail="Bad gateway")
 
-    # aclose() is idempotent, so one guarded finally covers every pre-handoff exit
-    # (buffered success/failure, header-building errors). Only a successful handoff to
-    # StreamingResponse transfers ownership to _aiter_and_close, which then closes.
+    # aclose() is idempotent: one guarded finally covers every exit except a
+    # successful StreamingResponse handoff, which passes ownership to _aiter_and_close.
     handed_off = False
     try:
         response_headers = {
@@ -359,10 +354,8 @@ async def _proxy_request(
             response_headers, str(session_id)
         )
 
-        # Only /_next/static/media/* (fonts, images) has content-hashed filenames safe
-        # to cache forever. In dev, chunk/CSS URLs are path-stable but their content
-        # changes on every edit, so the dev server marks them no-cache — overriding that
-        # to immutable serves stale code after an edit + full reload. Preserve it.
+        # Only /_next/static/media/* is content-hashed (safe forever). Dev chunk/CSS
+        # URLs are stable but mutable, so immutable would serve stale code after edits.
         if path.lstrip("/").startswith("_next/static/media/"):
             response_headers["cache-control"] = "public, max-age=31536000, immutable"
             response_headers.pop("pragma", None)
@@ -370,8 +363,7 @@ async def _proxy_request(
 
         content_type = response.headers.get("content-type", "")
 
-        # Buffer and rewrite /_next/ refs. Idempotent: already-proxied URLs
-        # (new sandboxes with assetPrefix) are not double-rewritten.
+        # Buffer to rewrite /_next/ refs; idempotent for assetPrefix-prefixed URLs.
         if any(ct in content_type for ct in REWRITABLE_CONTENT_TYPES):
             try:
                 raw = await response.aread()
@@ -404,8 +396,7 @@ async def _proxy_request(
 
 
 async def _check_webapp_access(session_id: UUID, user: User | None) -> None:
-    # Cached grants short-circuit before the DB fetch; 404 (missing session)
-    # must still beat 401 (unauthenticated), so only grants are cached.
+    # Only grants are cached — a 404 (missing session) must still beat 401 (unauth).
     cache = get_cache_backend()
     if user is not None and cache.get(_webapp_access_cache_key(session_id, user.id)):
         return
@@ -461,8 +452,7 @@ async def get_webapp(
         return await _proxy_request(path, request, session_id)
     except HTTPException as e:
         if e.status_code in (502, 503, 504):
-            # The cached URL may point at a dead/recreated pod; drop it so the
-            # next request re-resolves from the DB.
+            # Cached URL may point at a dead/recreated pod; drop it to force re-resolve.
             get_cache_backend().delete(_sandbox_url_cache_key(session_id))
             return _offline_html_response()
         raise
