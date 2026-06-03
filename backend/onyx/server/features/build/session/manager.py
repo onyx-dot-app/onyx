@@ -39,12 +39,6 @@ from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.llm.factory import get_default_llm
-from onyx.llm.models import LanguageModelInput
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import SystemMessage
-from onyx.llm.models import UserMessage
-from onyx.llm.utils import llm_response_to_string
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.api.models import DirectoryListing
 from onyx.server.features.build.api.models import FileSystemEntry
@@ -102,15 +96,10 @@ from onyx.server.features.build.session.interrupt_signal import clear_interrupt
 from onyx.server.features.build.session.interrupt_signal import is_interrupt_requested
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
-from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
-from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
+from onyx.server.features.build.session.naming import generate_session_name
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.skills.push import build_user_skills_payload
 from onyx.skills.push import hydrate_sandbox_skills
-from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.create import ensure_trace
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -1002,7 +991,7 @@ class SessionManager:
         if session is None:
             return None
 
-        return self._generate_session_name(session_id)
+        return generate_session_name(self._db_session, session_id)
 
     def update_session_name(
         self,
@@ -1033,85 +1022,12 @@ class SessionManager:
             session.name = name
         else:
             # Auto-generate name from first user message using LLM
-            session.name = self._generate_session_name(session_id)
+            session.name = generate_session_name(self._db_session, session_id)
 
         update_session_activity(session_id, self._db_session)
         self._db_session.commit()
         self._db_session.refresh(session)
         return session
-
-    def _generate_session_name(self, session_id: UUID) -> str:
-        """
-        Generate a session name using LLM based on the first user message.
-
-        Args:
-            session_id: The session UUID
-
-        Returns:
-            Generated session name or fallback name
-        """
-        # Get messages to find first user message
-        messages = get_session_messages(session_id, self._db_session)
-        first_user_msg = next((m for m in messages if m.type == MessageType.USER), None)
-
-        if not first_user_msg:
-            return f"Build Session {str(session_id)[:8]}"
-
-        # Extract text from message_metadata
-        metadata = first_user_msg.message_metadata
-        if not metadata:
-            return f"Build Session {str(session_id)[:8]}"
-
-        # Handle user_message packet structure: {type: "user_message", content: {type: "text", text: "..."}}
-        content = metadata.get("content", {})
-        if isinstance(content, dict):
-            user_message = content.get("text", "")
-        else:
-            user_message = str(content) if content else ""
-
-        if not user_message:
-            return f"Build Session {str(session_id)[:8]}"
-
-        # Use LLM to generate a concise session name with Braintrust tracing
-        try:
-            llm = get_default_llm()
-            prompt_messages: LanguageModelInput = [
-                SystemMessage(content=BUILD_NAMING_SYSTEM_PROMPT),
-                UserMessage(
-                    content=BUILD_NAMING_USER_PROMPT.format(
-                        user_message=user_message[:500]  # Limit input size
-                    )
-                ),
-            ]
-            with ensure_trace(
-                "build_session_naming",
-                group_id=str(session_id),
-                metadata={"session_id": str(session_id)},
-            ):
-                with llm_generation_span(
-                    llm=llm,
-                    flow=LLMFlow.BUILD_SESSION_NAMING,
-                    input_messages=prompt_messages,
-                ) as span_generation:
-                    response = llm.invoke(
-                        prompt_messages, reasoning_effort=ReasoningEffort.OFF
-                    )
-                    record_llm_response(span_generation, response)
-                    generated_name = llm_response_to_string(response).strip().strip('"')
-
-            # Ensure the name isn't too long (max 50 chars)
-            if len(generated_name) > 50:
-                generated_name = generated_name[:47] + "..."
-
-            return (
-                generated_name
-                if generated_name
-                else f"Build Session {str(session_id)[:8]}"
-            )
-        except Exception as e:
-            logger.warning("Failed to generate session name with LLM: %s", e)
-            # Fallback to simple truncation
-            return user_message[:40].strip() + ("..." if len(user_message) > 40 else "")
 
     def delete_session(
         self,
