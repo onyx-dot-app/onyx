@@ -5,7 +5,17 @@ import { Button, Text } from "@opal/components";
 import { visualFor } from "@/app/flows/components/nodeVisuals";
 import type { FlowNodeKind } from "@/app/flows/types";
 
-const KINDS: readonly FlowNodeKind[] = ["HTTP", "AI", "CONDITION", "TRANSFORM"];
+// Roughly most-reached-for first, so the common ones do not end up on a
+// second row when the pane is narrow.
+const KINDS: readonly FlowNodeKind[] = [
+  "HTTP",
+  "AI",
+  "CODE",
+  "TRANSFORM",
+  "CONDITION",
+  "LOOP",
+  "HUMAN",
+];
 
 export interface NodePaletteProps {
   /** The node a new one is wired after, or null to add it unconnected. */
@@ -14,7 +24,7 @@ export interface NodePaletteProps {
 }
 
 /**
- * The four node kinds, as one row of buttons.
+ * Every node kind, as one row of buttons.
  *
  * A palette rather than a drag source: nodes are placed by the layout, so
  * there is nowhere meaningful to drop one. Adding wires the new node after

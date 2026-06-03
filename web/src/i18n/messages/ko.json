@@ -12496,14 +12496,19 @@
         "HTTP": "HTTP 요청",
         "TRANSFORM": "변환",
         "CONDITION": "조건",
-        "AI": "AI"
+        "AI": "AI",
+        "HUMAN": "승인",
+        "CODE": "코드",
+        "LOOP": "반복"
       },
       "startBadge": "시작",
       "fanOutBadge": "항목별",
       "unreachableBadge": "연결 안 됨",
       "branch": {
         "true": "true",
-        "false": "false"
+        "false": "false",
+        "approve": "승인",
+        "reject": "거부"
       },
       "controls": {
         "zoomIn": "확대",
@@ -12518,7 +12523,10 @@
         "HTTP": "HTTP 요청",
         "TRANSFORM": "변환",
         "CONDITION": "조건",
-        "AI": "AI"
+        "AI": "AI",
+        "HUMAN": "승인",
+        "CODE": "코드",
+        "LOOP": "반복"
       }
     },
     "status": {
@@ -12530,14 +12538,18 @@
       "RUNNING": "실행 중",
       "SUCCEEDED": "성공",
       "FAILED": "실패",
-      "SKIPPED": "건너뜀"
+      "SKIPPED": "건너뜀",
+      "AWAITING_DECISION": "승인 대기 중"
     },
     "inspector": {
       "kind": {
         "HTTP": "HTTP 요청",
         "TRANSFORM": "변환",
         "CONDITION": "조건",
-        "AI": "AI"
+        "AI": "AI",
+        "HUMAN": "승인",
+        "CODE": "코드",
+        "LOOP": "반복"
       },
       "fields": {
         "name": "이름",
@@ -12563,7 +12575,18 @@
         "outputFieldsHelp": "모델이 반환할 각 필드의 이름과 형식을 지정하세요. 형식: text, number, boolean, list.",
         "fieldName": "필드",
         "fieldExpression": "식",
-        "fieldType": "형식"
+        "fieldType": "형식",
+        "question": "질문",
+        "questionHelp": "결정해야 할 내용입니다. 식은 보여 주기 전에 해석됩니다.",
+        "assignee": "담당자",
+        "assigneeHelp": "답할 사람입니다. 플로우 소유자는 언제든 결정할 수 있습니다.",
+        "rejectEndsRun": "거부에 연결된 단계가 없으면 거부 시 실행이 멈춥니다.",
+        "code": "Python",
+        "codeHelp": "trigger, steps, item, index 를 읽습니다. result 에 대입하면 값을 넘깁니다.",
+        "over": "나눌 목록",
+        "overHelp": "목록을 반환하는 식입니다.",
+        "batchSize": "배치당 항목 수",
+        "batchSizeHelp": "다음 단계를 항목마다 실행하면 배치를 하나씩 받습니다."
       },
       "onError": {
         "stop": "실행 중단",
@@ -12589,7 +12612,10 @@
         "resultPath": "data.items",
         "left": "'{{' steps.fetch.status '}}'",
         "fieldExpression": "'{{' steps.fetch.body.title '}}'",
-        "fieldType": "text"
+        "fieldType": "text",
+        "question": "요약을 팀에 보낼까요?",
+        "assignee": "someone@example.com",
+        "over": "'{{' steps.fetch.body.rows '}}'"
       }
     },
     "editor": {
@@ -12633,7 +12659,14 @@
       "notRun": "이 단계는 실행되지 않았습니다.",
       "item": "항목 {index}",
       "input": "입력",
-      "output": "출력"
+      "output": "출력",
+      "approve": "승인",
+      "reject": "거부",
+      "comment": "의견",
+      "commentPlaceholder": "나중에 실행 기록을 볼 사람을 위한 이유입니다.",
+      "assignedTo": "담당: {who}",
+      "decisionFailed": "결정을 기록하지 못했습니다.",
+      "decisionFallbackQuestion": "이 실행은 승인을 기다리고 있습니다."
     }
   },
   "knowledge": {

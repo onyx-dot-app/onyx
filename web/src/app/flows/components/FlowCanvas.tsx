@@ -7,6 +7,7 @@ import { SvgExpand, SvgMinus, SvgPlus } from "@opal/icons";
 import { cn } from "@opal/utils";
 import {
   CANVAS_PADDING,
+  type EdgeBranch,
   NODE_HEIGHT,
   NODE_WIDTH,
   layoutFlow,
@@ -204,13 +205,7 @@ export function FlowCanvas({
                 key={edge.id}
                 data-testid="flow-edge"
                 data-branch={edge.branch ?? "none"}
-                className={
-                  edge.branch === "true"
-                    ? "text-status-success-05"
-                    : edge.branch === "false"
-                      ? "text-status-error-05"
-                      : "text-border-02"
-                }
+                className={branchColourOf(edge.branch)}
               >
                 <path
                   d={edge.path}
@@ -294,6 +289,26 @@ export function FlowCanvas({
       </div>
     </div>
   );
+}
+
+/**
+ * Edge colour per branch: the yes side green, the no side red.
+ *
+ * A condition and an approval share the palette deliberately — both are a
+ * fork, and someone scanning the canvas should not have to learn two colour
+ * schemes to see which way the run can go.
+ */
+function branchColourOf(branch: EdgeBranch): string {
+  switch (branch) {
+    case "true":
+    case "approve":
+      return "text-status-success-05";
+    case "false":
+    case "reject":
+      return "text-status-error-05";
+    case null:
+      return "text-border-02";
+  }
 }
 
 /**

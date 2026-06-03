@@ -9,6 +9,7 @@ import {
   SvgLoader,
   SvgPauseCircle,
   SvgPlayCircle,
+  SvgUserCheck,
 } from "@opal/icons";
 import { cn } from "@opal/utils";
 import type { IconComponent } from "@/app/flows/components/nodeVisuals";
@@ -84,6 +85,14 @@ function runLook(status: FlowRunStatus): BadgeLook {
         icon: SvgLoader,
         chipClassName: "bg-status-info-01",
         iconClassName: "text-status-info-05 animate-spin",
+      };
+    case "AWAITING_DECISION":
+      // Warning rather than info: the run is not progressing, and somebody
+      // has to do something about that.
+      return {
+        icon: SvgUserCheck,
+        chipClassName: "bg-status-warning-01",
+        iconClassName: "text-status-warning-05",
       };
     case "QUEUED":
     case "SKIPPED":

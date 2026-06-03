@@ -18,7 +18,14 @@ export type JsonValue =
 export type JsonObject = { [key: string]: JsonValue };
 
 export type FlowStatus = "ACTIVE" | "PAUSED";
-export type FlowNodeKind = "HTTP" | "TRANSFORM" | "CONDITION" | "AI";
+export type FlowNodeKind =
+  | "HTTP"
+  | "TRANSFORM"
+  | "CONDITION"
+  | "AI"
+  | "HUMAN"
+  | "CODE"
+  | "LOOP";
 export type FlowTriggerKind = "SCHEDULE" | "WEBHOOK" | "MANUAL";
 export type FlowTriggerSource = "SCHEDULE" | "WEBHOOK" | "MANUAL" | "TEST";
 
@@ -27,7 +34,12 @@ export type FlowRunStatus =
   | "RUNNING"
   | "SUCCEEDED"
   | "FAILED"
-  | "SKIPPED";
+  | "SKIPPED"
+  /** Parked on a human step. Not terminal — a decision re-queues the run. */
+  | "AWAITING_DECISION";
+
+/** What a person can answer at a human step. */
+export type FlowDecision = "approve" | "reject";
 
 export type FlowNodeRunStatus = "RUNNING" | "SUCCEEDED" | "FAILED" | "SKIPPED";
 
@@ -104,7 +116,34 @@ export interface AiNode extends NodeBase {
   timeout_seconds: number;
 }
 
-export type FlowNode = HttpNode | TransformNode | ConditionNode | AiNode;
+export interface HumanNode extends NodeBase {
+  kind: "HUMAN";
+  question: string;
+  assignee: string | null;
+  on_approve: string[];
+  on_reject: string[];
+}
+
+export interface CodeNode extends NodeBase {
+  kind: "CODE";
+  code: string;
+  timeout_seconds: number;
+}
+
+export interface LoopNode extends NodeBase {
+  kind: "LOOP";
+  over: string;
+  batch_size: number;
+}
+
+export type FlowNode =
+  | HttpNode
+  | TransformNode
+  | ConditionNode
+  | AiNode
+  | HumanNode
+  | CodeNode
+  | LoopNode;
 
 export interface FlowSpec {
   spec_version: 1;

@@ -5,7 +5,15 @@
  * cannot drift into showing the same node three different ways.
  */
 
-import { SvgBranch, SvgCode, SvgGlobe, SvgSparkle } from "@opal/icons";
+import {
+  SvgBranch,
+  SvgCode,
+  SvgGlobe,
+  SvgRefreshCw,
+  SvgSparkle,
+  SvgTerminal,
+  SvgUserCheck,
+} from "@opal/icons";
 import type { FlowNodeKind, FlowNodeRunStatus } from "@/app/flows/types";
 
 export type IconComponent = React.FunctionComponent<{
@@ -46,6 +54,24 @@ const VISUALS = {
     chipClassName: "bg-theme-primary-04",
     iconClassName: "text-theme-primary-06",
     accentBorderClassName: "border-theme-primary-05",
+  },
+  HUMAN: {
+    icon: SvgUserCheck,
+    chipClassName: "bg-action-selection-01",
+    iconClassName: "text-action-selection-05",
+    accentBorderClassName: "border-action-selection-05",
+  },
+  CODE: {
+    icon: SvgTerminal,
+    chipClassName: "bg-background-tint-03",
+    iconClassName: "text-text-05",
+    accentBorderClassName: "border-text-05",
+  },
+  LOOP: {
+    icon: SvgRefreshCw,
+    chipClassName: "bg-status-success-01",
+    iconClassName: "text-status-success-05",
+    accentBorderClassName: "border-status-success-05",
   },
 } satisfies Record<FlowNodeKind, NodeVisual>;
 

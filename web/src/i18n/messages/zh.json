@@ -12496,14 +12496,19 @@
         "HTTP": "HTTP 请求",
         "TRANSFORM": "转换",
         "CONDITION": "条件",
-        "AI": "AI"
+        "AI": "AI",
+        "HUMAN": "审批",
+        "CODE": "代码",
+        "LOOP": "循环"
       },
       "startBadge": "起点",
       "fanOutBadge": "逐项",
       "unreachableBadge": "未连接",
       "branch": {
         "true": "true",
-        "false": "false"
+        "false": "false",
+        "approve": "已批准",
+        "reject": "已拒绝"
       },
       "controls": {
         "zoomIn": "放大",
@@ -12518,7 +12523,10 @@
         "HTTP": "HTTP 请求",
         "TRANSFORM": "转换",
         "CONDITION": "条件",
-        "AI": "AI"
+        "AI": "AI",
+        "HUMAN": "审批",
+        "CODE": "代码",
+        "LOOP": "循环"
       }
     },
     "status": {
@@ -12530,14 +12538,18 @@
       "RUNNING": "运行中",
       "SUCCEEDED": "成功",
       "FAILED": "失败",
-      "SKIPPED": "已跳过"
+      "SKIPPED": "已跳过",
+      "AWAITING_DECISION": "等待审批"
     },
     "inspector": {
       "kind": {
         "HTTP": "HTTP 请求",
         "TRANSFORM": "转换",
         "CONDITION": "条件",
-        "AI": "AI"
+        "AI": "AI",
+        "HUMAN": "审批",
+        "CODE": "代码",
+        "LOOP": "循环"
       },
       "fields": {
         "name": "名称",
@@ -12563,7 +12575,18 @@
         "outputFieldsHelp": "为模型必须返回的每个字段指定名称和类型。类型：text、number、boolean、list。",
         "fieldName": "字段",
         "fieldExpression": "表达式",
-        "fieldType": "类型"
+        "fieldType": "类型",
+        "question": "问题",
+        "questionHelp": "需要决定的内容。表达式在显示前解析。",
+        "assignee": "询问",
+        "assigneeHelp": "应由谁回答。流程的所有者始终可以决定。",
+        "rejectEndsRun": "若拒绝没有连接任何步骤，拒绝会停止运行。",
+        "code": "Python",
+        "codeHelp": "可读取 trigger、steps、item 和 index。赋值给 result 即可向后传递。",
+        "over": "拆分此列表",
+        "overHelp": "一个返回列表的表达式。",
+        "batchSize": "每批数量",
+        "batchSizeHelp": "下一步按项执行时，每次会收到一批。"
       },
       "onError": {
         "stop": "停止运行",
@@ -12589,7 +12612,10 @@
         "resultPath": "data.items",
         "left": "'{{' steps.fetch.status '}}'",
         "fieldExpression": "'{{' steps.fetch.body.title '}}'",
-        "fieldType": "text"
+        "fieldType": "text",
+        "question": "把摘要发给团队吗？",
+        "assignee": "someone@example.com",
+        "over": "'{{' steps.fetch.body.rows '}}'"
       }
     },
     "editor": {
@@ -12633,7 +12659,14 @@
       "notRun": "此步骤未运行。",
       "item": "第 {index} 项",
       "input": "输入",
-      "output": "输出"
+      "output": "输出",
+      "approve": "批准",
+      "reject": "拒绝",
+      "comment": "备注",
+      "commentPlaceholder": "写明原因，供之后查看运行的人参考。",
+      "assignedTo": "指派给 {who}",
+      "decisionFailed": "无法记录该决定。",
+      "decisionFallbackQuestion": "此运行正在等待审批。"
     }
   },
   "knowledge": {

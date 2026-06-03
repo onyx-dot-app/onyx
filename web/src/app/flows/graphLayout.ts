@@ -34,8 +34,8 @@ export const CANVAS_PADDING = 48;
 const COLUMN_STRIDE = NODE_WIDTH + COLUMN_GAP;
 const ROW_STRIDE = NODE_HEIGHT + ROW_GAP;
 
-/** Which side of a condition an edge leaves from. */
-export type EdgeBranch = "true" | "false" | null;
+/** Which side of a branching node an edge leaves from. */
+export type EdgeBranch = "true" | "false" | "approve" | "reject" | null;
 
 export interface PositionedNode {
   node: FlowNode;
@@ -73,14 +73,24 @@ export function successorsOf(node: FlowNode): string[] {
   if (node.kind === "CONDITION") {
     return [...node.next, ...node.on_true, ...node.on_false];
   }
+  if (node.kind === "HUMAN") {
+    return [...node.next, ...node.on_approve, ...node.on_reject];
+  }
   return [...node.next];
 }
 
 /** Which branch an edge represents, for labelling and colour. */
 function branchOf(node: FlowNode, target: string): EdgeBranch {
-  if (node.kind !== "CONDITION") return null;
-  if (node.on_true.includes(target)) return "true";
-  if (node.on_false.includes(target)) return "false";
+  if (node.kind === "CONDITION") {
+    if (node.on_true.includes(target)) return "true";
+    if (node.on_false.includes(target)) return "false";
+    return null;
+  }
+  if (node.kind === "HUMAN") {
+    if (node.on_approve.includes(target)) return "approve";
+    if (node.on_reject.includes(target)) return "reject";
+    return null;
+  }
   return null;
 }
 

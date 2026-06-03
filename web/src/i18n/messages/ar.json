@@ -12496,14 +12496,19 @@
         "HTTP": "طلب HTTP",
         "TRANSFORM": "تحويل",
         "CONDITION": "شرط",
-        "AI": "ذكاء اصطناعي"
+        "AI": "ذكاء اصطناعي",
+        "HUMAN": "موافقة",
+        "CODE": "شيفرة",
+        "LOOP": "تكرار"
       },
       "startBadge": "البداية",
       "fanOutBadge": "لكل عنصر",
       "unreachableBadge": "غير متصل",
       "branch": {
         "true": "صحيح",
-        "false": "خطأ"
+        "false": "خطأ",
+        "approve": "تمت الموافقة",
+        "reject": "مرفوض"
       },
       "controls": {
         "zoomIn": "تكبير",
@@ -12518,7 +12523,10 @@
         "HTTP": "طلب HTTP",
         "TRANSFORM": "تحويل",
         "CONDITION": "شرط",
-        "AI": "ذكاء اصطناعي"
+        "AI": "ذكاء اصطناعي",
+        "HUMAN": "موافقة",
+        "CODE": "شيفرة",
+        "LOOP": "تكرار"
       }
     },
     "status": {
@@ -12530,14 +12538,18 @@
       "RUNNING": "قيد التشغيل",
       "SUCCEEDED": "نجح",
       "FAILED": "فشل",
-      "SKIPPED": "تم تخطيه"
+      "SKIPPED": "تم تخطيه",
+      "AWAITING_DECISION": "بانتظار الموافقة"
     },
     "inspector": {
       "kind": {
         "HTTP": "طلب HTTP",
         "TRANSFORM": "تحويل",
         "CONDITION": "شرط",
-        "AI": "ذكاء اصطناعي"
+        "AI": "ذكاء اصطناعي",
+        "HUMAN": "موافقة",
+        "CODE": "شيفرة",
+        "LOOP": "تكرار"
       },
       "fields": {
         "name": "الاسم",
@@ -12563,7 +12575,18 @@
         "outputFieldsHelp": "سمِّ كل حقل يجب أن يعيده النموذج وحدد نوعه. الأنواع: text، number، boolean، list.",
         "fieldName": "الحقل",
         "fieldExpression": "التعبير",
-        "fieldType": "النوع"
+        "fieldType": "النوع",
+        "question": "السؤال",
+        "questionHelp": "ما يجب البتّ فيه. تُحل التعبيرات قبل عرضه.",
+        "assignee": "اسأل",
+        "assigneeHelp": "من يجب أن يجيب. مالك التدفق يمكنه دائمًا أن يقرر.",
+        "rejectEndsRun": "إذا لم يرتبط بالرفض أي شيء، فالرفض يوقف التشغيل.",
+        "code": "Python",
+        "codeHelp": "يقرأ trigger و steps و item و index. أسنِد إلى result لتمرير قيمة.",
+        "over": "قسّم هذه القائمة",
+        "overHelp": "تعبير ينتج قائمة.",
+        "batchSize": "العناصر لكل دفعة",
+        "batchSizeHelp": "تتلقى الخطوة التالية دفعة واحدة في كل مرة عند تنفيذها لكل عنصر."
       },
       "onError": {
         "stop": "إيقاف التشغيل",
@@ -12589,7 +12612,10 @@
         "resultPath": "data.items",
         "left": "'{{' steps.fetch.status '}}'",
         "fieldExpression": "'{{' steps.fetch.body.title '}}'",
-        "fieldType": "text"
+        "fieldType": "text",
+        "question": "هل نرسل الملخص إلى الفريق؟",
+        "assignee": "someone@example.com",
+        "over": "'{{' steps.fetch.body.rows '}}'"
       }
     },
     "editor": {
@@ -12633,7 +12659,14 @@
       "notRun": "لم تُنفَّذ هذه الخطوة.",
       "item": "العنصر {index}",
       "input": "المدخلات",
-      "output": "المخرجات"
+      "output": "المخرجات",
+      "approve": "موافقة",
+      "reject": "رفض",
+      "comment": "تعليق",
+      "commentPlaceholder": "السبب، لمن يقرأ التشغيل لاحقًا.",
+      "assignedTo": "مسند إلى {who}",
+      "decisionFailed": "تعذّر تسجيل القرار.",
+      "decisionFallbackQuestion": "هذا التشغيل بانتظار موافقة."
     }
   },
   "knowledge": {

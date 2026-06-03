@@ -12498,14 +12498,19 @@
         "HTTP": "HTTP リクエスト",
         "TRANSFORM": "変換",
         "CONDITION": "条件",
-        "AI": "AI"
+        "AI": "AI",
+        "HUMAN": "承認",
+        "CODE": "コード",
+        "LOOP": "ループ"
       },
       "startBadge": "開始",
       "fanOutBadge": "項目ごと",
       "unreachableBadge": "未接続",
       "branch": {
         "true": "true",
-        "false": "false"
+        "false": "false",
+        "approve": "承認",
+        "reject": "却下"
       },
       "controls": {
         "zoomIn": "拡大",
@@ -12520,7 +12525,10 @@
         "HTTP": "HTTP リクエスト",
         "TRANSFORM": "変換",
         "CONDITION": "条件",
-        "AI": "AI"
+        "AI": "AI",
+        "HUMAN": "承認",
+        "CODE": "コード",
+        "LOOP": "ループ"
       }
     },
     "status": {
@@ -12532,14 +12540,18 @@
       "RUNNING": "実行中",
       "SUCCEEDED": "成功",
       "FAILED": "失敗",
-      "SKIPPED": "スキップ"
+      "SKIPPED": "スキップ",
+      "AWAITING_DECISION": "承認待ち"
     },
     "inspector": {
       "kind": {
         "HTTP": "HTTP リクエスト",
         "TRANSFORM": "変換",
         "CONDITION": "条件",
-        "AI": "AI"
+        "AI": "AI",
+        "HUMAN": "承認",
+        "CODE": "コード",
+        "LOOP": "ループ"
       },
       "fields": {
         "name": "名前",
@@ -12565,7 +12577,18 @@
         "outputFieldsHelp": "モデルが返すフィールドの名前と型を指定します。型: text、number、boolean、list。",
         "fieldName": "フィールド",
         "fieldExpression": "式",
-        "fieldType": "型"
+        "fieldType": "型",
+        "question": "質問",
+        "questionHelp": "判断してもらう内容です。式は表示前に解決されます。",
+        "assignee": "担当者",
+        "assigneeHelp": "回答する人です。フローの所有者はいつでも判断できます。",
+        "rejectEndsRun": "却下の接続先がない場合、却下すると実行は停止します。",
+        "code": "Python",
+        "codeHelp": "trigger、steps、item、index を読み取れます。result に代入すると次へ渡せます。",
+        "over": "分割する一覧",
+        "overHelp": "一覧を返す式です。",
+        "batchSize": "1 バッチあたりの件数",
+        "batchSizeHelp": "次のステップを項目ごとに実行すると、1 バッチずつ渡されます。"
       },
       "onError": {
         "stop": "実行を停止",
@@ -12591,7 +12614,10 @@
         "resultPath": "data.items",
         "left": "'{{' steps.fetch.status '}}'",
         "fieldExpression": "'{{' steps.fetch.body.title '}}'",
-        "fieldType": "text"
+        "fieldType": "text",
+        "question": "要約をチームに送信しますか？",
+        "assignee": "someone@example.com",
+        "over": "'{{' steps.fetch.body.rows '}}'"
       }
     },
     "editor": {
@@ -12635,7 +12661,14 @@
       "notRun": "このステップは実行されませんでした。",
       "item": "項目 {index}",
       "input": "入力",
-      "output": "出力"
+      "output": "出力",
+      "approve": "承認",
+      "reject": "却下",
+      "comment": "コメント",
+      "commentPlaceholder": "後で実行内容を読む人のための理由です。",
+      "assignedTo": "担当: {who}",
+      "decisionFailed": "判断を記録できませんでした。",
+      "decisionFallbackQuestion": "この実行は承認を待っています。"
     }
   },
   "knowledge": {

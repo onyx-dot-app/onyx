@@ -12498,14 +12498,19 @@
         "HTTP": "Requisição HTTP",
         "TRANSFORM": "Transformar",
         "CONDITION": "Condição",
-        "AI": "IA"
+        "AI": "IA",
+        "HUMAN": "Aprovação",
+        "CODE": "Código",
+        "LOOP": "Ciclo"
       },
       "startBadge": "início",
       "fanOutBadge": "por item",
       "unreachableBadge": "não conectado",
       "branch": {
         "true": "verdadeiro",
-        "false": "falso"
+        "false": "falso",
+        "approve": "aprovado",
+        "reject": "recusado"
       },
       "controls": {
         "zoomIn": "Aproximar",
@@ -12520,7 +12525,10 @@
         "HTTP": "Requisição HTTP",
         "TRANSFORM": "Transformar",
         "CONDITION": "Condição",
-        "AI": "IA"
+        "AI": "IA",
+        "HUMAN": "Aprovação",
+        "CODE": "Código",
+        "LOOP": "Ciclo"
       }
     },
     "status": {
@@ -12532,14 +12540,18 @@
       "RUNNING": "Em execução",
       "SUCCEEDED": "Concluído",
       "FAILED": "Falhou",
-      "SKIPPED": "Ignorado"
+      "SKIPPED": "Ignorado",
+      "AWAITING_DECISION": "À espera de aprovação"
     },
     "inspector": {
       "kind": {
         "HTTP": "Requisição HTTP",
         "TRANSFORM": "Transformar",
         "CONDITION": "Condição",
-        "AI": "IA"
+        "AI": "IA",
+        "HUMAN": "Aprovação",
+        "CODE": "Código",
+        "LOOP": "Ciclo"
       },
       "fields": {
         "name": "Nome",
@@ -12565,7 +12577,18 @@
         "outputFieldsHelp": "Nomeie e tipe cada campo que o modelo deve devolver. Tipos: text, number, boolean, list.",
         "fieldName": "Campo",
         "fieldExpression": "Expressão",
-        "fieldType": "Tipo"
+        "fieldType": "Tipo",
+        "question": "Pergunta",
+        "questionHelp": "O que é preciso decidir. As expressões são resolvidas antes de a mostrar.",
+        "assignee": "Perguntar a",
+        "assigneeHelp": "Quem deve responder. Quem é dono do fluxo pode sempre decidir.",
+        "rejectEndsRun": "Sem nada ligado à recusa, recusar para a execução.",
+        "code": "Python",
+        "codeHelp": "Lê trigger, steps, item e index. Atribua a result para passar um valor.",
+        "over": "Dividir esta lista",
+        "overHelp": "Uma expressão que resulta numa lista.",
+        "batchSize": "Itens por lote",
+        "batchSizeHelp": "A etapa seguinte recebe um lote de cada vez se correr por item."
       },
       "onError": {
         "stop": "Parar a execução",
@@ -12591,7 +12614,10 @@
         "resultPath": "data.items",
         "left": "'{{' steps.fetch.status '}}'",
         "fieldExpression": "'{{' steps.fetch.body.title '}}'",
-        "fieldType": "text"
+        "fieldType": "text",
+        "question": "Enviar o resumo à equipa?",
+        "assignee": "alguem@example.com",
+        "over": "'{{' steps.fetch.body.rows '}}'"
       }
     },
     "editor": {
@@ -12635,7 +12661,14 @@
       "notRun": "Esta etapa não foi executada.",
       "item": "Item {index}",
       "input": "Entrada",
-      "output": "Saída"
+      "output": "Saída",
+      "approve": "Aprovar",
+      "reject": "Recusar",
+      "comment": "Comentário",
+      "commentPlaceholder": "O motivo, para quem ler a execução mais tarde.",
+      "assignedTo": "Atribuído a {who}",
+      "decisionFailed": "Não foi possível registar a decisão.",
+      "decisionFallbackQuestion": "Esta execução está à espera de uma aprovação."
     }
   },
   "knowledge": {

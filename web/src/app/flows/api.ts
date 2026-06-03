@@ -13,11 +13,13 @@
 
 import { FLOWS_API_BASE } from "@/app/flows/constants";
 import type {
+  FlowDecision,
   FlowDetail,
   FlowSpec,
   FlowStatus,
   FlowTrigger,
   JsonObject,
+  RunDetail,
   RunSummary,
   TriggerDefinition,
 } from "@/app/flows/types";
@@ -40,7 +42,8 @@ type RequestBody =
   | { name?: string; description?: string | null; spec?: FlowSpec }
   | { status: FlowStatus }
   | { triggers: TriggerDefinition[] }
-  | { payload: JsonObject | null };
+  | { payload: JsonObject | null }
+  | { node_id: string; decision: FlowDecision; comment: string | null };
 
 async function send<T>(
   path: string,
@@ -114,6 +117,29 @@ export async function replaceTriggers(
     "PUT",
     "Could not save the triggers",
     { triggers }
+  );
+}
+
+/**
+ * Answer an approval step a run is parked on.
+ *
+ * Returns the run as it stands the moment the decision lands, which is back
+ * to QUEUED rather than finished — the worker picks it up from there.
+ */
+export async function submitDecision(
+  flowId: string,
+  runId: string,
+  input: { nodeId: string; decision: FlowDecision; comment?: string | null }
+): Promise<RunDetail> {
+  return send<RunDetail>(
+    `/${flowId}/runs/${runId}/decision`,
+    "POST",
+    "Could not record the decision",
+    {
+      node_id: input.nodeId,
+      decision: input.decision,
+      comment: input.comment ?? null,
+    }
   );
 }
 

@@ -10,11 +10,14 @@
 import { successorsOf } from "@/app/flows/graphLayout";
 import type {
   AiNode,
+  CodeNode,
   ConditionNode,
   FlowNode,
   FlowNodeKind,
   FlowSpec,
   HttpNode,
+  HumanNode,
+  LoopNode,
   TransformNode,
 } from "@/app/flows/types";
 
@@ -106,6 +109,37 @@ export function blankNode(id: string, kind: FlowNodeKind): FlowNode {
       };
       return node;
     }
+    case "HUMAN": {
+      const node: HumanNode = {
+        ...base,
+        kind: "HUMAN",
+        question: "",
+        assignee: null,
+        on_approve: [],
+        on_reject: [],
+      };
+      return node;
+    }
+    case "CODE": {
+      const node: CodeNode = {
+        ...base,
+        kind: "CODE",
+        // A snippet that does nothing is still a valid one, and the comment
+        // says more about how the node works than an empty box would.
+        code: "result = steps\n",
+        timeout_seconds: 30,
+      };
+      return node;
+    }
+    case "LOOP": {
+      const node: LoopNode = {
+        ...base,
+        kind: "LOOP",
+        over: "",
+        batch_size: 10,
+      };
+      return node;
+    }
   }
 }
 
@@ -131,10 +165,14 @@ export function addNode(
 
   const nodes = spec.nodes.map((node) => {
     if (node.id !== afterNodeId) return node;
-    // A condition has no plain `next` in practice, so a node added after one
-    // joins the true branch — the branch people mean when they say "then".
+    // Neither branching kind has a plain `next` in practice, so a node added
+    // after one joins the positive branch — the branch people mean when they
+    // say "and then".
     if (node.kind === "CONDITION") {
       return { ...node, on_true: [...node.on_true, id] };
+    }
+    if (node.kind === "HUMAN") {
+      return { ...node, on_approve: [...node.on_approve, id] };
     }
     return { ...node, next: [...node.next, id] };
   });
@@ -147,7 +185,7 @@ export function addNode(
  *
  * Anything that pointed at the removed node inherits its successors, so
  * deleting a step from the middle of a chain joins the two ends rather than
- * severing the flow. A condition's branches are repaired the same way.
+ * severing the flow. Branch lists are repaired the same way.
  */
 export function removeNode(spec: FlowSpec, nodeId: string): FlowSpec {
   const doomed = spec.nodes.find((node) => node.id === nodeId);
@@ -170,6 +208,14 @@ export function removeNode(spec: FlowSpec, nodeId: string): FlowSpec {
           next: repoint(node.next),
           on_true: repoint(node.on_true),
           on_false: repoint(node.on_false),
+        };
+      }
+      if (node.kind === "HUMAN") {
+        return {
+          ...node,
+          next: repoint(node.next),
+          on_approve: repoint(node.on_approve),
+          on_reject: repoint(node.on_reject),
         };
       }
       return { ...node, next: repoint(node.next) };

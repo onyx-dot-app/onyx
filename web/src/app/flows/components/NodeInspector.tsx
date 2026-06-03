@@ -17,11 +17,14 @@ import { visualFor } from "@/app/flows/components/nodeVisuals";
 import { UNARY_OPERATORS } from "@/app/flows/types";
 import type {
   AiNode,
+  CodeNode,
   ConditionNode,
   ConditionOperator,
   FlowNode,
   HttpNode,
   HttpMethod,
+  HumanNode,
+  LoopNode,
   TransformNode,
 } from "@/app/flows/types";
 
@@ -116,24 +119,35 @@ export function NodeInspector({
         <ConditionFields node={node} onChange={onChange} />
       ) : null}
       {node.kind === "AI" ? <AiFields node={node} onChange={onChange} /> : null}
+      {node.kind === "HUMAN" ? (
+        <HumanFields node={node} onChange={onChange} />
+      ) : null}
+      {node.kind === "CODE" ? (
+        <CodeFields node={node} onChange={onChange} />
+      ) : null}
+      {node.kind === "LOOP" ? (
+        <LoopFields node={node} onChange={onChange} />
+      ) : null}
 
-      <InputVertical
-        withLabel
-        title={t("fields.forEach")}
-        description={t("fields.forEachHelp")}
-        suffix="optional"
-      >
-        <InputTypeIn
-          value={node.for_each ?? ""}
-          placeholder={t("placeholder.forEach")}
-          onChange={(event) =>
-            onChange({
-              ...node,
-              for_each: event.target.value === "" ? null : event.target.value,
-            })
-          }
-        />
-      </InputVertical>
+      {canFanOut(node) ? (
+        <InputVertical
+          withLabel
+          title={t("fields.forEach")}
+          description={t("fields.forEachHelp")}
+          suffix="optional"
+        >
+          <InputTypeIn
+            value={node.for_each ?? ""}
+            placeholder={t("placeholder.forEach")}
+            onChange={(event) =>
+              onChange({
+                ...node,
+                for_each: event.target.value === "" ? null : event.target.value,
+              })
+            }
+          />
+        </InputVertical>
+      ) : null}
 
       <InputVertical withLabel title={t("fields.onError")}>
         <InputSingleSelect
@@ -188,6 +202,17 @@ export function NodeInspector({
       ) : null}
     </aside>
   );
+}
+
+/**
+ * Whether this kind may fan out.
+ *
+ * The server rejects `for_each` on a branching node — per-item branching has
+ * no answer once the items disagree — so the field is not offered rather than
+ * offered and then refused on save.
+ */
+function canFanOut(node: FlowNode): boolean {
+  return node.kind !== "CONDITION" && node.kind !== "HUMAN";
 }
 
 /** Keep the attempt count inside what the server will accept. */
@@ -405,6 +430,120 @@ function AiFields({ node, onChange }: FieldProps<AiNode>) {
       </InputVertical>
     </>
   );
+}
+
+function HumanFields({ node, onChange }: FieldProps<HumanNode>) {
+  const t = useTranslations("flows.inspector");
+
+  return (
+    <>
+      <InputVertical
+        withLabel
+        title={t("fields.question")}
+        description={t("fields.questionHelp")}
+      >
+        <InputTextArea
+          value={node.question}
+          rows={3}
+          placeholder={t("placeholder.question")}
+          onChange={(event) =>
+            onChange({ ...node, question: event.target.value })
+          }
+        />
+      </InputVertical>
+
+      <InputVertical
+        withLabel
+        title={t("fields.assignee")}
+        description={t("fields.assigneeHelp")}
+        suffix="optional"
+      >
+        <InputTypeIn
+          value={node.assignee ?? ""}
+          placeholder={t("placeholder.assignee")}
+          onChange={(event) =>
+            onChange({
+              ...node,
+              assignee: event.target.value === "" ? null : event.target.value,
+            })
+          }
+        />
+      </InputVertical>
+
+      {node.on_reject.length === 0 ? (
+        <Text font="main-ui-muted" color="text-03">
+          {t("fields.rejectEndsRun")}
+        </Text>
+      ) : null}
+    </>
+  );
+}
+
+function CodeFields({ node, onChange }: FieldProps<CodeNode>) {
+  const t = useTranslations("flows.inspector");
+
+  return (
+    <InputVertical
+      withLabel
+      title={t("fields.code")}
+      description={t("fields.codeHelp")}
+    >
+      <InputTextArea
+        value={node.code}
+        rows={10}
+        // Nothing in a snippet is a word, and a red squiggle under every
+        // identifier makes the field harder to read than it needs to be.
+        spellCheck={false}
+        onChange={(event) => onChange({ ...node, code: event.target.value })}
+      />
+    </InputVertical>
+  );
+}
+
+function LoopFields({ node, onChange }: FieldProps<LoopNode>) {
+  const t = useTranslations("flows.inspector");
+
+  return (
+    <>
+      <InputVertical
+        withLabel
+        title={t("fields.over")}
+        description={t("fields.overHelp")}
+      >
+        <InputTypeIn
+          value={node.over}
+          placeholder={t("placeholder.over")}
+          onChange={(event) => onChange({ ...node, over: event.target.value })}
+        />
+      </InputVertical>
+
+      <InputVertical
+        withLabel
+        title={t("fields.batchSize")}
+        description={t("fields.batchSizeHelp")}
+      >
+        <InputTypeIn
+          type="number"
+          min={1}
+          max={200}
+          value={String(node.batch_size)}
+          onChange={(event) =>
+            onChange({
+              ...node,
+              batch_size: clampBatchSize(event.target.value),
+            })
+          }
+        />
+      </InputVertical>
+    </>
+  );
+}
+
+/** Keep the batch size inside what the server will accept. */
+function clampBatchSize(raw: string): number {
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isNaN(parsed)) return 1;
+  return Math.min(200, Math.max(1, parsed));
 }
 
 function asHttpMethod(value: string): HttpMethod {

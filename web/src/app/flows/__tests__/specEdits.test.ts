@@ -17,6 +17,7 @@ import type {
   ConditionNode,
   FlowNode,
   FlowSpec,
+  HumanNode,
   TransformNode,
 } from "@/app/flows/types";
 
@@ -48,6 +49,30 @@ function transform(id: string, next: string[] = []): TransformNode {
   };
 }
 
+/** Narrow for assertions; a wrong kind here means the test is wrong. */
+function asHuman(node: FlowNode | undefined): HumanNode {
+  if (node === undefined || node.kind !== "HUMAN") {
+    throw new Error(`expected an approval, got ${node?.kind ?? "nothing"}`);
+  }
+  return node;
+}
+
+function human(id: string, onApprove: string[], onReject: string[]): HumanNode {
+  return {
+    id,
+    name: id,
+    kind: "HUMAN",
+    next: [],
+    for_each: null,
+    on_error: "stop",
+    retry: { max_attempts: 1, backoff_seconds: 1 },
+    question: "ok?",
+    assignee: null,
+    on_approve: onApprove,
+    on_reject: onReject,
+  };
+}
+
 function spec(start: string, nodes: FlowNode[]): FlowSpec {
   return { spec_version: 1, start, nodes };
 }
@@ -75,6 +100,12 @@ describe("blankNode", () => {
     expect(blankNode("x", "TRANSFORM")).toMatchObject({
       fields: { value: "" },
     });
+    expect(blankNode("x", "HUMAN")).toMatchObject({
+      on_approve: [],
+      on_reject: [],
+    });
+    expect(blankNode("x", "CODE")).toMatchObject({ timeout_seconds: 30 });
+    expect(blankNode("x", "LOOP")).toMatchObject({ batch_size: 10 });
   });
 
   it("names the node after its id", () => {
@@ -139,6 +170,19 @@ describe("addNode", () => {
   });
 });
 
+describe("addNode after an approval", () => {
+  it("puts the new node on the approve branch", () => {
+    const flow = spec("gate", [human("gate", [], [])]);
+
+    const { spec: next, nodeId } = addNode(flow, "HTTP", "gate");
+
+    const gate = asHuman(next.nodes[0]);
+    expect(gate.on_approve).toEqual([nodeId]);
+    expect(gate.on_reject).toEqual([]);
+    expect(gate.next).toEqual([]);
+  });
+});
+
 describe("removeNode", () => {
   it("joins the two ends of a chain", () => {
     const flow = spec("a", [
@@ -190,6 +234,21 @@ describe("removeNode", () => {
 
     expect(condition.on_true).toEqual(["tail"]);
     expect(condition.on_false).toEqual(["other"]);
+  });
+
+  it("repairs both branches of an approval", () => {
+    const flow = spec("gate", [
+      human("gate", ["ship"], ["ship"]),
+      transform("ship", ["tell"]),
+      transform("tell"),
+    ]);
+
+    const next = removeNode(flow, "ship");
+
+    const gate = asHuman(next.nodes[0]);
+    expect(gate.on_approve).toEqual(["tell"]);
+    expect(gate.on_reject).toEqual(["tell"]);
+    expect(next.nodes).toHaveLength(2);
   });
 
   it("promotes a successor when the start node goes", () => {

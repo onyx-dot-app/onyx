@@ -12498,14 +12498,19 @@
         "HTTP": "HTTP-Anfrage",
         "TRANSFORM": "Umwandeln",
         "CONDITION": "Bedingung",
-        "AI": "KI"
+        "AI": "KI",
+        "HUMAN": "Freigabe",
+        "CODE": "Code",
+        "LOOP": "Schleife"
       },
       "startBadge": "Start",
       "fanOutBadge": "pro Element",
       "unreachableBadge": "nicht verbunden",
       "branch": {
         "true": "wahr",
-        "false": "falsch"
+        "false": "falsch",
+        "approve": "freigegeben",
+        "reject": "abgelehnt"
       },
       "controls": {
         "zoomIn": "Vergrößern",
@@ -12520,7 +12525,10 @@
         "HTTP": "HTTP-Anfrage",
         "TRANSFORM": "Umwandeln",
         "CONDITION": "Bedingung",
-        "AI": "KI"
+        "AI": "KI",
+        "HUMAN": "Freigabe",
+        "CODE": "Code",
+        "LOOP": "Schleife"
       }
     },
     "status": {
@@ -12532,14 +12540,18 @@
       "RUNNING": "Läuft",
       "SUCCEEDED": "Erfolgreich",
       "FAILED": "Fehlgeschlagen",
-      "SKIPPED": "Übersprungen"
+      "SKIPPED": "Übersprungen",
+      "AWAITING_DECISION": "Wartet auf Freigabe"
     },
     "inspector": {
       "kind": {
         "HTTP": "HTTP-Anfrage",
         "TRANSFORM": "Umwandeln",
         "CONDITION": "Bedingung",
-        "AI": "KI"
+        "AI": "KI",
+        "HUMAN": "Freigabe",
+        "CODE": "Code",
+        "LOOP": "Schleife"
       },
       "fields": {
         "name": "Name",
@@ -12565,7 +12577,18 @@
         "outputFieldsHelp": "Benennen Sie jedes Feld, das das Modell liefern muss. Typen: text, number, boolean, list.",
         "fieldName": "Feld",
         "fieldExpression": "Ausdruck",
-        "fieldType": "Typ"
+        "fieldType": "Typ",
+        "question": "Frage",
+        "questionHelp": "Worüber entschieden werden soll. Ausdrücke werden vorher aufgelöst.",
+        "assignee": "Fragen",
+        "assigneeHelp": "Wer antworten soll. Wem der Flow gehört, kann immer entscheiden.",
+        "rejectEndsRun": "Ohne Zweig für eine Ablehnung stoppt eine Ablehnung den Lauf.",
+        "code": "Python",
+        "codeHelp": "Liest trigger, steps, item und index. Weisen Sie result zu, um einen Wert weiterzugeben.",
+        "over": "Diese Liste aufteilen",
+        "overHelp": "Ein Ausdruck, der eine Liste ergibt.",
+        "batchSize": "Elemente pro Stapel",
+        "batchSizeHelp": "Der nächste Schritt erhält jeweils einen Stapel, wenn er pro Element läuft."
       },
       "onError": {
         "stop": "Lauf anhalten",
@@ -12591,7 +12614,10 @@
         "resultPath": "data.items",
         "left": "'{{' steps.fetch.status '}}'",
         "fieldExpression": "'{{' steps.fetch.body.title '}}'",
-        "fieldType": "text"
+        "fieldType": "text",
+        "question": "Die Zusammenfassung an das Team senden?",
+        "assignee": "person@example.com",
+        "over": "'{{' steps.fetch.body.rows '}}'"
       }
     },
     "editor": {
@@ -12635,7 +12661,14 @@
       "notRun": "Dieser Schritt wurde nicht ausgeführt.",
       "item": "Element {index}",
       "input": "Eingabe",
-      "output": "Ausgabe"
+      "output": "Ausgabe",
+      "approve": "Freigeben",
+      "reject": "Ablehnen",
+      "comment": "Kommentar",
+      "commentPlaceholder": "Begründung für alle, die den Lauf später lesen.",
+      "assignedTo": "Zugewiesen an {who}",
+      "decisionFailed": "Die Entscheidung konnte nicht gespeichert werden.",
+      "decisionFallbackQuestion": "Dieser Lauf wartet auf eine Freigabe."
     }
   },
   "knowledge": {

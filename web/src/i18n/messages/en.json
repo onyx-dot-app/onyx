@@ -12526,14 +12526,19 @@
         "HTTP": "HTTP request",
         "TRANSFORM": "Transform",
         "CONDITION": "Condition",
-        "AI": "AI"
+        "AI": "AI",
+        "HUMAN": "Approval",
+        "CODE": "Code",
+        "LOOP": "Loop"
       },
       "startBadge": "start",
       "fanOutBadge": "per item",
       "unreachableBadge": "not connected",
       "branch": {
         "true": "true",
-        "false": "false"
+        "false": "false",
+        "approve": "approved",
+        "reject": "rejected"
       },
       "controls": {
         "zoomIn": "Zoom in",
@@ -12548,7 +12553,10 @@
         "HTTP": "HTTP request",
         "TRANSFORM": "Transform",
         "CONDITION": "Condition",
-        "AI": "AI"
+        "AI": "AI",
+        "HUMAN": "Approval",
+        "CODE": "Code",
+        "LOOP": "Loop"
       }
     },
     "status": {
@@ -12560,14 +12568,18 @@
       "RUNNING": "Running",
       "SUCCEEDED": "Succeeded",
       "FAILED": "Failed",
-      "SKIPPED": "Skipped"
+      "SKIPPED": "Skipped",
+      "AWAITING_DECISION": "Waiting for approval"
     },
     "inspector": {
       "kind": {
         "HTTP": "HTTP request",
         "TRANSFORM": "Transform",
         "CONDITION": "Condition",
-        "AI": "AI"
+        "AI": "AI",
+        "HUMAN": "Approval",
+        "CODE": "Code",
+        "LOOP": "Loop"
       },
       "fields": {
         "name": "Name",
@@ -12593,7 +12605,18 @@
         "outputFieldsHelp": "Name and type each field the model must return. Types: text, number, boolean, list.",
         "fieldName": "Field",
         "fieldExpression": "Expression",
-        "fieldType": "Type"
+        "fieldType": "Type",
+        "question": "Question",
+        "questionHelp": "What the person has to decide. Expressions are resolved before they see it.",
+        "assignee": "Ask",
+        "assigneeHelp": "Who should answer. Whoever owns the flow can always decide.",
+        "rejectEndsRun": "With nothing wired to a rejection, rejecting stops the run.",
+        "code": "Python",
+        "codeHelp": "Reads trigger, steps, item and index. Assign to result to pass a value on.",
+        "over": "Split this list",
+        "overHelp": "An expression that resolves to a list.",
+        "batchSize": "Items per batch",
+        "batchSizeHelp": "The next step gets one batch at a time when it runs once per item."
       },
       "onError": {
         "stop": "Stop the run",
@@ -12619,7 +12642,10 @@
         "resultPath": "data.items",
         "left": "'{{' steps.fetch.status '}}'",
         "fieldExpression": "'{{' steps.fetch.body.title '}}'",
-        "fieldType": "text"
+        "fieldType": "text",
+        "question": "Send the summary to the team?",
+        "assignee": "someone@example.com",
+        "over": "'{{' steps.fetch.body.rows '}}'"
       }
     },
     "editor": {
@@ -12663,7 +12689,14 @@
       "notRun": "This step did not run.",
       "item": "Item {index}",
       "input": "Input",
-      "output": "Output"
+      "output": "Output",
+      "approve": "Approve",
+      "reject": "Reject",
+      "comment": "Comment",
+      "commentPlaceholder": "Why, for whoever reads the run later.",
+      "assignedTo": "Assigned to {who}",
+      "decisionFailed": "The decision could not be recorded.",
+      "decisionFallbackQuestion": "This run is waiting for an approval."
     }
   },
   "knowledge": {

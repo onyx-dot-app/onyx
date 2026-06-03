@@ -15,6 +15,7 @@ import type {
   ConditionNode,
   FlowNode,
   FlowSpec,
+  HumanNode,
   TransformNode,
 } from "@/app/flows/types";
 
@@ -52,6 +53,22 @@ function condition(
   };
 }
 
+function human(id: string, onApprove: string[], onReject: string[]): HumanNode {
+  return {
+    id,
+    name: id,
+    kind: "HUMAN",
+    next: [],
+    for_each: null,
+    on_error: "stop",
+    retry: { max_attempts: 1, backoff_seconds: 1 },
+    question: "ok?",
+    assignee: null,
+    on_approve: onApprove,
+    on_reject: onReject,
+  };
+}
+
 function spec(start: string, nodes: FlowNode[]): FlowSpec {
   return { spec_version: 1, start, nodes };
 }
@@ -65,6 +82,10 @@ function columnOf(layout: ReturnType<typeof layoutFlow>, id: string): number {
 describe("successorsOf", () => {
   it("includes both branches of a condition", () => {
     expect(successorsOf(condition("c", ["a"], ["b"]))).toEqual(["a", "b"]);
+  });
+
+  it("includes both branches of an approval", () => {
+    expect(successorsOf(human("g", ["a"], ["b"]))).toEqual(["a", "b"]);
   });
 
   it("is just next for every other kind", () => {
@@ -165,6 +186,21 @@ describe("layoutFlow", () => {
       layout.edges.map((edge) => [edge.to, edge.branch])
     );
     expect(branches).toEqual({ yes: "true", no: "false" });
+  });
+
+  it("marks an approval's branches too", () => {
+    const layout = layoutFlow(
+      spec("gate", [
+        human("gate", ["ship"], ["tell"]),
+        transform("ship"),
+        transform("tell"),
+      ])
+    );
+
+    const branches = Object.fromEntries(
+      layout.edges.map((edge) => [edge.to, edge.branch])
+    );
+    expect(branches).toEqual({ ship: "approve", tell: "reject" });
   });
 
   it("still places a node nothing reaches, and flags it", () => {
