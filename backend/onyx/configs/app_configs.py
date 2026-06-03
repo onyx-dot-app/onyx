@@ -1015,6 +1015,9 @@ RECENCY_BIAS_MULTIPLIER = float(os.environ.get("RECENCY_BIAS_MULTIPLIER") or 1.0
 # backend/onyx/document_index/vespa/app_config/schemas/danswer_chunk.sd.jinja.
 RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
 
+# Flat per-image cost (cents) when litellm has no price for an image model.
+DEFAULT_IMAGE_COST_CENTS = float(os.environ.get("DEFAULT_IMAGE_COST_CENTS") or 4.0)
+
 
 #####
 # Tool Configs

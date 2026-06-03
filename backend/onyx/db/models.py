@@ -5247,6 +5247,29 @@ class UserUsage(Base):
     )
 
 
+class ModelCostOverride(Base):
+    """Admin-set per-model rates that supersede litellm pricing.
+
+    Negotiated enterprise rates win over litellm's published numbers, so cost
+    computation consults this table before falling back to litellm.
+    """
+
+    __tablename__ = "model_cost_override"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # litellm-style model name (e.g. "gpt-4o"); one override per model.
+    model: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+
+    # Rates in USD per million tokens.
+    input_cost_per_mtok: Mapped[float] = mapped_column(Float, nullable=False)
+    output_cost_per_mtok: Mapped[float] = mapped_column(Float, nullable=False)
+
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 """Tables related to Build Mode (CLI Agent Platform)"""
 
 
