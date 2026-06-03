@@ -253,7 +253,7 @@ class TestEnsureSandboxRunning:
                 db_session.commit()
 
         monkeypatch.setattr(
-            "onyx.server.features.build.session.manager.time.sleep",
+            "onyx.server.features.build.session.sandbox_lifecycle.time.sleep",
             _flipping_sleep,
         )
 
@@ -292,7 +292,7 @@ class TestEnsureSandboxRunning:
             return None
 
         monkeypatch.setattr(
-            "onyx.server.features.build.session.manager.time.sleep",
+            "onyx.server.features.build.session.sandbox_lifecycle.time.sleep",
             _sleep_noop,
         )
 

@@ -102,6 +102,13 @@ HIDDEN_PATTERNS = {
 }
 
 
+def _sanitize_zip_basename(name: str, *, allow_dots: bool) -> str:
+    """Replace filesystem-unsafe characters in a zip filename stem. ``allow_dots``
+    keeps version-suffixed directory names like ``my.lib`` intact."""
+    safe = {"-", "_", "."} if allow_dots else {"-", "_"}
+    return "".join(c if c.isalnum() or c in safe else "_" for c in name)
+
+
 class SessionManager:
     """Public interface for session operations.
 
@@ -793,6 +800,78 @@ class SessionManager:
     # Artifact Operations
     # =========================================================================
 
+    def _resolve_owned_session_and_sandbox(
+        self, session_id: UUID, user_id: UUID
+    ) -> tuple[BuildSession, Sandbox] | None:
+        """Resolve ``(session, sandbox)`` for an owned session, or ``None`` if
+        either is missing — the caller surfaces ``None`` as a 404."""
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            return None
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        if sandbox is None:
+            return None
+        return session, sandbox
+
+    def _require_session_and_sandbox(
+        self, session_id: UUID, user_id: UUID
+    ) -> tuple[BuildSession, Sandbox]:
+        """Like :meth:`_resolve_owned_session_and_sandbox` but raises
+        ``ValueError`` instead of returning ``None`` (for mutating callers)."""
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            raise ValueError("Session not found")
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        if sandbox is None:
+            raise ValueError("Sandbox not found")
+        return session, sandbox
+
+    def _walk_sandbox_dir(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        base_dir: str,
+        arcname_for: Callable[[str], str],
+    ) -> list[tuple[str, str]]:
+        """Recursively collect ``(workspace_path, arcname)`` for every file
+        under ``base_dir``. Missing subdirectories are skipped."""
+        collected: list[tuple[str, str]] = []
+
+        def _walk(dir_path: str) -> None:
+            try:
+                entries = self._sandbox_manager.list_directory(
+                    sandbox_id=sandbox_id, session_id=session_id, path=dir_path
+                )
+            except ValueError:
+                return
+            for entry in entries:
+                if entry.is_directory:
+                    _walk(entry.path)
+                else:
+                    collected.append((entry.path, arcname_for(entry.path)))
+
+        _walk(base_dir)
+        return collected
+
+    def _zip_files(
+        self, sandbox_id: UUID, session_id: UUID, files: list[tuple[str, str]]
+    ) -> bytes:
+        """Build a deflate-compressed zip from ``(workspace_path, arcname)``
+        pairs. Unreadable files are skipped."""
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for workspace_path, arcname in files:
+                try:
+                    content = self._sandbox_manager.read_file(
+                        sandbox_id=sandbox_id,
+                        session_id=session_id,
+                        path=workspace_path,
+                    )
+                    zip_file.writestr(arcname, content)
+                except ValueError:
+                    continue
+        return buffer.getvalue()
+
     def list_artifacts(
         self,
         session_id: UUID,
@@ -810,14 +889,10 @@ class SessionManager:
         Returns:
             List of artifact dicts or None if session not found or user doesn't own session
         """
-        # Verify session ownership
-        session = get_build_session(session_id, user_id, self._db_session)
-        if session is None:
+        resolved = self._resolve_owned_session_and_sandbox(session_id, user_id)
+        if resolved is None:
             return None
-
-        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-        if sandbox is None:
-            return None
+        _, sandbox = resolved
 
         artifacts: list[dict[str, Any]] = []
         now = datetime.now(timezone.utc)
@@ -881,14 +956,10 @@ class SessionManager:
         Raises:
             ValueError: If path traversal attempted or path is a directory
         """
-        # Verify session ownership
-        session = get_build_session(session_id, user_id, self._db_session)
-        if session is None:
+        resolved = self._resolve_owned_session_and_sandbox(session_id, user_id)
+        if resolved is None:
             return None
-
-        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-        if sandbox is None:
-            return None
+        _, sandbox = resolved
 
         # Extract filename from path
         filename = Path(path).name
@@ -976,14 +1047,10 @@ class SessionManager:
         Raises:
             ValueError: If path is invalid or conversion fails
         """
-        # Verify session ownership
-        session = get_build_session(session_id, user_id, self._db_session)
-        if session is None:
+        resolved = self._resolve_owned_session_and_sandbox(session_id, user_id)
+        if resolved is None:
             return None
-
-        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-        if sandbox is None:
-            return None
+        _, sandbox = resolved
 
         # Validate file extension
         if not path.lower().endswith(".pptx"):
@@ -1096,77 +1163,33 @@ class SessionManager:
         Returns:
             Tuple of (zip_bytes, filename) or None if session/webapp not found
         """
-        # Verify session ownership
-        session = get_build_session(session_id, user_id, self._db_session)
-        if session is None:
+        resolved = self._resolve_owned_session_and_sandbox(session_id, user_id)
+        if resolved is None:
             return None
+        session, sandbox = resolved
 
-        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-        if sandbox is None:
-            return None
-
-        # Check if web directory exists using sandbox manager
+        base_dir = "outputs/web"
         try:
             self._sandbox_manager.list_directory(
                 sandbox_id=sandbox.id,
                 session_id=session_id,
-                path="outputs/web",
+                path=base_dir,
             )
         except ValueError:
             # Directory doesn't exist
             return None
 
-        # Recursively collect all files in the web directory
-        def collect_files(dir_path: str) -> list[tuple[str, str]]:
-            """Collect all files recursively, returning (full_path, relative_path) tuples."""
-            files: list[tuple[str, str]] = []
-            try:
-                entries = self._sandbox_manager.list_directory(
-                    sandbox_id=sandbox.id,
-                    session_id=session_id,
-                    path=dir_path,
-                )
-                for entry in entries:
-                    if entry.is_directory:
-                        # Recursively collect files from subdirectory
-                        files.extend(collect_files(entry.path))
-                    else:
-                        # entry.path is relative to session root (e.g., "outputs/web/file.txt")
-                        # arcname should be relative to web dir (e.g., "file.txt")
-                        arcname = entry.path.replace("outputs/web/", "", 1)
-                        files.append((entry.path, arcname))
-            except ValueError:
-                pass  # Directory doesn't exist, skip
-            return files
-
-        file_list = collect_files("outputs/web")
-
-        # Create zip file in memory
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            for full_path, arcname in file_list:
-                try:
-                    content = self._sandbox_manager.read_file(
-                        sandbox_id=sandbox.id,
-                        session_id=session_id,
-                        path=full_path,
-                    )
-                    zip_file.writestr(arcname, content)
-                except ValueError:
-                    # Skip files that can't be read
-                    pass
-
-        zip_buffer.seek(0)
-
-        # Create filename with session name or ID
-        session_name = session.name or f"session-{str(session_id)[:8]}"
-        # Sanitize filename
-        safe_name = "".join(
-            c if c.isalnum() or c in ("-", "_") else "_" for c in session_name
+        files = self._walk_sandbox_dir(
+            sandbox.id,
+            session_id,
+            base_dir,
+            arcname_for=lambda p: p[len(base_dir) + 1 :],
         )
-        filename = f"{safe_name}-webapp.zip"
+        zip_bytes = self._zip_files(sandbox.id, session_id, files)
 
-        return zip_buffer.getvalue(), filename
+        session_name = session.name or f"session-{str(session_id)[:8]}"
+        safe_name = _sanitize_zip_basename(session_name, allow_dots=False)
+        return zip_bytes, f"{safe_name}-webapp.zip"
 
     def download_directory(
         self,
@@ -1188,16 +1211,11 @@ class SessionManager:
         Raises:
             ValueError: If path traversal attempted or path is not a directory
         """
-        # Verify session ownership
-        session = get_build_session(session_id, user_id, self._db_session)
-        if session is None:
+        resolved = self._resolve_owned_session_and_sandbox(session_id, user_id)
+        if resolved is None:
             return None
+        _, sandbox = resolved
 
-        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-        if sandbox is None:
-            return None
-
-        # Check if directory exists
         try:
             self._sandbox_manager.list_directory(
                 sandbox_id=sandbox.id,
@@ -1207,54 +1225,17 @@ class SessionManager:
         except ValueError:
             return None
 
-        # Recursively collect all files
-        def collect_files(dir_path: str) -> list[tuple[str, str]]:
-            """Collect all files recursively, returning (full_path, arcname) tuples."""
-            files: list[tuple[str, str]] = []
-            try:
-                entries = self._sandbox_manager.list_directory(
-                    sandbox_id=sandbox.id,
-                    session_id=session_id,
-                    path=dir_path,
-                )
-                for entry in entries:
-                    if entry.is_directory:
-                        files.extend(collect_files(entry.path))
-                    else:
-                        # arcname is relative to the target directory
-                        prefix_len = len(path) + 1  # +1 for trailing slash
-                        arcname = entry.path[prefix_len:]
-                        files.append((entry.path, arcname))
-            except ValueError:
-                pass
-            return files
-
-        file_list = collect_files(path)
-
-        # Create zip file in memory
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            for full_path, arcname in file_list:
-                try:
-                    content = self._sandbox_manager.read_file(
-                        sandbox_id=sandbox.id,
-                        session_id=session_id,
-                        path=full_path,
-                    )
-                    zip_file.writestr(arcname, content)
-                except ValueError:
-                    pass
-
-        zip_buffer.seek(0)
-
-        # Use the directory name for the zip filename
-        dir_name = Path(path).name
-        safe_name = "".join(
-            c if c.isalnum() or c in ("-", "_", ".") else "_" for c in dir_name
+        prefix_len = len(path) + 1  # +1 for trailing slash
+        files = self._walk_sandbox_dir(
+            sandbox.id,
+            session_id,
+            path,
+            arcname_for=lambda p: p[prefix_len:],
         )
-        filename = f"{safe_name}.zip"
+        zip_bytes = self._zip_files(sandbox.id, session_id, files)
 
-        return zip_buffer.getvalue(), filename
+        safe_name = _sanitize_zip_basename(Path(path).name, allow_dots=True)
+        return zip_bytes, f"{safe_name}.zip"
 
     # =========================================================================
     # File System Operations
@@ -1280,14 +1261,10 @@ class SessionManager:
         Raises:
             ValueError: If path traversal attempted or path is not a directory
         """
-        # Verify session ownership
-        session = get_build_session(session_id, user_id, self._db_session)
-        if session is None:
+        resolved = self._resolve_owned_session_and_sandbox(session_id, user_id)
+        if resolved is None:
             return None
-
-        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-        if sandbox is None:
-            return None
+        _, sandbox = resolved
 
         # Use sandbox manager to list directory (works for both local and K8s)
         # If the directory doesn't exist (e.g., session workspace not yet loaded),
@@ -1335,14 +1312,7 @@ class SessionManager:
         Raises:
             ValueError: If session not found
         """
-        # Verify session ownership
-        session = get_build_session(session_id, user_id, self._db_session)
-        if session is None:
-            raise ValueError("Session not found")
-
-        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-        if sandbox is None:
-            raise ValueError("Sandbox not found")
+        _, sandbox = self._require_session_and_sandbox(session_id, user_id)
 
         # Delegate to sandbox manager (handles both local and K8s)
         return self._sandbox_manager.get_upload_stats(
@@ -1374,14 +1344,7 @@ class SessionManager:
         Raises:
             ValueError: If session not found or upload limits exceeded
         """
-        # Verify session ownership
-        session = get_build_session(session_id, user_id, self._db_session)
-        if session is None:
-            raise ValueError("Session not found")
-
-        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-        if sandbox is None:
-            raise ValueError("Sandbox not found")
+        _, sandbox = self._require_session_and_sandbox(session_id, user_id)
 
         # Check upload limits
         file_count, total_size = self.get_upload_stats(session_id, user_id)
@@ -1432,14 +1395,7 @@ class SessionManager:
         Raises:
             ValueError: If session not found or path traversal attempted
         """
-        # Verify session ownership
-        session = get_build_session(session_id, user_id, self._db_session)
-        if session is None:
-            raise ValueError("Session not found")
-
-        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-        if sandbox is None:
-            raise ValueError("Sandbox not found")
+        _, sandbox = self._require_session_and_sandbox(session_id, user_id)
 
         # Delegate to sandbox manager (handles both local and K8s)
         deleted = self._sandbox_manager.delete_file(
