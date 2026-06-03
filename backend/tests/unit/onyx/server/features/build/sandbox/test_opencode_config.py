@@ -1,10 +1,10 @@
 """Tests for :func:`build_multi_provider_opencode_config`.
 
-The multi-provider helper is what enables cross-provider per-prompt
-model overrides on the opencode-serve path without restarting the pod.
-Correctness here is load-bearing: a silent provider overwrite or a
-missing api_key in the rendered ``opencode.json`` means user-facing
-"agent is suddenly using big-pickle" / 401 / 'unknown provider' bugs.
+The multi-provider helper is what enables cross-provider per-prompt model
+overrides on the opencode-serve path without restarting the pod. Correctness
+here is load-bearing: a silent provider overwrite or a missing api_key in the
+rendered ``opencode.json`` means user-facing "agent is suddenly using
+big-pickle" / 401 / 'unknown provider' bugs.
 """
 
 from __future__ import annotations
@@ -47,9 +47,10 @@ def test_single_provider_renders_all_required_fields() -> None:
 
 
 def test_multi_provider_each_gets_its_own_block() -> None:
-    """All three providers should be pre-loaded with their own api_key
-    so per-prompt model override can target any of them without a pod
-    restart."""
+    """
+    All three providers should be pre-loaded with their own api_key so
+    per-prompt model override can target any of them without a pod restart.
+    """
     config = build_multi_provider_opencode_config(
         providers=[
             _cfg("anthropic", "claude-opus-4-7", api_key="sk-ant-1"),
@@ -73,8 +74,10 @@ def test_multi_provider_each_gets_its_own_block() -> None:
 
 
 def test_duplicate_providers_raise_value_error() -> None:
-    """Passing two entries with the same provider would silently overwrite
-    each other under a naive dict comprehension. Detect and refuse."""
+    """
+    Passing two entries with the same provider would silently overwrite each
+    other under a naive dict comprehension. Detect and refuse.
+    """
     with pytest.raises(ValueError, match="duplicate provider entries"):
         build_multi_provider_opencode_config(
             providers=[
@@ -96,9 +99,11 @@ def test_empty_providers_list_raises() -> None:
 
 
 def test_default_provider_must_be_in_providers() -> None:
-    """Mis-spelling default_provider is the kind of bug that would
-    otherwise produce an invalid ``model`` field opencode rejects only
-    at first prompt — fail fast at config-build time."""
+    """
+    Mis-spelling default_provider is the kind of bug that would otherwise
+    produce an invalid ``model`` field opencode rejects only at first prompt —
+    fail fast at config-build time.
+    """
     with pytest.raises(ValueError, match="not in providers"):
         build_multi_provider_opencode_config(
             providers=[_cfg("anthropic", "claude-opus-4-7")],
@@ -108,9 +113,11 @@ def test_default_provider_must_be_in_providers() -> None:
 
 
 def test_no_api_key_renders_no_options_block() -> None:
-    """If the caller omits the api_key (e.g. a provider that uses
-    env-var auth elsewhere), the ``options`` block should be absent
-    rather than present with apiKey: null."""
+    """
+    If the caller omits the api_key (e.g. a provider that uses env-var auth
+    elsewhere), the ``options`` block should be absent rather than present with
+    apiKey: null.
+    """
     config = build_multi_provider_opencode_config(
         providers=[_cfg("anthropic", "claude-opus-4-7", api_key=None)],
         default_provider="anthropic",
@@ -139,9 +146,11 @@ def test_api_base_propagates() -> None:
 
 
 def test_single_provider_wrapper_back_compat() -> None:
-    """``build_opencode_config`` wraps the multi-provider helper for the
-    docker path. Verify the wrapped output matches what a direct
-    multi-provider call with one entry would produce."""
+    """
+    ``build_opencode_config`` wraps the multi-provider helper for the docker
+    path. Verify the wrapped output matches what a direct multi-provider call
+    with one entry would produce.
+    """
     direct = build_opencode_config(
         provider="anthropic",
         model_name="claude-opus-4-7",
@@ -156,8 +165,10 @@ def test_single_provider_wrapper_back_compat() -> None:
 
 
 def test_permission_block_includes_external_directory_deny_by_default() -> None:
-    """K8s + Docker run in container, so external_directory must default
-    to deny. Only ``dev_mode=True`` opens it up."""
+    """
+    K8s + Docker run in container, so external_directory must default to deny.
+    Only ``dev_mode=True`` opens it up.
+    """
     config = build_multi_provider_opencode_config(
         providers=[_cfg("anthropic", "claude-opus-4-7")],
         default_provider="anthropic",
@@ -186,8 +197,10 @@ def test_disabled_tools_become_deny_entries() -> None:
 
 
 def test_skill_permission_denies_builtin_customize_opencode() -> None:
-    """The built-in customize-opencode skill must be denied by name, with
-    "*" before the deny since opencode evaluates skill rules via findLast()."""
+    """
+    The built-in customize-opencode skill must be denied by name, with "*"
+    before the deny since opencode evaluates skill rules via findLast().
+    """
     config = build_multi_provider_opencode_config(
         providers=[_cfg("anthropic", "claude-opus-4-7")],
         default_provider="anthropic",
@@ -201,8 +214,10 @@ def test_skill_permission_denies_builtin_customize_opencode() -> None:
 
 
 def test_plugins_omitted_by_default() -> None:
-    """No `plugin` key unless plugins are explicitly requested, so the
-    default config stays byte-identical to pre-plugin behavior."""
+    """
+    No `plugin` key unless plugins are explicitly requested, so the default
+    config stays byte-identical to pre-plugin behavior.
+    """
     config = build_multi_provider_opencode_config(
         providers=[_cfg("anthropic", "claude-opus-4-7")],
         default_provider="anthropic",
@@ -212,8 +227,10 @@ def test_plugins_omitted_by_default() -> None:
 
 
 def test_plugins_are_emitted_when_provided() -> None:
-    """The session-tagging plugin path flows into the `plugin` array so
-    opencode-serve loads it pod-wide via OPENCODE_CONFIG_CONTENT."""
+    """
+    The session-tagging plugin path flows into the `plugin` array so
+    opencode-serve loads it pod-wide via OPENCODE_CONFIG_CONTENT.
+    """
     config = build_multi_provider_opencode_config(
         providers=[_cfg("anthropic", "claude-opus-4-7")],
         default_provider="anthropic",
@@ -224,10 +241,12 @@ def test_plugins_are_emitted_when_provided() -> None:
 
 
 def test_single_provider_wrapper_forwards_plugins() -> None:
-    """The docker backend uses the single-provider builder and needs the
-    same session-tagging plugin the K8s multi-provider path registers.
-    Without forwarding, the proxy can't route approval cards to the
-    originating session for docker sandboxes."""
+    """
+    The docker backend uses the single-provider builder and needs the same
+    session-tagging plugin the K8s multi-provider path registers. Without
+    forwarding, the proxy can't route approval cards to the originating session
+    for docker sandboxes.
+    """
     config = build_opencode_config(
         provider="anthropic",
         model_name="claude-opus-4-7",
