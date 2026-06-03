@@ -27,11 +27,13 @@ export default function BuildV1Page() {
   useBuildSessionController({ existingSessionId: sessionId });
 
   return (
-    <div className="relative flex-1 h-full overflow-hidden">
+    // overflow-clip, not overflow-hidden: a hidden box is still programmatically
+    // scrollable, which would shove the chat column off-screen.
+    <div className="relative flex-1 h-full overflow-clip">
       {/* Chat panel - always full width for background */}
       <BuildChatPanel existingSessionId={sessionId} />
 
-      {/* Output panel - floats over as a card */}
+      {/* Output panel - slides in from the right edge, full viewport height */}
       <BuildOutputPanel onClose={toggleOutputPanel} isOpen={outputPanelOpen} />
     </div>
   );

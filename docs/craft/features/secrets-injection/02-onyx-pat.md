@@ -1,74 +1,116 @@
 # Plan 2 — Onyx PAT Resolver
 
-Reference: [Plan 1](./01-framework.md) for project context and the shared seam this plugs into.
+The Onyx PAT resolver brokers the sandbox's auth back to the Onyx API. It claims the
+`SANDBOX_API_SERVER_URL` host on the [Plan 1](./01-framework.md) dispatcher, reads the sandbox's
+persisted PAT, and overwrites the `Authorization` and `X-Onyx-Authorization` headers on the
+outbound request — so onyx-cli in the pod runs against a non-secret placeholder while the real
+CRAFT PAT lives only in the proxy.
 
-## Issues to Address
+## How it works
 
-The sandbox authenticates back to the Onyx API server with a CRAFT-type Personal Access Token,
-currently provisioned into the pod as the `ONYX_PAT` env var (`kubernetes_sandbox_manager.py`;
-docker manager too). It's a 30-day token scoped to the owning user (`ensure_sandbox_pat`,
-`sandbox.py`). This plan moves it out of the pod so it lives only in the proxy: an `OnyxPatResolver`
-behind the [Plan 1](./01-framework.md) seam injects auth on requests to the Onyx API host.
+**What gets injected.** The resolver claims by host and port (the Onyx API is never an external app,
+so `match` is ignored) and renders two headers:
 
-## Important Notes
+| Header | Value |
+|---|---|
+| `Authorization` | `Bearer <pat>` |
+| `X-Onyx-Authorization` | `Bearer <pat>` |
 
-**Blocker — the Onyx API host is on `NO_PROXY`, so the proxy never sees that traffic.**
-`_compute_no_proxy_list()` (`kubernetes_sandbox_manager.py`) adds the `SANDBOX_API_SERVER_URL`
-hostname. Routing it through the proxy (step 2) is the central change of this plan; the external-app
-and LLM hosts already traverse the proxy.
+No tenant header is injected. The tenant is embedded in the PAT itself
+(`onyx_pat_<tenant>.<random>`), and the server derives it from the token.
+`get_hashed_bearer_token_from_request` checks `X-Onyx-Authorization` first, then `Authorization`
+(`API_KEY_HEADER_ALTERNATIVE_NAME` / `API_KEY_HEADER_NAME` in `auth/constants.py`); both are
+overwritten so whichever the server reads carries the real PAT.
 
-**onyx-cli works with a non-empty placeholder (confirmed against v1.0.3 Go source).** `IsConfigured()`
-only checks the token is non-empty (no format validation), and the client sets it on **both**
-`Authorization` and `X-Onyx-Authorization` — so per Plan 1's placeholder/overwrite contract, keep
-`ONYX_PAT` a non-empty placeholder and have the resolver overwrite both headers. onyx-cli honors
-`HTTPS_PROXY`/`NO_PROXY` (it clones `http.DefaultTransport`) and trusts the proxy MITM CA via
-`SSL_CERT_FILE` (which Go honors; it ignores `REQUESTS_CA_BUNDLE`) plus the system-store install in
-`firewall-init.sh` — so it routes through the proxy once off `NO_PROXY`. That path isn't exercised
-today, so cover it with an integration test. `ONYX_SERVER_URL` stays set (onyx-cli appends `/api`).
+**Where the PAT lives.** `Sandbox.encrypted_pat` (`SensitiveValue[str]` over `EncryptedString`)
+stores the raw token encrypted on the sandbox row. The companion `PersonalAccessToken` row holds
+only a SHA-256 `hashed_token` for the server's lookup path. The resolver loads the sandbox by
+`ctx.sandbox.sandbox_id`, calls `get_value(apply_mask=False)` on `encrypted_pat`, and decrypts
+in-process — `ENCRYPTION_KEY_SECRET` is wired into the proxy Deployment by Plan 1. The `Sandbox`
+model has no `tenant_id` column; the resolver opens its session with the tenant carried on
+`ctx.sandbox.tenant_id` (from `ResolvedSandbox`). `Sandbox.user_id` is `unique=True`, so the
+one-pod, one-user, one-PAT identity is unambiguous.
 
-**How the resolver obtains the PAT: read + decrypt the stored per-sandbox PAT (chosen).** The proxy
-has `ENCRYPTION_KEY_SECRET` (Plan 1), so `OnyxPatResolver` reuses the PAT provisioning already mints
-and stores encrypted on the `Sandbox` row (`ensure_sandbox_pat`): resolve `sandbox_id` from source
-IP, read the row, decrypt. Provisioning is unchanged except the pod gets the placeholder; lifecycle
-is unchanged (30-day, rotated on re-provision).
+**PAT lifecycle.** `ensure_sandbox_pat` (in `onyx/server/features/build/db/sandbox.py`) enforces
+exactly one non-expired `CRAFT` PAT per user with a 30-day expiry (`_PAT_EXPIRATION_DAYS = 30`).
+On any drift — no row, hash mismatch, multiple rows — it revokes the existing PATs, mints a fresh
+one, and writes it back to `Sandbox.encrypted_pat`. The resolver always reads the currently
+materialized value, so rotations take effect on the next request.
 
-> **Pre-implementation check.** Confirm the `Sandbox` PAT column stores the *raw token encrypted*
-> (recoverable), not just the SHA-256 lookup hash. If only the hash, persist the raw token encrypted
-> at provisioning — acceptable under [[project_craft_beta_no_backcompat]]. This gates the chosen path.
+**NO_PROXY is loopback only.** `_proxy_main_container_env_vars()` in
+`kubernetes_sandbox_manager.py` sets `NO_PROXY` to the `_NO_PROXY = "127.0.0.1,localhost"`
+constant. Loopback is the only thing `firewall-init.sh` permits to bypass the proxy, so the Onyx
+API host transits the proxy and the PAT is injected on the wire. (Previously a
+`_compute_no_proxy_list()` helper appended the API host, which let clients try direct DNS and hit
+`EPERM`; that helper is gone.)
 
-*Alternative (not chosen):* the resolver mints + caches its own session PAT (`create_pat`), revoked
-on teardown — tighter lifecycle, more machinery. Revisit only if we want per-session revocation.
+**MITM trust.** Because the API host routes through the proxy, onyx-cli (pip-installed) trusts
+the proxy's MITM CA. The K8s sandbox wires the bundle through the
+standard env vars in `_proxy_main_container_env_vars()` — `REQUESTS_CA_BUNDLE`, `SSL_CERT_FILE`,
+`CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO`, `AWS_CA_BUNDLE` — and `firewall-init.sh`
+installs the CA into the system trust store via `update-ca-certificates`.
 
-**What the resolver injects.** `Authorization: Bearer <pat>` + `X-Onyx-Authorization: Bearer <pat>`,
-and `X-Onyx-Tenant-ID = resolved.tenant_id` (the server resolves the PAT via the standard auth path
-and the tenant via `add_onyx_tenant_id_middleware`).
+**Pod-side placeholder is non-empty.** onyx-cli treats an empty token as unconfigured, so the
+pod's `ONYX_PAT` env ships a non-empty placeholder (`_PROXY_INJECTED_PLACEHOLDER =
+"replaced_by_egress_proxy"`, a private constant in `kubernetes_sandbox_manager.py` shared with the
+LLM apiKey placeholders) and the proxy overwrites both auth headers per the Plan 1
+placeholder/overwrite contract.
 
-Scopes are out of scope — see Plan 1 (a CRAFT PAT grants full user access today).
+**Failure mode.** A missing row, a `None` `encrypted_pat`, or a decrypt failure raises
+`CredentialUnavailableError`; the dispatcher serves `http_403(SandboxProxyError.CREDENTIAL_ERROR)`.
+The sandbox never sees a partial-auth fallback.
 
-## Implementation Strategy
+**Inert outside Kubernetes.** When `SANDBOX_API_SERVER_URL` is unset the resolver computes no API
+host and `claims` always returns False. The docker self-hosted backend doesn't route through the
+proxy and continues to inject the real PAT directly as the `ONYX_PAT` env var.
 
-1. **Stop pre-populating the real PAT.** In `kubernetes_sandbox_manager.py` and the docker manager,
-   set `ONYX_PAT` to the Plan 1 placeholder. `ensure_sandbox_pat` keeps minting and storing the
-   encrypted PAT on the `Sandbox` row — the resolver reads from there.
+## Implementation
 
-2. **Route API traffic through the proxy.** Remove the `SANDBOX_API_SERVER_URL` hostname from
-   `_compute_no_proxy_list()` (keep `127.0.0.1`/`localhost`); verify the proxy can reach the API host.
+1. **`OnyxPatResolver`** (`onyx/sandbox_proxy/resolvers/onyx_pat.py`) implementing the Plan 1
+   `CredentialResolver` protocol.
+   - `claims(request, ctx)`: True iff `request.host` (case-insensitive) and `request.port` match the
+     host and port of `SANDBOX_API_SERVER_URL` (port defaults to 443/80 by scheme); False when the
+     var is unset.
+   - `resolve(request, ctx)`: open a session via `get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id)`,
+     load `Sandbox` by `ctx.sandbox.sandbox_id`, decrypt `encrypted_pat`, return the two headers.
+     Raise `CredentialUnavailableError` on missing row, `None` PAT, or decrypt failure.
 
-3. **Implement `OnyxPatResolver`** for the Onyx API host: read + decrypt the `Sandbox` PAT, overwrite
-   both `Authorization` and `X-Onyx-Authorization`, set `X-Onyx-Tenant-ID`; fail closed if identity
-   or token can't be resolved.
+2. **Pod-side placeholder swap** in `kubernetes_sandbox_manager.py`: the pod's `ONYX_PAT` env is
+   set to `_PROXY_INJECTED_PLACEHOLDER`, and `_create_sandbox_pod` no longer takes an `onyx_pat`
+   argument. `provision()` still takes and validates `onyx_pat` — it guarantees the PAT was minted
+   and persisted to `Sandbox.encrypted_pat` before the pod starts, even though the pod only ships
+   the placeholder. `ensure_sandbox_pat` is unchanged. The docker manager keeps injecting the real
+   PAT.
 
-4. **Config**: an enable flag for the PAT resolver, separate from the LLM-key resolver.
+3. **`NO_PROXY` collapse** to the `_NO_PROXY = "127.0.0.1,localhost"` constant (replacing
+   `_compute_no_proxy_list()`), so the Onyx API host transits the proxy.
+
+4. **Register in `build_resolvers()`** (`server.py`):
+   `[OnyxPatResolver(), LLMProviderKeyResolver(), ExternalAppResolver()]`. Hosts are disjoint.
 
 ## Tests
 
-Integration test (CI only — [[feedback_no_integration_tests_locally]]) in
-`backend/tests/integration/tests/craft/`:
+- **Unit** (`backend/tests/unit/sandbox_proxy/test_onyx_pat_resolver.py`): with a fake `Sandbox`
+  row and a patched `get_session_with_tenant`, the resolver returns both auth headers as
+  `Bearer <pat>`. Negative cases — missing row, `encrypted_pat is None`, decrypt raises — each raise
+  `CredentialUnavailableError`. `claims` is True for the API host and port (case-insensitive), False
+  for others, and False when `SANDBOX_API_SERVER_URL` is unset.
 
-- A request with the placeholder, routed through the proxy from a known sandbox IP, reaches the API
-  and authenticates as the owning user (proxy overwrote the headers + set the tenant header).
-- A request from an unidentifiable source IP to the API host is blocked (fail-closed).
+- **External-dependency unit**
+  (`backend/tests/external_dependency_unit/sandbox_proxy/test_onyx_pat_resolver.py`): against a
+  real DB, provision a `Sandbox`, mint a PAT with `ensure_sandbox_pat`, run `OnyxPatResolver.resolve`
+  with a real `InjectionContext`, and assert both auth headers carry the minted token — round-trips
+  through real `EncryptedString`.
 
-External-dependency unit test in `sandbox_proxy/`: given a `Sandbox` row with a stored PAT, a request
-from that sandbox's IP gets both auth headers overwritten and the tenant header set; and
-`_compute_no_proxy_list` no longer contains the API host.
+- **Pod spec** (`backend/tests/unit/onyx/server/features/build/sandbox/test_pod_spec.py`): the
+  pod's `ONYX_PAT` env equals `_PROXY_INJECTED_PLACEHOLDER` (never the real token); `NO_PROXY` is
+  loopback only.
+
+## Out of scope
+
+- PAT scopes — a CRAFT PAT grants full user access today; scope work is separate.
+- Per-session PAT minting / revocation. The persistent per-sandbox PAT (30-day, rotated on
+  re-provision) is sufficient.
+- LLM provider keys — see [Plan 3](./03-llm-key.md).
+- Any change to `_inject_credentials`, the matcher, or the gate's verdict paths — owned by
+  [Plan 1](./01-framework.md).

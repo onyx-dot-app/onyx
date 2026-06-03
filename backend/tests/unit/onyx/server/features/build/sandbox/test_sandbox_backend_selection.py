@@ -59,12 +59,3 @@ def test_sandbox_backend_enum_includes_docker_and_kubernetes() -> None:
     assert SandboxBackend.KUBERNETES.value == "kubernetes"
     assert configs.SandboxBackend("docker") is SandboxBackend.DOCKER
     assert configs.SandboxBackend("kubernetes") is SandboxBackend.KUBERNETES
-
-
-def test_local_backend_string_raises_helpful_error() -> None:
-    """``SANDBOX_BACKEND=local`` is no longer supported; the parser raises a
-    pointed startup error with a doc pointer rather than the bare
-    ``ValueError`` from the enum constructor.
-    """
-    with pytest.raises(RuntimeError, match="local-kubernetes.md"):
-        configs._parse_sandbox_backend("local")

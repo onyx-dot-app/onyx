@@ -44,12 +44,12 @@ import {
   SvgUserManage,
   SvgUsers,
   SvgX,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
 import { Card, EmptyMessageCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import useUsers from "@/hooks/useUsers";
 import { toast } from "@/hooks/useToast";
 import { UserRole } from "@/lib/types";
@@ -400,7 +400,7 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
   return (
     <Button
       prominence="tertiary"
-      icon={isFetching ? SimpleLoader : SvgRefreshCw}
+      icon={isFetching ? SvgSimpleLoader : SvgRefreshCw}
       onClick={async () => {
         abortRef.current?.abort();
         const controller = new AbortController();
@@ -800,7 +800,7 @@ function ModalWrapperInner({
             <Button
               disabled={!isValid || !dirty || busy}
               type="submit"
-              icon={busy ? SimpleLoader : undefined}
+              icon={busy ? SvgSimpleLoader : undefined}
               tooltip={disabledTooltip}
             >
               {llmProvider ? "Update" : "Connect"}

@@ -171,6 +171,8 @@ _REGISTRY: Final = BuiltInSkillRegistry(
         ExternalAppBuiltInProvider(
             skill_id="google-calendar", app_type=ExternalAppType.GOOGLE_CALENDAR
         ),
+        ExternalAppBuiltInProvider(skill_id="gmail", app_type=ExternalAppType.GMAIL),
+        ExternalAppBuiltInProvider(skill_id="github", app_type=ExternalAppType.GITHUB),
     )
 )
 
@@ -182,6 +184,12 @@ BUILT_IN_SKILLS: Final[dict[str, BuiltInSkillDefinition]] = (
 EXTERNAL_APP_BUILT_IN_SKILL_IDS: Final[dict[ExternalAppType, str]] = (
     _REGISTRY.external_app_skill_ids
 )
+# Inverse of the above: ``built_in_skill_id -> app_type``. Lets the skill push
+# path go from a ``Skill`` row's ``built_in_skill_id`` back to the provider
+# catalog without touching the DB. Skill ids are unique, so the inverse is too.
+EXTERNAL_APP_SKILL_ID_TO_APP_TYPE: Final[dict[str, ExternalAppType]] = {
+    skill_id: app_type for app_type, skill_id in EXTERNAL_APP_BUILT_IN_SKILL_IDS.items()
+}
 
 # Named handles so callers avoid bare slug literals.
 COMPANY_SEARCH: Final[BuiltInSkillDefinition] = BUILT_IN_SKILLS["company-search"]

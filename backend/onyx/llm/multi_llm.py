@@ -1,3 +1,4 @@
+import copy
 import os
 import threading
 from collections.abc import Iterator
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING
 from typing import Union
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
@@ -72,11 +74,15 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
     "claude-opus-4-5",
     "claude-opus-4-6",
     "claude-opus-4-7",
+    "claude-opus-4-8",
 )
 
 # Anthropic models that require the adaptive thinking API (thinking.type.adaptive
 # + output_config.effort) instead of the legacy thinking.type.enabled + budget_tokens.
-_ANTHROPIC_ADAPTIVE_THINKING_MODELS = ("claude-opus-4-7",)
+_ANTHROPIC_ADAPTIVE_THINKING_MODELS = (
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+)
 
 # Anthropic models that reject any non-default sampling parameter (temperature,
 # top_p, top_k). For these models we must omit these params entirely from the
@@ -89,6 +95,10 @@ _ANTHROPIC_NO_SAMPLING_PARAMS_MODELS = (
     "claude-opus-4.7",
     "claude-4-7-opus",
     "claude-4.7-opus",
+    "claude-opus-4-8",
+    "claude-opus-4.8",
+    "claude-4-8-opus",
+    "claude-4.8-opus",
 )
 
 
@@ -541,8 +551,8 @@ class LitellmLLM(LLM):
 
         # Temperature
         # Some models reject any non-default sampling parameter (e.g. Claude
-        # Opus 4.7 returns a 400 invalid_request_error if temperature is set to
-        # anything). For those models we must omit the param entirely —
+        # Opus 4.7/4.8 return a 400 invalid_request_error if temperature is set
+        # to anything). For those models we must omit the param entirely —
         # LiteLLM's drop_params is not reliable here because the upstream
         # provider config can still claim the param is supported.
         # https://github.com/BerriAI/litellm/issues/26444
@@ -649,6 +659,38 @@ class LitellmLLM(LLM):
             model_kwargs=self._model_kwargs,
             user_identity=user_identity,
         )
+
+        # OpenRouter sticky routing: inject session_id into extra_body so that
+        # OpenRouter pins all turns of a conversation to the same upstream provider,
+        # enabling prompt cache hits across turns.
+        # Without this, OpenRouter may alternate between e.g. Anthropic and Google
+        # for the same model, causing cache misses on every other turn.
+        # See: https://openrouter.ai/docs/features/provider-routing#session-id
+        #
+        # Gated on SEND_USER_METADATA_TO_LLM_PROVIDER for consistency with the
+        # user/session metadata handled in build_litellm_passthrough_kwargs: an
+        # operator who opted out of sending session identifiers to providers
+        # should not have the session_id forwarded to OpenRouter either.
+        if (
+            SEND_USER_METADATA_TO_LLM_PROVIDER
+            and self._model_provider == LlmProviderNames.OPENROUTER
+            and user_identity is not None
+            and user_identity.session_id
+        ):
+            if passthrough_kwargs is self._model_kwargs:
+                passthrough_kwargs = copy.deepcopy(self._model_kwargs)
+            existing_extra_body = passthrough_kwargs.get("extra_body") or {}
+            if isinstance(existing_extra_body, dict):
+                passthrough_kwargs["extra_body"] = {
+                    **existing_extra_body,
+                    "session_id": user_identity.session_id,
+                }
+            else:
+                logger.warning(
+                    "OpenRouter sticky routing: extra_body is not a dict (%s), "
+                    "skipping session_id injection",
+                    type(existing_extra_body).__name__,
+                )
 
         try:
             # NOTE: must pass in None instead of empty strings otherwise litellm

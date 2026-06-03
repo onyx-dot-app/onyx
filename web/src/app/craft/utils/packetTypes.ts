@@ -101,6 +101,12 @@ export interface ParsedToolCallStart {
   isTodo: boolean;
   /** Best-effort title resolved from toolName/kind, shown until progress arrives. */
   title: string;
+  /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
+  sessionId: string | null;
+  /** Non-null only for subagent child events — the parent opencode session. */
+  parentSessionId: string | null;
+  /** On a parent `task` event, the child session it spawned; else null. */
+  subagentSessionId: string | null;
 }
 
 export interface ParsedToolCallProgress {
@@ -126,6 +132,12 @@ export interface ParsedToolCallProgress {
   todos: TodoItem[];
   // Task-specific
   taskOutput: string | null;
+  /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
+  sessionId: string | null;
+  /** Non-null only for subagent child events — the parent opencode session. */
+  parentSessionId: string | null;
+  /** On a parent `task` event, the child session it spawned; else null. */
+  subagentSessionId: string | null;
 }
 
 export interface ParsedPromptResponse {

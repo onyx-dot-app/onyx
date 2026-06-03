@@ -44,7 +44,7 @@ import {
   fetchHierarchyNodeDocuments,
 } from "@/lib/hierarchy/svc";
 import { AgentAttachedDocument } from "@/lib/agents/types";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import { Spacer } from "@opal/components";
 
 // ============================================================================

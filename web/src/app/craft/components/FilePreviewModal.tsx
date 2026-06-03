@@ -4,8 +4,12 @@ import { useState, useEffect } from "react";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import { SvgFileText, SvgDownloadCloud, SvgImage } from "@opal/icons";
+import {
+  SvgFileText,
+  SvgDownloadCloud,
+  SvgImage,
+  SvgSimpleLoader,
+} from "@opal/icons";
 import { getArtifactUrl, FileSystemEntry } from "@/lib/build/client";
 
 interface FilePreviewModalProps {
@@ -64,7 +68,7 @@ export default function FilePreviewModal({
         <Modal.Body>
           {isLoading ? (
             <div className="flex items-center justify-center p-8">
-              <SimpleLoader />
+              <SvgSimpleLoader />
             </div>
           ) : error ? (
             <Text secondaryBody className="text-status-error-01">

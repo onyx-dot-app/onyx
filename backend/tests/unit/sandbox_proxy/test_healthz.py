@@ -5,11 +5,12 @@ from http.server import HTTPServer
 
 import pytest
 
+from onyx.sandbox_proxy.identity import SandboxIPLookup
 from onyx.sandbox_proxy.server import _build_healthz_handler
 from onyx.sandbox_proxy.server import _Readiness
 
 
-class _FakeLookup:
+class _FakeLookup(SandboxIPLookup):
     def __init__(self, synced: bool) -> None:
         self._synced = synced
 

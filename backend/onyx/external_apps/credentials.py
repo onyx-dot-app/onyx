@@ -50,11 +50,13 @@ def resolve_injection_headers(
     if app is None or not app.skill.enabled:
         return {}
 
-    credentials: dict[str, Any] = dict(app.organization_credentials)
+    credentials: dict[str, Any] = dict(
+        app.organization_credentials.get_value(apply_mask=False)
+    )
     user_cred = get_external_app_user_credential(
         db_session, external_app_id=external_app_id, user_id=user_id
     )
     if user_cred is not None:
-        credentials.update(user_cred.user_credentials)
+        credentials.update(user_cred.user_credentials.get_value(apply_mask=False))
 
     return build_auth_headers(app.auth_template, credentials)

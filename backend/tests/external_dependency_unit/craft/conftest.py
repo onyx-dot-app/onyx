@@ -17,6 +17,9 @@ import zipfile
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
+from collections.abc import Sequence
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
 from dataclasses import field
@@ -33,6 +36,7 @@ if TYPE_CHECKING:
     from kubernetes import client as k8s_client_module
 from redis import Redis
 from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.orm import class_mapper
 from sqlalchemy.orm import Session
 
@@ -78,9 +82,19 @@ from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 _DEV_PUSH_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
 
-@pytest.fixture(autouse=True)
-def _sandbox_push_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+@pytest.fixture(scope="module", autouse=True)
+def _sandbox_push_key() -> Generator[None, None, None]:
+    # Module-scoped so it's set before ``_pool_pod`` (also module-scoped)
+    # provisions its pod — the K8s manager reads the env var at pod-spec
+    # build time. Function-scoped ``monkeypatch`` runs *after* higher-scoped
+    # fixtures, which is what triggered the CI breakage when the first
+    # test in the file moved onto ``pool_session``.
+    mp = pytest.MonkeyPatch()
+    mp.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+    try:
+        yield
+    finally:
+        mp.undo()
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +183,9 @@ def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
         try:
             with get_session_with_current_tenant() as session:
+                # Fail fast instead of hanging if another (uncommitted) test
+                # session still holds locks on these rows.
+                session.execute(text("SET lock_timeout = '10s'"))
                 for row_id in ids:
                     row = session.get(model, row_id)
                     if row is not None:
@@ -189,6 +206,7 @@ def _best_effort_delete_memberships(group_ids: list[int]) -> None:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
         try:
             with get_session_with_current_tenant() as session:
+                session.execute(text("SET lock_timeout = '10s'"))
                 session.query(User__UserGroup).filter(
                     User__UserGroup.user_group_id.in_(group_ids)
                 ).delete(synchronize_session=False)
@@ -221,16 +239,9 @@ def _isolate_skill_tables(
 def _seed_default_llm_provider() -> Generator[None, None, None]:
     """Seed a default LLM provider so the real provisioning path resolves one.
 
-    No-op (and no teardown) if the DB already has a default, so it never
-    clobbers a dev database. K8s lane only.
+    No-op (and no teardown) if the DB already has a default. The fake key is
+    never invoked — tests forward the resolved config to ``provision()`` only.
     """
-    from onyx.server.features.build.configs import SANDBOX_BACKEND
-    from onyx.server.features.build.configs import SandboxBackend
-
-    if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
-        yield
-        return
-
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
     seeded_name: str | None = None
@@ -246,7 +257,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                         api_key_changed=True,
                         model_configurations=[
                             ModelConfigurationUpsertRequest(
-                                name="gpt-4o-mini", is_visible=True
+                                name="gpt-5-mini", is_visible=True
                             )
                         ],
                     ),
@@ -254,7 +265,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                 )
                 update_default_provider(
                     provider_id=provider.id,
-                    model_name="gpt-4o-mini",
+                    model_name="gpt-5-mini",
                     db_session=session,
                 )
                 session.commit()
@@ -311,6 +322,11 @@ def test_user(
     db_session.commit()
     db_session.refresh(user)
     yield user
+    # Release any uncommitted locks the test left on this session (e.g. an
+    # ensure_sandbox_pat flush without commit) before the separate-session
+    # delete below — otherwise its DELETE deadlocks on rows that cascade from
+    # this user, since db_session (the lock holder) only tears down later (LIFO).
+    db_session.rollback()
     _best_effort_delete(User, [user.id])
 
 
@@ -644,6 +660,74 @@ class SandboxHandle:
             _sandbox_id=sandbox_id,
         )
         return sandbox_row, workspace
+
+    def provision_for_many(
+        self,
+        users: Sequence[User],
+        status: SandboxStatus = SandboxStatus.RUNNING,
+    ) -> list[tuple[Sandbox, WorkspaceProxy]]:
+        """Parallel ``provision_for``; preserves input order.
+
+        ContextVars don't propagate to ThreadPoolExecutor workers, so each
+        worker re-pins the tenant id before touching the DB. Each
+        successfully-provisioned pod is registered for teardown
+        immediately so a partial failure still cleans up.
+        """
+        if not users:
+            return []
+
+        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+
+        def _worker(user: User) -> UUID:
+            token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+            try:
+                return _provision_sandbox_via_app(user.id)
+            finally:
+                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+        sandbox_ids: dict[User, UUID] = {}
+        worker_error: Exception | None = None
+        with ThreadPoolExecutor(max_workers=min(len(users), 8)) as pool:
+            futures = {pool.submit(_worker, user): user for user in users}
+            for fut in as_completed(futures):
+                user = futures[fut]
+                try:
+                    sandbox_id = fut.result()
+                except Exception as e:
+                    if worker_error is None:
+                        worker_error = e
+                    continue
+                sandbox_ids[user] = sandbox_id
+                self._register_extra(sandbox_id)
+
+        # Apply the requested status to every pod that came up — including
+        # on partial failure — so teardown sees consistent DB state before
+        # the error propagates.
+        self._db_session.expire_all()
+        if status != SandboxStatus.RUNNING and sandbox_ids:
+            for sandbox_id in sandbox_ids.values():
+                row = self._db_session.get(Sandbox, sandbox_id)
+                assert row is not None
+                row.status = status
+            self._db_session.commit()
+
+        if worker_error is not None:
+            raise worker_error
+
+        results: list[tuple[Sandbox, WorkspaceProxy]] = []
+        for user in users:
+            sandbox_id = sandbox_ids[user]
+            sandbox_row = self._db_session.get(Sandbox, sandbox_id)
+            assert sandbox_row is not None
+
+            workspace = WorkspaceProxy(
+                _k8s_client=self._k8s_client,
+                _pod_name=self.manager._get_pod_name(sandbox_id),
+                _sandbox_id=sandbox_id,
+            )
+            results.append((sandbox_row, workspace))
+
+        return results
 
 
 def _create_committed_craft_user() -> UUID:
@@ -1176,9 +1260,8 @@ def session_manager_with_stub(
     Patches both ``session.manager.get_sandbox_manager`` (which
     ``SessionManager.__init__`` captures into ``self._sandbox_manager`` at
     construction time) AND ``sandbox.base._sandbox_manager_instance`` so any
-    deferred lookup also lands on the stub. The LLM provider lookup is
-    short-circuited to ``default_llm_config()`` so tests don't need a real
-    provider configured in the DB.
+    deferred lookup also lands on the stub. The LLM lookup runs for real
+    against the provider from ``_seed_default_llm_provider``.
     """
     monkeypatch.setattr(
         "onyx.server.features.build.session.manager.get_sandbox_manager",
@@ -1189,11 +1272,6 @@ def session_manager_with_stub(
         stub_sandbox_manager,
     )
     sm = SessionManager(db_session)
-    monkeypatch.setattr(
-        sm,
-        "_get_llm_config",
-        lambda *args, **kwargs: default_llm_config(),  # noqa: ARG005
-    )
     # Sanity: SessionManager captured the stub at construction.
     assert sm._sandbox_manager is stub_sandbox_manager
     return sm

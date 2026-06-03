@@ -10,7 +10,7 @@ import { InputTypeIn } from "@opal/components";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { FormField } from "@/refresh-components/form/FormField";
 import Text from "@/refresh-components/texts/Text";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
@@ -588,7 +588,7 @@ export default function OpenAPIAuthenticationModal({
                               >
                                 {redirectUri}
                               </Text>
-                              <CopyIconButton
+                              <CopyButton
                                 getCopyText={() => redirectUri}
                                 tooltip="Copy redirect URI"
                                 prominence="tertiary"

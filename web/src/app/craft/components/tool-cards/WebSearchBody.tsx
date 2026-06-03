@@ -4,6 +4,9 @@ import { useMemo } from "react";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import { SvgGlobe } from "@opal/icons";
+import ToolCardSurface, {
+  ToolCardSection,
+} from "@/app/craft/components/tool-cards/ToolCardSurface";
 import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interfaces";
 
 interface SearchResult {
@@ -75,16 +78,18 @@ export default function WebSearchBody({ toolCall }: ToolCardBodyProps) {
 
   if (results.length === 0) {
     return (
-      <div className="px-3 overflow-auto max-h-[18rem] whitespace-pre-wrap wrap-break-word">
-        <Text as="p" font="secondary-mono" color="text-03">
-          {toolCall.rawOutput || "No results"}
-        </Text>
-      </div>
+      <ToolCardSurface>
+        <ToolCardSection className="whitespace-pre-wrap wrap-break-word">
+          <Text as="p" font="secondary-mono" color="text-03">
+            {toolCall.rawOutput || "No results"}
+          </Text>
+        </ToolCardSection>
+      </ToolCardSurface>
     );
   }
 
   return (
-    <div className="overflow-auto max-h-[28rem]">
+    <ToolCardSurface>
       <div className="divide-y divide-border-01">
         {results.map((result, idx) => (
           <div
@@ -117,6 +122,6 @@ export default function WebSearchBody({ toolCall }: ToolCardBodyProps) {
           </div>
         ))}
       </div>
-    </div>
+    </ToolCardSurface>
   );
 }

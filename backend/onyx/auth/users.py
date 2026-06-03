@@ -35,6 +35,7 @@ from fastapi import status
 from fastapi import WebSocket
 from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
+from fastapi.routing import APIRoute
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import BaseUserManager
 from fastapi_users import exceptions
@@ -70,6 +71,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
+from starlette.routing import BaseRoute
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.disposable_email_validator import is_disposable_email
@@ -123,11 +125,12 @@ from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import AccountType
+from onyx.db.enums import Permission
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import Persona
 from onyx.db.models import User
-from onyx.db.pat import fetch_user_for_pat
+from onyx.db.pat import resolve_pat
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.db.users import get_user_by_email
 from onyx.db.users import is_limited_user
@@ -877,7 +880,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise exceptions.UserNotExists()
 
                 except exceptions.UserNotExists:
-                    verify_email_domain(account_email, is_registration=True)
+                    # OAuth-created accounts are not subject to the dotted-Gmail
+                    # signup block: the provider vouches for one canonical email
+                    # per account, so dot-alias abuse isn't possible here.
+                    verify_email_domain(account_email)
 
                     # Lock + check on the same session that does the insert.
                     await self.user_db.session.run_sync(
@@ -1791,6 +1797,28 @@ async def _maybe_refresh_oauth_tokens(
         )
 
 
+def scope_exempt() -> None:
+    """Marker dependency: tags a route reachable by any scoped PAT."""
+
+
+scope_exempt._is_scope_exempt = True  # ty: ignore[unresolved-attribute]
+
+
+def _scoped_pat_permitted_on_route(
+    token_scopes: list[Permission] | None, route: BaseRoute | None
+) -> bool:
+    """Whether a scoped PAT may proceed on this route (fail-closed)."""
+    if token_scopes is None:
+        return True
+    if not isinstance(route, APIRoute):
+        return False
+    return any(
+        getattr(dependency.call, "_is_require_permission", False)
+        or getattr(dependency.call, "_is_scope_exempt", False)
+        for dependency in route.dependant.dependencies
+    )
+
+
 async def optional_user(
     request: Request,
     async_db_session: AsyncSession = Depends(get_async_session),
@@ -1804,12 +1832,28 @@ async def optional_user(
 
     try:
         if hashed_pat := get_hashed_pat_from_request(request):
-            user = await fetch_user_for_pat(hashed_pat, async_db_session)
+            pat = await resolve_pat(hashed_pat, async_db_session)
+            if pat is not None:
+                user = pat.user
+                # Expose the token's scopes so require_permission can cap the
+                # request to them.
+                request.state.token_scopes = pat.scopes
         elif hashed_api_key := get_hashed_api_key_from_request(request):
             user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
     except ValueError:
         logger.warning("Issue with validating authentication token")
         return None
+
+    # Fail-closed: a scoped PAT may only reach routes guarded by a
+    # require_permission its scopes can satisfy (see require_permission).
+    if not _scoped_pat_permitted_on_route(
+        getattr(request.state, "token_scopes", None),
+        request.scope.get("route"),
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "This token's scopes do not permit this endpoint.",
+        )
 
     if user is not None:
         await _maybe_refresh_oauth_tokens(user, async_db_session, user_manager)

@@ -53,6 +53,7 @@ from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.utils.logger import setup_logger
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from tests.external_dependency_unit.craft._test_helpers import action_entry
 from tests.external_dependency_unit.craft.conftest import pod_exec_async
 from tests.external_dependency_unit.craft.conftest import wait_for_pod_exec_output
 from tests.external_dependency_unit.craft.conftest import wait_for_proxy_redeploy
@@ -67,7 +68,7 @@ pytestmark = pytest.mark.skipif(
 # Label the helm chart attaches to the proxy Deployment + pods.
 _PROXY_COMPONENT_LABEL = "app.kubernetes.io/component=sandbox-proxy"
 
-# Matches the gate's SlackPostMessageMatcher (case-insensitive URL prefix).
+# Matches catalog action ``slack.messages.write``.
 _SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 
 # Spec value for approval_cache.WAIT_TIMEOUT_S; pinned by
@@ -665,11 +666,19 @@ def test_list_live_excludes_aged_pending_rows(
     now = datetime.now(timezone.utc)
     just_live_id = uuid4()
     just_expired_id = uuid4()
+    slack_actions = [
+        action_entry(
+            "slack.messages.write",
+            display_name="Post a message",
+            description="Post a message to a channel or conversation.",
+        )
+    ]
     db_session.add(
         ActionApproval(
             approval_id=just_live_id,
             session_id=session_id,
-            action_type="slack.chat.postMessage",
+            actions=slack_actions,
+            app_name="Slack",
             payload={"boundary": "just_live"},
             created_at=now - timedelta(seconds=_WAIT_TIMEOUT_S_SPEC - 5),
         )
@@ -678,7 +687,8 @@ def test_list_live_excludes_aged_pending_rows(
         ActionApproval(
             approval_id=just_expired_id,
             session_id=session_id,
-            action_type="slack.chat.postMessage",
+            actions=slack_actions,
+            app_name="Slack",
             payload={"boundary": "just_expired"},
             created_at=now - timedelta(seconds=_WAIT_TIMEOUT_S_SPEC + 5),
         )

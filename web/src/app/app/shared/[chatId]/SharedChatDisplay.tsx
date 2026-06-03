@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { humanReadableFormat } from "@/lib/time";
+import { humanReadableFormat } from "@opal/time";
 import { BackendChatSession } from "@/app/app/interfaces";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";

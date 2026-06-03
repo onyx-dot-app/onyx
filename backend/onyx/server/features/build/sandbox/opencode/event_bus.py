@@ -283,8 +283,25 @@ class PodEventBus:
         if sid is None:
             return
 
+        # Deliver to sid's own subscribers AND to every ancestor's subscribers
+        # so a turn subscribed only to the parent session also sees descendant
+        # (subagent) events. Walk _child_to_parent up to the root, deduping so
+        # no subscriber receives the event twice.
         with self._lock:
-            queues = list(self._subscribers.get(sid, ()))
+            target_sids = [sid]
+            ancestor = self._child_to_parent.get(sid)
+            seen_sids = {sid}
+            while ancestor is not None and ancestor not in seen_sids:
+                target_sids.append(ancestor)
+                seen_sids.add(ancestor)
+                ancestor = self._child_to_parent.get(ancestor)
+            queues: list[_Subscription] = []
+            seen_subs: set[int] = set()
+            for target_sid in target_sids:
+                for sub in self._subscribers.get(target_sid, ()):
+                    if id(sub) not in seen_subs:
+                        seen_subs.add(id(sub))
+                        queues.append(sub)
         for sub in queues:
             try:
                 sub.queue.put_nowait(evt)

@@ -1,15 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { cn } from "@opal/utils";
 import {
-  getPromptsForPersona,
-  UserPersona,
+  exampleBuildPrompts,
   BuildPrompt,
 } from "@/app/craft/constants/exampleBuildPrompts";
 
 interface SuggestedPromptsProps {
-  persona?: UserPersona;
   onPromptClick: (promptText: string) => void;
 }
 
@@ -38,27 +36,18 @@ function selectRandomPrompts(prompts: BuildPrompt[]): BuildPrompt[] {
 /**
  * SuggestedPrompts - Displays clickable prompt suggestions in a 2x2 grid
  *
- * Shows a 2x2 grid of example prompts based on user persona.
+ * Shows a 2x2 grid of example prompts.
  * Each prompt has summary text on top and a cropped image below it.
  * Clicking a prompt triggers the onPromptClick callback.
- * Randomly selects 4 prompts from the available prompts for the persona.
- * Shuffles on every component mount (when user returns) and when persona changes.
+ * Randomly selects 4 prompts, shuffled on every component mount (when user returns).
  */
 export default function SuggestedPrompts({
-  persona = "default",
   onPromptClick,
 }: SuggestedPromptsProps) {
-  // Randomly select 4 prompts - shuffles on mount and when persona changes
-  const [gridPrompts, setGridPrompts] = useState<BuildPrompt[]>(() => {
-    const prompts = getPromptsForPersona(persona);
-    return selectRandomPrompts(prompts);
-  });
-
-  // Reshuffle when persona changes
-  useEffect(() => {
-    const prompts = getPromptsForPersona(persona);
-    setGridPrompts(selectRandomPrompts(prompts));
-  }, [persona]);
+  // Randomly select 4 prompts - shuffles on mount (when user returns)
+  const [gridPrompts] = useState<BuildPrompt[]>(() =>
+    selectRandomPrompts(exampleBuildPrompts)
+  );
 
   return (
     <div className="mt-4 w-full grid grid-cols-2 gap-4">

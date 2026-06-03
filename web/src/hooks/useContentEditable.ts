@@ -6,6 +6,8 @@ import {
   insertTextAtCursor as insertTextAtCursorUtil,
   insertNodeAtCursor as insertNodeAtCursorUtil,
   getTextContent,
+  deleteTokenBeforeCursor,
+  stripLeadingBr,
 } from "@/lib/contentEditable";
 import {
   createRichInputTileNode,
@@ -13,6 +15,8 @@ import {
   shouldCreatePasteTile,
   getPasteTilePreview,
   getPasteTileMeta,
+  isSkillTile,
+  SKILL_TILE_TYPE,
 } from "@/lib/richInputTile";
 
 export interface UseContentEditableOptions {
@@ -35,6 +39,8 @@ export interface UseContentEditableReturn {
   handleCompositionEnd: () => void;
   insertTextAtCursor: (text: string) => void;
   insertTileAtCursor: (text: string) => void;
+  /** Insert a skill tile, replacing `beforeToken` (the `/<query>` before the caret). */
+  insertSkillTile: (slug: string, name: string, beforeToken: string) => boolean;
   pasteText: (text: string) => void;
   handleCopy: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   handleCut: (event: React.ClipboardEvent<HTMLDivElement>) => void;
@@ -164,6 +170,18 @@ export function useContentEditable({
     (_event: React.SyntheticEvent<HTMLDivElement>): string => {
       if (isComposingRef.current) return messageRef.current;
       clearTileSelection();
+      const el = ref.current;
+      if (el && stripLeadingBr(el)) {
+        // The stray <br> sat before the caret-at-start; collapse to the start.
+        const s = window.getSelection();
+        if (s) {
+          const r = document.createRange();
+          r.setStart(el, 0);
+          r.collapse(true);
+          s.removeAllRanges();
+          s.addRange(r);
+        }
+      }
       const text = syncFromDOM();
       resize();
       return text;
@@ -259,6 +277,30 @@ export function useContentEditable({
     [syncFromDOM, resize]
   );
 
+  const insertSkillTile = useCallback(
+    (slug: string, name: string, beforeToken: string): boolean => {
+      const el = ref.current;
+      if (!el) return false;
+      // Replacing a typed `/<query>`: bail if it can't be verifiably removed,
+      // since the tile serializes back to `/<slug> ` and would duplicate it. An
+      // empty `beforeToken` (e.g. paste) just inserts at the caret.
+      if (beforeToken && !deleteTokenBeforeCursor(el, beforeToken))
+        return false;
+      const tile = createRichInputTileNode({
+        type: SKILL_TILE_TYPE,
+        text: `/${slug} `,
+        preview: `Skill: ${name}`,
+        meta: "",
+        skillSlug: slug,
+      });
+      insertNodeAtCursorUtil(el, tile); // also places the caret after the tile
+      syncFromDOM();
+      resize();
+      return true;
+    },
+    [syncFromDOM, resize]
+  );
+
   const pasteText = useCallback(
     (text: string) => {
       if (pasteTilesEnabled && shouldCreatePasteTile(text)) {
@@ -300,6 +342,9 @@ export function useContentEditable({
 
       const tile = target.closest("[data-rich-tile]") as HTMLElement | null;
       if (tile) {
+        // Skill tiles don't use the paste-edit popover; their click handling
+        // (re-pick) lives in the host input bar.
+        if (isSkillTile(tile)) return;
         const text = tile.getAttribute("data-text") ?? "";
         setTilePopover({ text, tile });
       } else {
@@ -374,10 +419,12 @@ export function useContentEditable({
       const isNav = event.key === "ArrowLeft" || event.key === "ArrowRight";
       const isDelete = event.key === "Backspace" || event.key === "Delete";
 
-      // Enter on selected tile → open popover
+      // Enter on selected tile → open popover (paste tiles only; skill tiles
+      // have no editable text, so Enter is a no-op that keeps them selected).
       if (event.key === "Enter" && selectedTileRef.current) {
         event.preventDefault();
         const tile = selectedTileRef.current;
+        if (isSkillTile(tile)) return true;
         const text = tile.getAttribute("data-text") ?? "";
         setTilePopover({ text, tile });
         return true;
@@ -406,22 +453,11 @@ export function useContentEditable({
         const selected = selectedTileRef.current;
 
         if (isNav) {
-          // Arrow on selected tile → deselect and move cursor past it
-          event.preventDefault();
+          // Deselect; let the native arrow collapse the selection to the right
+          // edge (it renders the caret correctly, unlike a manual tile-boundary
+          // range, which had no caret rect and needed a second press).
           clearTileSelection();
-          if (event.key === "ArrowRight") {
-            setCursorAfterNode(selected);
-          } else {
-            const s = window.getSelection();
-            if (s) {
-              const r = document.createRange();
-              r.setStartBefore(selected);
-              r.collapse(true);
-              s.removeAllRanges();
-              s.addRange(r);
-            }
-          }
-          return true;
+          return false;
         }
 
         if (isDelete) {
@@ -444,6 +480,27 @@ export function useContentEditable({
       }
 
       const range = sel.getRangeAt(0);
+
+      // Chrome deletes a leading contentEditable=false tile when Backspace is
+      // pressed with nothing before the caret. That deletion is a no-op anyway
+      // (nothing to the left), so block it — otherwise it eats the tile or
+      // leaves an empty first line above it.
+      const el = ref.current;
+      if (
+        event.key === "Backspace" &&
+        el &&
+        el.contains(range.startContainer)
+      ) {
+        const before = document.createRange();
+        before.selectNodeContents(el);
+        before.setEnd(range.startContainer, range.startOffset);
+        // Collapsed ⇒ nothing precedes the caret.
+        if (before.collapsed) {
+          event.preventDefault();
+          return true;
+        }
+      }
+
       let direction: "before" | "after";
       if (isDelete) {
         direction = event.key === "Backspace" ? "before" : "after";
@@ -530,6 +587,7 @@ export function useContentEditable({
     handleCompositionEnd,
     insertTextAtCursor,
     insertTileAtCursor,
+    insertSkillTile,
     pasteText,
     handleCopy,
     handleCut,

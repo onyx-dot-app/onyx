@@ -4,7 +4,7 @@ import {
   SvgEdit,
   SvgSearch,
   SvgGlobe,
-  SvgBubbleText,
+  SvgCpu,
   SvgCheckSquare,
   SvgAlertCircle,
   SvgLoader,
@@ -27,7 +27,7 @@ export function getToolIcon(kind: ToolCallKind): IconFunctionComponent {
     case "search":
       return SvgSearch;
     case "task":
-      return SvgBubbleText;
+      return SvgCpu;
     case "other":
     default:
       return SvgEdit;
