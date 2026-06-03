@@ -113,6 +113,17 @@ function parseSelectorList(
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Cap every IdP form interaction. Playwright's default action timeout is
+// unbounded, so a field/button that never becomes actionable — e.g. a real Okta
+// org re-rendering its "Sign in" button mid-submit — makes `click()`/`fill()`
+// hang until the whole test times out (observed: a submit click eating the full
+// 300s budget). Bounding each action lets it fail fast so the password-retry
+// loop and Enter-key fallback can recover, and so per-test retries get real
+// budget instead of one long hang.
+const IDP_ACTION_TIMEOUT_MS = Number(
+  process.env.MCP_OAUTH_IDP_ACTION_TIMEOUT_MS || 15_000
+);
+
 export interface CompleteFlowOptions {
   expectReturnPathContains: string;
   confirmConnected?: () => Promise<void>;
@@ -180,7 +191,7 @@ export class McpOAuthFlow {
         .catch(() => "")
         .then((val) => val ?? "");
       if (existing !== value) {
-        await locator.fill(value);
+        await locator.fill(value, { timeout: IDP_ACTION_TIMEOUT_MS });
       }
       return true;
     }
@@ -204,7 +215,7 @@ export class McpOAuthFlow {
         }
       }
       try {
-        await locator.click();
+        await locator.click({ timeout: IDP_ACTION_TIMEOUT_MS });
         return true;
       } catch (err) {
         if (!options.optional) throw err;
@@ -334,7 +345,9 @@ export class McpOAuthFlow {
           .locator(passwordSelectorString)
           .first();
         if ((await passwordLocator.count()) > 0) {
-          await passwordLocator.press("Enter").catch(() => {});
+          await passwordLocator
+            .press("Enter", { timeout: IDP_ACTION_TIMEOUT_MS })
+            .catch(() => {});
         } else {
           await this.page.keyboard.press("Enter").catch(() => {});
         }
