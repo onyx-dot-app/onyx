@@ -642,10 +642,20 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             error_code = e.response["Error"].get("Code", "")
             status_code = e.response["ResponseMetadata"].get("HTTPStatusCode")
 
+            # Credential rejections. These commonly mean the request reached the
+            # wrong AWS partition (e.g. a GovCloud bucket addressed through the
+            # commercial endpoint due to a missing/incorrect region) rather than
+            # a bucket-policy problem, so don't lump them in with AccessDenied.
+            if error_code in ["InvalidAccessKeyId", "InvalidToken"]:
+                raise CredentialExpiredError(
+                    f"Blob storage credentials were rejected (code={error_code}). "
+                    "Verify the credentials and that the configured AWS region matches "
+                    "the bucket's partition (e.g. us-gov-west-1 for GovCloud buckets)."
+                )
+
             # Most common S3 error cases
             if error_code in [
                 "AccessDenied",
-                "InvalidAccessKeyId",
                 "SignatureDoesNotMatch",
             ]:
                 if status_code == 403 or error_code == "AccessDenied":

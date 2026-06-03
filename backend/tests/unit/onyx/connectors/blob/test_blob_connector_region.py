@@ -1,11 +1,15 @@
 from typing import Any
+from typing import cast
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from onyx.configs.constants import BlobType
 from onyx.connectors.blob.connector import BlobStorageConnector
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import InsufficientPermissionsError
 
 
 def _make_connector(region_name: str | None) -> BlobStorageConnector:
@@ -82,6 +86,43 @@ def test_iam_role_auth_passes_region_to_sts_and_s3() -> None:
 def test_blank_region_normalized_to_none() -> None:
     connector = _make_connector("   ")
     assert connector.region_name is None
+
+
+def _client_error(error_code: str, status_code: int) -> ClientError:
+    error_response = cast(
+        Any,
+        {
+            "Error": {"Code": error_code},
+            "ResponseMetadata": {"HTTPStatusCode": status_code},
+        },
+    )
+    return ClientError(error_response=error_response, operation_name="ListObjectsV2")
+
+
+@pytest.mark.parametrize(
+    "error_code, status_code",
+    [("InvalidAccessKeyId", 403), ("InvalidToken", 400)],
+)
+def test_validation_maps_credential_rejections_to_credential_error(
+    error_code: str, status_code: int
+) -> None:
+    connector = _make_connector(None)
+    connector.s3_client = MagicMock()
+    connector.s3_client.list_objects_v2.side_effect = _client_error(
+        error_code, status_code
+    )
+
+    with pytest.raises(CredentialExpiredError, match=error_code):
+        connector.validate_connector_settings()
+
+
+def test_validation_maps_access_denied_to_insufficient_permissions() -> None:
+    connector = _make_connector(None)
+    connector.s3_client = MagicMock()
+    connector.s3_client.list_objects_v2.side_effect = _client_error("AccessDenied", 403)
+
+    with pytest.raises(InsufficientPermissionsError):
+        connector.validate_connector_settings()
 
 
 def test_govcloud_blob_link_uses_govcloud_console() -> None:
