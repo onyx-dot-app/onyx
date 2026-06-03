@@ -12615,7 +12615,7 @@
       "fields": {
         "name": "Name",
         "forEach": "Run once per item in",
-        "forEachHelp": "An expression that resolves to a list. Each item is available as '{item}'.",
+        "forEachHelp": "An expression that resolves to a list. Each item is available as '{{' item '}}'.",
         "onError": "If this step fails",
         "retries": "Attempts",
         "retriesHelp": "How many times to try before the step fails. Only transient errors are retried.",
@@ -12667,7 +12667,7 @@
         "filterOver": "List to filter",
         "filterOverHelp": "An expression that resolves to a list.",
         "filterLeft": "For each item, compare",
-        "filterLeftHelp": "Evaluated once per item, with '{item}' and '{index}' available.",
+        "filterLeftHelp": "Evaluated once per item, with '{{' item '}}' and '{{' index '}}' available.",
         "filterRight": "Matching value",
         "cron": "Cron expression",
         "cronHelp": "When to carry on, in UTC. Five fields: minute, hour, day, month, weekday.",

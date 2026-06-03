@@ -12585,7 +12585,7 @@
       "fields": {
         "name": "이름",
         "forEach": "이 목록의 항목마다 실행",
-        "forEachHelp": "목록을 반환하는 식입니다. 각 항목은 '{item}' 으로 사용할 수 있습니다.",
+        "forEachHelp": "목록을 반환하는 식입니다. 각 항목은 '{{' item '}}' 으로 사용할 수 있습니다.",
         "onError": "이 단계가 실패하면",
         "retries": "시도 횟수",
         "retriesHelp": "실패로 처리하기 전 시도 횟수입니다. 일시적인 오류만 재시도합니다.",
@@ -12637,7 +12637,7 @@
         "filterOver": "필터링할 목록",
         "filterOverHelp": "목록을 반환하는 식입니다.",
         "filterLeft": "각 항목에서 비교할 값",
-        "filterLeftHelp": "항목마다 평가되며 '{item}' 과 '{index}' 를 쓸 수 있습니다.",
+        "filterLeftHelp": "항목마다 평가되며 '{{' item '}}' 과 '{{' index '}}' 를 쓸 수 있습니다.",
         "filterRight": "일치시킬 값",
         "cron": "cron 식",
         "cronHelp": "다시 진행할 시각입니다(UTC). 분, 시, 일, 월, 요일 다섯 항목입니다.",

@@ -12589,7 +12589,7 @@
       "fields": {
         "name": "Nom",
         "forEach": "Exécuter une fois par élément dans",
-        "forEachHelp": "Une expression qui donne une liste. Chaque élément est disponible via '{item}'.",
+        "forEachHelp": "Une expression qui donne une liste. Chaque élément est disponible via '{{' item '}}'.",
         "onError": "Si cette étape échoue",
         "retries": "Tentatives",
         "retriesHelp": "Nombre d'essais avant l'échec. Seules les erreurs passagères sont réessayées.",
@@ -12641,7 +12641,7 @@
         "filterOver": "Liste à filtrer",
         "filterOverHelp": "Une expression qui donne une liste.",
         "filterLeft": "Pour chaque élément, comparer",
-        "filterLeftHelp": "Évaluée une fois par élément, avec '{item}' et '{index}'.",
+        "filterLeftHelp": "Évaluée une fois par élément, avec '{{' item '}}' et '{{' index '}}'.",
         "filterRight": "Valeur recherchée",
         "cron": "Expression cron",
         "cronHelp": "Quand reprendre, en UTC. Cinq champs : minute, heure, jour, mois, jour de la semaine.",

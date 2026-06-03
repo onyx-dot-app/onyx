@@ -12585,7 +12585,7 @@
       "fields": {
         "name": "名称",
         "forEach": "对此列表中的每一项执行",
-        "forEachHelp": "一个返回列表的表达式。每一项可用 '{item}' 引用。",
+        "forEachHelp": "一个返回列表的表达式。每一项可用 '{{' item '}}' 引用。",
         "onError": "当此步骤失败时",
         "retries": "尝试次数",
         "retriesHelp": "判定失败前的尝试次数。仅对临时错误重试。",
@@ -12637,7 +12637,7 @@
         "filterOver": "要筛选的列表",
         "filterOverHelp": "一个返回列表的表达式。",
         "filterLeft": "对每一项比较",
-        "filterLeftHelp": "对每一项求值，可使用 '{item}' 和 '{index}'。",
+        "filterLeftHelp": "对每一项求值，可使用 '{{' item '}}' 和 '{{' index '}}'。",
         "filterRight": "匹配的值",
         "cron": "cron 表达式",
         "cronHelp": "何时继续（UTC）。五个字段：分、时、日、月、星期。",

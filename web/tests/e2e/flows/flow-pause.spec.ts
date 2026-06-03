@@ -41,6 +41,7 @@ test.describe("Flows pause between batches", () => {
     await flows.expectNoField("Seconds between items");
     await flows.fillField("Run once per item in", "{{ steps.loop.batches }}");
     await flows.expectFieldValue("Seconds between items", "0");
+    await flows.expectInspectorContains("Each item is available as {{ item }}");
 
     // It holds a worker while it waits, so the editor keeps it to what the
     // server allows.

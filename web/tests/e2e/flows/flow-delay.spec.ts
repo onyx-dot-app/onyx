@@ -70,6 +70,8 @@ test.describe("Flows delay and filter steps", () => {
 
     await flows.fillField("List to filter", "{{ steps.http.body.rows }}");
     await flows.fillField("For each item, compare", "{{ item.state }}");
+    // The help spells the syntax the field takes, braces and all.
+    await flows.expectInspectorContains("{{ item }} and {{ index }}");
     await flows.expectField("Matching value");
 
     await flows.selectOperator("is not empty");

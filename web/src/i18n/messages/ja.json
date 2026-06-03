@@ -12587,7 +12587,7 @@
       "fields": {
         "name": "名前",
         "forEach": "この一覧の項目ごとに実行",
-        "forEachHelp": "一覧を返す式です。各項目は '{item}' で参照できます。",
+        "forEachHelp": "一覧を返す式です。各項目は '{{' item '}}' で参照できます。",
         "onError": "このステップが失敗したとき",
         "retries": "試行回数",
         "retriesHelp": "失敗と判定するまでの試行回数です。一時的なエラーのみ再試行します。",
@@ -12639,7 +12639,7 @@
         "filterOver": "絞り込む一覧",
         "filterOverHelp": "一覧を返す式です。",
         "filterLeft": "各項目で比較する値",
-        "filterLeftHelp": "項目ごとに評価されます。'{item}' と '{index}' が使えます。",
+        "filterLeftHelp": "項目ごとに評価されます。'{{' item '}}' と '{{' index '}}' が使えます。",
         "filterRight": "一致させる値",
         "cron": "cron 式",
         "cronHelp": "再開する時刻です（UTC）。分・時・日・月・曜日の 5 項目です。",

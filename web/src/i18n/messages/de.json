@@ -12587,7 +12587,7 @@
       "fields": {
         "name": "Name",
         "forEach": "Einmal pro Element ausführen in",
-        "forEachHelp": "Ein Ausdruck, der eine Liste ergibt. Jedes Element steht als '{item}' bereit.",
+        "forEachHelp": "Ein Ausdruck, der eine Liste ergibt. Jedes Element steht als '{{' item '}}' bereit.",
         "onError": "Wenn dieser Schritt fehlschlägt",
         "retries": "Versuche",
         "retriesHelp": "Wie oft versucht wird, bevor der Schritt fehlschlägt. Nur vorübergehende Fehler werden wiederholt.",
@@ -12639,7 +12639,7 @@
         "filterOver": "Zu filternde Liste",
         "filterOverHelp": "Ein Ausdruck, der eine Liste ergibt.",
         "filterLeft": "Für jedes Element vergleiche",
-        "filterLeftHelp": "Wird je Element ausgewertet, mit '{item}' und '{index}'.",
+        "filterLeftHelp": "Wird je Element ausgewertet, mit '{{' item '}}' und '{{' index '}}'.",
         "filterRight": "Passender Wert",
         "cron": "Cron-Ausdruck",
         "cronHelp": "Wann es weitergeht, in UTC. Fünf Felder: Minute, Stunde, Tag, Monat, Wochentag.",
