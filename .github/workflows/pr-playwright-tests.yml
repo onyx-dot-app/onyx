@@ -38,13 +38,21 @@ env:
   SLACK_CLIENT_ID: ${{ secrets.SLACK_CLIENT_ID }}
   SLACK_CLIENT_SECRET: ${{ secrets.SLACK_CLIENT_SECRET }}
 
-  # for MCP Oauth tests
-  MCP_OAUTH_CLIENT_ID: ${{ secrets.MCP_OAUTH_CLIENT_ID }}
-  MCP_OAUTH_CLIENT_SECRET: ${{ secrets.MCP_OAUTH_CLIENT_SECRET }}
-  MCP_OAUTH_ISSUER: ${{ secrets.MCP_OAUTH_ISSUER }}
-  MCP_OAUTH_JWKS_URI: ${{ secrets.MCP_OAUTH_JWKS_URI }}
-  MCP_OAUTH_USERNAME: ${{ vars.MCP_OAUTH_USERNAME }}
-  MCP_OAUTH_PASSWORD: ${{ secrets.MCP_OAUTH_PASSWORD }}
+  # MCP OAuth tests. AUDIENCE and REQUIRED_SCOPES are identical for both
+  # providers (the real Okta org is configured to mint exactly these), so they
+  # stay here. The issuer, JWKS URI, and client/user credentials are
+  # provider-specific and set per-job by a "Configure MCP OAuth provider" step
+  # (the only place `secrets` resolve) — NOT here, so the Okta job's $GITHUB_ENV
+  # writes aren't clobbered by a workflow-level definition. The playwright-tests
+  # job always uses the self-hosted mock OIDC IdP
+  # (deployment/docker_compose/docker-compose.mcp-oauth-test.yml): no secrets,
+  # deterministic, fork-safe, and gates every PR + merge_group. The
+  # playwright-tests-oauth-okta job additionally exercises the real Okta org when
+  # OAuth-relevant paths change — required on same-repo PRs, informational on
+  # merge_group.
+  MOCK_OIDC_PORT: 8090
+  MCP_OAUTH_AUDIENCE: api://mcp
+  MCP_OAUTH_REQUIRED_SCOPES: mcp:use
 
   # for MCP API Key tests
   MCP_API_KEY: test-api-key-12345
@@ -82,6 +90,10 @@ jobs:
     timeout-minutes: 5
     outputs:
       playwright: ${{ steps.filter.outputs.playwright || 'true' }}
+      # Whether this change touches MCP-OAuth-relevant code. Drives whether a
+      # same-repo PR validates the OAuth spec against the real Okta org instead of
+      # the mock IdP. Defaults to 'false' on events where the filter doesn't run.
+      mcp_oauth: ${{ steps.filter.outputs.mcp_oauth || 'false' }}
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
@@ -103,6 +115,13 @@ jobs:
               - '.github/workflows/pr-playwright-tests.yml'
               - '.github/actions/setup-test-license/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
+            mcp_oauth:
+              - 'backend/onyx/server/features/mcp/**'
+              - 'backend/tests/integration/mock_services/mcp_test_server/**'
+              - 'web/tests/e2e/mcp/**'
+              - 'web/tests/e2e/pages/ActionsPopover.ts'
+              - 'deployment/docker_compose/docker-compose.mcp-oauth-test.yml'
+              - '.github/workflows/pr-playwright-tests.yml'
 
   build-web-image:
     needs: changes
@@ -368,6 +387,35 @@ jobs:
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
+      # The MCP OAuth test drives the mock OIDC IdP in the browser at its
+      # advertised issuer (http://host.docker.internal:8090). The dockerized
+      # services reach that host via host-gateway, but the Playwright browser
+      # runs on the runner host, which doesn't resolve host.docker.internal by
+      # default — map it to the loopback where the IdP container publishes 8090.
+      - name: Make host.docker.internal resolvable for the browser
+        run: |
+          if ! grep -q "host.docker.internal" /etc/hosts; then
+            echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+          fi
+
+      # The main suite always runs the OAuth spec against the self-hosted mock
+      # OIDC IdP — deterministic, fork-safe, and the gate for every PR +
+      # merge_group. The real Okta org is validated separately by the
+      # playwright-tests-oauth-okta job. Written to $GITHUB_ENV (not the
+      # workflow-level env:) so that job can set its own values without a
+      # workflow-level definition clobbering them. getMcpOAuthConfig() requires
+      # the client/user vars even though the auto-issuing IdP ignores them.
+      - name: Configure MCP OAuth provider (mock IdP)
+        run: |
+          {
+            echo "MCP_OAUTH_ISSUER=http://host.docker.internal:8090"
+            echo "MCP_OAUTH_JWKS_URI=http://host.docker.internal:8090/jwks"
+            echo "MCP_OAUTH_CLIENT_ID=mock-oauth-client"
+            echo "MCP_OAUTH_CLIENT_SECRET=mock-oauth-secret"
+            echo "MCP_OAUTH_USERNAME=mock-user@example.com"
+            echo "MCP_OAUTH_PASSWORD=mock-password"
+          } >> "$GITHUB_ENV"
+
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
@@ -526,7 +574,9 @@ jobs:
           WORKSPACE: ${{ github.workspace }}
         run: |
           cd deployment/docker_compose
-          docker compose logs > docker-compose.log
+          # Pass the same -f overrides as `up` so the mock MCP/IdP services
+          # (defined only in the override files) are included in the logs.
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml logs > docker-compose.log
           mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
@@ -534,6 +584,175 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
+          path: ${{ github.workspace }}/docker-compose.log
+
+  # Validates the MCP OAuth spec against the REAL Okta org (the mock IdP run in
+  # playwright-tests is a deterministic stand-in). Runs only when OAuth-relevant
+  # paths change AND the secrets are reachable: always on merge_group, and on
+  # same-repo PRs (forks can't read secrets, so they rely on the mock-IdP run).
+  # Gating: this job's result is REQUIRED on pull_request and INFORMATIONAL on
+  # merge_group — see the playwright-required job.
+  playwright-tests-oauth-okta:
+    needs: [changes, build-web-image, build-backend-image, build-model-server-image]
+    if: >-
+      needs.changes.outputs.playwright == 'true' &&
+      needs.changes.outputs.mcp_oauth == 'true' && (
+        github.event_name == 'merge_group' || (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        )
+      )
+    name: Playwright Tests (oauth-okta)
+    permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange (license)
+      contents: read
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-arm64
+      - "run-id=${{ github.run_id }}-playwright-tests-oauth-okta"
+      - "extras=ecr-cache"
+      - volume=50gb
+    timeout-minutes: 45
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
+        with:
+          bun-version: "1.3.13"
+
+      - name: Install node dependencies
+        working-directory: ./web
+        run: bun install --frozen-lockfile
+
+      - name: Cache playwright cache
+        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
+        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-bun-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-bun-
+
+      - name: Install playwright browsers
+        working-directory: ./web
+        run: bunx playwright install chromium
+
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
+      - name: Create .env file for Docker Compose
+        env:
+          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
+          EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          cat <<EOF > deployment/docker_compose/.env
+          COMPOSE_PROFILES=s3-filestore
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          AUTH_TYPE=basic
+          INTEGRATION_TESTS_MODE=true
+          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
+          EXA_API_KEY=${EXA_API_KEY_VALUE}
+          REQUIRE_EMAIL_VERIFICATION=false
+          DISABLE_TELEMETRY=true
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
+          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
+          EOF
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Make host.docker.internal resolvable for the browser
+        run: |
+          if ! grep -q "host.docker.internal" /etc/hosts; then
+            echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+          fi
+
+      # Point the OAuth spec + mcp_oauth_server at the real Okta org. Written to
+      # $GITHUB_ENV (the only level where `secrets` resolve). This job only runs
+      # when the secrets are expected to be present, so an empty value is a hard
+      # error rather than a silent fall-back. The McpOAuthFlow page object drives
+      # the Okta login form (its selectors are still in DEFAULT_*_SELECTORS).
+      - name: Configure MCP OAuth provider (real Okta)
+        env:
+          OKTA_ISSUER: ${{ secrets.MCP_OAUTH_ISSUER }}
+          OKTA_JWKS_URI: ${{ secrets.MCP_OAUTH_JWKS_URI }}
+          OKTA_CLIENT_ID: ${{ secrets.MCP_OAUTH_CLIENT_ID }}
+          OKTA_CLIENT_SECRET: ${{ secrets.MCP_OAUTH_CLIENT_SECRET }}
+          OKTA_USERNAME: ${{ vars.MCP_OAUTH_USERNAME }}
+          OKTA_PASSWORD: ${{ secrets.MCP_OAUTH_PASSWORD }}
+        run: |
+          if [ -z "${OKTA_ISSUER}" ] || [ -z "${OKTA_JWKS_URI}" ] || \
+             [ -z "${OKTA_CLIENT_ID}" ] || [ -z "${OKTA_CLIENT_SECRET}" ] || \
+             [ -z "${OKTA_USERNAME}" ] || [ -z "${OKTA_PASSWORD}" ]; then
+            echo "::error::The MCP_OAUTH_* Okta secrets/vars are required but one or more are empty. Confirm they still exist in repo settings (secrets: ISSUER/JWKS_URI/CLIENT_ID/CLIENT_SECRET/PASSWORD; var: USERNAME)."
+            exit 1
+          fi
+          {
+            echo "MCP_OAUTH_ISSUER=${OKTA_ISSUER}"
+            echo "MCP_OAUTH_JWKS_URI=${OKTA_JWKS_URI}"
+            echo "MCP_OAUTH_CLIENT_ID=${OKTA_CLIENT_ID}"
+            echo "MCP_OAUTH_CLIENT_SECRET=${OKTA_CLIENT_SECRET}"
+            echo "MCP_OAUTH_USERNAME=${OKTA_USERNAME}"
+            echo "MCP_OAUTH_PASSWORD=${OKTA_PASSWORD}"
+          } >> "$GITHUB_ENV"
+
+      - name: Start Docker containers
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml up -d --wait --wait-timeout 300
+        id: start_docker
+
+      - name: Seed dev license
+        run: |
+          docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
+            python -m scripts.seed_dev_license
+
+      - name: Run Playwright OAuth spec (real Okta)
+        working-directory: ./web
+        run: bunx playwright test mcp_oauth_flow --project admin
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: playwright-test-results-oauth-okta-${{ github.run_id }}
+          path: ./web/output/playwright/
+          retention-days: 30
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: playwright-screenshots-oauth-okta-${{ github.run_id }}
+          path: ./web/output/screenshots/
+          retention-days: 30
+
+      - name: Save Docker logs
+        if: success() || failure()
+        env:
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml logs > docker-compose.log
+          mv docker-compose.log ${WORKSPACE}/docker-compose.log
+
+      - name: Upload logs
+        if: success() || failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: docker-logs-oauth-okta-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
 
   playwright-tests-lite:
@@ -745,15 +964,18 @@ jobs:
     # matrix was legitimately skipped).
     runs-on: ubuntu-slim
     timeout-minutes: 5
-    needs: [changes, playwright-tests, playwright-tests-lite]
+    needs:
+      [changes, playwright-tests, playwright-tests-lite, playwright-tests-oauth-okta]
     if: ${{ always() }}
     steps:
       - name: Check job status
         env:
+          EVENT_NAME: ${{ github.event_name }}
           CHANGES_RESULT: ${{ needs.changes.result }}
           RUN_TESTS: ${{ needs.changes.outputs.playwright }}
           TESTS_RESULT: ${{ needs.playwright-tests.result }}
           LITE_RESULT: ${{ needs.playwright-tests-lite.result }}
+          OKTA_RESULT: ${{ needs.playwright-tests-oauth-okta.result }}
         run: |
           # Fail closed if `changes` didn't succeed. Otherwise an empty
           # RUN_TESTS (which is what we'd see when `changes` failed/cancelled)
@@ -769,6 +991,15 @@ jobs:
           fi
           if [ "${TESTS_RESULT}" != "success" ] || [ "${LITE_RESULT}" != "success" ]; then
             echo "Test results: playwright-tests=${TESTS_RESULT}, playwright-tests-lite=${LITE_RESULT}"
+            exit 1
+          fi
+          # The real-Okta OAuth job gates pull_request runs (blocks the PR), but
+          # is informational on merge_group so a flaky Okta run can't wedge the
+          # serialized merge queue. `skipped` means it wasn't applicable (no OAuth
+          # paths changed, or a fork PR) and is always acceptable.
+          if [ "${EVENT_NAME}" = "pull_request" ] && \
+             [ "${OKTA_RESULT}" != "success" ] && [ "${OKTA_RESULT}" != "skipped" ]; then
+            echo "Okta OAuth job result (required on PRs): ${OKTA_RESULT}"
             exit 1
           fi
           echo "All tests passed."
