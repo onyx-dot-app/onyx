@@ -112,11 +112,35 @@ function RootLayoutSidebar({
 }
 
 // ---------------------------------------------------------------------------
-// MainContent — fills remaining flex space
+// App — fills remaining flex space; use as direct child of Root
 // ---------------------------------------------------------------------------
 
-function RootLayoutMainContent({ children }: { children: ReactNode }) {
-  return <div className="opal-root-layout__main">{children}</div>;
+type RootLayoutAppProps = React.HTMLAttributes<HTMLDivElement>;
+
+function RootLayoutApp({ children, className, ...props }: RootLayoutAppProps) {
+  return (
+    <div className={cn("opal-root-layout__app", className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MainContent — scrollable content slot inside App
+// ---------------------------------------------------------------------------
+
+type RootLayoutMainContentProps = React.HTMLAttributes<HTMLDivElement>;
+
+function RootLayoutMainContent({
+  children,
+  className,
+  ...props
+}: RootLayoutMainContentProps) {
+  return (
+    <div className={cn("opal-root-layout__main", className)} {...props}>
+      {children}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -186,6 +210,7 @@ function RootLayoutFooter({
 export {
   RootLayoutRoot as Root,
   RootLayoutSidebar as Sidebar,
+  RootLayoutApp as App,
   RootLayoutMainContent as MainContent,
   RootLayoutLeftPanel as LeftPanel,
   RootLayoutRightPanel as RightPanel,

@@ -6,6 +6,7 @@ import { ProjectsProvider } from "@/providers/ProjectsContext";
 import { VoiceModeProvider } from "@/providers/VoiceModeProvider";
 import AppSidebar from "@/sections/sidebar/AppSidebar";
 import { RootLayout } from "@opal/layouts";
+import AppChrome from "@/sections/app-chrome/AppChrome";
 
 export interface LayoutProps {
   children: React.ReactNode;
@@ -29,7 +30,7 @@ export default async function Layout({ children }: LayoutProps) {
       <VoiceModeProvider>
         <RootLayout.Root>
           <AppSidebar />
-          <RootLayout.MainContent>{children}</RootLayout.MainContent>
+          <AppChrome>{children}</AppChrome>
         </RootLayout.Root>
       </VoiceModeProvider>
     </ProjectsProvider>
