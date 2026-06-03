@@ -67,9 +67,9 @@ ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 # test_build_mode_provider_types_sync.py.
 BUILD_MODE_ALLOWED_PROVIDER_TYPES = ["anthropic", "openai", "openrouter"]
 BUILD_MODE_RECOMMENDED_MODEL_BY_TYPE = {
-    "anthropic": "claude-opus-4-7",
+    "anthropic": "claude-opus-4-8",
     "openai": "gpt-5.5",
-    "openrouter": "moonshotai/kimi-k2.6",
+    "openrouter": "minimax/minimax-m3",
 }
 
 # Dev/debug-only: exposes an SSE endpoint that tails the sandbox pod's
