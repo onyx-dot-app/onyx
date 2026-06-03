@@ -62,6 +62,8 @@ export interface BaseInputBarProps {
 
   topSlot?: ReactNode;
   bottomLeftSlot?: ReactNode;
+  /** Rendered in the right control group, left of Stop/Send (e.g. a mic button). */
+  bottomRightSlot?: ReactNode;
 
   /** Return true to consume the pasted text (skips pasteText). */
   onPasteText?: (text: string) => boolean;
@@ -90,6 +92,7 @@ const BaseInputBar = memo(
         isInterrupting = false,
         topSlot,
         bottomLeftSlot,
+        bottomRightSlot,
         onPasteText,
         onPasteFiles,
         onInputCallback,
@@ -335,6 +338,7 @@ const BaseInputBar = memo(
                 )}
               </div>
               <div className="flex flex-row items-center gap-1">
+                {bottomRightSlot}
                 <div
                   className={cn(
                     "overflow-hidden transition-[width,opacity] duration-150 ease-out motion-reduce:transition-none",
