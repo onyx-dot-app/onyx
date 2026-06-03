@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import Logo from "@/refresh-components/Logo";
 import CraftInputBar, {
   CraftInputBarHandle,
@@ -47,18 +47,14 @@ export default function BuildWelcome({
       <div className="w-full max-w-(--app-page-main-content-width) flex flex-col">
         {/* Branding on the left, model picker on the right — mirrors AppPage. */}
         <div className="flex flex-row items-center justify-between gap-4 pb-6">
-          {/* Typed Onyx wordmark + "Craft". The wordmark's letters sit in the
+          {/* Typed Onyx wordmark + "Craft" (heading-h2, 24/36 — matches the
+              main app's chat welcome). The wordmark's letters sit in the
               upper-middle of its box (baseline ~79% down), so we baseline-align
-              and nudge the wordmark down to share "Craft"'s baseline; the font
-              size is matched to the wordmark's letter height. */}
+              and nudge the wordmark down (~0.21 × size) to share Craft's
+              baseline. */}
           <div className="flex flex-row items-baseline gap-2">
-            <Logo size={34} className="translate-y-[7px]" />
-            <Text
-              as="p"
-              headingH1
-              text05
-              className="!text-[2.0625rem] !leading-none"
-            >
+            <Logo size={28} className="translate-y-[6px]" />
+            <Text font="heading-h2" color="text-05">
               Craft
             </Text>
           </div>
