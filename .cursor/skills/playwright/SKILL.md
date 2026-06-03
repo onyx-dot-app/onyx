@@ -26,15 +26,45 @@ import { TEST_ADMIN_CREDENTIALS } from "@tests/e2e/constants";
 
 All new files should be `.ts`, not `.js`.
 
+## Environment
+
+`playwright.config.ts` honors a `BASE_URL` override (default `http://localhost:3000`). Global setup
+registers/logs in users over `/api/auth/*`, so `BASE_URL` must point at a server that proxies `/api`
+to the backend. Pick it based on how the app is running:
+
+- **Dev servers (`ods web dev` + `ods backend api`):** use the default `http://localhost:3000` — no
+  override needed. In dev, `next dev` proxies `/api/*` to the backend itself (the dev-only route
+  handler `web/src/app/api/[...path]/route.ts`), so both the UI and `/api` live on `:3000`.
+- **Prebuilt / production compose stack:** production builds disable that in-app `/api` proxy, so
+  `/api` is fronted by the `nginx` sibling container — run with `BASE_URL=http://nginx`.
+
+Readiness check (whichever you use): `curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/api/auth/type"` → `200`.
+
+Other bootstrap notes:
+- The devcontainer image bakes in Playwright's OS deps + Node, but **not** the Chromium browser binary. If a run fails with a missing-browser error, install it once: `bunx playwright install chromium`.
+- Run commands from the `web/` directory; `global-setup.ts` writes auth-state files (`admin_auth.json`, …) to the cwd. It's idempotent, so setup is fast.
+- `web/.vscode/.env` may be **absent** — `dotenv` skips it silently (fine for most tests). One exception: `tests/e2e/mcp/mcp_oauth_flow.spec.ts` **throws at import** without `MCP_OAUTH_*` vars, which also breaks a whole-suite `--list`. Scope runs to specific files/dirs to avoid it.
+
 ## Running Tests
 
 ```bash
+cd web   # from the repo root
+
 # Run a specific test file
-npx playwright test web/tests/e2e/chat/default_assistant.spec.ts
+# (default BASE_URL=http://localhost:3000 works with the dev servers)
+bunx playwright test tests/e2e/chat/default_assistant.spec.ts
+
+# Narrow to a single test by title (fast smoke check)
+bunx playwright test tests/e2e/chat/welcome_page.spec.ts \
+  -g "chat input is visible and focusable" --project admin
 
 # Run a specific project
-npx playwright test --project admin
-npx playwright test --project exclusive
+bunx playwright test --project admin
+bunx playwright test --project exclusive
+
+# Against the prebuilt compose stack (prod build) instead of the dev servers,
+# front /api via nginx:
+BASE_URL=http://nginx bunx playwright test --project admin
 ```
 
 ## Test Projects

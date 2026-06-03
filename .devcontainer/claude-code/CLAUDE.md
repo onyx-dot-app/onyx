@@ -20,3 +20,20 @@ Each is also exported as an env var:
 - Model server: `inference_model_server` (`MODEL_SERVER_HOST`)
 - OpenSearch: `opensearch` (`OPENSEARCH_HOST`)
 - MinIO / S3: `minio:9000` (`S3_ENDPOINT_URL=http://minio:9000`)
+
+## Running the app (web UI + API)
+
+The supporting services above run as sibling containers, but the **frontend and backend are not
+started for you** — run them in this container (both hot-reload):
+
+- `ods web dev` — Next.js frontend on `localhost:3000`
+- `ods backend api` — FastAPI backend (uvicorn) on `localhost:8080`
+
+In dev mode the frontend proxies `/api/*` straight to the backend (the dev-only catch-all route
+handler at `web/src/app/api/[...path]/route.ts`), so **`localhost:3000` serves both the UI and
+`/api`** — no reverse proxy needed. You can also hit the backend directly at `localhost:8080` (note:
+**no** `/api` prefix there — e.g. `/health`, `/auth/type`).
+
+`nginx` (sibling container, port 80) is only needed when running against the **prebuilt/production
+compose containers** instead of the dev servers: a production `next start` build disables that
+in-app `/api` proxy (returns 404), so nginx fronts `/` → web and `/api/*` → backend.
