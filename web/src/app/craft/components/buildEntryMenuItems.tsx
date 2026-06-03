@@ -1,5 +1,5 @@
 import { Text } from "@opal/components";
-import { SvgPaperclip, SvgSparkle } from "@opal/icons";
+import { SvgPaperclip, SvgPlug, SvgSparkle } from "@opal/icons";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import type { PickerEntry, PickerSections } from "@/lib/skills/picker";
 import type { PlusMenuItem } from "@/sections/input/PlusMenuButton";
@@ -45,7 +45,7 @@ export function buildEntryMenuItems(
   if (sections.apps.length > 0) {
     items.push({
       key: "apps",
-      icon: getAppTypeLogo("CUSTOM"),
+      icon: SvgPlug,
       label: "Apps",
       flyoutItems: sections.apps.map((app) => ({
         key: app.slug,
