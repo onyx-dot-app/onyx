@@ -40,6 +40,5 @@ handler at `web/src/app/api/[...path]/route.ts`), so **`localhost:3000` serves b
 `check-yaml` pre-commit hook instead:
 
 ```bash
-pre-commit run check-yaml --all-files        # all tracked YAML
 pre-commit run check-yaml --files path/to/file.yaml
 ```
