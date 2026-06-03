@@ -10,6 +10,7 @@ tar byte equality), not call lists.
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -72,23 +73,22 @@ def _push_private_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ksm, "_push_public_key_b64", None, raising=False)
 
 
-def _make_manager(
-    *, pod_ip: str | None = "10.0.0.1", read_pod_exc: Exception | None = None
-) -> KubernetesSandboxManager:
+def _make_manager(*, pod_read_exc: Exception | None = None) -> KubernetesSandboxManager:
     """Construct a manager without invoking _initialize (which needs a K8s config).
 
-    The only attributes write_files_to_sandbox touches are ``_core_api`` and
-    ``_namespace``. Bypass ``__new__`` cache with object.__new__ so each test
-    gets a fresh instance (singleton would otherwise leak between tests).
+    ``write_files_to_sandbox`` resolves hosts via ``_sandbox_pod_hosts`` (the
+    Service FQDN plus the pod IP read from ``read_namespaced_pod``), then POSTs
+    over the mocked ``httpx.Client``. Pass ``pod_read_exc`` to simulate a
+    gone/unreadable pod. Bypass ``__new__`` cache with object.__new__.
     """
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
 
     core_api = MagicMock()
-    if read_pod_exc is not None:
-        core_api.read_namespaced_pod.side_effect = read_pod_exc
+    if pod_read_exc is not None:
+        core_api.read_namespaced_pod.side_effect = pod_read_exc
     else:
         pod_obj = MagicMock()
-        pod_obj.status.pod_ip = pod_ip
+        pod_obj.status.pod_ip = "10.0.0.1"
         core_api.read_namespaced_pod.return_value = pod_obj
 
     mgr._core_api = core_api  # type: ignore[attr-defined]
@@ -124,52 +124,30 @@ def _mock_httpx_client(
     return factory
 
 
+def _mock_httpx_per_url(handler: Callable[[str], MagicMock]) -> MagicMock:
+    """httpx.Client factory whose ``.post`` dispatches on the request URL, so a
+    test can make one host transport-fail while another responds."""
+    client_instance = MagicMock()
+    client_instance.post.side_effect = lambda url, **_: handler(url)
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=client_instance)
+    ctx.__exit__ = MagicMock(return_value=False)
+    return MagicMock(return_value=ctx)
+
+
+def _resp(status: int, text: str = "") -> MagicMock:
+    resp = MagicMock()
+    resp.status_code = status
+    resp.text = text
+    return resp
+
+
 def _sandbox_id() -> UUID:
     return uuid4()
 
 
 def _files() -> FileSet:
     return {"my-skill/SKILL.md": b"# hello\n"}
-
-
-# ---------------------------------------------------------------------------
-# Pod-read failure modes
-# ---------------------------------------------------------------------------
-
-
-def test_pod_404_raises_fatal_write_error() -> None:
-    mgr = _make_manager(read_pod_exc=ApiException(status=404, reason="Not Found"))
-    with pytest.raises(FatalWriteError, match="not found"):
-        mgr.write_files_to_sandbox(
-            sandbox_id=_sandbox_id(),
-            mount_path="/workspace/managed/skills",
-            files=_files(),
-        )
-
-
-def test_pod_has_no_ip_yet_raises_retriable() -> None:
-    mgr = _make_manager(pod_ip=None)
-    with pytest.raises(RetriableWriteError, match="no IP"):
-        mgr.write_files_to_sandbox(
-            sandbox_id=_sandbox_id(),
-            mount_path="/workspace/managed/skills",
-            files=_files(),
-        )
-
-
-def test_pod_non_404_api_error_raises_retriable() -> None:
-    """500 from the K8s API is transient -> retriable.
-
-    Follows the same contract; kept under the same file because it shares
-    the read-pod seam.
-    """
-    mgr = _make_manager(read_pod_exc=ApiException(status=500, reason="Server Error"))
-    with pytest.raises(RetriableWriteError, match="Failed to read pod"):
-        mgr.write_files_to_sandbox(
-            sandbox_id=_sandbox_id(),
-            mount_path="/workspace/managed/skills",
-            files=_files(),
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -335,3 +313,85 @@ def test_tar_build_is_byte_for_byte_deterministic() -> None:
 
     assert raw1 == raw2
     assert sha1 == sha2
+
+
+# ---------------------------------------------------------------------------
+# Multi-host fallback: Service FQDN first, raw pod IP second
+# ---------------------------------------------------------------------------
+
+
+def _fqdn_unreachable_then(
+    pod_ip_resp: Callable[[], MagicMock],
+) -> Callable[[str], MagicMock]:
+    def handler(url: str) -> MagicMock:
+        if "10.0.0.1" in url:
+            return pod_ip_resp()
+        raise httpx.ConnectError("FQDN unreachable")
+
+    return handler
+
+
+def test_push_falls_back_to_pod_ip_when_fqdn_unreachable() -> None:
+    mgr = _make_manager()
+    factory = _mock_httpx_per_url(_fqdn_unreachable_then(lambda: _resp(200, "ok")))
+    with patch(_HTTPX_CLIENT_PATH, factory):
+        mgr.write_files_to_sandbox(
+            sandbox_id=_sandbox_id(),
+            mount_path="/workspace/managed/skills",
+            files=_files(),
+        )
+
+
+def test_push_maps_http_status_on_fallback_host() -> None:
+    """A 4xx from the fallback host is mapped (fatal), not retried onward."""
+    mgr = _make_manager()
+    factory = _mock_httpx_per_url(_fqdn_unreachable_then(lambda: _resp(400, "bad")))
+    with patch(_HTTPX_CLIENT_PATH, factory):
+        with pytest.raises(FatalWriteError, match="400"):
+            mgr.write_files_to_sandbox(
+                sandbox_id=_sandbox_id(),
+                mount_path="/workspace/managed/skills",
+                files=_files(),
+            )
+
+
+def test_post_to_sidecar_falls_back_to_pod_ip() -> None:
+    mgr = _make_manager()
+    factory = _mock_httpx_per_url(_fqdn_unreachable_then(lambda: _resp(200)))
+    with patch(_HTTPX_CLIENT_PATH, factory):
+        resp = mgr._post_to_sidecar(
+            _sandbox_id(), "/snapshot/create", b"{}", timeout=5.0
+        )
+    assert resp.status_code == 200
+
+
+def test_post_to_sidecar_reraises_when_all_hosts_fail() -> None:
+    mgr = _make_manager()
+
+    def handler(_url: str) -> MagicMock:
+        raise httpx.ConnectError("unreachable")
+
+    with patch(_HTTPX_CLIENT_PATH, _mock_httpx_per_url(handler)):
+        with pytest.raises(httpx.TransportError):
+            mgr._post_to_sidecar(_sandbox_id(), "/snapshot/create", b"{}", timeout=5.0)
+
+
+def test_sandbox_pod_hosts_degrades_to_fqdn_when_pod_unreadable() -> None:
+    """A gone/unreadable pod must not break host resolution — the Service FQDN
+    still routes; the pod-IP candidate is simply dropped."""
+    mgr = _make_manager(pod_read_exc=ApiException(status=404, reason="Not Found"))
+    hosts = mgr._sandbox_pod_hosts(_sandbox_id())
+    assert len(hosts) == 1
+    assert hosts[0].endswith(".sandbox-test.svc.cluster.local")
+
+
+def test_push_pod_404_is_retriable() -> None:
+    mgr = _make_manager(pod_read_exc=ApiException(status=404, reason="Not Found"))
+    factory = _mock_httpx_client(raise_exc=httpx.ConnectError("no endpoints"))
+    with patch(_HTTPX_CLIENT_PATH, factory):
+        with pytest.raises(RetriableWriteError):
+            mgr.write_files_to_sandbox(
+                sandbox_id=_sandbox_id(),
+                mount_path="/workspace/managed/skills",
+                files=_files(),
+            )
