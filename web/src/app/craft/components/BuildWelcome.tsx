@@ -47,16 +47,19 @@ export default function BuildWelcome({
       <div className="w-full max-w-(--app-page-main-content-width) flex flex-col">
         {/* Branding on the left, model picker on the right — mirrors AppPage. */}
         <div className="flex flex-row items-center justify-between gap-4 pb-6">
-          {/* Typed Onyx wordmark + lowercase "craft" sized to match its glyphs. */}
-          <div className="flex flex-row items-center gap-2">
-            <Logo size={40} />
+          {/* Typed Onyx wordmark + "Craft". The wordmark's letters sit in the
+              upper-middle of its box (baseline ~79% down), so we baseline-align
+              and nudge the wordmark down to share "Craft"'s baseline; the font
+              size is matched to the wordmark's letter height. */}
+          <div className="flex flex-row items-baseline gap-2">
+            <Logo size={34} className="translate-y-[7px]" />
             <Text
               as="p"
               headingH1
               text05
-              className="!text-[2.625rem] !leading-none"
+              className="!text-[2.0625rem] !leading-none"
             >
-              craft
+              Craft
             </Text>
           </div>
           <ModelPickerButton
