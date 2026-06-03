@@ -3,7 +3,13 @@
 import { type ReactNode, useMemo, useState } from "react";
 import useSWR from "swr";
 import { Button } from "@opal/components";
-import { SvgBarChart, SvgEye, SvgRefreshCw, SvgThumbsDown } from "@opal/icons";
+import {
+  SvgBarChart,
+  SvgDownload,
+  SvgEye,
+  SvgRefreshCw,
+  SvgThumbsDown,
+} from "@opal/icons";
 import {
   Table,
   TableBody,
@@ -353,6 +359,20 @@ export default function TutorInstructorInsights({
     return params.toString();
   }, [projectId, startDate, endDate]);
 
+  const exportHref = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("project_id", String(projectId));
+    params.set("start", startDate.toISOString());
+    params.set("end", endDate.toISOString());
+    return `/api/lti/instructor/query-history/export?${params.toString()}`;
+  }, [projectId, startDate, endDate]);
+
+  // Navigating to the `attachment` response triggers a download without
+  // disturbing the embedded (iframe) layout — no popup/new-tab handling needed.
+  const handleExport = () => {
+    window.location.href = exportHref;
+  };
+
   const {
     data: trends,
     isLoading: trendsLoading,
@@ -413,6 +433,13 @@ export default function TutorInstructorInsights({
                 maxDate={new Date()}
               />
             </div>
+            <Button
+              prominence="secondary"
+              icon={SvgDownload}
+              onClick={handleExport}
+            >
+              Export CSV
+            </Button>
             <Button
               prominence="secondary"
               icon={SvgRefreshCw}

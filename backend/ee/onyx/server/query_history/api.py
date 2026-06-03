@@ -1,6 +1,9 @@
+import csv
+import io
 import re
 import uuid
 from collections.abc import Generator
+from collections.abc import Iterable
 from datetime import date
 from datetime import datetime
 from datetime import timedelta
@@ -29,6 +32,7 @@ from ee.onyx.server.query_history.models import LtiInstructorThemeAnalysis
 from ee.onyx.server.query_history.models import LtiInstructorTrendsResponse
 from ee.onyx.server.query_history.models import MessageSnapshot
 from ee.onyx.server.query_history.models import QueryHistoryExport
+from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_user
@@ -86,6 +90,10 @@ ONYX_ANONYMIZED_EMAIL = "anonymous@anonymous.invalid"
 LTI_INSTRUCTOR_THEME_CACHE_TTL_SECONDS = 60 * 60
 LTI_INSTRUCTOR_THEME_MESSAGE_LIMIT = 200
 _EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
+
+# Column order for query-history CSV exports. Shared by the admin Celery export
+# task and the synchronous LTI instructor export so both produce byte-identical files.
+QUERY_HISTORY_CSV_FIELDS = list(QuestionAnswerPairSnapshot.model_fields.keys())
 
 
 def ensure_query_history_is_enabled(
@@ -337,6 +345,7 @@ def fetch_and_process_chat_session_history(
     start: datetime,
     end: datetime,
     limit: int | None = 500,  # noqa: ARG001
+    project_id: int | None = None,
 ) -> Generator[ChatSessionSnapshot]:
     PAGE_SIZE = 100
 
@@ -348,6 +357,7 @@ def fetch_and_process_chat_session_history(
             db_session=db_session,
             page_num=page,
             page_size=PAGE_SIZE,
+            project_id=project_id,
         )
 
         if not paged_chat_sessions:
@@ -374,6 +384,34 @@ def fetch_and_process_chat_session_history(
             break
 
         page += 1
+
+
+def _drain_csv_buffer(buffer: io.StringIO) -> str:
+    value = buffer.getvalue()
+    buffer.seek(0)
+    buffer.truncate(0)
+    return value
+
+
+def stream_query_history_as_csv(
+    snapshots: Iterable[ChatSessionSnapshot],
+) -> Generator[str]:
+    """Yield query-history CSV incrementally (header first, then one chunk per
+    chat session). Used for synchronous streaming downloads; the admin export task
+    drains the same generator into a single buffer so both formats stay identical."""
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=QUERY_HISTORY_CSV_FIELDS)
+    writer.writeheader()
+    yield _drain_csv_buffer(buffer)
+
+    for snapshot in snapshots:
+        writer.writerows(
+            qa_pair.to_json()
+            for qa_pair in QuestionAnswerPairSnapshot.from_chat_session_snapshot(
+                snapshot
+            )
+        )
+        yield _drain_csv_buffer(buffer)
 
 
 def snapshot_from_chat_session(
@@ -570,6 +608,45 @@ def get_lti_instructor_chat_session_history(
             for chat_session in page_of_chat_sessions
         ],
         total_items=total_filtered_chat_sessions_count,
+    )
+
+
+# NOTE: declared before the `/{chat_session_id}` route so the literal "export"
+# path isn't captured (and rejected) as a UUID path parameter.
+@router.get("/lti/instructor/query-history/export")
+def export_lti_instructor_query_history(
+    project_id: int,
+    start: datetime,
+    end: datetime,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> StreamingResponse:
+    ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
+    _ensure_valid_time_range(start, end)
+    _ensure_lti_instructor_project_access(
+        project_id=project_id,
+        user=user,
+        db_session=db_session,
+    )
+
+    snapshots = fetch_and_process_chat_session_history(
+        db_session=db_session,
+        start=start,
+        end=end,
+        project_id=project_id,
+    )
+    # Mandatory, unconditional anonymization + content redaction — identical to the
+    # instructor view surfaces and independent of `ONYX_QUERY_HISTORY_TYPE`.
+    redacted_snapshots = (
+        _force_anonymized_snapshot(snapshot, redact_content=True)
+        for snapshot in snapshots
+    )
+
+    filename = f"course-{project_id}-query-history.csv"
+    return StreamingResponse(
+        stream_query_history_as_csv(redacted_snapshots),
+        media_type=FileType.CSV,
+        headers={"Content-Disposition": f"attachment;filename={filename}"},
     )
 
 

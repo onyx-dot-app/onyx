@@ -1,5 +1,5 @@
-import csv
 import io
+from collections.abc import Generator
 from datetime import datetime
 
 from celery import shared_task
@@ -7,7 +7,8 @@ from celery import Task
 
 from ee.onyx.server.query_history.api import fetch_and_process_chat_session_history
 from ee.onyx.server.query_history.api import ONYX_ANONYMIZED_EMAIL
-from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
+from ee.onyx.server.query_history.api import stream_query_history_as_csv
+from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
@@ -24,6 +25,17 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
+
+
+def _anonymize_emails_if_configured(
+    snapshots: Generator[ChatSessionSnapshot],
+) -> Generator[ChatSessionSnapshot]:
+    """Anonymize only the session email, and only when the global setting is
+    ANONYMIZED. Unlike the instructor export, this does not redact in-message text."""
+    for snapshot in snapshots:
+        if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
+            snapshot.user_email = ONYX_ANONYMIZED_EMAIL
+        yield snapshot
 
 
 @shared_task(
@@ -47,11 +59,6 @@ def export_query_history_task(
 
     task_id = self.request.id
     stream = io.StringIO()
-    writer = csv.DictWriter(
-        stream,
-        fieldnames=list(QuestionAnswerPairSnapshot.model_fields.keys()),
-    )
-    writer.writeheader()
 
     with get_session_with_current_tenant() as db_session:
         try:
@@ -66,16 +73,10 @@ def export_query_history_task(
                 end=end,
             )
 
-            for snapshot in snapshot_generator:
-                if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
-                    snapshot.user_email = ONYX_ANONYMIZED_EMAIL
-
-                writer.writerows(
-                    qa_pair.to_json()
-                    for qa_pair in QuestionAnswerPairSnapshot.from_chat_session_snapshot(
-                        snapshot
-                    )
-                )
+            for chunk in stream_query_history_as_csv(
+                _anonymize_emails_if_configured(snapshot_generator)
+            ):
+                stream.write(chunk)
 
         except Exception:
             logger.exception(f"Failed to export query history with {task_id=}")
