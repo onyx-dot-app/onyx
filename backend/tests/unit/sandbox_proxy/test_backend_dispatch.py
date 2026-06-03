@@ -6,10 +6,9 @@ import pytest
 from onyx.sandbox_proxy import backend as backend_mod
 from onyx.server.features.build.configs import SandboxBackend
 
-# Each test patches only the single constructor the dispatch branch is
-# expected to hit. The unpatched branch's concrete class would require
-# live config (kube config / docker socket) on construction, so we
-# never let dispatch reach it.
+# Each test patches only the single constructor the dispatch branch is expected
+# to hit. The unpatched branch's concrete class would require live config (kube
+# config / docker socket) on construction, so we never let dispatch reach it.
 
 
 def test_build_ca_store_kubernetes_dispatches_k8s_store() -> None:

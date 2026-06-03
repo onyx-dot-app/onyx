@@ -6,7 +6,7 @@ LABEL_K8S_MANAGED_BY = "app.kubernetes.io/managed-by"
 LABEL_K8S_MANAGED_BY_ONYX = "onyx"
 
 # Docker-backend equivalents of the K8s component label. The proxy's
-# DockerEventsLookup filters on these; ``docker_sandbox_manager`` stamps
-# them onto every sandbox container it creates.
+# DockerEventsLookup filters on these; ``docker_sandbox_manager`` stamps them
+# onto every sandbox container it creates.
 LABEL_DOCKER_COMPONENT = "onyx.app/component"
 LABEL_DOCKER_COMPONENT_SANDBOX = "craft-sandbox"

@@ -1,14 +1,13 @@
 """Docker-compose implementation of ``SandboxIPLookup``.
 
 Background thread streams ``DockerClient.events()`` filtered to sandbox
-containers and maintains a ``{container_ip: SandboxIdentity}`` cache.
-On any error or EOF the loop reconnects with exponential backoff capped
-at ``_RECONNECT_MAX_SECONDS``.
+containers and maintains a ``{container_ip: SandboxIdentity}`` cache. On any
+error or EOF the loop reconnects with exponential backoff capped at
+``_RECONNECT_MAX_SECONDS``.
 
-Mirrors the K8s informer's posture (`identity_k8s.py`): fail loud on
-duplicate IPs at initial sync, clear ``_synced`` on disconnect so
-``/healthz`` flips to 503, evict by container id when the IP changes
-on restart.
+Mirrors the K8s informer's posture (`identity_k8s.py`): fail loud on duplicate
+IPs at initial sync, clear ``_synced`` on disconnect so ``/healthz`` flips to
+503, evict by container id when the IP changes on restart.
 """
 
 import threading
@@ -43,19 +42,19 @@ def _safe_close(stream: CancellableStream) -> None:
     try:
         stream.close()
     except Exception:
-        logger.debug("ignoring error closing events stream", exc_info=True)
+        logger.debug("Ignoring error closing events stream.", exc_info=True)
 
 
 def _identity_from_container(
     container: Container,
     network: str,
 ) -> SandboxIdentity | None:
-    """Build a ``SandboxIdentity`` from a container's labels + bridge IP.
+    """Builds a ``SandboxIdentity`` from a container's labels + bridge IP.
 
-    Returns ``None`` for containers that aren't sandbox-labelled, are
-    missing the sandbox/tenant labels, have a non-UUID sandbox-id, or
-    have no IP on the configured sandbox bridge yet (i.e. a sandbox in
-    a creation race that hasn't been attached to the network).
+    Returns ``None`` for containers that aren't sandbox-labelled, are missing
+    the sandbox/tenant labels, have a non-UUID sandbox-id, or have no IP on the
+    configured sandbox bridge yet (i.e. a sandbox in a creation race that hasn't
+    been attached to the network).
     """
     labels = container.labels or {}
 
@@ -73,7 +72,7 @@ def _identity_from_container(
         sandbox_id = UUID(sandbox_id_raw)
     except ValueError:
         logger.warning(
-            "skipping sandbox container %s with non-UUID sandbox-id label %r",
+            "Skipping sandbox container %s with non-UUID sandbox-id label %r",
             container.name,
             sandbox_id_raw,
         )
@@ -109,8 +108,8 @@ class DockerEventsLookup(SandboxIPLookup):
         self._network = network
 
         self._cache: dict[str, SandboxIdentity] = {}
-        # container_id -> ip so we can evict on `die`/`destroy` (events
-        # don't carry IPs) and on restart with a new IP.
+        # container_id -> ip so we can evict on `die`/`destroy` (events don't
+        # carry IPs) and on restart with a new IP.
         self._by_id: dict[str, str] = {}
         self._cache_lock = threading.Lock()
 
@@ -118,10 +117,10 @@ class DockerEventsLookup(SandboxIPLookup):
         self._stop_event = threading.Event()
         self._synced = threading.Event()
 
-        # Held so ``stop()`` can cancel the blocking ``for event in stream``
-        # in ``_watch_loop``. Without this, a quiescent docker daemon (no
-        # container churn) leaves the iterator blocked on socket read
-        # forever and ``stop()`` becomes a no-op.
+        # Held so ``stop()`` can cancel the blocking ``for event in stream`` in
+        # ``_watch_loop``. Without this, a quiescent docker daemon (no container
+        # churn) leaves the iterator blocked on socket read forever and
+        # ``stop()`` becomes a no-op.
         self._stream_lock = threading.Lock()
         self._stream: CancellableStream | None = None
 
@@ -139,8 +138,8 @@ class DockerEventsLookup(SandboxIPLookup):
         with self._stream_lock:
             stream = self._stream
         if stream is not None:
-            # Best-effort cancel; the daemon thread tears down its own
-            # resources in the ``_watch_loop`` finally block.
+            # Best-effort cancel; the daemon thread tears down its own resources
+            # in the ``_watch_loop`` finally block.
             _safe_close(stream)
 
     def wait_for_initial_sync(self, timeout_seconds: float) -> bool:
@@ -153,24 +152,20 @@ class DockerEventsLookup(SandboxIPLookup):
         with self._cache_lock:
             return self._cache.get(src_ip)
 
-    # ------------------------------------------------------------------
-    # background loop
-    # ------------------------------------------------------------------
-
     def _run(self) -> None:
         backoff = _RECONNECT_INITIAL_SECONDS
         while not self._stop_event.is_set():
             try:
                 # Capture ``since`` *before* the list so the events stream
                 # replays any start/die that fires during the list ->
-                # stream-open window. Without this the [list, stream-open]
-                # gap silently drops events: a sandbox starting in that
-                # window would be permanently unidentifiable until the next
-                # reconnect-driven re-sync. The K8s informer uses the list
-                # response's ``resource_version`` for the same guarantee.
-                # ``-1`` guards against sub-second events (docker's
-                # ``since`` is second-resolution). Replay overlap is safe
-                # because ``_apply_event`` is idempotent.
+                # stream-open window. Without this the [list, stream-open] gap
+                # silently drops events: a sandbox starting in that window would
+                # be permanently unidentifiable until the next reconnect-driven
+                # re-sync. The K8s informer uses the list response's
+                # ``resource_version`` for the same guarantee. ``-1`` guards
+                # against sub-second events (docker's ``since`` is
+                # second-resolution). Replay overlap is safe because
+                # ``_apply_event`` is idempotent.
                 since_ts = int(time.time()) - 1
                 self._initial_sync()
                 self._initial_sync_done.set()
@@ -180,14 +175,14 @@ class DockerEventsLookup(SandboxIPLookup):
             except (APIError, RequestsConnectionError, OSError) as e:
                 self._synced.clear()
                 logger.warning(
-                    "docker events lookup error: %s; reconnecting in %.1fs",
+                    "Docker events lookup error: %s; reconnecting in %.1fs.",
                     e,
                     backoff,
                 )
             except Exception:
                 self._synced.clear()
                 logger.exception(
-                    "unexpected docker events failure; reconnecting in %.1fs",
+                    "Unexpected docker events failure; reconnecting in %.1fs.",
                     backoff,
                 )
 
@@ -216,9 +211,9 @@ class DockerEventsLookup(SandboxIPLookup):
             existing = new_cache.get(identity.sandbox_ip)
             if existing is not None and existing.sandbox_id != identity.sandbox_id:
                 raise RuntimeError(
-                    f"duplicate sandbox IP {identity.sandbox_ip} mapped to "
+                    f"Duplicate sandbox IP {identity.sandbox_ip} mapped to "
                     f"{existing.sandbox_id} and {identity.sandbox_id}; "
-                    "refusing to serve traffic with ambiguous identity"
+                    "Refusing to serve traffic with ambiguous identity."
                 )
             new_cache[identity.sandbox_ip] = identity
             new_by_id[c.id] = identity.sandbox_ip
@@ -242,8 +237,8 @@ class DockerEventsLookup(SandboxIPLookup):
         )
         with self._stream_lock:
             # If ``stop()`` raced us between events() returning and the
-            # assignment below, close immediately -- otherwise stop()
-            # observed ``self._stream is None`` and we'd block forever.
+            # assignment below, close immediately -- otherwise stop() observed
+            # ``self._stream is None`` and we'd block forever.
             if self._stop_event.is_set():
                 _safe_close(stream)
                 return
@@ -265,8 +260,8 @@ class DockerEventsLookup(SandboxIPLookup):
         if not action or not container_id:
             return
 
-        # Container lifecycle events we care about. ``start`` lands when
-        # the container is attached to its network and has an IP;
+        # Container lifecycle events we care about. ``start`` lands when the
+        # container is attached to its network and has an IP;
         # ``die``/``destroy``/``kill`` mean the IP is going away.
         if action == "start":
             try:
@@ -277,24 +272,22 @@ class DockerEventsLookup(SandboxIPLookup):
             if identity is None:
                 return
             with self._cache_lock:
-                # Evict any previous IP for this container (restart with
-                # a new bridge IP) before upserting the new entry.
+                # Evict any previous IP for this container (restart with a new
+                # bridge IP) before upserting the new entry.
                 stale_ip = self._by_id.get(container_id)
                 if stale_ip is not None and stale_ip != identity.sandbox_ip:
                     self._cache.pop(stale_ip, None)
 
-                # Evict any stale ``_by_id`` entries (different
-                # container_id) that still point to the IP we are about
-                # to claim. Two distinct containers cannot legitimately
-                # share a bridge IP at the same instant; if our state
-                # says they do, we missed a die event for the prior
-                # container. Leaving the orphan in ``_by_id`` means its
-                # eventual die event would pop *this* IP from the cache
-                # via the die branch's ``_cache.pop(stale_ip)``,
-                # silently un-identifying the new container. Don't gate
-                # on sandbox_id -- a sandbox restart keeps the
-                # sandbox_id label but gets a fresh container_id, and
-                # that case is what trips this most often.
+                # Evict any stale ``_by_id`` entries (different container_id)
+                # that still point to the IP we are about to claim. Two distinct
+                # containers cannot legitimately share a bridge IP at the same
+                # instant; if our state says they do, we missed a die event for
+                # the prior container. Leaving the orphan in ``_by_id`` means
+                # its eventual die event would pop *this* IP from the cache via
+                # the die branch's ``_cache.pop(stale_ip)``, silently
+                # un-identifying the new container. Don't gate on sandbox_id --
+                # a sandbox restart keeps the sandbox_id label but gets a fresh
+                # container_id, and that case is what trips this most often.
                 orphans = [
                     cid
                     for cid, ip in self._by_id.items()
@@ -304,8 +297,8 @@ class DockerEventsLookup(SandboxIPLookup):
                     for cid in orphans:
                         self._by_id.pop(cid, None)
                     logger.warning(
-                        "ip %s reclaimed; evicted stale by_id entries "
-                        "for %s (new container=%s, sandbox_id=%s)",
+                        "IP %s reclaimed; evicted stale by_id entries "
+                        "for %s (new container=%s, sandbox_id=%s).",
                         identity.sandbox_ip,
                         orphans,
                         container_id,
