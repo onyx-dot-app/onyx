@@ -19,7 +19,7 @@ import (
 
 // celeryWorker describes a single celery worker (or beat) process. The fields
 // mirror the "Celery <name>" configurations in .vscode/launch.json so that
-// `ods celery` launches the same set of processes as the "Run All Onyx
+// `ods background` launches the same set of processes as the "Run All Onyx
 // Services" debug compound.
 type celeryWorker struct {
 	name        string // logical worker name, also used for --hostname and CLI selection
@@ -33,7 +33,7 @@ type celeryWorker struct {
 // celeryWorkers is the canonical worker list, kept in sync with the celery
 // configurations in .vscode/launch.json. `monitoring` is excluded from the
 // default set to match the "Run All Onyx Services" compound, but can be run
-// explicitly (`ods celery monitoring`) or via --all.
+// explicitly (`ods background monitoring`) or via --all.
 var celeryWorkers = []celeryWorker{
 	{name: "primary", command: "worker", concurrency: "4", prefetch: "1", queues: "celery", inDefault: true},
 	{name: "light", command: "worker", concurrency: "64", prefetch: "8", queues: "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration", inDefault: true},
@@ -46,21 +46,21 @@ var celeryWorkers = []celeryWorker{
 	{name: "monitoring", command: "worker", concurrency: "1", prefetch: "1", queues: "monitoring", inDefault: false},
 }
 
-// CeleryOptions holds options for the celery command.
-type CeleryOptions struct {
+// BackgroundOptions holds options for the background command.
+type BackgroundOptions struct {
 	NoEE     bool
 	NoReload bool
 	LogLevel string
 	All      bool
 }
 
-func NewCeleryCommand() *cobra.Command {
-	opts := &CeleryOptions{}
+func NewBackgroundCommand() *cobra.Command {
+	opts := &BackgroundOptions{}
 
 	cmd := &cobra.Command{
-		Use:   "celery [worker...]",
-		Short: "Run Onyx celery workers (with hot-reload)",
-		Long: `Run Onyx celery workers with environment from .vscode/.env.
+		Use:   "background [worker...]",
+		Short: "Run Onyx background (celery) workers (with hot-reload)",
+		Long: `Run Onyx background celery workers with environment from .vscode/.env.
 
 With no arguments, starts every worker in the "Run All Onyx Services" debug
 compound (primary, light, heavy, docfetching, docprocessing,
@@ -79,12 +79,12 @@ Available workers:
   user_file_processing, scheduled_tasks, beat, monitoring
 
 Examples:
-  ods celery
-  ods celery primary beat
-  ods celery --all
-  ods celery docfetching docprocessing --no-reload`,
+  ods background
+  ods background primary beat
+  ods background --all
+  ods background docfetching docprocessing --no-reload`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runCelery(selectCeleryWorkers(args, opts.All), opts)
+			runBackground(selectCeleryWorkers(args, opts.All), opts)
 		},
 	}
 
@@ -165,7 +165,7 @@ func (w celeryWorker) celeryArgs(loglevel string) []string {
 	return args
 }
 
-func runCelery(workers []celeryWorker, opts *CeleryOptions) {
+func runBackground(workers []celeryWorker, opts *BackgroundOptions) {
 	if len(workers) == 0 {
 		log.Fatal("No celery workers selected")
 	}

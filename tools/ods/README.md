@@ -220,19 +220,20 @@ ods backend model_server
 ods backend model_server --port 9001
 ```
 
-### `celery` - Run Celery Workers
+### `background` - Run Background (Celery) Workers
 
-Run Onyx celery workers with environment loaded from `.vscode/.env` (same env
-handling and EE defaults as `backend`). With no arguments, starts every worker
-in the "Run All Onyx Services" debug compound; pass worker names to run a
-subset, or `--all` to also include the `monitoring` worker.
+Run Onyx background celery workers with environment loaded from `.vscode/.env`
+(same env handling and EE defaults as `backend`). With no arguments, starts
+every worker in the "Run All Onyx Services" debug compound; pass worker names to
+run a subset, or `--all` to also include the `monitoring` worker.
 
 Each worker runs through `backend/scripts/dev_celery_reload.py` for hot-reload
 on changes under `backend/onyx` and `backend/ee`. All workers stream to one
-terminal with a per-worker prefix, and a single `Ctrl-C` stops them all.
+terminal with a per-worker prefix, and a single `Ctrl-C` stops them all (press
+again to force kill).
 
 ```shell
-ods celery [worker...]
+ods background [worker...]
 ```
 
 **Available workers:**
@@ -255,16 +256,16 @@ ods celery [worker...]
 
 ```shell
 # Start the full dev worker set
-ods celery
+ods background
 
 # Start only specific workers
-ods celery primary beat
+ods background primary beat
 
 # Include the monitoring worker
-ods celery --all
+ods background --all
 
 # Run without hot-reload
-ods celery docfetching docprocessing --no-reload
+ods background docfetching docprocessing --no-reload
 ```
 
 This pairs with `ods compose dev --infra`, `ods backend api`,
