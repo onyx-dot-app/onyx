@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import useOnMount from "@/hooks/useOnMount";
 import { cn } from "@opal/utils";
 import { Button, InputTypeIn, Text } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
@@ -26,6 +27,12 @@ import { useUser } from "@/providers/UserProvider";
 // /craft/v1/apps/manage; admins and curators get a shortcut button to it here.
 export default function ExternalAppsPage() {
   const { isAdmin, isCurator } = useUser();
+  const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useOnMount(() => {
+    searchInputRef.current?.focus();
+  });
 
   return (
     <SettingsLayouts.Root>
@@ -48,23 +55,34 @@ export default function ExternalAppsPage() {
             </div>
           ) : undefined
         }
-      />
+      >
+        <InputTypeIn
+          ref={searchInputRef}
+          placeholder="Search apps..."
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          searchIcon
+        />
+      </SettingsLayouts.Header>
       <SettingsLayouts.Body>
-        <AppConnections />
+        <AppConnections query={query} />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
 }
 
+interface AppConnectionsProps {
+  query: string;
+}
+
 // Connected apps lead as a list; the rest are browsable as a grid.
-function AppConnections() {
+function AppConnections({ query }: AppConnectionsProps) {
   const { data, mutate } = useSWR<ExternalAppUserResponse[]>(
     SWR_KEYS.buildExternalApps,
     errorHandlingFetcher,
     { keepPreviousData: true }
   );
   const connectSlug = useSearchParams().get("connect");
-  const [query, setQuery] = useState("");
 
   const { connected, browse } = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -98,13 +116,6 @@ function AppConnections() {
 
   return (
     <div className="flex flex-col gap-6">
-      <InputTypeIn
-        placeholder="Search apps..."
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        searchIcon
-      />
-
       {connected.length > 0 && (
         <section className="flex flex-col gap-2">
           <Text font="secondary-body" color="text-03">
