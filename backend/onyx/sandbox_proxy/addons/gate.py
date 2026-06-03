@@ -439,15 +439,10 @@ class GateAddon:
     def _resolve_auto_approval(
         self, db: Session, ctx: SessionContext, match: RequestMatch
     ) -> _AutoApproval | None:
-        """Grant sources, checked before the park; first hit wins, ``None``
-        parks. The single extension point for skipping the approval park.
-
-        Each source inspects ``match`` and may scope at any granularity — the
-        whole app (``match.external_app_id``) or a specific action
-        (``match.decisive.action_type``). Today: scheduled-task pre-approval.
-        Future session-scoped grants (auto-approve-all, per-app, per-action)
-        add a source here and reuse the mint/inject/notify path unchanged.
-        """
+        """Resolve a gated request to an auto-approval, or ``None`` to park."""
+        # Scheduled-task grants are the only auto-approval type today. As other
+        # types appear (session-scoped, per-action), each becomes a source
+        # resolved here — first hit wins.
         return self._scheduled_task_grant(db, ctx, match)
 
     def _scheduled_task_grant(
