@@ -207,18 +207,22 @@ export default function CraftToolCard({
     <div className="flex items-center gap-2 min-w-0 w-full">
       {renderStatusIcon(toolCall)}
       <span className="truncate min-w-0">{renderPrimary(toolCall)}</span>
-      {toolCall.skillName && toolCall.toolName !== "skill" && (
-        <SkillBadge name={toolCall.skillName} />
-      )}
-      {/* Chevron always rendered to reserve space so the row doesn't shift. */}
-      <SvgChevronDown
-        aria-hidden={!expandable}
-        className={cn(
-          "size-4 stroke-text-03 transition-transform duration-150 shrink-0 ml-auto",
-          !isOpen && "-rotate-90",
-          !expandable && "invisible"
+      {/* Skill badge + chevron are pinned right so the badge aligns vertically
+          across rows regardless of how long the primary text is. */}
+      <span className="ml-auto flex items-center gap-2 shrink-0">
+        {toolCall.skillName && toolCall.toolName !== "skill" && (
+          <SkillBadge name={toolCall.skillName} />
         )}
-      />
+        {/* Chevron always rendered to reserve space so the row doesn't shift. */}
+        <SvgChevronDown
+          aria-hidden={!expandable}
+          className={cn(
+            "size-4 stroke-text-03 transition-transform duration-150 shrink-0",
+            !isOpen && "-rotate-90",
+            !expandable && "invisible"
+          )}
+        />
+      </span>
     </div>
   );
 
