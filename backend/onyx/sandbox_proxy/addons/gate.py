@@ -8,10 +8,12 @@ import asyncio
 import base64
 import binascii
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
 from mitmproxy import http
+from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.cache.interface import CacheBackend
@@ -61,6 +63,21 @@ CacheFactory = Callable[[str], CacheBackend]
 # Relative deep link routed through the Next router by NotificationsPopover.tsx;
 # must mirror the frontend's CRAFT_PATH + sessionId search param.
 _CRAFT_SESSION_LINK_TEMPLATE = "/craft/v1?sessionId={session_id}"
+
+
+@dataclass(frozen=True)
+class _AutoApproval:
+    """A decision to approve a gated request without parking it.
+
+    Produced by a grant source in ``_resolve_auto_approval``; the
+    mint/inject/notify path that consumes it is source-agnostic. Carries how
+    to attribute the audit row (``decided_via``) and the bell entry to raise.
+    """
+
+    decided_via: ApprovalDecidedVia
+    notif_type: NotificationType
+    notification_title: str
+    notification_data: dict[str, str | int]
 
 
 class ParkedApprovals:
@@ -224,22 +241,22 @@ class GateAddon:
             return
         ctx, match = gate_target
 
-        # Pre-approval short-circuit: a RUNNING scheduled run granting this
-        # app skips the park. Off-thread to keep sync DB work off the event
-        # loop; failure falls through to the normal park flow.
-        pre_approved: bool
+        # Auto-approval short-circuit: a grant source (today: a RUNNING
+        # scheduled run pre-approving this app) skips the park. Off-thread to
+        # keep sync DB work off the event loop; failure falls through to park.
+        auto_approved: bool
         try:
-            pre_approved = await asyncio.to_thread(self._try_pre_approve, ctx, match)
+            auto_approved = await asyncio.to_thread(self._try_auto_approve, ctx, match)
         except Exception:
             logger.exception(
-                "gate.pre_approval_check_error session_id=%s tenant_id=%s "
+                "gate.auto_approval_check_error session_id=%s tenant_id=%s "
                 "action_type=%s",
                 ctx.session_id,
                 ctx.tenant_id,
                 match.decisive.action_type,
             )
-            pre_approved = False
-        if pre_approved:
+            auto_approved = False
+        if auto_approved:
             # Same off-thread rationale as the ALWAYS / post-approval paths.
             # Fail closed: an unguarded raise would let mitmproxy forward the
             # original request, bypassing the gate after an APPROVED row exists.
@@ -252,7 +269,7 @@ class GateAddon:
                 )
             except Exception:
                 logger.exception(
-                    "gate.pre_approved_dispatch_error session_id=%s tenant_id=%s "
+                    "gate.auto_approved_dispatch_error session_id=%s tenant_id=%s "
                     "action_type=%s",
                     ctx.session_id,
                     ctx.tenant_id,
@@ -419,21 +436,51 @@ class GateAddon:
         )
         return ctx, match
 
-    def _try_pre_approve(self, ctx: SessionContext, match: RequestMatch) -> bool:
-        """Insert a pre-decided APPROVED row for a RUNNING scheduled run that
-        grants the matched app; False otherwise (falls through to the park).
+    def _resolve_auto_approval(
+        self, db: Session, ctx: SessionContext, match: RequestMatch
+    ) -> _AutoApproval | None:
+        """Grant sources, checked before the park; first hit wins, ``None``
+        parks. The single extension point for skipping the approval park.
+
+        Each source inspects ``match`` and may scope at any granularity — the
+        whole app (``match.external_app_id``) or a specific action
+        (``match.decisive.action_type``). Today: scheduled-task pre-approval.
+        Future session-scoped grants (auto-approve-all, per-app, per-action)
+        add a source here and reuse the mint/inject/notify path unchanged.
+        """
+        return self._scheduled_task_grant(db, ctx, match)
+
+    def _scheduled_task_grant(
+        self, db: Session, ctx: SessionContext, match: RequestMatch
+    ) -> _AutoApproval | None:
+        """Grant source: a RUNNING scheduled run whose task pre-approves the
+        matched app. App-level granularity, per scheduled-task semantics."""
+        grants = get_live_scheduled_run_grants(db_session=db, session_id=ctx.session_id)
+        if grants is None:
+            return None
+        run_id, granted_app_ids = grants
+        if match.external_app_id not in granted_app_ids:
+            return None
+        return _AutoApproval(
+            decided_via=ApprovalDecidedVia.PRE_APPROVAL,
+            notif_type=NotificationType.SCHEDULED_TASK_PRE_APPROVED_ACTION,
+            notification_title=f"Scheduled task used {match.app_name} (pre-approved)",
+            notification_data={
+                "run_id": str(run_id),
+                "external_app_id": match.external_app_id,
+            },
+        )
+
+    def _try_auto_approve(self, ctx: SessionContext, match: RequestMatch) -> bool:
+        """Mint a pre-decided APPROVED row if a grant source covers this
+        request; False otherwise (falls through to the park). Source-agnostic.
 
         Bypassing ``try_record_decision``'s arbiter is safe: nothing parks
         on a pre-decided row.
         """
         with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
-            grants = get_live_scheduled_run_grants(
-                db_session=db, session_id=ctx.session_id
-            )
-            if grants is None:
-                return False
-            run_id, granted_app_ids = grants
-            if match.external_app_id not in granted_app_ids:
+            approval = self._resolve_auto_approval(db, ctx, match)
+            if approval is None:
                 return False
             row = action_approval.insert_action_approval(
                 db,
@@ -443,26 +490,26 @@ class GateAddon:
                 payload=match.payload,
                 external_app_id=match.external_app_id,
                 decision=ApprovalDecision.APPROVED,
-                decided_via=ApprovalDecidedVia.PRE_APPROVAL,
+                decided_via=approval.decided_via,
             )
             approval_id = row.approval_id
             db.commit()
 
         logger.info(
-            "gate.pre_approved approval_id=%s session_id=%s tenant_id=%s "
-            "run_id=%s external_app_id=%s action_type=%s",
+            "gate.auto_approved approval_id=%s session_id=%s tenant_id=%s "
+            "decided_via=%s external_app_id=%s action_type=%s",
             approval_id,
             ctx.session_id,
             ctx.tenant_id,
-            run_id,
+            approval.decided_via,
             match.external_app_id,
             match.decisive.action_type,
         )
         try:
-            self._notify_pre_approved(run_id, ctx, match)
+            self._notify_auto_approved(ctx, approval)
         except Exception as e:
             logger.warning(
-                "gate.pre_approve_notify_failed approval_id=%s error=%s",
+                "gate.auto_approve_notify_failed approval_id=%s error=%s",
                 approval_id,
                 str(e),
             )
@@ -716,25 +763,22 @@ class GateAddon:
     # Notification dispatch
     # ------------------------------------------------------------------
 
-    def _notify_pre_approved(
-        self, run_id: UUID, ctx: SessionContext, match: RequestMatch
+    def _notify_auto_approved(
+        self, ctx: SessionContext, approval: _AutoApproval
     ) -> None:
-        """Best-effort notification, one per (run, app).
+        """Best-effort bell entry for an auto-approved action.
 
         ``create_notification`` dedups on (user, type, additional_data), so
-        the payload must stay exactly this pair — anything per-request would
-        defeat the dedup.
+        the grant source must keep ``notification_data`` a stable per-scope
+        key — anything per-request would defeat the dedup.
         """
         with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
             create_notification(
                 user_id=ctx.user_id,
-                notif_type=NotificationType.SCHEDULED_TASK_PRE_APPROVED_ACTION,
+                notif_type=approval.notif_type,
                 db_session=db,
-                title=f"Scheduled task used {match.app_name} (pre-approved)",
-                additional_data={
-                    "run_id": str(run_id),
-                    "external_app_id": match.external_app_id,
-                },
+                title=approval.notification_title,
+                additional_data=approval.notification_data,
                 autocommit=True,
             )
 
