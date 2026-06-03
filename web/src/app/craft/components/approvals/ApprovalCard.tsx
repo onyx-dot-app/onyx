@@ -5,7 +5,12 @@ import { useSWRConfig } from "swr";
 
 import { Button, Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgChevronDown, SvgLoader } from "@opal/icons";
+import {
+  SvgAlertCircle,
+  SvgCheckSquare,
+  SvgChevronDown,
+  SvgLoader,
+} from "@opal/icons";
 import {
   Collapsible,
   CollapsibleContent,
@@ -21,11 +26,17 @@ import {
   ApprovalView,
 } from "@/app/craft/types/approvals";
 import PayloadView from "@/app/craft/components/approvals/PayloadView";
+import CometEdge from "@/app/craft/components/CometEdge";
 import { SWR_KEYS } from "@/lib/swr-keys";
+
+// Hold the settled edge so the cross-fade is visible before the row unmounts.
+const SETTLE_HOLD_MS = 800;
 
 interface ApprovalCardProps {
   approval: ApprovalView;
   defaultOpen?: boolean;
+  /** Seed a decided state for Storybook (real approvals start pending). */
+  defaultDecision?: ApprovalSubmitDecision | null;
 }
 
 // Single-action: name the action; multi-action: just count them. The
@@ -65,38 +76,55 @@ function ActionList({ actions }: { actions: ApprovalAction[] }) {
 export default function ApprovalCard({
   approval,
   defaultOpen = false,
+  defaultDecision = null,
 }: ApprovalCardProps) {
   const { mutate } = useSWRConfig();
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  // Optimistic decision so the comet settles before the row drops from /live.
+  const [decision, setDecision] = useState<ApprovalSubmitDecision | null>(
+    defaultDecision
+  );
 
   // Guards setState after the post-decision SWR revalidation drops
   // this row from /live and the card unmounts mid-await.
   const mountedRef = useRef(true);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     return () => {
       mountedRef.current = false;
+      if (settleTimer.current) clearTimeout(settleTimer.current);
     };
   }, []);
 
   const headline = approvalHeadline(approval);
   const swrKey = SWR_KEYS.buildSessionLiveApprovals(approval.session_id);
 
-  async function decide(decision: ApprovalSubmitDecision) {
+  const decided = decision !== null;
+  const approved = decision === "APPROVED";
+
+  async function decide(next: ApprovalSubmitDecision) {
     setSubmitting(true);
     setErrorMessage(null);
+    setDecision(next);
     try {
-      await postApprovalDecision(approval.approval_id, decision);
-      void mutate(swrKey);
+      await postApprovalDecision(approval.approval_id, next);
+      settleTimer.current = setTimeout(() => {
+        void mutate(swrKey);
+      }, SETTLE_HOLD_MS);
     } catch (e) {
       // 409 = already resolved (by someone else, or expired by the
-      // proxy). Same UX as a successful submit: refetch and unmount.
+      // proxy). Same UX as a successful submit: hold the settle, then refetch.
       if (e instanceof ApprovalConflictError) {
-        void mutate(swrKey);
+        settleTimer.current = setTimeout(() => {
+          void mutate(swrKey);
+        }, SETTLE_HOLD_MS);
         return;
       }
+      console.error("Failed to submit approval decision:", e);
       if (mountedRef.current) {
+        setDecision(null);
         setErrorMessage(
           e instanceof Error ? e.message : "Failed to submit decision"
         );
@@ -113,75 +141,109 @@ export default function ApprovalCard({
   }
 
   return (
-    <div className="rounded-08 border border-status-info-03 overflow-hidden bg-background-neutral-00">
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        {/*
-         * Two triggers (header + chevron) because action buttons can't
-         * nest inside a trigger (invalid HTML) and shouldn't toggle the
-         * collapse. `data-approval-trigger` scopes the row's hover tint.
-         */}
-        <div
-          className={cn(
-            "flex items-center gap-1 pr-2 transition-colors",
-            "has-[[data-approval-trigger]:hover]:bg-background-tint-02"
-          )}
-        >
-          <CollapsibleTrigger asChild>
-            <button
-              data-approval-trigger
-              className="flex items-center gap-2 min-w-0 flex-1 text-left px-3 py-2"
-            >
-              <SvgLoader className="size-4 shrink-0 stroke-status-info-05 animate-spin" />
-              <Text font="main-ui-muted" color="text-04" nowrap>
-                {headline}
-              </Text>
-            </button>
-          </CollapsibleTrigger>
-          <Button
-            prominence="primary"
-            size="sm"
-            disabled={submitting}
-            onClick={() => decide("APPROVED")}
+    <CometEdge
+      active={!decided}
+      settled={decided}
+      tone={decided ? (approved ? "success" : "error") : "info"}
+      speedSeconds={3.6}
+    >
+      <div
+        className={cn(
+          "rounded-08 border overflow-hidden bg-background-neutral-00 transition-colors",
+          decided
+            ? approved
+              ? "border-status-success-03"
+              : "border-status-error-03"
+            : "border-status-info-03"
+        )}
+      >
+        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+          <div
+            className={cn(
+              "flex items-center gap-1 pr-2 transition-colors",
+              "has-[[data-approval-trigger]:hover]:bg-background-tint-02"
+            )}
           >
-            Approve
-          </Button>
-          <Button
-            prominence="secondary"
-            size="sm"
-            disabled={submitting}
-            onClick={() => decide("REJECTED")}
-          >
-            Reject
-          </Button>
-          <CollapsibleTrigger asChild>
-            <button
-              data-approval-trigger
-              aria-label={isOpen ? "Hide details" : "Show details"}
-              className="p-1.5"
-            >
-              <SvgChevronDown
-                className={cn(
-                  "size-4 stroke-text-03 transition-transform duration-150",
-                  !isOpen && "-rotate-90"
+            <CollapsibleTrigger asChild>
+              <button
+                data-approval-trigger
+                className="flex items-center gap-2 min-w-0 flex-1 text-left px-3 py-2"
+              >
+                {decided ? (
+                  approved ? (
+                    <SvgCheckSquare className="size-4 shrink-0 stroke-status-success-05" />
+                  ) : (
+                    <SvgAlertCircle className="size-4 shrink-0 stroke-status-error-05" />
+                  )
+                ) : (
+                  <SvgLoader className="size-4 shrink-0 stroke-status-info-05 animate-spin" />
                 )}
-              />
-            </button>
-          </CollapsibleTrigger>
-        </div>
-        <CollapsibleContent>
-          <div className="p-2 flex flex-col gap-3">
-            <ActionList actions={approval.actions} />
-            <PayloadView payload={approval.payload} />
-            {errorMessage && (
-              <div className="text-status-error-05">
-                <Text font="secondary-body" color="inherit">
-                  {errorMessage}
+                <Text font="main-ui-muted" color="text-04" nowrap>
+                  {headline}
+                </Text>
+              </button>
+            </CollapsibleTrigger>
+            {decided ? (
+              <div
+                className={cn(
+                  "px-2",
+                  approved ? "text-status-success-05" : "text-status-error-05"
+                )}
+              >
+                <Text font="main-ui-action" color="inherit" nowrap>
+                  {approved ? "Approved" : "Rejected"}
                 </Text>
               </div>
+            ) : (
+              <>
+                <Button
+                  prominence="primary"
+                  size="sm"
+                  disabled={submitting}
+                  onClick={() => decide("APPROVED")}
+                >
+                  Approve
+                </Button>
+                <Button
+                  prominence="secondary"
+                  size="sm"
+                  disabled={submitting}
+                  onClick={() => decide("REJECTED")}
+                >
+                  Reject
+                </Button>
+              </>
             )}
+            <CollapsibleTrigger asChild>
+              <button
+                data-approval-trigger
+                aria-label={isOpen ? "Hide details" : "Show details"}
+                className="p-1.5"
+              >
+                <SvgChevronDown
+                  className={cn(
+                    "size-4 stroke-text-03 transition-transform duration-150",
+                    !isOpen && "-rotate-90"
+                  )}
+                />
+              </button>
+            </CollapsibleTrigger>
           </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </div>
+          <CollapsibleContent>
+            <div className="p-2 flex flex-col gap-3">
+              <ActionList actions={approval.actions} />
+              <PayloadView payload={approval.payload} />
+              {errorMessage && (
+                <div className="text-status-error-05">
+                  <Text font="secondary-body" color="inherit">
+                    {errorMessage}
+                  </Text>
+                </div>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
+    </CometEdge>
   );
 }
