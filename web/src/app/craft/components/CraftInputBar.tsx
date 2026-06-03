@@ -17,6 +17,9 @@ import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import InterruptHint from "@/app/craft/components/InterruptHint";
 import { InputChipStrip } from "@/sections/input/InputChipStrip";
 import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
+import HiddenFileInput, {
+  type HiddenFileInputHandle,
+} from "@/refresh-components/inputs/HiddenFileInput";
 import { buildEntryMenuItems } from "@/app/craft/components/buildEntryMenuItems";
 import { useDoubleEscapeInterrupt } from "@/hooks/useDoubleEscapeInterrupt";
 import useSlashPicker from "@/hooks/useSlashPicker";
@@ -75,7 +78,7 @@ const CraftInputBar = memo(
       ref
     ) => {
       const baseRef = useRef<BaseInputBarHandle>(null);
-      const fileInputRef = useRef<HTMLInputElement>(null);
+      const fileInputRef = useRef<HiddenFileInputHandle>(null);
 
       const {
         currentMessageFiles,
@@ -183,7 +186,7 @@ const CraftInputBar = memo(
       const plusMenuItems = useMemo(
         () =>
           buildEntryMenuItems(pickerSections, {
-            onAttachFiles: () => fileInputRef.current?.click(),
+            onAttachFiles: () => fileInputRef.current?.open(),
             onSelectEntry: addEntry,
           }),
         [pickerSections, addEntry]
@@ -204,17 +207,7 @@ const CraftInputBar = memo(
 
       return (
         <>
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            multiple
-            onChange={(e) => {
-              const files = e.target.files;
-              if (files && files.length > 0) uploadFiles(Array.from(files));
-              e.target.value = "";
-            }}
-          />
+          <HiddenFileInput ref={fileInputRef} multiple onFiles={uploadFiles} />
           <BaseInputBar
             ref={baseRef}
             onSubmit={handleSubmit}
