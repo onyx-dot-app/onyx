@@ -10,11 +10,10 @@
  * (files are already inlined) but serve as the canonical source of truth for
  * what the design system includes and in what order.
  *
- * App-level tokens (container widths, page widths, etc.) live in the app's
- * own CSS — this file covers only library-owned tokens and stylesheets.
+ * Layout tokens (container widths, page widths, etc.) are library-owned and
+ * live here — app-specific overrides should be applied in the app's own CSS.
  */
 
-@import "./styles/breakpoints.css";
 @import "./styles/colors.css";
 @import "./styles/sizes.css";
 @import "./styles/typography.css";

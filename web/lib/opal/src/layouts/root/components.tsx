@@ -145,6 +145,40 @@ function RootLayoutRightPanel({ children, className }: RootLayoutPanelProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Header — pinned top bar inside MainContent
+// ---------------------------------------------------------------------------
+
+interface RootLayoutHeaderProps {
+  children: ReactNode;
+}
+
+function RootLayoutHeader({ children }: RootLayoutHeaderProps) {
+  return <div className="shrink-0">{children}</div>;
+}
+
+// ---------------------------------------------------------------------------
+// Footer — pinned bottom bar inside MainContent
+// ---------------------------------------------------------------------------
+
+interface RootLayoutFooterProps {
+  children: ReactNode;
+  /**
+   * Adds top padding to give shadow breathing room above the input bar.
+   * Used when an animated spacer is not present (e.g. outside active chat).
+   */
+  extraPadding?: boolean;
+}
+
+function RootLayoutFooter({
+  children,
+  extraPadding = false,
+}: RootLayoutFooterProps) {
+  return (
+    <div className={cn("shrink-0", extraPadding && "pt-3.5")}>{children}</div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -154,4 +188,6 @@ export {
   RootLayoutMainContent as MainContent,
   RootLayoutLeftPanel as LeftPanel,
   RootLayoutRightPanel as RightPanel,
+  RootLayoutHeader as Header,
+  RootLayoutFooter as Footer,
 };
