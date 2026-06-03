@@ -225,7 +225,7 @@ BEDROCK_MODEL_TOKEN_LIMITS: dict[str, int] = {
     # Moonshot Kimi
     "kimi": 128000,
     # Minimax
-    "minimax": 204000,
+    "minimax": 512000,
     # OpenAI (via Bedrock)
     "gpt-oss": 128000,
     # AI21 models (from LiteLLM: Jamba 1.5 = 256K, Jamba Instruct = 70K)

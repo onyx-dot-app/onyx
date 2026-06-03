@@ -26,7 +26,7 @@ import {
   LLMConfigurationModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 
-const DEFAULT_DEFAULT_MODEL_NAME = "MiniMax-M2.5";
+const DEFAULT_DEFAULT_MODEL_NAME = "MiniMax-M3";
 
 export default function MiniMaxModal({
   variant = "llm-configuration",
@@ -140,7 +140,7 @@ export default function MiniMaxModal({
 
           <FieldSeparator />
           {isOnboarding ? (
-            <SingleDefaultModelField placeholder="E.g. MiniMax-M2.5" />
+            <SingleDefaultModelField placeholder="E.g. MiniMax-M3" />
           ) : (
             <ModelsField
               modelConfigurations={modelConfigurations}
