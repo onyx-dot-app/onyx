@@ -804,12 +804,30 @@ jobs:
 
       # Pull every shard's screenshots for this project into one directory.
       # Shards capture disjoint screenshot names, so merge-multiple is safe.
+      # download-artifact errors when zero artifacts match the pattern (e.g. a
+      # shard failed before capturing any screenshot, so its artifact was never
+      # uploaded). Tolerate that here and let the presence check below decide
+      # whether there's anything to diff, so an infra failure degrades to a
+      # no-op rather than turning this advisory job red.
       - name: Download shard screenshots
+        continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: playwright-screenshots-${{ matrix.project }}-shard-*-${{ github.run_id }}
           path: web/output/screenshots/
           merge-multiple: true
+
+      - name: Check for screenshots
+        id: screenshots
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: |
+          if [ -d "web/output/screenshots/" ] && [ -n "$(ls -A web/output/screenshots/ 2>/dev/null)" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No shard screenshots found for ${PROJECT} — skipping diff and baseline update."
+          fi
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
@@ -847,6 +865,7 @@ jobs:
           fi
 
       - name: Generate screenshot diff report
+        if: steps.screenshots.outputs.present == 'true'
         env:
           PROJECT: ${{ matrix.project }}
           PLAYWRIGHT_S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
@@ -856,7 +875,11 @@ jobs:
             --project "${PROJECT}" \
             --rev "${BASELINE_REV}"
 
+      # PR-only: PR_NUMBER is empty on push/merge_group events, which would write
+      # the report under a junk `reports/pr-/...` key. Baselines (updated below)
+      # are the meaningful artifact on those events, not this PR-scoped report.
       - name: Upload visual diff report to S3
+        if: github.event_name == 'pull_request' && steps.screenshots.outputs.present == 'true'
         env:
           PROJECT: ${{ matrix.project }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
