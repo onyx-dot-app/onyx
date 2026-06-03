@@ -63,8 +63,6 @@ export interface BaseInputBarProps {
   topSlot?: ReactNode;
   bottomLeftSlot?: ReactNode;
 
-  /** Return true to consume the event (skips BaseInputBar key handling). */
-  onBeforeKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => boolean;
   /** Return true to consume the pasted text (skips pasteText). */
   onPasteText?: (text: string) => boolean;
   onPasteFiles?: (files: File[]) => void;
@@ -92,7 +90,6 @@ const BaseInputBar = memo(
         isInterrupting = false,
         topSlot,
         bottomLeftSlot,
-        onBeforeKeyDown,
         onPasteText,
         onPasteFiles,
         onInputCallback,
@@ -238,7 +235,6 @@ const BaseInputBar = memo(
 
       const handleKeyDown = useCallback(
         (event: KeyboardEvent<HTMLDivElement>) => {
-          if (onBeforeKeyDown?.(event)) return;
           const isSubmitEnter =
             event.key === "Enter" &&
             !event.shiftKey &&
@@ -249,7 +245,7 @@ const BaseInputBar = memo(
             handleSubmit();
           }
         },
-        [handleSubmit, handleTileKeyDown, queueNav, onBeforeKeyDown]
+        [handleSubmit, handleTileKeyDown, queueNav]
       );
 
       const handleSelectionChange = useCallback(() => {

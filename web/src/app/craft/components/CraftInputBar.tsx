@@ -226,7 +226,6 @@ const CraftInputBar = memo(
             isInterrupting={isInterrupting}
             topSlot={topSlot}
             bottomLeftSlot={bottomLeftSlot}
-            onBeforeKeyDown={slashPicker.onBeforeKeyDown}
             onPasteText={onPasteText}
             onPasteFiles={uploadFiles}
             onInputCallback={slashPicker.onInput}

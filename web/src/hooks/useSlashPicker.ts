@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type RefObject,
-} from "react";
+import { useCallback, useRef, useState, type RefObject } from "react";
 import type { BaseInputBarHandle } from "@/sections/input/BaseInputBar";
 import type { PickerEntry } from "@/lib/skills/picker";
 import {
@@ -30,7 +24,6 @@ export interface UseSlashPickerResult {
   reset: () => void;
   onInput: () => void;
   onSelectionChange: () => void;
-  onBeforeKeyDown: (event: KeyboardEvent<HTMLDivElement>) => boolean;
 }
 
 /** Drives the `/`-triggered entry picker over a BaseInputBar. */
@@ -64,14 +57,6 @@ export default function useSlashPicker({
     setSession(next);
   }, [inputRef]);
 
-  const onBeforeKeyDown = useCallback(
-    (_event: KeyboardEvent<HTMLDivElement>): boolean => {
-      onSelectionChange();
-      return false;
-    },
-    [onSelectionChange]
-  );
-
   const handleSelect = useCallback(
     (entry: PickerEntry) => {
       const current = sessionRef.current;
@@ -92,6 +77,5 @@ export default function useSlashPicker({
     reset,
     onInput,
     onSelectionChange,
-    onBeforeKeyDown,
   };
 }
