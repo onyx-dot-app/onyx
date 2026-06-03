@@ -5,6 +5,7 @@ import { OnyxBotChart } from "@/app/ee/admin/performance/usage/OnyxBotChart";
 import { FeedbackChart } from "@/app/ee/admin/performance/usage/FeedbackChart";
 import { QueryPerformanceChart } from "@/app/ee/admin/performance/usage/QueryPerformanceChart";
 import { PersonaMessagesChart } from "@/app/ee/admin/performance/usage/PersonaMessagesChart";
+import { TokenUsageCostReport } from "@/app/ee/admin/performance/usage/TokenUsageCostReport";
 import { useTimeRange } from "@/app/ee/admin/performance/lib";
 import UsageReports from "@/app/ee/admin/performance/usage/UsageReports";
 import { Divider } from "@opal/components";
@@ -33,6 +34,7 @@ export default function AnalyticsPage() {
           availablePersonas={agents}
           timeRange={timeRange}
         />
+        <TokenUsageCostReport timeRange={timeRange} />
         <Divider />
         <UsageReports />
       </SettingsLayouts.Body>
