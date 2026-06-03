@@ -8,7 +8,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
 } from "react";
 import BaseInputBar, {
   type BaseInputBarHandle,
@@ -22,23 +21,21 @@ import {
   type PlusMenuItem,
 } from "@/sections/input/PlusMenuButton";
 import { useDoubleEscapeInterrupt } from "@/hooks/useDoubleEscapeInterrupt";
+import useSlashPicker from "@/hooks/useSlashPicker";
 import {
   useUploadFilesContext,
   type BuildFile,
 } from "@/app/craft/contexts/UploadFilesContext";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
-import { toPickerSections, type PickerEntry } from "@/lib/skills/picker";
+import {
+  toPickerSections,
+  flattenSections,
+  type PickerEntry,
+} from "@/lib/skills/picker";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import { Text } from "@opal/components";
 import { SvgPaperclip, SvgSparkle } from "@opal/icons";
-import {
-  reduceOnInput,
-  reduceOnDismiss,
-  reduceOnSelection,
-  INITIAL_PICKER_SESSION,
-  type PickerSession,
-} from "@/lib/skills/pickerSession";
 import type { QueuedMessage } from "@/app/app/interfaces";
 
 export interface CraftInputBarHandle {
@@ -103,30 +100,11 @@ const CraftInputBar = memo(
       const [activeEntries, setActiveEntries] = useState<PickerEntry[]>(
         initialEntries ?? []
       );
-      const [session, setSession] = useState<PickerSession>(
-        INITIAL_PICKER_SESSION
-      );
-      // Mirror `session` into a ref so the callbacks handed to the memoized
-      // BaseInputBar keep a stable identity across picker-query changes.
-      const sessionRef = useRef(session);
-      sessionRef.current = session;
-      const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
       const [entryInfo, setEntryInfo] = useState<{
         entry: PickerEntry;
         chipEl: HTMLElement;
       } | null>(null);
       const dismissEntryInfo = useCallback(() => setEntryInfo(null), []);
-
-      const interruptible = !!onInterrupt && isRunning;
-      const handleInterrupt = useCallback(() => {
-        if (interruptible && !isInterrupting) onInterrupt?.();
-      }, [interruptible, isInterrupting, onInterrupt]);
-
-      const { armed } = useDoubleEscapeInterrupt({
-        enabled:
-          interruptible && !isInterrupting && !session.open && !entryInfo,
-        onInterrupt: handleInterrupt,
-      });
 
       const addEntry = useCallback((entry: PickerEntry) => {
         setActiveEntries((prev) =>
@@ -138,74 +116,39 @@ const CraftInputBar = memo(
         setActiveEntries((prev) => prev.filter((e) => e.slug !== slug));
       }, []);
 
+      const slashPicker = useSlashPicker({
+        inputRef: baseRef,
+        onSelect: addEntry,
+      });
+
+      const interruptible = !!onInterrupt && isRunning;
+      const handleInterrupt = useCallback(() => {
+        if (interruptible && !isInterrupting) onInterrupt?.();
+      }, [interruptible, isInterrupting, onInterrupt]);
+
+      const { armed } = useDoubleEscapeInterrupt({
+        enabled:
+          interruptible && !isInterrupting && !slashPicker.open && !entryInfo,
+        onInterrupt: handleInterrupt,
+      });
+
       useImperativeHandle(ref, () => ({
         reset: () => {
           baseRef.current?.reset();
           setActiveEntries([]);
           clearFiles();
-          setSession(INITIAL_PICKER_SESSION);
+          slashPicker.reset();
         },
         focus: () => baseRef.current?.focus(),
         setMessage: (msg: string) => baseRef.current?.setMessage(msg),
       }));
 
-      // ── Slash picker ──────────────────────────────────────────────────────
-
-      const closeSkillPicker = useCallback(
-        () => setSession(INITIAL_PICKER_SESSION),
-        []
-      );
-      const dismissSkillPicker = useCallback(
-        () => setSession(reduceOnDismiss),
-        []
-      );
-
-      const handleInputCallback = useCallback(() => {
-        const text = baseRef.current?.getTextBeforeCursor() ?? null;
-        const next = reduceOnInput(sessionRef.current, text);
-        if (next.open) setAnchorRect(baseRef.current?.getCaretRect() ?? null);
-        setSession(next);
-      }, []);
-
-      const handleSkillPickerSelect = useCallback(
-        (entry: PickerEntry) => {
-          if (!session.open) return;
-          baseRef.current?.deleteBeforeToken(`/${session.query}`);
-          addEntry(entry);
-          closeSkillPicker();
-        },
-        [session, addEntry, closeSkillPicker]
-      );
-
-      // ── Extension hooks ───────────────────────────────────────────────────
-
-      // Re-evaluate the slash trigger after the caret moves (arrow keys, click,
-      // selection). Keeps the picker query in sync or closes it when the caret
-      // leaves the token.
-      const syncPickerSelection = useCallback(() => {
-        const current = sessionRef.current;
-        if (!current.open) return;
-        const text = baseRef.current?.getTextBeforeCursor() ?? null;
-        const next = reduceOnSelection(current, text);
-        if (next.open) setAnchorRect(baseRef.current?.getCaretRect() ?? null);
-        setSession(next);
-      }, []);
-
-      const onBeforeKeyDown = useCallback(
-        (_event: KeyboardEvent<HTMLDivElement>): boolean => {
-          syncPickerSelection();
-          return false;
-        },
-        [syncPickerSelection]
-      );
-
       const onPasteText = useCallback(
         (text: string): boolean => {
           const slug = text.trim().match(/^\/(\S+)$/)?.[1];
           const entry = slug
-            ? ([...pickerSections.skills, ...pickerSections.apps].find(
-                (e) => e.slug === slug
-              ) ?? null)
+            ? (flattenSections(pickerSections).find((e) => e.slug === slug) ??
+              null)
             : null;
           if (entry) {
             addEntry(entry);
@@ -342,19 +285,19 @@ const CraftInputBar = memo(
             isInterrupting={isInterrupting}
             topSlot={topSlot}
             bottomLeftSlot={bottomLeftSlot}
-            onBeforeKeyDown={onBeforeKeyDown}
+            onBeforeKeyDown={slashPicker.onBeforeKeyDown}
             onPasteText={onPasteText}
             onPasteFiles={uploadFiles}
-            onInputCallback={handleInputCallback}
-            onSelectionChange={syncPickerSelection}
+            onInputCallback={slashPicker.onInput}
+            onSelectionChange={slashPicker.onSelectionChange}
           />
           <EntryPickerPopover
-            open={session.open}
-            anchorRect={anchorRect}
-            query={session.query}
+            open={slashPicker.open}
+            anchorRect={slashPicker.anchorRect}
+            query={slashPicker.query}
             sections={pickerSections}
-            onSelect={handleSkillPickerSelect}
-            onClose={dismissSkillPicker}
+            onSelect={slashPicker.onSelect}
+            onClose={slashPicker.onClose}
           />
           {entryInfo && (
             <EntryInfoPopover
