@@ -59,18 +59,16 @@ def test_second_replica_refused_then_admitted_after_release(
     replica_a = _make_replica()
     replica_b = _make_replica()
 
-    # Replica A holds the slot for an in-flight turn.
-    slot_a = replica_a.prompt_slot(sandbox_id, build_session_id)
-    assert slot_a.__enter__() is True
-    try:
+    # Replica A holds the slot for an in-flight turn. A nested `with` keeps it
+    # held while B contends, and guarantees release even if acquisition raises.
+    with replica_a.prompt_slot(sandbox_id, build_session_id) as first:
+        assert first is True
         # Replica B is a different instance with a different in-process lock —
         # only the distributed lock stands between them, and it must refuse.
         with replica_b.prompt_slot(sandbox_id, build_session_id) as second:
             assert second is False, (
                 "a second replica must be refused while the slot is held"
             )
-    finally:
-        slot_a.__exit__(None, None, None)
 
     # A released → a queued third turn (on either replica) can now proceed.
     with replica_b.prompt_slot(sandbox_id, build_session_id) as third:
