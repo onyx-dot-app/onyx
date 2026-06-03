@@ -58,6 +58,32 @@ RUN ln -sf "$(which fdfind)" /usr/local/bin/fd
 # (cmake, libxmlsec1-dev, pkg-config, postgresql-client).
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
+# Install prek (https://github.com/j178/prek) — a fast Rust reimplementation of
+# pre-commit and a drop-in replacement for it. Symlinked to `pre-commit` so the
+# repo's `.pre-commit-config.yaml` plus any `pre-commit ...` muscle memory and CI
+# invocations work unchanged. Fetched from the pinned GitHub release and verified
+# against the per-arch SHA256 the project publishes alongside each asset, matching
+# the supply-chain posture of the digest-pinned binaries elsewhere in this file.
+# Bumping PREK_VERSION requires updating BOTH checksums below (from the release's
+# *.tar.gz.sha256 assets); a mismatch fails the build closed.
+ARG PREK_VERSION=0.4.3
+RUN set -eux; \
+  case "$(dpkg --print-architecture)" in \
+    amd64) PREK_TRIPLE=x86_64-unknown-linux-gnu; \
+           PREK_SHA256=8a8210d64476657cac3e797afa109011d8d872c09e3a407f50c5a4dde063b381 ;; \
+    arm64) PREK_TRIPLE=aarch64-unknown-linux-gnu; \
+           PREK_SHA256=02e5731ce90e737bade91abef4c76c13495b9cc9290f609dfcb2e7b2a05b532e ;; \
+    *) echo "unsupported arch for prek: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+  esac; \
+  curl -fsSL -o /tmp/prek.tar.gz \
+    "https://github.com/j178/prek/releases/download/v${PREK_VERSION}/prek-${PREK_TRIPLE}.tar.gz"; \
+  echo "${PREK_SHA256}  /tmp/prek.tar.gz" | sha256sum -c -; \
+  tar -xzf /tmp/prek.tar.gz -C /tmp; \
+  install -m 0755 "/tmp/prek-${PREK_TRIPLE}/prek" /usr/local/bin/prek; \
+  ln -s prek /usr/local/bin/pre-commit; \
+  rm -rf /tmp/prek.tar.gz "/tmp/prek-${PREK_TRIPLE}"; \
+  prek --version
+
 # Install bun (JavaScript package manager) from the bun_source stage defined at the top.
 COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx

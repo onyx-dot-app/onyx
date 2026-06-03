@@ -33,3 +33,20 @@ In dev mode the frontend proxies `/api/*` straight to the backend (the dev-only 
 handler at `web/src/app/api/[...path]/route.ts`), so **`localhost:3000` serves both the UI and
 `/api`** — no reverse proxy needed. You can also hit the backend directly at `localhost:8080` (note:
 **no** `/api` prefix there — e.g. `/health`, `/auth/type`).
+
+## Validating YAML
+
+`pyyaml` is **not installed** in this environment, so `python3 -c 'import yaml'` fails with
+`ModuleNotFoundError`. To validate YAML, use the `check-yaml` pre-commit hook instead — it
+runs in its own isolated env (the `pre-commit` command here is [prek](https://github.com/j178/prek),
+which installs `pyyaml` for the hook):
+
+```bash
+pre-commit run check-yaml --all-files        # all tracked YAML
+pre-commit run check-yaml --files path/to/file.yaml
+```
+
+It runs with `--unsafe` (syntax-only) so it tolerates the repo's intentional custom tags
+(CloudFormation `!Ref`, docker-compose `!reset`) and multi-document files; Helm chart templates
+under `deployment/helm/charts/onyx/templates*` are excluded since their Go templating isn't
+parseable as YAML.
