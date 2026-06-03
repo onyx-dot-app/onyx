@@ -24,7 +24,6 @@ import httpx
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
-from onyx.cache.interface import CacheLock
 from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
@@ -104,9 +103,6 @@ class _ServeMixin:
             # Tombstone: blocks late subscribe from racing a terminate.
             self._terminated_sandboxes: set[UUID] = set()
             self._event_buses_lock = threading.Lock()
-            # Key on build_session_id, not opencode_session_id — see prompt_slot.
-            self._prompt_locks: dict[tuple[UUID, UUID], threading.Lock] = {}
-            self._prompt_locks_meta = threading.Lock()
             self._serve_conn_info: dict[UUID, ServeConnectionInfo] = {}
             self._serve_conn_info_lock = threading.Lock()
             self._serve_state_initialized = True
@@ -160,102 +156,58 @@ class _ServeMixin:
         sandbox_id: UUID,
         build_session_id: UUID,
     ) -> Generator[bool, None, None]:
-        """Bounded-blocking acquire of a per-build-session lock; yields True
-        if acquired within ``PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS``, False if a
-        turn is still in flight past it (caller must abort without side
-        effects).
+        """Serialize turns per build session across ``api_server`` replicas.
 
         opencode-serve's ``prompt_async`` is fire-and-forget and not
-        concurrent-safe: a second POST while a turn is in flight is
-        silently dropped, the second subscriber catches the *first* turn's
-        terminator, and a phantom user_message gets persisted with no
-        assistant reply. The short wait (rather than an instant refusal) lets
-        a queued message that fires while an interrupted turn is still unwinding
-        serialize cleanly behind it instead of erroring.
-
-        Two layered locks: an in-process ``threading.Lock`` (cheap same-pod
-        fast path, avoids redundant cache round-trips and same-pod thundering)
-        wrapping a ``CacheBackend`` lock that is the cross-pod correctness
-        boundary — a ``threading.Lock`` alone can't serialize turns that land
-        on different ``api_server`` replicas. Mirrors the interrupt fence:
-        tenant-aware ``get_cache_backend()``, an auto-expiry (``timeout``) ≥
-        the max turn time so a crashed holder can't pin the slot forever, and
-        fail-open on cache outage so a Redis/Postgres-cache blip can't brick
-        every turn. Key on ``build_session_id`` (not ``opencode_session_id``)
-        so the lock survives id rotation from ``on_opencode_session_resolved``
-        and bounds the local dict to one entry per build session.
+        concurrent-safe, so a second in-flight POST corrupts session state
+        (phantom user_message, no assistant reply). Yields True if the slot is
+        acquired within ``PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS``, else False
+        (caller must abort without side effects). Distributed via the
+        tenant-aware cache (mirrors the interrupt fence): auto-expires after a
+        turn's max length so a crashed holder can't pin it, and fails open on
+        cache outage. Key on ``build_session_id``, not ``opencode_session_id``,
+        which can rotate mid-turn via ``on_opencode_session_resolved``.
         """
-        key = (sandbox_id, build_session_id)
-        with self._prompt_locks_meta:
-            local_lock = self._prompt_locks.get(key)
-            if local_lock is None:
-                local_lock = threading.Lock()
-                self._prompt_locks[key] = local_lock
-
-        start = time.monotonic()
-        local_acquired = local_lock.acquire(timeout=PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS)
-        if not local_acquired:
+        try:
+            lock = get_cache_backend().lock(
+                _prompt_slot_key(sandbox_id, build_session_id),
+                timeout=SANDBOX_TURN_TIMEOUT_SECONDS,
+            )
+            acquired = lock.acquire(
+                blocking=True, blocking_timeout=PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS
+            )
+        except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
-                "[SANDBOX-SERVE] prompt_slot: refused — concurrent send_message "
-                "same-pod on sandbox=%s build_session=%s",
+                "[SANDBOX-SERVE] prompt_slot: cache unreachable (%s) — failing open "
+                "on sandbox=%s build_session=%s",
+                e,
                 sandbox_id,
                 build_session_id,
             )
-            yield False
+            yield True
             return
 
-        cache_lock: CacheLock | None = None
-        cache_acquired = False
         try:
-            try:
-                cache_lock = get_cache_backend().lock(
-                    _prompt_slot_key(sandbox_id, build_session_id),
-                    timeout=SANDBOX_TURN_TIMEOUT_SECONDS,
-                )
-                # Respect the overall acquire budget: the local lock may have
-                # already eaten into it.
-                remaining = PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS - (
-                    time.monotonic() - start
-                )
-                cache_acquired = cache_lock.acquire(
-                    blocking=True, blocking_timeout=max(0.0, remaining)
-                )
-            except CACHE_TRANSIENT_ERRORS as e:
-                # Fail open: a cache outage must not brick every turn. The
-                # local guard still serializes same-pod; the cross-pod race is
-                # rare. (The interrupt fence fails open for the same reason.)
+            if not acquired:
                 logger.warning(
-                    "[SANDBOX-SERVE] prompt_slot: cache unreachable (%s) — failing "
-                    "open (same-pod serialization only) on sandbox=%s build_session=%s",
-                    e,
+                    "[SANDBOX-SERVE] prompt_slot: refused — concurrent turn in flight "
+                    "for sandbox=%s build_session=%s",
                     sandbox_id,
                     build_session_id,
                 )
-                yield True
-                return
-
-            if not cache_acquired:
-                logger.warning(
-                    "[SANDBOX-SERVE] prompt_slot: refused — concurrent turn in "
-                    "flight on another replica for sandbox=%s build_session=%s",
-                    sandbox_id,
-                    build_session_id,
-                )
-            yield cache_acquired
+            yield acquired
         finally:
-            try:
-                if cache_acquired and cache_lock is not None:
-                    cache_lock.release()
-            except CACHE_TRANSIENT_ERRORS as e:
-                logger.warning(
-                    "[SANDBOX-SERVE] prompt_slot: cache lock release failed (%s) "
-                    "on sandbox=%s build_session=%s — relying on TTL auto-expiry",
-                    e,
-                    sandbox_id,
-                    build_session_id,
-                )
-            finally:
-                local_lock.release()
+            if acquired:
+                try:
+                    lock.release()
+                except CACHE_TRANSIENT_ERRORS as e:
+                    logger.warning(
+                        "[SANDBOX-SERVE] prompt_slot: lock release failed (%s) on "
+                        "sandbox=%s build_session=%s — relying on TTL",
+                        e,
+                        sandbox_id,
+                        build_session_id,
+                    )
 
     @staticmethod
     def _session_directory(session_id: UUID) -> str:
@@ -406,11 +358,9 @@ class _ServeMixin:
             )
 
     def _close_all_sandbox_buses(self, sandbox_id: UUID) -> None:
-        """Tombstone + pop + close every bus for ``sandbox_id``, and drop
-        the per-build-session prompt-slot locks. Call from ``terminate``
-        before destroying the container/pod so late subscribes can't race
-        a fresh bus in, and so we don't leak one ``threading.Lock`` per
-        ``(sandbox_id, build_session_id)`` for the api_server's lifetime."""
+        """Tombstone + pop + close every bus for ``sandbox_id``. Call from
+        ``terminate`` before destroying the container/pod so late subscribes
+        can't race a fresh bus in."""
         with self._event_buses_lock:
             self._terminated_sandboxes.add(sandbox_id)
             doomed_keys = [k for k in self._event_buses if k[0] == sandbox_id]
@@ -423,10 +373,6 @@ class _ServeMixin:
                     "[SANDBOX-SERVE] PodEventBus close failed during terminate for %s",
                     sandbox_id,
                 )
-        with self._prompt_locks_meta:
-            stale = [k for k in self._prompt_locks if k[0] == sandbox_id]
-            for k in stale:
-                self._prompt_locks.pop(k, None)
         self._invalidate_serve_connection_info(sandbox_id)
 
     def _send_message_via_serve(

@@ -1,28 +1,10 @@
-"""Tests for ``KubernetesSandboxManager.prompt_slot``.
+"""Unit tests for ``KubernetesSandboxManager.prompt_slot``.
 
-Empirical finding (E2E chaos test, 2026-05-23): opencode-serve's
-``prompt_async`` is fire-and-forget and not concurrent-safe. A second
-POST against a busy session returns 2xx but is silently dropped; the
-second subscriber's bus catches the *first* turn's terminator and emits
-PromptResponse as if turn 2 succeeded, while a phantom user_message gets
-persisted with no assistant reply.
-
-The fix: a per-(sandbox_id, build_session_id) lock, acquired non-
-blocking before user_message persistence. Keying on build_session_id
-(not opencode_session_id) is deliberate — the opencode id can rotate
-mid-turn via the on_opencode_session_resolved callback, and keying on
-it would let concurrent requests in the recovery path acquire
-different locks and bypass serialization. These tests lock the
-contract.
-
-``prompt_slot`` layers a cross-replica ``CacheBackend`` lock under the
-in-process ``threading.Lock``. These are *unit* tests (no external
-services), so the cache is replaced with an in-memory fake; they assert the
-same-pod behaviour and the fail-open-on-cache-error contract. The
-cross-replica behaviour the fake can't prove lives in the external
-dependency unit suite (``test_prompt_slot_distributed.py``).
-
-Bypasses ``_initialize`` (no K8s config needed) — pure lock logic.
+``prompt_slot`` serializes turns per build session via the distributed cache
+lock (opencode-serve's ``prompt_async`` is not concurrent-safe). These run
+hermetically against an in-memory cache fake and assert the
+acquire/refuse/release contract plus fail-open on cache error; the real
+cross-replica proof lives in ``test_prompt_slot_distributed.py``.
 """
 
 from __future__ import annotations

@@ -1,15 +1,8 @@
-"""Cross-replica prompt-slot serialization (distributed lock).
+"""Cross-replica prompt-slot serialization, against a real cache (Redis).
 
-Proves what an in-process test cannot: two manager instances — standing in
-for two ``api_server`` replicas — share one cache, so only the *distributed*
-lock (not each instance's own ``threading.Lock``) can serialize their turns.
-This is the boundary that stops two pods from both POSTing ``prompt_async``
-for one build session and corrupting persisted conversation state.
-
-Requires a real cache (forces the Redis backend).
-
-    python -m dotenv -f .vscode/.env run -- pytest \
-        backend/tests/external_dependency_unit/craft/test_prompt_slot_distributed.py
+Two manager instances stand in for two ``api_server`` replicas sharing one
+cache; the distributed lock must stop both from running a turn for the same
+build session at once — the proof an in-process test can't give.
 """
 
 from __future__ import annotations
@@ -27,8 +20,8 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 
 
 def _make_replica() -> KubernetesSandboxManager:
-    """A manager with only serve-transport state — its own in-process lock map,
-    like a fresh pod. Skips ``_initialize`` so no kube config is needed."""
+    """A fresh manager (its own state, like a separate pod); skips
+    ``_initialize`` so no kube config is needed."""
     m: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     m._init_serve_state()
     return m
@@ -59,17 +52,15 @@ def test_second_replica_refused_then_admitted_after_release(
     replica_a = _make_replica()
     replica_b = _make_replica()
 
-    # Replica A holds the slot for an in-flight turn. A nested `with` keeps it
-    # held while B contends, and guarantees release even if acquisition raises.
+    # A holds the slot; B shares only the cache, so the distributed lock must
+    # refuse it. Nested `with` keeps A held while B contends.
     with replica_a.prompt_slot(sandbox_id, build_session_id) as first:
         assert first is True
-        # Replica B is a different instance with a different in-process lock —
-        # only the distributed lock stands between them, and it must refuse.
         with replica_b.prompt_slot(sandbox_id, build_session_id) as second:
             assert second is False, (
                 "a second replica must be refused while the slot is held"
             )
 
-    # A released → a queued third turn (on either replica) can now proceed.
+    # A released → a queued third turn can now proceed.
     with replica_b.prompt_slot(sandbox_id, build_session_id) as third:
         assert third is True, "slot must be acquirable once the holder releases"
