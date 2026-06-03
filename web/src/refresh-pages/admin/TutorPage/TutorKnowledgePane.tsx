@@ -7,12 +7,14 @@ import { Card } from "@/refresh-components/cards";
 import SourceHierarchyBrowser from "@/sections/knowledge/SourceHierarchyBrowser";
 import { ValidSources } from "@/lib/types";
 import { AttachedDocumentSnapshot } from "@/app/admin/agents/interfaces";
+import TutorInstructorWebsites from "@/refresh-pages/tutor/TutorInstructorWebsites";
 
 // The Virtual Tutor knowledge pane is intentionally narrower than the generic
-// AgentKnowledgePane: tutors are bound to a Canvas course, so the only valid
-// knowledge source is Canvas. We render the Canvas hierarchy browser inline
-// — no source picker, no document sets, no file uploads, no on/off toggle —
-// because the tutor always has Canvas knowledge enabled.
+// AgentKnowledgePane: a tutor's knowledge is its Canvas course plus any public
+// websites the instructor adds for that course. We render the Canvas hierarchy
+// browser inline (no source picker, no document sets, no on/off toggle —
+// Canvas is always enabled) and, when a course is bound, the per-course website
+// manager below it.
 
 interface TutorKnowledgePaneProps {
   selectedDocumentIds: string[];
@@ -26,6 +28,10 @@ interface TutorKnowledgePaneProps {
   // (Canvas not yet indexed, or duplicate course names), we fall back to
   // showing the whole Canvas hierarchy.
   canvasCourseNodeId: number | null;
+  // The LTI `context.id` this tutor is bound to. Required to manage the
+  // course's website connectors; when null (no course bound) the website
+  // manager is hidden.
+  courseId: string | null;
 }
 
 export default function TutorKnowledgePane({
@@ -35,6 +41,7 @@ export default function TutorKnowledgePane({
   onFolderIdsChange,
   initialAttachedDocuments,
   canvasCourseNodeId,
+  courseId,
 }: TutorKnowledgePaneProps) {
   const handleToggleDocument = useCallback(
     (documentId: string) => {
@@ -92,6 +99,8 @@ export default function TutorKnowledgePane({
           />
         </GeneralLayouts.Section>
       </Card>
+
+      {courseId && <TutorInstructorWebsites courseId={courseId} />}
     </GeneralLayouts.Section>
   );
 }

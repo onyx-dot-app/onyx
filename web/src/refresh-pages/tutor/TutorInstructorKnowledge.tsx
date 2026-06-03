@@ -38,8 +38,13 @@ import {
   ConnectorCredentialPairStatus,
 } from "@/app/admin/connector/[ccPairId]/types";
 import TutorTabHeader from "@/refresh-pages/tutor/TutorTabHeader";
+import TutorInstructorWebsites from "@/refresh-pages/tutor/TutorInstructorWebsites";
 
 const CANVAS_STATUS_KEY = "tutor-instructor-canvas-knowledge";
+
+interface TutorInstructorKnowledgeProps {
+  courseId: string | null;
+}
 
 function isCanvasConnectorStatus(
   status: ConnectorIndexingStatusLite | { id: number }
@@ -52,9 +57,7 @@ function formatLastIndexed(lastIndexed: string | null | undefined) {
 }
 
 function formatLastIndexedDetail(lastIndexed: string | null | undefined) {
-  return lastIndexed
-    ? localizeAndPrettify(lastIndexed)
-    : "No index has run yet";
+  return lastIndexed ? localizeAndPrettify(lastIndexed) : "No sync has run yet";
 }
 
 function KnowledgeMetricCard({
@@ -103,7 +106,7 @@ function CanvasConnectorSelector({
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Documents</TableHead>
-              <TableHead>Last Indexed</TableHead>
+              <TableHead>Last Synced</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -143,7 +146,9 @@ function CanvasConnectorSelector({
   );
 }
 
-export default function TutorInstructorKnowledge() {
+export default function TutorInstructorKnowledge({
+  courseId,
+}: TutorInstructorKnowledgeProps) {
   const vectorDbEnabled = useVectorDbEnabled();
   const [selectedCcPairId, setSelectedCcPairId] = useState<number | null>(null);
   const [isStartingReindex, setIsStartingReindex] = useState(false);
@@ -218,7 +223,7 @@ export default function TutorInstructorKnowledge() {
 
   const forceReindexTooltip = canForceReindex
     ? undefined
-    : "Re-indexing is unavailable while this knowledge source is paused, invalid, deleting, or already indexing.";
+    : "Syncing is unavailable while this knowledge source is paused, invalid, deleting, or already syncing.";
 
   const handleForceReindex = useCallback(async () => {
     if (!ccPair || !canForceReindex) return;
@@ -233,14 +238,14 @@ export default function TutorInstructorKnowledge() {
       );
 
       if (result.success) {
-        toast.success("Canvas knowledge re-index started successfully");
+        toast.success("Canvas knowledge sync started successfully");
       } else {
-        toast.error(result.message || "Failed to start re-indexing");
+        toast.error(result.message || "Failed to start syncing");
       }
       await refreshCurrent();
     } catch (error) {
-      console.error("Failed to start Canvas knowledge re-index", error);
-      toast.error("Failed to start re-indexing");
+      console.error("Failed to start Canvas knowledge sync", error);
+      toast.error("Failed to start syncing");
     } finally {
       setIsStartingReindex(false);
     }
@@ -315,18 +320,7 @@ export default function TutorInstructorKnowledge() {
       <TutorTabHeader
         icon={SvgBookOpen}
         title="Knowledge"
-        description={ccPair.name}
-        rightChildren={
-          <Button
-            prominence="secondary"
-            icon={SvgRefreshCw}
-            disabled={!canForceReindex || isStartingReindex}
-            tooltip={forceReindexTooltip}
-            onClick={() => void handleForceReindex()}
-          >
-            Sync Canvas
-          </Button>
-        }
+        description="Add and manage the knowledge your tutors can reference."
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -340,19 +334,28 @@ export default function TutorInstructorKnowledge() {
           {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
             <div className="mt-6">
               <Callout type="warning" title="Knowledge source needs attention">
-                This Canvas knowledge source cannot be re-indexed until its
-                setup is fixed.
+                This Canvas knowledge source cannot be synced until its setup is
+                fixed.
               </Callout>
             </div>
           )}
 
-          <Title className="mb-2 mt-6" size="md">
-            Knowledge Status
-          </Title>
+          <div className="mb-2 mt-6 flex items-center justify-between gap-4">
+            <Title size="md">Canvas</Title>
+            <Button
+              prominence="secondary"
+              icon={SvgRefreshCw}
+              disabled={!canForceReindex || isStartingReindex}
+              tooltip={forceReindexTooltip}
+              onClick={() => void handleForceReindex()}
+            >
+              Sync Canvas
+            </Button>
+          </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <KnowledgeMetricCard
-              label="Documents Indexed"
+              label="Documents Synced"
               value={ccPair.num_docs_indexed.toLocaleString()}
               detail={
                 ccPair.status ===
@@ -365,7 +368,7 @@ export default function TutorInstructorKnowledge() {
             />
 
             <KnowledgeMetricCard
-              label="Last Indexed"
+              label="Last Synced"
               value={formatLastIndexed(ccPair.last_indexed)}
               detail={formatLastIndexedDetail(ccPair.last_indexed)}
             />
@@ -381,11 +384,13 @@ export default function TutorInstructorKnowledge() {
               }
               detail={
                 ccPair.indexing
-                  ? "Indexing is currently running"
+                  ? "Syncing is currently running"
                   : "Ready for tutor retrieval"
               }
             />
           </div>
+
+          {courseId && <TutorInstructorWebsites courseId={courseId} />}
         </div>
       </div>
     </div>

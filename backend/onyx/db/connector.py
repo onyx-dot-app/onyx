@@ -117,6 +117,36 @@ def fetch_canvas_cc_pair_for_lti_course(
     return None
 
 
+def fetch_lti_course_website_cc_pairs(
+    db_session: Session,
+    lti_context_id: str,
+) -> list[ConnectorCredentialPair]:
+    """Return every WEB connector cc-pair an instructor added for an LTI course.
+
+    Web course connectors are tagged with `lti_context_id` in their
+    `connector_specific_config` (see the LTI websites endpoints). A course can
+    have many of them, unlike the single Canvas connector.
+    """
+    stmt = (
+        select(ConnectorCredentialPair)
+        .join(Connector)
+        .options(joinedload(ConnectorCredentialPair.connector))
+        .where(Connector.source == DocumentSource.WEB)
+        .order_by(ConnectorCredentialPair.id.asc())
+    )
+
+    cc_pairs = db_session.scalars(stmt).unique().all()
+    return [
+        cc_pair
+        for cc_pair in cc_pairs
+        if cc_pair.connector is not None
+        and str(
+            (cc_pair.connector.connector_specific_config or {}).get("lti_context_id")
+        )
+        == lti_context_id
+    ]
+
+
 def connector_by_name_source_exists(
     connector_name: str, source: DocumentSource, db_session: Session
 ) -> bool:

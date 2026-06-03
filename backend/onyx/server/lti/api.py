@@ -12,6 +12,7 @@ through to the editor and picker views via URL params.
 
 import secrets
 import uuid
+from datetime import datetime
 from urllib.parse import urlencode
 from urllib.parse import urlparse
 
@@ -49,18 +50,27 @@ from onyx.configs.lti_configs import LTI_JWKS_URL
 from onyx.connectors.canvas.client import CanvasApiClient
 from onyx.connectors.canvas.connector import CanvasCourse
 from onyx.connectors.models import InputType
+from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
 from onyx.db.connector import connector_by_name_source_exists
 from onyx.db.connector import create_connector
 from onyx.db.connector import fetch_canvas_cc_pair_for_lti_course
+from onyx.db.connector import fetch_lti_course_website_cc_pairs
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import add_credential_to_connector
+from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import (
+    update_connector_credential_pair_from_id,
+)
 from onyx.db.credentials import create_credential
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
+from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
+from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import User
 from onyx.db.persona import get_tutor_persona_snapshots_for_course
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -116,6 +126,34 @@ class LtiCanvasConnectorSetupResponse(BaseModel):
     connector_id: int
     credential_id: int
     created: bool
+
+
+# Crawl strategies an instructor can pick for a course website. We deliberately
+# exclude UPLOAD (not a UI flow, and unsupported in multi-tenant cloud).
+_ALLOWED_WEBSITE_CRAWL_TYPES = {
+    WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value,
+    WEB_CONNECTOR_VALID_SETTINGS.SINGLE.value,
+    WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value,
+}
+
+
+class LtiCourseWebsiteCreateRequest(BaseModel):
+    url: str = Field(min_length=1)
+    crawl_type: str = WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value
+
+
+class LtiCourseWebsiteSnapshot(BaseModel):
+    cc_pair_id: int
+    connector_id: int
+    credential_id: int
+    name: str
+    base_url: str
+    crawl_type: str
+    cc_pair_status: ConnectorCredentialPairStatus
+    indexing_status: str | None
+    total_docs_indexed: int
+    has_indexed_documents: bool
+    last_successful_index_time: datetime | None
 
 
 def _origin_from_url(raw_url: str | None) -> str | None:
@@ -386,6 +424,54 @@ def _build_canvas_connector_name(
     return f"{name_with_context} {uuid.uuid4().hex[:8]}"
 
 
+class _CcPairIndexingStatus(BaseModel):
+    indexing_status: str | None
+    total_docs_indexed: int
+    has_indexed_documents: bool
+
+
+def _cc_pair_indexing_status(
+    cc_pair: ConnectorCredentialPair,
+    db_session: Session,
+) -> _CcPairIndexingStatus:
+    """Shared indexing-status assembly for a single cc-pair.
+
+    Used by both the Canvas connector status and the per-website snapshot so
+    the doc-count / latest-attempt logic lives in one place.
+    """
+    latest_attempt = get_latest_index_attempt_for_cc_pair_id(
+        db_session=db_session,
+        connector_credential_pair_id=cc_pair.id,
+        secondary_index=False,
+        only_finished=False,
+    )
+    indexed_document_counts = get_document_counts_for_cc_pairs(
+        db_session=db_session,
+        cc_pairs=[
+            ConnectorCredentialPairIdentifier(
+                connector_id=cc_pair.connector_id,
+                credential_id=cc_pair.credential_id,
+            )
+        ],
+    )
+    indexed_document_count = (
+        indexed_document_counts[0][2] if indexed_document_counts else 0
+    )
+    latest_attempt_docs_indexed = (
+        latest_attempt.total_docs_indexed if latest_attempt else 0
+    ) or 0
+    total_docs_indexed = max(
+        cc_pair.total_docs_indexed or 0,
+        latest_attempt_docs_indexed,
+        indexed_document_count,
+    )
+    return _CcPairIndexingStatus(
+        indexing_status=latest_attempt.status if latest_attempt else None,
+        total_docs_indexed=total_docs_indexed,
+        has_indexed_documents=indexed_document_count > 0,
+    )
+
+
 def _build_lti_course_connector_status(
     *,
     course_id: str,
@@ -411,42 +497,17 @@ def _build_lti_course_connector_status(
     }
 
     if cc_pair is not None:
-        latest_attempt = get_latest_index_attempt_for_cc_pair_id(
-            db_session=db_session,
-            connector_credential_pair_id=cc_pair.id,
-            secondary_index=False,
-            only_finished=False,
-        )
-        indexed_document_counts = get_document_counts_for_cc_pairs(
-            db_session=db_session,
-            cc_pairs=[
-                ConnectorCredentialPairIdentifier(
-                    connector_id=cc_pair.connector_id,
-                    credential_id=cc_pair.credential_id,
-                )
-            ],
-        )
-        indexed_document_count = (
-            indexed_document_counts[0][2] if indexed_document_counts else 0
-        )
-        latest_attempt_docs_indexed = (
-            latest_attempt.total_docs_indexed if latest_attempt else 0
-        ) or 0
-        total_docs_indexed = max(
-            cc_pair.total_docs_indexed or 0,
-            latest_attempt_docs_indexed,
-            indexed_document_count,
-        )
+        indexing_status = _cc_pair_indexing_status(cc_pair, db_session)
         status.update(
             {
                 "cc_pair_id": cc_pair.id,
                 "connector_id": cc_pair.connector_id,
                 "credential_id": cc_pair.credential_id,
                 "cc_pair_status": cc_pair.status,
-                "indexing_status": latest_attempt.status if latest_attempt else None,
+                "indexing_status": indexing_status.indexing_status,
                 "indexing_trigger": cc_pair.indexing_trigger,
-                "total_docs_indexed": total_docs_indexed,
-                "has_indexed_documents": indexed_document_count > 0,
+                "total_docs_indexed": indexing_status.total_docs_indexed,
+                "has_indexed_documents": indexing_status.has_indexed_documents,
                 "last_successful_index_time": cc_pair.last_successful_index_time,
             }
         )
@@ -598,6 +659,241 @@ def setup_lti_course_canvas_connector(
         connector_id=connector_id,
         credential_id=credential.id,
         created=True,
+    )
+
+
+def _resolve_lti_course_user_group_id(
+    *,
+    lti_context_id: str,
+    db_session: Session,
+) -> int:
+    """Resolve the Canvas-managed UserGroup id that scopes a course's websites.
+
+    Websites are scoped to the course's roster-mirroring group (created by the
+    LTI student-group-sync). The group must exist — we deliberately refuse to
+    create a website connector otherwise rather than fall back to a public /
+    unscoped one, which would leak course content to other classes. Also
+    requires EE (group-based access control); on non-EE the lookup is a no-op
+    returning None, which surfaces the same clear error.
+    """
+    fetch_user_group_by_lti_context_id = fetch_ee_implementation_or_noop(
+        "onyx.db.user_group", "fetch_user_group_by_lti_context_id", None
+    )
+    user_group = fetch_user_group_by_lti_context_id(
+        db_session=db_session,
+        lti_context_id=lti_context_id,
+    )
+    if user_group is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "No class group exists yet for this course, so a website cannot be "
+            "scoped to it. Make sure student group sync is enabled.",
+        )
+    return user_group.id
+
+
+def _website_snapshot(
+    cc_pair: ConnectorCredentialPair,
+    db_session: Session,
+) -> LtiCourseWebsiteSnapshot:
+    config = cc_pair.connector.connector_specific_config or {}
+    indexing_status = _cc_pair_indexing_status(cc_pair, db_session)
+    return LtiCourseWebsiteSnapshot(
+        cc_pair_id=cc_pair.id,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        name=cc_pair.connector.name,
+        base_url=str(config.get("base_url", "")),
+        crawl_type=str(
+            config.get(
+                "web_connector_type",
+                WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value,
+            )
+        ),
+        cc_pair_status=cc_pair.status,
+        indexing_status=indexing_status.indexing_status,
+        total_docs_indexed=indexing_status.total_docs_indexed,
+        has_indexed_documents=indexing_status.has_indexed_documents,
+        last_successful_index_time=cc_pair.last_successful_index_time,
+    )
+
+
+@router.get("/course/{course_id}/websites")
+def list_lti_course_websites(
+    course_id: str = Path(..., min_length=1),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> list[LtiCourseWebsiteSnapshot]:
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can view course websites",
+        )
+
+    cc_pairs = fetch_lti_course_website_cc_pairs(
+        db_session=db_session,
+        lti_context_id=course_id,
+    )
+    return [_website_snapshot(cc_pair, db_session) for cc_pair in cc_pairs]
+
+
+@router.post("/course/{course_id}/websites")
+def add_lti_course_website(
+    create_request: LtiCourseWebsiteCreateRequest,
+    course_id: str = Path(..., min_length=1),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> LtiCourseWebsiteSnapshot:
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can add course websites",
+        )
+
+    crawl_type = create_request.crawl_type
+    if crawl_type not in _ALLOWED_WEBSITE_CRAWL_TYPES:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Unsupported crawl type: {crawl_type}",
+        )
+
+    base_url = create_request.url.strip()
+    parsed_url = urlparse(base_url)
+    if parsed_url.scheme not in ("http", "https") or not parsed_url.netloc:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Website URL must be a valid http(s) URL",
+        )
+
+    # Resolve the course's roster-mirroring group BEFORE creating anything, so a
+    # missing group fails cleanly with no orphaned connector and no public leak.
+    course_group_id = _resolve_lti_course_user_group_id(
+        lti_context_id=course_id,
+        db_session=db_session,
+    )
+
+    connector_name = (
+        f"Course Website ({course_id}) {parsed_url.netloc} {uuid.uuid4().hex[:8]}"
+    )
+    try:
+        connector_response = create_connector(
+            db_session=db_session,
+            connector_data=ConnectorBase(
+                name=connector_name,
+                source=DocumentSource.WEB,
+                input_type=InputType.LOAD_STATE,
+                connector_specific_config={
+                    "base_url": base_url,
+                    "web_connector_type": crawl_type,
+                    "lti_context_id": course_id,
+                },
+            ),
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.DUPLICATE_RESOURCE, str(e)) from e
+
+    connector_id = int(connector_response.id)
+    # The web connector takes no real credentials; use an empty one like the
+    # admin mock-credential flow.
+    credential = create_credential(
+        credential_data=CredentialBase(
+            credential_json={},
+            admin_public=False,
+            source=DocumentSource.WEB,
+            name=f"{connector_name} credential",
+            curator_public=False,
+        ),
+        user=user,
+        db_session=db_session,
+    )
+
+    # PRIVATE + the course group => only this class can retrieve the docs.
+    cc_pair_response = add_credential_to_connector(
+        db_session=db_session,
+        user=user,
+        connector_id=connector_id,
+        credential_id=credential.id,
+        cc_pair_name=connector_name,
+        access_type=AccessType.PRIVATE,
+        groups=[course_group_id],
+    )
+    if not cc_pair_response.success or cc_pair_response.data is None:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            cc_pair_response.message,
+        )
+
+    cc_pair_id = int(cc_pair_response.data)
+    mark_ccpair_with_indexing_trigger(
+        cc_pair_id=cc_pair_id,
+        indexing_mode=IndexingMode.REINDEX,
+        db_session=db_session,
+    )
+    client_app.send_task(
+        OnyxCeleryTask.CHECK_FOR_INDEXING,
+        priority=OnyxCeleryPriority.HIGH,
+        kwargs={"tenant_id": get_current_tenant_id()},
+        expires=_CHECK_FOR_INDEXING_EXPIRES_SECONDS,
+    )
+
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+        eager_load_connector=True,
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "Website connector was created but could not be loaded",
+        )
+    return _website_snapshot(cc_pair, db_session)
+
+
+@router.delete("/course/{course_id}/websites/{cc_pair_id}")
+def delete_lti_course_website(
+    course_id: str = Path(..., min_length=1),
+    cc_pair_id: int = Path(...),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can remove course websites",
+        )
+
+    # Only allow deleting a website that actually belongs to this course — guards
+    # against an instructor of another course passing a foreign cc_pair_id.
+    course_website_cc_pairs = fetch_lti_course_website_cc_pairs(
+        db_session=db_session,
+        lti_context_id=course_id,
+    )
+    if not any(cc_pair.id == cc_pair_id for cc_pair in course_website_cc_pairs):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "No course website found with that id for this course",
+        )
+
+    # Standard connector deletion path: cancel indexing, mark DELETING, and let
+    # the background task remove the docs from the index.
+    cancel_indexing_attempts_for_ccpair(
+        cc_pair_id=cc_pair_id,
+        db_session=db_session,
+        include_secondary_index=True,
+    )
+    update_connector_credential_pair_from_id(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+        status=ConnectorCredentialPairStatus.DELETING,
+    )
+    db_session.commit()
+    client_app.send_task(
+        OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
+        priority=OnyxCeleryPriority.HIGH,
+        kwargs={"tenant_id": get_current_tenant_id()},
     )
 
 

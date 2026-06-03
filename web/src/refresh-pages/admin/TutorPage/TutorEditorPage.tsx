@@ -568,6 +568,11 @@ export default function TutorEditorPage({
                           existingTutor?.attached_documents
                         }
                         canvasCourseNodeId={ltiCanvasCourseNodeId}
+                        courseId={
+                          existingTutor
+                            ? existingCourseLabel?.name ?? null
+                            : ltiContextId
+                        }
                       />
 
                       <Separator noPadding />

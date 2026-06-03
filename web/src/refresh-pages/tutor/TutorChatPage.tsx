@@ -535,7 +535,9 @@ export default function TutorChatPage() {
   }
 
   if (activeTutorTab === "knowledge" && projectId !== null) {
-    return renderWithInstructorShell(<TutorInstructorKnowledge />);
+    return renderWithInstructorShell(
+      <TutorInstructorKnowledge courseId={ltiContextId} />
+    );
   }
 
   // No agentId chosen yet — render the picker if we know the course context,
