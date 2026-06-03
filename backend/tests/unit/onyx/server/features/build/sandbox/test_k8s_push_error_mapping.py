@@ -22,7 +22,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import NoEncryption
 from cryptography.hazmat.primitives.serialization import PrivateFormat
-from kubernetes.client.rest import ApiException
 
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     _build_targz,
@@ -72,24 +71,20 @@ def _push_private_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ksm, "_push_public_key_b64", None, raising=False)
 
 
-def _make_manager(
-    *, pod_ip: str | None = "10.0.0.1", read_pod_exc: Exception | None = None
-) -> KubernetesSandboxManager:
+def _make_manager() -> KubernetesSandboxManager:
     """Construct a manager without invoking _initialize (which needs a K8s config).
 
-    The only attributes write_files_to_sandbox touches are ``_core_api`` and
-    ``_namespace``. Bypass ``__new__`` cache with object.__new__ so each test
-    gets a fresh instance (singleton would otherwise leak between tests).
+    ``write_files_to_sandbox`` resolves hosts via ``_sandbox_pod_hosts`` (the
+    Service FQDN plus the pod IP read from ``read_namespaced_pod``), then POSTs
+    over the mocked ``httpx.Client``. Bypass ``__new__`` cache with
+    object.__new__ so each test gets a fresh instance.
     """
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
 
     core_api = MagicMock()
-    if read_pod_exc is not None:
-        core_api.read_namespaced_pod.side_effect = read_pod_exc
-    else:
-        pod_obj = MagicMock()
-        pod_obj.status.pod_ip = pod_ip
-        core_api.read_namespaced_pod.return_value = pod_obj
+    pod_obj = MagicMock()
+    pod_obj.status.pod_ip = "10.0.0.1"
+    core_api.read_namespaced_pod.return_value = pod_obj
 
     mgr._core_api = core_api  # type: ignore[attr-defined]
     mgr._namespace = "sandbox-test"  # type: ignore[attr-defined]
@@ -130,46 +125,6 @@ def _sandbox_id() -> UUID:
 
 def _files() -> FileSet:
     return {"my-skill/SKILL.md": b"# hello\n"}
-
-
-# ---------------------------------------------------------------------------
-# Pod-read failure modes
-# ---------------------------------------------------------------------------
-
-
-def test_pod_404_raises_fatal_write_error() -> None:
-    mgr = _make_manager(read_pod_exc=ApiException(status=404, reason="Not Found"))
-    with pytest.raises(FatalWriteError, match="not found"):
-        mgr.write_files_to_sandbox(
-            sandbox_id=_sandbox_id(),
-            mount_path="/workspace/managed/skills",
-            files=_files(),
-        )
-
-
-def test_pod_has_no_ip_yet_raises_retriable() -> None:
-    mgr = _make_manager(pod_ip=None)
-    with pytest.raises(RetriableWriteError, match="no IP"):
-        mgr.write_files_to_sandbox(
-            sandbox_id=_sandbox_id(),
-            mount_path="/workspace/managed/skills",
-            files=_files(),
-        )
-
-
-def test_pod_non_404_api_error_raises_retriable() -> None:
-    """500 from the K8s API is transient -> retriable.
-
-    Follows the same contract; kept under the same file because it shares
-    the read-pod seam.
-    """
-    mgr = _make_manager(read_pod_exc=ApiException(status=500, reason="Server Error"))
-    with pytest.raises(RetriableWriteError, match="Failed to read pod"):
-        mgr.write_files_to_sandbox(
-            sandbox_id=_sandbox_id(),
-            mount_path="/workspace/managed/skills",
-            files=_files(),
-        )
 
 
 # ---------------------------------------------------------------------------

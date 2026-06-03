@@ -43,7 +43,6 @@ import os
 import re
 import secrets
 import shlex
-import socket
 import tarfile
 import threading
 import time
@@ -154,21 +153,6 @@ _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-t
 
 _PROXY_DNS_RETRY_ATTEMPTS = 5
 _PROXY_DNS_RETRY_BACKOFF_S = 0.5
-
-
-def _resolve_proxy_ip() -> str:
-    last_err: OSError | None = None
-    for attempt in range(_PROXY_DNS_RETRY_ATTEMPTS):
-        try:
-            return socket.gethostbyname(SANDBOX_PROXY_HOST)
-        except OSError as e:
-            last_err = e
-            if attempt < _PROXY_DNS_RETRY_ATTEMPTS - 1:
-                time.sleep(_PROXY_DNS_RETRY_BACKOFF_S * (2**attempt))
-    raise RuntimeError(
-        f"failed to resolve SANDBOX_PROXY_HOST={SANDBOX_PROXY_HOST!r} "
-        f"after {_PROXY_DNS_RETRY_ATTEMPTS} attempts: {last_err}"
-    )
 
 
 # Loopback only: the firewall permits nothing else to bypass the proxy, and the
@@ -767,7 +751,7 @@ class KubernetesSandboxManager(SandboxManager):
         # kubelet injects hostAliases into every container's /etc/hosts;
         # initContainer mutations don't propagate, so we set it here.
         host_aliases = [
-            client.V1HostAlias(ip=_resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
+            client.V1HostAlias(ip=self._resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
         ]
 
         pod_spec = client.V1PodSpec(
@@ -841,12 +825,16 @@ class KubernetesSandboxManager(SandboxManager):
 
         service_name = self._get_service_name(sandbox_id_str)
 
-        # Build port list: opencode-serve + all session Next.js ports
         ports = [
             client.V1ServicePort(
                 name="opencode",
                 port=OPENCODE_SERVE_PORT,
                 target_port=OPENCODE_SERVE_PORT,
+            ),
+            client.V1ServicePort(
+                name="push-daemon",
+                port=PUSH_DAEMON_PORT,
+                target_port=PUSH_DAEMON_PORT,
             ),
         ]
 
@@ -1762,13 +1750,7 @@ echo "Session cleanup complete"
 
         Returns None if there are no outputs to snapshot.
         """
-        pod_name = self._get_pod_name(str(sandbox_id))
         snapshot_id = uuid4()
-
-        try:
-            pod_ip = self._get_pod_ip(pod_name)
-        except (FatalWriteError, RetriableWriteError) as e:
-            raise RuntimeError(f"Failed to create snapshot: {e}") from e
 
         body = (
             SnapshotCreateRequest(
@@ -1783,7 +1765,7 @@ echo "Session cleanup complete"
 
         try:
             resp = self._post_to_sidecar(
-                pod_ip, "/snapshot/create", body, timeout=300.0
+                sandbox_id, "/snapshot/create", body, timeout=300.0
             )
         except httpx.TransportError as e:
             raise RuntimeError(f"Snapshot create request failed: {e}") from e
@@ -1939,11 +1921,6 @@ echo "Session cleanup complete"
         session_path = f"/workspace/sessions/{session_id}"
         safe_session_path = shlex.quote(session_path)
 
-        try:
-            pod_ip = self._get_pod_ip(pod_name)
-        except (FatalWriteError, RetriableWriteError) as e:
-            raise RuntimeError(f"Failed to restore snapshot: {e}") from e
-
         body = (
             SnapshotRestoreRequest(
                 session_id=session_id,
@@ -1957,7 +1934,7 @@ echo "Session cleanup complete"
 
         try:
             resp = self._post_to_sidecar(
-                pod_ip, "/snapshot/restore", body, timeout=300.0
+                sandbox_id, "/snapshot/restore", body, timeout=300.0
             )
         except httpx.TransportError as e:
             raise RuntimeError(f"Snapshot restore request failed: {e}") from e
@@ -2050,20 +2027,16 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         logger.info("Session configuration files regenerated")
 
     def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
-        """Check if the sidecar's /health endpoint responds."""
-        pod_name = self._get_pod_name(str(sandbox_id))
-        try:
-            pod_ip = self._get_pod_ip(pod_name)
-        except (FatalWriteError, RetriableWriteError):
-            return False
-
-        url = f"http://{pod_ip}:{PUSH_DAEMON_PORT}/health"
-        try:
-            with httpx.Client(timeout=timeout) as http_client:
-                resp = http_client.get(url)
-            return resp.status_code == 200
-        except httpx.TransportError:
-            return False
+        """Check the sidecar's /health, trying each ``_sandbox_pod_hosts``."""
+        for host in self._sandbox_pod_hosts(sandbox_id):
+            url = f"http://{host}:{PUSH_DAEMON_PORT}/health"
+            try:
+                with httpx.Client(timeout=timeout) as http_client:
+                    if http_client.get(url).status_code == 200:
+                        return True
+            except httpx.TransportError:
+                continue
+        return False
 
     def _load_serve_connection_info(
         self, sandbox_id: UUID
@@ -2759,6 +2732,35 @@ fi
             logger.warning("Failed to get upload stats: %s", e)
             return 0, 0
 
+    def _resolve_proxy_ip(self) -> str:
+        """Resolve SANDBOX_PROXY_HOST to a pod-routable IP for the egress
+        hostAlias. Reads the Service ClusterIP from the k8s API, not the
+        api-server's OS resolver, so it stays correct under telepresence (whose
+        resolver returns a synthetic, pod-unroutable IP). A numeric host (CI
+        passes the ClusterIP directly) is returned unchanged."""
+        host = SANDBOX_PROXY_HOST
+        if re.match(r"^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$", host):
+            return host
+        name, _, rest = host.partition(".")
+        namespace = rest.partition(".")[0] or self._namespace
+        last_err: Exception | None = None
+        for attempt in range(_PROXY_DNS_RETRY_ATTEMPTS):
+            try:
+                cluster_ip = self._core_api.read_namespaced_service(
+                    name=name, namespace=namespace
+                ).spec.cluster_ip
+                if cluster_ip and cluster_ip != "None":
+                    return cluster_ip
+                last_err = RuntimeError(f"Service {name} has no ClusterIP")
+            except ApiException as e:
+                last_err = e
+            if attempt < _PROXY_DNS_RETRY_ATTEMPTS - 1:
+                time.sleep(_PROXY_DNS_RETRY_BACKOFF_S * (2**attempt))
+        raise RuntimeError(
+            f"failed to resolve proxy ClusterIP for SANDBOX_PROXY_HOST={host!r} "
+            f"after {_PROXY_DNS_RETRY_ATTEMPTS} attempts: {last_err}"
+        )
+
     def _get_pod_ip(self, pod_name: str) -> str:
         """Read pod IP. Raises FatalWriteError on 404, RetriableWriteError otherwise."""
         try:
@@ -2776,23 +2778,40 @@ fi
             raise RetriableWriteError(f"Pod {pod_name} has no IP yet")
         return pod_ip
 
+    def _sandbox_pod_hosts(self, sandbox_id: UUID) -> list[str]:
+        """Hosts to reach the pod sidecar, in preference order: Service FQDN
+        (routes in prod + telepresence), then raw pod IP (out-of-cluster CI,
+        which routes pod IPs but has no cluster DNS)."""
+        service_name = self._get_service_name(str(sandbox_id))
+        hosts = [f"{service_name}.{self._namespace}.svc.cluster.local"]
+        try:
+            hosts.append(self._get_pod_ip(self._get_pod_name(str(sandbox_id))))
+        except (FatalWriteError, RetriableWriteError):
+            pass
+        return hosts
+
     def _post_to_sidecar(
-        self, pod_ip: str, endpoint_path: str, body: bytes, timeout: float = 30.0
+        self, sandbox_id: UUID, endpoint_path: str, body: bytes, timeout: float = 30.0
     ) -> httpx.Response:
-        """POST a signed JSON request to a sidecar endpoint."""
+        """POST a signed JSON request to the sidecar, trying each
+        ``_sandbox_pod_hosts`` until one connects; re-raises the last transport
+        error if none do."""
         sha256_hex = hashlib.sha256(body).hexdigest()
         sig_b64, ts = _sign_sidecar_request(endpoint_path, sha256_hex)
-        url = f"http://{pod_ip}:{PUSH_DAEMON_PORT}{endpoint_path}"
-        with httpx.Client(timeout=timeout) as http_client:
-            return http_client.post(
-                url,
-                content=body,
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Push-Signature": sig_b64,
-                    "X-Push-Timestamp": ts,
-                },
-            )
+        headers = {
+            "Content-Type": "application/json",
+            "X-Push-Signature": sig_b64,
+            "X-Push-Timestamp": ts,
+        }
+        last_exc: httpx.TransportError | None = None
+        for host in self._sandbox_pod_hosts(sandbox_id):
+            url = f"http://{host}:{PUSH_DAEMON_PORT}{endpoint_path}"
+            try:
+                with httpx.Client(timeout=timeout) as http_client:
+                    return http_client.post(url, content=body, headers=headers)
+            except httpx.TransportError as e:
+                last_exc = e
+        raise last_exc or httpx.ConnectError("no sandbox pod host reachable")
 
     def write_files_to_sandbox(
         self,
@@ -2801,33 +2820,37 @@ fi
         mount_path: str,
         files: FileSet,
     ) -> None:
-        """Build tar.gz, POST to in-pod daemon."""
+        """Build tar.gz, POST to the in-pod daemon, trying each
+        ``_sandbox_pod_hosts`` until one connects."""
         pod_name = self._get_pod_name(sandbox_id)
-        pod_ip = self._get_pod_ip(pod_name)
-
         tar_bytes, sha256_hex = _build_targz(files)
         sig_b64, ts = _sign_sidecar_request(mount_path, sha256_hex)
+        headers = {
+            "Content-Type": "application/gzip",
+            "X-Bundle-Sha256": sha256_hex,
+            "X-Push-Signature": sig_b64,
+            "X-Push-Timestamp": ts,
+        }
 
-        url = f"http://{pod_ip}:{PUSH_DAEMON_PORT}/push"
-        try:
-            with httpx.Client(timeout=30.0) as http_client:
-                resp = http_client.post(
-                    url,
-                    params={"mount_path": mount_path},
-                    content=tar_bytes,
-                    headers={
-                        "Content-Type": "application/gzip",
-                        "X-Bundle-Sha256": sha256_hex,
-                        "X-Push-Signature": sig_b64,
-                        "X-Push-Timestamp": ts,
-                    },
-                )
-        except httpx.TransportError as e:
-            raise RetriableWriteError(f"Push to {pod_name} failed: {e}") from e
-
-        if resp.status_code == 200:
-            return
-        err = f"{pod_name}: {resp.status_code} {resp.text}"
-        if resp.status_code >= 500:
-            raise RetriableWriteError(err)
-        raise FatalWriteError(err)
+        last_exc: httpx.TransportError | None = None
+        for host in self._sandbox_pod_hosts(sandbox_id):
+            url = f"http://{host}:{PUSH_DAEMON_PORT}/push"
+            try:
+                with httpx.Client(timeout=30.0) as http_client:
+                    resp = http_client.post(
+                        url,
+                        params={"mount_path": mount_path},
+                        content=tar_bytes,
+                        headers=headers,
+                    )
+            except httpx.TransportError as e:
+                last_exc = e
+                continue
+            # Reached the daemon; map status, don't try other hosts.
+            if resp.status_code == 200:
+                return
+            err = f"{pod_name}: {resp.status_code} {resp.text}"
+            if resp.status_code >= 500:
+                raise RetriableWriteError(err)
+            raise FatalWriteError(err)
+        raise RetriableWriteError(f"Push to {pod_name} failed: {last_exc}")

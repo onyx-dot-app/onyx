@@ -50,7 +50,11 @@ def _push_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ksm, "_push_private_key", None, raising=False)
     monkeypatch.setattr(ksm, "_push_public_key_b64", None, raising=False)
     monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "sandbox-proxy.onyx.svc")
-    monkeypatch.setattr(ksm, "_resolve_proxy_ip", lambda: _TEST_PROXY_IP)
+    monkeypatch.setattr(
+        ksm.KubernetesSandboxManager,
+        "_resolve_proxy_ip",
+        lambda _self: _TEST_PROXY_IP,
+    )
 
 
 def _build_pod() -> client.V1Pod:
