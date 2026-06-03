@@ -240,13 +240,17 @@ def update_external_app_admin(
         db_session=db_session,
         external_app_id=external_app_id,
         app_type=app.app_type,
-        name=request.name,
-        description=request.description,
-        enabled=request.enabled,
-        # Gateway config is Onyx-owned for managed built-ins; drop it.
-        upstream_url_patterns=None if managed else request.upstream_url_patterns,
-        auth_template=None if managed else request.auth_template,
-        organization_credentials=None if managed else request.organization_credentials,
+        name=none_as_unset(request.name),
+        description=none_as_unset(request.description),
+        enabled=none_as_unset(request.enabled),
+        # Gateway config is Onyx-owned for managed built-ins; leave it untouched.
+        upstream_url_patterns=(
+            UNSET if managed else none_as_unset(request.upstream_url_patterns)
+        ),
+        auth_template=UNSET if managed else none_as_unset(request.auth_template),
+        organization_credentials=(
+            UNSET if managed else none_as_unset(request.organization_credentials)
+        ),
         action_policies=action_policies,
     )
     # Push before commit so a push failure rolls back the change.
