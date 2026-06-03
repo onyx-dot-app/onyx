@@ -42,6 +42,7 @@ from onyx.db.models import UserRole
 from onyx.db.permissions import recompute_permissions_for_group__no_commit
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import fetch_user_by_id
+from onyx.db.users import get_user_by_email
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -481,11 +482,18 @@ def _add_user_group__cc_pair_relationships__no_commit(
     return relationships
 
 
-def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserGroup:
+def insert_user_group(
+    db_session: Session,
+    user_group: UserGroupCreate,
+    lti_context_id: str | None = None,
+    lti_nrps_url: str | None = None,
+) -> UserGroup:
     db_user_group = UserGroup(
         name=user_group.name,
         time_last_modified_by_user=func.now(),
         is_up_to_date=DISABLE_VECTOR_DB,
+        lti_context_id=lti_context_id,
+        lti_nrps_url=lti_nrps_url,
     )
     db_session.add(db_user_group)
     db_session.flush()  # give the group an ID
@@ -996,3 +1004,218 @@ def set_group_permission__no_commit(
 
     db_session.flush()
     recompute_permissions_for_group__no_commit(group_id, db_session)
+
+
+# ---------------------------------------------------------------------------
+# LTI (Canvas) course → UserGroup mirroring
+#
+# A group whose `lti_context_id` is non-null is "Canvas-managed": its name and
+# membership are owned by the Canvas course roster and overwritten on each sync.
+# ---------------------------------------------------------------------------
+
+
+def fetch_user_group_by_lti_context_id(
+    db_session: Session, lti_context_id: str
+) -> UserGroup | None:
+    return db_session.scalar(
+        select(UserGroup).where(UserGroup.lti_context_id == lti_context_id)
+    )
+
+
+def fetch_lti_managed_user_groups(db_session: Session) -> Sequence[UserGroup]:
+    """Return every Canvas-managed group (non-null lti_context_id)."""
+    return (
+        db_session.scalars(
+            select(UserGroup).where(UserGroup.lti_context_id.isnot(None))
+        )
+        .unique()
+        .all()
+    )
+
+
+def _resolve_lti_group_name(
+    db_session: Session, desired_name: str, lti_context_id: str
+) -> str:
+    """Pick a unique group name, since UserGroup.name is unique.
+
+    Prefers the Canvas course title; on collision with a different group,
+    disambiguates with the stable context id.
+    """
+    existing = db_session.scalar(
+        select(UserGroup).where(UserGroup.name == desired_name)
+    )
+    if existing is None or existing.lti_context_id == lti_context_id:
+        return desired_name
+    return f"{desired_name} ({lti_context_id})"
+
+
+def ensure_lti_user_group(
+    db_session: Session,
+    lti_context_id: str,
+    course_title: str | None,
+    nrps_url: str | None,
+    initial_user_ids: list[UUID] | None = None,
+) -> UserGroup:
+    """Create or fetch the Canvas-managed group for a course.
+
+    Canvas is the source of truth for the name: on an existing group we
+    overwrite the name back to the current course title and refresh the NRPS
+    URL if the launch supplied a newer one.
+
+    `initial_user_ids` seeds membership at creation time only. Seeding here (vs.
+    a follow-up `add_users_to_user_group`) is what lets the launch flow add the
+    launching user immediately -- a freshly created group is not yet
+    `is_up_to_date`, so it would otherwise reject edits until the next Vespa sync.
+    """
+    desired_name = course_title or f"Canvas course {lti_context_id}"
+
+    existing = fetch_user_group_by_lti_context_id(db_session, lti_context_id)
+    if existing is not None:
+        resolved_name = _resolve_lti_group_name(
+            db_session, desired_name, lti_context_id
+        )
+        if existing.name != resolved_name:
+            existing.name = resolved_name
+        if nrps_url and existing.lti_nrps_url != nrps_url:
+            existing.lti_nrps_url = nrps_url
+        db_session.commit()
+        return existing
+
+    resolved_name = _resolve_lti_group_name(db_session, desired_name, lti_context_id)
+    return insert_user_group(
+        db_session=db_session,
+        user_group=UserGroupCreate(
+            name=resolved_name,
+            user_ids=initial_user_ids or [],
+            cc_pair_ids=[],
+        ),
+        lti_context_id=lti_context_id,
+        lti_nrps_url=nrps_url,
+    )
+
+
+def _set_user_group_membership__no_commit(
+    db_session: Session,
+    user_group_id: int,
+    target_user_ids: set[UUID],
+) -> bool:
+    """Diff and apply membership for a group. Returns True if anything changed.
+
+    NOTE: does not commit. Mirrors the membership portion of `update_user_group`
+    but takes no acting user (the periodic sync has none).
+    """
+    db_user_group = fetch_user_group(db_session, user_group_id)
+    if db_user_group is None:
+        raise ValueError(f"UserGroup with id '{user_group_id}' not found")
+
+    _check_user_group_is_modifiable(db_user_group)
+
+    current_user_ids = {user.id for user in db_user_group.users}
+    added_user_ids = list(target_user_ids - current_user_ids)
+    removed_user_ids = list(current_user_ids - target_user_ids)
+
+    if not added_user_ids and not removed_user_ids:
+        return False
+
+    if removed_user_ids:
+        _cleanup_user__user_group_relationships__no_commit(
+            db_session=db_session,
+            user_group_id=user_group_id,
+            user_ids=removed_user_ids,
+        )
+    if added_user_ids:
+        _add_user__user_group_relationships__no_commit(
+            db_session=db_session,
+            user_group_id=user_group_id,
+            user_ids=added_user_ids,
+        )
+
+    removed_users = db_session.scalars(
+        select(User).where(User.id.in_(removed_user_ids))  # type: ignore
+    ).unique()
+    users_to_validate = [
+        user
+        for user in removed_users
+        if user.role not in [UserRole.ADMIN, UserRole.GLOBAL_CURATOR]
+    ]
+    if users_to_validate:
+        _validate_curator_status__no_commit(db_session, users_to_validate)
+
+    db_user_group.time_last_modified_by_user = func.now()
+    recompute_user_permissions__no_commit(
+        list(set(added_user_ids) | set(removed_user_ids)), db_session
+    )
+    return True
+
+
+def _resolve_emails_to_user_ids(db_session: Session, emails: set[str]) -> set[UUID]:
+    """Map case-insensitive emails to existing Onyx user ids.
+
+    Emails without a corresponding Onyx user are skipped silently — provisioning
+    only happens on an actual LTI launch.
+    """
+    user_ids: set[UUID] = set()
+    for email in emails:
+        user = get_user_by_email(email, db_session)
+        if user is not None:
+            user_ids.add(user.id)
+    return user_ids
+
+
+def sync_lti_group_membership_by_emails(
+    db_session: Session,
+    user_group_id: int,
+    emails: set[str],
+) -> None:
+    """Overwrite a Canvas-managed group's membership to match a set of emails."""
+    target_user_ids = _resolve_emails_to_user_ids(db_session, emails)
+    changed = _set_user_group_membership__no_commit(
+        db_session=db_session,
+        user_group_id=user_group_id,
+        target_user_ids=target_user_ids,
+    )
+    if changed:
+        db_session.commit()
+    else:
+        db_session.rollback()
+
+
+def add_user_to_lti_group_by_email(
+    db_session: Session,
+    lti_context_id: str,
+    course_title: str | None,
+    nrps_url: str | None,
+    user_email: str,
+) -> None:
+    """Ensure the course's group exists and add a single user to it by email.
+
+    Called on LTI launch so the launching user lands in their class group
+    immediately, without waiting for the periodic roster sync.
+    """
+    user = get_user_by_email(user_email, db_session)
+    if user is None:
+        return
+
+    existing = fetch_user_group_by_lti_context_id(db_session, lti_context_id)
+    db_user_group = ensure_lti_user_group(
+        db_session=db_session,
+        lti_context_id=lti_context_id,
+        course_title=course_title,
+        nrps_url=nrps_url,
+        # On first launch seed the user at creation; subsequent launches add below.
+        initial_user_ids=[user.id] if existing is None else None,
+    )
+
+    if existing is None:
+        return
+
+    current_user_ids = {member.id for member in db_user_group.users}
+    if user.id in current_user_ids:
+        return
+
+    add_users_to_user_group(
+        db_session=db_session,
+        user=user,
+        user_group_id=db_user_group.id,
+        user_ids=[user.id],
+    )

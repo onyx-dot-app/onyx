@@ -16,9 +16,21 @@ from onyx.background.celery.tasks.beat_schedule import (
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.lti_configs import lti_group_sync_enabled
+from onyx.configs.lti_configs import LTI_GROUP_SYNC_INTERVAL_SECONDS
 from shared_configs.configs import MULTI_TENANT
 
 ee_beat_system_tasks: list[dict] = []
+
+_LTI_GROUP_SYNC_BEAT_TASK: dict = {
+    "name": "lti-group-sync",
+    "task": OnyxCeleryTask.LTI_GROUP_SYNC,
+    "schedule": timedelta(seconds=LTI_GROUP_SYNC_INTERVAL_SECONDS),
+    "options": {
+        "priority": OnyxCeleryPriority.LOW,
+        "expires": BEAT_EXPIRES_DEFAULT,
+    },
+}
 
 ee_beat_task_templates: list[dict] = [
     {
@@ -93,6 +105,11 @@ if not MULTI_TENANT:
             },
         },
     ]
+
+if lti_group_sync_enabled():
+    ee_beat_task_templates.append(_LTI_GROUP_SYNC_BEAT_TASK)
+    if not MULTI_TENANT:
+        ee_tasks_to_schedule.append(_LTI_GROUP_SYNC_BEAT_TASK)
 
 
 def get_cloud_tasks_to_schedule(beat_multiplier: float) -> list[dict[str, Any]]:

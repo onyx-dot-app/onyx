@@ -128,3 +128,14 @@ def get_public_jwks() -> dict:
 def get_private_key() -> rsa.RSAPrivateKey:
     """Return the private key (for signing LTI Advantage requests)."""
     return _ensure_key()
+
+
+def get_signing_kid() -> str:
+    """Return the `kid` of the public key served at /auth/lti/jwks.
+
+    LTI Advantage service calls (e.g. NRPS) sign a client-assertion JWT that the
+    platform verifies against this JWKS, so the assertion's `kid` header must
+    match the key id we publish.
+    """
+    jwks = get_public_jwks()
+    return str(jwks["keys"][0]["kid"])
