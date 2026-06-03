@@ -21,6 +21,8 @@ from onyx.flows.models import AiNode, AiOutputField
 from onyx.flows.nodes.base import NodeExecutionError, NodeOutcome, NodeRuntime
 from onyx.llm.models import ReasoningEffort, UserMessage
 from onyx.llm.multi_llm import LLMTimeoutError
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import parse_llm_json_response
 
@@ -82,12 +84,18 @@ def execute_ai(node: AiNode, context: RunContext, runtime: NodeRuntime) -> NodeO
 
 
 def _ask(node: AiNode, runtime: NodeRuntime, prompt: str) -> str:
+    message = UserMessage(content=prompt)
     try:
-        response = runtime.llm().invoke(
-            prompt=UserMessage(content=prompt),
-            reasoning_effort=ReasoningEffort.OFF,
-            total_timeout_s=node.timeout_seconds,
-        )
+        llm = runtime.llm()
+        with llm_generation_span(
+            llm=llm, flow=LLMFlow.FLOW_AI_STEP, input_messages=[message]
+        ) as span:
+            response = llm.invoke(
+                prompt=message,
+                reasoning_effort=ReasoningEffort.OFF,
+                total_timeout_s=node.timeout_seconds,
+            )
+            record_llm_response(span, response)
     except LLMTimeoutError as exc:
         raise NodeExecutionError(
             FlowErrorClass.TIMEOUT,

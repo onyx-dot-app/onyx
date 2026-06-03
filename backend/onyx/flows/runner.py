@@ -39,7 +39,10 @@ from onyx.flows.models import SpecError, parse_spec
 from onyx.flows.nodes import NodeRuntime, build_http_client
 from onyx.llm.factory import get_default_llm
 from onyx.llm.interfaces import LLM
+from onyx.tracing.framework.create import ensure_trace
+from onyx.tracing.framework.traces import TraceContentMode
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import CURRENT_USER_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -50,6 +53,9 @@ RUN_BUDGET_SECONDS = 15 * 60
 # A node with a longer timeout than this is rejected by the spec anyway; the
 # client-level timeout is just a backstop for a connection that never settles.
 HTTP_CLIENT_TIMEOUT_SECONDS = 120.0
+
+# The tracing workflow a run's model calls are grouped under.
+FLOW_RUN_TRACE_NAME = "flow_run"
 
 
 @dataclass
@@ -239,6 +245,7 @@ def run_flow_logic(run_id: UUID) -> None:
         raw_spec = run.version.spec if run.version is not None else flow.draft_spec
         trigger_payload = run.trigger_payload
         flow_id = flow.id
+        owner_id = flow.user_id
         # Read here rather than in the node: the executor has no session, and
         # a run should not be opening one halfway through a delivery.
         signing_secret = ensure_webhook_signing_secret(db_session=db_session, flow=flow)
@@ -270,6 +277,7 @@ def run_flow_logic(run_id: UUID) -> None:
     result = _execute(
         spec=spec,
         run_id=run_id,
+        owner_id=owner_id,
         trigger_payload=trigger_payload,
         signing_secret=signing_secret,
     )
@@ -302,6 +310,7 @@ def _execute(
     *,
     spec: Any,
     run_id: UUID,
+    owner_id: UUID,
     trigger_payload: Any,
     signing_secret: str | None = None,
 ) -> RunResult:
@@ -311,14 +320,26 @@ def _execute(
         llm_provider=_default_llm_provider,
         webhook_signing_secret=signing_secret,
     )
+    # The run acts for its owner, so its model usage is counted against them,
+    # as the Slack bot does for the person it answers.
+    user_token = CURRENT_USER_ID_CONTEXTVAR.set(str(owner_id))
     try:
-        return execute_flow(
-            spec=spec,
-            runtime=runtime,
-            recorder=DatabaseRecorder(run_id=run_id),
-            trigger_payload=trigger_payload,
-            budget_seconds=RUN_BUDGET_SECONDS,
-        )
+        # One trace per run groups its model calls. Metadata only, like the
+        # other unattended jobs: the run history already keeps prompts and
+        # replies, where only the flow's owner can read them.
+        with ensure_trace(
+            FLOW_RUN_TRACE_NAME,
+            group_id=str(run_id),
+            metadata={"run_id": str(run_id)},
+            content_mode=TraceContentMode.METADATA_ONLY,
+        ):
+            return execute_flow(
+                spec=spec,
+                runtime=runtime,
+                recorder=DatabaseRecorder(run_id=run_id),
+                trigger_payload=trigger_payload,
+                budget_seconds=RUN_BUDGET_SECONDS,
+            )
     except Exception as exc:
         logger.exception("flow run crashed run_id=%s", run_id)
         return RunResult(
@@ -328,6 +349,7 @@ def _execute(
             error_detail=f"{type(exc).__name__}: {exc}",
         )
     finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(user_token)
         runtime.close()
 
 

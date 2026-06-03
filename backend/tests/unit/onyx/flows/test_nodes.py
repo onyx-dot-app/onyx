@@ -6,7 +6,6 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
-from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -39,9 +38,13 @@ from onyx.flows.nodes.webhook import (
     execute_webhook,
     sign_payload,
 )
+from onyx.llm.model_response import Choice, Message, ModelResponse
+from onyx.llm.multi_llm import LLMTimeoutError
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     ExecuteResponse,
 )
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import llm_generation_span
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
@@ -306,8 +309,12 @@ def test_ordering_an_object_is_an_error() -> None:
 def stub_llm(*replies: str) -> MagicMock:
     llm = MagicMock()
     llm.invoke.side_effect = [
-        SimpleNamespace(choice=SimpleNamespace(message=SimpleNamespace(content=reply)))
-        for reply in replies
+        ModelResponse(
+            id=f"reply-{number}",
+            created="0",
+            choice=Choice(message=Message(content=reply)),
+        )
+        for number, reply in enumerate(replies)
     ]
     return llm
 
@@ -424,6 +431,32 @@ def test_ai_model_failure_is_reported_as_llm_error() -> None:
 
     assert caught.value.error_class == FlowErrorClass.LLM_ERROR
     assert "provider down" in caught.value.detail
+
+
+def test_ai_model_timeout_is_reported_as_a_timeout() -> None:
+    """The run history says the model was too slow, not that it broke."""
+    llm = MagicMock()
+    llm.invoke.side_effect = LLMTimeoutError("no answer")
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_ai(ai_node(timeout_seconds=5), RunContext(), ai_runtime(llm))
+
+    assert caught.value.error_class == FlowErrorClass.TIMEOUT
+    assert caught.value.error_class in RETRYABLE_ERROR_CLASSES
+    assert "5s" in caught.value.detail
+    assert llm.invoke.call_args.kwargs["total_timeout_s"] == 5
+
+
+def test_ai_model_call_is_tagged_for_tracing() -> None:
+    """An untagged call shows up in tracing as missing instrumentation."""
+    llm = stub_llm('{"team": "ops", "confidence": 1, "urgent": false}')
+
+    with patch(
+        "onyx.flows.nodes.ai.llm_generation_span", wraps=llm_generation_span
+    ) as span:
+        execute_ai(ai_node(), RunContext(), ai_runtime(llm))
+
+    assert span.call_args.kwargs["flow"] == LLMFlow.FLOW_AI_STEP
 
 
 # ---------------------------------------------------------------------------

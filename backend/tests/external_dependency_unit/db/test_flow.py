@@ -6,9 +6,11 @@ SKIP LOCKED` claim, the unique key that makes a redelivered run safe, and the
 cascades that keep run history from outliving its flow.
 """
 
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import pytest
@@ -48,7 +50,16 @@ from onyx.db.flow import (
 )
 from onyx.db.models import Flow, FlowNodeRun, FlowRun, FlowVersion, User
 from onyx.error_handling.exceptions import OnyxError
-from onyx.flows.runner import run_flow_logic
+from onyx.flows.runner import FLOW_RUN_TRACE_NAME, run_flow_logic
+from onyx.llm.model_response import Choice, Message, ModelResponse
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.processor_interface import TracingProcessor
+from onyx.tracing.framework.provider import DefaultTraceProvider
+from onyx.tracing.framework.setup import get_trace_provider, set_trace_provider
+from onyx.tracing.framework.span_data import GenerationSpanData
+from onyx.tracing.framework.spans import Span
+from onyx.tracing.framework.traces import Trace, TraceContentMode
+from shared_configs.contextvars import get_current_user_id
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -1168,3 +1179,132 @@ def test_an_approval_inside_a_loop_is_asked_again_on_every_pass(
         "satisfied": True,
         "results": [1, 2],
     }
+
+
+# ---------------------------------------------------------------------------
+# Tracing
+# ---------------------------------------------------------------------------
+
+
+class _CaptureTracing(TracingProcessor):
+    """Keeps the finished traces and spans the provider hands its processors."""
+
+    def __init__(self) -> None:
+        self.traces: list[Trace] = []
+        self.spans: list[Span[Any]] = []
+
+    def on_trace_start(self, trace: Trace) -> None:
+        pass
+
+    def on_trace_end(self, trace: Trace) -> None:
+        self.traces.append(trace)
+
+    def on_span_start(self, span: Span[Any]) -> None:
+        pass
+
+    def on_span_end(self, span: Span[Any]) -> None:
+        self.spans.append(span)
+
+    def shutdown(self) -> None:
+        pass
+
+    def force_flush(self) -> None:
+        pass
+
+
+def ai_run(db_session: Session, owner: User, name: str) -> FlowRun:
+    flow = create_flow(
+        db_session=db_session,
+        user_id=owner.id,
+        name=name,
+        draft_spec={
+            "start": "ask",
+            "nodes": [
+                {
+                    "id": "ask",
+                    "kind": "AI",
+                    "prompt": "private question",
+                    "output_fields": [],
+                }
+            ],
+        },
+    )
+    run = insert_run(
+        db_session=db_session, flow_id=flow.id, trigger_source=FlowTriggerSource.TEST
+    )
+    db_session.commit()
+    return run
+
+
+def stub_model(on_call: Callable[[], None] | None = None) -> MagicMock:
+    llm = MagicMock()
+    llm.config.model_name = "gpt-5-mini"
+    llm.config.model_provider = "openai"
+    llm.config.api_base = None
+
+    def invoke(**_: Any) -> ModelResponse:
+        if on_call is not None:
+            on_call()
+        return ModelResponse(
+            id="reply",
+            created="0",
+            choice=Choice(message=Message(content="private answer")),
+        )
+
+    llm.invoke.side_effect = invoke
+    return llm
+
+
+def test_a_run_traces_its_model_calls_without_their_content(
+    db_session: Session, owner: User
+) -> None:
+    """One trace per run, with each model call tagged and no text in it.
+
+    The run history already keeps the prompt and the reply, where only the
+    flow's owner can read them. A tracing backend is somewhere else.
+    """
+    run = ai_run(db_session, owner, "traced flow")
+
+    original_provider = get_trace_provider()
+    provider = DefaultTraceProvider()
+    capture = _CaptureTracing()
+    provider.register_processor(capture)
+    set_trace_provider(provider)
+    try:
+        with patch("onyx.flows.runner.get_default_llm", return_value=stub_model()):
+            run_flow_logic(run.id)
+    finally:
+        set_trace_provider(original_provider)
+
+    db_session.expire_all()
+    finished = get_run(db_session=db_session, run_id=run.id)
+    assert finished is not None
+    assert finished.status == FlowRunStatus.SUCCEEDED
+
+    [trace] = [t for t in capture.traces if t.name == FLOW_RUN_TRACE_NAME]
+    assert trace.content_mode == TraceContentMode.METADATA_ONLY
+    exported = trace.export()
+    assert exported is not None
+    assert exported["metadata"] == {"run_id": str(run.id)}
+
+    [span] = [s for s in capture.spans if isinstance(s.span_data, GenerationSpanData)]
+    assert span.trace_id == trace.trace_id
+    assert span.span_data.model_config is not None
+    assert span.span_data.model_config["flow"] == LLMFlow.FLOW_AI_STEP.value
+    assert span.span_data.input is None
+    assert span.span_data.output is None
+
+
+def test_a_run_counts_its_model_usage_against_the_owner(
+    db_session: Session, owner: User
+) -> None:
+    """Usage is metered by the current user, as it is for a chat."""
+    run = ai_run(db_session, owner, "metered flow")
+    seen: list[str | None] = []
+
+    model = stub_model(on_call=lambda: seen.append(get_current_user_id()))
+    with patch("onyx.flows.runner.get_default_llm", return_value=model):
+        run_flow_logic(run.id)
+
+    assert seen == [str(owner.id)]
+    assert get_current_user_id() is None, "the worker thread kept the owner"

@@ -18,7 +18,7 @@ import secrets
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -89,7 +89,7 @@ MAX_WEBHOOK_PAYLOAD_BYTES = 256 * 1024
 # ---------------------------------------------------------------------------
 
 
-@router.post("", response_model=FlowDetail, status_code=status.HTTP_201_CREATED)
+@router.post("")
 def create_flow_route(
     request: CreateFlowRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -106,7 +106,7 @@ def create_flow_route(
     return FlowDetail.build(flow, published_spec=None)
 
 
-@router.get("", response_model=list[FlowSummary])
+@router.get("")
 def list_flows_route(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -115,7 +115,7 @@ def list_flows_route(
     return [FlowSummary.from_model(flow) for flow in flows]
 
 
-@router.get("/{flow_id}", response_model=FlowDetail)
+@router.get("/{flow_id}")
 def get_flow_route(
     flow_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -138,7 +138,7 @@ def get_flow_route(
     )
 
 
-@router.patch("/{flow_id}", response_model=FlowDetail)
+@router.patch("/{flow_id}")
 def update_flow_route(
     flow_id: UUID,
     request: UpdateFlowRequest,
@@ -161,21 +161,20 @@ def update_flow_route(
     )
 
 
-@router.delete("/{flow_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{flow_id}")
 def delete_flow_route(
     flow_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> Response:
+) -> None:
     flow = get_flow(
         db_session=db_session, flow_id=flow_id, user_id=user.id, with_triggers=True
     )
     soft_delete_flow(db_session=db_session, flow=flow)
     db_session.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/{flow_id}/publish", response_model=FlowDetail)
+@router.post("/{flow_id}/publish")
 def publish_flow_route(
     flow_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -190,7 +189,7 @@ def publish_flow_route(
     return FlowDetail.build(flow, published_spec=flow.draft_spec)
 
 
-@router.post("/{flow_id}/status", response_model=FlowDetail)
+@router.post("/{flow_id}/status")
 def set_status_route(
     flow_id: UUID,
     request: SetStatusRequest,
@@ -212,7 +211,7 @@ def set_status_route(
 # ---------------------------------------------------------------------------
 
 
-@router.put("/{flow_id}/triggers", response_model=list[TriggerView])
+@router.put("/{flow_id}/triggers")
 def replace_triggers_route(
     flow_id: UUID,
     request: ReplaceTriggersRequest,
@@ -241,9 +240,7 @@ def replace_triggers_route(
 # ---------------------------------------------------------------------------
 
 
-@router.post(
-    "/{flow_id}/run", response_model=RunSummary, status_code=status.HTTP_202_ACCEPTED
-)
+@router.post("/{flow_id}/run")
 def start_run_route(
     flow_id: UUID,
     request: StartRunRequest,
@@ -286,7 +283,7 @@ def start_run_route(
     return RunSummary.from_model(run)
 
 
-@router.get("/{flow_id}/runs", response_model=list[RunSummary])
+@router.get("/{flow_id}/runs")
 def list_runs_route(
     flow_id: UUID,
     limit: int = Query(default=RUNS_DEFAULT_PAGE_SIZE, ge=1, le=RUNS_MAX_PAGE_SIZE),
@@ -306,7 +303,7 @@ def list_runs_route(
     return [RunSummary.from_model(run) for run in runs]
 
 
-@router.get("/{flow_id}/runs/{run_id}", response_model=RunDetail)
+@router.get("/{flow_id}/runs/{run_id}")
 def get_run_route(
     flow_id: UUID,
     run_id: UUID,
@@ -319,7 +316,7 @@ def get_run_route(
     return RunDetail.from_model(run)
 
 
-@router.post("/{flow_id}/runs/{run_id}/decision", response_model=RunDetail)
+@router.post("/{flow_id}/runs/{run_id}/decision")
 def submit_decision_route(
     flow_id: UUID,
     run_id: UUID,
@@ -355,11 +352,7 @@ def submit_decision_route(
 # ---------------------------------------------------------------------------
 
 
-@router.post(
-    "/webhooks/{trigger_id}",
-    response_model=WebhookAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
-)
+@router.post("/webhooks/{trigger_id}")
 async def webhook_route(
     trigger_id: UUID,
     request: Request,

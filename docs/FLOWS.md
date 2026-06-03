@@ -132,6 +132,12 @@ with `output_mismatch`.
 
 With no `output_fields`, the node returns `{"text": ...}`.
 
+Each model call is traced under the `flow_ai_step` tag (`LLMFlow.FLOW_AI_STEP`),
+inside one `flow_run` trace per run. The trace keeps timings and token counts
+but not the prompt or the reply: the run history already holds those, where
+only the flow's owner can read them. A run acts for its owner, so its token
+usage counts against them, as a chat's does.
+
 ### HUMAN
 
 Stops and waits for a person, then continues down `on_approve` or `on_reject`.
@@ -551,9 +557,10 @@ every time).
 Four behaviours matter when a run goes wrong:
 
 **A node is recorded before it runs.** The unique key on
-`(run_id, node_id, item_index)` is what makes a redelivered message safe: the
-second attempt finds a finished row and reuses its output instead of posting the
-same message to Slack twice.
+`(run_id, node_id, iteration, item_index)` is what makes a redelivered message
+safe: the second attempt finds a finished row and reuses its output instead of
+posting the same message to Slack twice. `iteration` is the loop pass, 0 outside
+a loop; see [Loops](#loops).
 
 **Branches skip, they do not fail.** A node whose predecessors all took the other
 branch is `SKIPPED`. The canvas greys it out, and nobody has to work out whether
@@ -585,8 +592,9 @@ Two consequences worth knowing:
   would fall back to the node's empty `next` list and skip everything below the
   branch it actually took.
 - Skipping is written idempotently, because the replay reaches the same untaken
-  branches a second time and the unique key on `(run_id, node_id, item_index)`
-  does not care that it is the same answer.
+  branches a second time and the unique key on
+  `(run_id, node_id, iteration, item_index)` does not care that it is the same
+  answer.
 
 `AWAITING_DECISION` is not terminal, and a parked run counts as in flight — a
 schedule queues behind it rather than putting a second question in front of the
