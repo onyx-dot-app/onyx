@@ -152,6 +152,23 @@ def test_error_hint_for_loopback_points_at_loopback_var() -> None:
     assert "never permitted" not in detail
 
 
+def test_error_hint_for_loopback_names_missing_private_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With ALLOW_LOOPBACK on but ALLOW_PRIVATE_NETWORK off, loopback is still
+    blocked (it needs both), so the hint must name the still-missing gate rather
+    than going silent."""
+    monkeypatch.setattr(mcp_ssrf, "MCP_SERVER_ALLOW_LOOPBACK", True)
+    monkeypatch.setattr(api, "MCP_SERVER_ALLOW_LOOPBACK", True)
+    with pytest.raises(OnyxError) as exc_info:
+        api._validate_mcp_server_url(
+            "http://127.0.0.1:8010/mcp", "server_url", require_https=False
+        )
+    detail = exc_info.value.detail
+    assert "MCP_SERVER_ALLOW_PRIVATE_NETWORK=true" in detail
+    assert "MCP_SERVER_ALLOW_LOOPBACK=true" not in detail
+
+
 def test_store_time_allows_loopback_when_opted_in(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

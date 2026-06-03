@@ -126,10 +126,19 @@ def _ssrf_error_hint(url: str, error: Exception) -> str:
     if ip.is_unspecified or ip.is_link_local:
         return _SSRF_HINT_NEVER_ALLOWED
     if ip.is_loopback:
-        if not MCP_SERVER_ALLOW_LOOPBACK:
+        # Loopback needs both gates, so name whichever is still missing.
+        missing = [
+            f"{var}=true"
+            for var, enabled in (
+                ("MCP_SERVER_ALLOW_LOOPBACK", MCP_SERVER_ALLOW_LOOPBACK),
+                ("MCP_SERVER_ALLOW_PRIVATE_NETWORK", MCP_SERVER_ALLOW_PRIVATE_NETWORK),
+            )
+            if not enabled
+        ]
+        if missing:
             return (
-                " To allow a loopback MCP server, set MCP_SERVER_ALLOW_LOOPBACK=true "
-                "(also requires MCP_SERVER_ALLOW_PRIVATE_NETWORK=true)."
+                f" To allow a loopback MCP server, set {' and '.join(missing)} "
+                "(cloud-metadata stays blocked)."
             )
         return ""
     if not MCP_SERVER_ALLOW_PRIVATE_NETWORK:
