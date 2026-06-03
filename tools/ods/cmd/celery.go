@@ -100,6 +100,9 @@ Examples:
 // args it returns the default set (or all workers when --all is set).
 func selectCeleryWorkers(args []string, all bool) []celeryWorker {
 	if all {
+		if len(args) > 0 {
+			log.Fatal("--all cannot be combined with named workers")
+		}
 		return celeryWorkers
 	}
 
