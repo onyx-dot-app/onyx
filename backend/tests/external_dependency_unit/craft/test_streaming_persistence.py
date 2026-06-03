@@ -37,8 +37,8 @@ from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
 from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
-from onyx.server.features.build.session.manager import BuildStreamingState
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.streaming import BuildStreamingState
 from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 
 
