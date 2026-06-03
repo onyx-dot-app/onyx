@@ -6,7 +6,6 @@ from functools import lru_cache
 
 from dateutil import tz
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,6 +17,8 @@ from onyx.db.models import ChatSession
 from onyx.db.models import TokenRateLimit
 from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -57,11 +58,9 @@ def _user_is_rate_limited_by_global() -> None:
             global_cutoff_time = _get_cutoff_time(global_rate_limits)
             global_usage = _fetch_global_usage(global_cutoff_time, db_session)
 
-            if _is_rate_limited(global_rate_limits, global_usage):
-                raise HTTPException(
-                    status_code=429,
-                    detail="Token budget exceeded for organization. Try again later.",
-                )
+            triggered = _first_triggered_limit(global_rate_limits, global_usage)
+            if triggered is not None:
+                raise_rate_limited("organization", triggered.period_hours)
 
 
 def _fetch_global_usage(
@@ -95,12 +94,10 @@ def _get_cutoff_time(rate_limits: Sequence[TokenRateLimit]) -> datetime:
     return datetime.now(tz=timezone.utc) - timedelta(hours=max_period_hours)
 
 
-def _is_rate_limited(
+def _first_triggered_limit(
     rate_limits: Sequence[TokenRateLimit], usage: Sequence[tuple[datetime, int]]
-) -> bool:
-    """
-    If at least one rate limit is exceeded, return True
-    """
+) -> TokenRateLimit | None:
+    """Return the first exceeded limit, or None. Carries period_hours for the reset time."""
     for rate_limit in rate_limits:
         tokens_used = sum(
             u_token_count
@@ -111,9 +108,39 @@ def _is_rate_limited(
 
         # token_budget is stored as a raw token count, matching the admin input.
         if tokens_used >= rate_limit.token_budget:
-            return True
+            return rate_limit
 
-    return False
+    return None
+
+
+def _is_rate_limited(
+    rate_limits: Sequence[TokenRateLimit], usage: Sequence[tuple[datetime, int]]
+) -> bool:
+    """
+    If at least one rate limit is exceeded, return True
+    """
+    return _first_triggered_limit(rate_limits, usage) is not None
+
+
+def raise_rate_limited(scope: str, period_hours: int) -> None:
+    """Raise a structured 429 carrying the offending scope + when its window rolls over.
+
+    Sliding-window enforcement has no single fixed reset instant; we report a full
+    period from now as the conservative "try again after" so the FE banner can count down.
+    """
+    retry_after_seconds = period_hours * 3600
+    reset_at = datetime.now(tz=timezone.utc) + timedelta(seconds=retry_after_seconds)
+    reset_at_iso = reset_at.isoformat()
+    raise OnyxError(
+        OnyxErrorCode.RATE_LIMITED,
+        f"Token budget exceeded for {scope}. Try again after {reset_at_iso}.",
+        extra={
+            "scope": scope,
+            "reset_at": reset_at_iso,
+            "retry_after_seconds": retry_after_seconds,
+        },
+        headers={"Retry-After": str(retry_after_seconds)},
+    )
 
 
 @lru_cache()

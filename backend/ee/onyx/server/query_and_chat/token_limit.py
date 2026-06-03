@@ -7,7 +7,6 @@ from typing import List
 from typing import Tuple
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -22,9 +21,10 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
+from onyx.server.query_and_chat.token_limit import _first_triggered_limit
 from onyx.server.query_and_chat.token_limit import _get_cutoff_time
-from onyx.server.query_and_chat.token_limit import _is_rate_limited
 from onyx.server.query_and_chat.token_limit import _user_is_rate_limited_by_global
+from onyx.server.query_and_chat.token_limit import raise_rate_limited
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 
@@ -62,11 +62,9 @@ def _user_is_rate_limited(user_id: UUID) -> None:
             user_cutoff_time = _get_cutoff_time(user_rate_limits)
             user_usage = _fetch_user_usage(user_id, user_cutoff_time, db_session)
 
-            if _is_rate_limited(user_rate_limits, user_usage):
-                raise HTTPException(
-                    status_code=429,
-                    detail="Token budget exceeded for user. Try again later.",
-                )
+            triggered = _first_triggered_limit(user_rate_limits, user_usage)
+            if triggered is not None:
+                raise_rate_limited("user", triggered.period_hours)
 
 
 def _fetch_user_usage(
@@ -110,19 +108,18 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
                 user_group_ids, group_cutoff_time, db_session
             )
 
-            has_at_least_one_untriggered_limit = False
+            # Limited only when every group the user belongs to is over budget.
+            # Reset uses the longest triggering window (most conservative retry).
+            triggered_periods: list[int] = []
             for user_group_id, rate_limits in group_rate_limits.items():
                 usage = group_usage.get(user_group_id, [])
 
-                if not _is_rate_limited(rate_limits, usage):
-                    has_at_least_one_untriggered_limit = True
-                    break
+                triggered = _first_triggered_limit(rate_limits, usage)
+                if triggered is None:
+                    return  # an under-budget group means the user is not group-limited
+                triggered_periods.append(triggered.period_hours)
 
-            if not has_at_least_one_untriggered_limit:
-                raise HTTPException(
-                    status_code=429,
-                    detail="Token budget exceeded for user's groups. Try again later.",
-                )
+            raise_rate_limited("user's groups", max(triggered_periods))
 
 
 def _fetch_all_user_group_rate_limits(
