@@ -21,7 +21,7 @@ from onyx.server.features.build.api.models import MessageRequest
 from onyx.server.features.build.api.models import MessageResponse
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.session.manager import RateLimitError
+from onyx.server.features.build.session.errors import RateLimitError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.utils.logger import setup_logger
 

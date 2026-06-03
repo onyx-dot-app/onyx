@@ -24,7 +24,7 @@ from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.session.manager import get_all_build_mode_llm_configs
+from onyx.server.features.build.session.llm_config import get_all_build_mode_llm_configs
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationView
