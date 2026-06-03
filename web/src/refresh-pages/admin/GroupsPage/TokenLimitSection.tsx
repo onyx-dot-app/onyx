@@ -103,7 +103,7 @@ function TokenLimitSection({
                     Token Limit
                   </Text>
                   <Text mainUiMuted text03 className="ml-0.5">
-                    (thousand tokens)
+                    (tokens)
                   </Text>
                 </div>
                 <div className="flex-1 flex items-center min-w-[160px]">
@@ -127,7 +127,7 @@ function TokenLimitSection({
                       value={limit.tokenBudget}
                       onChange={(v) => updateLimit(i, "tokenBudget", v)}
                       min={0}
-                      placeholder="Token limit in thousands"
+                      placeholder="Token limit"
                     />
                   </div>
                   <div className="flex-1">

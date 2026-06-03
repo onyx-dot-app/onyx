@@ -143,7 +143,7 @@ export default function CreateRateLimitModal({
                 />
                 <TextFormField
                   name="token_budget"
-                  label="Token Budget (Thousands)"
+                  label="Token Budget (Tokens)"
                   type="number"
                   placeholder=""
                 />

@@ -102,7 +102,7 @@ export const TokenRateLimitTable = ({
             <TableHead>Enabled</TableHead>
             {shouldRenderGroupName() && <TableHead>Group Name</TableHead>}
             <TableHead>Time Window (Hours)</TableHead>
-            <TableHead>Token Budget (Thousands)</TableHead>
+            <TableHead>Token Budget (Tokens)</TableHead>
             {isAdmin && <TableHead>Delete</TableHead>}
           </TableRow>
         </TableHeader>
@@ -152,7 +152,7 @@ export const TokenRateLimitTable = ({
                     (tokenRateLimit.period_hours > 1 ? "s" : "")}
                 </TableCell>
                 <TableCell>
-                  {tokenRateLimit.token_budget + " thousand tokens"}
+                  {tokenRateLimit.token_budget + " tokens"}
                 </TableCell>
                 {isAdmin && (
                   <TableCell>

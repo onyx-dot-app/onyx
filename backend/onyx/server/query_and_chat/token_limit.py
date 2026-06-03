@@ -24,9 +24,6 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 logger = setup_logger()
 
 
-TOKEN_BUDGET_UNIT = 1_000
-
-
 def check_token_rate_limits(
     user: User = Depends(current_chat_accessible_user),
 ) -> None:
@@ -112,7 +109,8 @@ def _is_rate_limited(
             >= datetime.now(tz=tz.UTC) - timedelta(hours=rate_limit.period_hours)
         )
 
-        if tokens_used >= rate_limit.token_budget * TOKEN_BUDGET_UNIT:
+        # token_budget is stored as a raw token count, matching the admin input.
+        if tokens_used >= rate_limit.token_budget:
             return True
 
     return False
