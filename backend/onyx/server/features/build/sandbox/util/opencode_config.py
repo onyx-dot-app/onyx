@@ -12,7 +12,7 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 
 # 4.6+ supports adaptive thinking; older needs enabled+budgetTokens.
 _ADAPTIVE_THINKING_MODELS = frozenset(
-    {"claude-opus-4-6", "claude-opus-4-7", "claude-sonnet-4-6"}
+    {"claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6"}
 )
 
 
