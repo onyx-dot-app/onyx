@@ -12499,7 +12499,9 @@
         "AI": "ذكاء اصطناعي",
         "HUMAN": "موافقة",
         "CODE": "شيفرة",
-        "LOOP": "تكرار"
+        "LOOP": "تكرار",
+        "RETRY": "إعادة المحاولة",
+        "WEBHOOK": "Webhook"
       },
       "startBadge": "البداية",
       "fanOutBadge": "لكل عنصر",
@@ -12526,7 +12528,9 @@
         "AI": "ذكاء اصطناعي",
         "HUMAN": "موافقة",
         "CODE": "شيفرة",
-        "LOOP": "تكرار"
+        "LOOP": "تكرار",
+        "RETRY": "إعادة المحاولة",
+        "WEBHOOK": "Webhook"
       }
     },
     "status": {
@@ -12549,7 +12553,9 @@
         "AI": "ذكاء اصطناعي",
         "HUMAN": "موافقة",
         "CODE": "شيفرة",
-        "LOOP": "تكرار"
+        "LOOP": "تكرار",
+        "RETRY": "إعادة المحاولة",
+        "WEBHOOK": "Webhook"
       },
       "fields": {
         "name": "الاسم",
@@ -12586,7 +12592,19 @@
         "over": "قسّم هذه القائمة",
         "overHelp": "تعبير ينتج قائمة.",
         "batchSize": "العناصر لكل دفعة",
-        "batchSizeHelp": "تتلقى الخطوة التالية دفعة واحدة في كل مرة عند تنفيذها لكل عنصر."
+        "batchSizeHelp": "تتلقى الخطوة التالية دفعة واحدة في كل مرة عند تنفيذها لكل عنصر.",
+        "untilPath": "الانتظار حتى يطابق هذا الجزء من الاستجابة",
+        "untilPathHelp": "مسار بالنقاط داخل جسم الاستجابة. اتركه فارغًا لفحص الجسم كاملًا.",
+        "untilValue": "القيمة المتوقعة",
+        "maxChecks": "عدد الفحوص",
+        "maxChecksHelp": "كم مرة يُسأل قبل التوقف.",
+        "interval": "الثواني بين الفحوص",
+        "intervalHelp": "صفر يعني السؤال مرة أخرى فورًا.",
+        "retryWindow": "ينتظر حتى {seconds} ثانية إجمالًا.",
+        "payload": "الحمولة",
+        "payloadHelp": "جسم JSON الذي يُرسل. تُحل التعبيرات قبل الإرسال.",
+        "signingSecret": "مفتاح التوقيع",
+        "signingSecretHelp": "انسخه إلى النظام المستقبِل. يُرسل مع كل تسليم في ترويسة X-Onyx-Signature."
       },
       "onError": {
         "stop": "إيقاف التشغيل",
@@ -12615,7 +12633,9 @@
         "fieldType": "text",
         "question": "هل نرسل الملخص إلى الفريق؟",
         "assignee": "someone@example.com",
-        "over": "'{{' steps.fetch.body.rows '}}'"
+        "over": "'{{' steps.fetch.body.rows '}}'",
+        "untilPath": "state",
+        "payload": "'{' \"text\": \"ملخّص\" '}'"
       }
     },
     "editor": {

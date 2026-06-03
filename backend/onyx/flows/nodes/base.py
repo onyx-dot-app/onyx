@@ -111,6 +111,10 @@ class NodeRuntime:
     http_client: httpx.Client
     llm_provider: Callable[[], LLM]
     code_runner_provider: Callable[[], CodeRunner] = build_code_runner
+    # Signs what the flow's webhook nodes send. None leaves deliveries
+    # unsigned, which the webhook node warns about rather than refusing —
+    # a flow written before the secret existed should still deliver.
+    webhook_signing_secret: str | None = None
 
     _llm: LLM | None = None
     _code_runner: CodeRunner | None = None

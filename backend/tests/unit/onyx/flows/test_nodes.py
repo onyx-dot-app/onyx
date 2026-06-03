@@ -23,6 +23,13 @@ from onyx.flows.nodes.condition import execute_condition
 from onyx.flows.nodes.http import execute_http
 from onyx.flows.nodes.human import execute_human, resume_human
 from onyx.flows.nodes.loop import execute_loop
+from onyx.flows.nodes.retry import execute_retry
+from onyx.flows.nodes.webhook import (
+    SIGNATURE_HEADER,
+    TIMESTAMP_HEADER,
+    execute_webhook,
+    sign_payload,
+)
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     ExecuteResponse,
 )
@@ -724,3 +731,217 @@ def test_the_runtime_closes_the_sandbox_it_opened() -> None:
     runtime.close()
 
     assert sandbox.closed is True
+
+
+# ---------------------------------------------------------------------------
+# Retry
+# ---------------------------------------------------------------------------
+
+
+def retry_node(**overrides: Any) -> Any:
+    node: dict[str, Any] = {
+        "id": "poll",
+        "kind": "RETRY",
+        "url": "https://api.test/jobs/1",
+        "until_path": "state",
+        "operator": "eq",
+        "value": "done",
+        "interval_seconds": 0,
+    }
+    node.update(overrides)
+    return only_node(node)
+
+
+def responder(states: list[Any]) -> Any:
+    """Answers each call with the next state, repeating the last one."""
+    calls = {"count": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        index = min(calls["count"], len(states) - 1)
+        calls["count"] += 1
+        return httpx.Response(200, json={"state": states[index]})
+
+    handler.calls = calls  # ty: ignore[unresolved-attribute]
+    return handler
+
+
+def test_retry_stops_as_soon_as_the_check_passes() -> None:
+    handler = responder(["queued", "running", "done", "done"])
+
+    outcome = execute_retry(retry_node(), RunContext(), runtime_with(handler))
+
+    assert outcome.output["satisfied"] is True
+    assert outcome.output["checks"] == 3
+    assert outcome.output["result"]["body"] == {"state": "done"}
+    assert handler.calls["count"] == 3, "kept polling after the answer arrived"
+
+
+def test_retry_gives_up_and_fails_by_default() -> None:
+    handler = responder(["running"])
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_retry(retry_node(max_checks=3), RunContext(), runtime_with(handler))
+
+    assert caught.value.error_class == FlowErrorClass.RETRY_EXHAUSTED
+    assert handler.calls["count"] == 3
+
+
+def test_retry_can_carry_on_after_giving_up() -> None:
+    """Turning the failure off is what lets a flow branch on the outcome."""
+    handler = responder(["running"])
+
+    outcome = execute_retry(
+        retry_node(max_checks=2, fail_when_exhausted=False),
+        RunContext(),
+        runtime_with(handler),
+    )
+
+    assert outcome.output["satisfied"] is False
+    assert outcome.output["checks"] == 2
+    assert outcome.output["result"]["body"] == {"state": "running"}
+
+
+def test_a_path_that_is_not_there_yet_counts_as_not_yet() -> None:
+    """An endpoint that omits the field until the job starts is answering."""
+    handler = responder([{}, {}, "done"])
+
+    def shaped(request: httpx.Request) -> httpx.Response:
+        response = handler(request)
+        body = response.json()["state"]
+        return httpx.Response(200, json={} if body == {} else {"state": body})
+
+    outcome = execute_retry(retry_node(), RunContext(), runtime_with(shaped))
+
+    assert outcome.output["satisfied"] is True
+    assert outcome.output["checks"] == 3
+
+
+def test_retry_compares_against_a_resolved_expression() -> None:
+    handler = responder(["v9"])
+    context = RunContext(trigger={"tag": "v9"})
+
+    outcome = execute_retry(
+        retry_node(value="{{ trigger.tag }}"), context, runtime_with(handler)
+    )
+
+    assert outcome.output["satisfied"] is True
+    assert handler.calls["count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Webhook
+# ---------------------------------------------------------------------------
+
+
+def webhook_node(**overrides: Any) -> Any:
+    node: dict[str, Any] = {
+        "id": "notify",
+        "kind": "WEBHOOK",
+        "url": "https://hooks.test/incoming",
+        "payload": {"tag": "{{ trigger.tag }}", "count": "{{ trigger.count }}"},
+    }
+    node.update(overrides)
+    return only_node(node)
+
+
+def webhook_context() -> RunContext:
+    """Whatever the default payload's expressions need."""
+    return RunContext(trigger={"tag": "v2", "count": 7})
+
+
+def capturing_runtime(
+    status: int = 200, secret: str | None = "s3cret"
+) -> tuple[NodeRuntime, dict[str, Any]]:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["url"] = str(request.url)
+        seen["headers"] = dict(request.headers)
+        seen["body"] = request.content.decode()
+        return httpx.Response(status, text="thanks")
+
+    runtime = NodeRuntime(
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        llm_provider=MagicMock(),
+        webhook_signing_secret=secret,
+    )
+    return runtime, seen
+
+
+def test_webhook_posts_the_resolved_payload_as_json() -> None:
+    runtime, seen = capturing_runtime()
+
+    outcome = execute_webhook(webhook_node(), webhook_context(), runtime)
+
+    assert seen["method"] == "POST"
+    assert json.loads(seen["body"]) == {"tag": "v2", "count": 7}
+    assert seen["headers"]["content-type"] == "application/json"
+    assert outcome.output["delivered"] is True
+    assert outcome.output["response"] == "thanks"
+
+
+def test_a_receiver_can_verify_what_was_sent() -> None:
+    """The signature is over the timestamp and the exact bytes delivered."""
+    runtime, seen = capturing_runtime(secret="top-secret")
+
+    outcome = execute_webhook(webhook_node(), webhook_context(), runtime)
+
+    timestamp = int(seen["headers"][TIMESTAMP_HEADER.lower()])
+    expected = sign_payload("top-secret", timestamp, seen["body"])
+    assert seen["headers"][SIGNATURE_HEADER.lower()] == expected
+    assert outcome.output["signed"] is True
+
+
+def test_a_tampered_body_does_not_verify() -> None:
+    runtime, seen = capturing_runtime(secret="top-secret")
+
+    execute_webhook(webhook_node(), webhook_context(), runtime)
+
+    timestamp = int(seen["headers"][TIMESTAMP_HEADER.lower()])
+    tampered = sign_payload("top-secret", timestamp, seen["body"] + " ")
+    assert seen["headers"][SIGNATURE_HEADER.lower()] != tampered
+
+
+def test_a_replayed_delivery_does_not_verify_under_a_new_timestamp() -> None:
+    """Signing the timestamp is what makes a captured delivery worthless."""
+    runtime, seen = capturing_runtime(secret="top-secret")
+
+    execute_webhook(webhook_node(), webhook_context(), runtime)
+
+    timestamp = int(seen["headers"][TIMESTAMP_HEADER.lower()])
+    assert (
+        sign_payload("top-secret", timestamp + 1, seen["body"])
+        != (seen["headers"][SIGNATURE_HEADER.lower()])
+    )
+
+
+def test_a_flow_with_no_secret_still_delivers_unsigned() -> None:
+    runtime, seen = capturing_runtime(secret=None)
+
+    outcome = execute_webhook(webhook_node(), webhook_context(), runtime)
+
+    assert SIGNATURE_HEADER.lower() not in seen["headers"]
+    assert outcome.output["signed"] is False
+    assert outcome.output["delivered"] is True
+
+
+def test_a_receiver_being_down_does_not_stop_the_run() -> None:
+    runtime, _ = capturing_runtime(status=503)
+
+    outcome = execute_webhook(webhook_node(), webhook_context(), runtime)
+
+    assert outcome.output["delivered"] is False
+    assert outcome.output["status"] == 503
+
+
+def test_a_receiver_being_down_can_be_made_to_stop_the_run() -> None:
+    runtime, _ = capturing_runtime(status=503)
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_webhook(
+            webhook_node(fail_on_error_status=True), webhook_context(), runtime
+        )
+
+    assert caught.value.error_class == FlowErrorClass.HTTP_ERROR
+    assert "503" in caught.value.detail

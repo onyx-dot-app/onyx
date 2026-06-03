@@ -26,7 +26,9 @@ from onyx.flows.nodes.condition import execute_condition, resume_condition
 from onyx.flows.nodes.http import build_http_client, execute_http
 from onyx.flows.nodes.human import execute_human, resume_human
 from onyx.flows.nodes.loop import execute_loop
+from onyx.flows.nodes.retry import execute_retry
 from onyx.flows.nodes.transform import execute_transform
+from onyx.flows.nodes.webhook import execute_webhook
 
 NODE_EXECUTORS: dict[FlowNodeKind, NodeExecutor] = {
     FlowNodeKind.HTTP: execute_http,
@@ -36,6 +38,8 @@ NODE_EXECUTORS: dict[FlowNodeKind, NodeExecutor] = {
     FlowNodeKind.HUMAN: execute_human,
     FlowNodeKind.CODE: execute_code,
     FlowNodeKind.LOOP: execute_loop,
+    FlowNodeKind.RETRY: execute_retry,
+    FlowNodeKind.WEBHOOK: execute_webhook,
 }
 
 NODE_REPLAYERS: dict[FlowNodeKind, NodeReplayer] = {

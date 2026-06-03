@@ -41,6 +41,10 @@ logger = setup_logger()
 # whatever is going to POST to it.
 WEBHOOK_SECRET_BYTES = 32
 
+# The key a flow signs its outbound deliveries with. Same size, different job:
+# this one goes into the receiving system rather than coming from it.
+SIGNING_SECRET_BYTES = 32
+
 
 # ---------------------------------------------------------------------------
 # Flow CRUD
@@ -68,6 +72,10 @@ def create_flow(
         description=description,
         draft_spec=draft_spec,
         status=FlowStatus.PAUSED,
+    )
+    # EncryptedString coerces str -> SensitiveValue at the ORM level.
+    flow.webhook_signing_secret = secrets.token_urlsafe(  # ty: ignore[invalid-assignment]
+        SIGNING_SECRET_BYTES
     )
     db_session.add(flow)
     db_session.flush()
@@ -174,6 +182,25 @@ def publish_flow(*, db_session: Session, flow: Flow, user_id: UUID) -> FlowVersi
         len(spec.nodes),
     )
     return version
+
+
+def ensure_webhook_signing_secret(*, db_session: Session, flow: Flow) -> str:
+    """The flow's signing secret, minting one if it has none yet.
+
+    Flows created before webhook nodes existed have a NULL here, and so does
+    any flow restored from a backup taken then. Minting on demand means the
+    column never needs backfilling and a flow only gains a secret at the point
+    something is going to read it.
+    """
+    if flow.webhook_signing_secret is None:
+        flow.webhook_signing_secret = secrets.token_urlsafe(  # ty: ignore[invalid-assignment]
+            SIGNING_SECRET_BYTES
+        )
+        db_session.flush()
+        logger.info("minted a webhook signing secret flow_id=%s", flow.id)
+
+    assert flow.webhook_signing_secret is not None  # just assigned if it was not
+    return flow.webhook_signing_secret.get_value(apply_mask=False)
 
 
 def get_flow_version(

@@ -12499,7 +12499,9 @@
         "AI": "AI",
         "HUMAN": "승인",
         "CODE": "코드",
-        "LOOP": "반복"
+        "LOOP": "반복",
+        "RETRY": "재시도",
+        "WEBHOOK": "웹훅"
       },
       "startBadge": "시작",
       "fanOutBadge": "항목별",
@@ -12526,7 +12528,9 @@
         "AI": "AI",
         "HUMAN": "승인",
         "CODE": "코드",
-        "LOOP": "반복"
+        "LOOP": "반복",
+        "RETRY": "재시도",
+        "WEBHOOK": "웹훅"
       }
     },
     "status": {
@@ -12549,7 +12553,9 @@
         "AI": "AI",
         "HUMAN": "승인",
         "CODE": "코드",
-        "LOOP": "반복"
+        "LOOP": "반복",
+        "RETRY": "재시도",
+        "WEBHOOK": "웹훅"
       },
       "fields": {
         "name": "이름",
@@ -12586,7 +12592,19 @@
         "over": "나눌 목록",
         "overHelp": "목록을 반환하는 식입니다.",
         "batchSize": "배치당 항목 수",
-        "batchSizeHelp": "다음 단계를 항목마다 실행하면 배치를 하나씩 받습니다."
+        "batchSizeHelp": "다음 단계를 항목마다 실행하면 배치를 하나씩 받습니다.",
+        "untilPath": "응답의 이 부분이 맞을 때까지 대기",
+        "untilPathHelp": "응답 본문의 점 경로입니다. 비워 두면 본문 전체를 확인합니다.",
+        "untilValue": "기대하는 값",
+        "maxChecks": "확인 횟수",
+        "maxChecksHelp": "포기하기 전까지 몇 번 확인할지입니다.",
+        "interval": "확인 간격(초)",
+        "intervalHelp": "0 이면 곧바로 다시 확인합니다.",
+        "retryWindow": "최대 {seconds}초까지 기다립니다.",
+        "payload": "페이로드",
+        "payloadHelp": "보낼 JSON 본문입니다. 식은 보내기 전에 해석됩니다.",
+        "signingSecret": "서명 비밀키",
+        "signingSecretHelp": "받는 시스템에 복사해 넣으세요. 전송할 때 X-Onyx-Signature 헤더로 함께 갑니다."
       },
       "onError": {
         "stop": "실행 중단",
@@ -12615,7 +12633,9 @@
         "fieldType": "text",
         "question": "요약을 팀에 보낼까요?",
         "assignee": "someone@example.com",
-        "over": "'{{' steps.fetch.body.rows '}}'"
+        "over": "'{{' steps.fetch.body.rows '}}'",
+        "untilPath": "state",
+        "payload": "'{' \"text\": \"요약\" '}'"
       }
     },
     "editor": {

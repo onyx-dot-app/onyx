@@ -14,6 +14,8 @@ const KINDS: readonly FlowNodeKind[] = [
   "TRANSFORM",
   "CONDITION",
   "LOOP",
+  "RETRY",
+  "WEBHOOK",
   "HUMAN",
 ];
 

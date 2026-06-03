@@ -12501,7 +12501,9 @@
         "AI": "KI",
         "HUMAN": "Freigabe",
         "CODE": "Code",
-        "LOOP": "Schleife"
+        "LOOP": "Schleife",
+        "RETRY": "Wiederholen",
+        "WEBHOOK": "Webhook"
       },
       "startBadge": "Start",
       "fanOutBadge": "pro Element",
@@ -12528,7 +12530,9 @@
         "AI": "KI",
         "HUMAN": "Freigabe",
         "CODE": "Code",
-        "LOOP": "Schleife"
+        "LOOP": "Schleife",
+        "RETRY": "Wiederholen",
+        "WEBHOOK": "Webhook"
       }
     },
     "status": {
@@ -12551,7 +12555,9 @@
         "AI": "KI",
         "HUMAN": "Freigabe",
         "CODE": "Code",
-        "LOOP": "Schleife"
+        "LOOP": "Schleife",
+        "RETRY": "Wiederholen",
+        "WEBHOOK": "Webhook"
       },
       "fields": {
         "name": "Name",
@@ -12588,7 +12594,19 @@
         "over": "Diese Liste aufteilen",
         "overHelp": "Ein Ausdruck, der eine Liste ergibt.",
         "batchSize": "Elemente pro Stapel",
-        "batchSizeHelp": "Der nächste Schritt erhält jeweils einen Stapel, wenn er pro Element läuft."
+        "batchSizeHelp": "Der nächste Schritt erhält jeweils einen Stapel, wenn er pro Element läuft.",
+        "untilPath": "Warten, bis dieser Teil der Antwort passt",
+        "untilPathHelp": "Ein Punktpfad in den Antworttext. Leer lassen, um die ganze Antwort zu prüfen.",
+        "untilValue": "Erwarteter Wert",
+        "maxChecks": "Anzahl der Prüfungen",
+        "maxChecksHelp": "Wie oft gefragt wird, bevor aufgegeben wird.",
+        "interval": "Sekunden zwischen den Prüfungen",
+        "intervalHelp": "Null fragt sofort erneut.",
+        "retryWindow": "Wartet insgesamt bis zu {seconds} Sekunden.",
+        "payload": "Nutzdaten",
+        "payloadHelp": "Der JSON-Text, der gesendet wird. Ausdrücke werden vorher aufgelöst.",
+        "signingSecret": "Signaturschlüssel",
+        "signingSecretHelp": "Kopieren Sie ihn in das empfangende System. Jede Zustellung trägt ihn als X-Onyx-Signature-Header."
       },
       "onError": {
         "stop": "Lauf anhalten",
@@ -12617,7 +12635,9 @@
         "fieldType": "text",
         "question": "Die Zusammenfassung an das Team senden?",
         "assignee": "person@example.com",
-        "over": "'{{' steps.fetch.body.rows '}}'"
+        "over": "'{{' steps.fetch.body.rows '}}'",
+        "untilPath": "state",
+        "payload": "'{' \"text\": \"eine Zusammenfassung\" '}'"
       }
     },
     "editor": {

@@ -29,6 +29,7 @@ from onyx.db.flow import (
     apply_human_decision,
     claim_due_triggers,
     create_flow,
+    ensure_webhook_signing_secret,
     finish_node_run,
     get_flow,
     get_run,
@@ -678,3 +679,58 @@ def test_a_parked_run_still_counts_as_in_flight(
     db_session.expire_all()
 
     assert has_in_flight_run(db_session=db_session, flow_id=run.flow_id) is True
+
+
+# ---------------------------------------------------------------------------
+# Webhook signing secret
+# ---------------------------------------------------------------------------
+
+
+def test_a_new_flow_gets_a_signing_secret_that_survives_the_column(
+    db_session: Session, owner: User
+) -> None:
+    """Minted on create, and the same value comes back out.
+
+    The column is an EncryptedString, so the value makes a round trip through
+    the type decorator rather than being stored as given. Whether that round
+    trip actually encrypts depends on the deployment's key, which is the
+    type's own business — what matters here is that a receiver's configured
+    secret still matches what the flow will sign with.
+    """
+    flow = make_flow(db_session, owner, name="signed flow")
+
+    assert flow.webhook_signing_secret is not None
+    secret = flow.webhook_signing_secret.get_value(apply_mask=False)
+    assert len(secret) > 20, "too short to be worth signing with"
+
+    db_session.expire_all()
+    reloaded = get_flow(db_session=db_session, flow_id=flow.id, user_id=owner.id)
+    assert reloaded.webhook_signing_secret is not None
+    assert reloaded.webhook_signing_secret.get_value(apply_mask=False) == secret
+
+
+def test_minting_a_signing_secret_is_idempotent(
+    db_session: Session, owner: User
+) -> None:
+    flow = make_flow(db_session, owner, name="stable secret flow")
+    first = ensure_webhook_signing_secret(db_session=db_session, flow=flow)
+
+    second = ensure_webhook_signing_secret(db_session=db_session, flow=flow)
+
+    assert second == first, "a receiver's configured secret must not move"
+
+
+def test_a_flow_without_a_secret_gets_one_on_demand(
+    db_session: Session, owner: User
+) -> None:
+    """Flows written before webhook nodes existed have NULL here."""
+    flow = make_flow(db_session, owner, name="legacy flow")
+    flow.webhook_signing_secret = None
+    db_session.commit()
+
+    minted = ensure_webhook_signing_secret(db_session=db_session, flow=flow)
+    db_session.commit()
+
+    assert minted
+    assert flow.webhook_signing_secret is not None
+    assert flow.webhook_signing_secret.get_value(apply_mask=False) == minted

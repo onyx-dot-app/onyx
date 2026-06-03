@@ -9,7 +9,9 @@ import {
   SvgBranch,
   SvgCode,
   SvgGlobe,
+  SvgHourglass,
   SvgRefreshCw,
+  SvgShareWebhook,
   SvgSparkle,
   SvgTerminal,
   SvgUserCheck,
@@ -72,6 +74,18 @@ const VISUALS = {
     chipClassName: "bg-status-success-01",
     iconClassName: "text-status-success-05",
     accentBorderClassName: "border-status-success-05",
+  },
+  RETRY: {
+    icon: SvgHourglass,
+    chipClassName: "bg-status-warning-01",
+    iconClassName: "text-status-warning-05",
+    accentBorderClassName: "border-status-warning-05",
+  },
+  WEBHOOK: {
+    icon: SvgShareWebhook,
+    chipClassName: "bg-status-info-01",
+    iconClassName: "text-status-info-05",
+    accentBorderClassName: "border-status-info-05",
   },
 } satisfies Record<FlowNodeKind, NodeVisual>;
 

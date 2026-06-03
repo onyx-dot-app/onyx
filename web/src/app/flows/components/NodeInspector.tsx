@@ -15,6 +15,7 @@ import { SvgTrash } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { visualFor } from "@/app/flows/components/nodeVisuals";
 import { UNARY_OPERATORS } from "@/app/flows/types";
+import type { JsonValue } from "@/app/flows/types";
 import type {
   AiNode,
   CodeNode,
@@ -25,7 +26,9 @@ import type {
   HttpMethod,
   HumanNode,
   LoopNode,
+  RetryNode,
   TransformNode,
+  WebhookNode,
 } from "@/app/flows/types";
 
 const HTTP_METHODS: readonly HttpMethod[] = [
@@ -54,6 +57,9 @@ export interface NodeInspectorProps {
   /** True for the spec's entry node, which cannot be deleted from here. */
   isStart: boolean;
   canDelete: boolean;
+  /** The flow's key, shown on a webhook step so it can be copied into the
+   *  receiving system. Null while the flow is still loading. */
+  webhookSigningSecret?: string | null;
   onChange: (node: FlowNode) => void;
   onDelete: (nodeId: string) => void;
   className?: string;
@@ -71,6 +77,7 @@ export function NodeInspector({
   node,
   isStart,
   canDelete,
+  webhookSigningSecret,
   onChange,
   onDelete,
   className,
@@ -127,6 +134,16 @@ export function NodeInspector({
       ) : null}
       {node.kind === "LOOP" ? (
         <LoopFields node={node} onChange={onChange} />
+      ) : null}
+      {node.kind === "RETRY" ? (
+        <RetryFields node={node} onChange={onChange} />
+      ) : null}
+      {node.kind === "WEBHOOK" ? (
+        <WebhookFields
+          node={node}
+          signingSecret={webhookSigningSecret ?? null}
+          onChange={onChange}
+        />
       ) : null}
 
       {canFanOut(node) ? (
@@ -544,6 +561,224 @@ function clampBatchSize(raw: string): number {
   const parsed = Number.parseInt(raw, 10);
   if (Number.isNaN(parsed)) return 1;
   return Math.min(200, Math.max(1, parsed));
+}
+
+function RetryFields({ node, onChange }: FieldProps<RetryNode>) {
+  const t = useTranslations("flows.inspector");
+  const needsValue = !UNARY_OPERATORS.includes(node.operator);
+
+  return (
+    <>
+      <InputVertical
+        withLabel
+        title={t("fields.url")}
+        description={t("fields.urlHelp")}
+      >
+        <InputTypeIn
+          value={node.url}
+          onChange={(event) => onChange({ ...node, url: event.target.value })}
+        />
+      </InputVertical>
+
+      <InputVertical
+        withLabel
+        title={t("fields.untilPath")}
+        description={t("fields.untilPathHelp")}
+        suffix="optional"
+      >
+        <InputTypeIn
+          value={node.until_path ?? ""}
+          placeholder={t("placeholder.untilPath")}
+          onChange={(event) =>
+            onChange({
+              ...node,
+              until_path: event.target.value === "" ? null : event.target.value,
+            })
+          }
+        />
+      </InputVertical>
+
+      <InputVertical withLabel title={t("fields.operator")}>
+        <InputSingleSelect
+          value={node.operator}
+          onValueChange={(raw) => {
+            const operator = asOperator(raw);
+            onChange({
+              ...node,
+              operator,
+              value: UNARY_OPERATORS.includes(operator)
+                ? null
+                : (node.value ?? ""),
+            });
+          }}
+        >
+          <InputSingleSelect.Trigger />
+          <InputSingleSelect.Content>
+            {OPERATORS.map((operator) => (
+              <InputSingleSelect.Item key={operator} value={operator}>
+                {t(`operator.${operator}`)}
+              </InputSingleSelect.Item>
+            ))}
+          </InputSingleSelect.Content>
+        </InputSingleSelect>
+      </InputVertical>
+
+      {needsValue ? (
+        <InputVertical withLabel title={t("fields.untilValue")}>
+          <InputTypeIn
+            value={node.value ?? ""}
+            onChange={(event) =>
+              onChange({ ...node, value: event.target.value })
+            }
+          />
+        </InputVertical>
+      ) : null}
+
+      <InputVertical
+        withLabel
+        title={t("fields.maxChecks")}
+        description={t("fields.maxChecksHelp")}
+      >
+        <InputTypeIn
+          type="number"
+          min={1}
+          max={60}
+          value={String(node.max_checks)}
+          onChange={(event) =>
+            onChange({ ...node, max_checks: clampChecks(event.target.value) })
+          }
+        />
+      </InputVertical>
+
+      <InputVertical
+        withLabel
+        title={t("fields.interval")}
+        description={t("fields.intervalHelp")}
+      >
+        <InputTypeIn
+          type="number"
+          min={0}
+          max={60}
+          value={String(node.interval_seconds)}
+          onChange={(event) =>
+            onChange({
+              ...node,
+              interval_seconds: clampInterval(event.target.value),
+            })
+          }
+        />
+      </InputVertical>
+
+      <Text font="main-ui-muted" color="text-03">
+        {t("fields.retryWindow", {
+          seconds: Math.round(node.max_checks * node.interval_seconds),
+        })}
+      </Text>
+    </>
+  );
+}
+
+function WebhookFields({
+  node,
+  signingSecret,
+  onChange,
+}: FieldProps<WebhookNode> & { signingSecret: string | null }) {
+  const t = useTranslations("flows.inspector");
+
+  return (
+    <>
+      <InputVertical
+        withLabel
+        title={t("fields.url")}
+        description={t("fields.urlHelp")}
+      >
+        <InputTypeIn
+          value={node.url}
+          onChange={(event) => onChange({ ...node, url: event.target.value })}
+        />
+      </InputVertical>
+
+      <InputVertical
+        withLabel
+        title={t("fields.payload")}
+        description={t("fields.payloadHelp")}
+      >
+        <InputTextArea
+          value={stringifyPayload(node.payload)}
+          rows={6}
+          spellCheck={false}
+          placeholder={t("placeholder.payload")}
+          onChange={(event) =>
+            onChange({ ...node, payload: parsePayload(event.target.value) })
+          }
+        />
+      </InputVertical>
+
+      <InputVertical withLabel title={t("fields.headers")} suffix="optional">
+        <InputKeyValue
+          items={toPairs(node.headers)}
+          onChange={(items) => onChange({ ...node, headers: toRecord(items) })}
+        />
+      </InputVertical>
+
+      {signingSecret !== null ? (
+        <InputVertical
+          withLabel
+          title={t("fields.signingSecret")}
+          description={t("fields.signingSecretHelp")}
+        >
+          <InputTypeIn
+            variant="readOnly"
+            value={signingSecret}
+            data-testid="webhook-signing-secret"
+          />
+        </InputVertical>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The payload as text the author can edit.
+ *
+ * A webhook body is arbitrary JSON, so it is a text field rather than a set
+ * of key/value rows — nested blocks are exactly what a Slack or Discord
+ * delivery needs, and a flat map cannot express them.
+ */
+function stringifyPayload(payload: JsonValue): string {
+  if (payload === null) return "";
+  return JSON.stringify(payload, null, 2);
+}
+
+/**
+ * Text back into a payload, keeping what was typed when it is not valid JSON
+ * yet.
+ *
+ * Half-typed JSON is the normal state of a field somebody is editing. Storing
+ * it as a string keeps the keystroke rather than throwing it away, and the
+ * server rejects a spec it cannot use.
+ */
+function parsePayload(raw: string): JsonValue {
+  if (raw.trim() === "") return null;
+  try {
+    return JSON.parse(raw) as JsonValue;
+  } catch {
+    return raw;
+  }
+}
+
+/** Keep the check count inside what the server will accept. */
+function clampChecks(raw: string): number {
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isNaN(parsed)) return 1;
+  return Math.min(60, Math.max(1, parsed));
+}
+
+/** Keep the wait between checks inside what the server will accept. */
+function clampInterval(raw: string): number {
+  const parsed = Number.parseFloat(raw);
+  if (Number.isNaN(parsed)) return 0;
+  return Math.min(60, Math.max(0, parsed));
 }
 
 function asHttpMethod(value: string): HttpMethod {

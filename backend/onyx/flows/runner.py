@@ -25,6 +25,7 @@ from onyx.db.enums import (
     FlowRunStatus,
 )
 from onyx.db.flow import (
+    ensure_webhook_signing_secret,
     finish_node_run,
     get_node_run,
     get_run,
@@ -218,6 +219,9 @@ def run_flow_logic(run_id: UUID) -> None:
         raw_spec = run.version.spec if run.version is not None else flow.draft_spec
         trigger_payload = run.trigger_payload
         flow_id = flow.id
+        # Read here rather than in the node: the executor has no session, and
+        # a run should not be opening one halfway through a delivery.
+        signing_secret = ensure_webhook_signing_secret(db_session=db_session, flow=flow)
 
         try:
             spec = parse_spec(raw_spec)
@@ -243,7 +247,12 @@ def run_flow_logic(run_id: UUID) -> None:
         len(spec.nodes),
     )
 
-    result = _execute(spec=spec, run_id=run_id, trigger_payload=trigger_payload)
+    result = _execute(
+        spec=spec,
+        run_id=run_id,
+        trigger_payload=trigger_payload,
+        signing_secret=signing_secret,
+    )
 
     with get_session_with_current_tenant() as db_session:
         run = get_run(db_session=db_session, run_id=run_id)
@@ -268,11 +277,18 @@ def run_flow_logic(run_id: UUID) -> None:
     )
 
 
-def _execute(*, spec: Any, run_id: UUID, trigger_payload: Any) -> RunResult:
+def _execute(
+    *,
+    spec: Any,
+    run_id: UUID,
+    trigger_payload: Any,
+    signing_secret: str | None = None,
+) -> RunResult:
     """Run the graph, converting an unexpected crash into a FAILED result."""
     runtime = NodeRuntime(
         http_client=build_http_client(HTTP_CLIENT_TIMEOUT_SECONDS),
         llm_provider=_default_llm_provider,
+        webhook_signing_secret=signing_secret,
     )
     try:
         return execute_flow(

@@ -12501,7 +12501,9 @@
         "AI": "IA",
         "HUMAN": "Aprovação",
         "CODE": "Código",
-        "LOOP": "Ciclo"
+        "LOOP": "Ciclo",
+        "RETRY": "Repetir",
+        "WEBHOOK": "Webhook"
       },
       "startBadge": "início",
       "fanOutBadge": "por item",
@@ -12528,7 +12530,9 @@
         "AI": "IA",
         "HUMAN": "Aprovação",
         "CODE": "Código",
-        "LOOP": "Ciclo"
+        "LOOP": "Ciclo",
+        "RETRY": "Repetir",
+        "WEBHOOK": "Webhook"
       }
     },
     "status": {
@@ -12551,7 +12555,9 @@
         "AI": "IA",
         "HUMAN": "Aprovação",
         "CODE": "Código",
-        "LOOP": "Ciclo"
+        "LOOP": "Ciclo",
+        "RETRY": "Repetir",
+        "WEBHOOK": "Webhook"
       },
       "fields": {
         "name": "Nome",
@@ -12588,7 +12594,19 @@
         "over": "Dividir esta lista",
         "overHelp": "Uma expressão que resulta numa lista.",
         "batchSize": "Itens por lote",
-        "batchSizeHelp": "A etapa seguinte recebe um lote de cada vez se correr por item."
+        "batchSizeHelp": "A etapa seguinte recebe um lote de cada vez se correr por item.",
+        "untilPath": "Esperar até esta parte da resposta corresponder",
+        "untilPathHelp": "Um caminho com pontos no corpo. Deixe vazio para testar a resposta inteira.",
+        "untilValue": "Valor esperado",
+        "maxChecks": "Quantas verificações",
+        "maxChecksHelp": "Quantas vezes perguntar antes de desistir.",
+        "interval": "Segundos entre verificações",
+        "intervalHelp": "Zero pergunta outra vez de imediato.",
+        "retryWindow": "Espera até {seconds} segundos no total.",
+        "payload": "Conteúdo",
+        "payloadHelp": "O corpo JSON a enviar. As expressões são resolvidas antes do envio.",
+        "signingSecret": "Chave de assinatura",
+        "signingSecretHelp": "Copie-a para o sistema recetor. Cada envio leva-a no cabeçalho X-Onyx-Signature."
       },
       "onError": {
         "stop": "Parar a execução",
@@ -12617,7 +12635,9 @@
         "fieldType": "text",
         "question": "Enviar o resumo à equipa?",
         "assignee": "alguem@example.com",
-        "over": "'{{' steps.fetch.body.rows '}}'"
+        "over": "'{{' steps.fetch.body.rows '}}'",
+        "untilPath": "state",
+        "payload": "'{' \"text\": \"um resumo\" '}'"
       }
     },
     "editor": {

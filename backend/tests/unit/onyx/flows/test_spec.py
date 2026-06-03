@@ -1,14 +1,30 @@
 """Spec validation: what the editor is allowed to save."""
 
+from typing import TypeVar
+
 import pytest
 
 from onyx.flows.models import (
     MAX_CODE_LENGTH,
     MAX_FAN_OUT_ITEMS,
     ConditionNode,
+    FlowSpec,
+    RetryNode,
     SpecError,
+    WebhookNode,
     parse_spec,
 )
+
+_Node = TypeVar("_Node")
+
+
+def only(spec: FlowSpec, kind: type[_Node]) -> _Node:
+    """The spec's single node, narrowed. A wrong kind means the test is wrong."""
+    node = spec.nodes[0]
+    assert isinstance(node, kind), (
+        f"expected {kind.__name__}, got {type(node).__name__}"
+    )
+    return node
 
 
 def http_node(node_id: str, **overrides: object) -> dict:
@@ -265,3 +281,85 @@ def test_a_loop_batch_must_fit_the_fan_out_limit() -> None:
                 ],
             }
         )
+
+
+def test_a_retry_cannot_wait_longer_than_one_step_is_allowed() -> None:
+    with pytest.raises(SpecError, match="over the 600s limit"):
+        parse_spec(
+            {
+                "start": "poll",
+                "nodes": [
+                    {
+                        "id": "poll",
+                        "kind": "RETRY",
+                        "url": "https://example.test/jobs/1",
+                        "value": "done",
+                        "max_checks": 40,
+                        "interval_seconds": 30,
+                    }
+                ],
+            }
+        )
+
+
+def test_a_retry_with_a_binary_operator_needs_something_to_compare() -> None:
+    with pytest.raises(SpecError, match="needs a 'value'"):
+        parse_spec(
+            {
+                "start": "poll",
+                "nodes": [
+                    {
+                        "id": "poll",
+                        "kind": "RETRY",
+                        "url": "https://example.test/jobs/1",
+                        "operator": "eq",
+                    }
+                ],
+            }
+        )
+
+
+def test_a_retry_checking_for_presence_needs_no_value() -> None:
+    spec = parse_spec(
+        {
+            "start": "poll",
+            "nodes": [
+                {
+                    "id": "poll",
+                    "kind": "RETRY",
+                    "url": "https://example.test/jobs/1",
+                    "until_path": "result",
+                    "operator": "is_not_empty",
+                }
+            ],
+        }
+    )
+
+    assert only(spec, RetryNode).value is None
+
+
+def test_rejects_a_webhook_with_no_url() -> None:
+    with pytest.raises(SpecError, match="url: must not be empty"):
+        parse_spec({"start": "w", "nodes": [{"id": "w", "kind": "WEBHOOK", "url": ""}]})
+
+
+def test_a_webhook_delivers_whatever_shape_you_give_it() -> None:
+    """The payload is arbitrary JSON, not a flat map of strings."""
+    spec = parse_spec(
+        {
+            "start": "w",
+            "nodes": [
+                {
+                    "id": "w",
+                    "kind": "WEBHOOK",
+                    "url": "https://hooks.example.test/x",
+                    "payload": {
+                        "text": "{{ steps.ai.summary }}",
+                        "blocks": [{"type": "section", "n": 1}],
+                    },
+                }
+            ],
+        }
+    )
+
+    assert only(spec, WebhookNode).payload["blocks"][0]["type"] == "section"

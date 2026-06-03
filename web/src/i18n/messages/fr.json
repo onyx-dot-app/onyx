@@ -12503,7 +12503,9 @@
         "AI": "IA",
         "HUMAN": "Approbation",
         "CODE": "Code",
-        "LOOP": "Boucle"
+        "LOOP": "Boucle",
+        "RETRY": "Réessayer",
+        "WEBHOOK": "Webhook"
       },
       "startBadge": "début",
       "fanOutBadge": "par élément",
@@ -12530,7 +12532,9 @@
         "AI": "IA",
         "HUMAN": "Approbation",
         "CODE": "Code",
-        "LOOP": "Boucle"
+        "LOOP": "Boucle",
+        "RETRY": "Réessayer",
+        "WEBHOOK": "Webhook"
       }
     },
     "status": {
@@ -12553,7 +12557,9 @@
         "AI": "IA",
         "HUMAN": "Approbation",
         "CODE": "Code",
-        "LOOP": "Boucle"
+        "LOOP": "Boucle",
+        "RETRY": "Réessayer",
+        "WEBHOOK": "Webhook"
       },
       "fields": {
         "name": "Nom",
@@ -12590,7 +12596,19 @@
         "over": "Découper cette liste",
         "overHelp": "Une expression qui donne une liste.",
         "batchSize": "Éléments par lot",
-        "batchSizeHelp": "L'étape suivante reçoit un lot à la fois si elle s'exécute par élément."
+        "batchSizeHelp": "L'étape suivante reçoit un lot à la fois si elle s'exécute par élément.",
+        "untilPath": "Attendre que cette partie de la réponse corresponde",
+        "untilPathHelp": "Un chemin pointé dans le corps. Laissez vide pour tester toute la réponse.",
+        "untilValue": "Valeur attendue",
+        "maxChecks": "Nombre de vérifications",
+        "maxChecksHelp": "Combien de fois demander avant d'abandonner.",
+        "interval": "Secondes entre les vérifications",
+        "intervalHelp": "Zéro redemande tout de suite.",
+        "retryWindow": "Attend jusqu'à {seconds} secondes au total.",
+        "payload": "Contenu",
+        "payloadHelp": "Le corps JSON envoyé. Les expressions sont résolues avant l'envoi.",
+        "signingSecret": "Clé de signature",
+        "signingSecretHelp": "Copiez-la dans le système récepteur. Chaque envoi la porte dans l'en-tête X-Onyx-Signature."
       },
       "onError": {
         "stop": "Arrêter l'exécution",
@@ -12619,7 +12637,9 @@
         "fieldType": "text",
         "question": "Envoyer le résumé à l'équipe ?",
         "assignee": "personne@example.com",
-        "over": "'{{' steps.fetch.body.rows '}}'"
+        "over": "'{{' steps.fetch.body.rows '}}'",
+        "untilPath": "state",
+        "payload": "'{' \"text\": \"un résumé\" '}'"
       }
     },
     "editor": {

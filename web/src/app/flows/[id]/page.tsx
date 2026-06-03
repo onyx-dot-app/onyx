@@ -256,6 +256,7 @@ export default function FlowEditorPage() {
               node={selectedNode}
               isStart={selectedNode.id === draft.start}
               canDelete={!isLastNode(draft)}
+              webhookSigningSecret={flow.webhook_signing_secret}
               onChange={handleNodeChange}
               onDelete={handleNodeDelete}
               className="w-80 shrink-0"

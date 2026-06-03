@@ -929,6 +929,8 @@ class FlowNodeKind(str, PyEnum):
     HUMAN = "HUMAN"
     CODE = "CODE"
     LOOP = "LOOP"
+    RETRY = "RETRY"
+    WEBHOOK = "WEBHOOK"
 
 
 class FlowRunStatus(str, PyEnum):
@@ -981,6 +983,7 @@ class FlowErrorClass(str, PyEnum):
     HTTP_ERROR = "http_error"
     CODE_ERROR = "code_error"
     DECISION_REJECTED = "decision_rejected"
+    RETRY_EXHAUSTED = "retry_exhausted"
     LLM_ERROR = "llm_error"
     OUTPUT_MISMATCH = "output_mismatch"
     TIMEOUT = "timeout"

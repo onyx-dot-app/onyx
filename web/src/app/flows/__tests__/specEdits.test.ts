@@ -106,6 +106,20 @@ describe("blankNode", () => {
     });
     expect(blankNode("x", "CODE")).toMatchObject({ timeout_seconds: 30 });
     expect(blankNode("x", "LOOP")).toMatchObject({ batch_size: 10 });
+    expect(blankNode("x", "RETRY")).toMatchObject({
+      max_checks: 10,
+      interval_seconds: 5,
+    });
+    // A receiver being down is their outage, not a reason to stop the run.
+    expect(blankNode("x", "WEBHOOK")).toMatchObject({
+      fail_on_error_status: false,
+    });
+  });
+
+  it("keeps a retry inside the server's wait budget", () => {
+    const node = blankNode("x", "RETRY");
+    if (node.kind !== "RETRY") throw new Error("wrong kind");
+    expect(node.max_checks * node.interval_seconds).toBeLessThanOrEqual(600);
   });
 
   it("names the node after its id", () => {

@@ -191,6 +191,84 @@ send.for_each   = "{{ steps.loop.batches }}"
 `send` then runs once per batch with `{{ item }}` bound to the 25 rows, which is
 the shape most bulk APIs actually want.
 
+### RETRY
+
+Calls an endpoint over and over until the answer is the one you are waiting
+for. Output is `{result, checks, satisfied}`, where `result` is the last
+response in the same `{status, headers, body}` shape an HTTP node produces.
+
+Not the same thing as `retry` on a node, and the difference is the whole
+reason it exists:
+
+| | fires when |
+|---|---|
+| `retry` policy | the step **raised** — a timeout, a refused connection, a 500 |
+| RETRY node | the step **succeeded and said "not yet"** |
+
+That is the long-job-behind-an-API shape: you POST some work, you get a job id,
+and then you sit there asking whether it is done. Without this you would need a
+cycle in the graph, and a spec is acyclic on purpose.
+
+The two layers compose rather than overlap. A transient error still propagates
+out of the loop and is handled by the node's own retry policy; only an
+unsatisfied condition is handled inside it.
+
+```
+poll.url              = "https://api.example.com/exports/{{ steps.start.body.id }}"
+poll.until_path       = "state"
+poll.operator         = "eq"
+poll.value            = "complete"
+poll.max_checks       = 30
+poll.interval_seconds = 10
+```
+
+A path that is not there yet counts as "not yet" rather than as an error — an
+endpoint that omits `state` until the job starts is answering the question.
+Running out of checks fails the node with `retry_exhausted`; turn
+`fail_when_exhausted` off to carry on and branch on `satisfied` instead.
+
+The node sleeps inside one step rather than across the graph, so the spec caps
+`max_checks × interval_seconds` at 600 s. Without that, one step could eat the
+whole run budget on its own.
+
+### WEBHOOK
+
+POSTs a payload to an outside system. Output is
+`{delivered, signed, status, headers, response}`.
+
+The HTTP node can already send a POST. What it cannot do is prove the delivery
+came from here, and that is the difference: a webhook node signs the body it
+sends, so a receiver can tell a real delivery from anything else that found the
+URL.
+
+Two headers ride along:
+
+```
+X-Onyx-Timestamp: 1780531200
+X-Onyx-Signature: <hex>
+```
+
+The signature is `HMAC-SHA256(secret, f"{timestamp}.{raw_body}")`. Signing the
+timestamp too is what stops a captured delivery being replayed later — a
+receiver rejects anything older than its own tolerance. To verify:
+
+```python
+signed = f"{headers['X-Onyx-Timestamp']}.{raw_body}"
+expected = hmac.new(secret, signed.encode(), hashlib.sha256).hexdigest()
+hmac.compare_digest(expected, headers["X-Onyx-Signature"])
+```
+
+The secret is per **flow**, not per node — a receiver verifies deliveries from
+a flow. It is minted when the flow is created (or on first read, for flows that
+pre-date webhook nodes), kept in `flow.webhook_signing_secret` as an
+`EncryptedString`, and served to the flow's owner on `GET /flows/{flow_id}`.
+Unlike an inbound trigger's secret it is readable more than once, because
+setting up another receiver means copying it again.
+
+A webhook does **not** fail the run on a 4xx or 5xx by default. A receiver
+being down is their outage, not a reason to stop an automation that has already
+done its work; `fail_on_error_status` turns that around.
+
 ## Execution
 
 `execute_flow` walks the reachable subgraph in topological order (Kahn's
@@ -210,7 +288,8 @@ grey means broken.
 
 **Expression errors are not retried.** A missing key will still be missing in two
 seconds. Only `http_error`, `timeout`, `llm_error` and `node_exception` get
-another attempt.
+another attempt. A RETRY node's own loop is separate from this: see
+[RETRY](#retry).
 
 **A run waiting on a person holds nothing.** See below.
 

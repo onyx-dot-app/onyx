@@ -18,7 +18,9 @@ import type {
   HttpNode,
   HumanNode,
   LoopNode,
+  RetryNode,
   TransformNode,
+  WebhookNode,
 } from "@/app/flows/types";
 
 const DEFAULT_RETRY = { max_attempts: 1, backoff_seconds: 1 };
@@ -137,6 +139,40 @@ export function blankNode(id: string, kind: FlowNodeKind): FlowNode {
         kind: "LOOP",
         over: "",
         batch_size: 10,
+      };
+      return node;
+    }
+    case "RETRY": {
+      const node: RetryNode = {
+        ...base,
+        kind: "RETRY",
+        method: "GET",
+        url: "https://",
+        headers: {},
+        query: {},
+        body: null,
+        timeout_seconds: 30,
+        result_path: null,
+        fail_on_error_status: true,
+        until_path: null,
+        operator: "eq",
+        value: "",
+        max_checks: 10,
+        interval_seconds: 5,
+        fail_when_exhausted: true,
+      };
+      return node;
+    }
+    case "WEBHOOK": {
+      const node: WebhookNode = {
+        ...base,
+        kind: "WEBHOOK",
+        url: "https://",
+        payload: {},
+        headers: {},
+        timeout_seconds: 30,
+        // A receiver being down is their outage, not a reason to stop.
+        fail_on_error_status: false,
       };
       return node;
     }

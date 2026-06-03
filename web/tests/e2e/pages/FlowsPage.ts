@@ -39,6 +39,8 @@ export type StepKind =
   | "Transform"
   | "Condition"
   | "Loop"
+  | "Retry"
+  | "Webhook"
   | "Approval";
 
 export class FlowsPage {
@@ -64,6 +66,7 @@ export class FlowsPage {
   readonly decisionPanel: Locator;
   readonly approveButton: Locator;
   readonly rejectButton: Locator;
+  readonly signingSecret: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -88,6 +91,7 @@ export class FlowsPage {
     this.decisionPanel = page.getByTestId("decision-panel");
     this.approveButton = page.getByTestId("decision-approve");
     this.rejectButton = page.getByTestId("decision-reject");
+    this.signingSecret = page.getByTestId("webhook-signing-secret");
   }
 
   // ---------------------------------------------------------------------------
@@ -172,6 +176,26 @@ export class FlowsPage {
     await expect(this.field(title)).toBeVisible();
   }
 
+  async expectFieldValue(title: string, value: string): Promise<void> {
+    await expect(this.field(title)).toHaveValue(value);
+  }
+
+  /** Text the inspector shows that is not a field, such as a note. */
+  async expectInspectorContains(text: string): Promise<void> {
+    await expect(this.inspector).toContainText(text);
+  }
+
+  /**
+   * The key a webhook step signs its deliveries with.
+   *
+   * Returned so a spec can check it is the same one the API serves, rather
+   * than only that some text is on screen.
+   */
+  async readSigningSecret(): Promise<string> {
+    await expect(this.signingSecret).toBeVisible();
+    return this.signingSecret.inputValue();
+  }
+
   /** A field the selected kind does not have. */
   async expectNoField(title: string): Promise<void> {
     await expect(this.field(title)).toHaveCount(0);
@@ -203,6 +227,21 @@ export class FlowsPage {
   // ---------------------------------------------------------------------------
   // Viewport
   // ---------------------------------------------------------------------------
+
+  /** The flow being edited, from the URL the editor is on. */
+  flowIdFromUrl(): string {
+    const found = /\/flows\/([0-9a-f-]{36})/.exec(this.page.url());
+    if (found?.[1] === undefined) {
+      throw new Error(`no flow id in ${this.page.url()}`);
+    }
+    return found[1];
+  }
+
+  /** Pick a comparison operator in the inspector. */
+  async selectOperator(label: string): Promise<void> {
+    await this.field("Operator").click();
+    await this.page.getByRole("option", { name: label, exact: true }).click();
+  }
 
   /** Current zoom as a number, for control flow rather than assertions. */
   async currentZoomPercent(): Promise<number> {

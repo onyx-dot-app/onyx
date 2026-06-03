@@ -12529,7 +12529,9 @@
         "AI": "AI",
         "HUMAN": "Approval",
         "CODE": "Code",
-        "LOOP": "Loop"
+        "LOOP": "Loop",
+        "RETRY": "Retry",
+        "WEBHOOK": "Webhook"
       },
       "startBadge": "start",
       "fanOutBadge": "per item",
@@ -12556,7 +12558,9 @@
         "AI": "AI",
         "HUMAN": "Approval",
         "CODE": "Code",
-        "LOOP": "Loop"
+        "LOOP": "Loop",
+        "RETRY": "Retry",
+        "WEBHOOK": "Webhook"
       }
     },
     "status": {
@@ -12579,7 +12583,9 @@
         "AI": "AI",
         "HUMAN": "Approval",
         "CODE": "Code",
-        "LOOP": "Loop"
+        "LOOP": "Loop",
+        "RETRY": "Retry",
+        "WEBHOOK": "Webhook"
       },
       "fields": {
         "name": "Name",
@@ -12616,7 +12622,19 @@
         "over": "Split this list",
         "overHelp": "An expression that resolves to a list.",
         "batchSize": "Items per batch",
-        "batchSizeHelp": "The next step gets one batch at a time when it runs once per item."
+        "batchSizeHelp": "The next step gets one batch at a time when it runs once per item.",
+        "untilPath": "Wait until this part of the response",
+        "untilPathHelp": "A dotted path into the response body. Leave empty to test the whole body.",
+        "untilValue": "Expected value",
+        "maxChecks": "How many checks",
+        "maxChecksHelp": "How many times to ask before giving up.",
+        "interval": "Seconds between checks",
+        "intervalHelp": "Zero asks again straight away.",
+        "retryWindow": "Waits up to {seconds} seconds in total.",
+        "payload": "Payload",
+        "payloadHelp": "The JSON body to send. Expressions are resolved before it goes out.",
+        "signingSecret": "Signing secret",
+        "signingSecretHelp": "Copy this into the receiving system. Deliveries carry it as an X-Onyx-Signature header."
       },
       "onError": {
         "stop": "Stop the run",
@@ -12645,7 +12663,9 @@
         "fieldType": "text",
         "question": "Send the summary to the team?",
         "assignee": "someone@example.com",
-        "over": "'{{' steps.fetch.body.rows '}}'"
+        "over": "'{{' steps.fetch.body.rows '}}'",
+        "untilPath": "state",
+        "payload": "'{' \"text\": \"a summary\" '}'"
       }
     },
     "editor": {

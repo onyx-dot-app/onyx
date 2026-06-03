@@ -12499,7 +12499,9 @@
         "AI": "AI",
         "HUMAN": "审批",
         "CODE": "代码",
-        "LOOP": "循环"
+        "LOOP": "循环",
+        "RETRY": "重试",
+        "WEBHOOK": "Webhook"
       },
       "startBadge": "起点",
       "fanOutBadge": "逐项",
@@ -12526,7 +12528,9 @@
         "AI": "AI",
         "HUMAN": "审批",
         "CODE": "代码",
-        "LOOP": "循环"
+        "LOOP": "循环",
+        "RETRY": "重试",
+        "WEBHOOK": "Webhook"
       }
     },
     "status": {
@@ -12549,7 +12553,9 @@
         "AI": "AI",
         "HUMAN": "审批",
         "CODE": "代码",
-        "LOOP": "循环"
+        "LOOP": "循环",
+        "RETRY": "重试",
+        "WEBHOOK": "Webhook"
       },
       "fields": {
         "name": "名称",
@@ -12586,7 +12592,19 @@
         "over": "拆分此列表",
         "overHelp": "一个返回列表的表达式。",
         "batchSize": "每批数量",
-        "batchSizeHelp": "下一步按项执行时，每次会收到一批。"
+        "batchSizeHelp": "下一步按项执行时，每次会收到一批。",
+        "untilPath": "等待响应的这一部分满足条件",
+        "untilPathHelp": "响应体中的点号路径。留空则判断整个响应体。",
+        "untilValue": "期望值",
+        "maxChecks": "检查次数",
+        "maxChecksHelp": "放弃之前最多询问多少次。",
+        "interval": "每次检查间隔（秒）",
+        "intervalHelp": "填 0 则立即再次询问。",
+        "retryWindow": "总共最多等待 {seconds} 秒。",
+        "payload": "负载",
+        "payloadHelp": "要发送的 JSON 内容。表达式在发送前解析。",
+        "signingSecret": "签名密钥",
+        "signingSecretHelp": "把它复制到接收系统。每次投递都会通过 X-Onyx-Signature 请求头带上它。"
       },
       "onError": {
         "stop": "停止运行",
@@ -12615,7 +12633,9 @@
         "fieldType": "text",
         "question": "把摘要发给团队吗？",
         "assignee": "someone@example.com",
-        "over": "'{{' steps.fetch.body.rows '}}'"
+        "over": "'{{' steps.fetch.body.rows '}}'",
+        "untilPath": "state",
+        "payload": "'{' \"text\": \"一段摘要\" '}'"
       }
     },
     "editor": {

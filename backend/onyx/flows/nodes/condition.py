@@ -24,7 +24,7 @@ def execute_condition(
         None if node.operator in UNARY_OPERATORS else resolve(node.right or "", context)
     )
 
-    matched = _compare(node.operator, left, right)
+    matched = compare(node.operator, left, right)
     branch = node.on_true if matched else node.on_false
 
     return NodeOutcome(
@@ -45,7 +45,12 @@ def resume_condition(node: ConditionNode, output: Any) -> NodeOutcome:
     return NodeOutcome(output=output, next_ids=list(branch))
 
 
-def _compare(operator: str, left: Any, right: Any) -> bool:
+def compare(operator: str, left: Any, right: Any) -> bool:
+    """Apply one of the condition operators.
+
+    Public because the retry node compares a response the same way. One
+    comparison vocabulary across the product beats two that drift.
+    """
     if operator == "eq":
         return _loosely_equal(left, right)
     if operator == "ne":

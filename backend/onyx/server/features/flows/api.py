@@ -35,6 +35,7 @@ from onyx.db.enums import (
 from onyx.db.flow import (
     apply_human_decision,
     create_flow,
+    ensure_webhook_signing_secret,
     get_flow,
     get_flow_version,
     get_run_for_user,
@@ -120,9 +121,18 @@ def get_flow_route(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> FlowDetail:
+    """The flow the editor renders.
+
+    Mints the webhook signing secret if the flow has none, so a flow written
+    before webhook nodes existed can show one the moment somebody opens it
+    rather than only after its first run. Idempotent, so the write happens
+    once and every later read is a plain read.
+    """
     flow = get_flow(
         db_session=db_session, flow_id=flow_id, user_id=user.id, with_triggers=True
     )
+    ensure_webhook_signing_secret(db_session=db_session, flow=flow)
+    db_session.commit()
     return FlowDetail.build(
         flow, published_spec=_published_spec(db_session=db_session, flow=flow)
     )

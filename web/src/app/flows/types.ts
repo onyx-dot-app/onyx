@@ -25,7 +25,9 @@ export type FlowNodeKind =
   | "AI"
   | "HUMAN"
   | "CODE"
-  | "LOOP";
+  | "LOOP"
+  | "RETRY"
+  | "WEBHOOK";
 export type FlowTriggerKind = "SCHEDULE" | "WEBHOOK" | "MANUAL";
 export type FlowTriggerSource = "SCHEDULE" | "WEBHOOK" | "MANUAL" | "TEST";
 
@@ -136,6 +138,25 @@ export interface LoopNode extends NodeBase {
   batch_size: number;
 }
 
+export interface RetryNode extends Omit<HttpNode, "kind"> {
+  kind: "RETRY";
+  until_path: string | null;
+  operator: ConditionOperator;
+  value: string | null;
+  max_checks: number;
+  interval_seconds: number;
+  fail_when_exhausted: boolean;
+}
+
+export interface WebhookNode extends NodeBase {
+  kind: "WEBHOOK";
+  url: string;
+  payload: JsonValue;
+  headers: Record<string, string>;
+  timeout_seconds: number;
+  fail_on_error_status: boolean;
+}
+
 export type FlowNode =
   | HttpNode
   | TransformNode
@@ -143,7 +164,9 @@ export type FlowNode =
   | AiNode
   | HumanNode
   | CodeNode
-  | LoopNode;
+  | LoopNode
+  | RetryNode
+  | WebhookNode;
 
 export interface FlowSpec {
   spec_version: 1;
@@ -176,6 +199,8 @@ export interface FlowSummary {
 export interface FlowDetail extends FlowSummary {
   spec: FlowSpec;
   has_unpublished_changes: boolean;
+  /** What this flow's webhook steps sign their deliveries with. */
+  webhook_signing_secret: string | null;
 }
 
 export interface NodeRun {

@@ -7548,6 +7548,13 @@ class Flow(Base):
     # second FK back would make both tables un-droppable in one migration.
     published_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # Signs the payloads this flow's webhook nodes send out, so a receiver can
+    # tell a real delivery from anything else that found the URL. One per
+    # flow: a receiver verifies deliveries from a flow, not from a node.
+    webhook_signing_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+
     deleted: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
@@ -7580,9 +7587,7 @@ class Flow(Base):
         cascade="all, delete-orphan",
     )
 
-    __table_args__ = (
-        Index("ix_flow_user_created", "user_id", desc("created_at")),
-    )
+    __table_args__ = (Index("ix_flow_user_created", "user_id", desc("created_at")),)
 
 
 class FlowVersion(Base):

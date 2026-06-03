@@ -49,6 +49,13 @@ MAX_AI_OUTPUT_FIELDS = 20
 MAX_CODE_LENGTH = 20_000
 MAX_CODE_TIMEOUT_SECONDS = 120.0
 MAX_QUESTION_LENGTH = 2000
+MAX_RETRY_CHECKS = 60
+MAX_RETRY_INTERVAL_SECONDS = 60.0
+
+# A retry node sleeps between checks, and it does that inside one node rather
+# than across the graph. Capping the whole window keeps a single step from
+# eating the run's 15-minute budget on its own.
+MAX_RETRY_WINDOW_SECONDS = 600.0
 
 # What a person can answer at a human step. Stored on the node's run row and
 # read back by the engine when the run resumes, so the strings are part of the
@@ -385,8 +392,94 @@ class LoopNode(NodeBase):
         return value
 
 
+class RetryNode(HttpNode):
+    """Call an endpoint over and over until the answer is the one you want.
+
+    Not the same thing as ``retry`` on a node, and the difference is the whole
+    reason this exists: the retry policy tries again when a step *raised*,
+    while this one tries again when the step *succeeded and said "not yet"*.
+    Long jobs behind an API are the common case — you POST, you get a job id,
+    and then you sit there asking whether it is done.
+
+    The check walks ``until_path`` through the response body and compares it
+    with the same operators a condition uses, so there is one comparison
+    vocabulary in the product rather than two.
+    """
+
+    kind: Literal[FlowNodeKind.RETRY] = FlowNodeKind.RETRY
+
+    # Dot path into the response body. Empty tests the whole body.
+    until_path: str | None = None
+    operator: ConditionOperator = "eq"
+    value: str | None = None
+
+    max_checks: int = Field(default=10, ge=1, le=MAX_RETRY_CHECKS)
+    interval_seconds: float = Field(default=5.0, ge=0.0, le=MAX_RETRY_INTERVAL_SECONDS)
+    # Running out of checks is usually a real failure — the job never
+    # finished. Turn this off to carry on and branch on `satisfied` instead.
+    fail_when_exhausted: bool = True
+
+    @model_validator(mode="after")
+    def _value_matches_operator(self) -> RetryNode:
+        if self.operator in UNARY_OPERATORS:
+            return self
+        if self.value is None:
+            raise ValueError(f"operator '{self.operator}' needs a 'value'")
+        return self
+
+    @model_validator(mode="after")
+    def _window_fits_the_budget(self) -> RetryNode:
+        window = self.max_checks * self.interval_seconds
+        if window > MAX_RETRY_WINDOW_SECONDS:
+            raise ValueError(
+                f"{self.max_checks} checks {self.interval_seconds:g}s apart "
+                f"would wait up to {window:.0f}s, over the "
+                f"{MAX_RETRY_WINDOW_SECONDS:.0f}s limit for one step"
+            )
+        return self
+
+
+class WebhookNode(NodeBase):
+    """POST a payload to an outside system.
+
+    The HTTP node can do this. What it cannot do is prove the delivery came
+    from here: this one signs the body with the flow's signing secret and
+    sends the signature and a timestamp alongside it, which is what every
+    receiver worth integrating with expects to check.
+
+    It also does not fail the run by default. A receiver being down is their
+    outage, not a reason to stop an automation that has already done its work.
+    """
+
+    kind: Literal[FlowNodeKind.WEBHOOK] = FlowNodeKind.WEBHOOK
+
+    url: str
+    # Rendered through the expression layer, so a delivery can be assembled
+    # from upstream output without a transform node in front of it.
+    payload: Any = None
+    headers: dict[str, str] = Field(default_factory=dict)
+
+    timeout_seconds: float = Field(default=30.0, gt=0.0, le=MAX_HTTP_TIMEOUT_SECONDS)
+    fail_on_error_status: bool = False
+
+    @field_validator("url")
+    @classmethod
+    def _non_empty_url(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value
+
+
 FlowNode = Annotated[
-    HttpNode | TransformNode | ConditionNode | AiNode | HumanNode | CodeNode | LoopNode,
+    HttpNode
+    | TransformNode
+    | ConditionNode
+    | AiNode
+    | HumanNode
+    | CodeNode
+    | LoopNode
+    | RetryNode
+    | WebhookNode,
     Field(discriminator="kind"),
 ]
 

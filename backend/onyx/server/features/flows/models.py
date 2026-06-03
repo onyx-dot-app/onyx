@@ -144,6 +144,11 @@ class FlowDetail(FlowSummary):
 
     spec: dict[str, Any]
     has_unpublished_changes: bool
+    # What this flow's webhook nodes sign their deliveries with. Served to the
+    # owner whenever they ask, unlike an inbound trigger's secret: setting up
+    # a new receiver means copying this into it, and that happens more than
+    # once over a flow's life.
+    webhook_signing_secret: str | None = None
 
     @classmethod
     def build(cls, flow: Flow, *, published_spec: dict[str, Any] | None) -> FlowDetail:
@@ -153,6 +158,11 @@ class FlowDetail(FlowSummary):
             spec=flow.draft_spec,
             has_unpublished_changes=(
                 published_spec is None or published_spec != flow.draft_spec
+            ),
+            webhook_signing_secret=(
+                None
+                if flow.webhook_signing_secret is None
+                else flow.webhook_signing_secret.get_value(apply_mask=False)
             ),
         )
 

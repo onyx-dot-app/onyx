@@ -12501,7 +12501,9 @@
         "AI": "AI",
         "HUMAN": "承認",
         "CODE": "コード",
-        "LOOP": "ループ"
+        "LOOP": "ループ",
+        "RETRY": "再試行",
+        "WEBHOOK": "Webhook"
       },
       "startBadge": "開始",
       "fanOutBadge": "項目ごと",
@@ -12528,7 +12530,9 @@
         "AI": "AI",
         "HUMAN": "承認",
         "CODE": "コード",
-        "LOOP": "ループ"
+        "LOOP": "ループ",
+        "RETRY": "再試行",
+        "WEBHOOK": "Webhook"
       }
     },
     "status": {
@@ -12551,7 +12555,9 @@
         "AI": "AI",
         "HUMAN": "承認",
         "CODE": "コード",
-        "LOOP": "ループ"
+        "LOOP": "ループ",
+        "RETRY": "再試行",
+        "WEBHOOK": "Webhook"
       },
       "fields": {
         "name": "名前",
@@ -12588,7 +12594,19 @@
         "over": "分割する一覧",
         "overHelp": "一覧を返す式です。",
         "batchSize": "1 バッチあたりの件数",
-        "batchSizeHelp": "次のステップを項目ごとに実行すると、1 バッチずつ渡されます。"
+        "batchSizeHelp": "次のステップを項目ごとに実行すると、1 バッチずつ渡されます。",
+        "untilPath": "レスポンスのこの部分が一致するまで待つ",
+        "untilPathHelp": "レスポンス本文へのドット区切りパスです。空にすると本文全体を判定します。",
+        "untilValue": "期待する値",
+        "maxChecks": "確認回数",
+        "maxChecksHelp": "あきらめるまでに何回確認するかです。",
+        "interval": "確認の間隔（秒）",
+        "intervalHelp": "0 を指定するとすぐに再確認します。",
+        "retryWindow": "最大で合計 {seconds} 秒待ちます。",
+        "payload": "ペイロード",
+        "payloadHelp": "送信する JSON 本文です。式は送信前に解決されます。",
+        "signingSecret": "署名シークレット",
+        "signingSecretHelp": "受信側のシステムに登録してください。送信時に X-Onyx-Signature ヘッダーで送られます。"
       },
       "onError": {
         "stop": "実行を停止",
@@ -12617,7 +12635,9 @@
         "fieldType": "text",
         "question": "要約をチームに送信しますか？",
         "assignee": "someone@example.com",
-        "over": "'{{' steps.fetch.body.rows '}}'"
+        "over": "'{{' steps.fetch.body.rows '}}'",
+        "untilPath": "state",
+        "payload": "'{' \"text\": \"要約\" '}'"
       }
     },
     "editor": {
