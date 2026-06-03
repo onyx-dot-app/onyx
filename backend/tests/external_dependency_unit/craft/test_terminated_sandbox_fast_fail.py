@@ -1,10 +1,12 @@
-"""Cross-replica fast-fail for terminated sandboxes.
+"""Cross-replica fast-fail for sandboxes with no live backend.
 
 ``_ServeMixin._terminated_sandboxes`` is a per-process tombstone: it only
 blocks racing subscribes on the replica that ran ``terminate``. A peer replica
 has an empty tombstone, so it would happily build a doomed bus against the
 deleted backend. The fix consults the authoritative DB ``Sandbox.status`` in
-``_get_or_create_event_bus`` so the refusal fires on every replica.
+``_get_or_create_event_bus`` so the refusal fires on every replica — for every
+state whose pod is gone: ``TERMINATED`` / ``FAILED`` (permanent) and
+``SLEEPING`` (pod torn down, snapshot in S3).
 
 These tests use a *fresh* ``StubSandboxManager`` (empty local tombstone) to
 stand in for that peer replica, and drive bus creation purely off DB state.
@@ -37,7 +39,7 @@ class TestTerminatedSandboxFastFail:
         manager = StubSandboxManager()
         assert row.id not in manager._terminated_sandboxes
 
-        with pytest.raises(RuntimeError, match="terminal per DB"):
+        with pytest.raises(RuntimeError, match="no live backend"):
             manager._get_or_create_event_bus(row.id, f"/workspace/sessions/{row.id}")
 
     def test_failed_sandbox_refused_on_peer_replica(
@@ -50,7 +52,22 @@ class TestTerminatedSandboxFastFail:
         row = sandbox(user=test_user, status=SandboxStatus.FAILED)
         manager = StubSandboxManager()
 
-        with pytest.raises(RuntimeError, match="terminal per DB"):
+        with pytest.raises(RuntimeError, match="no live backend"):
+            manager._get_or_create_event_bus(row.id, f"/workspace/sessions/{row.id}")
+
+    def test_sleeping_sandbox_refused_on_peer_replica(
+        self,
+        db_session: Session,  # noqa: ARG002
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+    ) -> None:
+        # SLEEPING = pod torn down, snapshot saved to S3. The backend is gone,
+        # so a bus built against it is just as doomed as a terminal one and must
+        # be refused (it would otherwise burn its full reconnect budget).
+        row = sandbox(user=test_user, status=SandboxStatus.SLEEPING)
+        manager = StubSandboxManager()
+
+        with pytest.raises(RuntimeError, match="no live backend"):
             manager._get_or_create_event_bus(row.id, f"/workspace/sessions/{row.id}")
 
     def test_running_sandbox_builds_bus(

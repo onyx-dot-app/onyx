@@ -316,15 +316,40 @@ class _ServeMixin:
         return False
 
     def _get_or_create_event_bus(self, sandbox_id: UUID, directory: str) -> PodEventBus:
-        """Lazy per-(sandbox, directory) bus. Refuses to create for a
-        terminated sandbox; replaces self-closed buses so callers don't
-        wedge on BUS_CLOSED_SENTINEL until restart."""
+        """Lazy per-(sandbox, directory) bus. Refuses to create for a sandbox
+        with no live backend pod (terminated / failed / sleeping); replaces
+        self-closed buses so callers don't wedge on BUS_CLOSED_SENTINEL until
+        restart."""
         key = (sandbox_id, directory)
+
+        # Fast path: a live cached bus needs no I/O — return it under the lock.
+        # The local tombstone short-circuits the terminating pod's own racing
+        # subscribes without a DB hit.
         with self._event_buses_lock:
             bus = self._event_buses.get(key)
             if bus is not None and not bus.closed:
                 return bus
-            if bus is not None and bus.closed:
+            if sandbox_id in self._terminated_sandboxes:
+                raise RuntimeError(
+                    f"Sandbox {sandbox_id} has been terminated; refusing to "
+                    "create a new event bus against its (deleted) backend"
+                )
+
+        # Cache miss: do the authoritative gone-check + connection-info load
+        # WITHOUT holding the lock, so a slow DB / control-plane round-trip
+        # doesn't block bus creation for other sandboxes. The tombstone above is
+        # only a local fast-path; this DB check makes the refusal fire on every
+        # replica, not just the terminating one. The double-checked insert below
+        # handles the race where two threads both miss the cache.
+        self._assert_sandbox_backend_live(sandbox_id)
+        info = self._serve_connection_info(sandbox_id)
+
+        with self._event_buses_lock:
+            existing = self._event_buses.get(key)
+            if existing is not None and not existing.closed:
+                # Another thread won the race while we were loading — use theirs.
+                return existing
+            if existing is not None and existing.closed:
                 logger.warning(
                     "[SANDBOX-SERVE] Replacing self-closed PodEventBus for "
                     "sandbox %s dir=%s (prior bus exhausted its reconnect budget)",
@@ -332,16 +357,6 @@ class _ServeMixin:
                     directory,
                 )
                 self._event_buses.pop(key, None)
-            if sandbox_id in self._terminated_sandboxes:
-                raise RuntimeError(
-                    f"Sandbox {sandbox_id} has been terminated; refusing to "
-                    "create a new event bus against its (deleted) backend"
-                )
-            # The local tombstone above only covers the replica that ran
-            # terminate. Consult the authoritative DB status so the refusal
-            # fires on every replica, not just the terminating one.
-            self._assert_sandbox_not_terminal(sandbox_id)
-            info = self._serve_connection_info(sandbox_id)
             bus = PodEventBus(
                 base_url=info.base_url,
                 auth=info.auth(),
@@ -360,25 +375,30 @@ class _ServeMixin:
             )
             return bus
 
-    def _assert_sandbox_not_terminal(self, sandbox_id: UUID) -> None:
-        """Refuse to build a bus against a sandbox the DB reports terminal.
+    def _assert_sandbox_backend_live(self, sandbox_id: UUID) -> None:
+        """Refuse to build a bus against a sandbox with no live backend pod,
+        per the authoritative DB ``Sandbox.status``.
 
         ``Sandbox.status`` is the strongly-consistent, indexed authority shared
-        by all api_server replicas, so this makes the terminate-time refusal
-        fire everywhere — not just on the pod that holds the local
-        ``_terminated_sandboxes`` tombstone.
+        by all api_server replicas, so this makes the refusal fire everywhere —
+        not just on the pod that holds the local ``_terminated_sandboxes``
+        tombstone.
 
-        Only terminal states (``TERMINATED`` / ``FAILED``) are fast-failed.
-        PROVISIONING / not-yet-ready sandboxes are not terminal and must flow
-        on to the readiness wait. A missing row (status ``None``) is left to
-        the existing connection-info handling rather than treated as terminal.
+        A bus is refused for every state whose pod is gone: ``TERMINATED`` /
+        ``FAILED`` (permanent) and ``SLEEPING`` (pod torn down, snapshot in S3).
+        All three would otherwise burn the full reconnect budget (~30s) against
+        a dead Service before self-closing. ``RUNNING`` and ``PROVISIONING``
+        keep a (possibly still-coming-up) pod and flow on to the readiness wait.
+        A missing row (status ``None``) is left to the existing connection-info
+        handling rather than treated as gone.
         """
         with get_session_with_current_tenant() as db_session:
             status = get_sandbox_status(db_session, sandbox_id)
-        if status is not None and status.is_terminal():
+        if status is not None and (status.is_terminal() or status.is_sleeping()):
             raise RuntimeError(
-                f"Sandbox {sandbox_id} is {status.value} (terminal per DB); "
-                "refusing to create a new event bus against its (deleted) backend"
+                f"Sandbox {sandbox_id} is {status.value} (no live backend per "
+                "DB); refusing to create a new event bus against its "
+                "(deleted) backend"
             )
 
     def _build_serve_client(
