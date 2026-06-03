@@ -25,24 +25,26 @@ const (
 
 // resolveDeployTarget returns the deploy target repo and workflow to use,
 // preferring explicit flags, then saved config, then prompting the user on
-// first-time setup. The selector picks which config section to read from and
-// persist to (e.g. DeployEdge vs DeployWiki), so each subcommand keeps its own
-// saved target while sharing this resolution logic. Any newly-prompted values
-// are persisted back to the config file so subsequent runs are non-interactive.
-func resolveDeployTarget(flagRepo, flagWorkflow string, selector func(*config.Config) *config.DeployTarget) (string, string) {
+// first-time setup. The repo is shared by all deploy subcommands (read from and
+// persisted to config.Deploy.TargetRepo), so it is only entered once; the
+// workflowSelector picks which per-command section holds the workflow filename
+// (e.g. DeployEdge vs DeployWiki). Any newly-prompted values are persisted back
+// to the config file so subsequent runs are non-interactive.
+func resolveDeployTarget(flagRepo, flagWorkflow string, workflowSelector func(*config.Config) *string) (string, string) {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load ods config: %v", err)
 	}
-	section := selector(cfg)
+	repoPtr := &cfg.Deploy.TargetRepo
+	workflowPtr := workflowSelector(cfg)
 
 	repo := flagRepo
 	if repo == "" {
-		repo = section.TargetRepo
+		repo = *repoPtr
 	}
 	workflow := flagWorkflow
 	if workflow == "" {
-		workflow = section.TargetWorkflow
+		workflow = *workflowPtr
 	}
 
 	prompted := false
@@ -57,8 +59,8 @@ func resolveDeployTarget(flagRepo, flagWorkflow string, selector func(*config.Co
 	}
 
 	if prompted {
-		section.TargetRepo = repo
-		section.TargetWorkflow = workflow
+		*repoPtr = repo
+		*workflowPtr = workflow
 		if err := config.Save(cfg); err != nil {
 			log.Fatalf("Failed to save ods config: %v", err)
 		}

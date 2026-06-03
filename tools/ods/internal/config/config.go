@@ -9,18 +9,25 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
-// DeployTarget holds a persisted deploy workflow target (the repo hosting the
-// workflow and the workflow filename). Shared by the `ods deploy` subcommands.
-type DeployTarget struct {
-	TargetRepo     string `json:"target_repo,omitempty"`
+// DeployConfig holds deploy settings shared by every `ods deploy` subcommand.
+type DeployConfig struct {
+	// TargetRepo is the GitHub repo (owner/name) hosting the deploy workflows.
+	// It is shared across subcommands since they deploy from the same repo.
+	TargetRepo string `json:"target_repo,omitempty"`
+}
+
+// DeployCommandConfig holds the per-subcommand deploy settings.
+type DeployCommandConfig struct {
+	// TargetWorkflow is the deploy workflow filename for this subcommand.
 	TargetWorkflow string `json:"target_workflow,omitempty"`
 }
 
 // Config is the top-level on-disk schema for ~/.config/onyx-dev/config.json.
 // New per-command sections should be added as additional fields.
 type Config struct {
-	DeployEdge DeployTarget `json:"deploy_edge,omitempty"`
-	DeployWiki DeployTarget `json:"deploy_wiki,omitempty"`
+	Deploy     DeployConfig        `json:"deploy,omitempty"`
+	DeployEdge DeployCommandConfig `json:"deploy_edge,omitempty"`
+	DeployWiki DeployCommandConfig `json:"deploy_wiki,omitempty"`
 }
 
 // Load reads the config file. Returns a zero-valued Config if the file does

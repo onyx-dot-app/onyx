@@ -50,9 +50,10 @@ by your gh credentials and GitHub's repo/workflow permissions. A kickoff
 Slack message will appear in #monitor-deployments.
 
 On first run, you'll be prompted for the deploy target repo and workflow
-filename. These are saved to the ods config file (~/.config/onyx-dev/config.json
-on Linux/macOS) and reused on subsequent runs. Pass --target-repo or
---target-workflow to override the saved values.
+filename, saved to the ods config file (~/.config/onyx-dev/config.json on
+Linux/macOS) and reused on subsequent runs. The target repo is shared across
+all deploy subcommands; the workflow filename is per-subcommand. Pass
+--target-repo or --target-workflow to override the saved values.
 
 Pass --no-build to skip step 1 and just deploy whatever's already on
 Docker Hub for today's tag.
@@ -66,7 +67,7 @@ Example usage:
 		},
 	}
 
-	cmd.Flags().StringVar(&opts.TargetRepo, "target-repo", "", "GitHub repo (owner/name) hosting the deploy workflow; overrides saved config")
+	cmd.Flags().StringVar(&opts.TargetRepo, "target-repo", "", "GitHub repo (owner/name) hosting the deploy workflows; shared across deploy subcommands; overrides saved config")
 	cmd.Flags().StringVar(&opts.TargetWorkflow, "target-workflow", "", "Filename of the deploy workflow within the target repo; overrides saved config")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Perform local operations only; skip dispatching workflows")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip the confirmation prompt")
@@ -82,7 +83,7 @@ func deployWiki(opts *DeployWikiOptions) {
 	deployRepo, deployWorkflow := resolveDeployTarget(
 		opts.TargetRepo,
 		opts.TargetWorkflow,
-		func(c *config.Config) *config.DeployTarget { return &c.DeployWiki },
+		func(c *config.Config) *string { return &c.DeployWiki.TargetWorkflow },
 	)
 
 	if opts.DryRun {
