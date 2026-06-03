@@ -379,12 +379,37 @@ def test_stop_closes_active_stream_to_unblock_watch_loop() -> None:
     # stop() must have invoked close() on the live stream.
     assert close_calls[0] >= 1
 
-    # Release the blocking iterator so the thread can drain its finally
-    # block. In production, close() would raise OSError -> StopIteration
-    # inside the iterator; here we just unblock it directly.
+    # Release the blocking iterator so the thread can drain its finally block.
+    # In production, close() would raise OSError -> StopIteration inside the
+    # iterator; here we just unblock it directly.
     iter_event.set()
     thread.join(timeout=2.0)
     assert not thread.is_alive(), "_watch_loop thread failed to exit after stop()."
+
+
+def test_synced_clears_after_watch_loop_returns_cleanly() -> None:
+    """
+    Clean watch EOF clears ``_synced`` so /healthz reports not-ready during the
+    reconnect window.
+    """
+    lookup, client = _make_lookup()
+    client.containers.list.return_value = []
+
+    # Empty iter -> _watch_loop exhausts without raising. Stop after one pass.
+    call_count = [0]
+
+    def events_side_effect(**_: object) -> object:
+        call_count[0] += 1
+        lookup._stop_event.set()
+        return iter([])
+
+    client.events.side_effect = events_side_effect
+
+    lookup._run()
+
+    assert lookup._initial_sync_done.is_set()
+    assert not lookup._synced.is_set()
+    assert call_count[0] == 1
 
 
 def test_watch_loop_close_race_when_stop_fires_between_open_and_publish() -> None:
