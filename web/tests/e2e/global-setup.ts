@@ -1,7 +1,4 @@
-import { FullConfig, request, chromium } from "@playwright/test";
-import { execFileSync } from "child_process";
-import { existsSync } from "fs";
-import path from "path";
+import { FullConfig, request } from "@playwright/test";
 import {
   TEST_ADMIN_CREDENTIALS,
   TEST_ADMIN2_CREDENTIALS,
@@ -13,37 +10,6 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 const PREFLIGHT_TIMEOUT_MS = 60_000;
 const PREFLIGHT_POLL_INTERVAL_MS = 2_000;
 const PREFLIGHT_WARN_AFTER_MS = 15_000;
-
-/**
- * Ensure the Playwright chromium browser binary is present before any test
- * launches it. Mirrors the backend's `_install_playwright` fixture
- * (backend/tests/integration/conftest.py): the devcontainer ships chromium's
- * apt deps but not the browser binary, so it's installed here at runtime where
- * the version tracks web/package.json's floating `@playwright/test`. Playwright
- * has no ubuntu26.04 build yet, so on Linux pin to the binary-compatible
- * ubuntu24.04 build via the host-platform override. No-op when the browser is
- * already installed (e.g. CI runners that preinstall it).
- */
-function ensureChromiumInstalled(): void {
-  try {
-    if (existsSync(chromium.executablePath())) {
-      return;
-    }
-  } catch {
-    // executablePath() throws when the browser isn't installed for this
-    // Playwright version — fall through and install it.
-  }
-
-  const env = { ...process.env };
-  if (process.platform === "linux") {
-    const pwArch = process.arch === "arm64" ? "arm64" : "x64";
-    env.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE = `ubuntu24.04-${pwArch}`;
-  }
-
-  console.log("[global-setup] Installing Playwright chromium browser ...");
-  const cli = path.join(process.cwd(), "node_modules", ".bin", "playwright");
-  execFileSync(cli, ["install", "chromium"], { env, stdio: "inherit" });
-}
 
 /**
  * Poll the health endpoint until the server is ready or we time out.
@@ -230,9 +196,6 @@ async function promoteToAdmin(
 async function globalSetup(config: FullConfig) {
   // Get baseURL from config, fallback to localhost:3000
   const baseURL = config.projects[0]?.use?.baseURL || "http://localhost:3000";
-
-  // ── Ensure the browser is installed (devcontainer ships deps only) ───
-  ensureChromiumInstalled();
 
   // ── Preflight check ──────────────────────────────────────────────────
   await waitForServer(baseURL);

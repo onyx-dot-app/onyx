@@ -14,8 +14,6 @@ All locators and interactions for a UI surface live on a Page Object class — n
 - Specs call methods on the page object. They do not construct locators.
 - When extending coverage for an area that has no page object, create one before writing the spec.
 
-> Note: some older page objects still live next to their specs (e.g. `chat/ChatPage.ts`, `admin/users/UsersAdminPage.ts`). New page objects go in `tests/e2e/pages/`; the existing ones will migrate there over time.
-
 ```typescript
 // ✅ Good — spec calls into the POM
 await chatPage.goto();
