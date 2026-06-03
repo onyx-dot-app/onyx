@@ -79,7 +79,7 @@ export default function SidebarWrapper({
       <div
         className={cn(
           "h-screen flex flex-col bg-background-tint-02 py-2 gap-4 group/SidebarWrapper transition-width duration-200 ease-in-out",
-          folded ? "w-13" : "w-60"
+          folded ? "w-(--sidebar-width-folded)" : "w-(--sidebar-width-expanded)"
         )}
       >
         <LogoSection folded={folded} onFoldClick={onFoldClick} />

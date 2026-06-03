@@ -10,6 +10,9 @@
 
   --toast-width: 25rem;
 
+  --sidebar-width-expanded: 15rem;
+  --sidebar-width-folded: 3.25rem;
+
   /* HEIGHT — CONTENT */
   --height-content-main: 1rem;
   --height-content-label: 1.125rem;
