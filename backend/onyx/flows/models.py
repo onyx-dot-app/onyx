@@ -1,0 +1,404 @@
+"""The flow spec: the declarative document an automation executes.
+
+A spec is stored as JSONB on ``flow.draft_spec`` and ``flow_version.spec``, and
+it is the only contract between the editor and the engine. Everything a run
+needs lives in here; the engine never reads configuration back out of the ORM
+once a run has started.
+
+Two conventions are worth knowing before reading the node types:
+
+* **Adjacency lives on the node.** A node names its successors in ``next``
+  (or ``on_true`` / ``on_false`` for a condition). The canvas draws edges from
+  that; keeping one representation avoids the spec and the picture disagreeing.
+* **Fan-out is explicit.** A node with ``for_each`` set runs once per element
+  of that list and records the per-item outputs as its own output. The editor
+  fills ``for_each`` in automatically when it notices an upstream list, so the
+  convenience lives in the UI while the engine stays predictable — which is
+  what you want at 3am reading a run that went wrong.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Annotated, Any, Literal
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
+
+from onyx.db.enums import FlowNodeKind
+
+# A node id is referenced from other nodes and from run history, so it is held
+# to the same shape as a Python identifier in snake_case.
+NODE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+# Guardrails. These are not tuning knobs — they bound how much damage a
+# malformed or hostile spec can do to a worker before validation rejects it.
+MAX_NODES_PER_FLOW = 60
+MAX_FAN_OUT_ITEMS = 200
+MAX_NODE_ATTEMPTS = 4
+MAX_HTTP_TIMEOUT_SECONDS = 120.0
+MAX_AI_OUTPUT_FIELDS = 20
+
+
+class SpecError(ValueError):
+    """A spec that cannot be executed. Surfaced to the editor as 400."""
+
+
+# ---------------------------------------------------------------------------
+# Shared node settings
+# ---------------------------------------------------------------------------
+
+
+class RetryPolicy(BaseModel):
+    """How often to re-run a node that raised before giving up.
+
+    Retries re-use the node's row in ``flow_node_run`` and bump ``attempt``,
+    so a retried node never duplicates its own history.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    max_attempts: int = Field(default=1, ge=1, le=MAX_NODE_ATTEMPTS)
+    # Seconds to wait before the second attempt. Doubles each attempt after.
+    backoff_seconds: float = Field(default=1.0, ge=0.0, le=30.0)
+
+
+class NodeBase(BaseModel):
+    """Fields every node kind carries.
+
+    ``on_error`` is deliberately only stop-or-skip. Routing failures down a
+    dedicated branch sounds useful until you have to explain which branch a
+    half-finished fan-out took, so it stays out until there is a real need.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str = ""
+    next: list[str] = Field(default_factory=list)
+
+    # Expression yielding a list. When set, the node runs once per element
+    # with `{{ item }}` and `{{ index }}` bound.
+    for_each: str | None = None
+
+    on_error: Literal["stop", "skip"] = "stop"
+    retry: RetryPolicy = Field(default_factory=RetryPolicy)
+
+    @field_validator("id")
+    @classmethod
+    def _valid_id(cls, value: str) -> str:
+        if not NODE_ID_PATTERN.fullmatch(value):
+            raise ValueError(
+                "must start with a letter and use only lowercase letters, "
+                "digits and underscores (max 64 chars)"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _default_name_to_id(self) -> NodeBase:
+        if not self.name:
+            object.__setattr__(self, "name", self.id)
+        return self
+
+    def successors(self) -> list[str]:
+        """Every node id this node can hand control to."""
+        return list(self.next)
+
+
+# ---------------------------------------------------------------------------
+# Node kinds
+# ---------------------------------------------------------------------------
+
+
+class HttpNode(NodeBase):
+    """Call an HTTP endpoint.
+
+    The workhorse. Between this and the AI node almost any service can be
+    driven without waiting for a first-party provider to exist.
+    """
+
+    kind: Literal[FlowNodeKind.HTTP] = FlowNodeKind.HTTP
+
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"] = "GET"
+    url: str
+    headers: dict[str, str] = Field(default_factory=dict)
+    query: dict[str, str] = Field(default_factory=dict)
+    # Rendered through the expression layer, so a body can be assembled from
+    # upstream output without a transform node in front of it.
+    body: Any = None
+
+    timeout_seconds: float = Field(default=30.0, gt=0.0, le=MAX_HTTP_TIMEOUT_SECONDS)
+    # Dot path into the parsed response body. None keeps the whole body.
+    result_path: str | None = None
+    # 4xx/5xx raises by default. Turn this off to branch on `status` instead.
+    fail_on_error_status: bool = True
+
+    @field_validator("url")
+    @classmethod
+    def _non_empty_url(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value
+
+
+class TransformNode(NodeBase):
+    """Build a new object out of expressions.
+
+    This is what keeps a `Set` node off the canvas for simple reshaping: each
+    key maps to one expression, evaluated against the current context.
+    """
+
+    kind: Literal[FlowNodeKind.TRANSFORM] = FlowNodeKind.TRANSFORM
+
+    fields: dict[str, str] = Field(min_length=1)
+
+
+ConditionOperator = Literal[
+    "eq",
+    "ne",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "contains",
+    "not_contains",
+    "is_empty",
+    "is_not_empty",
+]
+
+# Operators that compare against nothing, so `right` is meaningless for them.
+UNARY_OPERATORS: frozenset[str] = frozenset({"is_empty", "is_not_empty"})
+
+
+class ConditionNode(NodeBase):
+    """Branch on a comparison.
+
+    ``next`` is unused; a condition hands control to ``on_true`` or
+    ``on_false``. Either may be empty, which ends that branch.
+    """
+
+    kind: Literal[FlowNodeKind.CONDITION] = FlowNodeKind.CONDITION
+
+    left: str
+    operator: ConditionOperator
+    right: str | None = None
+    on_true: list[str] = Field(default_factory=list)
+    on_false: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _right_matches_operator(self) -> ConditionNode:
+        if self.operator in UNARY_OPERATORS:
+            return self
+        if self.right is None:
+            raise ValueError(f"operator '{self.operator}' needs a 'right' value")
+        return self
+
+    @model_validator(mode="after")
+    def _no_fan_out(self) -> ConditionNode:
+        # Per-item branching has no sensible answer for "which way did the
+        # node go" once items disagree. Fan out first, then compare.
+        if self.for_each is not None:
+            raise ValueError(
+                "a condition cannot use 'for_each' — put the condition inside "
+                "the node that fans out, or fan out afterwards"
+            )
+        return self
+
+    def successors(self) -> list[str]:
+        return [*self.next, *self.on_true, *self.on_false]
+
+
+class AiOutputField(BaseModel):
+    """One field the AI node must return.
+
+    Declaring fields rather than a raw JSON schema keeps the editor simple and
+    gives downstream nodes something to autocomplete against.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    type: Literal["text", "number", "boolean", "list"] = "text"
+    description: str = ""
+
+    @field_validator("name")
+    @classmethod
+    def _valid_name(cls, value: str) -> str:
+        if not NODE_ID_PATTERN.fullmatch(value):
+            raise ValueError(
+                "must start with a letter and use only lowercase letters, "
+                "digits and underscores"
+            )
+        return value
+
+
+class AiNode(NodeBase):
+    """Ask a model something and get typed fields back.
+
+    The output contract is the point. A node that returns prose forces the
+    next node to parse it; declaring fields means the engine validates the
+    shape once and everything downstream can rely on it.
+    """
+
+    kind: Literal[FlowNodeKind.AI] = FlowNodeKind.AI
+
+    prompt: str
+    output_fields: list[AiOutputField] = Field(
+        default_factory=list, max_length=MAX_AI_OUTPUT_FIELDS
+    )
+    # Bounds a single model call. Separate from the run budget.
+    timeout_seconds: float = Field(default=90.0, gt=0.0, le=300.0)
+
+    @field_validator("prompt")
+    @classmethod
+    def _non_empty_prompt(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value
+
+    @field_validator("output_fields")
+    @classmethod
+    def _unique_field_names(cls, value: list[AiOutputField]) -> list[AiOutputField]:
+        names = [field.name for field in value]
+        duplicates = {name for name in names if names.count(name) > 1}
+        if duplicates:
+            raise ValueError(
+                "duplicate output field names: " + ", ".join(sorted(duplicates))
+            )
+        return value
+
+
+FlowNode = Annotated[
+    HttpNode | TransformNode | ConditionNode | AiNode,
+    Field(discriminator="kind"),
+]
+
+
+# ---------------------------------------------------------------------------
+# The spec
+# ---------------------------------------------------------------------------
+
+
+class FlowSpec(BaseModel):
+    """A validated, executable flow.
+
+    Parsing a spec guarantees the engine four things: ids are unique, every
+    reference resolves, there are no cycles, and the entry node exists. Nodes
+    that nothing reaches are allowed — the editor creates one every time
+    someone drops a node on the canvas, and failing autosave over it would be
+    obnoxious. The engine simply never runs them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    spec_version: Literal[1] = 1
+    start: str
+    nodes: list[FlowNode] = Field(min_length=1, max_length=MAX_NODES_PER_FLOW)
+
+    @model_validator(mode="after")
+    def _check_graph(self) -> FlowSpec:
+        by_id: dict[str, Any] = {}
+        for node in self.nodes:
+            if node.id in by_id:
+                raise ValueError(f"duplicate node id: {node.id}")
+            by_id[node.id] = node
+
+        if self.start not in by_id:
+            raise ValueError(f"start node '{self.start}' is not defined")
+
+        for node in self.nodes:
+            for target in node.successors():
+                if target not in by_id:
+                    raise ValueError(
+                        f"node '{node.id}' points at undefined node '{target}'"
+                    )
+                if target == node.id:
+                    raise ValueError(f"node '{node.id}' points at itself")
+
+        _reject_cycles(by_id)
+        return self
+
+    def node_map(self) -> dict[str, Any]:
+        """Nodes keyed by id, in declaration order."""
+        return {node.id: node for node in self.nodes}
+
+    def reachable_ids(self) -> set[str]:
+        """Ids the engine can actually arrive at from ``start``."""
+        by_id = self.node_map()
+        seen: set[str] = set()
+        stack = [self.start]
+        while stack:
+            current = stack.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            stack.extend(by_id[current].successors())
+        return seen
+
+
+def _reject_cycles(by_id: dict[str, Any]) -> None:
+    """Depth-first search for a back edge.
+
+    Iterative rather than recursive so a wide spec cannot blow the stack, and
+    the error names the node that closes the loop because "cycle detected" on
+    its own is useless when you are staring at forty boxes.
+    """
+    WHITE, GREY, BLACK = 0, 1, 2
+    colour = dict.fromkeys(by_id, WHITE)
+
+    for root in by_id:
+        if colour[root] != WHITE:
+            continue
+        stack: list[tuple[str, list[str]]] = [(root, list(by_id[root].successors()))]
+        colour[root] = GREY
+        while stack:
+            node_id, pending = stack[-1]
+            if not pending:
+                colour[node_id] = BLACK
+                stack.pop()
+                continue
+            nxt = pending.pop()
+            if colour[nxt] == GREY:
+                raise ValueError(f"nodes form a cycle through '{nxt}'")
+            if colour[nxt] == WHITE:
+                colour[nxt] = GREY
+                stack.append((nxt, list(by_id[nxt].successors())))
+
+
+def parse_spec(raw: dict[str, Any]) -> FlowSpec:
+    """Validate a stored or submitted spec.
+
+    Raises:
+        SpecError: with a message meant for the person editing the flow.
+    """
+    try:
+        return FlowSpec.model_validate(raw)
+    except ValidationError as exc:
+        raise SpecError(_readable_validation_error(exc)) from exc
+    except ValueError as exc:
+        raise SpecError(str(exc)) from exc
+
+
+def _readable_validation_error(exc: ValidationError) -> str:
+    """Flatten pydantic's report into something an editor can show.
+
+    Pydantic's default rendering carries a docs URL and the offending input on
+    every line, which is noise in a toast. Keep the location and the message.
+    """
+    parts: list[str] = []
+    for error in exc.errors():
+        location = ".".join(str(piece) for piece in error["loc"] if piece != "nodes")
+        message = error["msg"].removeprefix("Value error, ")
+        parts.append(f"{location}: {message}" if location else message)
+    # Duplicates are common when a discriminated union reports per-variant.
+    seen: list[str] = []
+    for part in parts:
+        if part not in seen:
+            seen.append(part)
+    return "; ".join(seen)
