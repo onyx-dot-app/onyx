@@ -125,13 +125,19 @@ unguarded after an `APPROVED` row is already committed.
 
 ## Data Model
 
-No new table. New columns:
+New table `scheduled_task_pre_approved_app` — one row per `(task, app)`
+grant:
 
-- `scheduled_task.pre_approved_app_ids` — JSONB list of `external_app`
-  ids, NOT NULL default `[]`. Grants are tiny, always accessed via the
-  task, and whole-list-replaced from the editor form, so a normalized
-  table buys nothing. Validated against the tenant's apps and deduped
-  at write time; stale entries are inert.
+- `scheduled_task_id` → `scheduled_task.id` (`ON DELETE CASCADE`) and
+  `external_app_id` → `external_app.id` (`ON DELETE CASCADE`), with a
+  `UNIQUE(scheduled_task_id, external_app_id)` constraint that keeps
+  grants idempotent and serves the per-task lookup. The FKs give real
+  referential integrity — a grant can't point at a removed app, and
+  removing either side drops the grant. `ScheduledTask.pre_approved_apps`
+  is the ORM collection; `pre_approved_app_ids` is a read-only accessor
+  over it, so the API contract (`list[int]`) is unchanged. The write
+  path replaces the whole set (`set_pre_approved_apps`), validated
+  against the tenant's apps and deduped order-preserving.
 - `action_approval.decided_via` — nullable (`user | pre_approval`,
   NULL for legacy/expired rows): the audit marker distinguishing a
   human click from a pre-approval. Kept separate from `decision` so
@@ -190,9 +196,12 @@ pre-decided inserts go through `insert_action_approval` in
   catalog actions added in later releases. Mitigated today by admin
   per-action `DENY`; the planned grant-time covered-actions expander will
   surface the scope.
-- **One extra DB round-trip per gated request on scheduled sessions.**
-  Acceptable — `ASK` is already the slow path (row insert + notify),
-  and the lookup is a single indexed join behind `asyncio.to_thread`.
+- **Grant lookup on the gated path.** Cached per session in-process
+  (`_GrantCache`, 60s TTL) so a run firing many actions hits Postgres
+  once, not per request. The TTL bounds staleness from the
+  RUNNING → terminal transition: an interactive follow-up on a finished
+  scheduled session re-parks once the entry expires. The lookup itself
+  is two indexed reads behind `asyncio.to_thread`.
 
 ## Planned (not in this PR)
 
