@@ -4,6 +4,9 @@ import { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { RootLayout } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import { ensureHrefProtocol, INTERACTIVE_SELECTOR, noProp } from "@/lib/utils";
+import { useAppBackground } from "@/providers/AppBackgroundProvider";
+import { useTheme } from "next-themes";
+import useBrowserInfo from "@/hooks/useBrowserInfo";
 import Text from "@/refresh-components/texts/Text";
 import type { Components } from "react-markdown";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
@@ -482,6 +485,21 @@ interface AppChromeProps {
 }
 
 export default function AppChrome({ children }: AppChromeProps) {
+  const appFocus = useAppFocus();
+  const { hasBackground, appBackgroundUrl } = useAppBackground();
+  const { resolvedTheme } = useTheme();
+  const { isSafari } = useBrowserInfo();
+  const isLightMode = resolvedTheme === "light";
+  const showBackground = hasBackground && !appFocus.isProject();
+
+  const horizontalBlurMask = `linear-gradient(
+    to right,
+    transparent 0%,
+    black max(0%, calc(50% - 25rem)),
+    black min(100%, calc(50% + 25rem)),
+    transparent 100%
+  )`;
+
   const inputWasFocused = useRef(false);
 
   // Track whether the chat input was focused before a mousedown, so we can
@@ -515,10 +533,56 @@ export default function AppChrome({ children }: AppChromeProps) {
   return (
     <RootLayout.App
       data-main-container
-      className="@container"
+      className={cn(
+        "@container relative isolate",
+        showBackground && "bg-cover bg-center bg-fixed"
+      )}
+      style={
+        showBackground
+          ? { backgroundImage: `url(${appBackgroundUrl})` }
+          : undefined
+      }
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
     >
+      {/* Effect 1 — Vignette overlay for custom backgrounds (disabled in light mode).
+          z-[-1] keeps overlays below the normal-flow header/content/footer. */}
+      {showBackground && !isLightMode && (
+        <div
+          className="absolute z-[-1] inset-0 pointer-events-none"
+          style={{
+            background: `
+              linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 4rem),
+              linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 4rem)
+            `,
+          }}
+        />
+      )}
+      {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
+      {showBackground && appFocus.isChat() && (
+        <>
+          <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />
+          {isSafari ? (
+            <div
+              className="absolute z-[-1] inset-0 bg-cover bg-center bg-fixed pointer-events-none"
+              style={{
+                backgroundImage: `url(${appBackgroundUrl})`,
+                filter: "blur(16px)",
+                maskImage: horizontalBlurMask,
+                WebkitMaskImage: horizontalBlurMask,
+              }}
+            />
+          ) : (
+            <div
+              className="absolute z-[-1] inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
+              style={{
+                maskImage: horizontalBlurMask,
+                WebkitMaskImage: horizontalBlurMask,
+              }}
+            />
+          )}
+        </>
+      )}
       <RootLayout.Header>
         <Header />
       </RootLayout.Header>

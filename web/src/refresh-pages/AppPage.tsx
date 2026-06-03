@@ -67,9 +67,6 @@ import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import { Button } from "@opal/components";
 import { IllustrationContent, RootLayout } from "@opal/layouts";
-import { useAppBackground } from "@/providers/AppBackgroundProvider";
-import { useTheme } from "next-themes";
-import useBrowserInfo from "@/hooks/useBrowserInfo";
 import SvgNotFound from "@opal/illustrations/not-found";
 import SvgNoAccess from "@opal/illustrations/no-access";
 import { Spacer } from "@opal/components";
@@ -131,18 +128,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const router = useRouter();
   const appFocus = useAppFocus();
-  const { hasBackground, appBackgroundUrl } = useAppBackground();
-  const { resolvedTheme } = useTheme();
-  const { isSafari } = useBrowserInfo();
-  const isLightMode = resolvedTheme === "light";
-  const showBackground = hasBackground && !appFocus.isProject();
-  const horizontalBlurMask = `linear-gradient(
-    to right,
-    transparent 0%,
-    black max(0%, calc(50% - 25rem)),
-    black min(100%, calc(50% + 25rem)),
-    transparent 100%
-  )`;
 
   useToastFromQuery({
     oauth_connected: {
@@ -783,54 +768,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       <FederatedOAuthModal />
 
       <div className="flex flex-row w-full h-full overflow-hidden">
-        <div
-          className={cn(
-            "relative flex-1 h-full overflow-hidden",
-            showBackground && "bg-cover bg-center bg-fixed"
-          )}
-          style={
-            showBackground
-              ? { backgroundImage: `url(${appBackgroundUrl})` }
-              : undefined
-          }
-        >
-          {/* Effect 1 — Vignette overlay for custom backgrounds (disabled in light mode) */}
-          {showBackground && !isLightMode && (
-            <div
-              className="absolute z-0 inset-0 pointer-events-none"
-              style={{
-                background: `
-                  linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 4rem),
-                  linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 4rem)
-                `,
-              }}
-            />
-          )}
-          {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
-          {showBackground && appFocus.isChat() && (
-            <>
-              <div className="absolute inset-0 backdrop-blur-[1px] pointer-events-none" />
-              {isSafari ? (
-                <div
-                  className="absolute z-0 inset-0 bg-cover bg-center bg-fixed pointer-events-none"
-                  style={{
-                    backgroundImage: `url(${appBackgroundUrl})`,
-                    filter: "blur(16px)",
-                    maskImage: horizontalBlurMask,
-                    WebkitMaskImage: horizontalBlurMask,
-                  }}
-                />
-              ) : (
-                <div
-                  className="absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
-                  style={{
-                    maskImage: horizontalBlurMask,
-                    WebkitMaskImage: horizontalBlurMask,
-                  }}
-                />
-              )}
-            </>
-          )}
+        <div className="flex-1 h-full overflow-hidden">
           <Dropzone
             onDrop={(acceptedFiles) =>
               handleMessageSpecificFileUpload(acceptedFiles)
