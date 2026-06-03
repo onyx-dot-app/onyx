@@ -228,7 +228,7 @@ func runCelery(workers []celeryWorker, opts *CeleryOptions) {
 			// A partial startup would leave a silently degraded stack, so tear
 			// down the workers we did start and fail.
 			log.Errorf("Failed to start celery %s: %v", w.name, err)
-			terminateCeleryWorkers(cmds)
+			signalCeleryWorkers(cmds, syscall.SIGTERM)
 			wg.Wait()
 			os.Exit(1)
 		}
@@ -245,25 +245,28 @@ func runCelery(workers []celeryWorker, opts *CeleryOptions) {
 		}(svcCmd, w.name, stdout, stderr)
 	}
 
-	// Forward the first interrupt to every worker's process group, then wait
-	// for them to drain.
-	sigCh := make(chan os.Signal, 1)
+	// First interrupt asks workers to drain (SIGTERM); a second escalates to
+	// SIGKILL so a hung worker can't trap us in wg.Wait() forever.
+	sigCh := make(chan os.Signal, 2)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		log.Info("Shutting down celery workers...")
-		terminateCeleryWorkers(cmds)
+		log.Info("Shutting down celery workers... (press Ctrl-C again to force kill)")
+		signalCeleryWorkers(cmds, syscall.SIGTERM)
+		<-sigCh
+		log.Info("Force killing celery workers...")
+		signalCeleryWorkers(cmds, syscall.SIGKILL)
 	}()
 
 	wg.Wait()
 }
 
-// terminateCeleryWorkers sends SIGTERM to each worker's process group, stopping
-// the whole tree (uv -> python -> watchfiles fork -> celery).
-func terminateCeleryWorkers(cmds []*exec.Cmd) {
+// signalCeleryWorkers sends sig to each worker's process group, reaching the
+// whole tree (uv -> python -> watchfiles fork -> celery).
+func signalCeleryWorkers(cmds []*exec.Cmd, sig syscall.Signal) {
 	for _, c := range cmds {
 		if c.Process != nil {
-			_ = syscall.Kill(-c.Process.Pid, syscall.SIGTERM)
+			_ = syscall.Kill(-c.Process.Pid, sig)
 		}
 	}
 }
