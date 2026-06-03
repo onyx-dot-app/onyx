@@ -77,11 +77,18 @@ export default function FlowRunPage() {
 
   const selectedRuns = useMemo(
     () =>
-      (run?.node_runs ?? []).filter(
-        (nodeRun) => nodeRun.node_id === selectedNodeId
-      ),
+      (run?.node_runs ?? [])
+        .filter((nodeRun) => nodeRun.node_id === selectedNodeId)
+        // Pass by pass, then item by item, the order they ran in.
+        .sort(
+          (a, b) => a.iteration - b.iteration || a.item_index - b.item_index
+        ),
     [run, selectedNodeId]
   );
+  // Only a step inside a loop has rows from more than one pass, and only
+  // then is the pass worth a label.
+  const showPass = selectedRuns.some((nodeRun) => nodeRun.iteration > 0);
+  const showItem = selectedRuns.some((nodeRun) => nodeRun.item_index > 0);
 
   // The approval the run is parked on: the one HUMAN step still open. Found
   // from the rows rather than the spec, because only the row carries the
@@ -160,9 +167,10 @@ export default function FlowRunPage() {
             ) : (
               selectedRuns.map((nodeRun) => (
                 <NodeRunDetails
-                  key={`${nodeRun.node_id}-${nodeRun.item_index}`}
+                  key={`${nodeRun.node_id}-${nodeRun.iteration}-${nodeRun.item_index}`}
                   nodeRun={nodeRun}
-                  showItemIndex={selectedRuns.length > 1}
+                  showPass={showPass}
+                  showItemIndex={showItem}
                 />
               ))
             )}
@@ -283,21 +291,29 @@ function readText(input: JsonObject | null, key: string): string | null {
 
 function NodeRunDetails({
   nodeRun,
+  showPass,
   showItemIndex,
 }: {
   nodeRun: NodeRun;
+  showPass: boolean;
   showItemIndex: boolean;
 }) {
   const t = useTranslations("flows.run");
+  // Counted from 1, the way the loop's own failure message counts them.
+  const pass = nodeRun.iteration + 1;
 
   return (
     <div
       data-testid="node-run-item"
       className="flex flex-col gap-2 pb-3 border-b border-border-01"
     >
-      {showItemIndex ? (
+      {showPass || showItemIndex ? (
         <Text font="figure-small-label" color="text-03">
-          {t("item", { index: nodeRun.item_index })}
+          {showPass && showItemIndex
+            ? t("passItem", { number: pass, index: nodeRun.item_index })
+            : showPass
+              ? t("pass", { number: pass })
+              : t("item", { index: nodeRun.item_index })}
         </Text>
       ) : null}
 

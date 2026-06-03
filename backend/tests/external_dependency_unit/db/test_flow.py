@@ -39,6 +39,7 @@ from onyx.db.flow import (
     mark_run_status,
     publish_flow,
     purge_old_runs,
+    record_skipped_node,
     replace_triggers,
     resume_delayed_run,
     set_flow_status,
@@ -349,6 +350,7 @@ def test_a_finished_node_is_returned_rather_than_duplicated(
         run_id=run.id,
         node_id="step",
         kind=FlowNodeKind.TRANSFORM,
+        iteration=0,
         item_index=0,
         node_input=None,
     )
@@ -366,6 +368,7 @@ def test_a_finished_node_is_returned_rather_than_duplicated(
         run_id=run.id,
         node_id="step",
         kind=FlowNodeKind.TRANSFORM,
+        iteration=0,
         item_index=0,
         node_input=None,
     )
@@ -397,6 +400,7 @@ def test_fanned_out_items_get_a_row_each(db_session: Session, owner: User) -> No
             run_id=run.id,
             node_id="step",
             kind=FlowNodeKind.TRANSFORM,
+            iteration=0,
             item_index=index,
             node_input={"index": index},
         )
@@ -488,6 +492,7 @@ def test_deleting_a_flow_takes_its_history_with_it(
         run_id=run.id,
         node_id="step",
         kind=FlowNodeKind.TRANSFORM,
+        iteration=0,
         item_index=0,
         node_input=None,
     )
@@ -987,3 +992,179 @@ def test_a_flow_with_an_unusable_schedule_is_refused_on_save(
                 "nodes": [{"id": "at_nine", "kind": "SCHEDULE", "cron": "not a cron"}],
             },
         )
+
+
+# ---------------------------------------------------------------------------
+# Loops: one row per pass
+# ---------------------------------------------------------------------------
+
+
+def test_each_loop_pass_gets_its_own_row(db_session: Session, owner: User) -> None:
+    """The same step in three passes is three executions, and the same step
+    in the same pass is still one — the resume guarantee holds per pass."""
+    flow = make_flow(db_session, owner)
+    run = insert_run(
+        db_session=db_session,
+        flow_id=flow.id,
+        trigger_source=FlowTriggerSource.MANUAL,
+    )
+    db_session.commit()
+
+    first_rows = [
+        start_node_run(
+            db_session=db_session,
+            run_id=run.id,
+            node_id="step",
+            kind=FlowNodeKind.TRANSFORM,
+            iteration=iteration,
+            item_index=0,
+            node_input=None,
+        )[0]
+        for iteration in range(3)
+    ]
+    db_session.commit()
+
+    again, existed = start_node_run(
+        db_session=db_session,
+        run_id=run.id,
+        node_id="step",
+        kind=FlowNodeKind.TRANSFORM,
+        iteration=1,
+        item_index=0,
+        node_input=None,
+    )
+    db_session.commit()
+
+    assert existed is True
+    assert again.id == first_rows[1].id
+    assert sorted(row.iteration for row in node_rows(db_session, run.id, "step")) == [
+        0,
+        1,
+        2,
+    ]
+
+
+def test_a_skip_is_recorded_once_per_pass(db_session: Session, owner: User) -> None:
+    flow = make_flow(db_session, owner)
+    run = insert_run(
+        db_session=db_session,
+        flow_id=flow.id,
+        trigger_source=FlowTriggerSource.MANUAL,
+    )
+    db_session.commit()
+
+    for iteration in (0, 0, 1):
+        record_skipped_node(
+            db_session=db_session,
+            run_id=run.id,
+            node_id="untaken",
+            kind=FlowNodeKind.TRANSFORM,
+            iteration=iteration,
+        )
+    db_session.commit()
+
+    rows = node_rows(db_session, run.id, "untaken")
+    assert sorted(row.iteration for row in rows) == [0, 1]
+
+
+def looped_approval_spec() -> dict[str, Any]:
+    """Two pages, and a question before each one is sent."""
+    return {
+        "spec_version": 1,
+        "start": "pages",
+        "nodes": [
+            {
+                "id": "pages",
+                "kind": "REPEAT",
+                "body": ["gate"],
+                "start": "{{ trigger.page }}",
+                "until": "{{ item.next }}",
+                "operator": "is_empty",
+                "carry": "{{ item.next }}",
+                "collect": "{{ steps.send.value }}",
+            },
+            {
+                "id": "gate",
+                "kind": "HUMAN",
+                "question": "Send page {{ item.id }}?",
+                "on_approve": ["send"],
+            },
+            {"id": "send", "kind": "TRANSFORM", "fields": {"value": "{{ item.id }}"}},
+        ],
+    }
+
+
+def test_an_approval_inside_a_loop_is_asked_again_on_every_pass(
+    db_session: Session, owner: User
+) -> None:
+    """The whole cycle against real rows: park, answer, replay the answered
+    pass, park on the next one, answer again, finish."""
+    flow = create_flow(
+        db_session=db_session,
+        user_id=owner.id,
+        name="looped approval",
+        draft_spec=looped_approval_spec(),
+    )
+    run_id = insert_run(
+        db_session=db_session,
+        flow_id=flow.id,
+        trigger_source=FlowTriggerSource.TEST,
+        trigger_payload={"page": {"id": 1, "next": {"id": 2}}},
+    ).id
+    db_session.commit()
+
+    # What each pass works on: the page the cursor points at.
+    pages = {1: {"id": 1, "next": {"id": 2}}, 2: {"id": 2}}
+
+    for page, iteration in ((1, 0), (2, 1)):
+        run_flow_logic(run_id)
+        db_session.expire_all()
+
+        run = get_run(db_session=db_session, run_id=run_id)
+        assert run is not None
+        assert run.status == FlowRunStatus.AWAITING_DECISION
+        open_gates = [
+            row
+            for row in node_rows(db_session, run_id, "gate")
+            if row.status == FlowNodeRunStatus.RUNNING
+        ]
+        assert [(row.iteration, row.input) for row in open_gates] == [
+            (
+                iteration,
+                {
+                    "item": pages[page],
+                    "index": iteration,
+                    "question": f"Send page {page}?",
+                    "assignee": None,
+                },
+            )
+        ]
+
+        apply_human_decision(
+            db_session=db_session,
+            run=run,
+            node_id="gate",
+            decision="approve",
+            comment=None,
+            decided_by="ada@example.test",
+        )
+        db_session.commit()
+
+    run_flow_logic(run_id)
+    db_session.expire_all()
+
+    run = get_run(db_session=db_session, run_id=run_id)
+    assert run is not None
+    assert run.status == FlowRunStatus.SUCCEEDED
+    assert sorted(row.iteration for row in node_rows(db_session, run_id, "send")) == [
+        0,
+        1,
+    ]
+    loop_row = node_rows(db_session, run_id, "pages")[0]
+    assert loop_row.status == FlowNodeRunStatus.SUCCEEDED
+    assert loop_row.output is not None
+    assert loop_row.output["value"] == {
+        "passes": 2,
+        "satisfied": True,
+        "results": [1, 2],
+    }

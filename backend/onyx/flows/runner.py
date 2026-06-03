@@ -63,6 +63,7 @@ class DatabaseRecorder:
         *,
         node_id: str,
         kind: FlowNodeKind,
+        iteration: int,
         item_index: int,
         node_input: dict[str, Any] | None,
     ) -> RecordedNode | None:
@@ -72,6 +73,7 @@ class DatabaseRecorder:
                 run_id=self.run_id,
                 node_id=node_id,
                 kind=kind,
+                iteration=iteration,
                 item_index=item_index,
                 node_input=node_input,
             )
@@ -90,6 +92,7 @@ class DatabaseRecorder:
         self,
         *,
         node_id: str,
+        iteration: int,
         item_index: int,
         status: FlowNodeRunStatus,
         output: Any,
@@ -97,6 +100,7 @@ class DatabaseRecorder:
     ) -> None:
         self._close_node(
             node_id=node_id,
+            iteration=iteration,
             item_index=item_index,
             status=status,
             output=output,
@@ -107,6 +111,7 @@ class DatabaseRecorder:
         self,
         *,
         node_id: str,
+        iteration: int,
         item_index: int,
         error_class: FlowErrorClass,
         error_detail: str,
@@ -114,6 +119,7 @@ class DatabaseRecorder:
     ) -> None:
         self._close_node(
             node_id=node_id,
+            iteration=iteration,
             item_index=item_index,
             status=FlowNodeRunStatus.FAILED,
             attempt=attempt,
@@ -125,6 +131,7 @@ class DatabaseRecorder:
         self,
         *,
         node_id: str,
+        iteration: int,
         item_index: int,
         status: FlowNodeRunStatus,
         attempt: int,
@@ -143,13 +150,15 @@ class DatabaseRecorder:
                 db_session=db_session,
                 run_id=self.run_id,
                 node_id=node_id,
+                iteration=iteration,
                 item_index=item_index,
             )
             if node_run is None:
                 logger.error(
-                    "no node row to close run_id=%s node=%s item=%d",
+                    "no node row to close run_id=%s node=%s pass=%d item=%d",
                     self.run_id,
                     node_id,
+                    iteration,
                     item_index,
                 )
                 return
@@ -165,13 +174,19 @@ class DatabaseRecorder:
             db_session.commit()
 
     def park_node(
-        self, *, node_id: str, item_index: int, detail: dict[str, Any]
+        self,
+        *,
+        node_id: str,
+        iteration: int,
+        item_index: int,
+        detail: dict[str, Any],
     ) -> None:
         with get_session_with_current_tenant() as db_session:
             parked = record_node_waiting(
                 db_session=db_session,
                 run_id=self.run_id,
                 node_id=node_id,
+                iteration=iteration,
                 item_index=item_index,
                 detail=detail,
             )
@@ -181,10 +196,14 @@ class DatabaseRecorder:
                 )
             db_session.commit()
 
-    def skip_node(self, *, node_id: str, kind: FlowNodeKind) -> None:
+    def skip_node(self, *, node_id: str, kind: FlowNodeKind, iteration: int) -> None:
         with get_session_with_current_tenant() as db_session:
             record_skipped_node(
-                db_session=db_session, run_id=self.run_id, node_id=node_id, kind=kind
+                db_session=db_session,
+                run_id=self.run_id,
+                node_id=node_id,
+                kind=kind,
+                iteration=iteration,
             )
             db_session.commit()
 

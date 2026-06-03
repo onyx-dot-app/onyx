@@ -33,6 +33,7 @@ import type {
   HumanNode,
   LoopNode,
   ParallelNode,
+  RepeatNode,
   RetryNode,
   ScheduleNode,
   SplitNode,
@@ -60,6 +61,7 @@ const MAX_DELAY_SECONDS = 30 * 24 * 60 * 60;
 const MAX_SWITCH_CASES = 10;
 const MAX_PARALLEL_CALLS = 10;
 const MAX_PAUSE_SECONDS = 60;
+const MAX_REPEAT_PASSES = 50;
 
 /**
  * The picker value for "this branch ends here".
@@ -92,8 +94,8 @@ export interface NodeInspectorProps {
   webhookSigningSecret?: string | null;
   /** Steps that lead to this one, which a merge may name as sources. */
   mergeCandidates?: readonly string[];
-  /** Steps a switch case may lead to: everything but this one and its
-   *  ancestors, since either would close a loop. */
+  /** Steps a switch case or a loop's body may lead to: everything but this
+   *  one and its ancestors, since either would close a cycle. */
   branchTargets?: readonly string[];
   onChange: (node: FlowNode) => void;
   onDelete: (nodeId: string) => void;
@@ -199,6 +201,13 @@ export function NodeInspector({
       ) : null}
       {node.kind === "SWITCH" ? (
         <SwitchFields
+          node={node}
+          targets={branchTargets ?? []}
+          onChange={onChange}
+        />
+      ) : null}
+      {node.kind === "REPEAT" ? (
+        <RepeatFields
           node={node}
           targets={branchTargets ?? []}
           onChange={onChange}
@@ -317,9 +326,9 @@ export function NodeInspector({
  *
  * Each has its own reason — a branch has no answer once the items disagree,
  * a wait would be the same wall clock spent N times over, a merge has one
- * output per source already, a parallel step fans out on its own — but the
- * rule for the editor is the same: do not offer a field that only gets
- * refused on save.
+ * output per source already, a parallel step fans out on its own, a loop
+ * would multiply every pass — but the rule for the editor is the same: do
+ * not offer a field that only gets refused on save.
  *
  * Mirrors the `_no_fan_out` validators in `backend/onyx/flows/models.py`.
  */
@@ -331,6 +340,7 @@ const NEVER_FANS_OUT: readonly FlowNodeKind[] = [
   "SCHEDULE",
   "MERGE",
   "PARALLEL",
+  "REPEAT",
 ];
 
 function canFanOut(node: FlowNode): boolean {
@@ -602,6 +612,185 @@ function SwitchFields({
       </InputVertical>
     </>
   );
+}
+
+function RepeatFields({
+  node,
+  targets,
+  onChange,
+}: FieldProps<RepeatNode> & { targets: readonly string[] }) {
+  const t = useTranslations("flows.inspector");
+  const needsValue = !UNARY_OPERATORS.includes(node.operator);
+  // What follows the loop cannot also be what it repeats; the server refuses
+  // a step that is both.
+  const bodyTargets = targets.filter((target) => !node.next.includes(target));
+
+  return (
+    <>
+      <InputVertical
+        withLabel
+        title={t("fields.repeatBody")}
+        description={t("fields.repeatBodyHelp")}
+      >
+        <InputSingleSelect
+          // One place each pass starts. A body written against the API can
+          // name several; choosing one here replaces them.
+          value={node.body[0] ?? ""}
+          onValueChange={(picked) => onChange({ ...node, body: [picked] })}
+        >
+          <InputSingleSelect.Trigger
+            aria-label={t("fields.repeatBody")}
+            placeholder={t("placeholder.repeatBody")}
+          />
+          <InputSingleSelect.Content>
+            {bodyTargets.map((target) => (
+              <InputSingleSelect.Item key={target} value={target}>
+                {target}
+              </InputSingleSelect.Item>
+            ))}
+          </InputSingleSelect.Content>
+        </InputSingleSelect>
+      </InputVertical>
+
+      {node.body.length === 0 ? (
+        <Text font="main-ui-muted" color="text-03">
+          {t("fields.repeatBodyEmpty")}
+        </Text>
+      ) : null}
+
+      <InputVertical
+        withLabel
+        title={t("fields.repeatUntil")}
+        description={t("fields.repeatUntilHelp")}
+      >
+        <InputTypeIn
+          value={node.until}
+          placeholder={t("placeholder.repeatUntil")}
+          onChange={(event) => onChange({ ...node, until: event.target.value })}
+        />
+      </InputVertical>
+
+      <InputVertical withLabel title={t("fields.operator")}>
+        <InputSingleSelect
+          value={node.operator}
+          onValueChange={(raw) => {
+            const operator = asOperator(raw);
+            onChange({
+              ...node,
+              operator,
+              value: UNARY_OPERATORS.includes(operator)
+                ? null
+                : (node.value ?? ""),
+            });
+          }}
+        >
+          <InputSingleSelect.Trigger />
+          <InputSingleSelect.Content>
+            {OPERATORS.map((operator) => (
+              <InputSingleSelect.Item key={operator} value={operator}>
+                {t(`operator.${operator}`)}
+              </InputSingleSelect.Item>
+            ))}
+          </InputSingleSelect.Content>
+        </InputSingleSelect>
+      </InputVertical>
+
+      {needsValue ? (
+        <InputVertical withLabel title={t("fields.untilValue")}>
+          <InputTypeIn
+            value={node.value ?? ""}
+            onChange={(event) =>
+              onChange({ ...node, value: event.target.value })
+            }
+          />
+        </InputVertical>
+      ) : null}
+
+      <InputVertical
+        withLabel
+        title={t("fields.maxPasses")}
+        description={t("fields.maxPassesHelp")}
+      >
+        <InputTypeIn
+          type="number"
+          min={1}
+          max={MAX_REPEAT_PASSES}
+          value={String(node.max_passes)}
+          onChange={(event) =>
+            onChange({ ...node, max_passes: clampPasses(event.target.value) })
+          }
+        />
+      </InputVertical>
+
+      <InputVertical
+        withLabel
+        title={t("fields.repeatStart")}
+        description={t("fields.repeatStartHelp")}
+        suffix="optional"
+      >
+        <InputTypeIn
+          value={node.start ?? ""}
+          onChange={(event) =>
+            onChange({ ...node, start: blankToNull(event.target.value) })
+          }
+        />
+      </InputVertical>
+
+      <InputVertical
+        withLabel
+        title={t("fields.repeatCarry")}
+        description={t("fields.repeatCarryHelp")}
+        suffix="optional"
+      >
+        <InputTypeIn
+          value={node.carry ?? ""}
+          placeholder={t("placeholder.repeatUntil")}
+          onChange={(event) =>
+            onChange({ ...node, carry: blankToNull(event.target.value) })
+          }
+        />
+      </InputVertical>
+
+      <InputVertical
+        withLabel
+        title={t("fields.repeatCollect")}
+        description={t("fields.repeatCollectHelp")}
+        suffix="optional"
+      >
+        <InputTypeIn
+          value={node.collect ?? ""}
+          placeholder={t("placeholder.repeatCollect")}
+          onChange={(event) =>
+            onChange({ ...node, collect: blankToNull(event.target.value) })
+          }
+        />
+      </InputVertical>
+
+      <label className="flex flex-row items-center gap-2 cursor-pointer">
+        <InputCheckbox
+          checked={node.fail_when_exhausted}
+          onCheckedChange={(checked) =>
+            onChange({ ...node, fail_when_exhausted: checked })
+          }
+        />
+        <Text font="main-ui-body" color="text-04">
+          {t("fields.repeatFailExhausted")}
+        </Text>
+      </label>
+    </>
+  );
+}
+
+/** Keep the number of passes inside what the server will accept. */
+function clampPasses(raw: string): number {
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isNaN(parsed)) return 1;
+  return Math.min(MAX_REPEAT_PASSES, Math.max(1, parsed));
+}
+
+/** An optional expression: an empty field means "not set", not "". */
+function blankToNull(raw: string): string | null {
+  return raw === "" ? null : raw;
 }
 
 interface BranchTargetSelectProps {

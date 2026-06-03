@@ -12508,7 +12508,8 @@
         "MERGE": "병합",
         "SPLIT": "분할",
         "PARALLEL": "병렬",
-        "SWITCH": "스위치"
+        "SWITCH": "스위치",
+        "REPEAT": "반복(조건까지)"
       },
       "startBadge": "시작",
       "fanOutBadge": "항목별",
@@ -12519,7 +12520,10 @@
         "approve": "승인",
         "reject": "거부",
         "case": "케이스",
-        "otherwise": "그 외"
+        "otherwise": "그 외",
+        "pass": "매 회차",
+        "after": "끝나면",
+        "again": "다시"
       },
       "controls": {
         "zoomIn": "확대",
@@ -12547,7 +12551,8 @@
         "MERGE": "병합",
         "SPLIT": "분할",
         "PARALLEL": "병렬",
-        "SWITCH": "스위치"
+        "SWITCH": "스위치",
+        "REPEAT": "반복(조건까지)"
       }
     },
     "status": {
@@ -12580,7 +12585,8 @@
         "MERGE": "병합",
         "SPLIT": "분할",
         "PARALLEL": "병렬",
-        "SWITCH": "스위치"
+        "SWITCH": "스위치",
+        "REPEAT": "반복(조건까지)"
       },
       "fields": {
         "name": "이름",
@@ -12668,7 +12674,21 @@
         "branchEnds": "여기서 종료",
         "pauseSeconds": "항목 간격(초)",
         "pauseSecondsHelp": "다음 항목으로 넘어가기 전에 이만큼 기다립니다. 호출 빈도가 제한된 API에 사용합니다. 최대 60초이며, 대기 시간은 실행의 15분 제한에 포함됩니다.",
-        "loopPauseHint": "배치 사이에 기다리려면 배치마다 한 번씩 실행되는 단계에 간격을 설정하세요."
+        "loopPauseHint": "배치 사이에 기다리려면 배치마다 한 번씩 실행되는 단계에 간격을 설정하세요.",
+        "repeatBody": "반복 시작 단계",
+        "repeatBodyHelp": "매 회차가 여기서 시작됩니다. 이 단계 뒤에 이어지는 단계도 함께 반복됩니다.",
+        "repeatBodyEmpty": "이 단계 뒤에 처음 추가하는 단계가 반복 대상이 됩니다.",
+        "repeatUntil": "종료 조건",
+        "repeatUntilHelp": "매 회차가 끝날 때 확인합니다. 없는 값은 비어 있는 것으로 봅니다.",
+        "maxPasses": "최대 회차",
+        "maxPassesHelp": "최대 50회입니다. 각 회차는 실행의 15분 제한에 포함됩니다.",
+        "repeatStart": "처음 값",
+        "repeatStartHelp": "첫 회차에서 '{{' item '}}'로 보이는 값입니다.",
+        "repeatCarry": "다음 값",
+        "repeatCarryHelp": "각 회차가 끝날 때 정해집니다. 다음 회차에서는 이 값이 '{{' item '}}'가 됩니다.",
+        "repeatCollect": "매 회차 후 모을 값",
+        "repeatCollectHelp": "매 회차 후 반복 결과에 추가됩니다. 목록은 하나로 합쳐집니다.",
+        "repeatFailExhausted": "회차를 모두 쓰면 실행을 실패로 처리"
       },
       "onError": {
         "stop": "실행 중단",
@@ -12706,7 +12726,10 @@
         "cron": "0 9 * * 1-5",
         "splitValue": "'{{' trigger.tags '}}'",
         "switchValue": "'{{' trigger.priority '}}'",
-        "caseValue": "high"
+        "caseValue": "high",
+        "repeatBody": "단계 선택",
+        "repeatUntil": "'{{' steps.fetch.body.next_cursor '}}'",
+        "repeatCollect": "'{{' steps.fetch.body.items '}}'"
       },
       "mergeMode": {
         "combine": "각 단계의 출력을 이름 그대로 두기",
@@ -12762,7 +12785,9 @@
       "assignedTo": "담당: {who}",
       "decisionFailed": "결정을 기록하지 못했습니다.",
       "decisionFallbackQuestion": "이 실행은 승인을 기다리고 있습니다.",
-      "resumesAt": "{when} 에 이어서 진행합니다."
+      "resumesAt": "{when} 에 이어서 진행합니다.",
+      "pass": "{number}회차",
+      "passItem": "{number}회차, 항목 {index}"
     }
   },
   "knowledge": {

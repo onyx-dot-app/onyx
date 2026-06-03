@@ -317,7 +317,7 @@ def test_a_finished_node_is_not_run_again(runtime: NodeRuntime) -> None:
         }
     )
     recorder = InMemoryRecorder()
-    recorder._finished[("already", 0)] = RecordedNode(
+    recorder._finished[("already", 0, 0)] = RecordedNode(
         status=FlowNodeRunStatus.SUCCEEDED, output={"value": "from the first attempt"}
     )
 
@@ -433,6 +433,7 @@ def test_an_approval_parks_the_run_without_touching_what_follows(
     assert parked == [
         {
             "node_id": "gate",
+            "iteration": 0,
             "item_index": 0,
             "status": FlowNodeRunStatus.RUNNING,
             "waiting_for": {"question": "Ship v3?", "assignee": None},
@@ -459,7 +460,7 @@ def test_parking_is_not_swallowed_by_on_error_skip(runtime: NodeRuntime) -> None
 def test_an_approved_run_resumes_down_the_approve_branch(runtime: NodeRuntime) -> None:
     spec = gated_spec(on_approve=["ship"], on_reject=["tell"])
     recorder = InMemoryRecorder()
-    recorder._finished[("gate", 0)] = approved()
+    recorder._finished[("gate", 0, 0)] = approved()
 
     result = execute_flow(
         spec=spec,
@@ -477,7 +478,7 @@ def test_an_approved_run_resumes_down_the_approve_branch(runtime: NodeRuntime) -
 def test_a_rejected_run_resumes_down_the_reject_branch(runtime: NodeRuntime) -> None:
     spec = gated_spec(on_approve=["ship"], on_reject=["tell"])
     recorder = InMemoryRecorder()
-    recorder._finished[("gate", 0)] = rejected("not this week")
+    recorder._finished[("gate", 0, 0)] = rejected("not this week")
 
     result = execute_flow(
         spec=spec,
@@ -496,7 +497,7 @@ def test_rejecting_a_gate_with_no_reject_branch_fails_the_run(
 ) -> None:
     spec = gated_spec(on_approve=["ship"])
     recorder = InMemoryRecorder()
-    recorder._finished[("gate", 0)] = rejected("the numbers are wrong")
+    recorder._finished[("gate", 0, 0)] = rejected("the numbers are wrong")
 
     result = execute_flow(
         spec=spec,
@@ -539,7 +540,7 @@ def test_a_replayed_condition_keeps_the_branch_it_first_took(
         }
     )
     recorder = InMemoryRecorder()
-    recorder._finished[("check", 0)] = RecordedNode(
+    recorder._finished[("check", 0, 0)] = RecordedNode(
         status=FlowNodeRunStatus.SUCCEEDED,
         output={"matched": True, "left": 9, "right": 5},
     )
@@ -595,7 +596,7 @@ def test_a_short_delay_does_not_park_at_all(runtime: NodeRuntime) -> None:
 def test_a_resumed_delay_does_not_wait_again(runtime: NodeRuntime) -> None:
     """The row the sweep closed is what stops the replay walking back in."""
     recorder = InMemoryRecorder()
-    recorder._finished[("wait", 0)] = RecordedNode(
+    recorder._finished[("wait", 0, 0)] = RecordedNode(
         status=FlowNodeRunStatus.SUCCEEDED,
         output={"waited_seconds": 7200, "parked": True},
     )
@@ -757,7 +758,7 @@ def test_a_replayed_switch_keeps_the_branch_it_first_took(
     wrong one.
     """
     recorder = InMemoryRecorder()
-    recorder._finished[("route", 0)] = RecordedNode(
+    recorder._finished[("route", 0, 0)] = RecordedNode(
         status=FlowNodeRunStatus.SUCCEEDED,
         output={"value": "low", "case": 1, "equals": "low"},
     )
@@ -878,7 +879,7 @@ def test_a_replayed_fan_out_does_not_wait_again(
     so none of them is owed a pause."""
     recorder = InMemoryRecorder()
     for index, batch in enumerate(["a", "b", "c"]):
-        recorder._finished[("send", index)] = sent(batch)
+        recorder._finished[("send", 0, index)] = sent(batch)
 
     result = execute_flow(
         spec=paced_spec(30),
@@ -895,8 +896,8 @@ def test_a_fan_out_resumed_midway_waits_only_between_new_items(
     runtime: NodeRuntime, pauses: list[float]
 ) -> None:
     recorder = InMemoryRecorder()
-    recorder._finished[("send", 0)] = sent("a")
-    recorder._finished[("send", 1)] = sent("b")
+    recorder._finished[("send", 0, 0)] = sent("a")
+    recorder._finished[("send", 0, 1)] = sent("b")
 
     result = execute_flow(
         spec=paced_spec(2),
@@ -925,3 +926,409 @@ def test_a_pause_the_budget_cannot_cover_fails_before_sleeping(
     assert result.failed_node_id == "send"
     assert result.error_detail == "no time left to pause before item 1 of 'send'"
     assert pauses == []
+
+
+# ---------------------------------------------------------------------------
+# Loops: running a body pass after pass
+# ---------------------------------------------------------------------------
+
+# A cursor chain in the trigger, standing in for a paginated API: each page
+# names the next, and the last page has no `next` at all.
+PAGES = {"id": 1, "next": {"id": 2, "next": {"id": 3}}}
+
+
+def loop(**overrides: Any) -> dict[str, Any]:
+    node: dict[str, Any] = {
+        "id": "pages",
+        "kind": "REPEAT",
+        "body": ["read"],
+        "start": "{{ trigger.page }}",
+        "until": "{{ item.next }}",
+        "operator": "is_empty",
+        "carry": "{{ item.next }}",
+        "collect": "{{ steps.read.value }}",
+        "next": ["after"],
+    }
+    node.update(overrides)
+    return node
+
+
+def looped_spec(*body: dict[str, Any], **loop_overrides: Any) -> Any:
+    return parse_spec(
+        {
+            "start": "pages",
+            "nodes": [
+                loop(**loop_overrides),
+                *(body or [transform("read", "{{ item.id }}")]),
+                transform("after", "{{ steps.pages.results }}"),
+            ],
+        }
+    )
+
+
+def rows_of(recorder: InMemoryRecorder, node_id: str, status: Any) -> list[int]:
+    """The passes a node has a row of this status for, in order."""
+    return [
+        entry["iteration"]
+        for entry in recorder.entries
+        if entry["node_id"] == node_id and entry["status"] == status
+    ]
+
+
+def test_a_loop_follows_a_cursor_until_it_runs_out(runtime: NodeRuntime) -> None:
+    recorder = InMemoryRecorder()
+
+    result = execute_flow(
+        spec=looped_spec(),
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"page": PAGES},
+    )
+
+    assert result.status == FlowRunStatus.SUCCEEDED
+    assert result.outputs["pages"] == {
+        "passes": 3,
+        "satisfied": True,
+        "results": [1, 2, 3],
+    }
+    # What follows the loop runs once, after it, and sees the last pass.
+    assert result.outputs["after"] == {"value": [1, 2, 3]}
+    assert result.outputs["read"] == {"value": 3}
+    assert rows_of(recorder, "read", FlowNodeRunStatus.SUCCEEDED) == [0, 1, 2]
+    assert rows_of(recorder, "after", FlowNodeRunStatus.SUCCEEDED) == [0]
+    # The walk around the loop leaves the loop's steps to the loop.
+    assert rows_of(recorder, "read", FlowNodeRunStatus.SKIPPED) == []
+
+
+def test_a_cursor_that_is_simply_left_out_counts_as_the_end(
+    runtime: NodeRuntime,
+) -> None:
+    """The last page has no `next` key at all. That is an API saying "no
+    more", not an error, so the loop ends instead of failing."""
+    result = execute_flow(
+        spec=looped_spec(),
+        runtime=runtime,
+        recorder=InMemoryRecorder(),
+        trigger_payload={"page": {"id": 1}},
+    )
+
+    assert result.status == FlowRunStatus.SUCCEEDED
+    assert result.outputs["pages"]["passes"] == 1
+
+
+def test_each_pass_knows_its_number(runtime: NodeRuntime) -> None:
+    spec = looped_spec(
+        transform("read", "{{ index }}"),
+        start=None,
+        carry=None,
+        until="{{ index }}",
+        operator="eq",
+        value="2",
+    )
+
+    result = execute_flow(spec=spec, runtime=runtime, recorder=InMemoryRecorder())
+
+    assert result.outputs["pages"]["results"] == [0, 1, 2]
+
+
+def test_a_branch_inside_the_loop_is_decided_again_every_pass(
+    runtime: NodeRuntime,
+) -> None:
+    spec = looped_spec(
+        {
+            "id": "read",
+            "kind": "CONDITION",
+            "left": "{{ index }}",
+            "operator": "eq",
+            "right": "1",
+            "on_true": ["odd"],
+            "on_false": ["even"],
+        },
+        transform("odd", "odd"),
+        transform("even", "even"),
+        start=None,
+        carry=None,
+        collect=None,
+        until="{{ index }}",
+        operator="eq",
+        value="2",
+    )
+    recorder = InMemoryRecorder()
+
+    execute_flow(spec=spec, runtime=runtime, recorder=recorder)
+
+    assert rows_of(recorder, "even", FlowNodeRunStatus.SUCCEEDED) == [0, 2]
+    assert rows_of(recorder, "even", FlowNodeRunStatus.SKIPPED) == [1]
+    assert rows_of(recorder, "odd", FlowNodeRunStatus.SUCCEEDED) == [1]
+    assert rows_of(recorder, "odd", FlowNodeRunStatus.SKIPPED) == [0, 2]
+
+
+def test_a_pass_cannot_read_a_step_it_skipped(runtime: NodeRuntime) -> None:
+    """`first` only runs on pass 0. If its output lingered, every later pass
+    would collect it again as if it had just run."""
+    spec = looped_spec(
+        {
+            "id": "read",
+            "kind": "CONDITION",
+            "left": "{{ index }}",
+            "operator": "eq",
+            "right": "0",
+            "on_true": ["first"],
+        },
+        transform("first", "only once"),
+        start=None,
+        carry=None,
+        collect="{{ steps.first.value }}",
+        until="{{ index }}",
+        operator="eq",
+        value="2",
+    )
+
+    result = execute_flow(spec=spec, runtime=runtime, recorder=InMemoryRecorder())
+
+    assert result.outputs["pages"]["results"] == ["only once"]
+
+
+def test_running_out_of_passes_fails_the_run_by_default(
+    runtime: NodeRuntime,
+) -> None:
+    spec = looped_spec(
+        transform("read", "{{ index }}"),
+        start=None,
+        carry=None,
+        until="{{ index }}",
+        operator="eq",
+        value="99",
+        max_passes=3,
+    )
+    recorder = InMemoryRecorder()
+
+    result = execute_flow(spec=spec, runtime=runtime, recorder=recorder)
+
+    assert result.status == FlowRunStatus.FAILED
+    assert result.error_class == FlowErrorClass.LOOP_EXHAUSTED
+    assert result.failed_node_id == "pages"
+    assert result.error_detail == "still not eq after 3 passes"
+    assert rows_of(recorder, "pages", FlowNodeRunStatus.FAILED) == [0]
+    assert "after" not in result.outputs
+
+
+def test_running_out_of_passes_can_be_made_to_carry_on(
+    runtime: NodeRuntime,
+) -> None:
+    spec = looped_spec(
+        transform("read", "{{ index }}"),
+        start=None,
+        carry=None,
+        until="{{ index }}",
+        operator="eq",
+        value="99",
+        max_passes=3,
+        fail_when_exhausted=False,
+    )
+
+    result = execute_flow(spec=spec, runtime=runtime, recorder=InMemoryRecorder())
+
+    assert result.status == FlowRunStatus.SUCCEEDED
+    assert result.outputs["pages"]["satisfied"] is False
+    assert result.outputs["pages"]["passes"] == 3
+    assert "after" in result.outputs
+
+
+def test_a_step_that_fails_inside_the_loop_is_the_one_the_run_names(
+    runtime: NodeRuntime,
+) -> None:
+    """The second page has no `id`. The run names `read`, the step that
+    broke, and the loop's own row says which pass it broke in."""
+    recorder = InMemoryRecorder()
+
+    result = execute_flow(
+        spec=looped_spec(),
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"page": {"id": 1, "next": {"next": {"id": 3}}}},
+    )
+
+    assert result.status == FlowRunStatus.FAILED
+    assert result.failed_node_id == "read"
+    assert result.error_detail == "ExpressionError: 'item' has no 'id' (it has: next)"
+    loop_failure = next(
+        entry
+        for entry in recorder.entries
+        if entry["node_id"] == "pages" and entry["status"] == FlowNodeRunStatus.FAILED
+    )
+    assert loop_failure["error_detail"].startswith("pass 2 stopped at 'read': ")
+
+
+def test_a_start_that_cannot_be_read_fails_before_any_pass(
+    runtime: NodeRuntime,
+) -> None:
+    """Only what a loop reads after a pass is forgiving. A start that points
+    nowhere is a mistake in the flow."""
+    recorder = InMemoryRecorder()
+
+    result = execute_flow(
+        spec=looped_spec(start="{{ trigger.nope }}"),
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"page": PAGES},
+    )
+
+    assert result.status == FlowRunStatus.FAILED
+    assert result.error_class == FlowErrorClass.EXPRESSION_ERROR
+    assert result.failed_node_id == "pages"
+    assert rows_of(recorder, "read", FlowNodeRunStatus.SUCCEEDED) == []
+
+
+def test_collecting_more_than_the_fan_out_limit_fails_the_loop(
+    runtime: NodeRuntime,
+) -> None:
+    spec = looped_spec(
+        transform("read", "{{ index }}"),
+        start=None,
+        carry=None,
+        collect="{{ trigger.rows }}",
+        until="{{ index }}",
+        operator="eq",
+        value="1",
+    )
+
+    result = execute_flow(
+        spec=spec,
+        runtime=runtime,
+        recorder=InMemoryRecorder(),
+        trigger_payload={"rows": list(range(150))},
+    )
+
+    assert result.status == FlowRunStatus.FAILED
+    assert result.error_class == FlowErrorClass.INVALID_SPEC
+    assert result.failed_node_id == "pages"
+
+
+def test_a_loop_on_an_untaken_branch_skips_its_steps_too(
+    runtime: NodeRuntime,
+) -> None:
+    spec = parse_spec(
+        {
+            "start": "check",
+            "nodes": [
+                {
+                    "id": "check",
+                    "kind": "CONDITION",
+                    "left": "{{ trigger.go }}",
+                    "operator": "eq",
+                    "right": "yes",
+                    "on_true": ["pages"],
+                },
+                loop(next=[]),
+                transform("read", "{{ item.id }}"),
+            ],
+        }
+    )
+    recorder = InMemoryRecorder()
+
+    execute_flow(
+        spec=spec, runtime=runtime, recorder=recorder, trigger_payload={"go": "no"}
+    )
+
+    assert statuses(recorder)["pages"] == FlowNodeRunStatus.SKIPPED
+    assert statuses(recorder)["read"] == FlowNodeRunStatus.SKIPPED
+
+
+def test_a_finished_loop_replays_without_running_its_body_again(
+    runtime: NodeRuntime,
+) -> None:
+    """A redelivered run reuses every pass's rows. Replaying them is also
+    what puts the last pass back into `steps` for the step after the loop."""
+    recorder = InMemoryRecorder()
+    for index, page in enumerate([1, 2, 3]):
+        recorder._finished[("read", index, 0)] = RecordedNode(
+            status=FlowNodeRunStatus.SUCCEEDED, output={"value": f"page {page}"}
+        )
+    recorder._finished[("pages", 0, 0)] = RecordedNode(
+        status=FlowNodeRunStatus.SUCCEEDED, output={"passes": 3}
+    )
+
+    result = execute_flow(
+        spec=looped_spec(),
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"page": PAGES},
+    )
+
+    assert result.status == FlowRunStatus.SUCCEEDED
+    assert result.outputs["read"] == {"value": "page 3"}
+    assert [entry["node_id"] for entry in recorder.entries] == ["after"]
+
+
+def test_a_loop_cut_off_midway_carries_on_from_the_pass_it_reached(
+    runtime: NodeRuntime,
+) -> None:
+    recorder = InMemoryRecorder()
+    recorder._finished[("pages", 0, 0)] = RecordedNode(
+        status=FlowNodeRunStatus.RUNNING, output=None
+    )
+    recorder._finished[("read", 0, 0)] = RecordedNode(
+        status=FlowNodeRunStatus.SUCCEEDED, output={"value": 1}
+    )
+
+    result = execute_flow(
+        spec=looped_spec(),
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"page": PAGES},
+    )
+
+    assert result.outputs["pages"]["results"] == [1, 2, 3]
+    assert rows_of(recorder, "read", FlowNodeRunStatus.SUCCEEDED) == [1, 2]
+    assert rows_of(recorder, "pages", FlowNodeRunStatus.SUCCEEDED) == [0]
+
+
+def test_an_approval_inside_a_loop_parks_each_pass_and_resumes_in_it(
+    runtime: NodeRuntime,
+) -> None:
+    """Two passes, one question each. Every resume replays the passes
+    already answered and parks again at the next open question."""
+    spec = looped_spec(
+        {
+            "id": "read",
+            "kind": "HUMAN",
+            "question": "Send page {{ item.id }}?",
+            "on_approve": ["send"],
+        },
+        transform("send", "sent {{ item.id }}"),
+        collect="{{ steps.send.value }}",
+    )
+    payload = {"page": {"id": 1, "next": {"id": 2}}}
+
+    first = InMemoryRecorder()
+    parked = execute_flow(
+        spec=spec, runtime=runtime, recorder=first, trigger_payload=payload
+    )
+    assert parked.status == FlowRunStatus.AWAITING_DECISION
+    assert [
+        (entry["iteration"], entry["waiting_for"]["question"])
+        for entry in first.entries
+        if "waiting_for" in entry
+    ] == [(0, "Send page 1?")]
+
+    second = InMemoryRecorder()
+    second._finished[("read", 0, 0)] = approved()
+    parked_again = execute_flow(
+        spec=spec, runtime=runtime, recorder=second, trigger_payload=payload
+    )
+    assert parked_again.status == FlowRunStatus.AWAITING_DECISION
+    assert [
+        (entry["iteration"], entry["waiting_for"]["question"])
+        for entry in second.entries
+        if "waiting_for" in entry
+    ] == [(1, "Send page 2?")]
+
+    third = InMemoryRecorder()
+    third._finished[("read", 0, 0)] = approved()
+    third._finished[("read", 1, 0)] = approved()
+    finished = execute_flow(
+        spec=spec, runtime=runtime, recorder=third, trigger_payload=payload
+    )
+    assert finished.status == FlowRunStatus.SUCCEEDED
+    assert finished.outputs["pages"]["results"] == ["sent 1", "sent 2"]

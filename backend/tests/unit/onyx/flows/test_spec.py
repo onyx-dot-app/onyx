@@ -11,6 +11,7 @@ from onyx.flows.models import (
     MAX_FAN_OUT_ITEMS,
     MAX_PARALLEL_CALLS,
     MAX_PAUSE_SECONDS,
+    MAX_REPEAT_PASSES,
     MAX_SWITCH_CASES,
     ConditionNode,
     DelayNode,
@@ -19,6 +20,7 @@ from onyx.flows.models import (
     HttpNode,
     MergeNode,
     ParallelNode,
+    RepeatNode,
     RetryNode,
     ScheduleNode,
     SpecError,
@@ -798,3 +800,125 @@ def test_a_spec_saved_before_pauses_existed_runs_unpaced() -> None:
     )
 
     assert only(spec, HttpNode).pause_seconds == 0
+
+
+def looped(*nodes: dict[str, Any], **loop_overrides: Any) -> dict[str, Any]:
+    """A loop over `fetch` -> `tidy`, then `done`, plus whatever is added."""
+    repeat: dict[str, Any] = {
+        "id": "pages",
+        "kind": "REPEAT",
+        "body": ["fetch"],
+        "until": "{{ steps.fetch.body.next }}",
+        "operator": "is_empty",
+        "next": ["done"],
+    }
+    repeat.update(loop_overrides)
+    return {
+        "start": "pages",
+        "nodes": [
+            repeat,
+            http_node("fetch", next=["tidy"]),
+            http_node("tidy"),
+            http_node("done"),
+            *nodes,
+        ],
+    }
+
+
+def test_a_loop_owns_everything_its_body_leads_to() -> None:
+    spec = parse_spec(looped())
+
+    assert spec.loop_bodies() == {"pages": ["fetch", "tidy"]}
+    assert only(spec, RepeatNode).successors() == ["done", "fetch"]
+
+
+def test_a_loop_may_branch_inside_its_body() -> None:
+    raw = looped(http_node("other"))
+    raw["nodes"][1] = {
+        "id": "fetch",
+        "kind": "CONDITION",
+        "left": "{{ index }}",
+        "operator": "eq",
+        "right": "0",
+        "on_true": ["tidy"],
+        "on_false": ["other"],
+    }
+
+    assert parse_spec(raw).loop_bodies() == {"pages": ["fetch", "tidy", "other"]}
+
+
+def test_rejects_a_step_outside_the_loop_leading_into_it() -> None:
+    raw = looped(http_node("sneak", next=["tidy"]))
+
+    with pytest.raises(SpecError, match="node 'sneak' leads into the loop 'pages'"):
+        parse_spec(raw)
+
+
+def test_rejects_a_loop_that_continues_into_its_own_body() -> None:
+    with pytest.raises(SpecError, match="'tidy' is both inside the loop"):
+        parse_spec(looped(next=["tidy"]))
+
+
+def test_rejects_a_body_that_points_back_at_its_loop() -> None:
+    """The loop repeats its body by itself; wiring the way back is a cycle."""
+    raw = looped()
+    raw["nodes"][2]["next"] = ["pages"]
+
+    with pytest.raises(SpecError, match="cycle"):
+        parse_spec(raw)
+
+
+def test_rejects_a_loop_inside_a_loop() -> None:
+    raw = looped(
+        {
+            "id": "inner",
+            "kind": "REPEAT",
+            "body": ["deep"],
+            "until": "{{ index }}",
+            "operator": "is_empty",
+        },
+        http_node("deep"),
+    )
+    raw["nodes"][2]["next"] = ["inner"]
+
+    with pytest.raises(SpecError, match="loops cannot be nested"):
+        parse_spec(raw)
+
+
+def test_rejects_a_flow_that_starts_inside_a_loop() -> None:
+    raw = looped()
+    raw["start"] = "fetch"
+
+    with pytest.raises(SpecError, match="the start node 'fetch' is inside the loop"):
+        parse_spec(raw)
+
+
+def test_a_loop_needs_something_to_compare_unless_the_operator_does_not() -> None:
+    with pytest.raises(SpecError, match="operator 'eq' needs a 'value'"):
+        parse_spec(looped(operator="eq"))
+
+    spec = parse_spec(looped(operator="eq", value="done"))
+    assert only(spec, RepeatNode).value == "done"
+
+
+def test_rejects_a_loop_with_nothing_to_repeat() -> None:
+    with pytest.raises(SpecError, match="body"):
+        parse_spec(looped(body=[]))
+
+
+def test_rejects_a_loop_with_more_passes_than_the_limit() -> None:
+    with pytest.raises(SpecError, match="max_passes"):
+        parse_spec(looped(max_passes=MAX_REPEAT_PASSES + 1))
+
+
+def test_rejects_a_loop_that_fans_out() -> None:
+    with pytest.raises(SpecError, match="a repeat cannot use 'for_each'"):
+        parse_spec(looped(for_each="{{ trigger.rows }}"))
+
+
+def test_a_step_inside_a_loop_may_fan_out() -> None:
+    """Per-item work on each page is the ordinary shape of pagination."""
+    raw = looped()
+    raw["nodes"][2]["for_each"] = "{{ steps.fetch.body.items }}"
+
+    assert parse_spec(raw).loop_bodies() == {"pages": ["fetch", "tidy"]}

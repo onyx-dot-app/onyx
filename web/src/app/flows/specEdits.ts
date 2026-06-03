@@ -22,6 +22,7 @@ import type {
   HumanNode,
   LoopNode,
   ParallelNode,
+  RepeatNode,
   RetryNode,
   ScheduleNode,
   SplitNode,
@@ -255,6 +256,25 @@ export function blankNode(id: string, kind: FlowNodeKind): FlowNode {
       };
       return node;
     }
+    case "REPEAT": {
+      const node: RepeatNode = {
+        ...base,
+        kind: "REPEAT",
+        // Empty until a step is added after it, which becomes what it
+        // repeats. The server needs one, so a half-built loop cannot save.
+        body: [],
+        until: "",
+        // "Until there is no next page" is the loop most flows want.
+        operator: "is_empty",
+        value: null,
+        max_passes: 10,
+        start: null,
+        carry: null,
+        collect: null,
+        fail_when_exhausted: true,
+      };
+      return node;
+    }
     case "WEBHOOK": {
       const node: WebhookNode = {
         ...base,
@@ -310,6 +330,11 @@ export function addNode(
         ),
       };
     }
+    // A new loop has nothing to repeat yet, so the first step added after it
+    // becomes its body. Once it has one, added steps follow the loop.
+    if (node.kind === "REPEAT" && node.body.length === 0) {
+      return { ...node, body: [id] };
+    }
     return { ...node, next: [...node.next, id] };
   });
 
@@ -364,6 +389,9 @@ export function removeNode(spec: FlowSpec, nodeId: string): FlowSpec {
           })),
           otherwise: repoint(node.otherwise),
         };
+      }
+      if (node.kind === "REPEAT") {
+        return { ...node, next: repoint(node.next), body: repoint(node.body) };
       }
       return { ...node, next: repoint(node.next) };
     });

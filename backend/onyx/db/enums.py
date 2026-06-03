@@ -938,6 +938,7 @@ class FlowNodeKind(str, PyEnum):
     SPLIT = "SPLIT"
     PARALLEL = "PARALLEL"
     SWITCH = "SWITCH"
+    REPEAT = "REPEAT"
 
 
 class FlowRunStatus(str, PyEnum):
@@ -994,6 +995,7 @@ class FlowErrorClass(str, PyEnum):
     CODE_ERROR = "code_error"
     DECISION_REJECTED = "decision_rejected"
     RETRY_EXHAUSTED = "retry_exhausted"
+    LOOP_EXHAUSTED = "loop_exhausted"
     LLM_ERROR = "llm_error"
     OUTPUT_MISMATCH = "output_mismatch"
     TIMEOUT = "timeout"

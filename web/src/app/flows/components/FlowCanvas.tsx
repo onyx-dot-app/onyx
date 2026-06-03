@@ -212,6 +212,9 @@ export function FlowCanvas({
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={2}
+                  // Dashed because it is not an edge in the spec: the loop
+                  // goes round by itself, and this only shows that it does.
+                  strokeDasharray={edge.branch === "again" ? "6 4" : undefined}
                 />
                 {/* A dot where the edge lands, rather than an SVG marker:
                     markers do not inherit `currentColor`, so each branch
@@ -298,6 +301,7 @@ export function FlowCanvas({
  * fork, and someone scanning the canvas should not have to learn two colour
  * schemes to see which way the run can go. A switch's cases are neither yes
  * nor no, so they take the switch's own colour, and the catch-all is muted.
+ * A loop's way in and way round take its colour; its way out is muted.
  */
 function branchColourOf(branch: EdgeBranch): string {
   switch (branch) {
@@ -310,7 +314,11 @@ function branchColourOf(branch: EdgeBranch): string {
     case "case":
       return "text-status-warning-05";
     case "otherwise":
+    case "after":
       return "text-text-03";
+    case "pass":
+    case "again":
+      return "text-status-success-05";
     case null:
       return "text-border-02";
   }

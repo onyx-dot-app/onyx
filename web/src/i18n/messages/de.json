@@ -12510,7 +12510,8 @@
         "MERGE": "Zusammenführen",
         "SPLIT": "Aufteilen",
         "PARALLEL": "Parallel",
-        "SWITCH": "Weiche"
+        "SWITCH": "Weiche",
+        "REPEAT": "Schleife (bis)"
       },
       "startBadge": "Start",
       "fanOutBadge": "pro Element",
@@ -12521,7 +12522,10 @@
         "approve": "freigegeben",
         "reject": "abgelehnt",
         "case": "Fall",
-        "otherwise": "sonst"
+        "otherwise": "sonst",
+        "pass": "je Durchlauf",
+        "after": "danach",
+        "again": "erneut"
       },
       "controls": {
         "zoomIn": "Vergrößern",
@@ -12549,7 +12553,8 @@
         "MERGE": "Zusammenführen",
         "SPLIT": "Aufteilen",
         "PARALLEL": "Parallel",
-        "SWITCH": "Weiche"
+        "SWITCH": "Weiche",
+        "REPEAT": "Schleife (bis)"
       }
     },
     "status": {
@@ -12582,7 +12587,8 @@
         "MERGE": "Zusammenführen",
         "SPLIT": "Aufteilen",
         "PARALLEL": "Parallel",
-        "SWITCH": "Weiche"
+        "SWITCH": "Weiche",
+        "REPEAT": "Schleife (bis)"
       },
       "fields": {
         "name": "Name",
@@ -12670,7 +12676,21 @@
         "branchEnds": "Hier enden",
         "pauseSeconds": "Sekunden zwischen den Elementen",
         "pauseSecondsHelp": "So lange zwischen einem Element und dem nächsten warten, für eine API, die begrenzt, wie schnell sie aufgerufen werden darf. Bis zu 60. Die Wartezeit zählt zum 15-Minuten-Limit des Laufs.",
-        "loopPauseHint": "Um zwischen Stapeln zu warten, eine Pause bei dem Schritt einstellen, der einmal pro Stapel läuft."
+        "loopPauseHint": "Um zwischen Stapeln zu warten, eine Pause bei dem Schritt einstellen, der einmal pro Stapel läuft.",
+        "repeatBody": "Wiederholen ab",
+        "repeatBodyHelp": "Jeder Durchlauf beginnt hier. Alles, wohin dieser Schritt führt, wird mit wiederholt.",
+        "repeatBodyEmpty": "Der erste Schritt, den Sie danach hinzufügen, wird wiederholt.",
+        "repeatUntil": "Aufhören, wenn",
+        "repeatUntilHelp": "Wird nach jedem Durchlauf geprüft. Ein fehlender Wert zählt als leer.",
+        "maxPasses": "Höchstens Durchläufe",
+        "maxPassesHelp": "Bis zu 50. Jeder Durchlauf zählt zum 15-Minuten-Limit des Laufs.",
+        "repeatStart": "Erster Wert",
+        "repeatStartHelp": "Was der erste Durchlauf als '{{' item '}}' sieht.",
+        "repeatCarry": "Nächster Wert",
+        "repeatCarryHelp": "Wird am Ende jedes Durchlaufs ermittelt. Der nächste Durchlauf sieht ihn als '{{' item '}}'.",
+        "repeatCollect": "Nach jedem Durchlauf sammeln",
+        "repeatCollectHelp": "Wird nach jedem Durchlauf zu den Ergebnissen der Schleife hinzugefügt. Listen werden zusammengeführt.",
+        "repeatFailExhausted": "Lauf scheitern lassen, wenn die Durchläufe ausgehen"
       },
       "onError": {
         "stop": "Lauf anhalten",
@@ -12708,7 +12728,10 @@
         "cron": "0 9 * * 1-5",
         "splitValue": "'{{' trigger.tags '}}'",
         "switchValue": "'{{' trigger.priority '}}'",
-        "caseValue": "hoch"
+        "caseValue": "hoch",
+        "repeatBody": "Schritt wählen",
+        "repeatUntil": "'{{' steps.fetch.body.next_cursor '}}'",
+        "repeatCollect": "'{{' steps.fetch.body.items '}}'"
       },
       "mergeMode": {
         "combine": "Ausgabe jedes Schritts unter seinem Namen behalten",
@@ -12764,7 +12787,9 @@
       "assignedTo": "Zugewiesen an {who}",
       "decisionFailed": "Die Entscheidung konnte nicht gespeichert werden.",
       "decisionFallbackQuestion": "Dieser Lauf wartet auf eine Freigabe.",
-      "resumesAt": "Läuft weiter am {when}."
+      "resumesAt": "Läuft weiter am {when}.",
+      "pass": "Durchlauf {number}",
+      "passItem": "Durchlauf {number}, Element {index}"
     }
   },
   "knowledge": {

@@ -34,7 +34,8 @@ export type FlowNodeKind =
   | "MERGE"
   | "SPLIT"
   | "PARALLEL"
-  | "SWITCH";
+  | "SWITCH"
+  | "REPEAT";
 export type FlowTriggerKind = "SCHEDULE" | "WEBHOOK" | "MANUAL";
 export type FlowTriggerSource = "SCHEDULE" | "WEBHOOK" | "MANUAL" | "TEST";
 
@@ -228,6 +229,26 @@ export interface SwitchNode extends NodeBase {
   otherwise: string[];
 }
 
+/**
+ * Runs a group of steps pass after pass until a condition holds.
+ *
+ * `body` names where each pass starts; everything reachable from there is
+ * the loop's own. Each pass sees `{{ index }}` and `{{ item }}` — `start` on
+ * the first pass, then what `carry` said at the end of the one before.
+ */
+export interface RepeatNode extends NodeBase {
+  kind: "REPEAT";
+  body: string[];
+  until: string;
+  operator: ConditionOperator;
+  value: string | null;
+  max_passes: number;
+  start: string | null;
+  carry: string | null;
+  collect: string | null;
+  fail_when_exhausted: boolean;
+}
+
 export type FlowNode =
   | HttpNode
   | TransformNode
@@ -244,7 +265,8 @@ export type FlowNode =
   | MergeNode
   | SplitNode
   | ParallelNode
-  | SwitchNode;
+  | SwitchNode
+  | RepeatNode;
 
 export interface FlowSpec {
   spec_version: 1;
@@ -285,6 +307,8 @@ export interface NodeRun {
   node_id: string;
   kind: FlowNodeKind;
   status: FlowNodeRunStatus;
+  /** The loop pass this row belongs to, from 0; 0 outside a loop. */
+  iteration: number;
   item_index: number;
   attempt: number;
   input: JsonObject | null;

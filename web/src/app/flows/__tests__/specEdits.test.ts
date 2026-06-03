@@ -18,6 +18,7 @@ import type {
   FlowNode,
   FlowSpec,
   HumanNode,
+  RepeatNode,
   SwitchNode,
   TransformNode,
 } from "@/app/flows/types";
@@ -71,6 +72,39 @@ function human(id: string, onApprove: string[], onReject: string[]): HumanNode {
     assignee: null,
     on_approve: onApprove,
     on_reject: onReject,
+  };
+}
+
+/** Narrow for assertions; a wrong kind here means the test is wrong. */
+function asRepeat(node: FlowNode | undefined): RepeatNode {
+  if (node === undefined || node.kind !== "REPEAT") {
+    throw new Error(`expected a loop, got ${node?.kind ?? "nothing"}`);
+  }
+  return node;
+}
+
+function repeatNode(
+  id: string,
+  body: string[],
+  next: string[] = []
+): RepeatNode {
+  return {
+    id,
+    name: id,
+    kind: "REPEAT",
+    next,
+    for_each: null,
+    on_error: "stop",
+    retry: { max_attempts: 1, backoff_seconds: 1 },
+    body,
+    until: "{{ steps.fetch.next }}",
+    operator: "is_empty",
+    value: null,
+    max_passes: 10,
+    start: null,
+    carry: null,
+    collect: null,
+    fail_when_exhausted: true,
   };
 }
 
@@ -168,6 +202,13 @@ describe("blankNode", () => {
       method: "GET",
       over: "",
       concurrency: 5,
+    });
+    // Nothing to repeat yet; the first step added after it fills that in.
+    expect(blankNode("x", "REPEAT")).toMatchObject({
+      body: [],
+      operator: "is_empty",
+      max_passes: 10,
+      fail_when_exhausted: true,
     });
   });
 
@@ -275,6 +316,31 @@ describe("addNode after a switch", () => {
   });
 });
 
+describe("addNode after a loop", () => {
+  it("makes the first step added what the loop repeats", () => {
+    const flow = spec("pages", [repeatNode("pages", [])]);
+
+    const { spec: next, nodeId } = addNode(flow, "HTTP", "pages");
+
+    const loop = asRepeat(next.nodes[0]);
+    expect(loop.body).toEqual([nodeId]);
+    expect(loop.next).toEqual([]);
+  });
+
+  it("puts later steps after the loop", () => {
+    const flow = spec("pages", [
+      repeatNode("pages", ["fetch"]),
+      transform("fetch"),
+    ]);
+
+    const { spec: next, nodeId } = addNode(flow, "HTTP", "pages");
+
+    const loop = asRepeat(next.nodes[0]);
+    expect(loop.body).toEqual(["fetch"]);
+    expect(loop.next).toEqual([nodeId]);
+  });
+});
+
 describe("removeNode", () => {
   it("joins the two ends of a chain", () => {
     const flow = spec("a", [
@@ -366,6 +432,20 @@ describe("removeNode", () => {
       ["queue"],
     ]);
     expect(route.otherwise).toEqual(["tell"]);
+  });
+
+  it("repairs a loop whose first step goes", () => {
+    const flow = spec("pages", [
+      repeatNode("pages", ["fetch"], ["done"]),
+      transform("fetch", ["tidy"]),
+      transform("tidy"),
+      transform("done"),
+    ]);
+
+    const loop = asRepeat(removeNode(flow, "fetch").nodes[0]);
+
+    expect(loop.body).toEqual(["tidy"]);
+    expect(loop.next).toEqual(["done"]);
   });
 
   it("promotes a successor when the start node goes", () => {

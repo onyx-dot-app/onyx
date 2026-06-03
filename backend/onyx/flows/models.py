@@ -10,8 +10,9 @@ Two conventions are worth knowing before reading the node types:
 * **Adjacency lives on the node.** A node names its successors in ``next``, or
   in branch lists when it chooses a path — ``on_true`` / ``on_false`` for a
   condition, ``on_approve`` / ``on_reject`` for an approval, one ``then`` per
-  case plus ``otherwise`` for a switch. The canvas draws edges from that;
-  keeping one representation avoids the spec and the picture disagreeing.
+  case plus ``otherwise`` for a switch, and ``body`` for the steps a repeat
+  runs on every pass. The canvas draws edges from that; keeping one
+  representation avoids the spec and the picture disagreeing.
 * **Fan-out is explicit.** A node with ``for_each`` set runs once per element
   of that list and records the per-item outputs as its own output. The editor
   fills ``for_each`` in automatically when it notices an upstream list, so the
@@ -70,6 +71,10 @@ MAX_DELAY_SECONDS = 30 * 24 * 60 * 60.0
 MAX_MERGE_SOURCES = 10
 MAX_SEPARATOR_LENGTH = 20
 MAX_SWITCH_CASES = 10
+
+# Every pass writes a row per step it runs, and a resumed run replays them
+# all, so the cap bounds both the history and the cost of coming back.
+MAX_REPEAT_PASSES = 50
 
 # Calls a parallel step keeps in flight at once. Past this the step stops being
 # a faster loop and starts looking like a load test against someone's API.
@@ -777,6 +782,79 @@ class SwitchNode(NodeBase):
         return [*self.next, *branches, *self.otherwise]
 
 
+class RepeatNode(NodeBase):
+    """Run a group of steps again and again until a condition holds.
+
+    The spec stays acyclic: the loop is this node, not an edge pointing
+    backwards. ``body`` names the step each pass starts at, and everything
+    reachable from there is the loop's own — it runs once per pass and
+    nothing outside may lead into it. When the condition holds, or the passes
+    run out, control goes to ``next``.
+
+    Each pass sees ``{{ index }}``, the pass number from 0, and ``{{ item }}``,
+    a value handed from one pass to the next: ``start`` on the first pass,
+    then whatever ``carry`` said at the end of the pass before. That is what
+    walks a cursor through a paginated API:
+
+        pages.start = ""
+        pages.body  = ["fetch"]
+        fetch.url   = "https://api.example.com/items?cursor={{ item }}"
+        pages.until = "{{ steps.fetch.body.next_cursor }}"   is_empty
+        pages.carry = "{{ steps.fetch.body.next_cursor }}"
+        pages.collect = "{{ steps.fetch.body.items }}"
+
+    Inside a pass, ``steps`` shows that pass's steps only, so a step skipped
+    this time cannot be read as if it had run. After the loop, ``steps``
+    holds the last pass, and this node's output has every pass's ``collect``.
+    """
+
+    kind: Literal[FlowNodeKind.REPEAT] = FlowNodeKind.REPEAT
+
+    body: list[str] = Field(min_length=1)
+    # Tested after every pass with the condition's operators. A value that is
+    # not there counts as nothing, so ``is_empty`` also covers an API that
+    # drops its cursor on the last page instead of sending null.
+    until: str
+    operator: ConditionOperator = "eq"
+    value: str | None = None
+    max_passes: int = Field(default=10, ge=1, le=MAX_REPEAT_PASSES)
+
+    start: str | None = None
+    carry: str | None = None
+    collect: str | None = None
+    # Running out of passes is usually a real failure — the last page never
+    # came. Turn this off to carry on and branch on `satisfied` instead.
+    fail_when_exhausted: bool = True
+
+    @field_validator("until")
+    @classmethod
+    def _non_empty_until(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value
+
+    @model_validator(mode="after")
+    def _value_matches_operator(self) -> RepeatNode:
+        if self.operator in UNARY_OPERATORS:
+            return self
+        if self.value is None:
+            raise ValueError(f"operator '{self.operator}' needs a 'value'")
+        return self
+
+    @model_validator(mode="after")
+    def _no_fan_out(self) -> RepeatNode:
+        # A loop per item would multiply every pass by the list. Fan out on a
+        # step inside the loop instead, where it applies to that pass.
+        if self.for_each is not None:
+            raise ValueError(
+                "a repeat cannot use 'for_each' — fan out on a step inside it"
+            )
+        return self
+
+    def successors(self) -> list[str]:
+        return [*self.next, *self.body]
+
+
 class FilterNode(NodeBase):
     """Keep the items of a list that match a comparison.
 
@@ -829,7 +907,8 @@ FlowNode = Annotated[
     | MergeNode
     | SplitNode
     | ParallelNode
-    | SwitchNode,
+    | SwitchNode
+    | RepeatNode,
     Field(discriminator="kind"),
 ]
 
@@ -877,11 +956,21 @@ class FlowSpec(BaseModel):
 
         _reject_cycles(by_id)
         _check_merge_sources(by_id)
+        _check_loop_bodies(by_id, self.start)
         return self
 
     def node_map(self) -> dict[str, Any]:
         """Nodes keyed by id, in declaration order."""
         return {node.id: node for node in self.nodes}
+
+    def loop_bodies(self) -> dict[str, list[str]]:
+        """Each repeat's own steps, keyed by the repeat, in declaration order."""
+        by_id = self.node_map()
+        return {
+            node.id: _body_of(node, by_id)
+            for node in self.nodes
+            if node.kind is FlowNodeKind.REPEAT
+        }
 
     def reachable_ids(self) -> set[str]:
         """Ids the engine can actually arrive at from ``start``."""
@@ -918,6 +1007,60 @@ def _check_merge_sources(by_id: dict[str, Any]) -> None:
                 raise ValueError(
                     f"node '{node.id}' merges '{source}', which does not lead "
                     "to it — connect them, or merge something that does"
+                )
+
+
+def _body_of(repeat: Any, by_id: dict[str, Any]) -> list[str]:
+    """Every step reachable from a repeat's body, in declaration order."""
+    inside: set[str] = set()
+    stack = list(repeat.body)
+    while stack:
+        current = stack.pop()
+        if current in inside or current not in by_id:
+            continue
+        inside.add(current)
+        stack.extend(by_id[current].successors())
+    return [node_id for node_id in by_id if node_id in inside]
+
+
+def _check_loop_bodies(by_id: dict[str, Any], start: str) -> None:
+    """A loop's steps must belong to it and to nothing else.
+
+    The engine runs a body once per pass and the rest of the graph once, so a
+    step reachable both ways would have no single answer to "how many times
+    does this run". Each rule below closes one way that could happen.
+    """
+    for repeat in by_id.values():
+        if repeat.kind is not FlowNodeKind.REPEAT:
+            continue
+        inside = set(_body_of(repeat, by_id))
+
+        if start in inside:
+            raise ValueError(
+                f"the start node '{start}' is inside the loop '{repeat.id}' — "
+                "a run has to reach a loop before it can repeat anything"
+            )
+        for target in repeat.next:
+            if target in inside:
+                raise ValueError(
+                    f"'{target}' is both inside the loop '{repeat.id}' and "
+                    "after it — point the loop's next step somewhere else"
+                )
+        for node in by_id.values():
+            if node.id == repeat.id or node.id in inside:
+                continue
+            for target in node.successors():
+                if target in inside:
+                    raise ValueError(
+                        f"node '{node.id}' leads into the loop '{repeat.id}' "
+                        f"at '{target}' — a loop's steps can only be reached "
+                        "through the loop"
+                    )
+        for node_id in inside:
+            if by_id[node_id].kind is FlowNodeKind.REPEAT:
+                raise ValueError(
+                    f"the loop '{node_id}' is inside the loop '{repeat.id}' — "
+                    "loops cannot be nested"
                 )
 
 

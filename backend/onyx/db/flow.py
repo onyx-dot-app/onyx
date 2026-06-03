@@ -581,6 +581,23 @@ def resume_delayed_run(*, db_session: Session, run: FlowRun) -> FlowNodeRun | No
     return node_run
 
 
+def _latest_node_run(
+    *, db_session: Session, run_id: UUID, node_id: str
+) -> FlowNodeRun | None:
+    """A node's row from the latest loop pass it reached.
+
+    Outside a loop that is the only row. Inside one, an approval asks again
+    on every pass, and only the newest question can still be open.
+    """
+    stmt = (
+        select(FlowNodeRun)
+        .where(FlowNodeRun.run_id == run_id, FlowNodeRun.node_id == node_id)
+        .order_by(FlowNodeRun.iteration.desc(), FlowNodeRun.item_index.desc())
+        .limit(1)
+    )
+    return db_session.execute(stmt).scalars().first()
+
+
 def _open_node_run(
     *, db_session: Session, run_id: UUID, kinds: Collection[FlowNodeKind]
 ) -> FlowNodeRun | None:
@@ -619,11 +636,17 @@ def find_stuck_runs(
 
 
 def get_node_run(
-    *, db_session: Session, run_id: UUID, node_id: str, item_index: int
+    *,
+    db_session: Session,
+    run_id: UUID,
+    node_id: str,
+    iteration: int,
+    item_index: int,
 ) -> FlowNodeRun | None:
     stmt = select(FlowNodeRun).where(
         FlowNodeRun.run_id == run_id,
         FlowNodeRun.node_id == node_id,
+        FlowNodeRun.iteration == iteration,
         FlowNodeRun.item_index == item_index,
     )
     return db_session.execute(stmt).scalar_one_or_none()
@@ -635,6 +658,7 @@ def start_node_run(
     run_id: UUID,
     node_id: str,
     kind: FlowNodeKind,
+    iteration: int,
     item_index: int,
     node_input: dict[str, Any] | None,
 ) -> tuple[FlowNodeRun, bool]:
@@ -645,7 +669,11 @@ def start_node_run(
     effect, so the engine reuses its output rather than repeating it.
     """
     existing = get_node_run(
-        db_session=db_session, run_id=run_id, node_id=node_id, item_index=item_index
+        db_session=db_session,
+        run_id=run_id,
+        node_id=node_id,
+        iteration=iteration,
+        item_index=item_index,
     )
     if existing is not None:
         return existing, True
@@ -654,6 +682,7 @@ def start_node_run(
         run_id=run_id,
         node_id=node_id,
         kind=kind,
+        iteration=iteration,
         item_index=item_index,
         status=FlowNodeRunStatus.RUNNING,
         input=node_input,
@@ -688,17 +717,26 @@ def finish_node_run(
 
 
 def record_skipped_node(
-    *, db_session: Session, run_id: UUID, node_id: str, kind: FlowNodeKind
+    *,
+    db_session: Session,
+    run_id: UUID,
+    node_id: str,
+    kind: FlowNodeKind,
+    iteration: int,
 ) -> FlowNodeRun:
     """Note a node on a branch the run did not take.
 
     Idempotent, because a run resumed after an approval walks the whole graph
     again and reaches the same untaken branches a second time. The unique key
-    on (run, node, item) would otherwise turn a perfectly ordinary resume into
-    an integrity error.
+    on (run, node, pass, item) would otherwise turn a perfectly ordinary
+    resume into an integrity error.
     """
     existing = get_node_run(
-        db_session=db_session, run_id=run_id, node_id=node_id, item_index=0
+        db_session=db_session,
+        run_id=run_id,
+        node_id=node_id,
+        iteration=iteration,
+        item_index=0,
     )
     if existing is not None:
         return existing
@@ -707,6 +745,7 @@ def record_skipped_node(
         run_id=run_id,
         node_id=node_id,
         kind=kind,
+        iteration=iteration,
         item_index=0,
         status=FlowNodeRunStatus.SKIPPED,
         finished_at=datetime.now(tz=timezone.utc),
@@ -721,6 +760,7 @@ def record_node_waiting(
     db_session: Session,
     run_id: UUID,
     node_id: str,
+    iteration: int,
     item_index: int,
     detail: dict[str, Any],
 ) -> FlowNodeRun | None:
@@ -731,7 +771,11 @@ def record_node_waiting(
     without a column of its own.
     """
     node_run = get_node_run(
-        db_session=db_session, run_id=run_id, node_id=node_id, item_index=item_index
+        db_session=db_session,
+        run_id=run_id,
+        node_id=node_id,
+        iteration=iteration,
+        item_index=item_index,
     )
     if node_run is None:
         return None
@@ -763,9 +807,7 @@ def apply_human_decision(
             "This run is not waiting for a decision",
         )
 
-    node_run = get_node_run(
-        db_session=db_session, run_id=run.id, node_id=node_id, item_index=0
-    )
+    node_run = _latest_node_run(db_session=db_session, run_id=run.id, node_id=node_id)
     if node_run is None or node_run.kind != FlowNodeKind.HUMAN:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "No approval step by that name")
     if node_run.status != FlowNodeRunStatus.RUNNING:

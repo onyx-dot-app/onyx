@@ -37,7 +37,9 @@ interface FlowNodeSeed {
     | "DELAY"
     | "FILTER"
     | "SWITCH"
-    | "PARALLEL";
+    | "PARALLEL"
+    | "REPEAT"
+    | "HUMAN";
   next: string[];
   for_each: string | null;
   on_error: "stop" | "skip";
@@ -475,12 +477,18 @@ function parallelFlowSpec() {
   };
 }
 
-/** Create a flow, fire a test run of it, and wait for the run to settle. */
+/**
+ * Create a flow, fire a test run of it, and wait for the run to settle.
+ *
+ * "Settle" is a terminal status unless the caller says otherwise — a run
+ * that parks on an approval settles when it starts waiting.
+ */
 async function runToTheEnd(
   request: APIRequestContext,
   name: string,
   spec: object,
-  payload: object
+  payload: object,
+  settled: RegExp = TERMINAL_STATUS
 ): Promise<SeededRun> {
   const createRes = await request.post("/api/flows", {
     data: { name, description: "Seeded for the run view", spec },
@@ -513,10 +521,10 @@ async function runToTheEnd(
       {
         timeout: RUN_TIMEOUT_MS,
         message:
-          "the run never reached a terminal status — is a worker consuming the scheduled_tasks queue?",
+          "the run never settled — is a worker consuming the scheduled_tasks queue?",
       }
     )
-    .toMatch(TERMINAL_STATUS);
+    .toMatch(settled);
 
   return { flowId: flow.id, runId: run.id };
 }
@@ -618,4 +626,91 @@ export async function readItemGapsMs(
     }
     return Date.parse(row.started_at) - Date.parse(finished);
   });
+}
+
+/**
+ * A cursor chain standing in for a paginated API: each page names the next
+ * and the last has no `next` at all.
+ */
+export const CURSOR_PAGES = { id: 1, next: { id: 2, next: { id: 3 } } };
+
+function loopNode(overrides: Record<string, unknown>): FlowNodeSeed {
+  return {
+    id: "pages",
+    name: "Walk the pages",
+    kind: "REPEAT",
+    next: [],
+    for_each: null,
+    on_error: "stop",
+    retry: { max_attempts: 1, backoff_seconds: 1 },
+    body: ["read"],
+    start: "{{ trigger.page }}",
+    until: "{{ item.next }}",
+    operator: "is_empty",
+    value: null,
+    max_passes: 10,
+    carry: "{{ item.next }}",
+    collect: null,
+    fail_when_exhausted: true,
+    ...overrides,
+  };
+}
+
+/** Walk the cursor, reading each page's id and collecting it. */
+export async function seedCursorLoopRun(
+  request: APIRequestContext,
+  name: string
+): Promise<SeededRun> {
+  const spec = {
+    spec_version: 1,
+    start: "pages",
+    nodes: [
+      loopNode({ collect: "{{ steps.read.id }}" }),
+      transform("read", "Read a page", { id: "{{ item.id }}" }),
+    ],
+  };
+  return runToTheEnd(request, name, spec, { page: CURSOR_PAGES });
+}
+
+/** The question the looped approval asks on its first pass. */
+export const FIRST_PAGE_QUESTION = "Send page 1?";
+
+/**
+ * A loop that asks before sending each page, parked on its first question.
+ *
+ * Two pages, so answering once must lead to a second question rather than
+ * to the end of the run.
+ */
+export async function seedLoopedApprovalRun(
+  request: APIRequestContext,
+  name: string
+): Promise<SeededRun> {
+  const spec = {
+    spec_version: 1,
+    start: "pages",
+    nodes: [
+      loopNode({ body: ["ask"], collect: "{{ steps.send.sent }}" }),
+      {
+        id: "ask",
+        name: "Ask first",
+        kind: "HUMAN",
+        next: [],
+        for_each: null,
+        on_error: "stop",
+        retry: { max_attempts: 1, backoff_seconds: 1 },
+        question: "Send page {{ item.id }}?",
+        assignee: null,
+        on_approve: ["send"],
+        on_reject: [],
+      } satisfies FlowNodeSeed,
+      transform("send", "Send the page", { sent: "{{ item.id }}" }),
+    ],
+  };
+  return runToTheEnd(
+    request,
+    name,
+    spec,
+    { page: { id: 1, next: { id: 2 } } },
+    /^AWAITING_DECISION$/
+  );
 }

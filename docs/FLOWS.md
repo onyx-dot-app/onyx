@@ -48,9 +48,10 @@ Parsing a spec guarantees four things:
 - node ids are unique and match `^[a-z][a-z0-9_]{0,63}$`
 - every successor reference resolves: `next`, and each branch list
   (`on_true` / `on_false`, `on_approve` / `on_reject`, a switch's `then` and
-  `otherwise`)
+  `otherwise`, a loop's `body`)
 - the graph has no cycles
 - `start` exists
+- each loop's steps belong to that loop alone (see [REPEAT](#repeat))
 
 Nodes nothing reaches are **allowed**. The editor creates one every time
 someone drops a node on the canvas, and failing autosave over it would be
@@ -179,8 +180,9 @@ saying so, and the rest of the flow package stays usable.
 ### LOOP
 
 Cuts a list into batches. Output is `{batches, batch_count, total}`. The editor
-calls it **Loop (batches)**: batching is what it does, and "loop" on its own
-suggests repeating steps, which an acyclic spec cannot do.
+calls it **Loop (batches)**: batching is what it does. To repeat steps until
+something is true, use [REPEAT](#repeat), which the editor calls
+**Loop (until)**.
 
 A spec is acyclic, so there is no jumping backwards; looping here means handing
 the next node a manageable slice instead of four hundred items at once. Pair it
@@ -474,6 +476,72 @@ bare pool thread would apply the default schema's policy instead. Only the
 calls leave the engine's thread: the engine writes the step's row after the
 step returns, so no database session is shared between threads.
 
+### REPEAT
+
+Runs a group of steps again and again until a condition holds. The editor
+calls it **Loop (until)**. Output is `{passes, satisfied, results}`.
+
+The spec stays acyclic: the loop is this node, not an edge pointing back.
+`body` names the step each pass starts at, and everything reachable from there
+is the loop's own. When the condition holds, or the passes run out, control
+goes to `next`.
+
+```
+pages.start   = ""                                    # first page: no cursor
+pages.body    = ["fetch"]
+fetch.url     = "https://api.example.com/items?cursor={{ item }}"
+pages.until   = "{{ steps.fetch.body.next_cursor }}"   # operator: is_empty
+pages.carry   = "{{ steps.fetch.body.next_cursor }}"
+pages.collect = "{{ steps.fetch.body.items }}"
+pages.next    = ["report"]
+```
+
+Each pass sees two values:
+
+- `{{ index }}`: the pass number, from 0.
+- `{{ item }}`: what one pass hands the next. The first pass gets `start`, and
+  each later pass gets what `carry` said at the end of the pass before.
+
+A step inside the body that fans out binds its own `item` and `index`, the
+same as a nested loop in any language.
+
+After each pass the loop evaluates `collect`, then `until`, then `carry`:
+
+- `collect` is added to `results`. Lists are joined and a single value is
+  added as one item, the rule a MERGE in append mode follows. Capped at 200.
+- `until` is compared with `value` using the condition operators. A value that
+  is not there counts as nothing, so `is_empty` also covers an API that drops
+  its cursor on the last page instead of sending null. `carry` and `collect`
+  read missing values the same way. `start` does not: a start that points
+  nowhere is a mistake in the flow.
+- Running out of `max_passes` (1 to 50, default 10) fails the node with
+  `loop_exhausted`. Turn off `fail_when_exhausted` to carry on and branch on
+  `satisfied` instead.
+
+Inside a pass, `steps` shows that pass's steps only. A step skipped this time
+therefore cannot be read as if it had run, and anything a pass needs from the
+one before goes through `carry`. After the loop, `steps` holds the last pass.
+
+The spec is refused when:
+
+- a step outside the loop leads into its body
+- the loop's `next` is also inside its body
+- the flow starts inside a body
+- one loop sits inside another
+- a body step points back at its loop (a cycle: the loop repeats its body by
+  itself)
+
+A step inside a body can fail on its own terms, and the run names that step.
+The loop's row records which pass stopped: `pass 3 stopped at 'fetch': …`.
+The loop's own `on_error` covers only the loop's failures, such as running
+out of passes. An approval or a long delay inside a body parks the run as
+usual; see [Loops](#loops) for how the run resumes.
+
+In the editor, the first step added after a new loop becomes its body, and
+later ones follow the loop. The canvas places what follows the loop after the
+whole body. The way out arcs over the body, and a dashed arc shows the way
+back from the end of each pass.
+
 ## Execution
 
 `execute_flow` walks the reachable subgraph in topological order (Kahn's
@@ -545,6 +613,28 @@ So a delay costs no worker while it waits, and "follow up tomorrow" survives a
 deploy in the middle of it. A run that comes back finds no `resume_at` on its
 row, because `mark_run_status` always assigns it — a finished run must not
 advertise a wait that is no longer coming.
+
+### Loops
+
+A loop's body is walked once per pass by the same code that walks the whole
+graph, so activation, skipping, `on_error`, retries and the budget all work
+the same inside a pass. The walk around the loop never touches the body.
+
+Every row carries its pass in `flow_node_run.iteration` (0 outside a loop),
+and the unique key is `(run_id, node_id, iteration, item_index)`. A step that
+runs in three passes therefore has three rows, and the resume guarantee holds
+per pass.
+
+A resumed run replays a loop pass by pass. The body rows are reused, so
+nothing runs twice, and the replay is also what puts the last pass back into
+`steps` for the step after the loop. `until` and `carry` are evaluated again
+from the replayed outputs, which gives the same answers, so the replay takes
+the same number of passes.
+
+An approval inside a loop parks the run on each pass. Answering it closes the
+newest open row for that step, and the run parks again at the next pass's
+question. A long delay inside a loop parks the same way, and the sweep closes
+whichever pass's row is open.
 
 ### Fan-out
 

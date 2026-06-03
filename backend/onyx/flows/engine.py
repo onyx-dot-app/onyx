@@ -9,9 +9,9 @@ Four behaviours are worth stating up front, because they are the ones that
 matter when a run goes wrong at 4am:
 
 **A node is recorded before it runs.** ``begin_node`` writes the row, and the
-unique key on (run, node, item) is what makes a redelivered Celery message
-safe: the second attempt finds a finished row and reuses its output instead of
-posting the same message to Slack twice.
+unique key on (run, node, pass, item) is what makes a redelivered Celery
+message safe: the second attempt finds a finished row and reuses its output
+instead of posting the same message to Slack twice.
 
 **Branches skip, they do not fail.** A node whose predecessors all took the
 other branch is SKIPPED. The canvas greys it out, and nobody has to work out
@@ -25,6 +25,10 @@ returns; whatever resumes it — a person answering, or the clock coming round �
 re-queues the run, which walks the graph again from the top and reuses every
 row it already wrote. A parked run therefore survives a deploy, a worker crash
 and a week of nobody looking at it.
+
+A loop does not change any of that. Its body is walked once per pass by the
+same code that walks the whole graph, with the pass number in every row's
+key, so a replayed loop replays pass by pass exactly as it first ran.
 """
 
 from __future__ import annotations
@@ -37,7 +41,7 @@ from typing import Any, Protocol
 
 from onyx.db.enums import FlowErrorClass, FlowNodeKind, FlowNodeRunStatus, FlowRunStatus
 from onyx.flows.expressions import ExpressionError, RunContext, resolve
-from onyx.flows.models import MAX_FAN_OUT_ITEMS, FlowSpec
+from onyx.flows.models import MAX_FAN_OUT_ITEMS, UNARY_OPERATORS, FlowSpec
 from onyx.flows.nodes import (
     NODE_EXECUTORS,
     NODE_REPLAYERS,
@@ -46,6 +50,7 @@ from onyx.flows.nodes import (
     NodeRuntime,
     NodeSuspended,
 )
+from onyx.flows.nodes.condition import compare
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -84,6 +89,9 @@ class RunRecorder(Protocol):
     ``begin_node`` returns the prior row when one exists, which is the entire
     resume mechanism — the engine does not otherwise know or care that it has
     been restarted.
+
+    A row is named by its node, the loop pass it ran in (``iteration``, 0
+    outside a loop) and the fan-out item (``item_index``, 0 without one).
     """
 
     def begin_node(
@@ -91,6 +99,7 @@ class RunRecorder(Protocol):
         *,
         node_id: str,
         kind: FlowNodeKind,
+        iteration: int,
         item_index: int,
         node_input: dict[str, Any] | None,
     ) -> RecordedNode | None: ...
@@ -99,6 +108,7 @@ class RunRecorder(Protocol):
         self,
         *,
         node_id: str,
+        iteration: int,
         item_index: int,
         status: FlowNodeRunStatus,
         output: Any,
@@ -109,6 +119,7 @@ class RunRecorder(Protocol):
         self,
         *,
         node_id: str,
+        iteration: int,
         item_index: int,
         error_class: FlowErrorClass,
         error_detail: str,
@@ -116,12 +127,19 @@ class RunRecorder(Protocol):
     ) -> None: ...
 
     def park_node(
-        self, *, node_id: str, item_index: int, detail: dict[str, Any]
+        self,
+        *,
+        node_id: str,
+        iteration: int,
+        item_index: int,
+        detail: dict[str, Any],
     ) -> None:
         """Note what a node is waiting on, leaving its row open."""
         ...
 
-    def skip_node(self, *, node_id: str, kind: FlowNodeKind) -> None: ...
+    def skip_node(
+        self, *, node_id: str, kind: FlowNodeKind, iteration: int
+    ) -> None: ...
 
 
 @dataclass
@@ -133,32 +151,36 @@ class InMemoryRecorder:
     """
 
     entries: list[dict[str, Any]] = field(default_factory=list)
-    _finished: dict[tuple[str, int], RecordedNode] = field(default_factory=dict)
+    # Keyed (node, pass, item), the same as the unique key on a real row.
+    _finished: dict[tuple[str, int, int], RecordedNode] = field(default_factory=dict)
 
     def begin_node(
         self,
         *,
         node_id: str,
         kind: FlowNodeKind,
+        iteration: int,
         item_index: int,
         node_input: dict[str, Any] | None,
     ) -> RecordedNode | None:
         _ = kind, node_input  # part of the protocol; nothing to store here
-        return self._finished.get((node_id, item_index))
+        return self._finished.get((node_id, iteration, item_index))
 
     def finish_node(
         self,
         *,
         node_id: str,
+        iteration: int,
         item_index: int,
         status: FlowNodeRunStatus,
         output: Any,
         attempt: int,
     ) -> None:
-        self._finished[(node_id, item_index)] = RecordedNode(status, output)
+        self._finished[(node_id, iteration, item_index)] = RecordedNode(status, output)
         self.entries.append(
             {
                 "node_id": node_id,
+                "iteration": iteration,
                 "item_index": item_index,
                 "status": status,
                 "output": output,
@@ -170,6 +192,7 @@ class InMemoryRecorder:
         self,
         *,
         node_id: str,
+        iteration: int,
         item_index: int,
         error_class: FlowErrorClass,
         error_detail: str,
@@ -178,6 +201,7 @@ class InMemoryRecorder:
         self.entries.append(
             {
                 "node_id": node_id,
+                "iteration": iteration,
                 "item_index": item_index,
                 "status": FlowNodeRunStatus.FAILED,
                 "error_class": error_class,
@@ -187,20 +211,31 @@ class InMemoryRecorder:
         )
 
     def park_node(
-        self, *, node_id: str, item_index: int, detail: dict[str, Any]
+        self,
+        *,
+        node_id: str,
+        iteration: int,
+        item_index: int,
+        detail: dict[str, Any],
     ) -> None:
         self.entries.append(
             {
                 "node_id": node_id,
+                "iteration": iteration,
                 "item_index": item_index,
                 "status": FlowNodeRunStatus.RUNNING,
                 "waiting_for": detail,
             }
         )
 
-    def skip_node(self, *, node_id: str, kind: FlowNodeKind) -> None:
+    def skip_node(self, *, node_id: str, kind: FlowNodeKind, iteration: int) -> None:
         self.entries.append(
-            {"node_id": node_id, "kind": kind, "status": FlowNodeRunStatus.SKIPPED}
+            {
+                "node_id": node_id,
+                "kind": kind,
+                "iteration": iteration,
+                "status": FlowNodeRunStatus.SKIPPED,
+            }
         )
 
 
@@ -232,87 +267,324 @@ def execute_flow(
     still propagate.
     """
     context = RunContext(trigger=trigger_payload, steps={})
-    by_id = spec.node_map()
-    order = _execution_order(spec)
-    predecessors = _predecessor_map(spec, order)
-
-    # Successors each executed node handed control to. A condition, a switch
-    # or an approval narrows this to one branch; everything else passes its
-    # whole `next` list.
-    handed_to: dict[str, set[str]] = {}
-    executed: set[str] = set()
     deadline = time.monotonic() + budget_seconds
     runtime.deadline = deadline
+    run = _Run(
+        spec=spec,
+        by_id=spec.node_map(),
+        bodies=spec.loop_bodies(),
+        runtime=runtime,
+        recorder=recorder,
+        deadline=deadline,
+        budget_seconds=budget_seconds,
+    )
 
-    for node_id in order:
-        node = by_id[node_id]
-
-        if not _is_activated(node_id, spec.start, predecessors, handed_to):
-            recorder.skip_node(node_id=node_id, kind=node.kind)
-            continue
-
-        if time.monotonic() > deadline:
-            detail = f"run exceeded its {budget_seconds:.0f}s budget at '{node_id}'"
-            logger.warning("flow run budget exceeded node=%s", node_id)
-            return RunResult(
-                status=FlowRunStatus.FAILED,
-                outputs=dict(context.steps),
-                error_class=FlowErrorClass.BUDGET_EXCEEDED,
-                error_detail=detail,
-                failed_node_id=node_id,
-            )
-
-        try:
-            output, chosen = _execute_node(
-                node=node,
-                context=context,
-                runtime=runtime,
-                recorder=recorder,
-                deadline=deadline,
-            )
-        except NodeSuspended as exc:
-            # Not a failure and not the end: the run keeps its open row at
-            # this node, and whatever resumes it — a person answering, or the
-            # clock coming round — re-queues the run to start again from the
-            # top, replaying everything already recorded.
-            logger.info("flow run parked node=%s status=%s", node_id, exc.status.value)
-            return RunResult(
-                status=exc.status,
-                outputs=dict(context.steps),
-                resume_at=exc.resume_at,
-            )
-        except RunBudgetExceeded as exc:
-            return RunResult(
-                status=FlowRunStatus.FAILED,
-                outputs=dict(context.steps),
-                error_class=FlowErrorClass.BUDGET_EXCEEDED,
-                error_detail=str(exc),
-                failed_node_id=node_id,
-            )
-        except NodeExecutionError as exc:
-            if node.on_error == "skip":
-                logger.info(
-                    "flow node failed but is set to skip node=%s detail=%s",
-                    node_id,
-                    exc.detail,
-                )
-                context.steps[node_id] = None
-                executed.add(node_id)
-                handed_to[node_id] = set(node.next)
-                continue
-            return RunResult(
-                status=FlowRunStatus.FAILED,
-                outputs=dict(context.steps),
-                error_class=exc.error_class,
-                error_detail=exc.detail,
-                failed_node_id=node_id,
-            )
-
-        context.steps[node_id] = output
-        executed.add(node_id)
-        handed_to[node_id] = set(chosen)
+    try:
+        run.walk(run.top_level(), context, iteration=0)
+    except NodeSuspended as exc:
+        # Not a failure and not the end: the run keeps its open row at this
+        # node, and whatever resumes it — a person answering, or the clock
+        # coming round — re-queues the run to start again from the top,
+        # replaying everything already recorded.
+        logger.info("flow run parked node=%s status=%s", exc.node_id, exc.status.value)
+        return RunResult(
+            status=exc.status,
+            outputs=dict(context.steps),
+            resume_at=exc.resume_at,
+        )
+    except _RunStopped as exc:
+        return RunResult(
+            status=FlowRunStatus.FAILED,
+            outputs=dict(context.steps),
+            error_class=exc.error_class,
+            error_detail=exc.detail,
+            failed_node_id=exc.node_id,
+        )
 
     return RunResult(status=FlowRunStatus.SUCCEEDED, outputs=dict(context.steps))
+
+
+class _RunStopped(Exception):
+    """A step failed for good, or the run's budget ran out.
+
+    Raised out of however many walks are in progress, a loop's pass inside
+    the whole flow included, and carries the step that stopped it so the run
+    row names the step that broke rather than the loop around it.
+    """
+
+    def __init__(
+        self, *, error_class: FlowErrorClass, detail: str, node_id: str
+    ) -> None:
+        super().__init__(detail)
+        self.error_class = error_class
+        self.detail = detail
+        self.node_id = node_id
+        # Set on the way out of a loop: which pass the step failed in.
+        self.pass_number: int | None = None
+
+
+@dataclass(frozen=True)
+class _Graph:
+    """The nodes one walk visits: the whole flow, or one loop's body."""
+
+    order: list[str]
+    predecessors: dict[str, set[str]]
+    # Run without a predecessor handing them control: the flow's start, or
+    # the steps a loop's pass begins at.
+    entries: frozenset[str]
+
+
+@dataclass
+class _Run:
+    """What every walk in one execution of a spec shares."""
+
+    spec: FlowSpec
+    by_id: dict[str, Any]
+    # Each loop's own steps. They are walked once per pass, never by the
+    # walk around the loop.
+    bodies: dict[str, list[str]]
+    runtime: NodeRuntime
+    recorder: RunRecorder
+    deadline: float
+    budget_seconds: float
+
+    def top_level(self) -> _Graph:
+        owned = {node_id for body in self.bodies.values() for node_id in body}
+        order = [
+            node_id for node_id in _execution_order(self.spec) if node_id not in owned
+        ]
+        return _Graph(
+            order=order,
+            predecessors=_predecessor_map(self.spec, order),
+            entries=frozenset({self.spec.start}),
+        )
+
+    def body_graph(self, repeat: Any) -> _Graph:
+        inside = set(self.bodies[repeat.id])
+        order = [
+            node_id for node_id in _execution_order(self.spec) if node_id in inside
+        ]
+        return _Graph(
+            order=order,
+            predecessors=_predecessor_map(self.spec, order),
+            entries=frozenset(repeat.body),
+        )
+
+    def walk(self, graph: _Graph, context: RunContext, iteration: int) -> None:
+        """Run each activated node of ``graph`` once, in topological order."""
+        # Successors each node handed control to in this walk. A condition, a
+        # switch or an approval narrows this to one branch; everything else
+        # passes its whole `next` list.
+        handed_to: dict[str, set[str]] = {}
+
+        for node_id in graph.order:
+            node = self.by_id[node_id]
+
+            if not _is_activated(node_id, graph.entries, graph.predecessors, handed_to):
+                self.skip(node, iteration)
+                continue
+
+            if time.monotonic() > self.deadline:
+                logger.warning("flow run budget exceeded node=%s", node_id)
+                raise _RunStopped(
+                    error_class=FlowErrorClass.BUDGET_EXCEEDED,
+                    detail=(
+                        f"run exceeded its {self.budget_seconds:.0f}s budget "
+                        f"at '{node_id}'"
+                    ),
+                    node_id=node_id,
+                )
+
+            try:
+                if node.kind is FlowNodeKind.REPEAT:
+                    output: Any = self.repeat(node, context, iteration)
+                    chosen = list(node.next)
+                else:
+                    output, chosen = _execute_node(
+                        node=node,
+                        context=context,
+                        runtime=self.runtime,
+                        recorder=self.recorder,
+                        deadline=self.deadline,
+                        iteration=iteration,
+                    )
+            except RunBudgetExceeded as exc:
+                raise _RunStopped(
+                    error_class=FlowErrorClass.BUDGET_EXCEEDED,
+                    detail=str(exc),
+                    node_id=node_id,
+                ) from exc
+            except NodeExecutionError as exc:
+                if node.on_error == "skip":
+                    logger.info(
+                        "flow node failed but is set to skip node=%s detail=%s",
+                        node_id,
+                        exc.detail,
+                    )
+                    context.steps[node_id] = None
+                    handed_to[node_id] = set(node.next)
+                    continue
+                raise _RunStopped(
+                    error_class=exc.error_class, detail=exc.detail, node_id=node_id
+                ) from exc
+
+            context.steps[node_id] = output
+            handed_to[node_id] = set(chosen)
+
+    def skip(self, node: Any, iteration: int) -> None:
+        self.recorder.skip_node(node_id=node.id, kind=node.kind, iteration=iteration)
+        # A loop that never ran never ran its steps either. Saying so keeps
+        # the run view from showing them as merely unvisited.
+        for body_id in self.bodies.get(node.id, []):
+            self.recorder.skip_node(
+                node_id=body_id, kind=self.by_id[body_id].kind, iteration=iteration
+            )
+
+    def repeat(self, node: Any, context: RunContext, iteration: int) -> Any:
+        """Walk a loop's body pass after pass, until its condition holds.
+
+        The loop's own row stays open while it runs, which is what the run
+        view shows as in progress. On a resumed run it is already there, and
+        every pass replays from its rows — that is also what puts the last
+        pass's outputs back into ``steps`` for whatever follows the loop.
+        """
+        already = self.recorder.begin_node(
+            node_id=node.id,
+            kind=node.kind,
+            iteration=iteration,
+            item_index=0,
+            node_input=_describe_input(context),
+        )
+        finished = already is not None and already.status == FlowNodeRunStatus.SUCCEEDED
+
+        try:
+            output = self._passes(node, context)
+        except NodeExecutionError as exc:
+            if not finished:
+                self._fail_loop(node, iteration, exc.error_class, exc.detail)
+            raise
+        except _RunStopped as exc:
+            if not finished:
+                self._fail_loop(
+                    node,
+                    iteration,
+                    exc.error_class,
+                    f"pass {exc.pass_number} stopped at '{exc.node_id}': {exc.detail}",
+                )
+            raise
+
+        if not finished:
+            self.recorder.finish_node(
+                node_id=node.id,
+                iteration=iteration,
+                item_index=0,
+                status=FlowNodeRunStatus.SUCCEEDED,
+                output=output,
+                attempt=1,
+            )
+        return output
+
+    def _passes(self, node: Any, context: RunContext) -> dict[str, Any]:
+        graph = self.body_graph(node)
+        value = _resolve_strict(node.start, context) if node.start is not None else None
+        collected: list[Any] = []
+
+        for index in range(node.max_passes):
+            # A pass sees its own steps only. Reading last pass's output from
+            # a step skipped this time would be reading history as news;
+            # what one pass hands the next goes through `carry` instead.
+            for body_id in self.bodies[node.id]:
+                context.steps.pop(body_id, None)
+
+            pass_context = context.for_item(value, index)
+            try:
+                self.walk(graph, pass_context, iteration=index)
+            except _RunStopped as exc:
+                exc.pass_number = index + 1
+                raise
+
+            if node.collect is not None:
+                _gather(collected, _resolve_lenient(node.collect, pass_context))
+            if _loop_satisfied(node, pass_context):
+                logger.info("flow loop finished node=%s passes=%d", node.id, index + 1)
+                return {"passes": index + 1, "satisfied": True, "results": collected}
+            if node.carry is not None:
+                value = _resolve_lenient(node.carry, pass_context)
+
+        logger.info(
+            "flow loop ran out of passes node=%s passes=%d", node.id, node.max_passes
+        )
+        if node.fail_when_exhausted:
+            raise NodeExecutionError(
+                FlowErrorClass.LOOP_EXHAUSTED,
+                f"still not {node.operator} after {node.max_passes} passes",
+            )
+        return {"passes": node.max_passes, "satisfied": False, "results": collected}
+
+    def _fail_loop(
+        self,
+        node: Any,
+        iteration: int,
+        error_class: FlowErrorClass,
+        detail: str,
+    ) -> None:
+        self.recorder.fail_node(
+            node_id=node.id,
+            iteration=iteration,
+            item_index=0,
+            error_class=error_class,
+            error_detail=detail,
+            attempt=1,
+        )
+
+
+def _resolve_strict(expression: str, context: RunContext) -> Any:
+    try:
+        return resolve(expression, context)
+    except ExpressionError as exc:
+        raise NodeExecutionError(FlowErrorClass.EXPRESSION_ERROR, str(exc)) from exc
+
+
+def _resolve_lenient(expression: str, context: RunContext) -> Any:
+    """Resolve, reading a value that is not there as nothing.
+
+    Only for what a loop reads at the end of a pass. An API that drops its
+    cursor on the last page instead of sending null is saying "no more", and
+    failing the run over it would be reading the answer as an error.
+    """
+    try:
+        return resolve(expression, context)
+    except ExpressionError:
+        return None
+
+
+def _loop_satisfied(node: Any, context: RunContext) -> bool:
+    left = _resolve_lenient(node.until, context)
+    right = (
+        None
+        if node.operator in UNARY_OPERATORS
+        else _resolve_lenient(node.value or "", context)
+    )
+    return compare(node.operator, left, right)
+
+
+def _gather(collected: list[Any], value: Any) -> None:
+    """Add one pass's ``collect`` to the loop's results.
+
+    Lists are joined and a lone value is added as one item, the same rule a
+    merge in append mode follows. Nothing at all adds nothing.
+    """
+    if value is None:
+        return
+    if isinstance(value, list):
+        collected.extend(value)
+    else:
+        collected.append(value)
+    if len(collected) > MAX_FAN_OUT_ITEMS:
+        raise NodeExecutionError(
+            FlowErrorClass.INVALID_SPEC,
+            f"collected {len(collected)} items, over the {MAX_FAN_OUT_ITEMS} limit",
+        )
 
 
 def _execute_node(
@@ -322,6 +594,7 @@ def _execute_node(
     runtime: NodeRuntime,
     recorder: RunRecorder,
     deadline: float,
+    iteration: int,
 ) -> tuple[Any, list[str]]:
     """Run one node, fanning out over ``for_each`` when it is set.
 
@@ -333,6 +606,7 @@ def _execute_node(
             context=context,
             runtime=runtime,
             recorder=recorder,
+            iteration=iteration,
             item_index=0,
             deadline=deadline,
         )
@@ -370,6 +644,7 @@ def _execute_node(
             context=context.for_item(item, index),
             runtime=runtime,
             recorder=recorder,
+            iteration=iteration,
             item_index=index,
             deadline=deadline,
         )
@@ -404,6 +679,7 @@ def _run_once(
     context: RunContext,
     runtime: NodeRuntime,
     recorder: RunRecorder,
+    iteration: int,
     item_index: int,
     deadline: float,
 ) -> tuple[NodeOutcome, bool]:
@@ -415,6 +691,7 @@ def _run_once(
     already = recorder.begin_node(
         node_id=node.id,
         kind=node.kind,
+        iteration=iteration,
         item_index=item_index,
         node_input=_describe_input(context),
     )
@@ -440,7 +717,10 @@ def _run_once(
             outcome = executor(node, context, runtime)
         except NodeSuspended as exc:
             recorder.park_node(
-                node_id=node.id, item_index=item_index, detail=exc.detail
+                node_id=node.id,
+                iteration=iteration,
+                item_index=item_index,
+                detail=exc.detail,
             )
             raise
         except NodeExecutionError as exc:
@@ -453,6 +733,7 @@ def _run_once(
         else:
             recorder.finish_node(
                 node_id=node.id,
+                iteration=iteration,
                 item_index=item_index,
                 status=FlowNodeRunStatus.SUCCEEDED,
                 output=outcome.output,
@@ -479,6 +760,7 @@ def _run_once(
     assert last_error is not None
     recorder.fail_node(
         node_id=node.id,
+        iteration=iteration,
         item_index=item_index,
         error_class=last_error.error_class,
         error_detail=last_error.detail,
@@ -547,17 +829,18 @@ def _predecessor_map(spec: FlowSpec, order: list[str]) -> dict[str, set[str]]:
 
 def _is_activated(
     node_id: str,
-    start_id: str,
+    entries: frozenset[str],
     predecessors: dict[str, set[str]],
     handed_to: dict[str, set[str]],
 ) -> bool:
     """Whether any predecessor actually chose this node.
 
-    The entry node is always activated. Everything else needs a predecessor
-    that ran *and* named it — which is how a condition's untaken branch ends
-    up skipped rather than merely unvisited.
+    An entry node — the start, or where a loop's pass begins — is always
+    activated. Everything else needs a predecessor that ran *and* named it,
+    which is how a condition's untaken branch ends up skipped rather than
+    merely unvisited.
     """
-    if node_id == start_id:
+    if node_id in entries:
         return True
     return any(
         node_id in handed_to.get(parent, set())

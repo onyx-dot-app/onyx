@@ -42,10 +42,23 @@ export type EdgeBranch =
   | "reject"
   | "case"
   | "otherwise"
+  // A loop's three edges: into its body, out when it is done, and the dashed
+  // way back from the end of a pass.
+  | "pass"
+  | "after"
+  | "again"
   | null;
 
 /** Longest switch case shown on an edge before it is cut short. */
 const MAX_CASE_LABEL_LENGTH = 18;
+
+/**
+ * How far a loop's arcs rise above or dip below the nodes they join.
+ *
+ * Under the canvas padding, so an arc on the top or bottom row stays inside
+ * the area the canvas fits to view.
+ */
+const LOOP_ARC_LIFT = 40;
 
 export interface PositionedNode {
   node: FlowNode;
@@ -65,7 +78,7 @@ export interface PositionedEdge {
   /** What a switch case matches, shown as typed. Null for every other edge,
    *  whose label is a fixed word the canvas translates. */
   caseLabel: string | null;
-  /** SVG cubic path from the source's right edge to the target's left. */
+  /** SVG cubic path: right edge to left edge, or an arc for a loop. */
   path: string;
   labelX: number;
   labelY: number;
@@ -93,7 +106,61 @@ export function successorsOf(node: FlowNode): string[] {
     const cases = node.cases.flatMap((branch) => branch.then);
     return [...node.next, ...cases, ...node.otherwise];
   }
+  if (node.kind === "REPEAT") {
+    return [...node.next, ...node.body];
+  }
   return [...node.next];
+}
+
+/**
+ * Each loop's own steps: everything its body leads to.
+ *
+ * Mirrors `_body_of` in `backend/onyx/flows/models.py`, which is what the
+ * server runs once per pass.
+ */
+export function loopBodiesOf(spec: FlowSpec): Map<string, Set<string>> {
+  const byId = new Map(spec.nodes.map((node) => [node.id, node]));
+  const bodies = new Map<string, Set<string>>();
+
+  for (const node of spec.nodes) {
+    if (node.kind !== "REPEAT") continue;
+    const inside = new Set<string>();
+    const stack = [...node.body];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (current === undefined || inside.has(current)) continue;
+      const found = byId.get(current);
+      if (found === undefined) continue;
+      inside.add(current);
+      stack.push(...successorsOf(found));
+    }
+    bodies.set(node.id, inside);
+  }
+  return bodies;
+}
+
+/**
+ * Successors for placing nodes, which is not quite the graph.
+ *
+ * A loop's `next` runs after its body, not beside it, so every step in the
+ * body is treated as leading there too. Without that, the step after a loop
+ * lands in the same column as the loop's first step and reads as parallel.
+ */
+function placementSuccessors(spec: FlowSpec): Map<string, string[]> {
+  const placement = new Map(
+    spec.nodes.map((node) => [node.id, successorsOf(node)])
+  );
+  const bodies = loopBodiesOf(spec);
+
+  for (const node of spec.nodes) {
+    if (node.kind !== "REPEAT") continue;
+    const inside = bodies.get(node.id) ?? new Set<string>();
+    const after = node.next.filter((target) => !inside.has(target));
+    for (const id of inside) {
+      placement.get(id)?.push(...after);
+    }
+  }
+  return placement;
 }
 
 /** Which branch an edge represents, for labelling and colour. */
@@ -113,6 +180,11 @@ function branchOf(node: FlowNode, target: string): EdgeBranch {
       return "case";
     }
     if (node.otherwise.includes(target)) return "otherwise";
+    return null;
+  }
+  if (node.kind === "REPEAT") {
+    if (node.body.includes(target)) return "pass";
+    if (node.next.includes(target)) return "after";
     return null;
   }
   return null;
@@ -206,12 +278,15 @@ export function reachableFrom(spec: FlowSpec): Set<string> {
  * a spec can be saved, and any stragglers are appended so nothing vanishes
  * from the canvas over a bad payload.
  */
-function topologicalOrder(spec: FlowSpec): FlowNode[] {
+function topologicalOrder(
+  spec: FlowSpec,
+  placement: Map<string, string[]>
+): FlowNode[] {
   const byId = new Map(spec.nodes.map((node) => [node.id, node]));
   const indegree = new Map(spec.nodes.map((node) => [node.id, 0]));
 
   for (const node of spec.nodes) {
-    for (const target of successorsOf(node)) {
+    for (const target of placement.get(node.id) ?? []) {
       const current = indegree.get(target);
       if (current !== undefined) indegree.set(target, current + 1);
     }
@@ -224,7 +299,7 @@ function topologicalOrder(spec: FlowSpec): FlowNode[] {
     const node = ready.shift();
     if (node === undefined) break;
     ordered.push(node);
-    for (const target of successorsOf(node)) {
+    for (const target of placement.get(node.id) ?? []) {
       const remaining = indegree.get(target);
       if (remaining === undefined) continue;
       indegree.set(target, remaining - 1);
@@ -243,12 +318,15 @@ function topologicalOrder(spec: FlowSpec): FlowNode[] {
 }
 
 /** Longest path from a source, which is the node's column. */
-function assignColumns(ordered: FlowNode[]): Map<string, number> {
+function assignColumns(
+  ordered: FlowNode[],
+  placement: Map<string, string[]>
+): Map<string, number> {
   const column = new Map(ordered.map((node) => [node.id, 0]));
 
   for (const node of ordered) {
     const here = column.get(node.id) ?? 0;
-    for (const target of successorsOf(node)) {
+    for (const target of placement.get(node.id) ?? []) {
       const existing = column.get(target);
       if (existing !== undefined && existing < here + 1) {
         column.set(target, here + 1);
@@ -268,11 +346,12 @@ function assignColumns(ordered: FlowNode[]): Map<string, number> {
  */
 function assignRows(
   ordered: FlowNode[],
-  column: Map<string, number>
+  column: Map<string, number>,
+  placement: Map<string, string[]>
 ): Map<string, number> {
   const predecessors = new Map<string, string[]>();
   for (const node of ordered) {
-    for (const target of successorsOf(node)) {
+    for (const target of placement.get(node.id) ?? []) {
       const existing = predecessors.get(target);
       if (existing === undefined) predecessors.set(target, [node.id]);
       else existing.push(node.id);
@@ -332,14 +411,89 @@ function edgePath(
   return `M ${fromX} ${fromY} C ${fromX + reach} ${fromY} ${toX - reach} ${toY} ${toX} ${toY}`;
 }
 
+interface EdgeGeometry {
+  path: string;
+  labelX: number;
+  labelY: number;
+  endX: number;
+  endY: number;
+}
+
+function forwardEdge(
+  source: PositionedNode,
+  target: PositionedNode
+): EdgeGeometry {
+  const fromX = source.x + NODE_WIDTH;
+  const fromY = source.y + NODE_HEIGHT / 2;
+  const toX = target.x;
+  const toY = target.y + NODE_HEIGHT / 2;
+  return {
+    path: edgePath(fromX, fromY, toX, toY),
+    labelX: (fromX + toX) / 2,
+    labelY: (fromY + toY) / 2,
+    endX: toX,
+    endY: toY,
+  };
+}
+
+/**
+ * Top edge to top edge, over whatever sits between.
+ *
+ * A loop's way out goes this way. Drawn straight, it would run through the
+ * body, which sits in the columns between the loop and what follows it.
+ */
+function arcOver(source: PositionedNode, target: PositionedNode): EdgeGeometry {
+  return arc(
+    source.x + NODE_WIDTH / 2,
+    source.y,
+    target.x + NODE_WIDTH / 2,
+    target.y,
+    -LOOP_ARC_LIFT
+  );
+}
+
+/** Bottom edge to bottom edge: the way back into a loop. */
+function arcUnder(
+  source: PositionedNode,
+  target: PositionedNode
+): EdgeGeometry {
+  return arc(
+    source.x + NODE_WIDTH / 2,
+    source.y + NODE_HEIGHT,
+    target.x + NODE_WIDTH / 2,
+    target.y + NODE_HEIGHT,
+    LOOP_ARC_LIFT
+  );
+}
+
+function arc(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  lift: number
+): EdgeGeometry {
+  // A cubic reaches three quarters of its control offset, so this peaks at
+  // `lift` away from the nodes it joins.
+  const reach = (lift * 4) / 3;
+  return {
+    path: `M ${fromX} ${fromY} C ${fromX} ${fromY + reach} ${toX} ${toY + reach} ${toX} ${toY}`,
+    labelX: (fromX + toX) / 2,
+    labelY: (fromY + toY) / 2 + lift,
+    endX: toX,
+    endY: toY,
+  };
+}
+
 export function layoutFlow(spec: FlowSpec): FlowLayout {
   if (spec.nodes.length === 0) {
     return { nodes: [], edges: [], width: 0, height: 0 };
   }
 
-  const ordered = topologicalOrder(spec);
-  const column = assignColumns(ordered);
-  const row = assignRows(ordered, column);
+  const placement = placementSuccessors(spec);
+  const ordered = topologicalOrder(spec, placement);
+  const column = assignColumns(ordered, placement);
+  const row = assignRows(ordered, column, placement);
   const reachable = reachableFrom(spec);
 
   // Centre every column against the tallest one so the graph reads as a band
@@ -376,22 +530,35 @@ export function layoutFlow(spec: FlowSpec): FlowLayout {
       const target = positionById.get(targetId);
       if (target === undefined) continue;
 
-      const fromX = source.x + NODE_WIDTH;
-      const fromY = source.y + NODE_HEIGHT / 2;
-      const toX = target.x;
-      const toY = target.y + NODE_HEIGHT / 2;
-
+      const branch = branchOf(source.node, targetId);
       edges.push({
         id: `${source.node.id}->${targetId}`,
         from: source.node.id,
         to: targetId,
-        branch: branchOf(source.node, targetId),
+        branch,
         caseLabel: caseLabelOf(source.node, targetId),
-        path: edgePath(fromX, fromY, toX, toY),
-        labelX: (fromX + toX) / 2,
-        labelY: (fromY + toY) / 2,
-        endX: toX,
-        endY: toY,
+        ...(branch === "after"
+          ? arcOver(source, target)
+          : forwardEdge(source, target)),
+      });
+    }
+  }
+
+  // The way back from the end of a pass: from each step in a loop's body
+  // that leads nowhere else, round underneath to the loop.
+  for (const [loopId, inside] of loopBodiesOf(spec)) {
+    const loop = positionById.get(loopId);
+    if (loop === undefined) continue;
+    for (const id of inside) {
+      const exit = positionById.get(id);
+      if (exit === undefined || successorsOf(exit.node).length > 0) continue;
+      edges.push({
+        id: `${id}->${loopId}:again`,
+        from: id,
+        to: loopId,
+        branch: "again",
+        caseLabel: null,
+        ...arcUnder(exit, loop),
       });
     }
   }

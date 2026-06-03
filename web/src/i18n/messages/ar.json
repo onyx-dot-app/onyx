@@ -12508,7 +12508,8 @@
         "MERGE": "دمج",
         "SPLIT": "تقسيم",
         "PARALLEL": "متوازٍ",
-        "SWITCH": "تبديل"
+        "SWITCH": "تبديل",
+        "REPEAT": "تكرار (حتى)"
       },
       "startBadge": "البداية",
       "fanOutBadge": "لكل عنصر",
@@ -12519,7 +12520,10 @@
         "approve": "تمت الموافقة",
         "reject": "مرفوض",
         "case": "حالة",
-        "otherwise": "غير ذلك"
+        "otherwise": "غير ذلك",
+        "pass": "كل دورة",
+        "after": "عند الانتهاء",
+        "again": "مرة أخرى"
       },
       "controls": {
         "zoomIn": "تكبير",
@@ -12547,7 +12551,8 @@
         "MERGE": "دمج",
         "SPLIT": "تقسيم",
         "PARALLEL": "متوازٍ",
-        "SWITCH": "تبديل"
+        "SWITCH": "تبديل",
+        "REPEAT": "تكرار (حتى)"
       }
     },
     "status": {
@@ -12580,7 +12585,8 @@
         "MERGE": "دمج",
         "SPLIT": "تقسيم",
         "PARALLEL": "متوازٍ",
-        "SWITCH": "تبديل"
+        "SWITCH": "تبديل",
+        "REPEAT": "تكرار (حتى)"
       },
       "fields": {
         "name": "الاسم",
@@ -12668,7 +12674,21 @@
         "branchEnds": "انتهِ هنا",
         "pauseSeconds": "الثواني بين العناصر",
         "pauseSecondsHelp": "انتظر هذه المدة بين عنصر والعنصر التالي، لواجهة برمجة تطبيقات تحدّ من سرعة استدعائها. حتى 60. تُحسب مدة الانتظار ضمن حد التشغيل البالغ 15 دقيقة.",
-        "loopPauseHint": "للانتظار بين الدفعات، اضبط مهلة على الخطوة التي تعمل مرة لكل دفعة."
+        "loopPauseHint": "للانتظار بين الدفعات، اضبط مهلة على الخطوة التي تعمل مرة لكل دفعة.",
+        "repeatBody": "كرّر بدءًا من",
+        "repeatBodyHelp": "تبدأ كل دورة من هنا. كل ما يلي هذه الخطوة يتكرر معها.",
+        "repeatBodyEmpty": "أول خطوة تضيفها بعد هذه تصبح ما يتكرر.",
+        "repeatUntil": "توقف عندما",
+        "repeatUntilHelp": "يُفحص بعد كل دورة. القيمة غير الموجودة تُعد فارغة.",
+        "maxPasses": "أقصى عدد من الدورات",
+        "maxPassesHelp": "حتى 50. تُحسب كل دورة ضمن حد التشغيل البالغ 15 دقيقة.",
+        "repeatStart": "القيمة الأولى",
+        "repeatStartHelp": "ما تراه الدورة الأولى على أنه '{{' item '}}'.",
+        "repeatCarry": "القيمة التالية",
+        "repeatCarryHelp": "تُحسب في نهاية كل دورة، وتراها الدورة التالية على أنها '{{' item '}}'.",
+        "repeatCollect": "اجمع بعد كل دورة",
+        "repeatCollectHelp": "يُضاف إلى نتائج التكرار بعد كل دورة. تُدمج القوائم في قائمة واحدة.",
+        "repeatFailExhausted": "أفشل التشغيل إذا نفدت الدورات"
       },
       "onError": {
         "stop": "إيقاف التشغيل",
@@ -12706,7 +12726,10 @@
         "cron": "0 9 * * 1-5",
         "splitValue": "'{{' trigger.tags '}}'",
         "switchValue": "'{{' trigger.priority '}}'",
-        "caseValue": "high"
+        "caseValue": "high",
+        "repeatBody": "اختر خطوة",
+        "repeatUntil": "'{{' steps.fetch.body.next_cursor '}}'",
+        "repeatCollect": "'{{' steps.fetch.body.items '}}'"
       },
       "mergeMode": {
         "combine": "الاحتفاظ بمخرجات كل خطوة باسمها",
@@ -12762,7 +12785,9 @@
       "assignedTo": "مسند إلى {who}",
       "decisionFailed": "تعذّر تسجيل القرار.",
       "decisionFallbackQuestion": "هذا التشغيل بانتظار موافقة.",
-      "resumesAt": "يُستأنف في {when}."
+      "resumesAt": "يُستأنف في {when}.",
+      "pass": "الدورة {number}",
+      "passItem": "الدورة {number}، العنصر {index}"
     }
   },
   "knowledge": {

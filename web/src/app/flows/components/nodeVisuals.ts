@@ -23,6 +23,7 @@ import {
   SvgListTree,
   SvgNetworkGraph,
   SvgRefreshCw,
+  SvgRevert,
   SvgShareWebhook,
   SvgSparkle,
   SvgTerminal,
@@ -140,6 +141,12 @@ const VISUALS = {
     chipClassName: "bg-status-warning-01",
     iconClassName: "text-status-warning-05",
     accentBorderClassName: "border-status-warning-05",
+  },
+  REPEAT: {
+    icon: SvgRevert,
+    chipClassName: "bg-status-success-01",
+    iconClassName: "text-status-success-05",
+    accentBorderClassName: "border-status-success-05",
   },
 } satisfies Record<FlowNodeKind, NodeVisual>;
 

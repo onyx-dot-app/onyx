@@ -12538,7 +12538,8 @@
         "MERGE": "Merge",
         "SPLIT": "Split",
         "PARALLEL": "Parallel",
-        "SWITCH": "Switch"
+        "SWITCH": "Switch",
+        "REPEAT": "Loop (until)"
       },
       "startBadge": "start",
       "fanOutBadge": "per item",
@@ -12549,7 +12550,10 @@
         "approve": "approved",
         "reject": "rejected",
         "case": "case",
-        "otherwise": "otherwise"
+        "otherwise": "otherwise",
+        "pass": "each pass",
+        "after": "when done",
+        "again": "again"
       },
       "controls": {
         "zoomIn": "Zoom in",
@@ -12577,7 +12581,8 @@
         "MERGE": "Merge",
         "SPLIT": "Split",
         "PARALLEL": "Parallel",
-        "SWITCH": "Switch"
+        "SWITCH": "Switch",
+        "REPEAT": "Loop (until)"
       }
     },
     "status": {
@@ -12610,7 +12615,8 @@
         "MERGE": "Merge",
         "SPLIT": "Split",
         "PARALLEL": "Parallel",
-        "SWITCH": "Switch"
+        "SWITCH": "Switch",
+        "REPEAT": "Loop (until)"
       },
       "fields": {
         "name": "Name",
@@ -12698,7 +12704,21 @@
         "branchEnds": "End here",
         "pauseSeconds": "Seconds between items",
         "pauseSecondsHelp": "Wait this long between one item and the next, for an API that limits how fast you may call it. Up to 60. The wait counts toward the run's 15-minute limit.",
-        "loopPauseHint": "To wait between batches, set a pause on the step that runs once per batch."
+        "loopPauseHint": "To wait between batches, set a pause on the step that runs once per batch.",
+        "repeatBody": "Repeat from",
+        "repeatBodyHelp": "Each pass starts here. Everything this step leads to repeats with it.",
+        "repeatBodyEmpty": "The first step you add after this one becomes what it repeats.",
+        "repeatUntil": "Stop when",
+        "repeatUntilHelp": "Checked after every pass. A value that is not there counts as empty.",
+        "maxPasses": "Most passes",
+        "maxPassesHelp": "Up to 50. Every pass counts toward the run's 15-minute limit.",
+        "repeatStart": "First value",
+        "repeatStartHelp": "What the first pass sees as '{{' item '}}'.",
+        "repeatCarry": "Next value",
+        "repeatCarryHelp": "Worked out at the end of each pass. The next pass sees it as '{{' item '}}'.",
+        "repeatCollect": "Collect after each pass",
+        "repeatCollectHelp": "Added to the loop's results after every pass. Lists are joined into one.",
+        "repeatFailExhausted": "Fail the run if it runs out of passes"
       },
       "onError": {
         "stop": "Stop the run",
@@ -12736,7 +12756,10 @@
         "cron": "0 9 * * 1-5",
         "splitValue": "'{{' trigger.tags '}}'",
         "switchValue": "'{{' trigger.priority '}}'",
-        "caseValue": "high"
+        "caseValue": "high",
+        "repeatBody": "Choose a step",
+        "repeatUntil": "'{{' steps.fetch.body.next_cursor '}}'",
+        "repeatCollect": "'{{' steps.fetch.body.items '}}'"
       },
       "mergeMode": {
         "combine": "Keep each step's output under its own name",
@@ -12792,7 +12815,9 @@
       "assignedTo": "Assigned to {who}",
       "decisionFailed": "The decision could not be recorded.",
       "decisionFallbackQuestion": "This run is waiting for an approval.",
-      "resumesAt": "Carries on at {when}."
+      "resumesAt": "Carries on at {when}.",
+      "pass": "Pass {number}",
+      "passItem": "Pass {number}, item {index}"
     }
   },
   "knowledge": {

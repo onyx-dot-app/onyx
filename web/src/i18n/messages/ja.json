@@ -12510,7 +12510,8 @@
         "MERGE": "結合",
         "SPLIT": "分割",
         "PARALLEL": "並列",
-        "SWITCH": "スイッチ"
+        "SWITCH": "スイッチ",
+        "REPEAT": "ループ（条件まで）"
       },
       "startBadge": "開始",
       "fanOutBadge": "項目ごと",
@@ -12521,7 +12522,10 @@
         "approve": "承認",
         "reject": "却下",
         "case": "ケース",
-        "otherwise": "その他"
+        "otherwise": "その他",
+        "pass": "毎回",
+        "after": "終了後",
+        "again": "もう一度"
       },
       "controls": {
         "zoomIn": "拡大",
@@ -12549,7 +12553,8 @@
         "MERGE": "結合",
         "SPLIT": "分割",
         "PARALLEL": "並列",
-        "SWITCH": "スイッチ"
+        "SWITCH": "スイッチ",
+        "REPEAT": "ループ（条件まで）"
       }
     },
     "status": {
@@ -12582,7 +12587,8 @@
         "MERGE": "結合",
         "SPLIT": "分割",
         "PARALLEL": "並列",
-        "SWITCH": "スイッチ"
+        "SWITCH": "スイッチ",
+        "REPEAT": "ループ（条件まで）"
       },
       "fields": {
         "name": "名前",
@@ -12670,7 +12676,21 @@
         "branchEnds": "ここで終了",
         "pauseSeconds": "項目の間隔（秒）",
         "pauseSecondsHelp": "次の項目に進む前にこの秒数だけ待ちます。呼び出し頻度に制限がある API 向けです。最大 60。待ち時間は実行の 15 分の上限に含まれます。",
-        "loopPauseHint": "バッチの間で待つには、バッチごとに 1 回実行されるステップで間隔を設定します。"
+        "loopPauseHint": "バッチの間で待つには、バッチごとに 1 回実行されるステップで間隔を設定します。",
+        "repeatBody": "繰り返しの開始",
+        "repeatBodyHelp": "毎回ここから始まります。このステップの先にあるものはすべて一緒に繰り返されます。",
+        "repeatBodyEmpty": "この後に最初に追加したステップが繰り返しの対象になります。",
+        "repeatUntil": "終了する条件",
+        "repeatUntilHelp": "毎回の終わりに確認します。存在しない値は空として扱われます。",
+        "maxPasses": "最大回数",
+        "maxPassesHelp": "最大 50。各回は実行の 15 分の上限に含まれます。",
+        "repeatStart": "最初の値",
+        "repeatStartHelp": "最初の回で '{{' item '}}' として参照される値です。",
+        "repeatCarry": "次の値",
+        "repeatCarryHelp": "各回の終わりに求めます。次の回ではこれが '{{' item '}}' になります。",
+        "repeatCollect": "毎回の後に集める値",
+        "repeatCollectHelp": "毎回の後にループの結果へ追加されます。一覧は 1 つにまとめられます。",
+        "repeatFailExhausted": "回数を使い切ったら実行を失敗にする"
       },
       "onError": {
         "stop": "実行を停止",
@@ -12708,7 +12728,10 @@
         "cron": "0 9 * * 1-5",
         "splitValue": "'{{' trigger.tags '}}'",
         "switchValue": "'{{' trigger.priority '}}'",
-        "caseValue": "high"
+        "caseValue": "high",
+        "repeatBody": "ステップを選択",
+        "repeatUntil": "'{{' steps.fetch.body.next_cursor '}}'",
+        "repeatCollect": "'{{' steps.fetch.body.items '}}'"
       },
       "mergeMode": {
         "combine": "各ステップの出力をその名前のまま残す",
@@ -12764,7 +12787,9 @@
       "assignedTo": "担当: {who}",
       "decisionFailed": "判断を記録できませんでした。",
       "decisionFallbackQuestion": "この実行は承認を待っています。",
-      "resumesAt": "{when} に再開します。"
+      "resumesAt": "{when} に再開します。",
+      "pass": "{number} 回目",
+      "passItem": "{number} 回目、項目 {index}"
     }
   },
   "knowledge": {

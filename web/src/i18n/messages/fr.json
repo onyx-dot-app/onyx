@@ -12512,7 +12512,8 @@
         "MERGE": "Fusionner",
         "SPLIT": "Découper",
         "PARALLEL": "Parallèle",
-        "SWITCH": "Aiguillage"
+        "SWITCH": "Aiguillage",
+        "REPEAT": "Boucle (jusqu'à)"
       },
       "startBadge": "début",
       "fanOutBadge": "par élément",
@@ -12523,7 +12524,10 @@
         "approve": "approuvé",
         "reject": "refusé",
         "case": "cas",
-        "otherwise": "sinon"
+        "otherwise": "sinon",
+        "pass": "chaque passage",
+        "after": "une fois fini",
+        "again": "encore"
       },
       "controls": {
         "zoomIn": "Zoom avant",
@@ -12551,7 +12555,8 @@
         "MERGE": "Fusionner",
         "SPLIT": "Découper",
         "PARALLEL": "Parallèle",
-        "SWITCH": "Aiguillage"
+        "SWITCH": "Aiguillage",
+        "REPEAT": "Boucle (jusqu'à)"
       }
     },
     "status": {
@@ -12584,7 +12589,8 @@
         "MERGE": "Fusionner",
         "SPLIT": "Découper",
         "PARALLEL": "Parallèle",
-        "SWITCH": "Aiguillage"
+        "SWITCH": "Aiguillage",
+        "REPEAT": "Boucle (jusqu'à)"
       },
       "fields": {
         "name": "Nom",
@@ -12672,7 +12678,21 @@
         "branchEnds": "Terminer ici",
         "pauseSeconds": "Secondes entre les éléments",
         "pauseSecondsHelp": "Attendre ce délai entre un élément et le suivant, pour une API qui limite la fréquence des appels. Jusqu'à 60. L'attente compte dans la limite de 15 minutes de l'exécution.",
-        "loopPauseHint": "Pour attendre entre les lots, réglez une pause sur l'étape qui s'exécute une fois par lot."
+        "loopPauseHint": "Pour attendre entre les lots, réglez une pause sur l'étape qui s'exécute une fois par lot.",
+        "repeatBody": "Répéter à partir de",
+        "repeatBodyHelp": "Chaque passage commence ici. Tout ce qui suit cette étape se répète avec elle.",
+        "repeatBodyEmpty": "La première étape ajoutée après celle-ci sera celle qui se répète.",
+        "repeatUntil": "Arrêter quand",
+        "repeatUntilHelp": "Vérifié après chaque passage. Une valeur absente compte comme vide.",
+        "maxPasses": "Passages au maximum",
+        "maxPassesHelp": "Jusqu'à 50. Chaque passage compte dans la limite de 15 minutes de l'exécution.",
+        "repeatStart": "Première valeur",
+        "repeatStartHelp": "Ce que le premier passage voit comme '{{' item '}}'.",
+        "repeatCarry": "Valeur suivante",
+        "repeatCarryHelp": "Calculée à la fin de chaque passage. Le passage suivant la voit comme '{{' item '}}'.",
+        "repeatCollect": "Recueillir après chaque passage",
+        "repeatCollectHelp": "Ajouté aux résultats de la boucle après chaque passage. Les listes sont réunies en une.",
+        "repeatFailExhausted": "Faire échouer l'exécution si les passages s'épuisent"
       },
       "onError": {
         "stop": "Arrêter l'exécution",
@@ -12710,7 +12730,10 @@
         "cron": "0 9 * * 1-5",
         "splitValue": "'{{' trigger.tags '}}'",
         "switchValue": "'{{' trigger.priority '}}'",
-        "caseValue": "haute"
+        "caseValue": "haute",
+        "repeatBody": "Choisir une étape",
+        "repeatUntil": "'{{' steps.fetch.body.next_cursor '}}'",
+        "repeatCollect": "'{{' steps.fetch.body.items '}}'"
       },
       "mergeMode": {
         "combine": "Garder la sortie de chaque étape sous son nom",
@@ -12766,7 +12789,9 @@
       "assignedTo": "Assigné à {who}",
       "decisionFailed": "La décision n'a pas pu être enregistrée.",
       "decisionFallbackQuestion": "Cette exécution attend une approbation.",
-      "resumesAt": "Reprend le {when}."
+      "resumesAt": "Reprend le {when}.",
+      "pass": "Passage {number}",
+      "passItem": "Passage {number}, élément {index}"
     }
   },
   "knowledge": {

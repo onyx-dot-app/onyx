@@ -39,6 +39,7 @@ export type StepKind =
   | "Transform"
   | "Condition"
   | "Loop (batches)"
+  | "Loop (until)"
   | "Retry"
   | "Webhook"
   | "Delay"
@@ -394,6 +395,27 @@ export class FlowsPage {
     await expect(this.decisionPanel).toBeHidden({ timeout: RESUME_TIMEOUT_MS });
   }
 
+  /**
+   * Answer, and wait for the next question rather than for the panel to go.
+   *
+   * An approval inside a loop asks again on the next pass. The run can park
+   * on that question before the page even refreshes, so the panel may never
+   * be seen empty — waiting for the new question is what proves the answer
+   * went through and the loop moved on.
+   */
+  async decideAndExpectNext(
+    decision: "approve" | "reject",
+    nextQuestion: string
+  ): Promise<void> {
+    await expect(this.decisionPanel).toBeVisible();
+    await (
+      decision === "approve" ? this.approveButton : this.rejectButton
+    ).click();
+    await expect(this.decisionPanel).toContainText(nextQuestion, {
+      timeout: RESUME_TIMEOUT_MS,
+    });
+  }
+
   async expectAwaitingDecision(question: string): Promise<void> {
     await expect(this.decisionPanel).toBeVisible();
     await expect(this.decisionPanel).toContainText(question);
@@ -425,6 +447,14 @@ export class FlowsPage {
 
   async expectRunItemCount(count: number): Promise<void> {
     await expect(this.runItems).toHaveCount(count);
+  }
+
+  /** The heading over each of the selected step's rows, in order. */
+  async expectRunItemHeadings(headings: string[]): Promise<void> {
+    await expect(this.runItems).toHaveCount(headings.length);
+    for (const [position, heading] of headings.entries()) {
+      await expect(this.runItems.nth(position)).toContainText(heading);
+    }
   }
 
   async expectRunPanelContains(text: string): Promise<void> {

@@ -17,6 +17,7 @@ const KINDS: readonly FlowNodeKind[] = [
   "SPLIT",
   "FILTER",
   "LOOP",
+  "REPEAT",
   "PARALLEL",
   "MERGE",
   "DELAY",

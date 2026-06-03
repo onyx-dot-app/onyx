@@ -7779,9 +7779,10 @@ class FlowNodeRun(Base):
     """One node's execution inside a run.
 
     A node that fans out over a list gets one row per item, distinguished by
-    `item_index`. The unique key on (run_id, node_id, item_index) is what
-    makes a redelivered executor safe: the insert conflicts and the engine
-    reuses the recorded output instead of repeating the side effect.
+    `item_index`, and a node inside a loop gets one per pass, distinguished by
+    `iteration`. The unique key on (run_id, node_id, iteration, item_index) is
+    what makes a redelivered executor safe: the insert conflicts and the
+    engine reuses the recorded output instead of repeating the side effect.
     """
 
     __tablename__ = "flow_node_run"
@@ -7812,6 +7813,10 @@ class FlowNodeRun(Base):
     item_index: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
+    # The loop pass this execution belongs to. 0 outside a loop.
+    iteration: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     # Retries within this row. 1 on the first try.
     attempt: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default=text("1")
@@ -7839,7 +7844,11 @@ class FlowNodeRun(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "run_id", "node_id", "item_index", name="uq_flow_node_run_identity"
+            "run_id",
+            "node_id",
+            "iteration",
+            "item_index",
+            name="uq_flow_node_run_identity",
         ),
         Index("ix_flow_node_run_run", "run_id"),
     )

@@ -171,6 +171,8 @@ class NodeRunView(BaseModel):
     node_id: str
     kind: FlowNodeKind
     status: FlowNodeRunStatus
+    # The loop pass this row belongs to; 0 outside a loop.
+    iteration: int
     item_index: int
     attempt: int
     input: dict[str, Any] | None
@@ -187,6 +189,7 @@ class NodeRunView(BaseModel):
             node_id=node_run.node_id,
             kind=node_run.kind,
             status=node_run.status,
+            iteration=node_run.iteration,
             item_index=node_run.item_index,
             attempt=node_run.attempt,
             input=node_run.input,

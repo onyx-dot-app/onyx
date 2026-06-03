@@ -12508,7 +12508,8 @@
         "MERGE": "合并",
         "SPLIT": "拆分",
         "PARALLEL": "并行",
-        "SWITCH": "多路分支"
+        "SWITCH": "多路分支",
+        "REPEAT": "循环（直到）"
       },
       "startBadge": "起点",
       "fanOutBadge": "逐项",
@@ -12519,7 +12520,10 @@
         "approve": "已批准",
         "reject": "已拒绝",
         "case": "情况",
-        "otherwise": "其他"
+        "otherwise": "其他",
+        "pass": "每一轮",
+        "after": "完成后",
+        "again": "再来一轮"
       },
       "controls": {
         "zoomIn": "放大",
@@ -12547,7 +12551,8 @@
         "MERGE": "合并",
         "SPLIT": "拆分",
         "PARALLEL": "并行",
-        "SWITCH": "多路分支"
+        "SWITCH": "多路分支",
+        "REPEAT": "循环（直到）"
       }
     },
     "status": {
@@ -12580,7 +12585,8 @@
         "MERGE": "合并",
         "SPLIT": "拆分",
         "PARALLEL": "并行",
-        "SWITCH": "多路分支"
+        "SWITCH": "多路分支",
+        "REPEAT": "循环（直到）"
       },
       "fields": {
         "name": "名称",
@@ -12668,7 +12674,21 @@
         "branchEnds": "在此结束",
         "pauseSeconds": "每项之间的间隔（秒）",
         "pauseSecondsHelp": "在一项和下一项之间等待这么久，适用于限制调用频率的 API。最多 60 秒。等待时间计入运行的 15 分钟上限。",
-        "loopPauseHint": "要在批次之间等待，请在每批执行一次的步骤上设置间隔。"
+        "loopPauseHint": "要在批次之间等待，请在每批执行一次的步骤上设置间隔。",
+        "repeatBody": "从此步骤开始重复",
+        "repeatBodyHelp": "每一轮都从这里开始。此步骤之后的所有步骤都会一起重复。",
+        "repeatBodyEmpty": "在此之后添加的第一个步骤将成为重复的内容。",
+        "repeatUntil": "停止条件",
+        "repeatUntilHelp": "每一轮结束后检查。不存在的值视为空。",
+        "maxPasses": "最多轮数",
+        "maxPassesHelp": "最多 50 轮。每一轮都计入运行的 15 分钟上限。",
+        "repeatStart": "初始值",
+        "repeatStartHelp": "第一轮中 '{{' item '}}' 的值。",
+        "repeatCarry": "下一个值",
+        "repeatCarryHelp": "在每一轮结束时计算，下一轮将其作为 '{{' item '}}'。",
+        "repeatCollect": "每轮后收集",
+        "repeatCollectHelp": "每轮结束后加入循环的结果。列表会合并为一个。",
+        "repeatFailExhausted": "轮数用完时使运行失败"
       },
       "onError": {
         "stop": "停止运行",
@@ -12706,7 +12726,10 @@
         "cron": "0 9 * * 1-5",
         "splitValue": "'{{' trigger.tags '}}'",
         "switchValue": "'{{' trigger.priority '}}'",
-        "caseValue": "high"
+        "caseValue": "high",
+        "repeatBody": "选择步骤",
+        "repeatUntil": "'{{' steps.fetch.body.next_cursor '}}'",
+        "repeatCollect": "'{{' steps.fetch.body.items '}}'"
       },
       "mergeMode": {
         "combine": "按各步骤的名称分别保留其输出",
@@ -12762,7 +12785,9 @@
       "assignedTo": "指派给 {who}",
       "decisionFailed": "无法记录该决定。",
       "decisionFallbackQuestion": "此运行正在等待审批。",
-      "resumesAt": "将于 {when} 继续。"
+      "resumesAt": "将于 {when} 继续。",
+      "pass": "第 {number} 轮",
+      "passItem": "第 {number} 轮，第 {index} 项"
     }
   },
   "knowledge": {

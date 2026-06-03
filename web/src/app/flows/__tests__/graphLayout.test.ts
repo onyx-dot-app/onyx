@@ -10,6 +10,7 @@ import {
   ancestorsOf,
   branchTargetsOf,
   layoutFlow,
+  loopBodiesOf,
   reachableFrom,
   successorsOf,
 } from "@/app/flows/graphLayout";
@@ -18,6 +19,7 @@ import type {
   FlowNode,
   FlowSpec,
   HumanNode,
+  RepeatNode,
   SwitchNode,
   TransformNode,
 } from "@/app/flows/types";
@@ -88,6 +90,31 @@ function switchNode(
     value: "{{ trigger.priority }}",
     cases: cases.map(([equals, then]) => ({ equals, then })),
     otherwise,
+  };
+}
+
+function repeatNode(
+  id: string,
+  body: string[],
+  next: string[] = []
+): RepeatNode {
+  return {
+    id,
+    name: id,
+    kind: "REPEAT",
+    next,
+    for_each: null,
+    on_error: "stop",
+    retry: { max_attempts: 1, backoff_seconds: 1 },
+    body,
+    until: "{{ steps.fetch.next }}",
+    operator: "is_empty",
+    value: null,
+    max_passes: 10,
+    start: null,
+    carry: null,
+    collect: null,
+    fail_when_exhausted: true,
   };
 }
 
@@ -240,6 +267,8 @@ describe("layoutFlow", () => {
     );
 
     for (const edge of layout.edges) {
+      // A loop's way round points back on purpose; see the loop tests.
+      if (edge.branch === "again") continue;
       expect(columnOf(layout, edge.to)).toBeGreaterThan(
         columnOf(layout, edge.from)
       );
@@ -407,5 +436,70 @@ describe("branchTargetsOf", () => {
     ]);
 
     expect(branchTargetsOf(flow, "route")).toEqual(["page", "tell", "loose"]);
+  });
+});
+
+describe("loops", () => {
+  /** fetch -> tidy repeat; done follows the loop. */
+  function paginated(): FlowSpec {
+    return spec("pages", [
+      repeatNode("pages", ["fetch"], ["done"]),
+      transform("fetch", ["tidy"]),
+      transform("tidy"),
+      transform("done"),
+    ]);
+  }
+
+  it("counts a loop's body among the steps it can hand control to", () => {
+    expect(successorsOf(repeatNode("pages", ["fetch"], ["done"]))).toEqual([
+      "done",
+      "fetch",
+    ]);
+  });
+
+  it("finds everything a loop's body leads to", () => {
+    expect(loopBodiesOf(paginated())).toEqual(
+      new Map([["pages", new Set(["fetch", "tidy"])]])
+    );
+  });
+
+  it("places the step after a loop after its whole body", () => {
+    const layout = layoutFlow(paginated());
+
+    expect(columnOf(layout, "fetch")).toBe(1);
+    expect(columnOf(layout, "tidy")).toBe(2);
+    // Not column 1, beside the body, where it would read as parallel to it.
+    expect(columnOf(layout, "done")).toBe(3);
+  });
+
+  it("labels the way in and the way out", () => {
+    const layout = layoutFlow(paginated());
+
+    const fromLoop = Object.fromEntries(
+      layout.edges
+        .filter((edge) => edge.from === "pages")
+        .map((edge) => [edge.to, edge.branch])
+    );
+    expect(fromLoop).toEqual({ fetch: "pass", done: "after" });
+  });
+
+  it("draws the way round from the end of the body back to the loop", () => {
+    const layout = layoutFlow(paginated());
+
+    const again = layout.edges.filter((edge) => edge.branch === "again");
+    expect(again.map((edge) => [edge.from, edge.to])).toEqual([
+      ["tidy", "pages"],
+    ]);
+  });
+
+  it("arcs the way out over the body instead of through it", () => {
+    const layout = layoutFlow(paginated());
+    const out = layout.edges.find((edge) => edge.branch === "after");
+    const loopRow = layout.nodes.find((entry) => entry.node.id === "pages");
+
+    expect(out).toBeDefined();
+    expect(loopRow).toBeDefined();
+    // The label sits above the top of the nodes it joins.
+    expect(out?.labelY ?? 0).toBeLessThan(loopRow?.y ?? 0);
   });
 });
