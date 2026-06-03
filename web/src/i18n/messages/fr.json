@@ -12509,7 +12509,8 @@
         "DELAY": "Attendre",
         "FILTER": "Filtrer",
         "SCHEDULE": "Planifier",
-        "MERGE": "Fusionner"
+        "MERGE": "Fusionner",
+        "SPLIT": "Découper"
       },
       "startBadge": "début",
       "fanOutBadge": "par élément",
@@ -12542,7 +12543,8 @@
         "DELAY": "Attendre",
         "FILTER": "Filtrer",
         "SCHEDULE": "Planifier",
-        "MERGE": "Fusionner"
+        "MERGE": "Fusionner",
+        "SPLIT": "Découper"
       }
     },
     "status": {
@@ -12572,7 +12574,8 @@
         "DELAY": "Attendre",
         "FILTER": "Filtrer",
         "SCHEDULE": "Planifier",
-        "MERGE": "Fusionner"
+        "MERGE": "Fusionner",
+        "SPLIT": "Découper"
       },
       "fields": {
         "name": "Nom",
@@ -12638,7 +12641,13 @@
         "mergeNoCandidates": "Reliez d'abord une étape à celle-ci.",
         "mergeNeedsTwo": "Choisissez au moins deux étapes.",
         "mergeMode": "Comment les combiner",
-        "mergeModeHelp": "Une étape qui ne s'est pas exécutée n'apporte rien dans les deux cas."
+        "mergeModeHelp": "Une étape qui ne s'est pas exécutée n'apporte rien dans les deux cas.",
+        "splitValue": "Texte à découper",
+        "splitValueHelp": "Une liste passe telle quelle.",
+        "separator": "Découper sur",
+        "separatorHelp": "Tapez '\\n' pour un saut de ligne, '\\t' pour une tabulation.",
+        "splitTrim": "Retirer les espaces autour de chaque morceau",
+        "splitDropEmpty": "Écarter les morceaux vides"
       },
       "onError": {
         "stop": "Arrêter l'exécution",
@@ -12671,7 +12680,8 @@
         "untilPath": "state",
         "payload": "'{' \"text\": \"un résumé\" '}'",
         "filterLeft": "'{{' item.state '}}'",
-        "cron": "0 9 * * 1-5"
+        "cron": "0 9 * * 1-5",
+        "splitValue": "'{{' trigger.tags '}}'"
       },
       "mergeMode": {
         "combine": "Garder la sortie de chaque étape sous son nom",

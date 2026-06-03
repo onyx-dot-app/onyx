@@ -17,6 +17,7 @@ from onyx.flows.models import (
     RetryNode,
     ScheduleNode,
     SpecError,
+    SplitNode,
     WebhookNode,
     parse_spec,
 )
@@ -530,3 +531,57 @@ def test_a_schedule_keeps_the_cron_it_was_given() -> None:
     )
 
     assert only(spec, ScheduleNode).cron == "0 9 * * 1-5"
+
+
+def test_a_split_keeps_the_separator_it_was_given() -> None:
+    spec = parse_spec(
+        {
+            "start": "cut",
+            "nodes": [
+                {
+                    "id": "cut",
+                    "kind": "SPLIT",
+                    "value": "{{ trigger.tags }}",
+                    "separator": " | ",
+                }
+            ],
+        }
+    )
+
+    assert only(spec, SplitNode).separator == " | "
+
+
+def test_rejects_a_split_with_nothing_to_split_on() -> None:
+    with pytest.raises(SpecError, match="separator: must not be empty"):
+        parse_spec(
+            {
+                "start": "cut",
+                "nodes": [
+                    {
+                        "id": "cut",
+                        "kind": "SPLIT",
+                        "value": "{{ trigger.tags }}",
+                        "separator": "",
+                    }
+                ],
+            }
+        )
+
+
+def test_a_split_may_fan_out_because_splitting_per_item_makes_sense() -> None:
+    """Each row carrying its own tag string is the ordinary case."""
+    spec = parse_spec(
+        {
+            "start": "cut",
+            "nodes": [
+                {
+                    "id": "cut",
+                    "kind": "SPLIT",
+                    "value": "{{ item.tags }}",
+                    "for_each": "{{ trigger.rows }}",
+                }
+            ],
+        }
+    )
+
+    assert only(spec, SplitNode).for_each == "{{ trigger.rows }}"

@@ -13,6 +13,7 @@ const KINDS: readonly FlowNodeKind[] = [
   "CODE",
   "TRANSFORM",
   "CONDITION",
+  "SPLIT",
   "FILTER",
   "LOOP",
   "MERGE",

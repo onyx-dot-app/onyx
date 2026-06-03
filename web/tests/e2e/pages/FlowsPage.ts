@@ -45,6 +45,7 @@ export type StepKind =
   | "Filter"
   | "Schedule"
   | "Merge"
+  | "Split"
   | "Approval";
 
 export class FlowsPage {
@@ -416,6 +417,24 @@ export class FlowsPage {
 
   async expectRunPanelContains(text: string): Promise<void> {
     await expect(this.runPanel).toContainText(text);
+  }
+
+  /** A tick-box in the inspector, found by the text beside it. */
+  inspectorOption(label: string): Locator {
+    return this.inspector
+      .locator("label")
+      .filter({ hasText: label })
+      .getByRole("checkbox");
+  }
+
+  async toggleInspectorOption(label: string): Promise<void> {
+    await this.inspectorOption(label).click();
+  }
+
+  async expectOptionChecked(label: string, checked: boolean): Promise<void> {
+    const option = this.inspectorOption(label);
+    if (checked) await expect(option).toBeChecked();
+    else await expect(option).not.toBeChecked();
   }
 
   /**

@@ -363,6 +363,35 @@ answers.
 `append` joins the sources' lists into one, wrapping a source that produced a
 single value rather than rejecting it, and is capped at the fan-out limit.
 
+### SPLIT
+
+Breaks a piece of text into a list. Output is `{items, total}`.
+
+The gap the other list steps leave. [LOOP](#loop) batches a list,
+[FILTER](#filter) narrows one and [`for_each`](#fan-out) walks one — but
+nothing turned `"urgent,billing"` into a list in the first place, and a
+webhook delivering tags as one comma-separated string is not unusual. Before
+this the only answer was a [CODE](#code) step, which is a sandbox round trip
+for one call to `split`.
+
+```
+cut.value     = "{{ trigger.tags }}"
+cut.separator = ","
+send.for_each = "{{ steps.cut.items }}"
+```
+
+Pieces are trimmed and empty ones dropped by default, because a list typed by
+a person has spaces in it and a trailing comma. Turn `trim` and `drop_empty`
+off to keep them.
+
+Escape sequences in the separator are read the way a programmer expects —
+`\n`, `\t`, `\r`, `\\` — so a single-line field can still say "newline",
+which is half of what anyone wants this for.
+
+A value that is already a list passes straight through, being what the node
+is trying to produce; nothing at all splits to nothing; and a shape that
+cannot be cut up says so rather than being stringified into one useless item.
+
 ## Execution
 
 `execute_flow` walks the reachable subgraph in topological order (Kahn's

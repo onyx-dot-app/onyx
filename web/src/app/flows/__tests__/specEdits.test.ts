@@ -118,6 +118,12 @@ describe("blankNode", () => {
     expect(blankNode("x", "DELAY")).toMatchObject({ seconds: 60 });
     expect(blankNode("x", "FILTER")).toMatchObject({ operator: "eq" });
     expect(blankNode("x", "SCHEDULE")).toMatchObject({ cron: "0 9 * * 1-5" });
+    // A list typed by a person has spaces in it and a trailing comma.
+    expect(blankNode("x", "SPLIT")).toMatchObject({
+      separator: ",",
+      trim: true,
+      drop_empty: true,
+    });
     // Empty on purpose: the server needs two, which is what stops a
     // half-built merge being saved.
     expect(blankNode("x", "MERGE")).toMatchObject({

@@ -31,6 +31,7 @@ from onyx.flows.nodes.loop import execute_loop
 from onyx.flows.nodes.merge import execute_merge
 from onyx.flows.nodes.retry import execute_retry
 from onyx.flows.nodes.schedule import execute_schedule
+from onyx.flows.nodes.split import execute_split
 from onyx.flows.nodes.transform import execute_transform
 from onyx.flows.nodes.webhook import execute_webhook
 
@@ -48,6 +49,7 @@ NODE_EXECUTORS: dict[FlowNodeKind, NodeExecutor] = {
     FlowNodeKind.FILTER: execute_filter,
     FlowNodeKind.SCHEDULE: execute_schedule,
     FlowNodeKind.MERGE: execute_merge,
+    FlowNodeKind.SPLIT: execute_split,
 }
 
 NODE_REPLAYERS: dict[FlowNodeKind, NodeReplayer] = {

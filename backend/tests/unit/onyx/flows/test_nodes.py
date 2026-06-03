@@ -29,6 +29,7 @@ from onyx.flows.nodes.loop import execute_loop
 from onyx.flows.nodes.merge import execute_merge
 from onyx.flows.nodes.retry import execute_retry
 from onyx.flows.nodes.schedule import execute_schedule
+from onyx.flows.nodes.split import execute_split
 from onyx.flows.nodes.webhook import (
     SIGNATURE_HEADER,
     TIMESTAMP_HEADER,
@@ -1241,5 +1242,93 @@ def test_appending_refuses_more_items_than_the_fan_out_limit() -> None:
 
     with pytest.raises(NodeExecutionError) as caught:
         execute_merge(merge_node(mode="append"), context, MagicMock())
+
+    assert caught.value.error_class == FlowErrorClass.INVALID_SPEC
+
+
+# ---------------------------------------------------------------------------
+# Split
+# ---------------------------------------------------------------------------
+
+
+def split_node(**overrides: Any) -> Any:
+    node: dict[str, Any] = {
+        "id": "cut",
+        "kind": "SPLIT",
+        "value": "{{ trigger.tags }}",
+    }
+    node.update(overrides)
+    return only_node(node)
+
+
+def test_split_cuts_text_into_a_list() -> None:
+    context = RunContext(trigger={"tags": "urgent,billing,eu"})
+
+    outcome = execute_split(split_node(), context, MagicMock())
+
+    assert outcome.output == {"items": ["urgent", "billing", "eu"], "total": 3}
+
+
+def test_split_tidies_the_pieces_by_default() -> None:
+    """A list typed by a person has spaces in it and a trailing comma."""
+    context = RunContext(trigger={"tags": "urgent, billing ,"})
+
+    outcome = execute_split(split_node(), context, MagicMock())
+
+    assert outcome.output["items"] == ["urgent", "billing"]
+
+
+def test_split_can_be_told_to_keep_the_whitespace_and_the_gaps() -> None:
+    context = RunContext(trigger={"tags": "a, b,"})
+
+    outcome = execute_split(
+        split_node(trim=False, drop_empty=False), context, MagicMock()
+    )
+
+    assert outcome.output["items"] == ["a", " b", ""]
+
+
+def test_a_typed_escape_becomes_a_real_separator() -> None:
+    """A single-line field cannot carry a newline, and line breaks are half
+    of what anybody wants this for."""
+    context = RunContext(trigger={"tags": "one\ntwo\n\nthree"})
+
+    outcome = execute_split(split_node(separator="\\n"), context, MagicMock())
+
+    assert outcome.output["items"] == ["one", "two", "three"]
+
+
+def test_splitting_nothing_is_an_empty_list_not_an_error() -> None:
+    outcome = execute_split(
+        split_node(), RunContext(trigger={"tags": None}), MagicMock()
+    )
+
+    assert outcome.output == {"items": [], "total": 0}
+
+
+def test_a_value_that_is_already_a_list_passes_straight_through() -> None:
+    """It is already what this node is trying to produce."""
+    context = RunContext(trigger={"tags": ["urgent", "billing"]})
+
+    outcome = execute_split(split_node(), context, MagicMock())
+
+    assert outcome.output["items"] == ["urgent", "billing"]
+
+
+def test_split_refuses_a_shape_it_cannot_cut_up() -> None:
+    context = RunContext(trigger={"tags": {"urgent": True}})
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_split(split_node(), context, MagicMock())
+
+    assert caught.value.error_class == FlowErrorClass.EXPRESSION_ERROR
+    assert "dict" in caught.value.detail
+
+
+def test_split_refuses_more_pieces_than_the_fan_out_limit() -> None:
+    context = RunContext(trigger={"tags": ",".join(str(n) for n in range(300))})
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_split(split_node(), context, MagicMock())
 
     assert caught.value.error_class == FlowErrorClass.INVALID_SPEC

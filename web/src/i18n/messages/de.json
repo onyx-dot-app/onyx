@@ -12507,7 +12507,8 @@
         "DELAY": "Warten",
         "FILTER": "Filtern",
         "SCHEDULE": "Zeitplan",
-        "MERGE": "Zusammenführen"
+        "MERGE": "Zusammenführen",
+        "SPLIT": "Aufteilen"
       },
       "startBadge": "Start",
       "fanOutBadge": "pro Element",
@@ -12540,7 +12541,8 @@
         "DELAY": "Warten",
         "FILTER": "Filtern",
         "SCHEDULE": "Zeitplan",
-        "MERGE": "Zusammenführen"
+        "MERGE": "Zusammenführen",
+        "SPLIT": "Aufteilen"
       }
     },
     "status": {
@@ -12570,7 +12572,8 @@
         "DELAY": "Warten",
         "FILTER": "Filtern",
         "SCHEDULE": "Zeitplan",
-        "MERGE": "Zusammenführen"
+        "MERGE": "Zusammenführen",
+        "SPLIT": "Aufteilen"
       },
       "fields": {
         "name": "Name",
@@ -12636,7 +12639,13 @@
         "mergeNoCandidates": "Verbinden Sie zuerst einen Schritt mit diesem.",
         "mergeNeedsTwo": "Wählen Sie mindestens zwei Schritte.",
         "mergeMode": "Art der Verbindung",
-        "mergeModeHelp": "Ein Schritt, der nicht lief, trägt so oder so nichts bei."
+        "mergeModeHelp": "Ein Schritt, der nicht lief, trägt so oder so nichts bei.",
+        "splitValue": "Zu teilender Text",
+        "splitValueHelp": "Eine Liste wird unverändert weitergereicht.",
+        "separator": "Trennen bei",
+        "separatorHelp": "'\\n' für einen Zeilenumbruch, '\\t' für einen Tabulator.",
+        "splitTrim": "Leerzeichen um jedes Stück entfernen",
+        "splitDropEmpty": "Leere Stücke verwerfen"
       },
       "onError": {
         "stop": "Lauf anhalten",
@@ -12669,7 +12678,8 @@
         "untilPath": "state",
         "payload": "'{' \"text\": \"eine Zusammenfassung\" '}'",
         "filterLeft": "'{{' item.state '}}'",
-        "cron": "0 9 * * 1-5"
+        "cron": "0 9 * * 1-5",
+        "splitValue": "'{{' trigger.tags '}}'"
       },
       "mergeMode": {
         "combine": "Ausgabe jedes Schritts unter seinem Namen behalten",

@@ -12505,7 +12505,8 @@
         "DELAY": "انتظار",
         "FILTER": "تصفية",
         "SCHEDULE": "جدولة",
-        "MERGE": "دمج"
+        "MERGE": "دمج",
+        "SPLIT": "تقسيم"
       },
       "startBadge": "البداية",
       "fanOutBadge": "لكل عنصر",
@@ -12538,7 +12539,8 @@
         "DELAY": "انتظار",
         "FILTER": "تصفية",
         "SCHEDULE": "جدولة",
-        "MERGE": "دمج"
+        "MERGE": "دمج",
+        "SPLIT": "تقسيم"
       }
     },
     "status": {
@@ -12568,7 +12570,8 @@
         "DELAY": "انتظار",
         "FILTER": "تصفية",
         "SCHEDULE": "جدولة",
-        "MERGE": "دمج"
+        "MERGE": "دمج",
+        "SPLIT": "تقسيم"
       },
       "fields": {
         "name": "الاسم",
@@ -12634,7 +12637,13 @@
         "mergeNoCandidates": "اربط خطوة بهذه الخطوة أولًا.",
         "mergeNeedsTwo": "اختر خطوتين على الأقل.",
         "mergeMode": "طريقة الدمج",
-        "mergeModeHelp": "الخطوة التي لم تُنفَّذ لا تضيف شيئًا في الحالتين."
+        "mergeModeHelp": "الخطوة التي لم تُنفَّذ لا تضيف شيئًا في الحالتين.",
+        "splitValue": "النص المراد تقسيمه",
+        "splitValueHelp": "القائمة تمر كما هي.",
+        "separator": "التقسيم عند",
+        "separatorHelp": "اكتب '\\n' لسطر جديد، و'\\t' لعلامة جدولة.",
+        "splitTrim": "إزالة المسافات حول كل جزء",
+        "splitDropEmpty": "إسقاط الأجزاء الفارغة"
       },
       "onError": {
         "stop": "إيقاف التشغيل",
@@ -12667,7 +12676,8 @@
         "untilPath": "state",
         "payload": "'{' \"text\": \"ملخّص\" '}'",
         "filterLeft": "'{{' item.state '}}'",
-        "cron": "0 9 * * 1-5"
+        "cron": "0 9 * * 1-5",
+        "splitValue": "'{{' trigger.tags '}}'"
       },
       "mergeMode": {
         "combine": "الاحتفاظ بمخرجات كل خطوة باسمها",

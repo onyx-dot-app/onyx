@@ -935,6 +935,7 @@ class FlowNodeKind(str, PyEnum):
     FILTER = "FILTER"
     SCHEDULE = "SCHEDULE"
     MERGE = "MERGE"
+    SPLIT = "SPLIT"
 
 
 class FlowRunStatus(str, PyEnum):

@@ -31,7 +31,8 @@ export type FlowNodeKind =
   | "DELAY"
   | "FILTER"
   | "SCHEDULE"
-  | "MERGE";
+  | "MERGE"
+  | "SPLIT";
 export type FlowTriggerKind = "SCHEDULE" | "WEBHOOK" | "MANUAL";
 export type FlowTriggerSource = "SCHEDULE" | "WEBHOOK" | "MANUAL" | "TEST";
 
@@ -191,6 +192,14 @@ export interface MergeNode extends NodeBase {
   mode: MergeMode;
 }
 
+export interface SplitNode extends NodeBase {
+  kind: "SPLIT";
+  value: string;
+  separator: string;
+  trim: boolean;
+  drop_empty: boolean;
+}
+
 export type FlowNode =
   | HttpNode
   | TransformNode
@@ -204,7 +213,8 @@ export type FlowNode =
   | DelayNode
   | FilterNode
   | ScheduleNode
-  | MergeNode;
+  | MergeNode
+  | SplitNode;
 
 export interface FlowSpec {
   spec_version: 1;

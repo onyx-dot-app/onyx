@@ -12507,7 +12507,8 @@
         "DELAY": "Esperar",
         "FILTER": "Filtrar",
         "SCHEDULE": "Programar",
-        "MERGE": "Combinar"
+        "MERGE": "Combinar",
+        "SPLIT": "Dividir"
       },
       "startBadge": "inicio",
       "fanOutBadge": "por elemento",
@@ -12540,7 +12541,8 @@
         "DELAY": "Esperar",
         "FILTER": "Filtrar",
         "SCHEDULE": "Programar",
-        "MERGE": "Combinar"
+        "MERGE": "Combinar",
+        "SPLIT": "Dividir"
       }
     },
     "status": {
@@ -12570,7 +12572,8 @@
         "DELAY": "Esperar",
         "FILTER": "Filtrar",
         "SCHEDULE": "Programar",
-        "MERGE": "Combinar"
+        "MERGE": "Combinar",
+        "SPLIT": "Dividir"
       },
       "fields": {
         "name": "Nombre",
@@ -12636,7 +12639,13 @@
         "mergeNoCandidates": "Conecta un paso con este antes de elegir qué combinar.",
         "mergeNeedsTwo": "Elige al menos dos pasos.",
         "mergeMode": "Cómo combinarlos",
-        "mergeModeHelp": "Un paso que no se ejecutó no aporta nada en ningún caso."
+        "mergeModeHelp": "Un paso que no se ejecutó no aporta nada en ningún caso.",
+        "splitValue": "Texto a dividir",
+        "splitValueHelp": "Una lista pasa sin cambios.",
+        "separator": "Dividir por",
+        "separatorHelp": "Escribe '\\n' para un salto de línea, '\\t' para un tabulador.",
+        "splitTrim": "Quitar los espacios de cada parte",
+        "splitDropEmpty": "Descartar las partes vacías"
       },
       "onError": {
         "stop": "Detener la ejecución",
@@ -12669,7 +12678,8 @@
         "untilPath": "state",
         "payload": "'{' \"text\": \"un resumen\" '}'",
         "filterLeft": "'{{' item.state '}}'",
-        "cron": "0 9 * * 1-5"
+        "cron": "0 9 * * 1-5",
+        "splitValue": "'{{' trigger.tags '}}'"
       },
       "mergeMode": {
         "combine": "Guardar la salida de cada paso con su propio nombre",

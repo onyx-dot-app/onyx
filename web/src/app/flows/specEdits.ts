@@ -23,6 +23,7 @@ import type {
   LoopNode,
   RetryNode,
   ScheduleNode,
+  SplitNode,
   TransformNode,
   WebhookNode,
 } from "@/app/flows/types";
@@ -195,6 +196,18 @@ export function blankNode(id: string, kind: FlowNodeKind): FlowNode {
         // Nine on weekday mornings: the shape almost every schedule takes,
         // and obviously wrong if it is not what you meant.
         cron: "0 9 * * 1-5",
+      };
+      return node;
+    }
+    case "SPLIT": {
+      const node: SplitNode = {
+        ...base,
+        kind: "SPLIT",
+        value: "",
+        separator: ",",
+        // A list typed by a person has spaces in it and a trailing comma.
+        trim: true,
+        drop_empty: true,
       };
       return node;
     }

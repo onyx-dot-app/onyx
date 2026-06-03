@@ -63,6 +63,7 @@ MAX_RETRY_WINDOW_SECONDS = 600.0
 INLINE_DELAY_SECONDS = 60.0
 MAX_DELAY_SECONDS = 30 * 24 * 60 * 60.0
 MAX_MERGE_SOURCES = 10
+MAX_SEPARATOR_LENGTH = 20
 
 # What a person can answer at a human step. Stored on the node's run row and
 # read back by the engine when the run resumes, so the strings are part of the
@@ -507,6 +508,47 @@ class DelayNode(NodeBase):
         return self.seconds > INLINE_DELAY_SECONDS
 
 
+class SplitNode(NodeBase):
+    """Break a piece of text into a list.
+
+    The gap the other list steps leave. A loop batches a list, a filter
+    narrows one and ``for_each`` walks one — but nothing turned
+    ``"urgent,billing"`` into a list in the first place, and a webhook
+    delivering tags as one comma-separated string is not unusual. Before
+    this the only answer was a code step, which is a sandbox round trip for
+    one call to ``split``.
+
+    Escape sequences in the separator are read the way a programmer expects,
+    so a single-line field can still say "newline".
+    """
+
+    kind: Literal[FlowNodeKind.SPLIT] = FlowNodeKind.SPLIT
+
+    # Expression yielding the text to split. A list passes straight through,
+    # already being what this node is trying to produce.
+    value: str
+    separator: str = Field(default=",", max_length=MAX_SEPARATOR_LENGTH)
+    trim: bool = True
+    # Splitting "a,b," leaves a trailing empty piece nobody asked for.
+    drop_empty: bool = True
+
+    @field_validator("value")
+    @classmethod
+    def _non_empty_value(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value
+
+    @field_validator("separator")
+    @classmethod
+    def _usable_separator(cls, value: str) -> str:
+        # Splitting on nothing is a different operation with a different
+        # answer in every language, so it is refused rather than guessed.
+        if not value:
+            raise ValueError("must not be empty")
+        return value
+
+
 class ScheduleNode(NodeBase):
     """Wait until the next time a cron expression comes round.
 
@@ -636,7 +678,8 @@ FlowNode = Annotated[
     | DelayNode
     | FilterNode
     | ScheduleNode
-    | MergeNode,
+    | MergeNode
+    | SplitNode,
     Field(discriminator="kind"),
 ]
 

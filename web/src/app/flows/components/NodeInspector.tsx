@@ -34,6 +34,7 @@ import type {
   LoopNode,
   RetryNode,
   ScheduleNode,
+  SplitNode,
   TransformNode,
   WebhookNode,
 } from "@/app/flows/types";
@@ -153,6 +154,9 @@ export function NodeInspector({
       ) : null}
       {node.kind === "RETRY" ? (
         <RetryFields node={node} onChange={onChange} />
+      ) : null}
+      {node.kind === "SPLIT" ? (
+        <SplitFields node={node} onChange={onChange} />
       ) : null}
       {node.kind === "SCHEDULE" ? (
         <ScheduleFields node={node} onChange={onChange} />
@@ -604,6 +608,61 @@ function clampBatchSize(raw: string): number {
   const parsed = Number.parseInt(raw, 10);
   if (Number.isNaN(parsed)) return 1;
   return Math.min(200, Math.max(1, parsed));
+}
+
+function SplitFields({ node, onChange }: FieldProps<SplitNode>) {
+  const t = useTranslations("flows.inspector");
+
+  return (
+    <>
+      <InputVertical
+        withLabel
+        title={t("fields.splitValue")}
+        description={t("fields.splitValueHelp")}
+      >
+        <InputTypeIn
+          value={node.value}
+          placeholder={t("placeholder.splitValue")}
+          onChange={(event) => onChange({ ...node, value: event.target.value })}
+        />
+      </InputVertical>
+
+      <InputVertical
+        withLabel
+        title={t("fields.separator")}
+        description={t("fields.separatorHelp")}
+      >
+        <InputTypeIn
+          value={node.separator}
+          onChange={(event) =>
+            onChange({ ...node, separator: event.target.value })
+          }
+        />
+      </InputVertical>
+
+      <label className="flex flex-row items-center gap-2 cursor-pointer">
+        <InputCheckbox
+          checked={node.trim}
+          onCheckedChange={(checked) => onChange({ ...node, trim: checked })}
+        />
+        <Text font="main-ui-body" color="text-04">
+          {t("fields.splitTrim")}
+        </Text>
+      </label>
+
+      <label className="flex flex-row items-center gap-2 cursor-pointer">
+        <InputCheckbox
+          checked={node.drop_empty}
+          onCheckedChange={(checked) =>
+            onChange({ ...node, drop_empty: checked })
+          }
+        />
+        <Text font="main-ui-body" color="text-04">
+          {t("fields.splitDropEmpty")}
+        </Text>
+      </label>
+    </>
+  );
 }
 
 function ScheduleFields({ node, onChange }: FieldProps<ScheduleNode>) {

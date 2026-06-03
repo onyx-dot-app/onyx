@@ -12535,7 +12535,8 @@
         "DELAY": "Delay",
         "FILTER": "Filter",
         "SCHEDULE": "Schedule",
-        "MERGE": "Merge"
+        "MERGE": "Merge",
+        "SPLIT": "Split"
       },
       "startBadge": "start",
       "fanOutBadge": "per item",
@@ -12568,7 +12569,8 @@
         "DELAY": "Delay",
         "FILTER": "Filter",
         "SCHEDULE": "Schedule",
-        "MERGE": "Merge"
+        "MERGE": "Merge",
+        "SPLIT": "Split"
       }
     },
     "status": {
@@ -12598,7 +12600,8 @@
         "DELAY": "Delay",
         "FILTER": "Filter",
         "SCHEDULE": "Schedule",
-        "MERGE": "Merge"
+        "MERGE": "Merge",
+        "SPLIT": "Split"
       },
       "fields": {
         "name": "Name",
@@ -12664,7 +12667,13 @@
         "mergeNoCandidates": "Connect a step to this one before choosing what to combine.",
         "mergeNeedsTwo": "Pick at least two steps.",
         "mergeMode": "How to combine them",
-        "mergeModeHelp": "A step that did not run contributes nothing either way."
+        "mergeModeHelp": "A step that did not run contributes nothing either way.",
+        "splitValue": "Text to split",
+        "splitValueHelp": "A list is passed through unchanged.",
+        "separator": "Split on",
+        "separatorHelp": "Type '\\n' for a line break, '\\t' for a tab.",
+        "splitTrim": "Trim spaces around each piece",
+        "splitDropEmpty": "Drop empty pieces"
       },
       "onError": {
         "stop": "Stop the run",
@@ -12697,7 +12706,8 @@
         "untilPath": "state",
         "payload": "'{' \"text\": \"a summary\" '}'",
         "filterLeft": "'{{' item.state '}}'",
-        "cron": "0 9 * * 1-5"
+        "cron": "0 9 * * 1-5",
+        "splitValue": "'{{' trigger.tags '}}'"
       },
       "mergeMode": {
         "combine": "Keep each step's output under its own name",

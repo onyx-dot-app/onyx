@@ -12507,7 +12507,8 @@
         "DELAY": "待機",
         "FILTER": "絞り込み",
         "SCHEDULE": "スケジュール",
-        "MERGE": "結合"
+        "MERGE": "結合",
+        "SPLIT": "分割"
       },
       "startBadge": "開始",
       "fanOutBadge": "項目ごと",
@@ -12540,7 +12541,8 @@
         "DELAY": "待機",
         "FILTER": "絞り込み",
         "SCHEDULE": "スケジュール",
-        "MERGE": "結合"
+        "MERGE": "結合",
+        "SPLIT": "分割"
       }
     },
     "status": {
@@ -12570,7 +12572,8 @@
         "DELAY": "待機",
         "FILTER": "絞り込み",
         "SCHEDULE": "スケジュール",
-        "MERGE": "結合"
+        "MERGE": "結合",
+        "SPLIT": "分割"
       },
       "fields": {
         "name": "名前",
@@ -12636,7 +12639,13 @@
         "mergeNoCandidates": "先にこのステップへつながるステップを接続してください。",
         "mergeNeedsTwo": "ステップを 2 つ以上選んでください。",
         "mergeMode": "結合の方法",
-        "mergeModeHelp": "実行されなかったステップは、どちらの方法でも何も加えません。"
+        "mergeModeHelp": "実行されなかったステップは、どちらの方法でも何も加えません。",
+        "splitValue": "分割する文字列",
+        "splitValueHelp": "一覧はそのまま通します。",
+        "separator": "区切り文字",
+        "separatorHelp": "改行は '\\n'、タブは '\\t' と入力します。",
+        "splitTrim": "各要素の前後の空白を取り除く",
+        "splitDropEmpty": "空の要素を捨てる"
       },
       "onError": {
         "stop": "実行を停止",
@@ -12669,7 +12678,8 @@
         "untilPath": "state",
         "payload": "'{' \"text\": \"要約\" '}'",
         "filterLeft": "'{{' item.state '}}'",
-        "cron": "0 9 * * 1-5"
+        "cron": "0 9 * * 1-5",
+        "splitValue": "'{{' trigger.tags '}}'"
       },
       "mergeMode": {
         "combine": "各ステップの出力をその名前のまま残す",

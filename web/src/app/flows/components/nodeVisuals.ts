@@ -19,6 +19,7 @@ import {
   SvgGlobe,
   SvgHourglass,
   SvgLinkedDots,
+  SvgListTree,
   SvgRefreshCw,
   SvgShareWebhook,
   SvgSparkle,
@@ -107,6 +108,12 @@ const VISUALS = {
     chipClassName: "bg-background-tint-02",
     iconClassName: "text-text-03",
     accentBorderClassName: "border-text-03",
+  },
+  SPLIT: {
+    icon: SvgListTree,
+    chipClassName: "bg-background-tint-03",
+    iconClassName: "text-text-05",
+    accentBorderClassName: "border-text-05",
   },
   MERGE: {
     icon: SvgLinkedDots,
