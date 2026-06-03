@@ -1,0 +1,42 @@
+name: "Save Docker logs"
+description: >
+  Dumps `docker compose logs` to a file and uploads it as a build artifact. Pass
+  the same -f overrides used to bring the stack up so services defined only in
+  override files are captured. Call with `if: success() || failure()` so logs are
+  captured even when the test step failed. Inner steps repeat that condition
+  because composite steps are otherwise skipped once the job is in a failed state.
+inputs:
+  label:
+    description: >
+      Distinguishes this job's log artifact (e.g. the matrix project, 'lite', or
+      'oauth-okta'). Combined with the run id to form the artifact name.
+    required: true
+  compose-files:
+    description: >
+      The `-f <file>` overrides to pass to `docker compose`, matching the set used
+      at startup. Leave empty to use the default docker-compose.yml only.
+    required: false
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - name: Save Docker logs
+      if: success() || failure()
+      shell: bash
+      env:
+        WORKSPACE: ${{ github.workspace }}
+        COMPOSE_FILES: ${{ inputs.compose-files }}
+      run: |
+        cd deployment/docker_compose
+        # COMPOSE_FILES is a list of `-f <file>` tokens that must word-split into
+        # separate args, so it is intentionally left unquoted.
+        # shellcheck disable=SC2086
+        docker compose ${COMPOSE_FILES} logs > docker-compose.log
+        mv docker-compose.log "${WORKSPACE}/docker-compose.log"
+
+    - name: Upload logs
+      if: success() || failure()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: docker-logs-${{ inputs.label }}-${{ github.run_id }}
+        path: ${{ github.workspace }}/docker-compose.log

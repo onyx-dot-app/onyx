@@ -1,0 +1,36 @@
+name: "Upload Playwright results"
+description: >
+  Uploads the Playwright output (test results + trace.zip files) and, optionally,
+  the screenshots directory produced by an e2e run. Call with `if: always()` so
+  artifacts are captured even when the test step failed. Inner steps carry their
+  own `always()` because composite steps are otherwise skipped once the job is in
+  a failed state.
+inputs:
+  label:
+    description: >
+      Distinguishes this job's artifacts (e.g. the matrix project, 'lite', or
+      'oauth-okta'). Combined with the run id to form the artifact name.
+    required: true
+  upload-screenshots:
+    description: "Whether to also upload web/output/screenshots/ (suites like lite produce none)."
+    required: false
+    default: "true"
+runs:
+  using: "composite"
+  steps:
+    - name: Upload test results
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        # Includes test results and trace.zip files
+        name: playwright-test-results-${{ inputs.label }}-${{ github.run_id }}
+        path: ./web/output/playwright/
+        retention-days: 30
+
+    - name: Upload screenshots
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: ${{ always() && inputs.upload-screenshots == 'true' }}
+      with:
+        name: playwright-screenshots-${{ inputs.label }}-${{ github.run_id }}
+        path: ./web/output/screenshots/
+        retention-days: 30

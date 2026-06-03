@@ -115,6 +115,9 @@ jobs:
               - '.github/workflows/pr-playwright-tests.yml'
               - '.github/actions/setup-test-license/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
+              - '.github/actions/setup-playwright-web/**'
+              - '.github/actions/upload-playwright-results/**'
+              - '.github/actions/save-docker-logs/**'
             mcp_oauth:
               - 'backend/onyx/server/features/mcp/**'
               - 'backend/tests/integration/mock_services/mcp_test_server/**'
@@ -334,27 +337,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        with:
-          bun-version: "1.3.13"
-
-      - name: Install node dependencies
-        working-directory: ./web
-        run: bun install --frozen-lockfile
-
-      - name: Cache playwright cache
-        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-bun-${{ hashFiles('web/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-bun-
-
-      - name: Install playwright browsers
-        working-directory: ./web
-        run: bunx playwright install chromium
+      - name: Setup Playwright (web)
+        uses: ./.github/actions/setup-playwright-web
 
       - name: Setup test license
         uses: ./.github/actions/setup-test-license
@@ -434,21 +418,11 @@ jobs:
         run: |
           bunx playwright test --project ${PROJECT}
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - name: Upload Playwright results
         if: always()
+        uses: ./.github/actions/upload-playwright-results
         with:
-          # Includes test results and trace.zip files
-          name: playwright-test-results-${{ matrix.project }}-${{ github.run_id }}
-          path: ./web/output/playwright/
-          retention-days: 30
-
-      - name: Upload screenshots
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: playwright-screenshots-${{ matrix.project }}-${{ github.run_id }}
-          path: ./web/output/screenshots/
-          retention-days: 30
+          label: ${{ matrix.project }}
 
       # --- Visual Regression Diff ---
       - name: Configure AWS credentials
@@ -567,24 +541,20 @@ jobs:
             echo "No screenshots to upload for ${PROJECT} — skipping baseline update."
           fi
 
-      # save before stopping the containers so the logs can be captured
+      # save before stopping the containers so the logs can be captured. pass the
+      # same -f overrides as `up` so services defined only in the override files
+      # (mock MCP/IdP) are captured.
       - name: Save Docker logs
         if: success() || failure()
-        env:
-          WORKSPACE: ${{ github.workspace }}
-        run: |
-          cd deployment/docker_compose
-          # Pass the same -f overrides as `up` so the mock MCP/IdP services
-          # (defined only in the override files) are included in the logs.
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml logs > docker-compose.log
-          mv docker-compose.log ${WORKSPACE}/docker-compose.log
-
-      - name: Upload logs
-        if: success() || failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: ./.github/actions/save-docker-logs
         with:
-          name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
-          path: ${{ github.workspace }}/docker-compose.log
+          label: ${{ matrix.project }}
+          compose-files: >-
+            -f docker-compose.yml
+            -f docker-compose.dev.yml
+            -f docker-compose.mcp-oauth-test.yml
+            -f docker-compose.mcp-api-key-test.yml
+            -f docker-compose.mcp-per-user-key-test.yml
 
   # Validates the MCP OAuth spec against the REAL Okta org (the mock IdP run in
   # playwright-tests is a deterministic stand-in). Runs only when OAuth-relevant
@@ -621,27 +591,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        with:
-          bun-version: "1.3.13"
-
-      - name: Install node dependencies
-        working-directory: ./web
-        run: bun install --frozen-lockfile
-
-      - name: Cache playwright cache
-        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-bun-${{ hashFiles('web/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-bun-
-
-      - name: Install playwright browsers
-        working-directory: ./web
-        run: bunx playwright install chromium
+      - name: Setup Playwright (web)
+        uses: ./.github/actions/setup-playwright-web
 
       - name: Setup test license
         uses: ./.github/actions/setup-test-license
@@ -724,36 +675,23 @@ jobs:
         working-directory: ./web
         run: bunx playwright test mcp_oauth_flow --project admin
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - name: Upload Playwright results
         if: always()
+        uses: ./.github/actions/upload-playwright-results
         with:
-          name: playwright-test-results-oauth-okta-${{ github.run_id }}
-          path: ./web/output/playwright/
-          retention-days: 30
-
-      - name: Upload screenshots
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: playwright-screenshots-oauth-okta-${{ github.run_id }}
-          path: ./web/output/screenshots/
-          retention-days: 30
+          label: oauth-okta
 
       - name: Save Docker logs
         if: success() || failure()
-        env:
-          WORKSPACE: ${{ github.workspace }}
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml logs > docker-compose.log
-          mv docker-compose.log ${WORKSPACE}/docker-compose.log
-
-      - name: Upload logs
-        if: success() || failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: ./.github/actions/save-docker-logs
         with:
-          name: docker-logs-oauth-okta-${{ github.run_id }}
-          path: ${{ github.workspace }}/docker-compose.log
+          label: oauth-okta
+          compose-files: >-
+            -f docker-compose.yml
+            -f docker-compose.dev.yml
+            -f docker-compose.mcp-oauth-test.yml
+            -f docker-compose.mcp-api-key-test.yml
+            -f docker-compose.mcp-per-user-key-test.yml
 
   playwright-tests-lite:
     needs: [build-web-image, build-backend-image]
@@ -775,27 +713,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        with:
-          bun-version: "1.3.13"
-
-      - name: Install node dependencies
-        working-directory: ./web
-        run: bun install --frozen-lockfile
-
-      - name: Cache playwright cache
-        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-bun-${{ hashFiles('web/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-bun-
-
-      - name: Install playwright browsers
-        working-directory: ./web
-        run: bunx playwright install chromium
+      - name: Setup Playwright (web)
+        uses: ./.github/actions/setup-playwright-web
 
       - name: Setup test license
         uses: ./.github/actions/setup-test-license
@@ -840,28 +759,18 @@ jobs:
         working-directory: ./web
         run: bunx playwright test --project lite
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - name: Upload Playwright results
         if: always()
+        uses: ./.github/actions/upload-playwright-results
         with:
-          name: playwright-test-results-lite-${{ github.run_id }}
-          path: ./web/output/playwright/
-          retention-days: 30
+          label: lite
+          upload-screenshots: "false"
 
       - name: Save Docker logs
         if: success() || failure()
-        env:
-          WORKSPACE: ${{ github.workspace }}
-        run: |
-          cd deployment/docker_compose
-          docker compose logs > docker-compose.log
-          mv docker-compose.log ${WORKSPACE}/docker-compose.log
-
-      - name: Upload logs
-        if: success() || failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: ./.github/actions/save-docker-logs
         with:
-          name: docker-logs-lite-${{ github.run_id }}
-          path: ${{ github.workspace }}/docker-compose.log
+          label: lite
 
   # Post a single combined visual regression comment after all matrix jobs finish
   visual-regression-comment:
