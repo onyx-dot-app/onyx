@@ -1,0 +1,34 @@
+/* Comet edge — see CometEdge.tsx. Dash is normalized to pathLength=100. */
+
+@keyframes craft-comet-travel {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+.craft-comet {
+  fill: none;
+  stroke: var(--comet-color, var(--status-info-05));
+  stroke-width: 1;
+  stroke-linecap: round;
+  /* 16 + 84 = 100: one comet per lap. */
+  stroke-dasharray: 16 84;
+  animation: craft-comet-travel var(--comet-speed, 3.6s) linear infinite;
+  transition: opacity 0.45s ease;
+}
+
+/* Settled: solid colored edge, no travel. */
+.craft-comet-static {
+  fill: none;
+  stroke: var(--comet-settle-color, var(--status-success-05));
+  stroke-width: 1;
+  transition: opacity 0.45s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .craft-comet {
+    animation: none;
+    /* Longer static segment so the live state still reads. */
+    stroke-dasharray: 34 66;
+  }
+}

@@ -53,17 +53,19 @@ function BasicDemo() {
         >
           <DemoSidebar folded={folded} />
         </RootLayout.Sidebar>
-        <RootLayout.MainContent>
-          <div className="h-full flex flex-col items-center justify-center gap-3">
-            <DemoContent label="Main content" />
-            <button
-              className="px-3 py-1.5 rounded-08 bg-background-neutral-03 text-text-02 text-sm"
-              onClick={() => setFolded((p) => !p)}
-            >
-              Toggle sidebar
-            </button>
-          </div>
-        </RootLayout.MainContent>
+        <RootLayout.App>
+          <RootLayout.MainContent>
+            <div className="h-full flex flex-col items-center justify-center gap-3">
+              <DemoContent label="Main content" />
+              <button
+                className="px-3 py-1.5 rounded-08 bg-background-neutral-03 text-text-02 text-sm"
+                onClick={() => setFolded((p) => !p)}
+              >
+                Toggle sidebar
+              </button>
+            </div>
+          </RootLayout.MainContent>
+        </RootLayout.App>
       </RootLayout.Root>
     </div>
   );
@@ -87,9 +89,11 @@ function WithPanelsDemo() {
         <RootLayout.LeftPanel className="w-56 bg-background-neutral-02 border-r border-border-01">
           <DemoContent label="Left panel" />
         </RootLayout.LeftPanel>
-        <RootLayout.MainContent>
-          <DemoContent label="Main content" />
-        </RootLayout.MainContent>
+        <RootLayout.App>
+          <RootLayout.MainContent>
+            <DemoContent label="Main content" />
+          </RootLayout.MainContent>
+        </RootLayout.App>
         <RootLayout.RightPanel className="w-72 bg-background-neutral-02 border-l border-border-01">
           <DemoContent label="Right panel" />
         </RootLayout.RightPanel>
@@ -114,7 +118,7 @@ function WithHeaderFooterDemo() {
         >
           <DemoSidebar folded={folded} />
         </RootLayout.Sidebar>
-        <RootLayout.MainContent>
+        <RootLayout.App>
           <RootLayout.Header>
             <div className="h-12 px-4 border-b border-border-01 bg-background-neutral-01 flex items-center">
               <span className="text-text-02 text-sm font-medium">
@@ -122,9 +126,9 @@ function WithHeaderFooterDemo() {
               </span>
             </div>
           </RootLayout.Header>
-          <div className="flex-1 overflow-auto p-4">
+          <RootLayout.MainContent>
             <DemoContent label="Scrollable page content" />
-          </div>
+          </RootLayout.MainContent>
           <RootLayout.Footer extraPadding={extraPadding}>
             <div className="h-12 px-4 border-t border-border-01 bg-background-neutral-01 flex items-center gap-3">
               <span className="text-text-03 text-xs">App footer</span>
@@ -136,7 +140,7 @@ function WithHeaderFooterDemo() {
               </button>
             </div>
           </RootLayout.Footer>
-        </RootLayout.MainContent>
+        </RootLayout.App>
       </RootLayout.Root>
     </div>
   );
