@@ -37,7 +37,7 @@ handler at `web/src/app/api/[...path]/route.ts`), so **`localhost:3000` serves b
 ## Validating YAML
 
 `pyyaml` is **not installed** here, so `python3 -c 'import yaml'` fails. To validate YAML, use the
-`check-yaml` pre-commit hook instead — it runs in its own env with `pyyaml` available:
+`check-yaml` pre-commit hook instead:
 
 ```bash
 pre-commit run check-yaml --all-files        # all tracked YAML
