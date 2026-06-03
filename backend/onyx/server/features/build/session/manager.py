@@ -95,6 +95,9 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
+from onyx.server.features.build.session.errors import RateLimitError
+from onyx.server.features.build.session.errors import SandboxProvisioningError
+from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.interrupt_signal import clear_interrupt
 from onyx.server.features.build.session.interrupt_signal import is_interrupt_requested
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
@@ -155,14 +158,6 @@ def get_all_build_mode_llm_configs(
             )
         )
     return configs
-
-
-class UploadLimitExceededError(ValueError):
-    """Raised when file upload limits are exceeded."""
-
-
-class SandboxProvisioningError(RuntimeError):
-    """Raised when a sandbox is mid-provision and the caller cannot wait it out."""
 
 
 class BuildStreamingState:
@@ -305,22 +300,6 @@ HIDDEN_PATTERNS = {
     ".env",
     ".gitignore",
 }
-
-
-class RateLimitError(Exception):
-    """Exception raised when rate limit is exceeded."""
-
-    def __init__(
-        self,
-        message: str,
-        messages_used: int,
-        limit: int,
-        reset_timestamp: str | None = None,
-    ):
-        super().__init__(message)
-        self.messages_used = messages_used
-        self.limit = limit
-        self.reset_timestamp = reset_timestamp
 
 
 class SessionManager:
