@@ -51,17 +51,7 @@ OPENCODE_SERVE_READY_TIMEOUT_SECONDS = 30
 OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.25
 
 # How long a new turn waits for the previous turn's slot before giving up.
-# Mostly absorbs the brief window where an interrupted turn is still unwinding
-# (abort → session.idle → terminator) as the next queued message fires.
 PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS = 10.0
-
-# Distributed prompt-slot lock key prefix. Mirrors interrupt_signal._fence_key;
-# tenant isolation is handled by the cache backend's key-prefixing.
-PROMPT_SLOT_PREFIX = "buildpromptslot"
-
-
-def _prompt_slot_key(sandbox_id: UUID, build_session_id: UUID) -> str:
-    return f"{PROMPT_SLOT_PREFIX}_{sandbox_id}_{build_session_id}"
 
 
 @dataclass(frozen=True)
@@ -156,21 +146,18 @@ class _ServeMixin:
         sandbox_id: UUID,
         build_session_id: UUID,
     ) -> Generator[bool, None, None]:
-        """Serialize turns per build session across ``api_server`` replicas.
+        """Serialize turns for a build session across replicas via the cache.
 
-        opencode-serve's ``prompt_async`` is fire-and-forget and not
-        concurrent-safe, so a second in-flight POST corrupts session state
-        (phantom user_message, no assistant reply). Yields True if the slot is
-        acquired within ``PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS``, else False
-        (caller must abort without side effects). Distributed via the
-        tenant-aware cache (mirrors the interrupt fence): auto-expires after a
-        turn's max length so a crashed holder can't pin it, and fails open on
-        cache outage. Key on ``build_session_id``, not ``opencode_session_id``,
-        which can rotate mid-turn via ``on_opencode_session_resolved``.
+        opencode-serve's ``prompt_async`` isn't concurrent-safe, so a second
+        in-flight POST corrupts session state. Yields False if a turn is
+        already in flight (caller aborts without side effects); fails open if
+        the cache is down. Auto-expires after a turn's max length. Keyed on
+        ``build_session_id``, which (unlike the opencode id) is stable per turn.
         """
+        # Tenant isolation is handled by the cache backend's key-prefixing.
         try:
             lock = get_cache_backend().lock(
-                _prompt_slot_key(sandbox_id, build_session_id),
+                f"buildpromptslot_{sandbox_id}_{build_session_id}",
                 timeout=SANDBOX_TURN_TIMEOUT_SECONDS,
             )
             acquired = lock.acquire(
