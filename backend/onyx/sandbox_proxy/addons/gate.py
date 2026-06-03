@@ -227,6 +227,7 @@ class GateAddon:
         # Pre-approval short-circuit: a RUNNING scheduled run granting this
         # app skips the park. Off-thread to keep sync DB work off the event
         # loop; failure falls through to the normal park flow.
+        pre_approved: bool
         try:
             pre_approved = await asyncio.to_thread(self._try_pre_approve, ctx, match)
         except Exception:
