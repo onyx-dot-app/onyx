@@ -55,10 +55,14 @@ import { APP_SLOGAN } from "@/lib/constants";
 function Header() {
   const appFocus = useAppFocus();
   if (appFocus.isSharedChat()) return null;
-  return <HeaderInner />;
+  return <HeaderInner appFocus={appFocus} />;
 }
 
-function HeaderInner() {
+function HeaderInner({
+  appFocus,
+}: {
+  appFocus: ReturnType<typeof useAppFocus>;
+}) {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
@@ -85,7 +89,6 @@ function HeaderInner() {
   const { currentChatSession, refreshChatSessions, removeSession } =
     useChatSessions();
   const router = useRouter();
-  const appFocus = useAppFocus();
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
