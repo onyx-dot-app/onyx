@@ -248,3 +248,15 @@ def test_ca_bundle_mounted_read_only_on_both_containers(pod: client.V1Pod) -> No
         mount = _mount(_container(pod, name), "sandbox-ca-bundle")
         assert mount.read_only is True
         assert mount.mount_path == "/etc/ssl/sandbox"
+
+
+def test_service_exposes_push_daemon_port() -> None:
+    """push/snapshot/health reach the pod via the Service FQDN, so the
+    push-daemon port must be exposed on the Service, not just the pod."""
+    mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
+    mgr._namespace = "onyx-sandboxes"  # type: ignore[attr-defined]
+    svc = mgr._create_sandbox_service(  # type: ignore[attr-defined]
+        sandbox_id="abc12345-abcd-abcd-abcd-abcdef123456",
+        tenant_id="t-1",
+    )
+    assert PUSH_DAEMON_PORT in {p.port for p in svc.spec.ports}

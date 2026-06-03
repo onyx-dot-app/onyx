@@ -75,6 +75,7 @@ from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_LIMIT
 from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_REQUEST
 from onyx.server.features.build.configs import SANDBOX_PROXY_CA_CONFIGMAP
 from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
+from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
@@ -151,8 +152,8 @@ _PROXY_ALIAS = "sandbox-proxy"
 _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
 
 
-_PROXY_DNS_RETRY_ATTEMPTS = 5
-_PROXY_DNS_RETRY_BACKOFF_S = 0.5
+_PROXY_RESOLVE_RETRY_ATTEMPTS = 5
+_PROXY_RESOLVE_RETRY_BACKOFF_S = 0.5
 
 
 # Loopback only: the firewall permits nothing else to bypass the proxy, and the
@@ -2027,7 +2028,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         logger.info("Session configuration files regenerated")
 
     def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
-        """Check the sidecar's /health, trying each ``_sandbox_pod_hosts``."""
+        """Check whether the sidecar's /health endpoint responds."""
         for host in self._sandbox_pod_hosts(sandbox_id):
             url = f"http://{host}:{PUSH_DAEMON_PORT}/health"
             try:
@@ -2053,9 +2054,9 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         )
 
     def _serve_health_check_base_url(self, sandbox_id: UUID) -> str | None:
-        """Probe the pod IP, not the Service FQDN ``base_url`` — an
-        out-of-cluster caller (CI test process) can't resolve cluster DNS.
-        ``None`` falls back to ``base_url`` until the IP is assigned."""
+        """Pod-IP fallback probe candidate for the readiness wait: out-of-cluster
+        CI routes pod IPs but can't resolve the Service FQDN. ``None`` until the
+        pod IP is assigned."""
         pod_name = self._get_pod_name(str(sandbox_id))
         try:
             pod_ip = self._get_pod_ip(pod_name)
@@ -2741,24 +2742,23 @@ fi
         host = SANDBOX_PROXY_HOST
         if re.match(r"^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$", host):
             return host
-        name, _, rest = host.partition(".")
-        namespace = rest.partition(".")[0] or self._namespace
+        name = host.partition(".")[0]
         last_err: Exception | None = None
-        for attempt in range(_PROXY_DNS_RETRY_ATTEMPTS):
+        for attempt in range(_PROXY_RESOLVE_RETRY_ATTEMPTS):
             try:
                 cluster_ip = self._core_api.read_namespaced_service(
-                    name=name, namespace=namespace
+                    name=name, namespace=SANDBOX_PROXY_NAMESPACE
                 ).spec.cluster_ip
                 if cluster_ip and cluster_ip != "None":
                     return cluster_ip
                 last_err = RuntimeError(f"Service {name} has no ClusterIP")
             except ApiException as e:
                 last_err = e
-            if attempt < _PROXY_DNS_RETRY_ATTEMPTS - 1:
-                time.sleep(_PROXY_DNS_RETRY_BACKOFF_S * (2**attempt))
+            if attempt < _PROXY_RESOLVE_RETRY_ATTEMPTS - 1:
+                time.sleep(_PROXY_RESOLVE_RETRY_BACKOFF_S * (2**attempt))
         raise RuntimeError(
             f"failed to resolve proxy ClusterIP for SANDBOX_PROXY_HOST={host!r} "
-            f"after {_PROXY_DNS_RETRY_ATTEMPTS} attempts: {last_err}"
+            f"after {_PROXY_RESOLVE_RETRY_ATTEMPTS} attempts: {last_err}"
         )
 
     def _get_pod_ip(self, pod_name: str) -> str:
@@ -2793,9 +2793,7 @@ fi
     def _post_to_sidecar(
         self, sandbox_id: UUID, endpoint_path: str, body: bytes, timeout: float = 30.0
     ) -> httpx.Response:
-        """POST a signed JSON request to the sidecar, trying each
-        ``_sandbox_pod_hosts`` until one connects; re-raises the last transport
-        error if none do."""
+        """POST a signed JSON request to the sidecar."""
         sha256_hex = hashlib.sha256(body).hexdigest()
         sig_b64, ts = _sign_sidecar_request(endpoint_path, sha256_hex)
         headers = {
@@ -2820,8 +2818,7 @@ fi
         mount_path: str,
         files: FileSet,
     ) -> None:
-        """Build tar.gz, POST to the in-pod daemon, trying each
-        ``_sandbox_pod_hosts`` until one connects."""
+        """Build tar.gz, POST to the in-pod daemon."""
         pod_name = self._get_pod_name(sandbox_id)
         tar_bytes, sha256_hex = _build_targz(files)
         sig_b64, ts = _sign_sidecar_request(mount_path, sha256_hex)

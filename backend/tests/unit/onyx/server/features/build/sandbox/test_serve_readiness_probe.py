@@ -42,11 +42,7 @@ class _FakeManager(_ServeMixin):
 
 
 def test_ready_via_service_dns(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Telepresence path: Service FQDN answers, pod IP would refuse → ready.
-
-    FQDN is the preferred candidate, so a green FQDN probe returns without ever
-    needing the (unroutable-under-telepresence) pod IP.
-    """
+    """FQDN answers, pod IP would refuse → ready via the preferred candidate."""
     probed: list[str] = []
 
     def fake_health_check(self: OpencodeServeClient) -> bool:
@@ -65,11 +61,7 @@ def test_ready_via_service_dns(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_ready_via_pod_ip_when_dns_unresolvable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """CI path: Service FQDN can't resolve, pod IP answers → ready.
-
-    Verifies the pod-IP fallback is probed when the FQDN candidate fails, and
-    that an FQDN failure does not abort the wait.
-    """
+    """FQDN unresolvable, pod IP answers → ready via the fallback candidate."""
     probed: list[str] = []
 
     def fake_health_check(self: OpencodeServeClient) -> bool:
@@ -82,7 +74,6 @@ def test_ready_via_pod_ip_when_dns_unresolvable(
 
     mgr = _FakeManager(health_check_url=_POD_IP_URL)
     assert mgr._wait_for_opencode_serve_ready(_SBX, timeout=5.0) is True
-    # FQDN is tried first, pod IP is the fallback.
     assert probed[0] == _SERVICE_URL
     assert _POD_IP_URL in probed
 

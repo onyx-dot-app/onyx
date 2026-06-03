@@ -9,6 +9,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+from kubernetes.client.rest import ApiException
 
 import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
@@ -44,3 +45,49 @@ def test_fqdn_resolved_to_clusterip_via_api(monkeypatch: pytest.MonkeyPatch) -> 
     core_api.read_namespaced_service.assert_called_once_with(
         name="onyx-sandbox-proxy", namespace="onyx"
     )
+
+
+def test_namespace_comes_from_config_not_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The proxy lives in its own namespace; the config must win over whatever
+    # namespace segment the host string happens to embed.
+    monkeypatch.setattr(
+        ksm, "SANDBOX_PROXY_HOST", "onyx-sandbox-proxy.WRONG.svc.cluster.local"
+    )
+    monkeypatch.setattr(ksm, "SANDBOX_PROXY_NAMESPACE", "proxy-ns")
+    mgr, core_api = _mgr()
+    svc = MagicMock()
+    svc.spec.cluster_ip = "10.0.0.5"
+    core_api.read_namespaced_service.return_value = svc
+
+    assert mgr._resolve_proxy_ip() == "10.0.0.5"
+    core_api.read_namespaced_service.assert_called_once_with(
+        name="onyx-sandbox-proxy", namespace="proxy-ns"
+    )
+
+
+def test_missing_clusterip_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        ksm, "SANDBOX_PROXY_HOST", "onyx-sandbox-proxy.onyx.svc.cluster.local"
+    )
+    monkeypatch.setattr(ksm, "_PROXY_RESOLVE_RETRY_ATTEMPTS", 1)
+    mgr, core_api = _mgr()
+    svc = MagicMock()
+    svc.spec.cluster_ip = None
+    core_api.read_namespaced_service.return_value = svc
+
+    with pytest.raises(RuntimeError, match="ClusterIP"):
+        mgr._resolve_proxy_ip()
+
+
+def test_api_error_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        ksm, "SANDBOX_PROXY_HOST", "onyx-sandbox-proxy.onyx.svc.cluster.local"
+    )
+    monkeypatch.setattr(ksm, "_PROXY_RESOLVE_RETRY_ATTEMPTS", 1)
+    mgr, core_api = _mgr()
+    core_api.read_namespaced_service.side_effect = ApiException(
+        status=500, reason="boom"
+    )
+
+    with pytest.raises(RuntimeError, match="failed to resolve proxy ClusterIP"):
+        mgr._resolve_proxy_ip()
