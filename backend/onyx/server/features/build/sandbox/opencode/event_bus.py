@@ -259,11 +259,10 @@ class PodEventBus:
                     self._dispatch(evt)
 
     def _refresh_auth_on_401(self) -> None:
-        """Reload auth so the ensuing reconnect uses the rotated password.
-        No-op when the reloaded credential is unchanged (a genuine auth
-        failure, not a rotation) so we don't log a misleading "reloaded" on
-        every reconnect before the bus self-closes. Best-effort: a failed
-        reload leaves auth unchanged."""
+        """Reload auth so the next reconnect uses the rotated password. No-op
+        when the credential is unchanged (genuine auth failure) to avoid a
+        misleading log on every reconnect. Best-effort: failed reload keeps
+        the current auth."""
         if self._reload_auth is None:
             return
         try:
@@ -341,10 +340,8 @@ class PodEventBus:
 
 
 def _auth_token(auth: httpx.Auth | None) -> str | None:
-    """Render an ``httpx.Auth`` to its Authorization header for value
-    comparison. ``httpx.Auth`` has no ``__eq__``, so we drive its public
-    ``auth_flow`` over a throwaway request — scheme-agnostic and not tied to
-    any private attribute. ``None`` if there's no auth or it sets no header."""
+    """Render auth to its Authorization header for comparison — ``httpx.Auth``
+    has no ``__eq__``, so drive its public ``auth_flow`` over a dummy request."""
     if auth is None:
         return None
     try:
