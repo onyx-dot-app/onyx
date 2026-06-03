@@ -180,11 +180,9 @@ export default function MCPAuthenticationModal({
       } else {
         setActiveAuthTab("per-user");
       }
-      if (
+      setAdvancedOpen(
         fullServer.oauth_provider_mode === MCPOAuthProviderMode.KNOWN_PROVIDER
-      ) {
-        setAdvancedOpen(true);
-      }
+      );
     }
   }, [fullServer]);
 
@@ -392,12 +390,16 @@ export default function MCPAuthenticationModal({
   };
 
   const handleSubmit = async (values: MCPAuthFormValues) => {
-    const serverData = constructServerData(values);
-    if (!serverData || !mcpServer) return;
+    if (!mcpServer) return;
 
     setIsSubmitting(true);
 
     try {
+      // constructServerData throws on invalid oauth_additional_auth_params JSON;
+      // keep it inside the try so the catch surfaces a toast.
+      const serverData = constructServerData(values);
+      if (!serverData) return;
+
       const authType = values.auth_type;
       // Step 1: Save the authentication configuration to the MCP server
       const { data: serverResult, error: serverError } =
