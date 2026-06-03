@@ -243,28 +243,56 @@ class _ServeMixin:
     ) -> bool:
         """Block until opencode-serve answers ``GET /doc`` with 200. Backend
         Ready only proves the supervisor is up; opencode binds :4096 a few
-        seconds later."""
+        seconds later.
+
+        On a 401 the cached password is stale (pod re-provisioned with a fresh
+        Secret); drop the cache, reload, and rebuild the probe client once.
+        Provision-time counterpart to the per-request heal in ``_request`` /
+        ``PodEventBus._refresh_auth_on_401``, which run only after readiness."""
         info = self._serve_connection_info(sandbox_id)
         probe_base_url = self._serve_health_check_base_url(sandbox_id) or info.base_url
         # One client across all polls — saves connect-setup churn while the
         # server is actively refusing connections.
-        with OpencodeServeClient(
+        client = OpencodeServeClient(
             base_url=probe_base_url, password=info.password, event_bus=None
-        ) as client:
+        )
+        password_reset_done = False
+        try:
             deadline = time.time() + timeout
             last_err = "no probe completed"
             while time.time() < deadline:
                 try:
-                    if client.health_check():
+                    status = client.health_check_status()
+                    if status == 200:
                         logger.info(
                             "[SANDBOX-SERVE] opencode-serve ready for sandbox %s",
                             sandbox_id,
                         )
                         return True
-                    last_err = "health_check returned False"
+                    if status == 401 and not password_reset_done:
+                        password_reset_done = True
+                        refreshed = self._reload_serve_connection_info(sandbox_id)
+                        if refreshed.password != info.password:
+                            logger.warning(
+                                "[SANDBOX-SERVE] opencode-serve returned 401 for "
+                                "sandbox %s; reloaded password and retrying probe "
+                                "with the current credentials",
+                                sandbox_id,
+                            )
+                            info = refreshed
+                            client.close()
+                            client = OpencodeServeClient(
+                                base_url=probe_base_url,
+                                password=info.password,
+                                event_bus=None,
+                            )
+                            continue
+                    last_err = f"health_check returned status={status}"
                 except Exception as e:
                     last_err = f"{type(e).__name__}: {e}"
                 time.sleep(OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS)
+        finally:
+            client.close()
         logger.error(
             "[SANDBOX-SERVE] opencode-serve never became ready for sandbox %s "
             "after %.0fs (last error: %s)",
