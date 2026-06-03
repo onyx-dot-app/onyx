@@ -80,14 +80,14 @@ class TestGetAllBuildModeLlmConfigs:
                 _provider(
                     name="Anthropic",
                     provider="anthropic",
-                    models=[_model("claude-opus-4-7")],
+                    models=[_model("claude-opus-4-8")],
                     api_key="k-anthropic",
                 )
             ]
         )
         assert [(c.provider, c.model_name) for c in configs] == [
             ("openai", "gpt-4o"),
-            ("anthropic", "claude-opus-4-7"),
+            ("anthropic", "claude-opus-4-8"),
         ]
         assert configs[1].api_key == "k-anthropic"
 
@@ -124,13 +124,13 @@ class TestGetAllBuildModeLlmConfigs:
                     provider="anthropic",
                     models=[
                         _model("claude-opus-4-6"),
-                        _model("claude-opus-4-7"),
+                        _model("claude-opus-4-8"),
                         _model("claude-sonnet-4-6"),
                     ],
                 )
             ]
         )
-        assert configs[1].model_name == "claude-opus-4-7"
+        assert configs[1].model_name == "claude-opus-4-8"
 
     def test_uses_first_visible_for_type_without_recommended(self) -> None:
         # A provider type with no recommended-model entry falls back to first visible.
@@ -146,19 +146,21 @@ class TestGetAllBuildModeLlmConfigs:
         assert configs[1].model_name == "gemini-2.5-pro"
 
     def test_skips_hidden_models_when_picking_first(self) -> None:
+        # A provider type without a recommended-model entry falls back to the
+        # first *visible* model, skipping hidden ones.
         configs = _run(
             [
                 _provider(
-                    name="Anthropic",
-                    provider="anthropic",
+                    name="Google",
+                    provider="google",
                     models=[
-                        _model("claude-hidden-1", is_visible=False),
-                        _model("claude-opus-4-7"),
+                        _model("gemini-hidden", is_visible=False),
+                        _model("gemini-2.5-pro"),
                     ],
                 )
             ]
         )
-        assert configs[1].model_name == "claude-opus-4-7"
+        assert configs[1].model_name == "gemini-2.5-pro"
 
     def test_dedupes_when_default_provider_also_in_build_mode_rows(self) -> None:
         """If the default's provider type is also tagged as build-mode, we
@@ -183,7 +185,7 @@ class TestGetAllBuildModeLlmConfigs:
                 _provider(
                     name="Anthropic",
                     provider="anthropic",
-                    models=[_model("claude-opus-4-7")],
+                    models=[_model("claude-opus-4-8")],
                 ),
                 _provider(
                     name="Google",
@@ -194,7 +196,7 @@ class TestGetAllBuildModeLlmConfigs:
         )
         assert [(c.provider, c.model_name) for c in configs] == [
             ("openai", "gpt-4o"),
-            ("anthropic", "claude-opus-4-7"),
+            ("anthropic", "claude-opus-4-8"),
             ("google", "gemini-2.5-pro"),
         ]
 
@@ -242,14 +244,14 @@ class TestGetLlmConfigFallback:
         provider = _provider(
             name="Anthropic",
             provider="anthropic",
-            models=[_model("claude-opus-4-7")],
+            models=[_model("claude-opus-4-8")],
             api_key="k-anthropic",
         )
         with self._patch_providers([provider]):
             config = self._manager().build_llm_configs(self._user(), None, None)[0]
         assert (config.provider, config.model_name) == (
             "anthropic",
-            "claude-opus-4-7",
+            "claude-opus-4-8",
         )
         assert config.api_key == "k-anthropic"
 
@@ -326,7 +328,7 @@ class TestGetLlmConfigFallback:
         with self._patch_providers(
             [
                 _provider(
-                    name="a", provider="anthropic", models=[_model("claude-opus-4-7")]
+                    name="a", provider="anthropic", models=[_model("claude-opus-4-8")]
                 )
             ]
         ):
@@ -335,7 +337,7 @@ class TestGetLlmConfigFallback:
             )[0]
         assert (config.provider, config.model_name) == (
             "anthropic",
-            "claude-opus-4-7",
+            "claude-opus-4-8",
         )
 
 
