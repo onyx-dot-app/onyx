@@ -305,8 +305,11 @@ jobs:
           INTEGRATION_TESTS_MODE=true
           MCP_SERVER_ENABLED=true
           # The MCP client tests register a mock MCP server on a private/loopback
-          # host (TEST_WEB_HOSTNAME); opt in so the SSRF guard allows it.
+          # host (TEST_WEB_HOSTNAME); opt in so the SSRF guard allows it. Loopback
+          # needs its own gate on top of the private one; cloud-metadata stays
+          # blocked regardless.
           MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
+          MCP_SERVER_ALLOW_LOOPBACK=true
           AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
           ENABLE_CRAFT=true
           # Lowered upload/bundle caps so cap-enforcement tests can use

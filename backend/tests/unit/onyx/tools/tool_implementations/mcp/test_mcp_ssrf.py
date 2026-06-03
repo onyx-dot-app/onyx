@@ -1,8 +1,9 @@
 """Guards the SSRF policy for outbound MCP traffic: internal targets are blocked
-by default; the private-network opt-in re-opens RFC1918 *and* loopback (a local/
-sidecar MCP server is legitimate) while still blocking cloud-metadata/link-local
-and unspecified; the httpx transport validates every hop; and the store-time
-error message steers operators to the right remedy."""
+by default; the private-network opt-in re-opens RFC1918 but loopback needs its
+own MCP_SERVER_ALLOW_LOOPBACK gate (it reaches the app host itself), while
+cloud-metadata/link-local and unspecified stay blocked under both opt-ins; the
+httpx transport validates every hop; and the store-time error message steers
+operators to the right remedy."""
 
 import asyncio
 
@@ -35,10 +36,8 @@ PUBLIC_HOSTS = [
     "https://1.1.1.1/mcp",
 ]
 
-# Never reachable, even with the opt-in on.
+# Never reachable, even with both opt-ins on.
 ALWAYS_BLOCKED = NAMED_BLOCKED + METADATA_AND_UNSPECIFIED
-# Internal but reachable once the operator opts in.
-OPT_IN_ALLOWED = LOOPBACK + PRIVATE_HOSTS
 
 
 def _allow_private(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -46,7 +45,14 @@ def _allow_private(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(api, "MCP_SERVER_ALLOW_PRIVATE_NETWORK", True)
 
 
-@pytest.mark.parametrize("url", ALWAYS_BLOCKED + OPT_IN_ALLOWED)
+def _allow_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Loopback also requires the private-network opt-in to take effect.
+    _allow_private(monkeypatch)
+    monkeypatch.setattr(mcp_ssrf, "MCP_SERVER_ALLOW_LOOPBACK", True)
+    monkeypatch.setattr(api, "MCP_SERVER_ALLOW_LOOPBACK", True)
+
+
+@pytest.mark.parametrize("url", ALWAYS_BLOCKED + LOOPBACK + PRIVATE_HOSTS)
 def test_validate_blocks_internal_by_default(url: str) -> None:
     with pytest.raises(SSRFException):
         mcp_ssrf.validate_mcp_outbound_url(url)
@@ -57,11 +63,30 @@ def test_validate_allows_public(url: str) -> None:
     assert mcp_ssrf.validate_mcp_outbound_url(url) == url
 
 
-@pytest.mark.parametrize("url", OPT_IN_ALLOWED)
-def test_opt_in_allows_private_and_loopback(
+@pytest.mark.parametrize("url", PRIVATE_HOSTS)
+def test_private_opt_in_allows_private(
     url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _allow_private(monkeypatch)
+    assert mcp_ssrf.validate_mcp_outbound_url(url) == url
+
+
+@pytest.mark.parametrize("url", LOOPBACK)
+def test_private_opt_in_alone_still_blocks_loopback(
+    url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Loopback reaches the app host itself, so the private-network opt-in alone
+    must not unblock it — it needs the dedicated MCP_SERVER_ALLOW_LOOPBACK gate."""
+    _allow_private(monkeypatch)
+    with pytest.raises(SSRFException):
+        mcp_ssrf.validate_mcp_outbound_url(url)
+
+
+@pytest.mark.parametrize("url", LOOPBACK)
+def test_loopback_opt_in_allows_loopback(
+    url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _allow_loopback(monkeypatch)
     assert mcp_ssrf.validate_mcp_outbound_url(url) == url
 
 
@@ -69,7 +94,7 @@ def test_opt_in_allows_private_and_loopback(
 def test_opt_in_still_blocks_metadata_and_named_hosts(
     url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _allow_private(monkeypatch)
+    _allow_loopback(monkeypatch)
     with pytest.raises(SSRFException):
         mcp_ssrf.validate_mcp_outbound_url(url)
 
@@ -106,23 +131,33 @@ def test_error_hint_for_never_allowed_omits_env_var(url: str) -> None:
     assert "MCP_SERVER_ALLOW_PRIVATE_NETWORK" not in detail
 
 
-@pytest.mark.parametrize("url", ["http://10.0.0.5/mcp", "http://127.0.0.1:8010/mcp"])
-def test_error_hint_for_opt_in_able_points_at_env_var(url: str) -> None:
-    """Private and loopback hosts *can* be opted into, so the message should
-    point at the env var rather than saying they're never permitted."""
+def test_error_hint_for_private_points_at_private_var() -> None:
     with pytest.raises(OnyxError) as exc_info:
-        api._validate_mcp_server_url(url, "server_url", require_https=False)
+        api._validate_mcp_server_url(
+            "http://10.0.0.5/mcp", "server_url", require_https=False
+        )
     detail = exc_info.value.detail
     assert "MCP_SERVER_ALLOW_PRIVATE_NETWORK=true" in detail
+    assert "never permitted" not in detail
+
+
+def test_error_hint_for_loopback_points_at_loopback_var() -> None:
+    """Loopback is opt-in-able via its own gate, so steer the operator there."""
+    with pytest.raises(OnyxError) as exc_info:
+        api._validate_mcp_server_url(
+            "http://127.0.0.1:8010/mcp", "server_url", require_https=False
+        )
+    detail = exc_info.value.detail
+    assert "MCP_SERVER_ALLOW_LOOPBACK=true" in detail
     assert "never permitted" not in detail
 
 
 def test_store_time_allows_loopback_when_opted_in(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Mirrors the integration test: with the opt-in on, a loopback MCP server
+    """Mirrors the integration test: with both opt-ins on, a loopback MCP server
     URL saves cleanly (the fetch-time transport guard applies the same policy)."""
-    _allow_private(monkeypatch)
+    _allow_loopback(monkeypatch)
     api._validate_mcp_server_url(
         "http://127.0.0.1:8010/mcp", "server_url", require_https=False
     )

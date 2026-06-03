@@ -712,6 +712,15 @@ MCP_SERVER_ALLOW_PRIVATE_NETWORK = (
     os.environ.get("MCP_SERVER_ALLOW_PRIVATE_NETWORK", "false").lower() == "true"
 )
 
+# Separately allow loopback (127.0.0.0/8, ::1) targets. Loopback reaches the app
+# host itself (its admin APIs, sidecars, other localhost services), so it stays
+# blocked even under MCP_SERVER_ALLOW_PRIVATE_NETWORK unless explicitly opted in.
+# Requires the private-network opt-in above to take effect. Used by our tests'
+# local mock MCP servers; cloud-metadata/link-local stay blocked regardless.
+MCP_SERVER_ALLOW_LOOPBACK = (
+    os.environ.get("MCP_SERVER_ALLOW_LOOPBACK", "false").lower() == "true"
+)
+
 HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY = os.environ.get(
     "HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY",
     HtmlBasedConnectorTransformLinksStrategy.STRIP,

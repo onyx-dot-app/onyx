@@ -32,6 +32,7 @@ from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
+from onyx.configs.app_configs import MCP_SERVER_ALLOW_LOOPBACK
 from onyx.configs.app_configs import MCP_SERVER_ALLOW_PRIVATE_NETWORK
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
@@ -100,32 +101,42 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
+_SSRF_HINT_NEVER_ALLOWED = (
+    " localhost, unspecified, and link-local/cloud-metadata addresses are never "
+    "permitted; use a loopback or private-network address instead."
+)
+
+
 def _ssrf_error_hint(url: str, error: Exception) -> str:
-    """Suffix steering the operator to the right remedy: point at the opt-in only
-    when it would actually unblock the host. Link-local/metadata, unspecified, and
-    BLOCKED_HOSTNAMES (e.g. localhost) are never reachable, so suggest a different
-    address instead; scheme errors get no address hint."""
+    """Suffix steering the operator to the right opt-in for a blocked host:
+    loopback → MCP_SERVER_ALLOW_LOOPBACK, other private → ALLOW_PRIVATE_NETWORK.
+    Link-local/metadata, unspecified, and BLOCKED_HOSTNAMES (e.g. localhost) are
+    never reachable, so suggest a different address; scheme errors get no hint.
+    Only literal IPs are classified — store-time validation doesn't resolve
+    hostnames, so a bare name can't reach the address-specific branches."""
     if "scheme" in str(error).lower():
         return ""
     host = (urlparse(url).hostname or "").lower()
-    never_allowed = host in BLOCKED_HOSTNAMES
-    if not never_allowed:
-        try:
-            ip = ipaddress.ip_address(host)
-            never_allowed = ip.is_unspecified or ip.is_link_local
-        except ValueError:
-            pass
-    if never_allowed:
-        return (
-            " localhost, unspecified, and link-local/cloud-metadata addresses "
-            "are never permitted; use a loopback or private-network address "
-            "instead."
-        )
+    if host in BLOCKED_HOSTNAMES:
+        return _SSRF_HINT_NEVER_ALLOWED
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return ""
+    if ip.is_unspecified or ip.is_link_local:
+        return _SSRF_HINT_NEVER_ALLOWED
+    if ip.is_loopback:
+        if not MCP_SERVER_ALLOW_LOOPBACK:
+            return (
+                " To allow a loopback MCP server, set MCP_SERVER_ALLOW_LOOPBACK=true "
+                "(also requires MCP_SERVER_ALLOW_PRIVATE_NETWORK=true)."
+            )
+        return ""
     if not MCP_SERVER_ALLOW_PRIVATE_NETWORK:
         return (
-            " To allow an MCP server on a loopback or private network, set "
-            "MCP_SERVER_ALLOW_PRIVATE_NETWORK=true (cloud-metadata and link-local "
-            "addresses remain blocked)."
+            " To allow an MCP server on a private network, set "
+            "MCP_SERVER_ALLOW_PRIVATE_NETWORK=true (loopback needs "
+            "MCP_SERVER_ALLOW_LOOPBACK; cloud-metadata stays blocked)."
         )
     return ""
 
