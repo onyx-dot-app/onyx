@@ -1346,7 +1346,7 @@ auth:
   # Generate with: python3 -c "import base64; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey as K; from cryptography.hazmat.primitives.serialization import *; print(base64.b64encode(K.generate().private_bytes(Encoding.Raw,PrivateFormat.Raw,NoEncryption())).decode())"
   sandboxPushSecret:
     enabled: false
-    allPods: false  # Only inject into API server pods
+    allPods: false  # Restricted: only injected into pods that provision sandboxes (API server + scheduled-tasks worker)
     secretName: 'onyx-sandbox-push-secret'
     existingSecret: ""
     secretKeys:
