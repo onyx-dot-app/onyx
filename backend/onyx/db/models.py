@@ -5196,6 +5196,57 @@ class TenantUsage(Base):
     )
 
 
+class UserUsage(Base):
+    """
+    Per-user LLM usage ledger within a time window — the source of truth for
+    per-user cost/token attribution and budget checks.
+
+    One row per (user, window, model, flow, provider); windows match the
+    tenant-usage alignment so per-user and per-tenant totals reconcile.
+    """
+
+    __tablename__ = "user_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    window_start: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    flow: Mapped[str] = mapped_column(String, nullable=False)
+    provider: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost_cents: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        # Upsert key: accumulate into one row per dimension tuple per window.
+        # The migration creates this index NULLS NOT DISTINCT (PG15+) so rows
+        # with provider IS NULL still collide; the kwarg isn't expressible on
+        # this SQLAlchemy version, so model-side it's a plain unique index.
+        Index(
+            "uq_user_usage_dims",
+            "user_id",
+            "window_start",
+            "model",
+            "flow",
+            "provider",
+            unique=True,
+        ),
+    )
+
+
 """Tables related to Build Mode (CLI Agent Platform)"""
 
 
