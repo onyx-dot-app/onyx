@@ -97,21 +97,31 @@ export function FlowCanvas({
     );
   }, []);
 
-  const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+  // Bound by hand rather than through `onWheel`. React registers wheel
+  // listeners as passive, so `preventDefault` there is ignored with a console
+  // warning and the page scrolls away underneath the zoom.
+  useEffect(() => {
     const container = containerRef.current;
     if (container === null) return;
-    event.preventDefault();
 
-    const bounds = container.getBoundingClientRect();
-    const factor = event.deltaY < 0 ? 1 + ZOOM_STEP : 1 - ZOOM_STEP;
-    setViewport((current) =>
-      zoomAround(
-        current,
-        factor,
-        event.clientX - bounds.left,
-        event.clientY - bounds.top
-      )
-    );
+    function onWheel(event: WheelEvent) {
+      if (container === null) return;
+      event.preventDefault();
+
+      const bounds = container.getBoundingClientRect();
+      const factor = event.deltaY < 0 ? 1 + ZOOM_STEP : 1 - ZOOM_STEP;
+      setViewport((current) =>
+        zoomAround(
+          current,
+          factor,
+          event.clientX - bounds.left,
+          event.clientY - bounds.top
+        )
+      );
+    }
+
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => container.removeEventListener("wheel", onWheel);
   }, []);
 
   const panOrigin = useRef<{ x: number; y: number } | null>(null);
@@ -170,7 +180,6 @@ export function FlowCanvas({
         data-testid="flow-canvas"
         role="presentation"
         className="w-full h-full touch-none cursor-grab active:cursor-grabbing"
-        onWheel={handleWheel}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={endPan}
@@ -254,6 +263,7 @@ export function FlowCanvas({
           size="sm"
           icon={SvgMinus}
           tooltip={t("controls.zoomOut")}
+          aria-label={t("controls.zoomOut")}
           onClick={() => zoomBy(1 - ZOOM_STEP)}
         />
         <Text font="figure-small-value" color="text-03">
@@ -265,6 +275,7 @@ export function FlowCanvas({
           size="sm"
           icon={SvgPlus}
           tooltip={t("controls.zoomIn")}
+          aria-label={t("controls.zoomIn")}
           onClick={() => zoomBy(1 + ZOOM_STEP)}
         />
         <Button
@@ -273,6 +284,7 @@ export function FlowCanvas({
           size="sm"
           icon={SvgExpand}
           tooltip={t("controls.fit")}
+          aria-label={t("controls.fit")}
           onClick={fitToView}
         />
       </div>
