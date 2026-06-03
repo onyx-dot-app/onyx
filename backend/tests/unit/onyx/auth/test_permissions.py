@@ -15,6 +15,7 @@ from onyx.auth.permissions import IMPLIED_PERMISSIONS
 from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
 from onyx.auth.permissions import require_permission
 from onyx.auth.permissions import resolve_effective_permissions
+from onyx.auth.users import get_anonymous_user
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -280,6 +281,31 @@ class TestRequirePermission:
         dep = require_permission(Permission.READ_SEARCH)
         with pytest.raises(OnyxError):
             await dep(request=_request([]), user=user)
+
+
+class TestAnonymousUserPermissions:
+    def test_anonymous_user_resolves_to_basic_scopes(self) -> None:
+        assert get_effective_permissions(get_anonymous_user()) == {
+            Permission.BASIC_ACCESS,
+            Permission.READ_SEARCH,
+            Permission.READ_CHAT,
+            Permission.WRITE_CHAT,
+        }
+
+    @pytest.mark.asyncio
+    async def test_allow_anonymous_admits_anonymous_user(self) -> None:
+        anon = get_anonymous_user()
+        dep = require_permission(Permission.WRITE_CHAT, allow_anonymous=True)
+        assert await dep(request=_request(None), user=anon) is anon
+
+    @pytest.mark.asyncio
+    async def test_allow_anonymous_still_caps_scoped_token(self) -> None:
+        user = MagicMock()
+        user.effective_permissions = ["basic"]
+        dep = require_permission(Permission.WRITE_CHAT, allow_anonymous=True)
+        with pytest.raises(OnyxError) as exc_info:
+            await dep(request=_request([Permission.READ_SEARCH]), user=user)
+        assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
 
 # ---------------------------------------------------------------------------

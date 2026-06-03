@@ -62,6 +62,22 @@ class PATManager:
         return raw_token
 
     @staticmethod
+    def scoped_auth_headers(
+        name: str,
+        expiration_days: int | None,
+        user_performing_action: DATestUser,
+        scopes: list[Permission] | None,
+    ) -> dict[str, str]:
+        """Mint a scoped PAT and return its bearer auth headers."""
+        raw_token = PATManager.create_scoped(
+            name=name,
+            expiration_days=expiration_days,
+            user_performing_action=user_performing_action,
+            scopes=scopes,
+        )
+        return PATManager.get_auth_headers(raw_token)
+
+    @staticmethod
     def list(user_performing_action: DATestUser) -> list[DATestPAT]:
         """List all PATs for a user.
 
