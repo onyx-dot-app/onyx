@@ -165,7 +165,7 @@ export function PlusMenuButton({
         />
       </Popover.Trigger>
 
-      <Popover.Content side="top" align="start" width="lg">
+      <Popover.Content side="bottom" align="start" width="lg">
         <Popover.Menu>{menuChildren}</Popover.Menu>
       </Popover.Content>
     </Popover>
