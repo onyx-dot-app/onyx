@@ -1263,17 +1263,14 @@ class KubernetesSandboxManager(SandboxManager):
                     f"Timeout waiting for existing sandbox pod {pod_name} to become ready"
                 )
 
-            # The pod may have been re-provisioned with a fresh opencode Secret
-            # (new HTTP-Basic password) since this api_server process last cached
-            # its connection info. K8s does not propagate Secret updates to a
-            # running container's env, so the cached password would 401 against
-            # the pod forever — the readiness probe below never sees 200 and the
-            # sandbox is stuck "initializing". Drop the stale cache (and clear any
-            # tombstone) so the probe and event buses re-read the current password,
-            # mirroring the re-provision branch below.
+            # We've committed to reusing this live pod, so clear any stale
+            # in-memory tombstone left by a prior terminate in this process —
+            # otherwise event-bus creation would refuse to attach. A stale cached
+            # opencode password is handled separately: the readiness probe below
+            # re-reads it from the Secret on a 401, so a pod re-provisioned with a
+            # fresh Secret heals without intervention here.
             with self._event_buses_lock:
                 self._terminated_sandboxes.discard(sandbox_id)
-            self._invalidate_serve_connection_info(sandbox_id)
 
             if not self._wait_for_opencode_serve_ready(sandbox_id):
                 raise RuntimeError(

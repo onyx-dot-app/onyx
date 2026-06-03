@@ -805,12 +805,20 @@ class OpencodeServeClient:
 
     # ----- session lifecycle ----------------------------------------
 
-    def health_check(self) -> bool:
+    def health_check_status(self) -> int | None:
+        """HTTP status from ``GET /doc``, or ``None`` on transport error.
+
+        Lets the readiness probe tell an auth failure (``401`` — stale Basic
+        password) apart from a pod that simply isn't listening yet
+        (transport error / non-200)."""
         try:
             r = self._http.get("/doc", timeout=self._timeouts.connect_timeout)
-            return r.status_code == 200
+            return r.status_code
         except httpx.HTTPError:
-            return False
+            return None
+
+    def health_check(self) -> bool:
+        return self.health_check_status() == 200
 
     # Cold-pod retry tunables — short window, total worst-case ~1.5s.
     _COLD_POD_RETRIES = 3
