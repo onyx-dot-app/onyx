@@ -14,6 +14,7 @@
  * own CSS — this file covers only library-owned tokens and stylesheets.
  */
 
+@import "./styles/breakpoints.css";
 @import "./styles/colors.css";
 @import "./styles/sizes.css";
 @import "./styles/typography.css";

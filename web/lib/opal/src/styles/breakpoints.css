@@ -1,0 +1,15 @@
+/**
+ * @opal/breakpoints — Content-width tokens for layout centering.
+ *
+ * These are not media-query breakpoints but max-width tokens for
+ * centered content columns. Consumers pick the token that fits the
+ * density of their page (sm for forms, md for most pages, lg/xl for
+ * dashboards and data-heavy layouts).
+ */
+
+:root {
+  --breakpoint-content-sm: 720px; /* narrow — settings, forms         */
+  --breakpoint-content-md: 960px; /* default — most app pages         */
+  --breakpoint-content-lg: 1200px; /* wide — dashboards, agent lists   */
+  --breakpoint-content-xl: 1440px; /* full — data-heavy, split layouts */
+}
