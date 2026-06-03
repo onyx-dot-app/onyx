@@ -1,0 +1,231 @@
+/**
+ * Layout is what the canvas draws, so it is worth pinning down: columns must
+ * follow the graph, edges must always point forward, and the same spec must
+ * lay out the same way twice.
+ */
+
+import {
+  COLUMN_GAP,
+  NODE_WIDTH,
+  layoutFlow,
+  reachableFrom,
+  successorsOf,
+} from "@/app/flows/graphLayout";
+import type {
+  ConditionNode,
+  FlowNode,
+  FlowSpec,
+  TransformNode,
+} from "@/app/flows/types";
+
+function transform(id: string, next: string[] = []): TransformNode {
+  return {
+    id,
+    name: id,
+    kind: "TRANSFORM",
+    next,
+    for_each: null,
+    on_error: "stop",
+    retry: { max_attempts: 1, backoff_seconds: 1 },
+    fields: { value: "1" },
+  };
+}
+
+function condition(
+  id: string,
+  onTrue: string[],
+  onFalse: string[]
+): ConditionNode {
+  return {
+    id,
+    name: id,
+    kind: "CONDITION",
+    next: [],
+    for_each: null,
+    on_error: "stop",
+    retry: { max_attempts: 1, backoff_seconds: 1 },
+    left: "{{ trigger.x }}",
+    operator: "eq",
+    right: "1",
+    on_true: onTrue,
+    on_false: onFalse,
+  };
+}
+
+function spec(start: string, nodes: FlowNode[]): FlowSpec {
+  return { spec_version: 1, start, nodes };
+}
+
+function columnOf(layout: ReturnType<typeof layoutFlow>, id: string): number {
+  const found = layout.nodes.find((entry) => entry.node.id === id);
+  if (found === undefined) throw new Error(`no node ${id} in layout`);
+  return found.column;
+}
+
+describe("successorsOf", () => {
+  it("includes both branches of a condition", () => {
+    expect(successorsOf(condition("c", ["a"], ["b"]))).toEqual(["a", "b"]);
+  });
+
+  it("is just next for every other kind", () => {
+    expect(successorsOf(transform("t", ["a", "b"]))).toEqual(["a", "b"]);
+  });
+});
+
+describe("reachableFrom", () => {
+  it("follows both branches", () => {
+    const flow = spec("check", [
+      condition("check", ["yes"], ["no"]),
+      transform("yes"),
+      transform("no"),
+    ]);
+    expect(reachableFrom(flow)).toEqual(new Set(["check", "yes", "no"]));
+  });
+
+  it("leaves out what nothing points at", () => {
+    const flow = spec("a", [transform("a"), transform("orphan")]);
+    expect(reachableFrom(flow)).toEqual(new Set(["a"]));
+  });
+
+  it("does not loop forever on a malformed cycle", () => {
+    // The server rejects cycles, but the canvas must survive one arriving.
+    const flow = spec("a", [transform("a", ["b"]), transform("b", ["a"])]);
+    expect(reachableFrom(flow)).toEqual(new Set(["a", "b"]));
+  });
+});
+
+describe("layoutFlow", () => {
+  it("puts a chain in consecutive columns", () => {
+    const layout = layoutFlow(
+      spec("a", [transform("a", ["b"]), transform("b", ["c"]), transform("c")])
+    );
+
+    expect(columnOf(layout, "a")).toBe(0);
+    expect(columnOf(layout, "b")).toBe(1);
+    expect(columnOf(layout, "c")).toBe(2);
+  });
+
+  it("gives a diamond's branches the same column and the join the next", () => {
+    const layout = layoutFlow(
+      spec("split", [
+        transform("split", ["left", "right"]),
+        transform("left", ["join"]),
+        transform("right", ["join"]),
+        transform("join"),
+      ])
+    );
+
+    expect(columnOf(layout, "left")).toBe(columnOf(layout, "right"));
+    expect(columnOf(layout, "join")).toBe(2);
+  });
+
+  it("pushes a join past its longest path, not its shortest", () => {
+    // `join` must clear `slow`, or the edge from it would run backwards.
+    const layout = layoutFlow(
+      spec("start", [
+        transform("start", ["quick", "slow"]),
+        transform("quick", ["join"]),
+        transform("slow", ["slower"]),
+        transform("slower", ["join"]),
+        transform("join"),
+      ])
+    );
+
+    expect(columnOf(layout, "join")).toBe(3);
+  });
+
+  it("never draws an edge that points backwards", () => {
+    const layout = layoutFlow(
+      spec("start", [
+        transform("start", ["a", "b"]),
+        transform("a", ["c"]),
+        transform("b", ["c"]),
+        transform("c", ["d"]),
+        transform("d"),
+      ])
+    );
+
+    for (const edge of layout.edges) {
+      expect(columnOf(layout, edge.to)).toBeGreaterThan(
+        columnOf(layout, edge.from)
+      );
+    }
+  });
+
+  it("marks branch edges so they can be labelled", () => {
+    const layout = layoutFlow(
+      spec("check", [
+        condition("check", ["yes"], ["no"]),
+        transform("yes"),
+        transform("no"),
+      ])
+    );
+
+    const branches = Object.fromEntries(
+      layout.edges.map((edge) => [edge.to, edge.branch])
+    );
+    expect(branches).toEqual({ yes: "true", no: "false" });
+  });
+
+  it("still places a node nothing reaches, and flags it", () => {
+    const layout = layoutFlow(spec("a", [transform("a"), transform("orphan")]));
+
+    expect(layout.nodes).toHaveLength(2);
+    const orphan = layout.nodes.find((entry) => entry.node.id === "orphan");
+    expect(orphan?.reachable).toBe(false);
+    expect(layout.nodes.find((entry) => entry.node.id === "a")?.reachable).toBe(
+      true
+    );
+  });
+
+  it("leaves a column gap between neighbours", () => {
+    const layout = layoutFlow(
+      spec("a", [transform("a", ["b"]), transform("b")])
+    );
+
+    const [first, second] = layout.nodes;
+    if (first === undefined || second === undefined) {
+      throw new Error("expected two placed nodes");
+    }
+    expect(second.x - (first.x + NODE_WIDTH)).toBe(COLUMN_GAP);
+  });
+
+  it("is deterministic", () => {
+    const flow = spec("start", [
+      transform("start", ["a", "b"]),
+      transform("a", ["join"]),
+      transform("b", ["join"]),
+      transform("join"),
+    ]);
+
+    const first = layoutFlow(flow);
+    const second = layoutFlow(flow);
+    expect(JSON.stringify(first)).toEqual(JSON.stringify(second));
+  });
+
+  it("sizes the canvas around its content", () => {
+    const layout = layoutFlow(
+      spec("a", [transform("a", ["b"]), transform("b")])
+    );
+
+    const furthest = Math.max(...layout.nodes.map((n) => n.x + NODE_WIDTH));
+    expect(layout.width).toBeGreaterThan(furthest);
+    expect(layout.height).toBeGreaterThan(0);
+  });
+
+  it("returns an empty layout for an empty spec", () => {
+    expect(layoutFlow(spec("a", []))).toEqual({
+      nodes: [],
+      edges: [],
+      width: 0,
+      height: 0,
+    });
+  });
+
+  it("ignores an edge to a node that is not in the spec", () => {
+    // Defensive: a truncated payload should not blow up the canvas.
+    const layout = layoutFlow(spec("a", [transform("a", ["ghost"])]));
+    expect(layout.edges).toHaveLength(0);
+    expect(layout.nodes).toHaveLength(1);
+  });
+});
