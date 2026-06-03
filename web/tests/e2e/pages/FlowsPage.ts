@@ -9,6 +9,18 @@
 import { type Locator, type Page, expect } from "@playwright/test";
 
 const LIST_PATH = "/flows";
+
+/** Outcome ring drawn around a step in the run view. */
+export type StepOutcome = "succeeded" | "failed" | "skipped";
+
+// Anchored to class boundaries on purpose. The node card also carries
+// `hover:border-border-02`, so a bare /border-border-02/ matches every card
+// whatever its outcome — an assertion that can never fail.
+const OUTCOME_BORDER: Record<StepOutcome, RegExp> = {
+  succeeded: /(?:^|\s)border-status-success-05(?:\s|$)/,
+  failed: /(?:^|\s)border-status-error-05(?:\s|$)/,
+  skipped: /(?:^|\s)border-border-02(?:\s|$)/,
+};
 const EDITOR_PATH_REGEX = /\/flows\/[0-9a-f-]{36}$/;
 
 /** The step kinds the palette offers, by their button label. */
@@ -31,6 +43,9 @@ export class FlowsPage {
   readonly saveButton: Locator;
   readonly publishButton: Locator;
   readonly activateButton: Locator;
+  readonly testRunButton: Locator;
+  readonly runPanel: Locator;
+  readonly runItems: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -49,6 +64,9 @@ export class FlowsPage {
     this.saveButton = page.getByRole("button", { name: "Save", exact: true });
     this.publishButton = page.getByRole("button", { name: "Publish" });
     this.activateButton = page.getByRole("button", { name: "Activate" });
+    this.testRunButton = page.getByRole("button", { name: "Test run" });
+    this.runPanel = page.locator("aside").last();
+    this.runItems = page.getByTestId("node-run-item");
   }
 
   // ---------------------------------------------------------------------------
@@ -205,5 +223,60 @@ export class FlowsPage {
         message: `zoom should fall below ${percent}%`,
       })
       .toBeLessThan(percent);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Run view
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Select a step on the run view.
+   *
+   * Separate from `selectNode`, which waits for the editor's inspector — the
+   * run view shows a read-only panel instead, so waiting for the inspector
+   * there would just time out.
+   */
+  async selectStepInRun(nodeId: string): Promise<void> {
+    await this.node(nodeId).click();
+  }
+
+  async gotoRun(flowId: string, runId: string): Promise<void> {
+    await this.page.goto(`${LIST_PATH}/${flowId}/runs/${runId}`);
+    await expect(this.canvas).toBeVisible();
+  }
+
+  /** Start a test run from the editor; the page follows the new run. */
+  async startTestRun(): Promise<void> {
+    await this.testRunButton.click();
+    await expect(this.page).toHaveURL(/\/flows\/[0-9a-f-]{36}\/runs\/[0-9a-f-]{36}$/);
+    await expect(this.canvas).toBeVisible();
+  }
+
+  async expectRunStatus(label: string): Promise<void> {
+    await expect(
+      this.page.getByTestId(`run-status-${label}`)
+    ).toBeVisible();
+  }
+
+  /** Each step wears the outcome it had, so the graph reads as the run. */
+  async expectStepOutcome(nodeId: string, outcome: StepOutcome): Promise<void> {
+    await expect(this.node(nodeId)).toHaveClass(OUTCOME_BORDER[outcome]);
+  }
+
+  /** A skipped branch reads as muted rather than alarming. */
+  async expectStepDimmed(nodeId: string): Promise<void> {
+    await expect(this.node(nodeId)).toHaveClass(/opacity-60/);
+  }
+
+  async expectStepNotDimmed(nodeId: string): Promise<void> {
+    await expect(this.node(nodeId)).not.toHaveClass(/opacity-60/);
+  }
+
+  async expectRunItemCount(count: number): Promise<void> {
+    await expect(this.runItems).toHaveCount(count);
+  }
+
+  async expectRunPanelContains(text: string): Promise<void> {
+    await expect(this.runPanel).toContainText(text);
   }
 }
