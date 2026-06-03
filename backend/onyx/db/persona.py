@@ -1203,7 +1203,12 @@ def validate_persona_tools(tools: list[Tool], db_session: Session) -> None:
     for tool in tools:
         if tool.in_code_tool_id is not None:
             tool_cls = get_built_in_tool_by_id(tool.in_code_tool_id)
-            if not tool_cls.is_available(db_session):
+            # Attaching a tool to a persona is a *configuration* action — use
+            # ``is_available_for_configuration`` (not ``is_available``) so that
+            # e.g. internal search can be attached before the first source
+            # finishes indexing. Whether the tool actually runs is re-checked
+            # at chat time via ``is_available``.
+            if not tool_cls.is_available_for_configuration(db_session):
                 raise ValueError(f"Tool {tool.in_code_tool_id} is not available")
 
 

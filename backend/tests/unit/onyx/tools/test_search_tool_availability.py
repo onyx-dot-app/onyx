@@ -84,3 +84,39 @@ def test_runtime_available_once_a_connector_exists() -> None:
     ):
         assert SearchTool.is_available(db_session) is True
         assert SearchTool.is_available_for_configuration(db_session) is True
+
+
+@patch("onyx.configs.app_configs.DISABLE_VECTOR_DB", False)
+def test_persona_can_attach_search_tool_without_any_content() -> None:
+    """Regression: creating an agent with Knowledge enabled before any source is
+    indexed must not be rejected by persona tool validation (this is the same
+    configuration-time action as the editor offering the tool)."""
+    from onyx.db.persona import validate_persona_tools
+
+    db_session = MagicMock(spec=Session)
+    search_tool_row = MagicMock()
+    search_tool_row.in_code_tool_id = "SearchTool"
+
+    patches = _patch_no_indexed_content()
+    for p in patches:
+        p.start()
+    try:
+        # Must not raise
+        validate_persona_tools([search_tool_row], db_session)
+    finally:
+        for p in patches:
+            p.stop()
+
+
+@patch("onyx.configs.app_configs.DISABLE_VECTOR_DB", True)
+def test_persona_cannot_attach_search_tool_when_vector_db_disabled() -> None:
+    import pytest
+
+    from onyx.db.persona import validate_persona_tools
+
+    db_session = MagicMock(spec=Session)
+    search_tool_row = MagicMock()
+    search_tool_row.in_code_tool_id = "SearchTool"
+
+    with pytest.raises(ValueError, match="SearchTool is not available"):
+        validate_persona_tools([search_tool_row], db_session)
