@@ -1,133 +1,67 @@
 import { test, expect } from "@playwright/test";
-import type { Page } from "@playwright/test";
 import { loginAs, apiLogin } from "@tests/e2e/utils/auth";
+import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import {
   startMcpApiKeyServer,
   McpServerProcess,
 } from "@tests/e2e/utils/mcpServer";
+import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
+import { ChatPreferencesPage } from "@tests/e2e/pages/ChatPreferencesPage";
+import { ActionsPopover } from "@tests/e2e/pages/ActionsPopover";
+import { AgentEditorPage } from "@tests/e2e/pages/AgentEditorPage";
 import {
-  getPacketObjectsByType,
-  sendMessageAndCaptureStreamPackets,
-} from "@tests/e2e/utils/chatStream";
+  expectMcpToolInvoked,
+  expectMcpToolNotInvoked,
+} from "@tests/e2e/mcp/mcpToolInvocation";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
 const DEFAULT_PORT = Number(process.env.MCP_API_KEY_TEST_PORT || "8005");
 const MCP_API_KEY_TEST_URL = process.env.MCP_API_KEY_TEST_URL;
 const MCP_ASSERTED_TOOL_NAME = "tool_0";
 
-async function scrollToBottom(page: Page): Promise<void> {
-  try {
-    await page.evaluate(() => {
-      window.scrollTo(0, document.body.scrollHeight);
-    });
-    await page.waitForTimeout(200);
-  } catch {
-    // ignore scrolling failures
-  }
-}
-
-async function ensureOnboardingComplete(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    try {
-      await fetch("/api/user/personalization", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ name: "Playwright User" }),
-      });
-    } catch {
-      // ignore personalization failures
-    }
-  });
-
-  await page.reload();
-  await page.waitForLoadState("networkidle");
-}
-
-const getToolName = (packetObject: Record<string, unknown>): string | null => {
-  const value = packetObject.tool_name;
-  return typeof value === "string" ? value : null;
-};
-
-function getToolPacketCounts(
-  packets: Record<string, unknown>[],
-  toolName: string
-): { start: number; delta: number; debug: number } {
-  const start = getPacketObjectsByType(packets, "custom_tool_start").filter(
-    (packetObject) => getToolName(packetObject) === toolName
-  ).length;
-  const delta = getPacketObjectsByType(packets, "custom_tool_delta").filter(
-    (packetObject) => getToolName(packetObject) === toolName
-  ).length;
-  const debug = getPacketObjectsByType(packets, "tool_call_debug").filter(
-    (packetObject) => getToolName(packetObject) === toolName
-  ).length;
-
-  return { start, delta, debug };
-}
-
-async function fetchMcpToolIdByName(
-  page: Page,
-  serverId: number,
-  toolName: string
-): Promise<number> {
-  const response = await page.request.get(
-    `/api/admin/mcp/server/${serverId}/db-tools`
-  );
-  expect(response.ok()).toBeTruthy();
-  const data = (await response.json()) as {
-    tools?: Array<{ id: number; name: string }>;
-  };
-  const matchedTool = data.tools?.find((tool) => tool.name === toolName);
-  expect(matchedTool?.id).toBeTruthy();
-  return matchedTool!.id;
-}
-
+/**
+ * Default-agent MCP integration for an admin-shared (API key) server.
+ *
+ * Setup (the MCP server + its tools) is provisioned once via the API in
+ * `beforeAll`; tests then drive only the UI surface under test. One UI
+ * "create-flow" test is retained to keep the Add-Server + auth modal covered.
+ */
 test.describe("Default Agent MCP Integration", () => {
   test.describe.configure({ mode: "serial" });
 
   let serverProcess: McpServerProcess | null = null;
-  let serverId: number | null = null;
+  let serverId: number;
   let serverName: string;
   let serverUrl: string;
   let basicUserEmail: string;
   let basicUserPassword: string;
   let createdProviderId: number | null = null;
-  let assertedToolId: number | null = null;
+  let assertedToolId: number;
+  // A throwaway server created by the UI create-flow test; cleaned up in afterAll.
+  let uiServerId: number | null = null;
 
   test.beforeAll(async ({ browser }) => {
-    // Use dockerized server if URL is provided, otherwise start local server
     if (MCP_API_KEY_TEST_URL) {
       serverUrl = MCP_API_KEY_TEST_URL;
-      console.log(
-        `[test-setup] Using dockerized MCP API key server at ${serverUrl}`
-      );
     } else {
-      // Start the MCP API key server locally
       serverProcess = await startMcpApiKeyServer({
         port: DEFAULT_PORT,
         apiKey: API_KEY,
       });
       serverUrl = `http://${serverProcess.address.host}:${serverProcess.address.port}/mcp`;
-      console.log(
-        `[test-setup] MCP API key server started locally at ${serverUrl}`
-      );
     }
 
     serverName = `PW API Key Server ${Date.now()}`;
 
-    // Setup as admin
     const adminContext = await browser.newContext({
       storageState: "admin_auth.json",
     });
-    const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage.request);
+    const adminClient = new OnyxApiClient(adminContext.request);
 
-    // Ensure a public LLM provider exists
     createdProviderId = await adminClient.ensurePublicProvider();
 
-    // Clean up any existing servers with the same URL
+    // Remove any stale servers pointing at the same mock URL.
     try {
       const existingServers = await adminClient.listMcpServers();
       for (const server of existingServers) {
@@ -139,7 +73,21 @@ test.describe("Default Agent MCP Integration", () => {
       console.warn("Failed to cleanup existing MCP servers", error);
     }
 
-    // Create a basic user for testing
+    // Provision the shared server + tools via API (replaces UI-driven setup).
+    serverId = await adminClient.createMcpServerWithAuth({
+      name: serverName,
+      description: "Shared API key MCP server (e2e)",
+      server_url: serverUrl,
+      auth_type: "API_TOKEN",
+      auth_performer: "ADMIN",
+      api_token: API_KEY,
+    });
+    await adminClient.discoverMcpTools(serverId);
+    assertedToolId = await adminClient.findMcpToolId(
+      serverId,
+      MCP_ASSERTED_TOOL_NAME
+    );
+
     basicUserEmail = `pw-basic-user-${Date.now()}@example.com`;
     basicUserPassword = "BasicUserPass123!";
     await adminClient.registerUser(basicUserEmail, basicUserPassword);
@@ -151,672 +99,193 @@ test.describe("Default Agent MCP Integration", () => {
     const adminContext = await browser.newContext({
       storageState: "admin_auth.json",
     });
-    const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage.request);
+    const adminClient = new OnyxApiClient(adminContext.request);
 
     if (createdProviderId !== null) {
       await adminClient.deleteProvider(createdProviderId);
     }
-
+    if (uiServerId) {
+      await adminClient.deleteMcpServer(uiServerId);
+    }
     if (serverId) {
       await adminClient.deleteMcpServer(serverId);
     }
-
     await adminContext.close();
 
-    // Only stop the server if we started it locally
     if (serverProcess) {
       await serverProcess.stop();
     }
   });
 
-  test("Admin configures API key MCP server and adds tools to default agent", async ({
+  test("Admin can create an API key MCP server through the UI", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    console.log(`[test] Starting with server name: ${serverName}`);
+    const adminMcp = new AdminMcpServersPage(page);
+    await adminMcp.goto();
 
-    // Navigate to MCP actions page
-    await page.goto("/admin/actions/mcp");
-    await page.waitForURL("**/admin/actions/mcp**");
-    console.log(`[test] Navigated to MCP actions page`);
-
-    // Click "Add MCP Server" button to open modal
-    await page.getByRole("button", { name: /Add MCP Server/i }).click();
-    await page.waitForTimeout(500); // Wait for modal to appear
-    console.log(`[test] Opened Add MCP Server modal`);
-
-    // Fill basic server info in AddMCPServerModal
-    await page.locator("input#name").fill(serverName);
-    await page.locator("textarea#description").fill("Test API key MCP server");
-    await page.locator("input#server_url").fill(serverUrl);
-    console.log(`[test] Filled basic server details`);
-
-    // Submit the modal to create server
-    const createServerResponsePromise = page.waitForResponse((resp) => {
-      try {
-        const url = new URL(resp.url());
-        return (
-          url.pathname === "/api/admin/mcp/server" &&
-          resp.request().method() === "POST" &&
-          resp.ok()
-        );
-      } catch {
-        return false;
-      }
+    const uiServerName = `${serverName} (UI)`;
+    await adminMcp.openAddServerModal();
+    await adminMcp.fillServerDetails({
+      name: uiServerName,
+      description: "API key MCP server created via UI",
+      url: serverUrl,
     });
-    await page.getByRole("button", { name: "Add Server" }).click();
-    const createServerResponse = await createServerResponsePromise;
-    const createdServer = (await createServerResponse.json()) as {
-      id?: number;
-    };
-    expect(createdServer.id).toBeTruthy();
-    serverId = Number(createdServer.id);
-    expect(serverId).toBeGreaterThan(0);
-    console.log(`[test] Created MCP server with id: ${serverId}`);
-    await page.waitForTimeout(1000); // Wait for modal to close and auth modal to open
-    console.log(`[test] Created MCP server, auth modal should open`);
+    uiServerId = await adminMcp.submitAddServer();
 
-    // MCPAuthenticationModal should now be open - configure API Key authentication
-    await page.waitForTimeout(500); // Ensure modal is fully rendered
+    await adminMcp.selectAuthMethod("API Key");
+    await adminMcp.selectApiKeyTab("admin");
+    await adminMcp.fillApiToken(API_KEY);
+    await adminMcp.clickConnect();
 
-    // Select API Key as authentication method
-    const authMethodSelect = page.getByTestId("mcp-auth-method-select");
-    await authMethodSelect.click();
-    await page.getByRole("option", { name: "API Key" }).click();
-    console.log(`[test] Selected API Key authentication method`);
+    await adminMcp.expectServerCard(uiServerName);
+    await adminMcp.refreshTools();
 
-    await page.waitForTimeout(500); // Wait for tabs to appear
-
-    // The modal now shows tabs - select "Shared Key (Admin)" tab
-    const adminTab = page.getByRole("tab", { name: /Shared Key.*Admin/i });
-    await expect(adminTab).toBeVisible({ timeout: 5000 });
-    await adminTab.click();
-    await page.waitForTimeout(300);
-    console.log(`[test] Selected Shared Key (Admin) tab`);
-
-    // Wait for API token field to appear and fill it
-    const apiTokenInput = page.locator('input[name="api_token"]');
-    await expect(apiTokenInput).toBeVisible({ timeout: 10000 });
-    await apiTokenInput.click(); // Focus the field first
-    await apiTokenInput.fill(API_KEY);
-    console.log(`[test] Filled API key`);
-
-    // Click Connect button to submit authentication
-    const connectButton = page.getByTestId("mcp-auth-connect-button");
-    await expect(connectButton).toBeVisible({ timeout: 5000 });
-    await connectButton.click();
-    console.log(`[test] Clicked Connect button`);
-
-    // Wait for the tools to be fetched
-    await page.waitForTimeout(1000);
-    console.log(`[test] Tools fetched successfully`);
-
-    // Verify server card is visible
-    await expect(
-      page.getByText(serverName, { exact: false }).first()
-    ).toBeVisible({ timeout: 20000 });
-    console.log(`[test] Verified server card is visible`);
-
-    // Click the refresh button to fetch/refresh tools
-    const refreshButton = page.getByRole("button", { name: "Refresh tools" });
-    await expect(refreshButton).toBeVisible({ timeout: 5000 });
-    await refreshButton.click();
-    console.log(`[test] Clicked refresh tools button`);
-
-    // Wait for tools to load - "No tools available" should disappear
-    await expect(page.getByText("No tools available")).not.toBeVisible({
-      timeout: 15000,
-    });
-    console.log(`[test] Tools loaded successfully`);
-
-    assertedToolId = await fetchMcpToolIdByName(
-      page,
-      serverId,
-      MCP_ASSERTED_TOOL_NAME
-    );
-    console.log(
-      `[test] Resolved ${MCP_ASSERTED_TOOL_NAME} to tool ID ${assertedToolId}`
-    );
-
-    // Disable multiple tools (tool_0, tool_1, tool_2, tool_3)
-    const toolIds = ["tool_11", "tool_12", "tool_13", "tool_14"];
-    let disabledToolsCount = 0;
-
-    for (const toolId of toolIds) {
-      const toolToggle = page.getByLabel(`tool-toggle-${toolId}`).first();
-
-      // Check if the tool exists
-      const isVisible = await toolToggle
-        .isVisible({ timeout: 2000 })
-        .catch(() => false);
-
-      if (!isVisible) {
-        console.log(`[test] Tool ${toolId} not found, skipping`);
-        continue;
-      }
-
-      console.log(`[test] Found tool: ${toolId}`);
-
-      // Disable if currently enabled (tools are enabled by default)
-      const state = await toolToggle.getAttribute("aria-checked");
-      if (state === "true") {
-        await toolToggle.click();
-        await expect(toolToggle).toHaveAttribute("aria-checked", "false", {
-          timeout: 5000,
-        });
-        disabledToolsCount++;
-        console.log(`[test] Disabled tool: ${toolId}`);
-      } else {
-        console.log(`[test] Tool ${toolId} already disabled`);
-      }
-    }
-
-    console.log(
-      `[test] Successfully disabled ${disabledToolsCount} tools via UI`
-    );
+    // Exercise the card-level tool toggle: disable then re-enable a tool.
+    await adminMcp.setCardToolEnabled(MCP_ASSERTED_TOOL_NAME, false);
+    await adminMcp.setCardToolEnabled(MCP_ASSERTED_TOOL_NAME, true);
   });
 
-  test("Admin adds MCP tools to default agent via chat preferences page", async ({
+  test("Admin adds MCP tools to the default agent via chat preferences", async ({
     page,
   }) => {
-    test.skip(!serverId, "MCP server must be created first");
-
     await page.context().clearCookies();
     await loginAs(page, "admin");
-    console.log(`[test] Logged in as admin for chat preferences config`);
 
-    // Navigate to chat preferences page
-    await page.goto("/admin/configuration/chat-preferences");
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
-    console.log(`[test] Navigated to chat preferences page`);
-
-    // Wait for page to load
-    await expect(page.locator('[aria-label="admin-page-title"]')).toBeVisible({
-      timeout: 10000,
-    });
-    console.log(`[test] Page loaded`);
-
-    // Scroll to the Actions & Tools section (open by default)
-    await scrollToBottom(page);
-
-    // Find the MCP server card by name text (expandable card)
-    const serverCard = page
-      .locator(".opal-card-expandable")
-      .filter({ hasText: serverName })
-      .first();
-    await expect(serverCard).toBeVisible({ timeout: 10000 });
-    console.log(`[test] MCP server card found for server: ${serverName}`);
-
-    // Scroll server card into view
-    await serverCard.scrollIntoViewIfNeeded();
-
-    // The server-level Switch in the header toggles ALL tools
-    const serverSwitch = serverCard.getByRole("switch").first();
-    await expect(serverSwitch).toBeVisible({ timeout: 5000 });
-
-    // Enable all tools by toggling the server switch ON
-    const serverState = await serverSwitch.getAttribute("aria-checked");
-    if (serverState !== "true") {
-      await serverSwitch.click();
-      // Auto-save triggers immediately
-      await expect(page.getByText("Tools updated").first()).toBeVisible({
-        timeout: 10000,
-      });
-    }
-    console.log(`[test] MCP tools successfully added to default agent`);
+    const chatPrefs = new ChatPreferencesPage(page);
+    await chatPrefs.goto();
+    await chatPrefs.enableServerTools(serverName);
   });
 
-  test("Basic user can see and toggle MCP tools in default agent", async ({
+  test("Basic user can see and toggle MCP tools in the default agent", async ({
     page,
   }) => {
-    test.skip(!serverId, "MCP server must be configured first");
-    test.skip(!basicUserEmail, "Basic user must be created first");
-
     await page.context().clearCookies();
     await apiLogin(page, basicUserEmail, basicUserPassword);
-    console.log(`[test] Logged in as basic user: ${basicUserEmail}`);
 
-    // Navigate to chat (which uses default agent for new users)
     await page.goto("/app");
     await page.waitForURL("**/app**");
     await ensureOnboardingComplete(page);
-    console.log(`[test] Navigated to chat page`);
 
-    // Open actions popover
-    const actionsButton = page.getByTestId("action-management-toggle");
-    await expect(actionsButton).toBeVisible({ timeout: 10000 });
-    await actionsButton.click();
-    console.log(`[test] Opened actions popover`);
+    const actions = new ActionsPopover(page);
+    await actions.expectServerVisible(serverName);
+    await actions.openServer(serverName);
 
-    // Wait for popover to open
-    const popover = page.locator('[data-testid="tool-options"]');
-    await expect(popover).toBeVisible({ timeout: 5000 });
+    // Toggle a tool off and back on.
+    await actions.disableTool(MCP_ASSERTED_TOOL_NAME);
+    await actions.enableTool(MCP_ASSERTED_TOOL_NAME);
 
-    // Find the MCP server in the list
-    const serverLineItem = popover
-      .locator(".group\\/LineItem")
-      .filter({ hasText: serverName });
-    await expect(serverLineItem).toBeVisible({ timeout: 10000 });
-    console.log(`[test] Found MCP server: ${serverName}`);
-
-    // Click to open the server's tool list
-    await serverLineItem.click();
-    await page.waitForTimeout(500);
-    console.log(`[test] Clicked on MCP server to view tools`);
-
-    // Verify we're in the tool list view (should have Enable/Disable All)
+    // Disable All then Enable All affect the whole server.
+    await actions.disableAll();
     await expect(
-      popover.getByText(/(Enable|Disable) All/i).first()
-    ).toBeVisible({ timeout: 5000 });
-    console.log(`[test] Tool list view loaded`);
-
-    // Find a specific tool (tool_0)
-    const toolLineItem = popover
-      .locator(".group\\/LineItem")
-      .filter({ hasText: /^tool_0/ })
-      .first();
-    await expect(toolLineItem).toBeVisible({ timeout: 5000 });
-    console.log(`[test] Found tool: tool_0`);
-
-    // Find the toggle switch for the tool
-    const toolToggle = toolLineItem.locator('[role="switch"]');
-    await expect(toolToggle).toBeVisible({ timeout: 5000 });
-    console.log(`[test] Tool toggle is visible`);
-
-    // Get initial state and toggle
-    const initialState = await toolToggle.getAttribute("aria-checked");
-    console.log(`[test] Initial toggle state: ${initialState}`);
-    await toolToggle.click();
-    await page.waitForTimeout(300);
-
-    // Wait for state to change
-    const expectedState = initialState === "true" ? "false" : "true";
-    await expect(toolToggle).toHaveAttribute("aria-checked", expectedState, {
-      timeout: 5000,
-    });
-    console.log(`[test] Toggle state changed to: ${expectedState}`);
-
-    // Toggle back
-    await toolToggle.click();
-    await page.waitForTimeout(300);
-    await expect(toolToggle).toHaveAttribute("aria-checked", initialState!, {
-      timeout: 5000,
-    });
-    console.log(`[test] Toggled back to original state: ${initialState}`);
-
-    // Test "Disable All" functionality
-    const disableAllButton = popover.getByText(/Disable All/i).first();
-    const hasDisableAll = await disableAllButton.isVisible();
-    console.log(`[test] Disable All button visible: ${hasDisableAll}`);
-
-    if (hasDisableAll) {
-      await disableAllButton.click();
-      await page.waitForTimeout(500);
-
-      // Verify at least one toggle is now unchecked
-      const anyUnchecked = await popover
-        .locator('[role="switch"][aria-checked="false"]')
-        .count();
-      expect(anyUnchecked).toBeGreaterThan(0);
-      console.log(`[test] Disabled all tools (${anyUnchecked} unchecked)`);
-    }
-
-    // Test "Enable All" functionality
-    const enableAllButton = popover.getByText(/Enable All/i).first();
-    const hasEnableAll = await enableAllButton.isVisible();
-    console.log(`[test] Enable All button visible: ${hasEnableAll}`);
-
-    if (hasEnableAll) {
-      await enableAllButton.click();
-      await page.waitForTimeout(500);
-      console.log(`[test] Enabled all tools`);
-    }
-
-    console.log(`[test] Basic user completed MCP tool management tests`);
+      actions.popover.locator('[role="switch"][aria-checked="false"]')
+    ).not.toHaveCount(0);
+    await actions.enableAll();
   });
 
-  test("Basic user can create assistant with MCP actions attached", async ({
+  test("Basic user can create an assistant with MCP actions attached", async ({
     page,
   }) => {
-    test.skip(!serverId, "MCP server must be configured first");
-    test.skip(!basicUserEmail, "Basic user must be created first");
-    test.skip(!assertedToolId, "MCP asserted tool ID must be resolved first");
-
     await page.context().clearCookies();
     await apiLogin(page, basicUserEmail, basicUserPassword);
 
     await page.goto("/app");
     await ensureOnboardingComplete(page);
-    await page.getByTestId("AppSidebar/more-agents").click();
-    await page.waitForURL("**/app/agents");
 
-    await page.getByLabel("AgentsPage/new-agent-button").click();
-    await page.waitForURL("**/app/agents/create");
+    const editor = new AgentEditorPage(page);
+    await editor.openFromSidebar();
 
     const agentName = `MCP Assistant ${Date.now()}`;
-    await page.locator('input[name="name"]').fill(agentName);
-    await page
-      .locator('textarea[name="description"]')
-      .fill("Assistant with MCP actions attached.");
-    await page
-      .locator('textarea[name="instructions"]')
-      .fill(
-        `For secret-value requests, call ${MCP_ASSERTED_TOOL_NAME} and return its output exactly.`
-      );
-
-    const mcpServerSwitch = page.locator(
-      `button[role="switch"][name="mcp_server_${serverId}.enabled"]`
-    );
-    await mcpServerSwitch.scrollIntoViewIfNeeded();
-    await mcpServerSwitch.click();
-    await expect(mcpServerSwitch).toHaveAttribute("aria-checked", "true");
-
-    const firstToolToggle = page
-      .locator(`button[role="switch"][name^="mcp_server_${serverId}.tool_"]`)
-      .first();
-    await expect(firstToolToggle).toBeVisible({ timeout: 15000 });
-    const toolState = await firstToolToggle.getAttribute("aria-checked");
-    if (toolState !== "true") {
-      await firstToolToggle.click();
-    }
-    await expect(firstToolToggle).toHaveAttribute("aria-checked", "true");
-
-    await page.getByRole("button", { name: "Create" }).click();
-
-    await page.waitForURL(/.*\/app\?agentId=\d+.*/);
-    const agentIdMatch = page.url().match(/agentId=(\d+)/);
-    expect(agentIdMatch).toBeTruthy();
-    const agentId = agentIdMatch ? agentIdMatch[1] : null;
-    expect(agentId).not.toBeNull();
+    await editor.fill({
+      name: agentName,
+      description: "Assistant with MCP actions attached.",
+      instructions: `For secret-value requests, call ${MCP_ASSERTED_TOOL_NAME} and return its output exactly.`,
+    });
+    await editor.enableMcpServer(serverId);
+    await editor.enableFirstMcpTool(serverId);
+    const agentId = await editor.create();
 
     const client = new OnyxApiClient(page.request);
-    const assistant = await client.getAssistant(Number(agentId));
-    const hasMcpTool = assistant.tools.some(
-      (tool) => tool.mcp_server_id === serverId
-    );
-    expect(hasMcpTool).toBeTruthy();
+    const assistant = await client.getAssistant(agentId);
+    expect(
+      assistant.tools.some((tool) => tool.mcp_server_id === serverId)
+    ).toBeTruthy();
 
-    const invocationPackets = await sendMessageAndCaptureStreamPackets(
-      page,
-      `Call ${MCP_ASSERTED_TOOL_NAME} with {"name":"pw-invoke-${Date.now()}"} and return only the tool output.`,
-      {
-        mockLlmResponse: JSON.stringify({
-          name: MCP_ASSERTED_TOOL_NAME,
-          arguments: { name: `pw-invoke-${Date.now()}` },
-        }),
-        payloadOverrides: {
-          forced_tool_id: assertedToolId,
-          forced_tool_ids: [assertedToolId],
-        },
-        waitForAiMessage: false,
-      }
-    );
-    const invocationCounts = getToolPacketCounts(
-      invocationPackets,
-      MCP_ASSERTED_TOOL_NAME
-    );
-    expect(invocationCounts.start).toBeGreaterThan(0);
-    expect(invocationCounts.delta).toBeGreaterThan(0);
-    expect(invocationCounts.debug).toBeGreaterThan(0);
+    // The tool is enabled, so a forced call should actually invoke it.
+    await expectMcpToolInvoked(page, MCP_ASSERTED_TOOL_NAME, assertedToolId);
 
-    const actionsButton = page.getByTestId("action-management-toggle");
-    await expect(actionsButton).toBeVisible({ timeout: 10000 });
-    await actionsButton.click();
+    // Disable the tool from the actions popover and confirm it no longer runs.
+    const actions = new ActionsPopover(page);
+    await actions.openServer(serverName);
+    await actions.searchTool(MCP_ASSERTED_TOOL_NAME);
+    await actions.disableTool(MCP_ASSERTED_TOOL_NAME);
+    await actions.close();
 
-    const popover = page.locator('[data-testid="tool-options"]');
-    await expect(popover).toBeVisible({ timeout: 5000 });
-
-    const serverLineItem = popover
-      .locator(".group\\/LineItem")
-      .filter({ hasText: serverName })
-      .first();
-    await expect(serverLineItem).toBeVisible({ timeout: 10000 });
-    await serverLineItem.click();
-
-    const toolSearchInput = popover
-      .getByPlaceholder(/Search .* tools/i)
-      .first();
-    await expect(toolSearchInput).toBeVisible({ timeout: 10000 });
-    await toolSearchInput.fill(MCP_ASSERTED_TOOL_NAME);
-
-    const toolToggle = popover.getByLabel(`Toggle ${MCP_ASSERTED_TOOL_NAME}`);
-    await expect(toolToggle).toBeVisible({ timeout: 10000 });
-    const isToolToggleUnchecked = async () => {
-      const dataState = await toolToggle.getAttribute("data-state");
-      if (typeof dataState === "string") {
-        return dataState === "unchecked";
-      }
-      return (await toolToggle.getAttribute("aria-checked")) === "false";
-    };
-    if (!(await isToolToggleUnchecked())) {
-      await toolToggle.click();
-    }
-    await expect
-      .poll(isToolToggleUnchecked, {
-        timeout: 5000,
-      })
-      .toBe(true);
-
-    await page.keyboard.press("Escape").catch(() => {});
-
-    const disabledPackets = await sendMessageAndCaptureStreamPackets(
-      page,
-      `Call ${MCP_ASSERTED_TOOL_NAME} with {"name":"pw-disabled-${Date.now()}"} and return only the tool output.`,
-      {
-        mockLlmResponse: JSON.stringify({
-          name: MCP_ASSERTED_TOOL_NAME,
-          arguments: { name: `pw-disabled-${Date.now()}` },
-        }),
-        payloadOverrides: {
-          forced_tool_id: assertedToolId,
-          forced_tool_ids: [assertedToolId],
-        },
-        waitForAiMessage: false,
-      }
-    );
-    const disabledCounts = getToolPacketCounts(
-      disabledPackets,
-      MCP_ASSERTED_TOOL_NAME
-    );
-    expect(disabledCounts.start).toBe(0);
-    expect(disabledCounts.delta).toBe(0);
-    expect(disabledCounts.debug).toBe(0);
+    await expectMcpToolNotInvoked(page, MCP_ASSERTED_TOOL_NAME, assertedToolId);
   });
 
-  test("Admin can modify MCP tools in default agent", async ({ page }) => {
-    test.skip(!serverId, "MCP server must be configured first");
-
-    await page.context().clearCookies();
-    await loginAs(page, "admin");
-    console.log(`[test] Testing tool modification`);
-
-    // Navigate to chat preferences page
-    await page.goto("/admin/configuration/chat-preferences");
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
-
-    // Scroll to Actions & Tools section
-    await scrollToBottom(page);
-
-    // Find the MCP server card by name (expandable card)
-    const serverCard = page
-      .locator(".opal-card-expandable")
-      .filter({ hasText: serverName })
-      .first();
-    await expect(serverCard).toBeVisible({ timeout: 10000 });
-    await serverCard.scrollIntoViewIfNeeded();
-
-    // Click "Expand" to reveal individual tools
-    const expandButton = page.getByRole("button", { name: "Expand" }).first();
-    const isExpandVisible = await expandButton.isVisible().catch(() => false);
-    if (isExpandVisible) {
-      await expandButton.click();
-      await page.waitForTimeout(300);
-      console.log(`[test] Expanded MCP server card`);
-    }
-
-    // Find a specific tool by name inside the expanded card content
-    const toolCard = page
-      .locator(".opal-card")
-      .filter({ hasText: "tool_0" })
-      .first();
-    const firstToolSwitch = toolCard.getByRole("switch").first();
-
-    await expect(firstToolSwitch).toBeVisible({ timeout: 5000 });
-    await firstToolSwitch.scrollIntoViewIfNeeded();
-
-    // Get initial state and toggle
-    const initialChecked = await firstToolSwitch.getAttribute("aria-checked");
-    console.log(`[test] Initial tool state: ${initialChecked}`);
-    await firstToolSwitch.click();
-
-    // Wait for auto-save toast
-    await expect(page.getByText("Tools updated").first()).toBeVisible({
-      timeout: 10000,
-    });
-    console.log(`[test] Save successful`);
-
-    // Reload and verify persistence
-    await page.reload();
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
-    await scrollToBottom(page);
-
-    // Re-find the server card (expandable card)
-    const serverCardAfter = page
-      .locator(".opal-card-expandable")
-      .filter({ hasText: serverName })
-      .first();
-    await expect(serverCardAfter).toBeVisible({ timeout: 10000 });
-    await serverCardAfter.scrollIntoViewIfNeeded();
-
-    // Re-expand the card
-    const expandButtonAfter = page
-      .getByRole("button", { name: "Expand" })
-      .first();
-    const isExpandVisibleAfter = await expandButtonAfter
-      .isVisible()
-      .catch(() => false);
-    if (isExpandVisibleAfter) {
-      await expandButtonAfter.click();
-      await page.waitForTimeout(300);
-    }
-
-    // Verify the tool state persisted
-    const toolCardAfter = page
-      .locator(".opal-card")
-      .filter({ hasText: "tool_0" })
-      .first();
-    const firstToolSwitchAfter = toolCardAfter.getByRole("switch").first();
-    await expect(firstToolSwitchAfter).toBeVisible({ timeout: 5000 });
-    const finalChecked =
-      await firstToolSwitchAfter.getAttribute("aria-checked");
-    console.log(`[test] Final tool state: ${finalChecked}`);
-    expect(finalChecked).not.toEqual(initialChecked);
-  });
-
-  test("Instructions persist when saving via chat preferences", async ({
+  test("Admin can modify MCP tools in the default agent and changes persist", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    await page.goto("/admin/configuration/chat-preferences");
+    const chatPrefs = new ChatPreferencesPage(page);
+    await chatPrefs.goto();
+    await chatPrefs.expandServerCard(serverName);
+
+    const toolSwitch = chatPrefs.toolSwitch(MCP_ASSERTED_TOOL_NAME);
+    await expect(toolSwitch).toBeVisible();
+    const initialChecked = await toolSwitch.getAttribute("aria-checked");
+    await chatPrefs.toggleTool(MCP_ASSERTED_TOOL_NAME);
+
+    // Reload and confirm the new state persisted.
+    await page.reload();
     await page.waitForURL("**/admin/configuration/chat-preferences**");
+    await chatPrefs.expandServerCard(serverName);
 
-    // Click "Modify Prompt" to open the system prompt modal
-    const modifyButton = page.getByText("Modify Prompt");
-    await expect(modifyButton).toBeVisible({ timeout: 5000 });
-    await modifyButton.click();
+    const toolSwitchAfter = chatPrefs.toolSwitch(MCP_ASSERTED_TOOL_NAME);
+    await expect(toolSwitchAfter).toBeVisible();
+    const expected = initialChecked === "true" ? "false" : "true";
+    await expect(toolSwitchAfter).toHaveAttribute("aria-checked", expected);
+  });
 
-    const modal = page.getByRole("dialog");
-    await expect(modal).toBeVisible({ timeout: 5000 });
+  test("Default agent instructions persist when saved via chat preferences", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
 
-    // Fill instructions in the modal textarea
+    const chatPrefs = new ChatPreferencesPage(page);
+    await chatPrefs.goto();
+
     const testInstructions = `Test instructions for MCP - ${Date.now()}`;
-    const textarea = modal.getByPlaceholder("Enter your system prompt...");
-    await textarea.fill(testInstructions);
-    console.log(`[test] Filled instructions`);
+    await chatPrefs.openModifyPrompt();
+    await chatPrefs.fillSystemPrompt(testInstructions);
+    await chatPrefs.saveSystemPrompt();
 
-    // Click Save in the modal footer
-    await modal.getByRole("button", { name: "Save" }).click();
-
-    await expect(page.getByText("System prompt updated")).toBeVisible({
-      timeout: 10000,
-    });
-    console.log(`[test] Instructions saved successfully`);
-
-    // Modal should close
-    await expect(modal).not.toBeVisible();
-
-    // Reload and verify — wait for all data to load before opening modal
-    // (the modal reads system_prompt from SWR state at click time, so data must be ready)
+    // Reload and confirm the value persisted.
     await page.reload();
     await page.waitForLoadState("networkidle");
     await page.waitForURL("**/admin/configuration/chat-preferences**");
 
-    // Reopen modal and check persisted value
-    const modifyButtonAfter = page.getByText("Modify Prompt");
-    await expect(modifyButtonAfter).toBeVisible({ timeout: 5000 });
-    await modifyButtonAfter.click();
-
-    const modalAfter = page.getByRole("dialog");
-    await expect(modalAfter).toBeVisible({ timeout: 5000 });
-    await expect(
-      modalAfter.getByPlaceholder("Enter your system prompt...")
-    ).toHaveValue(testInstructions);
-
-    console.log(`[test] Instructions persisted correctly`);
-
-    // Close modal
-    await modalAfter.getByRole("button", { name: "Cancel" }).click();
+    await chatPrefs.openModifyPrompt();
+    await chatPrefs.expectSystemPromptValue(testInstructions);
+    await chatPrefs.cancelModifyPrompt();
   });
 
-  test("MCP tools appear in basic user's chat actions after being added to default agent", async ({
-    page,
-  }) => {
-    test.skip(!serverId, "MCP server must be configured first");
-    test.skip(!basicUserEmail, "Basic user must be created first");
-
+  test("MCP tools appear in a basic user's chat actions", async ({ page }) => {
     await page.context().clearCookies();
     await apiLogin(page, basicUserEmail, basicUserPassword);
-    console.log(`[test] Logged in as basic user to verify tool visibility`);
 
-    // Navigate to chat
     await page.goto("/app");
     await page.waitForURL("**/app**");
-    console.log(`[test] Navigated to chat`);
 
-    // Open actions popover
-    const actionsButton = page.getByTestId("action-management-toggle");
-    await expect(actionsButton).toBeVisible({ timeout: 10000 });
-    await actionsButton.click();
-    console.log(`[test] Opened actions popover`);
-
-    // Wait for popover
-    const popover = page.locator('[data-testid="tool-options"]');
-    await expect(popover).toBeVisible({ timeout: 5000 });
-
-    // Verify MCP server appears in the actions list
-    const serverLineItem = popover
-      .locator(".group\\/LineItem")
-      .filter({ hasText: serverName });
-    await expect(serverLineItem).toBeVisible({ timeout: 10000 });
-    console.log(`[test] Found MCP server in actions list`);
-
-    // Click to see tools
-    await serverLineItem.click();
-    await page.waitForTimeout(500);
-    console.log(`[test] Clicked server to view tools`);
-
-    // Verify tools are present
-    const toolsList = popover.locator('[role="switch"]');
-    const toolCount = await toolsList.count();
-    expect(toolCount).toBeGreaterThan(0);
-
-    console.log(
-      `[test] Basic user can see ${toolCount} MCP tools from default agent`
-    );
+    const actions = new ActionsPopover(page);
+    await actions.expectServerVisible(serverName);
+    await actions.openServer(serverName);
+    await expect(actions.toolSwitches).not.toHaveCount(0);
   });
 });

@@ -55,12 +55,12 @@ def test_build_ip_lookup_docker_dispatches_events_lookup() -> None:
 def test_build_ca_store_raises_on_unknown_backend() -> None:
     sentinel = object()
     with patch.object(backend_mod, "SANDBOX_BACKEND", sentinel):
-        with pytest.raises(RuntimeError, match="unsupported SANDBOX_BACKEND"):
+        with pytest.raises(RuntimeError, match="Unsupported SANDBOX_BACKEND"):
             backend_mod.build_ca_store()
 
 
 def test_build_ip_lookup_raises_on_unknown_backend() -> None:
     sentinel = object()
     with patch.object(backend_mod, "SANDBOX_BACKEND", sentinel):
-        with pytest.raises(RuntimeError, match="unsupported SANDBOX_BACKEND"):
+        with pytest.raises(RuntimeError, match="Unsupported SANDBOX_BACKEND"):
             backend_mod.build_ip_lookup()

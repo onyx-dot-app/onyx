@@ -9,6 +9,7 @@ For the broader Onyx testing strategy and where Playwright fits among unit / ext
 All locators and interactions for a UI surface live on a Page Object class — never inline in a spec.
 
 - One class per surface (e.g. `ChatPage`, `InputBar`, `AdminUsersPage`).
+- Page objects live in `tests/e2e/pages/` — one file per class, named after the surface. Keep spec-only helpers (flow glue, assertion utilities) out of `pages/`; those stay beside their specs or in `tests/e2e/utils/`.
 - Composite pages expose nested objects: `chatPage.inputBar.someMethod()`.
 - Specs call methods on the page object. They do not construct locators.
 - When extending coverage for an area that has no page object, create one before writing the spec.

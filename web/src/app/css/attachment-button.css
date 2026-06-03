@@ -6,7 +6,7 @@
   width: 100%;
   padding: 0.25rem;
   background-color: var(--background-tint-00);
-  border-radius: var(--border-radius-12);
+  border-radius: var(--radius-12);
   gap: 0.5rem;
 }
 
@@ -30,7 +30,7 @@
   height: 100%;
   aspect-ratio: 1;
   background-color: var(--background-tint-01);
-  border-radius: var(--border-radius-08);
+  border-radius: var(--radius-08);
   display: flex;
   flex-direction: column;
   align-items: center;
