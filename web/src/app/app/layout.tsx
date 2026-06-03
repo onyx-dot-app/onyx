@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/auth/requireAuth";
 import { ProjectsProvider } from "@/providers/ProjectsContext";
 import { VoiceModeProvider } from "@/providers/VoiceModeProvider";
 import AppSidebar from "@/sections/sidebar/AppSidebar";
+import { RootLayout } from "@opal/layouts";
 
 export interface LayoutProps {
   children: React.ReactNode;
@@ -26,10 +27,10 @@ export default async function Layout({ children }: LayoutProps) {
           persists across page navigations (e.g., sidebar clicks during playback).
           It only activates WebSocket connections when TTS is actually triggered. */}
       <VoiceModeProvider>
-        <div className="flex flex-row w-full h-full">
+        <RootLayout.Root>
           <AppSidebar />
-          {children}
-        </div>
+          <RootLayout.MainContent>{children}</RootLayout.MainContent>
+        </RootLayout.Root>
       </VoiceModeProvider>
     </ProjectsProvider>
   );

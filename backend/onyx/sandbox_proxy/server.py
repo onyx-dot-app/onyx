@@ -43,8 +43,8 @@ _DB_APP_NAME = "sandbox_proxy"
 # Cap on the SIGTERM drain; only fires if `GateAddon.drain_inflight` hangs.
 _DRAIN_TIMEOUT_S = 10.0
 
-# Startup sync deadline; past it the proxy exits rather than serve traffic
-# with unbacked identity.
+# Startup sync deadline; past it the proxy exits rather than serve traffic with
+# unbacked identity.
 _LOOKUP_INITIAL_SYNC_TIMEOUT_S = 60.0
 
 # Directory mitmproxy reads its keypair + assorted state from. Default is
@@ -141,14 +141,17 @@ def _build_lookup() -> SandboxIPLookup:
     if not synced:
         raise RuntimeError(
             "Sandbox IP lookup did not complete initial sync within "
-            f"{_LOOKUP_INITIAL_SYNC_TIMEOUT_S:.1f}s; refusing to "
-            "serve traffic with unbacked identity"
+            f"{_LOOKUP_INITIAL_SYNC_TIMEOUT_S:.1f}s; refusing to serve traffic with unbacked "
+            "identity."
         )
     return lookup
 
 
 def _build_cache_factory() -> Callable[[str], CacheBackend]:
-    """tenant_id -> CacheBackend; must match the API side's namespace to share keys."""
+    """
+    tenant_id -> CacheBackend; Must match the API side's namespace to share
+    keys.
+    """
 
     def _factory(tenant_id: str) -> CacheBackend:
         return get_cache_backend(tenant_id=tenant_id)
@@ -171,7 +174,7 @@ async def _run_master(master: DumpMaster) -> None:
 
 
 def build_resolvers() -> list[CredentialResolver]:
-    """The registered credential resolvers, in first-claim-wins order.
+    """Builds the registered credential resolvers, in first-claim-wins order.
 
     Host-claim sets are designed to be disjoint (external-app requests are
     attributed by the matcher; host-only resolvers added later claim their own
@@ -193,17 +196,17 @@ def _install_signal_handlers(
             await asyncio.wait_for(gate.drain_inflight(), timeout=_DRAIN_TIMEOUT_S)
         except asyncio.TimeoutError:
             logger.warning(
-                "gate drain exceeded %.1fs; exiting anyway",
+                "Gate drain exceeded %.1fs; Exiting anyway.",
                 _DRAIN_TIMEOUT_S,
             )
         except Exception:
-            logger.exception("gate drain raised; exiting anyway")
+            logger.exception("Gate drain raised; Exiting anyway.")
         master.shutdown()
 
     def _on_signal() -> None:
         if readiness.shutting_down:
             return
-        logger.info("SIGTERM received; flipping readiness and draining")
+        logger.info("SIGTERM received; Flipping readiness and draining.")
         readiness.shutting_down = True
         lookup.stop()
         loop.create_task(_drain_and_shutdown())
@@ -216,7 +219,7 @@ def main() -> int:
     set_is_ee_based_on_env_variable()
 
     logger.info(
-        "starting sandbox proxy listen=%d healthz=%d namespace=%s",
+        "Starting sandbox proxy listen=%d healthz=%d namespace=%s",
         SANDBOX_PROXY_LISTEN_PORT,
         SANDBOX_PROXY_HEALTHZ_PORT,
         SANDBOX_NAMESPACE,
@@ -235,7 +238,7 @@ def main() -> int:
     healthz_server: HTTPServer | None = None
     try:
         readiness.lookup_ready = True
-        logger.info("informer initial sync complete")
+        logger.info("Informer initial sync complete.")
 
         healthz_server = _start_healthz_server(readiness, lookup)
 
@@ -244,13 +247,13 @@ def main() -> int:
         snapshot_policy = SnapshotEgressPolicy.from_env()
         if snapshot_policy is not None:
             logger.info(
-                "snapshot egress streaming enabled bucket=%s endpoint_host=%s",
+                "Snapshot egress streaming enabled bucket=%s endpoint_host=%s",
                 snapshot_policy.bucket,
                 snapshot_policy.endpoint_host,
             )
         resolvers = build_resolvers()
         logger.info(
-            "credential resolvers registered: %s",
+            "Credential resolvers registered: %s",
             [type(r).__name__ for r in resolvers],
         )
         gate = GateAddon(
@@ -283,7 +286,7 @@ def main() -> int:
             healthz_server.shutdown()
             healthz_server.server_close()
 
-    logger.info("sandbox proxy exiting cleanly")
+    logger.info("Sandbox proxy exiting cleanly.")
     return 0
 
 

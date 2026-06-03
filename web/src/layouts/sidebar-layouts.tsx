@@ -45,6 +45,11 @@ import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import OverflowDiv from "@/refresh-components/OverflowDiv";
 import useScreenSize from "@/hooks/useScreenSize";
+import {
+  RootLayoutFoldedContext,
+  useSidebarFolded,
+} from "@opal/layouts/root/components";
+export { useSidebarFolded } from "@opal/layouts/root/components";
 
 // ---------------------------------------------------------------------------
 // State provider — persistent sidebar fold state with keyboard shortcut
@@ -129,19 +134,8 @@ export function useSidebarState(): SidebarStateContextType {
 }
 
 // ---------------------------------------------------------------------------
-// Fold context
+// Fold context — provided by RootLayout.Sidebar (or SidebarRoot for legacy)
 // ---------------------------------------------------------------------------
-
-const SidebarFoldedContext = createContext(false);
-
-/**
- * Returns whether the sidebar content should render in its folded (narrow)
- * state. On mobile, this is always `false` because the overlay pattern handles
- * visibility — the sidebar content itself is always fully expanded.
- */
-export function useSidebarFolded(): boolean {
-  return useContext(SidebarFoldedContext);
-}
 
 // ---------------------------------------------------------------------------
 // Root
@@ -180,7 +174,7 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
 
   if (isMobile) {
     return (
-      <SidebarFoldedContext.Provider value={false}>
+      <RootLayoutFoldedContext.Provider value={false}>
         <div
           className={cn(
             "fixed inset-y-0 left-0 z-50 transition-transform duration-200",
@@ -202,7 +196,7 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
           )}
           onClick={closeSidebar}
         />
-      </SidebarFoldedContext.Provider>
+      </RootLayoutFoldedContext.Provider>
     );
   }
 
@@ -210,9 +204,9 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
   // expanding overlays content instead of pushing it.
   if (isMediumScreen) {
     return (
-      <SidebarFoldedContext.Provider value={folded}>
+      <RootLayoutFoldedContext.Provider value={folded}>
         {/* Spacer reserves the folded sidebar width in the flex layout */}
-        <div className="shrink-0 w-13" />
+        <div className="shrink-0 w-(--sidebar-width-folded)" />
 
         {/* Sidebar — fixed so it overlays content when expanded */}
         <div className="fixed inset-y-0 left-0 z-50">
@@ -231,19 +225,19 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
           )}
           onClick={closeSidebar}
         />
-      </SidebarFoldedContext.Provider>
+      </RootLayoutFoldedContext.Provider>
     );
   }
 
   return (
-    <SidebarFoldedContext.Provider value={contentFolded}>
+    <RootLayoutFoldedContext.Provider value={contentFolded}>
       <SidebarWrapper
         folded={foldable ? folded : undefined}
         onFoldClick={foldable ? toggleSidebar : undefined}
       >
         {inner}
       </SidebarWrapper>
-    </SidebarFoldedContext.Provider>
+    </RootLayoutFoldedContext.Provider>
   );
 }
 
