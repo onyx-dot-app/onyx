@@ -10,9 +10,14 @@ import { Button, Table, Tooltip, createTableColumns } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { toast } from "@/hooks/useToast";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { SvgClock, SvgPlus, SvgRefreshCw, SvgTrash } from "@opal/icons";
+import {
+  SvgClock,
+  SvgPlus,
+  SvgRefreshCw,
+  SvgTrash,
+  SvgSimpleLoader,
+} from "@opal/icons";
 import { deleteScheduledTask } from "@/app/craft/v1/tasks/api";
 import {
   RunStatusBadge,
@@ -197,7 +202,7 @@ export default function ScheduledTasksListPage() {
       <SettingsLayouts.Body>
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <SimpleLoader className="h-6 w-6" />
+            <SvgSimpleLoader className="h-6 w-6" />
           </div>
         ) : error ? (
           <Section gap={0.5}>

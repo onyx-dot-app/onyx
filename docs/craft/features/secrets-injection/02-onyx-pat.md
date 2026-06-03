@@ -8,8 +8,8 @@ CRAFT PAT lives only in the proxy.
 
 ## How it works
 
-**What gets injected.** The resolver claims by host (the Onyx API is never an external app, so
-`match` is ignored) and renders two headers:
+**What gets injected.** The resolver claims by host and port (the Onyx API is never an external app,
+so `match` is ignored) and renders two headers:
 
 | Header | Value |
 |---|---|
@@ -51,8 +51,9 @@ standard env vars in `_proxy_main_container_env_vars()` — `REQUESTS_CA_BUNDLE`
 installs the CA into the system trust store via `update-ca-certificates`.
 
 **Pod-side placeholder is non-empty.** onyx-cli treats an empty token as unconfigured, so the
-pod's `ONYX_PAT` env ships a non-empty placeholder (`_ONYX_PAT_PLACEHOLDER`, a private constant in
-`kubernetes_sandbox_manager.py`) and the proxy overwrites both auth headers per the Plan 1
+pod's `ONYX_PAT` env ships a non-empty placeholder (`_PROXY_INJECTED_PLACEHOLDER =
+"replaced_by_egress_proxy"`, a private constant in `kubernetes_sandbox_manager.py` shared with the
+LLM apiKey placeholders) and the proxy overwrites both auth headers per the Plan 1
 placeholder/overwrite contract.
 
 **Failure mode.** A missing row, a `None` `encrypted_pat`, or a decrypt failure raises
@@ -67,14 +68,15 @@ proxy and continues to inject the real PAT directly as the `ONYX_PAT` env var.
 
 1. **`OnyxPatResolver`** (`onyx/sandbox_proxy/resolvers/onyx_pat.py`) implementing the Plan 1
    `CredentialResolver` protocol.
-   - `claims(request, ctx)`: True iff `request.host` is the host of `SANDBOX_API_SERVER_URL`
-     (case-insensitive); False when the var is unset.
-   - `resolve(request, ctx)`: open a session via `ctx.db_session_factory(ctx.sandbox.tenant_id)`,
+   - `claims(request, ctx)`: True iff `request.host` (case-insensitive) and `request.port` match the
+     host and port of `SANDBOX_API_SERVER_URL` (port defaults to 443/80 by scheme); False when the
+     var is unset.
+   - `resolve(request, ctx)`: open a session via `get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id)`,
      load `Sandbox` by `ctx.sandbox.sandbox_id`, decrypt `encrypted_pat`, return the two headers.
      Raise `CredentialUnavailableError` on missing row, `None` PAT, or decrypt failure.
 
 2. **Pod-side placeholder swap** in `kubernetes_sandbox_manager.py`: the pod's `ONYX_PAT` env is
-   set to `_ONYX_PAT_PLACEHOLDER`, and `_create_sandbox_pod` no longer takes an `onyx_pat`
+   set to `_PROXY_INJECTED_PLACEHOLDER`, and `_create_sandbox_pod` no longer takes an `onyx_pat`
    argument. `provision()` still takes and validates `onyx_pat` — it guarantees the PAT was minted
    and persisted to `Sandbox.encrypted_pat` before the pod starts, even though the pod only ships
    the placeholder. `ensure_sandbox_pat` is unchanged. The docker manager keeps injecting the real
@@ -84,15 +86,15 @@ proxy and continues to inject the real PAT directly as the `ONYX_PAT` env var.
    `_compute_no_proxy_list()`), so the Onyx API host transits the proxy.
 
 4. **Register in `build_resolvers()`** (`server.py`):
-   `[OnyxPatResolver(), ExternalAppResolver()]`. Hosts are disjoint.
+   `[OnyxPatResolver(), LLMProviderKeyResolver(), ExternalAppResolver()]`. Hosts are disjoint.
 
 ## Tests
 
 - **Unit** (`backend/tests/unit/sandbox_proxy/test_onyx_pat_resolver.py`): with a fake `Sandbox`
-  row and a mock `db_session_factory`, the resolver returns both auth headers as `Bearer <pat>`.
-  Negative cases — missing row, `encrypted_pat is None`, decrypt raises — each raise
-  `CredentialUnavailableError`. `claims` is True for the API host (case-insensitive), False for
-  others, and False when `SANDBOX_API_SERVER_URL` is unset.
+  row and a patched `get_session_with_tenant`, the resolver returns both auth headers as
+  `Bearer <pat>`. Negative cases — missing row, `encrypted_pat is None`, decrypt raises — each raise
+  `CredentialUnavailableError`. `claims` is True for the API host and port (case-insensitive), False
+  for others, and False when `SANDBOX_API_SERVER_URL` is unset.
 
 - **External-dependency unit**
   (`backend/tests/external_dependency_unit/sandbox_proxy/test_onyx_pat_resolver.py`): against a
@@ -101,8 +103,8 @@ proxy and continues to inject the real PAT directly as the `ONYX_PAT` env var.
   through real `EncryptedString`.
 
 - **Pod spec** (`backend/tests/unit/onyx/server/features/build/sandbox/test_pod_spec.py`): the
-  pod's `ONYX_PAT` env equals `_ONYX_PAT_PLACEHOLDER` (never the real token); `NO_PROXY` is loopback
-  only.
+  pod's `ONYX_PAT` env equals `_PROXY_INJECTED_PLACEHOLDER` (never the real token); `NO_PROXY` is
+  loopback only.
 
 ## Out of scope
 

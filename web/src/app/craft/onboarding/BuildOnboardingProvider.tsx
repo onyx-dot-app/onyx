@@ -57,11 +57,9 @@ export function BuildOnboardingProvider({
         <BuildOnboardingModal
           mode={controller.mode}
           llmProviders={controller.llmProviders}
-          initialValues={controller.initialValues}
           isAdmin={controller.isAdmin}
-          hasUserInfo={controller.hasUserInfo}
           hasAnyProvider={controller.hasAnyProvider}
-          onComplete={controller.completeUserInfo}
+          onComplete={controller.completeOnboarding}
           onLlmComplete={controller.completeLlmSetup}
           onClose={controller.close}
         />

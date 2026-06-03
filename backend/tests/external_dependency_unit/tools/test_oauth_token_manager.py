@@ -9,6 +9,8 @@ All HTTP requests to external OAuth providers are mocked.
 import time
 from unittest.mock import Mock
 from unittest.mock import patch
+from urllib.parse import parse_qs
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import pytest
@@ -16,6 +18,9 @@ from requests import HTTPError
 from requests import Response
 from sqlalchemy.orm import Session
 
+from onyx.auth.oauth_token_manager import build_oauth_authorization_url
+from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
+from onyx.auth.oauth_token_manager import OAuthFlowParams
 from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.db.models import OAuthConfig
 from onyx.db.oauth_config import create_oauth_config
@@ -514,3 +519,87 @@ class TestUnwrapSensitiveStr:
 
         # Plain str input
         assert OAuthTokenManager._unwrap_sensitive_str("plain_string") == "plain_string"
+
+
+def _known_flow_params() -> OAuthFlowParams:
+    return OAuthFlowParams(
+        authorization_url="https://provider.example.com/authorize",
+        token_url="https://provider.example.com/token",
+        client_id="known_client_id",
+        client_secret="known_client_secret",
+        scopes=["read", "write"],
+        additional_params={"prompt": "consent"},
+    )
+
+
+class TestSharedOAuthPrimitives:
+    """The storage-agnostic wire primitives shared by tool OAuth and MCP
+    known-provider OAuth. PKCE and the resource indicator are opt-in and must
+    not appear unless requested."""
+
+    def test_build_authorization_url_includes_pkce_and_resource(self) -> None:
+        url = build_oauth_authorization_url(
+            _known_flow_params(),
+            redirect_uri="https://onyx.example.com/mcp/oauth/callback",
+            state="state_abc",
+            code_challenge="challenge_xyz",
+            resource="https://mcp.example.com/server",
+        )
+        query = parse_qs(urlparse(url).query)
+        assert query["client_id"] == ["known_client_id"]
+        assert query["response_type"] == ["code"]
+        assert query["state"] == ["state_abc"]
+        assert query["code_challenge"] == ["challenge_xyz"]
+        assert query["code_challenge_method"] == ["S256"]
+        assert query["resource"] == ["https://mcp.example.com/server"]
+        assert query["scope"] == ["read write"]
+        assert query["prompt"] == ["consent"]
+
+    def test_build_authorization_url_omits_pkce_and_resource_by_default(self) -> None:
+        url = build_oauth_authorization_url(
+            _known_flow_params(),
+            redirect_uri="https://onyx.example.com/callback",
+            state="state_abc",
+        )
+        query = parse_qs(urlparse(url).query)
+        assert "code_challenge" not in query
+        assert "code_challenge_method" not in query
+        assert "resource" not in query
+
+    @patch("onyx.auth.oauth_token_manager.requests.post")
+    def test_exchange_code_sends_code_verifier(self, mock_post: Mock) -> None:
+        mock_response = Mock(spec=Response)
+        mock_response.json.return_value = {
+            "access_token": "tok",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+        }
+        mock_response.raise_for_status = Mock()
+        mock_post.return_value = mock_response
+
+        token_data = exchange_oauth_code_for_token(
+            _known_flow_params(),
+            code="auth_code",
+            redirect_uri="https://onyx.example.com/mcp/oauth/callback",
+            code_verifier="verifier_123",
+        )
+
+        assert token_data["access_token"] == "tok"
+        assert "expires_at" in token_data
+        sent = mock_post.call_args[1]["data"]
+        assert sent["grant_type"] == "authorization_code"
+        assert sent["code"] == "auth_code"
+        assert sent["code_verifier"] == "verifier_123"
+        assert sent["client_secret"] == "known_client_secret"
+
+    @patch("onyx.auth.oauth_token_manager.requests.post")
+    def test_exchange_code_raises_on_http_error(self, mock_post: Mock) -> None:
+        mock_response = Mock(spec=Response)
+        mock_response.raise_for_status.side_effect = HTTPError("bad code")
+        mock_post.return_value = mock_response
+        with pytest.raises(HTTPError):
+            exchange_oauth_code_for_token(
+                _known_flow_params(),
+                code="bad",
+                redirect_uri="https://onyx.example.com/callback",
+            )

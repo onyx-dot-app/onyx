@@ -993,6 +993,12 @@ celery_worker_docfetching:
 #
 ######################################################################
 
+# Uncomment to skip the bundled redis-operator and let an existing cluster-wide
+# operator reconcile the Redis CR below (keep redis.enabled: true). Your operator
+# must provide the redis.redis.opstreelabs.in/v1beta2 CRDs. Unset = follow redis.enabled.
+# redisOperator:
+#   enabled: false
+
 redis:
   enabled: true
   redisStandalone:
@@ -1460,9 +1466,8 @@ configMap:
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
 
-# -- Sandbox egress proxy. Only deployed when ENABLE_CRAFT=true.
+# -- Sandbox egress proxy.
 sandboxProxy:
-  enabled: true
   replicaCount: 2
   containerPorts:
     proxy: 8080

@@ -4,7 +4,7 @@ import { cn } from "@opal/utils";
 import { QueuedMessage } from "@/app/app/interfaces";
 
 interface QueuedMessageBarProps {
-  messages: QueuedMessage[];
+  messages: readonly QueuedMessage[];
   highlightedIndex: number | null;
   awaitingPreferredSelection: boolean;
   onDiscard: (index: number) => void;

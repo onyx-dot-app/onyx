@@ -41,11 +41,16 @@ def _gen_key_b64() -> str:
     return base64.b64encode(seed).decode()
 
 
+_TEST_PROXY_IP = "10.255.255.254"
+
+
 @pytest.fixture(autouse=True)
 def _push_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", _gen_key_b64())
     monkeypatch.setattr(ksm, "_push_private_key", None, raising=False)
     monkeypatch.setattr(ksm, "_push_public_key_b64", None, raising=False)
+    monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "sandbox-proxy.onyx.svc")
+    monkeypatch.setattr(ksm, "_resolve_proxy_ip", lambda: _TEST_PROXY_IP)
 
 
 def _build_pod() -> client.V1Pod:
@@ -148,7 +153,12 @@ def test_workspace_volume_is_shared_for_session_io(pod: client.V1Pod) -> None:
     work, the sidecar to tar/untar snapshots.
     """
     volume_names = {v.name for v in pod.spec.volumes}
-    assert volume_names == {"workspace", "managed"}
+    assert volume_names == {
+        "workspace",
+        "managed",
+        "sandbox-ca-source",
+        "sandbox-ca-bundle",
+    }
     for name in ("sandbox", "sidecar"):
         mount = _mount(_container(pod, name), "workspace")
         assert mount.mount_path == "/workspace/sessions"
@@ -174,33 +184,63 @@ def test_share_process_namespace_is_disabled(pod: client.V1Pod) -> None:
 def test_onyx_pat_env_is_placeholder_not_real(pod: client.V1Pod) -> None:
     """The pod ships a placeholder; the egress proxy injects the real PAT."""
     env = {e.name: e.value for e in _container(pod, "sandbox").env}
-    assert env["ONYX_PAT"] == ksm._ONYX_PAT_PLACEHOLDER
+    assert env["ONYX_PAT"] == ksm._PROXY_INJECTED_PLACEHOLDER
 
 
-def test_no_proxy_is_loopback_only(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_proxy_is_loopback_only() -> None:
     """Only loopback may bypass the proxy; the Onyx API host must route through
     it so the PAT can be injected on the wire."""
-    monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "sandbox-proxy")
     env = {e.name: e.value for e in ksm._proxy_main_container_env_vars()}
     assert set(env["NO_PROXY"].split(",")) == {"127.0.0.1", "localhost"}
     assert env["no_proxy"] == env["NO_PROXY"]
 
 
-def test_no_proxy_env_on_sandbox_container_when_proxy_unconfigured(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """With no proxy host, the built pod's sandbox container must carry no proxy
-    env at all — pinning the actual spec, not just the helper, so a hardcoded or
-    misplaced proxy var can't create a silent direct-egress (un-injected) path."""
-    monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "")
-    env = {e.name for e in _container(_build_pod(), "sandbox").env}
-    assert env.isdisjoint(
-        {
-            "HTTP_PROXY",
-            "HTTPS_PROXY",
-            "NO_PROXY",
-            "http_proxy",
-            "https_proxy",
-            "no_proxy",
-        }
-    )
+# ---------------------------------------------------------------------------
+# Egress proxy wiring on the built pod (mandatory — no direct-egress path)
+# ---------------------------------------------------------------------------
+
+
+_PROXY_ENV_NAMES = {
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "NO_PROXY",
+    "no_proxy",
+}
+
+
+def test_proxy_env_is_set_on_sandbox_and_sidecar(pod: client.V1Pod) -> None:
+    """Both containers' outbound traffic must be routed through the proxy —
+    sandbox for the agent, sidecar for `aws s3` (the pod-wide iptables
+    lockdown blocks direct egress for either)."""
+    for name in ("sandbox", "sidecar"):
+        env = {e.name for e in _container(pod, name).env}
+        assert _PROXY_ENV_NAMES.issubset(env), (
+            f"{name} container missing proxy env: {_PROXY_ENV_NAMES - env}"
+        )
+
+
+def test_proxy_init_container_present(pod: client.V1Pod) -> None:
+    """The iptables-lockdown initContainer must run before any user code —
+    it's what blocks direct egress that the HTTPS_PROXY env doesn't catch."""
+    init_names = [c.name for c in (pod.spec.init_containers or [])]
+    assert init_names == ["sandbox-init"]
+
+
+def test_host_aliases_pin_proxy(pod: client.V1Pod) -> None:
+    """The iptables rules block DNS, so the proxy hostname must be resolved
+    via pod hostAliases."""
+    assert pod.spec.host_aliases is not None
+    aliases = {ha.ip: ha.hostnames for ha in pod.spec.host_aliases}
+    assert aliases == {_TEST_PROXY_IP: ["sandbox-proxy"]}
+
+
+def test_ca_bundle_mounted_read_only_on_both_containers(pod: client.V1Pod) -> None:
+    """The proxy terminates TLS with its own CA, so every container that
+    makes HTTPS calls must mount the CA bundle. Read-only — the bundle is
+    populated by the initContainer and must not be writable by the agent."""
+    for name in ("sandbox", "sidecar"):
+        mount = _mount(_container(pod, name), "sandbox-ca-bundle")
+        assert mount.read_only is True
+        assert mount.mount_path == "/etc/ssl/sandbox"

@@ -166,7 +166,6 @@ def _start_proxy(
     gate = GateAddon(
         identity=_StubResolver(),
         action_matcher=_NonGatingMatcher(),
-        db_session_factory=_unused_factory,
         cache_factory=_unused_factory,
         proxy_instance_id="proxy-test",
         credential_dispatcher=CredentialInjectionDispatcher([]),

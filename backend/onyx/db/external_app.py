@@ -132,6 +132,17 @@ def get_external_app_by_id(
     return db_session.scalar(stmt)
 
 
+def get_external_app_by_skill_id(
+    db_session: Session,
+    skill_id: UUID,
+) -> ExternalApp | None:
+    """The external-app gateway backing ``skill_id``, or None if the skill isn't
+    an external app. Returns just the row — callers that need its policies fetch
+    them via ``get_policies``."""
+    stmt = select(ExternalApp).where(ExternalApp.skill_id == skill_id)
+    return db_session.scalar(stmt)
+
+
 def get_external_apps(
     db_session: Session,
 ) -> list[ExternalApp]:
@@ -416,3 +427,20 @@ def upsert_external_app_user_credential(
     cred = db_session.scalars(stmt).one()
     db_session.commit()
     return cred
+
+
+def delete_external_app_user_credential(
+    db_session: Session,
+    *,
+    external_app_id: int,
+    user_id: UUID,
+) -> None:
+    """Delete the user's stored credentials for one app, and commit (no-op if
+    absent). Used when a refresh terminally fails so the user reconnects."""
+    db_session.execute(
+        delete(ExternalAppUserCredential).where(
+            ExternalAppUserCredential.external_app_id == external_app_id,
+            ExternalAppUserCredential.user_id == user_id,
+        )
+    )
+    db_session.commit()

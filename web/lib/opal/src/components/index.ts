@@ -59,6 +59,7 @@ export {
 /* Tag */
 export {
   Tag,
+  TAG_COLORS,
   type TagProps,
   type TagColor,
 } from "@opal/components/tag/components";

@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
+// When set by the dev-server start script, emits pre-proxied /_next/ URLs.
+const assetPrefix = process.env.WEBAPP_ASSET_PREFIX || undefined;
+
 const nextConfig: NextConfig = {
-  /* config options here */
+  ...(assetPrefix ? { assetPrefix } : {}),
 };
 
 export default nextConfig;

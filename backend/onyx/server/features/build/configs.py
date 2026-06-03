@@ -47,7 +47,7 @@ ATTACHMENTS_DIRECTORY = "attachments"
 SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 
 SANDBOX_CONTAINER_IMAGE = os.environ.get(
-    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.44"
+    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.50"
 )
 
 # Path structure: s3://{bucket}/{tenant_id}/snapshots/{session_id}/{snapshot_id}.tar.gz
@@ -96,8 +96,7 @@ SANDBOX_POD_MEMORY_LIMIT = os.environ.get("SANDBOX_POD_MEMORY_LIMIT", "10Gi")
 # Sandbox egress proxy
 # ============================================================================
 
-# Empty host disables proxy wiring for tests/dev (the initContainer is skipped
-# and HTTPS_PROXY isn't set on the sandbox).
+# Required when SANDBOX_BACKEND=kubernetes.
 SANDBOX_PROXY_HOST = os.environ.get("SANDBOX_PROXY_HOST", "")
 SANDBOX_PROXY_PORT = int(os.environ.get("SANDBOX_PROXY_PORT", "8080"))
 

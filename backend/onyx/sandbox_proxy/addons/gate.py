@@ -16,6 +16,7 @@ from mitmproxy import http
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import NotificationType
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.db.notification import create_notification
@@ -26,7 +27,6 @@ from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatche
 from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.errors import http_403
 from onyx.sandbox_proxy.errors import SandboxProxyError
-from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
@@ -94,7 +94,6 @@ class GateAddon:
         self,
         identity: _IdentityResolver,
         action_matcher: ActionMatcher,
-        db_session_factory: DBSessionFactory,
         cache_factory: CacheFactory,
         proxy_instance_id: str,
         credential_dispatcher: CredentialInjectionDispatcher,
@@ -103,7 +102,6 @@ class GateAddon:
     ) -> None:
         self._identity = identity
         self._action_matcher = action_matcher
-        self._db_session_factory = db_session_factory
         self._cache_factory = cache_factory
         self._proxy_instance_id = proxy_instance_id
         self._credential_dispatcher = credential_dispatcher
@@ -217,7 +215,7 @@ class GateAddon:
             # Already validated in `requestheaders`; body is streaming.
             return
 
-        gate_target = self._resolve_and_match(flow)
+        gate_target = await self._resolve_and_match(flow)
         # Strip the in-band session tag so it never reaches the origin
         flow.request.headers.pop("Proxy-Authorization", None)
         if gate_target is None:
@@ -232,8 +230,15 @@ class GateAddon:
             decision = await self._await_decision(approval_id, ctx, match)
             self._write_response_for_decision(flow, decision)
             if decision == ApprovalDecision.APPROVED:
-                self._dispatch_injection_or_block(
-                    flow, sandbox=ctx.without_session(), match=match
+                # Off-thread: the external-app resolver may refresh an expiring
+                # OAuth token (token POST + Redis lock) before rendering headers;
+                # keep that off the proxy event loop so a slow token endpoint
+                # stalls only this request, not every in-flight flow.
+                await asyncio.to_thread(
+                    self._dispatch_injection_or_block,
+                    flow,
+                    sandbox=ctx.without_session(),
+                    match=match,
                 )
         except Exception:
             logger.exception(
@@ -252,7 +257,7 @@ class GateAddon:
     # request() helpers
     # ------------------------------------------------------------------
 
-    def _resolve_and_match(
+    async def _resolve_and_match(
         self, flow: http.HTTPFlow
     ) -> tuple[SessionContext, RequestMatch] | None:
         """Identity → matcher → (only if gated) in-band session resolution.
@@ -330,7 +335,11 @@ class GateAddon:
             return None
 
         if match.decisive.policy is EndpointPolicy.ALWAYS:
-            self._dispatch_injection_or_block(flow, sandbox=sandbox, match=match)
+            # Off-thread: see the ASK path in `request` — the resolver may refresh
+            # an expiring OAuth token before injecting on this auto-approved call.
+            await asyncio.to_thread(
+                self._dispatch_injection_or_block, flow, sandbox=sandbox, match=match
+            )
             return None
 
         # ASK: resolve the originating session before prompting. An
@@ -378,7 +387,7 @@ class GateAddon:
         card on the next `/live` refetch, so we don't fail the request.
         """
         actions_payload = [a.model_dump(mode="json") for a in match.actions]
-        with self._db_session_factory(ctx.tenant_id) as db:
+        with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
             row = action_approval.insert_action_approval(
                 db,
                 session_id=ctx.session_id,
@@ -482,7 +491,7 @@ class GateAddon:
         """Conditionally claim EXPIRED; if the API already wrote a decision,
         return that winner instead so the caller forwards/rejects correctly.
         """
-        with self._db_session_factory(tenant_id) as db:
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
             claimed = action_approval.try_record_decision(
                 db,
                 approval_id=approval_id,
@@ -528,7 +537,6 @@ class GateAddon:
             InjectionContext(
                 sandbox=sandbox,
                 match=match,
-                db_session_factory=self._db_session_factory,
             ),
         )
 
@@ -627,7 +635,7 @@ class GateAddon:
         Body carries no PII; the full payload lives on the action_approval
         row, which the popover fetches when the chat loads.
         """
-        with self._db_session_factory(ctx.tenant_id) as db:
+        with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
             create_notification(
                 user_id=ctx.user_id,
                 notif_type=NotificationType.APPROVAL_REQUESTED,

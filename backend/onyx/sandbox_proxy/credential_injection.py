@@ -21,7 +21,6 @@ from mitmproxy import http
 from onyx.external_apps.matching.engine import RequestMatch
 from onyx.sandbox_proxy.errors import http_403
 from onyx.sandbox_proxy.errors import SandboxProxyError
-from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.utils.logger import setup_logger
 
@@ -43,7 +42,6 @@ class InjectionContext:
 
     sandbox: ResolvedSandbox
     match: RequestMatch | None
-    db_session_factory: DBSessionFactory
 
 
 class CredentialResolver(Protocol):

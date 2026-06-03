@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { cn } from "@opal/utils";
 import Logo from "@/refresh-components/Logo";
 import TextChunk from "@/app/craft/components/TextChunk";
@@ -17,14 +17,26 @@ import {
   TodoListState,
 } from "@/app/craft/types/displayTypes";
 
+/**
+ * A render unit: a run of consecutive non-task tool calls (the "Working" block),
+ * or a single non-tool item. Task calls become their own one-tool block so they
+ * render as standalone, non-collapsible rows.
+ */
+type RenderBlock =
+  | { kind: "tools"; tools: ToolCallState[] }
+  | { kind: "item"; item: Exclude<StreamItem, { type: "tool_call" }> };
+
 interface BuildMessageListProps {
   messages: BuildMessage[];
   streamItems: StreamItem[];
   isStreaming?: boolean;
   /** Whether auto-scroll is enabled (user is at bottom) */
   autoScrollEnabled?: boolean;
-  /** Ref to the end marker div for scroll detection */
-  messagesEndRef?: React.RefObject<HTMLDivElement>;
+  /**
+   * Scrollable container wrapping this list. Auto-scroll moves it directly
+   * rather than via scrollIntoView, which scrolls every ancestor.
+   */
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   /**
    * Trailing content attached to the last assistant block — either the
    * in-progress streaming area (if visible) or the last saved assistant
@@ -48,17 +60,20 @@ export default function BuildMessageList({
   streamItems,
   isStreaming = false,
   autoScrollEnabled = true,
-  messagesEndRef: externalMessagesEndRef,
+  scrollContainerRef,
   trailingAssistantSlot,
 }: BuildMessageListProps) {
-  const internalMessagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = externalMessagesEndRef ?? internalMessagesEndRef;
-
   useEffect(() => {
-    if (autoScrollEnabled && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    const container = scrollContainerRef.current;
+    if (autoScrollEnabled && container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
     }
-  }, [messages.length, streamItems.length, autoScrollEnabled, messagesEndRef]);
+  }, [
+    messages.length,
+    streamItems.length,
+    autoScrollEnabled,
+    scrollContainerRef,
+  ]);
 
   const hasStreamItems = streamItems.length > 0;
   const lastMessage = messages[messages.length - 1];
@@ -70,36 +85,24 @@ export default function BuildMessageList({
     rawItems: StreamItem[],
     opts: { isCurrentStream: boolean; extractLatestTodo: boolean }
   ): { nodes: React.ReactNode[]; pinnedTodo: TodoListState | null } => {
-    // Per-turn structure: [Working block, last thinking?, final text].
-    // - Drop every settled thinking before the last tool_call (pre-tool narration).
-    // - Keep only the last settled thinking, and only if it sits after the last
-    //   tool_call (post-tool reasoning; never a hidden pre-tool one that
-    //   happened to be the last).
-    // - Keep only the LAST text item.
-    // - All tool_calls survive; the grouping walker below rolls consecutive
-    //   runs into a single "Working" card.
-    let lastThinkingIdx = -1;
-    let lastToolIdx = -1;
-    let lastTextIdx = -1;
+    // Render items in stream order (tools, text, thinking interleaved).
+    //
+    // Filtering rules that apply first:
+    // - Only the LATEST todo_list is kept (either pinned via extractLatestTodo
+    //   or rendered inline at its original position).
+    // - Thinking is ephemeral: the card shows only while the model is actively
+    //   thinking and disappears once that block settles.
     let latestTodoIdx = -1;
     rawItems.forEach((it, idx) => {
-      if (it.type === "thinking") lastThinkingIdx = idx;
-      if (it.type === "tool_call") lastToolIdx = idx;
-      if (it.type === "text") lastTextIdx = idx;
       if (it.type === "todo_list") latestTodoIdx = idx;
     });
 
     const items = rawItems.filter((it, idx) => {
+      // Drop settled thinking entirely — it's only shown live, in progress.
       if (it.type === "thinking" && !it.isStreaming) {
-        if (idx !== lastThinkingIdx) return false;
-        if (lastToolIdx > idx) return false;
-      }
-      if (it.type === "text" && !it.isStreaming && idx !== lastTextIdx) {
         return false;
       }
-      // Always collapse to a single todo_list per turn — either pinned at
-      // the top of the streaming column, or rendered inline at the latest
-      // index for history.
+      // Collapse to one todo_list per turn.
       if (it.type === "todo_list" && idx !== latestTodoIdx) {
         return false;
       }
@@ -109,7 +112,6 @@ export default function BuildMessageList({
       return true;
     });
 
-    const nodes: React.ReactNode[] = [];
     const pinnedTodo =
       opts.extractLatestTodo && latestTodoIdx !== -1
         ? (
@@ -120,41 +122,54 @@ export default function BuildMessageList({
           ).todoList
         : null;
 
-    // Render order is enforced — tool calls always come first, then any
-    // surviving thinking/text/todo at the bottom. The model can emit tools
-    // anywhere in the stream, but the UI always presents work above answer.
-    const toolItems = items.filter(
-      (it): it is Extract<StreamItem, { type: "tool_call" }> =>
-        it.type === "tool_call"
-    );
-    const trailingItems = items.filter((it) => it.type !== "tool_call");
-
-    let i = 0;
-    while (i < toolItems.length) {
-      const item = toolItems[i]!;
-      const groupTools: ToolCallState[] = [item.toolCall];
-      let j = i + 1;
-      while (j < toolItems.length) {
-        groupTools.push(toolItems[j]!.toolCall);
-        j++;
+    // Group the flat items into render blocks: consecutive non-task tool calls
+    // merge into one "Working" block; task calls and non-tool items each stand
+    // alone.
+    const blocks: RenderBlock[] = [];
+    for (const it of items) {
+      if (it.type !== "tool_call") {
+        blocks.push({ kind: "item", item: it });
+        continue;
       }
-      if (groupTools.length === 1) {
-        nodes.push(<CraftToolCard key={item.id} toolCall={item.toolCall} />);
+      const tool = it.toolCall;
+      const last = blocks[blocks.length - 1];
+      if (
+        tool.kind !== "task" &&
+        last?.kind === "tools" &&
+        last.tools[0]!.kind !== "task"
+      ) {
+        last.tools.push(tool);
       } else {
-        nodes.push(
-          <CraftToolGroup key={`group-${item.id}`} toolCalls={groupTools} />
-        );
+        blocks.push({ kind: "tools", tools: [tool] });
       }
-      i = j;
     }
 
-    const hasToolsBefore = toolItems.length > 0;
-    trailingItems.forEach((item, idx) => {
-      const isFirstTrailing = idx === 0;
-      const topMargin = isFirstTrailing && hasToolsBefore ? "mt-3" : "";
+    const nodes = blocks.map((block, idx) => {
+      if (block.kind === "tools") {
+        const { tools } = block;
+        // A single tool (incl. every task) is a plain, non-collapsible card.
+        if (tools.length === 1) {
+          return <CraftToolCard key={tools[0]!.id} toolCall={tools[0]!} />;
+        }
+        // The group folds closed once an assistant message follows it.
+        const followedByMessage = blocks
+          .slice(idx + 1)
+          .some((b) => b.kind === "item" && b.item.type === "text");
+        return (
+          <CraftToolGroup
+            key={`group-${tools[0]!.id}`}
+            toolCalls={tools}
+            autoCollapse={followedByMessage}
+          />
+        );
+      }
+
+      // Inline item — small top margin when it follows a tool block.
+      const topMargin = blocks[idx - 1]?.kind === "tools" ? "mt-3" : "";
+      const { item } = block;
       switch (item.type) {
         case "text":
-          nodes.push(
+          return (
             <div key={item.id} className={cn(topMargin)}>
               <TextChunk
                 content={item.content}
@@ -162,9 +177,8 @@ export default function BuildMessageList({
               />
             </div>
           );
-          break;
         case "thinking":
-          nodes.push(
+          return (
             <div key={item.id} className={cn(topMargin)}>
               <ThinkingCard
                 content={item.content}
@@ -172,9 +186,8 @@ export default function BuildMessageList({
               />
             </div>
           );
-          break;
         case "todo_list":
-          nodes.push(
+          return (
             <div key={item.id} className={cn(topMargin)}>
               <TodoListCard
                 todoList={item.todoList}
@@ -182,7 +195,8 @@ export default function BuildMessageList({
               />
             </div>
           );
-          break;
+        default:
+          return null;
       }
     });
 
@@ -206,7 +220,7 @@ export default function BuildMessageList({
 
     return (
       <div key={message.id} className="flex items-start gap-3 py-4">
-        <div className="shrink-0 mt-0.5">
+        <div className="shrink-0 h-9 flex items-center">
           <Logo folded size={24} />
         </div>
         <div className="flex-1 flex flex-col gap-2 min-w-0">
@@ -251,7 +265,7 @@ export default function BuildMessageList({
 
   return (
     <div className="flex flex-col items-center px-4 pb-4">
-      <div className="w-full max-w-2xl rounded-16 p-4">
+      <div className="w-full max-w-[720px] rounded-16 p-4">
         {messages.map((message, idx) => {
           if (message.type === "user") {
             return <UserMessage key={message.id} content={message.content} />;
@@ -272,7 +286,7 @@ export default function BuildMessageList({
 
         {showStreamingArea && (
           <div className="flex items-start gap-3 py-4">
-            <div className="shrink-0 mt-0.5">
+            <div className="shrink-0 mt-2">
               <Logo folded size={24} />
             </div>
             <div className="flex-1 flex flex-col gap-2 min-w-0">
@@ -285,7 +299,7 @@ export default function BuildMessageList({
                 </div>
               )}
               {!hasStreamItems ? (
-                <div className="h-6 flex items-center">
+                <div className="h-9 flex items-center">
                   <BlinkingBar />
                 </div>
               ) : (
@@ -295,8 +309,6 @@ export default function BuildMessageList({
             </div>
           </div>
         )}
-
-        <div ref={messagesEndRef} />
       </div>
     </div>
   );

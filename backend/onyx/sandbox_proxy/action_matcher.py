@@ -14,12 +14,12 @@ from urllib.parse import parse_qs
 
 from mitmproxy import http
 
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.external_app import get_external_apps
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.engine import match_action
 from onyx.external_apps.matching.engine import RequestMatch
 from onyx.external_apps.matching.request import ProxiedRequest
-from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -63,11 +63,8 @@ class ExternalAppActionMatcher(ActionMatcher):
     the pre-written ``match_action`` for the policy verdict.
     """
 
-    def __init__(self, db_session_factory: DBSessionFactory) -> None:
-        self._db_session_factory = db_session_factory
-
     def match(self, request: http.Request, tenant_id: str) -> RequestMatch | None:
-        with self._db_session_factory(tenant_id) as db:
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
             apps = get_external_apps(db)
             app = resolve_app_for_url(request.url, apps)
             if app is None:

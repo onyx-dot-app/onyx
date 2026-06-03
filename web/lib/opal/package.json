@@ -1,6 +1,6 @@
 {
   "name": "@onyx-ai/opal",
-  "version": "0.1.3",
+  "version": "0.1.5",
   "description": "Opal — Onyx's Typescript component library and design system.",
   "license": "MIT",
   "repository": {
@@ -48,6 +48,10 @@
     "./logos": {
       "types": "./dist/logos/index.d.ts",
       "import": "./dist/logos/index.js"
+    },
+    "./time": {
+      "types": "./dist/time.d.ts",
+      "import": "./dist/time.js"
     },
     "./types": {
       "types": "./dist/types.d.ts",
