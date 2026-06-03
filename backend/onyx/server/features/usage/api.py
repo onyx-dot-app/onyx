@@ -2,7 +2,10 @@
 litellm in compute_cost_cents. Writes invalidate the per-tenant override cache
 so subsequent cost computations don't bill stale rates."""
 
+from collections import defaultdict
+from datetime import date
 from datetime import datetime
+from datetime import time
 from datetime import timedelta
 from datetime import timezone
 
@@ -17,6 +20,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.models import User
+from onyx.db.user_usage import get_usage_export
 from onyx.db.user_usage import get_user_cost_cents_in_window
 from onyx.db.user_usage import get_user_usage_by_day_and_model
 from onyx.db.user_usage import get_window_start
@@ -31,6 +35,10 @@ from onyx.server.features.usage.models import CostOverride
 from onyx.server.features.usage.models import CostOverrideUpsertRequest
 from onyx.server.features.usage.models import ModelPrice
 from onyx.server.features.usage.models import UsageDayModel
+from onyx.server.features.usage.models import UsageExportRecord
+from onyx.server.features.usage.models import UsageExportResponse
+from onyx.server.features.usage.models import UsageExportTotals
+from onyx.server.features.usage.models import UsageExportUser
 from onyx.server.features.usage.models import UserUsageResponse
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
@@ -38,9 +46,14 @@ from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 # the recorder (onyx/tracing/processors/user_usage_processor.py).
 _PERIOD_HOURS = USAGE_LIMIT_WINDOW_SECONDS // 3600
 
+# Default trailing range for the export when no start is given.
+_DEFAULT_EXPORT_DAYS = 30
+
 router = APIRouter(prefix="/admin/cost-overrides", tags=PUBLIC_API_TAGS)
 
 user_usage_router = APIRouter(prefix="/user/usage", tags=PUBLIC_API_TAGS)
+
+admin_usage_router = APIRouter(prefix="/admin/usage", tags=PUBLIC_API_TAGS)
 
 
 @user_usage_router.get("")
@@ -90,6 +103,60 @@ def get_my_usage(
         budget_cents=None,
         budget_remaining_cents=None,
         selected_model_price=selected_model_price,
+    )
+
+
+@admin_usage_router.get("/export")
+def export_usage(
+    start: date | None = None,
+    end: date | None = None,
+    model: str | None = None,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> UsageExportResponse:
+    """Company-wide GenAI usage report, keyed by user email.
+
+    Aggregates every user's usage over the half-open range [start, end) into
+    per (email x model x window-day) records plus a per-user totals roll-up.
+    `start` defaults to 30 days ago, `end` to today. Day granularity follows the
+    configured usage window (weekly by default), so each record's day is the
+    window's start day — not the calendar day a call was made.
+    """
+    end_date = end or datetime.now(timezone.utc).date()
+    start_date = start or (end_date - timedelta(days=_DEFAULT_EXPORT_DAYS))
+
+    # Half-open over the full end day so windows starting on `end` are included.
+    start_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+    end_dt = datetime.combine(end_date, time.min, tzinfo=timezone.utc) + timedelta(
+        days=1
+    )
+
+    rows = get_usage_export(db_session, start=start_dt, end=end_dt, model=model)
+
+    records_by_email: dict[str, list[UsageExportRecord]] = defaultdict(list)
+    for row in rows:
+        records_by_email[str(row["email"])].append(
+            UsageExportRecord.model_validate(row)
+        )
+
+    users = [
+        UsageExportUser(
+            email=email,
+            totals=UsageExportTotals(
+                input_tokens=sum(r.input_tokens for r in records),
+                output_tokens=sum(r.output_tokens for r in records),
+                cache_read_tokens=sum(r.cache_read_tokens for r in records),
+                cost_cents=sum(r.cost_cents for r in records),
+            ),
+            records=records,
+        )
+        for email, records in records_by_email.items()
+    ]
+
+    return UsageExportResponse(
+        start=start_date.isoformat(),
+        end=end_date.isoformat(),
+        users=users,
     )
 
 

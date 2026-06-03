@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from onyx.db.models import User
 from onyx.db.models import UserUsage
 from onyx.utils.logger import setup_logger
 
@@ -169,6 +170,61 @@ def get_user_usage_by_day_and_model(
             "cost_cents": float(cost or 0.0),
         }
         for day, model, in_tok, out_tok, cache_tok, cost in rows
+    ]
+
+
+def get_usage_export(
+    db_session: Session,
+    start: datetime,
+    end: datetime,
+    model: str | None = None,
+) -> list[dict[str, object]]:
+    """Tenant-wide usage joined to user email, grouped by (email, model, day).
+
+    Covers windows whose start falls in [start, end). Day granularity follows
+    the configured usage window (weekly by default), so func.date(window_start)
+    is the window day, not necessarily the calendar day a call was made — a
+    "daily" caller gets one row per window, labelled by that window's start day.
+
+    Rows: {email, model, day, input_tokens, output_tokens, cache_read_tokens,
+    cost_cents}, sorted by (email, day, model).
+    """
+    query = (
+        # User.email comes from the fastapi-users base; ty mis-resolves it as a
+        # non-column role, so the multi-column select overload doesn't match.
+        select(  # ty: ignore[no-matching-overload]
+            User.email,
+            UserUsage.model,
+            func.date(UserUsage.window_start).label("day"),
+            func.sum(UserUsage.input_tokens),
+            func.sum(UserUsage.output_tokens),
+            func.sum(UserUsage.cache_read_tokens),
+            func.sum(UserUsage.cost_cents),
+        )
+        .join(User, User.id == UserUsage.user_id)
+        .where(
+            UserUsage.window_start >= start,
+            UserUsage.window_start < end,
+        )
+        .group_by(User.email, UserUsage.model, func.date(UserUsage.window_start))
+        .order_by(User.email, func.date(UserUsage.window_start), UserUsage.model)
+    )
+    if model is not None:
+        query = query.where(UserUsage.model == model)
+
+    rows = db_session.execute(query).all()
+
+    return [
+        {
+            "email": email,
+            "model": mdl,
+            "day": str(day),
+            "input_tokens": int(in_tok or 0),
+            "output_tokens": int(out_tok or 0),
+            "cache_read_tokens": int(cache_tok or 0),
+            "cost_cents": float(cost or 0.0),
+        }
+        for email, mdl, day, in_tok, out_tok, cache_tok, cost in rows
     ]
 
 

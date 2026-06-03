@@ -37,6 +37,43 @@ class UsageDayModel(BaseModel):
     cost_cents: float
 
 
+class UsageExportRecord(BaseModel):
+    """One (model x window-day) bucket for a user in the admin export."""
+
+    model: str
+    day: str  # YYYY-MM-DD — the usage window's start day (see UsageExportUser)
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cost_cents: float
+
+
+class UsageExportTotals(BaseModel):
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cost_cents: float
+
+
+class UsageExportUser(BaseModel):
+    email: str
+    totals: UsageExportTotals
+    records: list[UsageExportRecord]
+
+
+class UsageExportResponse(BaseModel):
+    """Cursor-style company GenAI report, nested per user.
+
+    `start`/`end` echo the queried half-open range [start, end). Day granularity
+    follows the configured usage window (weekly by default), so each record's
+    `day` is the window's start day rather than the calendar day of every call.
+    """
+
+    start: str
+    end: str
+    users: list[UsageExportUser]
+
+
 class ModelPrice(BaseModel):
     """USD per 1M tokens for the user's selected chat model; null if unpriced."""
 
