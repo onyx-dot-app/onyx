@@ -119,7 +119,7 @@ export function BuildLLMPopover({
               provider.provider_display_name || provider.provider,
             modelName: model.name,
             displayName: model.display_name || model.name,
-            isRecommended: isRecommendedModel(provider.provider, model.name),
+            isRecommended: isRecommendedModel(model.name),
             isConfigured: true,
           });
         });

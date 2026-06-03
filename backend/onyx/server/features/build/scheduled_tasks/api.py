@@ -56,7 +56,6 @@ from onyx.server.features.build.scheduled_tasks.schedule import EditorMode
 from onyx.server.features.build.scheduled_tasks.schedule import EditorPayload
 from onyx.server.features.build.scheduled_tasks.schedule import human_readable
 from onyx.server.features.build.scheduled_tasks.schedule import next_n_fires
-from onyx.server.features.build.scheduled_tasks.schedule import validate_timezone
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -129,7 +128,6 @@ class ScheduledTaskCreate(_Forbid):
     prompt: str = Field(..., min_length=1)
     editor_mode: EditorMode
     editor_payload: EditorPayload
-    timezone: str
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE
     run_immediately: bool = False
 
@@ -147,7 +145,6 @@ class ScheduledTaskPatch(_Forbid):
     prompt: str | None = Field(default=None, min_length=1)
     editor_mode: EditorMode | None = None
     editor_payload: EditorPayload | None = None
-    timezone: str | None = None
     status: ScheduledTaskStatus | None = None
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
@@ -196,7 +193,6 @@ class ScheduledTaskListItem(BaseModel):
     name: str
     human_readable_schedule: str
     cron_expression: str
-    timezone: str
     editor_mode: str
     status: ScheduledTaskStatus
     next_run_at: datetime | None
@@ -215,7 +211,6 @@ class ScheduledTaskDetail(BaseModel):
     prompt: str
     human_readable_schedule: str
     cron_expression: str
-    timezone: str
     editor_mode: str
     status: ScheduledTaskStatus
     next_run_at: datetime | None
@@ -273,9 +268,8 @@ def _list_item(
     return ScheduledTaskListItem(
         id=str(task.id),
         name=task.name,
-        human_readable_schedule=human_readable(task.cron_expression, task.timezone),
+        human_readable_schedule=human_readable(task.cron_expression),
         cron_expression=task.cron_expression,
-        timezone=task.timezone,
         editor_mode=task.editor_mode,
         status=task.status,
         next_run_at=task.next_run_at,
@@ -295,7 +289,6 @@ def _detail(
     if task.status == ScheduledTaskStatus.ACTIVE:
         next_runs = next_n_fires(
             task.cron_expression,
-            task.timezone,
             datetime.now(tz=timezone.utc),
             NEXT_RUNS_PREVIEW_COUNT,
         )
@@ -303,9 +296,8 @@ def _detail(
         id=str(task.id),
         name=task.name,
         prompt=task.prompt,
-        human_readable_schedule=human_readable(task.cron_expression, task.timezone),
+        human_readable_schedule=human_readable(task.cron_expression),
         cron_expression=task.cron_expression,
-        timezone=task.timezone,
         editor_mode=task.editor_mode,
         status=task.status,
         next_run_at=task.next_run_at,
@@ -381,14 +373,12 @@ def create_task(
     """Create a new scheduled task.
 
     Pipeline:
-      1. Validate the timezone.
-      2. Compile ``editor_mode`` + ``editor_payload`` to a canonical cron.
-      3. Insert via ``create_scheduled_task`` (which computes ``next_run_at``
+      1. Compile ``editor_mode`` + ``editor_payload`` to a canonical cron.
+      2. Insert via ``create_scheduled_task`` (which computes ``next_run_at``
          when the task is created ACTIVE).
-      4. If ``run_immediately`` is set, insert a ``manual_run_now`` run row
+      3. If ``run_immediately`` is set, insert a ``manual_run_now`` run row
          and enqueue the executor. Does NOT touch ``next_run_at``.
     """
-    validate_timezone(request.timezone)
     cron_expression = compile_to_cron(request.editor_payload)
 
     task = create_scheduled_task(
@@ -397,7 +387,6 @@ def create_task(
         name=request.name,
         prompt=request.prompt,
         cron_expression=cron_expression,
-        timezone_name=request.timezone,
         editor_mode=request.editor_mode,
         status=request.status,
     )
@@ -442,8 +431,8 @@ def patch_task(
 
     If ``editor_mode`` + ``editor_payload`` are provided, the cron is
     recompiled before being handed to ``update_scheduled_task``. The DB op
-    handles ``next_run_at`` recomputation (schedule/timezone change,
-    pause/resume) on its own.
+    handles ``next_run_at`` recomputation (schedule change, pause/resume) on
+    its own.
     """
     cron_expression: str | None = None
     if request.editor_payload is not None:
@@ -458,7 +447,6 @@ def patch_task(
         name=request.name,
         prompt=request.prompt,
         cron_expression=cron_expression,
-        timezone_name=request.timezone,
         editor_mode=request.editor_mode,
         status=request.status,
     )

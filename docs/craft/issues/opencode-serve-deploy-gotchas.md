@@ -40,8 +40,25 @@ the Role in your deployment system.
 ```yaml
 - apiGroups: [""]
   resources: ["secrets"]
-  verbs: ["create", "get", "list", "watch", "delete", "patch"]
+  verbs: ["create", "get", "update", "delete"]
 ```
+
+These are exactly the four verbs the api server exercises — and no more.
+Map each to the `_core_api.` call that needs it:
+
+| call (`kubernetes_sandbox_manager.py`) | HTTP method | RBAC verb |
+| -------------------------------------- | ----------- | --------- |
+| `create_namespaced_secret`             | POST        | `create`  |
+| `read_namespaced_secret`               | GET         | `get`     |
+| `replace_namespaced_secret`            | PUT         | `update`  |
+| `delete_namespaced_secret`             | DELETE      | `delete`  |
+
+Watch out: `replace_namespaced_secret` is a **PUT**, which maps to the
+`update` verb — **not** `patch`. If you grant `patch` instead of
+`update`, the happy path still works but the 409-race re-provision
+branch (see §1.3 — the path that calls `replace_namespaced_secret` after
+a create conflict) will intermittently 403. `list`/`watch` are not used
+on secrets at all.
 
 `backend/onyx/server/features/build/sandbox/kubernetes/kubernetes_sandbox_manager.py`
 is the source of truth for which k8s resources the api server touches —

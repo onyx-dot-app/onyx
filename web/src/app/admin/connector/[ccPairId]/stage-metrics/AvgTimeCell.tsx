@@ -3,7 +3,7 @@
 import { Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { IndexAttemptStageMetric } from "@/lib/types";
-import { formatDurationMs } from "@/lib/time";
+import { formatDurationMs } from "@opal/time";
 import { cn } from "@opal/utils";
 import { colorClassForStage } from "./utils";
 

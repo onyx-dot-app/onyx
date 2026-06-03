@@ -34,24 +34,6 @@ def get_provider_display_name(provider: str | None) -> str | None:
     return PROVIDER_DISPLAY_NAMES.get(provider, provider.title())
 
 
-def build_user_context(user_name: str | None, user_role: str | None) -> str:
-    """Build the user context section for AGENTS.md.
-
-    Args:
-        user_name: User's name
-        user_role: User's role/title
-
-    Returns:
-        Formatted user context string
-    """
-    if not user_name:
-        return ""
-
-    if user_role:
-        return f"You are assisting **{user_name}**, {user_role}, with their work."
-    return f"You are assisting **{user_name}** with their work."
-
-
 # Content for the attachments section when user has uploaded files
 ATTACHMENTS_SECTION_CONTENT = """## Attachments (PRIORITY)
 
@@ -115,7 +97,6 @@ def generate_agent_instructions(
     nextjs_port: int | None = None,
     disabled_tools: list[str] | None = None,
     user_name: str | None = None,
-    user_role: str | None = None,
 ) -> str:
     """Generate AGENTS.md content by populating the template with dynamic values.
 
@@ -127,7 +108,6 @@ def generate_agent_instructions(
         nextjs_port: Port for Next.js development server
         disabled_tools: List of disabled tools
         user_name: User's name for personalization
-        user_role: User's role/title for personalization
 
     Returns:
         Generated AGENTS.md content with placeholders replaced
@@ -138,7 +118,10 @@ def generate_agent_instructions(
 
     template_content = template_path.read_text()
 
-    user_context = build_user_context(user_name, user_role)
+    if not user_name:
+        user_context = ""
+    else:
+        user_context = f"You are assisting **{user_name}** with their work."
 
     # Build LLM configuration section
     provider_display = get_provider_display_name(provider)

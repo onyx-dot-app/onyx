@@ -113,6 +113,8 @@ class _TurnState:
     # or fetch failed). Kept so subsequent deltas short-circuit without
     # re-issuing the REST hydrate.
     user_message_ids: set[str] = field(default_factory=set)
+    # `task` callID → claimed child session (parallel tasks get distinct children).
+    task_child_by_call: dict[str, str] = field(default_factory=dict)
     # Last LLM finish reason seen on any assistant message.updated. Only the
     # terminator (fired from session.idle/status) consumes it — message.updated
     # itself is per-step and can't terminate the turn.
@@ -342,10 +344,31 @@ def _is_assistant_message(
 # ---------------------------------------------------------------------------
 
 
+def _is_descendant_of(
+    sess_id: str,
+    ancestor_id: str,
+    parent_resolver: Callable[[str], str | None] | None,
+) -> bool:
+    """True if ``sess_id`` is a descendant of ``ancestor_id`` via the
+    child→parent chain. Guards against cycles and missing resolver."""
+    if parent_resolver is None:
+        return False
+    seen: set[str] = {sess_id}
+    parent = parent_resolver(sess_id)
+    while parent is not None and parent not in seen:
+        if parent == ancestor_id:
+            return True
+        seen.add(parent)
+        parent = parent_resolver(parent)
+    return False
+
+
 def translate_opencode_event(
     raw: dict[str, Any],
     state: _TurnState,
     fetch_message: Callable[[str], dict[str, Any] | None] | None = None,
+    parent_resolver: Callable[[str], str | None] | None = None,
+    children_resolver: Callable[[str], list[str]] | None = None,
 ) -> Iterable[SandboxEvent]:
     """Convert one opencode ``/event`` payload into zero-or-more SandboxEvents.
 
@@ -355,6 +378,12 @@ def translate_opencode_event(
     Returns an iterable so single opencode events that imply multiple
     sandbox events (e.g. final ``message.updated`` → flush +
     ``PromptResponse``) can yield more than one.
+
+    ``parent_resolver`` (child→parent) lets the translator recognize events
+    from descendant subagent sessions; their tool events are forwarded and
+    tagged with routing metadata instead of dropped. ``children_resolver``
+    (parent→children) lets the parent's ``task`` tool event be tagged with the
+    subagent session it spawned.
     """
     etype = raw.get("type")
     if not isinstance(etype, str):
@@ -372,8 +401,27 @@ def translate_opencode_event(
         info = props.get("info") or {}
         if isinstance(info, dict):
             sess_id = info.get("sessionID")
-    if sess_id is not None and sess_id != state.session_id:
-        return  # event for another session (e.g. subagent child)
+
+    if isinstance(sess_id, str) and sess_id != state.session_id:
+        # Event from another session. Forward ONLY descendant tool events,
+        # tagged so the frontend can route them to the right subagent. Child
+        # text/reasoning are dropped for v1 (routing them through
+        # _is_assistant_message would 404: fetch_message is bound to the
+        # parent session).
+        if not _is_descendant_of(sess_id, state.session_id, parent_resolver):
+            return  # unrelated session — drop as before
+        if etype != "message.part.updated":
+            return
+        part = props.get("part") or {}
+        if not isinstance(part, dict) or part.get("type") != "tool":
+            return
+        for event in _emit_tool_events(part, state):
+            _merge_field_meta(
+                event,
+                {"sessionId": sess_id, "parentSessionId": state.session_id},
+            )
+            yield event
+        return
 
     # ── streaming text deltas ────────────────────────────────────────
     if etype == "message.part.delta":
@@ -449,7 +497,29 @@ def translate_opencode_event(
             return
 
         if part_type == "tool":
-            yield from _emit_tool_events(part, state)
+            # Tag the parent's ``task`` tool event with the subagent session it
+            # spawned so the frontend can link the call to its child stream.
+            subagent_sid: str | None = None
+            if part.get("tool") == "task" and children_resolver is not None:
+                # Each task callID claims the most-recent not-yet-claimed child.
+                call_id = part.get("callID")
+                if call_id is not None and call_id in state.task_child_by_call:
+                    subagent_sid = state.task_child_by_call[call_id]
+                else:
+                    claimed = set(state.task_child_by_call.values())
+                    unclaimed = [
+                        c
+                        for c in children_resolver(state.session_id)
+                        if c not in claimed
+                    ]
+                    if unclaimed:
+                        subagent_sid = unclaimed[-1]
+                        if call_id is not None:
+                            state.task_child_by_call[call_id] = subagent_sid
+            for event in _emit_tool_events(part, state):
+                if subagent_sid is not None:
+                    _merge_field_meta(event, {"subagentSessionId": subagent_sid})
+                yield event
             return
 
         # Reasoning parts: streams come via message.part.delta with
@@ -570,6 +640,17 @@ def _reconcile_part_text(
             len(expected),
             len(local),
         )
+
+
+def _merge_field_meta(event: SandboxEvent, extra: dict[str, Any]) -> None:
+    """Merge routing metadata into an event's ACP ``_meta`` field in place.
+
+    ``field_meta`` (aliased ``_meta``) already carries ``toolName`` for tool
+    events; merge rather than overwrite so both survive ``model_dump``."""
+    existing = getattr(event, "field_meta", None)
+    merged: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
+    merged.update(extra)
+    setattr(event, "field_meta", merged)
 
 
 def _emit_tool_events(
@@ -965,6 +1046,7 @@ class OpencodeServeClient:
         model_provider: str | None = None,
         model_id: str | None = None,
         timeout: float = SANDBOX_TURN_TIMEOUT_SECONDS,
+        should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream one turn of SandboxEvents via the shared per-pod bus.
 
@@ -1031,6 +1113,9 @@ class OpencodeServeClient:
                 state,
                 fetch_message,
                 directory=directory,
+                parent_resolver=self._event_bus.parent_of,
+                children_resolver=self._event_bus.list_children,
+                should_interrupt=should_interrupt,
             )
 
         except GeneratorExit:
@@ -1048,13 +1133,31 @@ class OpencodeServeClient:
         fetch_message: Callable[[str], dict[str, Any] | None],
         *,
         directory: str,
+        parent_resolver: Callable[[str], str | None] | None = None,
+        children_resolver: Callable[[str], list[str]] | None = None,
+        should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Drain the bus queue, translate, yield until a
-        :class:`PromptResponse` is emitted. permission.asked → auto-allow."""
+        :class:`PromptResponse` is emitted. permission.asked → auto-allow.
+
+        ``should_interrupt`` (polled ~1/s) lets the caller end the turn
+        deterministically: we abort opencode and emit our own terminating
+        ``PromptResponse`` rather than waiting on a ``session.idle`` that may
+        never arrive after an abort — otherwise an interrupted, event-less turn
+        would pin its slot until ``timeout``."""
         terminated_locally = False
         start = time.monotonic()
         last_event = start
+        last_interrupt_check = start
         while True:
+            now = time.monotonic()
+            if should_interrupt is not None and now - last_interrupt_check >= 1.0:
+                last_interrupt_check = now
+                if should_interrupt():
+                    self.abort(opencode_session_id, directory=directory)
+                    yield PromptResponse.model_validate({"stopReason": "cancelled"})
+                    return
+
             remaining = timeout - (time.monotonic() - start)
             if remaining <= 0:
                 self.abort(opencode_session_id, directory=directory)
@@ -1088,7 +1191,13 @@ class OpencodeServeClient:
             if raw.get("type") == "server.connected":
                 continue
 
-            for sandbox_event in translate_opencode_event(raw, state, fetch_message):
+            for sandbox_event in translate_opencode_event(
+                raw,
+                state,
+                fetch_message,
+                parent_resolver=parent_resolver,
+                children_resolver=children_resolver,
+            ):
                 if isinstance(sandbox_event, PromptResponse):
                     terminated_locally = True
                 yield sandbox_event

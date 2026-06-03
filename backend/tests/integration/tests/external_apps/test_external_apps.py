@@ -6,6 +6,7 @@ import pytest
 from onyx.db.enums import ExternalAppType
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
+from onyx.utils.encryption import mask_credential_dict
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -105,7 +106,9 @@ def test_admin_creates_app_user_configures_credentials(
     assert admin_app.enabled is True
     assert admin_app.upstream_url_patterns == [r"^https://api\.example\.com/.*$"]
     assert admin_app.auth_template == _AUTH_TEMPLATE
-    assert admin_app.organization_credentials == _ORG_CREDENTIALS
+    # Org credentials are masked in the admin response so secrets are never
+    # returned to the client.
+    assert admin_app.organization_credentials == mask_credential_dict(_ORG_CREDENTIALS)
 
     user_app_before = ExternalAppManager.get_for_user(
         user_performing_action=basic_user, app_id=app_id
@@ -131,7 +134,9 @@ def test_admin_creates_app_user_configures_credentials(
     assert set(user_app_after.credential_keys) == _EXPECTED_USER_KEYS
 
     admin_apps_after = ExternalAppManager.list_admin(user_performing_action=admin_user)
-    assert admin_apps_after[0].organization_credentials == _ORG_CREDENTIALS
+    assert admin_apps_after[0].organization_credentials == mask_credential_dict(
+        _ORG_CREDENTIALS
+    )
 
 
 # =============================================================================

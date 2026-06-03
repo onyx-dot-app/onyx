@@ -16,6 +16,7 @@ _BASE = "https://www.googleapis.com/calendar/v3/"
 _PAGE_SIZE = 250
 _DEFAULT_LIMIT = 250
 _METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
+_HTTP_TIMEOUT_SECONDS = 180
 
 
 def _prune(value: Any) -> Any:
@@ -51,7 +52,7 @@ def _req(
     req = urllib.request.Request(  # noqa: S310 — fixed https base url
         url, data=data, method=method, headers=headers
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+    with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_SECONDS) as resp:  # noqa: S310
         raw = resp.read().decode("utf-8")
     return json.loads(raw) if raw.strip() else {}
 

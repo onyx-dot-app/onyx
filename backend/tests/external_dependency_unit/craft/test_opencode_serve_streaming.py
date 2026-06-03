@@ -147,7 +147,7 @@ def test_reasoning_routed_to_thought_chunk(
     running_sandbox: Callable[..., Any],
     llm_config: LLMProviderConfig,
 ) -> None:
-    """gpt-4o-mini reliably emits a short reasoning preamble. That content
+    """gpt-5-mini reliably emits a short reasoning preamble. That content
     must land in AgentThoughtChunk, NOT in AgentMessageChunk. Regression
     test for the wire-grammar bug where deltas on ``type=reasoning`` parts
     came across as visible message chunks."""
@@ -208,7 +208,7 @@ def test_multi_step_turn_doesnt_drop_post_tool_text(
     bug where post-tool text was dropped because its messageID wasn't
     in our singleton-tracked id.
 
-    Model variance: gpt-4o-mini sometimes refuses to "say something
+    Model variance: gpt-5-mini sometimes refuses to "say something
     after the tool" no matter how the prompt is worded. To assert
     correctness without flaking on model whim, we subscribe to the raw
     ``/event`` stream IN PARALLEL with the manager's send_message and
@@ -299,7 +299,7 @@ def test_multi_step_turn_doesnt_drop_post_tool_text(
 
     if len(assistant_msg_ids_with_text) <= 1:
         pytest.skip(
-            "gpt-4o-mini didn't emit a post-tool answer this run "
+            "gpt-5-mini didn't emit a post-tool answer this run "
             "(opencode produced text on only one assistant message); "
             "the multi-message regression path can't manifest here. "
             "Unit test ``test_multi_assistant_message_turn_accepts_both`` "

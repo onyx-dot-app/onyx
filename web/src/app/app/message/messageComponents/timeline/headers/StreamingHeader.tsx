@@ -5,7 +5,7 @@ import { SvgFold, SvgExpand } from "@opal/icons";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { useStreamingDuration } from "../hooks/useStreamingDuration";
-import { formatDurationSeconds } from "@/lib/time";
+import { formatDurationSeconds } from "@opal/time";
 
 export interface StreamingHeaderProps {
   headerText: string;

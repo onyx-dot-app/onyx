@@ -1,7 +1,6 @@
 import { Button } from "@opal/components";
 import { SvgDownload, SvgZoomIn, SvgZoomOut } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { Section } from "@/layouts/general-layouts";
 
 interface DownloadButtonProps {
@@ -19,16 +18,6 @@ export function DownloadButton({ fileUrl, fileName }: DownloadButtonProps) {
         tooltip="Download"
       />
     </a>
-  );
-}
-
-interface CopyButtonProps {
-  getText: () => string;
-}
-
-export function CopyButton({ getText }: CopyButtonProps) {
-  return (
-    <CopyIconButton getCopyText={getText} tooltip="Copy content" size="sm" />
   );
 }
 

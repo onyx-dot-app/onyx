@@ -5,13 +5,13 @@ Onyx's TypeScript component library and design system.
 ## Install
 
 ```sh
-npm install @onyx-ai/opal
+bun add @onyx-ai/opal
 ```
 
 Peer dependencies (install whichever the lib actually exercises in your usage):
 
 ```sh
-npm install react react-dom next \
+bun add react react-dom next \
   @radix-ui/react-popover @radix-ui/react-separator \
   @radix-ui/react-slot @radix-ui/react-tooltip \
   @dnd-kit/core @dnd-kit/sortable @dnd-kit/modifiers @dnd-kit/utilities \

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Callable
+from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
@@ -15,6 +16,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecision
+from onyx.db.enums import EndpointPolicy
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
 from onyx.server.features.build.db.action_approval import get_action_approval
@@ -26,6 +28,8 @@ from onyx.server.features.build.db.action_approval import (
 )
 from onyx.server.features.build.db.action_approval import try_record_decision
 from tests.external_dependency_unit.craft._test_helpers import _set_created_at
+from tests.external_dependency_unit.craft._test_helpers import action_entry
+from tests.external_dependency_unit.craft._test_helpers import default_action_entries
 from tests.external_dependency_unit.craft._test_helpers import make_user
 
 
@@ -33,49 +37,65 @@ def _seed_pending(
     db_session: Session,
     session_id: UUID,
     *,
-    action_type: str = "shell.exec",
-    payload: dict[str, object] | None = None,
+    actions: list[dict[str, Any]] | None = None,
+    app_name: str = "Shell",
+    payload: dict[str, Any] | None = None,
 ) -> ActionApproval:
-    row = ActionApproval(
+    """Seed a pending row via the public insert helper so the non-empty +
+    strictest-first invariants are enforced on the seeded data too."""
+    row = insert_action_approval(
+        db_session,
         session_id=session_id,
-        action_type=action_type,
+        actions=actions if actions is not None else default_action_entries(),
+        app_name=app_name,
         payload=payload if payload is not None else {"cmd": "ls"},
     )
-    db_session.add(row)
     db_session.commit()
     db_session.refresh(row)
     return row
 
 
-def test_insert_action_approval_returns_pending_row(
+def test_insert_action_approval_sorts_actions_strictest_first(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
+    """Every reader assumes ``actions[0]`` is strictest, so the helper
+    re-sorts defensively — callers that pass a catalog-ordered list still
+    end up with strictest-first on the row."""
     user = make_user(db_session)
     bs = build_session_with_user(user=user)
-
-    payload = {"cmd": "npm install", "cwd": "/workspace"}
-    before = dt.datetime.now(dt.timezone.utc)
+    laxest_first = [
+        action_entry("x.read", policy=EndpointPolicy.ALWAYS),
+        action_entry("x.write", policy=EndpointPolicy.ASK),
+    ]
     row = insert_action_approval(
         db_session,
         session_id=bs.id,
-        action_type="shell.exec",
-        payload=payload,
+        actions=laxest_first,
+        app_name="X",
+        payload={},
     )
-    db_session.commit()
-    after = dt.datetime.now(dt.timezone.utc)
+    assert [a["policy"] for a in row.actions] == ["ASK", "ALWAYS"]
 
-    assert isinstance(row.approval_id, UUID)
-    assert row.session_id == bs.id
-    assert row.action_type == "shell.exec"
-    assert row.payload == payload
-    assert row.decision is None
-    assert row.decided_at is None
-    # Server-default created_at, within the call window (allow clock skew).
-    assert row.created_at is not None
-    skew = dt.timedelta(seconds=5)
-    assert before - skew <= row.created_at <= after + skew
+
+def test_insert_action_approval_rejects_empty_actions(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    """At least one catalog action must drive a gated approval row."""
+    user = make_user(db_session)
+    bs = build_session_with_user(user=user)
+
+    with pytest.raises(ValueError, match="actions must be non-empty"):
+        insert_action_approval(
+            db_session,
+            session_id=bs.id,
+            actions=[],
+            app_name="Shell",
+            payload={"cmd": "ls"},
+        )
 
 
 def test_try_record_decision_happy_path_refreshes_in_memory_row(
@@ -143,11 +163,6 @@ def test_try_record_decision_lost_race_returns_none_and_preserves_decision(
     assert fetched.decided_at == decided_at_initial
 
 
-# A two-session concurrent-race test was removed as a duplicate: its blocks ran
-# sequentially, and the DB-level ``WHERE decision IS NULL`` guard makes thread
-# interleaving irrelevant — the ``lost_race`` test above already covers it.
-
-
 @pytest.mark.parametrize("case", ["known_id", "unknown_id"])
 def test_get_action_approval(
     case: str,
@@ -197,8 +212,8 @@ def test_list_session_pending_action_approvals_filters_by_created_after(
     user = make_user(db_session)
     bs = build_session_with_user(user=user)
 
-    old_row = _seed_pending(db_session, bs.id, action_type="old")
-    new_row = _seed_pending(db_session, bs.id, action_type="new")
+    old_row = _seed_pending(db_session, bs.id, payload={"cmd": "old"})
+    new_row = _seed_pending(db_session, bs.id, payload={"cmd": "new"})
 
     one_hour_ago = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)
     _set_created_at(db_session, ActionApproval, old_row.approval_id, one_hour_ago)
@@ -220,9 +235,9 @@ def test_list_session_action_approvals_filters_by_decision(
     user = make_user(db_session)
     bs = build_session_with_user(user=user)
 
-    approved = _seed_pending(db_session, bs.id, action_type="a")
-    rejected = _seed_pending(db_session, bs.id, action_type="b")
-    pending = _seed_pending(db_session, bs.id, action_type="c")
+    approved = _seed_pending(db_session, bs.id, payload={"cmd": "a"})
+    rejected = _seed_pending(db_session, bs.id, payload={"cmd": "b"})
+    pending = _seed_pending(db_session, bs.id, payload={"cmd": "c"})
 
     try_record_decision(
         db_session,
@@ -259,9 +274,9 @@ def test_list_session_action_approvals_since_until_inclusive(
     middle_ts = base - dt.timedelta(hours=1)
     late_ts = base
 
-    early = _seed_pending(db_session, bs.id, action_type="early")
-    middle = _seed_pending(db_session, bs.id, action_type="middle")
-    late = _seed_pending(db_session, bs.id, action_type="late")
+    early = _seed_pending(db_session, bs.id, payload={"cmd": "early"})
+    middle = _seed_pending(db_session, bs.id, payload={"cmd": "middle"})
+    late = _seed_pending(db_session, bs.id, payload={"cmd": "late"})
     for row, ts in ((early, early_ts), (middle, middle_ts), (late, late_ts)):
         _set_created_at(db_session, ActionApproval, row.approval_id, ts)
 

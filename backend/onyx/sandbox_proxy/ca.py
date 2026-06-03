@@ -18,8 +18,8 @@ _CA_KEY_SIZE_BITS = 4096
 _CA_VALIDITY_DAYS = 1825
 _CA_COMMON_NAME = "Onyx Sandbox Proxy CA"
 _CA_ORG_NAME = "Onyx"
-# mitmproxy auto-loads `$confdir/mitmproxy-ca.pem`. The subdir is ours to
-# chmod 0o700 (the mount root is root-owned).
+# mitmproxy auto-loads `$confdir/mitmproxy-ca.pem`. The subdir is ours to chmod
+# 0o700 (the mount root is root-owned).
 _DEFAULT_CA_PEM_PATH = "/var/run/sandbox-proxy/mitmproxy-confdir/mitmproxy-ca.pem"
 
 logger = setup_logger()
@@ -70,25 +70,25 @@ class CABootstrap:
         if existing is not None:
             cert_pem, key_pem = existing
             self._validate_loaded_cert(cert_pem)
-            self._log_cert_metadata(cert_pem, "loaded existing proxy CA")
+            self._log_cert_metadata(cert_pem, "Loaded existing proxy CA.")
             return self._materialize(cert_pem, key_pem)
 
         cert_pem, key_pem = self._generate_ca()
         try:
             self._store.persist(cert_pem, key_pem)
-            self._log_cert_metadata(cert_pem, "generated and persisted new proxy CA")
+            self._log_cert_metadata(cert_pem, "Generated and persisted new proxy CA.")
             return self._materialize(cert_pem, key_pem)
         except CAStoreConflictError:
-            logger.info("lost CA persist race; reloading winner's CA")
+            logger.info("Lost CA persist race; reloading winner's CA.")
             winner = self._store.load()
             if winner is None:
                 # Conflict implies a CA exists; a None here is a real fault.
                 raise RuntimeError(
-                    "CAStore raised conflict but subsequent load returned None"
+                    "CAStore raised conflict but subsequent load returned None."
                 )
             cert_pem, key_pem = winner
             self._validate_loaded_cert(cert_pem)
-            self._log_cert_metadata(cert_pem, "loaded race winner's proxy CA")
+            self._log_cert_metadata(cert_pem, "Loaded race winner's proxy CA.")
             return self._materialize(cert_pem, key_pem)
 
     @staticmethod
@@ -96,21 +96,21 @@ class CABootstrap:
         try:
             cert = x509.load_pem_x509_certificate(cert_pem)
         except ValueError as e:
-            raise RuntimeError(f"proxy CA cert is not valid PEM: {e}") from e
+            raise RuntimeError(f"Proxy CA cert is not valid PEM: {e}") from e
         now = dt.datetime.now(dt.timezone.utc)
         # Matches the not_before backdating in `_generate_ca` so a freshly
         # generated cert is accepted under clock drift.
         skew = dt.timedelta(minutes=5)
         if cert.not_valid_before_utc > now + skew:
             raise RuntimeError(
-                f"proxy CA cert is not yet valid "
+                f"Proxy CA cert is not yet valid "
                 f"(not_valid_before={cert.not_valid_before_utc.isoformat()})"
             )
         if cert.not_valid_after_utc <= now:
             raise RuntimeError(
-                f"proxy CA cert has expired "
+                f"Proxy CA cert has expired "
                 f"(not_valid_after={cert.not_valid_after_utc.isoformat()}); "
-                "rotate the CA Secret to recover"
+                "Rotate the CA Secret to recover."
             )
 
     @staticmethod
@@ -181,11 +181,11 @@ class CABootstrap:
         return cert_pem, key_pem
 
     def _materialize(self, cert_pem: bytes, key_pem: bytes) -> MaterializedCA:
-        # mitmproxy reads key+cert from one PEM; write atomically so a
-        # partial write can't leave it reading a half-file.
+        # mitmproxy reads key+cert from one PEM; write atomically so a partial
+        # write can't leave it reading a half-file.
         self._pem_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        # mkdir mode only applies on creation; enforce 0o700 if the dir
-        # already exists (e.g. created by the container entrypoint).
+        # mkdir mode only applies on creation; enforce 0o700 if the dir already
+        # exists (e.g. created by the container entrypoint).
         os.chmod(self._pem_path.parent, 0o700)
         tmp_path = self._pem_path.with_suffix(self._pem_path.suffix + ".tmp")
         # Clear a stale .tmp from a prior crash so O_EXCL can succeed.
