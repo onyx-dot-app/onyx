@@ -325,3 +325,39 @@ class TestCompressionForkResilience:
             current_history_tokens=effective_tokens,
             reserved_tokens=0,
         ).should_compress
+
+    def test_cache_backend_failure_does_not_break_compression(
+        self, db_session: Session, chat_session_id: UUID
+    ) -> None:
+        """Compression is best-effort: a cache outage must not propagate —
+        it degrades to running without the concurrency lock."""
+        root = get_or_create_root_message(
+            chat_session_id=chat_session_id, db_session=db_session
+        )
+        _add_turns(db_session, chat_session_id, root, num_turns=10)
+
+        db_session.expire_all()
+        history = create_chat_history_chain(
+            chat_session_id=chat_session_id, db_session=db_session
+        )
+        params = CompressionParams(should_compress=True, tokens_for_recent=2000)
+
+        with (
+            patch(
+                "onyx.chat.compression.get_cache_backend",
+                side_effect=ConnectionError("cache backend down"),
+            ),
+            patch(
+                "onyx.chat.compression.generate_summary",
+                return_value="canned summary",
+            ) as mock_generate,
+        ):
+            result = compress_chat_history(
+                chat_history=history,
+                llm=MagicMock(),
+                compression_params=params,
+            )
+
+        assert result.error is None
+        assert result.summary_created is True
+        assert mock_generate.call_count == 1

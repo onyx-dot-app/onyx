@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLock
 from onyx.configs.chat_configs import COMPRESSION_TRIGGER_RATIO
 from onyx.configs.constants import MessageType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -469,16 +470,29 @@ def compress_chat_history(
     # Only one compression per session at a time. Concurrent turns on the same
     # session (rapid-fire sends, regenerates, retries) would otherwise each run
     # their own expensive summarization LLM call over largely the same messages.
-    lock = get_cache_backend().lock(
-        f"chat_compression_lock:{chat_session_id}",
-        timeout=COMPRESSION_LOCK_TIMEOUT_SECONDS,
-    )
-    if not lock.acquire(blocking=False):
-        logger.info(
-            "Skipping compression for session %s: another compression is in flight",
-            chat_session_id,
+    # Compression is best-effort: cache backend trouble must never break the
+    # turn, so on lock infrastructure errors we proceed without dedup instead
+    # of propagating (or silently dropping compression).
+    lock: CacheLock | None = None
+    try:
+        lock = get_cache_backend().lock(
+            f"chat_compression_lock:{chat_session_id}",
+            timeout=COMPRESSION_LOCK_TIMEOUT_SECONDS,
         )
-        return CompressionResult(summary_created=False, messages_summarized=0)
+        if not lock.acquire(blocking=False):
+            logger.info(
+                "Skipping compression for session %s: another compression is in flight",
+                chat_session_id,
+            )
+            return CompressionResult(summary_created=False, messages_summarized=0)
+    except Exception:
+        logger.warning(
+            "Compression lock unavailable for session %s; "
+            "proceeding without concurrency dedup",
+            chat_session_id,
+            exc_info=True,
+        )
+        lock = None
 
     try:
         return _compress_chat_history_locked(
@@ -488,19 +502,25 @@ def compress_chat_history(
             chat_session_id=chat_session_id,
         )
     finally:
-        try:
-            lock.release()
-        except Exception:
-            logger.warning(
-                "Failed to release compression lock for session %s", chat_session_id
-            )
+        if lock is not None:
+            try:
+                # The lock auto-expires after COMPRESSION_LOCK_TIMEOUT_SECONDS;
+                # if compression outlived it, another holder may own it now —
+                # releasing would raise (e.g. redis LockNotOwnedError).
+                if lock.owned():
+                    lock.release()
+            except Exception:
+                logger.warning(
+                    "Failed to release compression lock for session %s",
+                    chat_session_id,
+                )
 
 
 def _compress_chat_history_locked(
     chat_history: list[ChatMessage],
     llm: LLM,
     compression_params: CompressionParams,
-    chat_session_id: UUID | None,
+    chat_session_id: UUID,
 ) -> CompressionResult:
     """Body of compress_chat_history; caller holds the per-session lock."""
     logger.info(
