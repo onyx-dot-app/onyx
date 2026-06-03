@@ -47,19 +47,33 @@ def test_fqdn_resolved_to_clusterip_via_api(monkeypatch: pytest.MonkeyPatch) -> 
     )
 
 
-def test_namespace_comes_from_config_not_host(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The proxy lives in its own namespace; the config must win over whatever
-    # namespace segment the host string happens to embed.
+def test_namespace_parsed_from_fqdn(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        ksm, "SANDBOX_PROXY_HOST", "onyx-sandbox-proxy.WRONG.svc.cluster.local"
+        ksm, "SANDBOX_PROXY_HOST", "onyx-sandbox-proxy.myrelease.svc.cluster.local"
     )
-    monkeypatch.setattr(ksm, "SANDBOX_PROXY_NAMESPACE", "proxy-ns")
+    monkeypatch.setattr(ksm, "SANDBOX_PROXY_NAMESPACE", "onyx")
     mgr, core_api = _mgr()
     svc = MagicMock()
     svc.spec.cluster_ip = "10.0.0.5"
     core_api.read_namespaced_service.return_value = svc
 
     assert mgr._resolve_proxy_ip() == "10.0.0.5"
+    core_api.read_namespaced_service.assert_called_once_with(
+        name="onyx-sandbox-proxy", namespace="myrelease"
+    )
+
+
+def test_namespace_falls_back_to_config_for_bare_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "onyx-sandbox-proxy")
+    monkeypatch.setattr(ksm, "SANDBOX_PROXY_NAMESPACE", "proxy-ns")
+    mgr, core_api = _mgr()
+    svc = MagicMock()
+    svc.spec.cluster_ip = "10.0.0.6"
+    core_api.read_namespaced_service.return_value = svc
+
+    assert mgr._resolve_proxy_ip() == "10.0.0.6"
     core_api.read_namespaced_service.assert_called_once_with(
         name="onyx-sandbox-proxy", namespace="proxy-ns"
     )

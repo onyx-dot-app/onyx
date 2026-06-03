@@ -37,6 +37,7 @@ import base64
 import binascii
 import hashlib
 import io
+import ipaddress
 import json
 import mimetypes
 import os
@@ -2740,14 +2741,18 @@ fi
         resolver returns a synthetic, pod-unroutable IP). A numeric host (CI
         passes the ClusterIP directly) is returned unchanged."""
         host = SANDBOX_PROXY_HOST
-        if re.match(r"^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$", host):
+        try:
+            ipaddress.ip_address(host)
             return host
-        name = host.partition(".")[0]
+        except ValueError:
+            pass
+        name, _, rest = host.partition(".")
+        namespace = rest.partition(".")[0] or SANDBOX_PROXY_NAMESPACE
         last_err: Exception | None = None
         for attempt in range(_PROXY_RESOLVE_RETRY_ATTEMPTS):
             try:
                 cluster_ip = self._core_api.read_namespaced_service(
-                    name=name, namespace=SANDBOX_PROXY_NAMESPACE
+                    name=name, namespace=namespace
                 ).spec.cluster_ip
                 if cluster_ip and cluster_ip != "None":
                     return cluster_ip

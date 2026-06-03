@@ -335,7 +335,6 @@ def test_push_falls_back_to_pod_ip_when_fqdn_unreachable() -> None:
     mgr = _make_manager()
     factory = _mock_httpx_per_url(_fqdn_unreachable_then(lambda: _resp(200, "ok")))
     with patch(_HTTPX_CLIENT_PATH, factory):
-        # No exception == the push succeeded via the pod-IP fallback host.
         mgr.write_files_to_sandbox(
             sandbox_id=_sandbox_id(),
             mount_path="/workspace/managed/skills",
