@@ -536,3 +536,86 @@ export async function seedParallelRun(
 ): Promise<SeededRun> {
   return runToTheEnd(request, name, parallelFlowSpec(), { ids });
 }
+
+/** The pause a seeded paced run waits between its batches, in seconds. */
+export const PACED_PAUSE_SECONDS = 1;
+
+/**
+ * Six rows in batches of two, and a step that sends each batch with a pause
+ * between them. Transforms only, so the waiting is the one thing that takes
+ * time.
+ */
+function pacedFlowSpec() {
+  return {
+    spec_version: 1,
+    start: "batch",
+    nodes: [
+      {
+        id: "batch",
+        name: "Batch the rows",
+        kind: "LOOP",
+        next: ["send"],
+        for_each: null,
+        on_error: "stop",
+        retry: { max_attempts: 1, backoff_seconds: 1 },
+        over: "{{ trigger.rows }}",
+        batch_size: 2,
+      } satisfies FlowNodeSeed,
+      {
+        ...transform(
+          "send",
+          "Send a batch",
+          { sent: "{{ item }}" },
+          { forEach: "{{ steps.batch.batches }}" }
+        ),
+        pause_seconds: PACED_PAUSE_SECONDS,
+      },
+    ],
+  };
+}
+
+export async function seedPacedRun(
+  request: APIRequestContext,
+  name: string
+): Promise<SeededRun> {
+  return runToTheEnd(request, name, pacedFlowSpec(), {
+    rows: [1, 2, 3, 4, 5, 6],
+  });
+}
+
+interface NodeRunTiming {
+  node_id: string;
+  item_index: number;
+  started_at: string;
+  finished_at: string | null;
+}
+
+/**
+ * Milliseconds from one item of a fan-out finishing to the next starting.
+ *
+ * Read from the run's rows because they are the only witness to a pause: the
+ * page shows what each item produced, not how long the run waited between
+ * them.
+ */
+export async function readItemGapsMs(
+  request: APIRequestContext,
+  run: SeededRun,
+  nodeId: string
+): Promise<number[]> {
+  const res = await request.get(`/api/flows/${run.flowId}/runs/${run.runId}`);
+  if (!res.ok()) {
+    throw new Error(`reading the run failed: ${res.status()}`);
+  }
+  const body: { node_runs: NodeRunTiming[] } = await res.json();
+  const rows = body.node_runs
+    .filter((row) => row.node_id === nodeId)
+    .sort((a, b) => a.item_index - b.item_index);
+
+  return rows.slice(1).map((row, position) => {
+    const finished = rows[position]?.finished_at;
+    if (finished === null || finished === undefined) {
+      throw new Error(`item ${position} of '${nodeId}' never finished`);
+    }
+    return Date.parse(row.started_at) - Date.parse(finished);
+  });
+}

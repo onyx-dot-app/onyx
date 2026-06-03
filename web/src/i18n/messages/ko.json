@@ -12525,7 +12525,8 @@
         "zoomIn": "확대",
         "zoomOut": "축소",
         "fit": "화면에 맞추기"
-      }
+      },
+      "pacedFanOutBadge": "항목별, {seconds}초 간격"
     },
     "palette": {
       "addAfterSelected": "선택한 단계 뒤에 추가:",
@@ -12664,7 +12665,10 @@
         "caseValue": "케이스 {number} 값",
         "caseTarget": "케이스 {number} 이동 대상",
         "switchOtherwise": "일치하는 항목이 없을 때 이동할 단계",
-        "branchEnds": "여기서 종료"
+        "branchEnds": "여기서 종료",
+        "pauseSeconds": "항목 간격(초)",
+        "pauseSecondsHelp": "다음 항목으로 넘어가기 전에 이만큼 기다립니다. 호출 빈도가 제한된 API에 사용합니다. 최대 60초이며, 대기 시간은 실행의 15분 제한에 포함됩니다.",
+        "loopPauseHint": "배치 사이에 기다리려면 배치마다 한 번씩 실행되는 단계에 간격을 설정하세요."
       },
       "onError": {
         "stop": "실행 중단",

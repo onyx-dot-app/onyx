@@ -12525,7 +12525,8 @@
         "zoomIn": "放大",
         "zoomOut": "缩小",
         "fit": "适应视图"
-      }
+      },
+      "pacedFanOutBadge": "逐项，间隔 {seconds} 秒"
     },
     "palette": {
       "addAfterSelected": "在所选步骤之后添加：",
@@ -12664,7 +12665,10 @@
         "caseValue": "情况 {number} 的值",
         "caseTarget": "情况 {number} 前往",
         "switchOtherwise": "都不匹配时前往",
-        "branchEnds": "在此结束"
+        "branchEnds": "在此结束",
+        "pauseSeconds": "每项之间的间隔（秒）",
+        "pauseSecondsHelp": "在一项和下一项之间等待这么久，适用于限制调用频率的 API。最多 60 秒。等待时间计入运行的 15 分钟上限。",
+        "loopPauseHint": "要在批次之间等待，请在每批执行一次的步骤上设置间隔。"
       },
       "onError": {
         "stop": "停止运行",

@@ -12527,7 +12527,8 @@
         "zoomIn": "Aproximar",
         "zoomOut": "Afastar",
         "fit": "Ajustar à tela"
-      }
+      },
+      "pacedFanOutBadge": "por item, a cada {seconds} s"
     },
     "palette": {
       "addAfterSelected": "Adicionar após a etapa selecionada:",
@@ -12666,7 +12667,10 @@
         "caseValue": "Valor do caso {number}",
         "caseTarget": "O caso {number} vai para",
         "switchOtherwise": "Se nada corresponder, ir para",
-        "branchEnds": "Terminar aqui"
+        "branchEnds": "Terminar aqui",
+        "pauseSeconds": "Segundos entre itens",
+        "pauseSecondsHelp": "Espera este tempo entre um item e o seguinte, para uma API que limita a frequência das chamadas. Até 60. A espera conta para o limite de 15 minutos da execução.",
+        "loopPauseHint": "Para esperar entre lotes, defina uma pausa na etapa que é executada uma vez por lote."
       },
       "onError": {
         "stop": "Parar a execução",

@@ -283,6 +283,11 @@ export class FlowsPage {
     ).toHaveCount(1);
   }
 
+  /** A note on a step's card, such as how it fans out. */
+  async expectStepBadge(nodeId: string, text: string): Promise<void> {
+    await expect(this.node(nodeId)).toContainText(text);
+  }
+
   async expectStepLabelled(nodeId: string, name: string): Promise<void> {
     await expect(this.node(nodeId)).toContainText(name);
   }

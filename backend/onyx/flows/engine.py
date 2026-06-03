@@ -328,7 +328,7 @@ def _execute_node(
     Returns the node's output and the successors it handed control to.
     """
     if node.for_each is None:
-        outcome = _run_once(
+        outcome, _ = _run_once(
             node=node,
             context=context,
             runtime=runtime,
@@ -358,8 +358,14 @@ def _execute_node(
         )
 
     outputs: list[Any] = []
+    # Only an item that ran in this pass is followed by a pause. Items reused
+    # from their rows made no call, and sleeping through their pauses again
+    # would spend every resumed run's budget waiting on nothing.
+    previous_ran = False
     for index, item in enumerate(items):
-        outcome = _run_once(
+        if previous_ran and node.pause_seconds > 0:
+            _pause_before_item(node, index, deadline)
+        outcome, previous_ran = _run_once(
             node=node,
             context=context.for_item(item, index),
             runtime=runtime,
@@ -372,6 +378,26 @@ def _execute_node(
     return outputs, list(node.next)
 
 
+def _pause_before_item(node: Any, index: int, deadline: float) -> None:
+    """Wait out the node's pause before its next item.
+
+    The budget is checked before sleeping rather than after. A run that
+    cannot afford the pause should fail now, not spend the pause and then
+    fail anyway.
+    """
+    if time.monotonic() + node.pause_seconds > deadline:
+        raise RunBudgetExceeded(
+            f"no time left to pause before item {index} of '{node.id}'"
+        )
+    logger.info(
+        "flow node pausing node=%s before item=%d for %.1fs",
+        node.id,
+        index,
+        node.pause_seconds,
+    )
+    time.sleep(node.pause_seconds)
+
+
 def _run_once(
     *,
     node: Any,
@@ -380,8 +406,12 @@ def _run_once(
     recorder: RunRecorder,
     item_index: int,
     deadline: float,
-) -> NodeOutcome:
-    """Execute a single node invocation, with resume and retry handling."""
+) -> tuple[NodeOutcome, bool]:
+    """Execute a single node invocation, with resume and retry handling.
+
+    Returns the outcome, and whether the node actually ran rather than
+    reusing a row an earlier delivery of the run already finished.
+    """
     already = recorder.begin_node(
         node_id=node.id,
         kind=node.kind,
@@ -396,8 +426,8 @@ def _run_once(
         )
         replay = NODE_REPLAYERS.get(node.kind)
         if replay is None:
-            return NodeOutcome(output=already.output)
-        return replay(node, already.output)
+            return NodeOutcome(output=already.output), False
+        return replay(node, already.output), False
 
     executor = NODE_EXECUTORS[node.kind]
     attempts = node.retry.max_attempts
@@ -428,7 +458,7 @@ def _run_once(
                 output=outcome.output,
                 attempt=attempt,
             )
-            return outcome
+            return outcome, True
 
         if attempt >= attempts or last_error.error_class not in RETRYABLE_ERROR_CLASSES:
             break

@@ -52,6 +52,11 @@ MAX_QUESTION_LENGTH = 2000
 MAX_RETRY_CHECKS = 60
 MAX_RETRY_INTERVAL_SECONDS = 60.0
 
+# A pause between fan-out items holds a worker thread for its whole length,
+# the same as the wait between a retry node's checks, so it gets the same
+# ceiling. Anything longer between batches is a schedule, not a pause.
+MAX_PAUSE_SECONDS = 60.0
+
 # A retry node sleeps between checks, and it does that inside one node rather
 # than across the graph. Capping the whole window keeps a single step from
 # eating the run's 15-minute budget on its own.
@@ -118,6 +123,10 @@ class NodeBase(BaseModel):
     # Expression yielding a list. When set, the node runs once per element
     # with `{{ item }}` and `{{ index }}` bound.
     for_each: str | None = None
+    # Seconds to wait between one element and the next. For an API that
+    # limits how fast it may be called: batch the list with a loop, then pace
+    # the step that sends the batches.
+    pause_seconds: float = Field(default=0.0, ge=0.0, le=MAX_PAUSE_SECONDS)
 
     on_error: Literal["stop", "skip"] = "stop"
     retry: RetryPolicy = Field(default_factory=RetryPolicy)
@@ -136,6 +145,17 @@ class NodeBase(BaseModel):
     def _default_name_to_id(self) -> NodeBase:
         if not self.name:
             object.__setattr__(self, "name", self.id)
+        return self
+
+    @model_validator(mode="after")
+    def _pause_needs_fan_out(self) -> NodeBase:
+        # A pause sits between items, so on a step that runs once it would do
+        # nothing. A setting that silently does nothing is worse than one that
+        # is refused.
+        if self.pause_seconds > 0 and self.for_each is None:
+            raise ValueError(
+                "'pause_seconds' only applies between the items of 'for_each'"
+            )
         return self
 
     def successors(self) -> list[str]:
@@ -389,7 +409,9 @@ class LoopNode(NodeBase):
         send.for_each   = "{{ steps.loop.batches }}"
 
     ``send`` then runs once per batch with ``{{ item }}`` bound to the 25 rows,
-    which is the shape most bulk APIs actually want.
+    which is the shape most bulk APIs actually want. Set ``pause_seconds`` on
+    ``send`` too when the API limits how fast it may be called; the wait goes
+    between batches, not inside one.
     """
 
     kind: Literal[FlowNodeKind.LOOP] = FlowNodeKind.LOOP

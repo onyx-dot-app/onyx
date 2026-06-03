@@ -112,7 +112,11 @@ export function FlowNodeCard({
         ) : null}
         {node.for_each !== null ? (
           <Text font="figure-small-label" color="text-03">
-            {t("fanOutBadge")}
+            {/* A paced step makes a run slower on purpose; saying so on the
+                card answers "why is this taking so long" without a click. */}
+            {(node.pause_seconds ?? 0) > 0
+              ? t("pacedFanOutBadge", { seconds: node.pause_seconds ?? 0 })
+              : t("fanOutBadge")}
           </Text>
         ) : null}
         {!reachable && runStatus === null ? (

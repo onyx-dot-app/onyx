@@ -12555,7 +12555,8 @@
         "zoomIn": "Zoom in",
         "zoomOut": "Zoom out",
         "fit": "Fit to view"
-      }
+      },
+      "pacedFanOutBadge": "per item, {seconds}s apart"
     },
     "palette": {
       "addAfterSelected": "Add after the selected step:",
@@ -12694,7 +12695,10 @@
         "caseValue": "Case {number} value",
         "caseTarget": "Case {number} goes to",
         "switchOtherwise": "When nothing matches, go to",
-        "branchEnds": "End here"
+        "branchEnds": "End here",
+        "pauseSeconds": "Seconds between items",
+        "pauseSecondsHelp": "Wait this long between one item and the next, for an API that limits how fast you may call it. Up to 60. The wait counts toward the run's 15-minute limit.",
+        "loopPauseHint": "To wait between batches, set a pause on the step that runs once per batch."
       },
       "onError": {
         "stop": "Stop the run",

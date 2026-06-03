@@ -59,6 +59,7 @@ const MAX_DELAY_SECONDS = 30 * 24 * 60 * 60;
 /** Matching the server's ceilings. */
 const MAX_SWITCH_CASES = 10;
 const MAX_PARALLEL_CALLS = 10;
+const MAX_PAUSE_SECONDS = 60;
 
 /**
  * The picker value for "this branch ends here".
@@ -222,9 +223,34 @@ export function NodeInspector({
             value={node.for_each ?? ""}
             placeholder={t("placeholder.forEach")}
             onChange={(event) =>
+              onChange(
+                event.target.value === ""
+                  ? // A pause only means anything between items, and the
+                    // server refuses one on a step that runs once.
+                    { ...node, for_each: null, pause_seconds: 0 }
+                  : { ...node, for_each: event.target.value }
+              )
+            }
+          />
+        </InputVertical>
+      ) : null}
+
+      {canFanOut(node) && node.for_each !== null ? (
+        <InputVertical
+          withLabel
+          title={t("fields.pauseSeconds")}
+          description={t("fields.pauseSecondsHelp")}
+          suffix="optional"
+        >
+          <InputTypeIn
+            type="number"
+            min={0}
+            max={MAX_PAUSE_SECONDS}
+            value={String(node.pause_seconds ?? 0)}
+            onChange={(event) =>
               onChange({
                 ...node,
-                for_each: event.target.value === "" ? null : event.target.value,
+                pause_seconds: clampPause(event.target.value),
               })
             }
           />
@@ -309,6 +335,13 @@ const NEVER_FANS_OUT: readonly FlowNodeKind[] = [
 
 function canFanOut(node: FlowNode): boolean {
   return !NEVER_FANS_OUT.includes(node.kind);
+}
+
+/** Keep the pause between items inside what the server will accept. */
+function clampPause(raw: string): number {
+  const parsed = Number.parseFloat(raw);
+  if (Number.isNaN(parsed)) return 0;
+  return Math.min(MAX_PAUSE_SECONDS, Math.max(0, parsed));
 }
 
 /** Keep the attempt count inside what the server will accept. */
@@ -841,6 +874,12 @@ function LoopFields({ node, onChange }: FieldProps<LoopNode>) {
           }
         />
       </InputVertical>
+
+      {/* The pause lives on the step that sends the batches, since that is
+          what waits. Said here because this is where people look for it. */}
+      <Text font="main-ui-muted" color="text-03">
+        {t("fields.loopPauseHint")}
+      </Text>
     </>
   );
 }

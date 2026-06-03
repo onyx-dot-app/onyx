@@ -68,6 +68,7 @@ export function blankNode(id: string, kind: FlowNodeKind): FlowNode {
     name: id,
     next: [],
     for_each: null,
+    pause_seconds: 0,
     on_error: "stop" as const,
     retry: { ...DEFAULT_RETRY },
   };

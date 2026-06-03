@@ -10,11 +10,13 @@ from onyx.flows.models import (
     MAX_DELAY_SECONDS,
     MAX_FAN_OUT_ITEMS,
     MAX_PARALLEL_CALLS,
+    MAX_PAUSE_SECONDS,
     MAX_SWITCH_CASES,
     ConditionNode,
     DelayNode,
     FilterNode,
     FlowSpec,
+    HttpNode,
     MergeNode,
     ParallelNode,
     RetryNode,
@@ -749,3 +751,50 @@ def test_rejects_a_parallel_step_that_also_fans_out() -> None:
                 "nodes": [parallel_node(for_each="{{ trigger.groups }}")],
             }
         )
+
+
+def test_a_pause_needs_items_to_pause_between() -> None:
+    """On a step that runs once a pause would do nothing, so it is refused."""
+    with pytest.raises(SpecError, match="only applies between the items"):
+        parse_spec({"start": "send", "nodes": [http_node("send", pause_seconds=5)]})
+
+
+def test_a_paced_fan_out_keeps_its_pause() -> None:
+    spec = parse_spec(
+        {
+            "start": "send",
+            "nodes": [
+                http_node("send", for_each="{{ trigger.batches }}", pause_seconds=2.5)
+            ],
+        }
+    )
+
+    assert only(spec, HttpNode).pause_seconds == 2.5
+
+
+def test_a_pause_longer_than_a_minute_is_refused() -> None:
+    with pytest.raises(SpecError, match="pause_seconds"):
+        parse_spec(
+            {
+                "start": "send",
+                "nodes": [
+                    http_node(
+                        "send",
+                        for_each="{{ trigger.batches }}",
+                        pause_seconds=MAX_PAUSE_SECONDS + 1,
+                    )
+                ],
+            }
+        )
+
+
+def test_a_spec_saved_before_pauses_existed_runs_unpaced() -> None:
+    """Stored specs are kept as they were sent, so most have no pause."""
+    spec = parse_spec(
+        {
+            "start": "send",
+            "nodes": [http_node("send", for_each="{{ trigger.batches }}")],
+        }
+    )
+
+    assert only(spec, HttpNode).pause_seconds == 0

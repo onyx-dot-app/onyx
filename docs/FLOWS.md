@@ -191,7 +191,10 @@ send.for_each   = "{{ steps.loop.batches }}"
 ```
 
 `send` then runs once per batch with `{{ item }}` bound to the 25 rows, which is
-the shape most bulk APIs actually want.
+the shape most bulk APIs actually want. When that API also limits how fast it may
+be called, set `pause_seconds` on `send` to wait between batches — see
+[Fan-out](#fan-out). The pause goes on `send` rather than on the loop because
+`send` is what waits.
 
 ### RETRY
 
@@ -551,10 +554,22 @@ Fan-out is explicit in the spec even though the editor fills it in
 automatically, so the convenience lives in the UI and the engine stays
 predictable.
 
+`pause_seconds` (0 to 60) waits between one item and the next, for an API that
+limits how fast it may be called. It goes between items only: none before the
+first and none after the last. The spec refuses it on a node without
+`for_each`, where there is nothing to pause between.
+
+The pause follows only an item that ran in this pass. A resumed run replays its
+finished items from their rows without calling anything, so they are owed no
+pause; sleeping through them again would spend every resume's budget on
+waiting. After a crash in the middle of a fan-out, the first new item therefore
+starts at once and the pauses start again after it.
+
 ### Budgets
 
-A run gets 15 minutes of wall clock, checked before each node and before each
-retry sleep. The deadline is also on `NodeRuntime`, so a step that does many
+A run gets 15 minutes of wall clock, checked before each node, before each
+retry sleep and before each pause between fan-out items. A pause the budget
+cannot cover fails the run straight away instead of sleeping first. The deadline is also on `NodeRuntime`, so a step that does many
 things at once — [PARALLEL](#parallel) — stops starting new ones when it
 passes. This is enforced in the engine because Celery's thread-pool worker
 silently ignores `soft_time_limit`.

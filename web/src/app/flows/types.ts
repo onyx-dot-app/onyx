@@ -84,6 +84,9 @@ interface NodeBase {
   name: string;
   next: string[];
   for_each: string | null;
+  /** Seconds between items while fanning out. Absent from specs saved before
+   *  it existed; the server reads that as no pause. */
+  pause_seconds?: number;
   on_error: "stop" | "skip";
   retry: RetryPolicy;
 }

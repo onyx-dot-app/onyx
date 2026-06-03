@@ -12527,7 +12527,8 @@
         "zoomIn": "拡大",
         "zoomOut": "縮小",
         "fit": "全体表示"
-      }
+      },
+      "pacedFanOutBadge": "項目ごと、{seconds} 秒間隔"
     },
     "palette": {
       "addAfterSelected": "選択したステップの後に追加:",
@@ -12666,7 +12667,10 @@
         "caseValue": "ケース {number} の値",
         "caseTarget": "ケース {number} の移動先",
         "switchOtherwise": "どれにも一致しないときの移動先",
-        "branchEnds": "ここで終了"
+        "branchEnds": "ここで終了",
+        "pauseSeconds": "項目の間隔（秒）",
+        "pauseSecondsHelp": "次の項目に進む前にこの秒数だけ待ちます。呼び出し頻度に制限がある API 向けです。最大 60。待ち時間は実行の 15 分の上限に含まれます。",
+        "loopPauseHint": "バッチの間で待つには、バッチごとに 1 回実行されるステップで間隔を設定します。"
       },
       "onError": {
         "stop": "実行を停止",

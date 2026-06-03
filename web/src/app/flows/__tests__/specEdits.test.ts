@@ -180,6 +180,11 @@ describe("blankNode", () => {
   it("names the node after its id", () => {
     expect(blankNode("fetch_issues", "HTTP").name).toBe("fetch_issues");
   });
+
+  it("starts every node unpaced, which the server needs off a fan-out", () => {
+    expect(blankNode("x", "HTTP").pause_seconds).toBe(0);
+    expect(blankNode("x", "LOOP").pause_seconds).toBe(0);
+  });
 });
 
 describe("updateNode", () => {

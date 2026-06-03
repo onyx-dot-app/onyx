@@ -12527,7 +12527,8 @@
         "zoomIn": "Vergrößern",
         "zoomOut": "Verkleinern",
         "fit": "Einpassen"
-      }
+      },
+      "pacedFanOutBadge": "pro Element, {seconds} s Abstand"
     },
     "palette": {
       "addAfterSelected": "Nach dem gewählten Schritt hinzufügen:",
@@ -12666,7 +12667,10 @@
         "caseValue": "Wert von Fall {number}",
         "caseTarget": "Fall {number} führt zu",
         "switchOtherwise": "Wenn nichts passt, weiter zu",
-        "branchEnds": "Hier enden"
+        "branchEnds": "Hier enden",
+        "pauseSeconds": "Sekunden zwischen den Elementen",
+        "pauseSecondsHelp": "So lange zwischen einem Element und dem nächsten warten, für eine API, die begrenzt, wie schnell sie aufgerufen werden darf. Bis zu 60. Die Wartezeit zählt zum 15-Minuten-Limit des Laufs.",
+        "loopPauseHint": "Um zwischen Stapeln zu warten, eine Pause bei dem Schritt einstellen, der einmal pro Stapel läuft."
       },
       "onError": {
         "stop": "Lauf anhalten",

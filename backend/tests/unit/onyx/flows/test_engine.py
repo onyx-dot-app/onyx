@@ -821,3 +821,107 @@ def test_a_parallel_step_stops_sending_when_the_run_budget_runs_out() -> None:
     assert result.failed_node_id == "lookup"
     assert result.error_detail == "run ran out of time after sending 1 of 3 calls"
     assert sent == ["https://api.test/users/1"]
+
+
+# ---------------------------------------------------------------------------
+# Pausing between fan-out items
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def pauses(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """Every sleep the engine asks for, instead of the sleep itself."""
+    asked: list[float] = []
+    monkeypatch.setattr(engine_module.time, "sleep", asked.append)
+    return asked
+
+
+def paced_spec(pause_seconds: float) -> Any:
+    return parse_spec(
+        {
+            "start": "send",
+            "nodes": [
+                transform(
+                    "send",
+                    "{{ item }}",
+                    for_each="{{ trigger.batches }}",
+                    pause_seconds=pause_seconds,
+                )
+            ],
+        }
+    )
+
+
+def sent(value: Any) -> RecordedNode:
+    return RecordedNode(status=FlowNodeRunStatus.SUCCEEDED, output={"value": value})
+
+
+def test_a_paced_fan_out_waits_between_items_but_not_after_the_last(
+    runtime: NodeRuntime, pauses: list[float]
+) -> None:
+    result = execute_flow(
+        spec=paced_spec(2),
+        runtime=runtime,
+        recorder=InMemoryRecorder(),
+        trigger_payload={"batches": ["a", "b", "c"]},
+    )
+
+    assert result.status == FlowRunStatus.SUCCEEDED
+    assert result.outputs["send"] == [{"value": "a"}, {"value": "b"}, {"value": "c"}]
+    assert pauses == [2, 2]
+
+
+def test_a_replayed_fan_out_does_not_wait_again(
+    runtime: NodeRuntime, pauses: list[float]
+) -> None:
+    """A resumed run replays every finished item. None of them made a call,
+    so none of them is owed a pause."""
+    recorder = InMemoryRecorder()
+    for index, batch in enumerate(["a", "b", "c"]):
+        recorder._finished[("send", index)] = sent(batch)
+
+    result = execute_flow(
+        spec=paced_spec(30),
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"batches": ["a", "b", "c"]},
+    )
+
+    assert result.status == FlowRunStatus.SUCCEEDED
+    assert pauses == []
+
+
+def test_a_fan_out_resumed_midway_waits_only_between_new_items(
+    runtime: NodeRuntime, pauses: list[float]
+) -> None:
+    recorder = InMemoryRecorder()
+    recorder._finished[("send", 0)] = sent("a")
+    recorder._finished[("send", 1)] = sent("b")
+
+    result = execute_flow(
+        spec=paced_spec(2),
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"batches": ["a", "b", "c", "d"]},
+    )
+
+    assert result.outputs["send"][2:] == [{"value": "c"}, {"value": "d"}]
+    assert pauses == [2], "one pause, between the two items that ran"
+
+
+def test_a_pause_the_budget_cannot_cover_fails_before_sleeping(
+    runtime: NodeRuntime, pauses: list[float]
+) -> None:
+    result = execute_flow(
+        spec=paced_spec(30),
+        runtime=runtime,
+        recorder=InMemoryRecorder(),
+        trigger_payload={"batches": ["a", "b"]},
+        budget_seconds=5,
+    )
+
+    assert result.status == FlowRunStatus.FAILED
+    assert result.error_class == FlowErrorClass.BUDGET_EXCEEDED
+    assert result.failed_node_id == "send"
+    assert result.error_detail == "no time left to pause before item 1 of 'send'"
+    assert pauses == []
