@@ -45,13 +45,11 @@ def test_ready_via_service_dns(monkeypatch: pytest.MonkeyPatch) -> None:
     """FQDN answers, pod IP would refuse → ready via the preferred candidate."""
     probed: list[str] = []
 
-    def fake_health_check(self: OpencodeServeClient) -> bool:
+    def fake_status(self: OpencodeServeClient) -> int | None:
         probed.append(self._base_url)
-        if self._base_url == _POD_IP_URL:
-            raise ConnectionError("pod IP not routable under telepresence")
-        return self._base_url == _SERVICE_URL
+        return None if self._base_url == _POD_IP_URL else 200
 
-    monkeypatch.setattr(OpencodeServeClient, "health_check", fake_health_check)
+    monkeypatch.setattr(OpencodeServeClient, "health_check_status", fake_status)
 
     mgr = _FakeManager(health_check_url=_POD_IP_URL)
     assert mgr._wait_for_opencode_serve_ready(_SBX, timeout=5.0) is True
@@ -64,13 +62,11 @@ def test_ready_via_pod_ip_when_dns_unresolvable(
     """FQDN unresolvable, pod IP answers → ready via the fallback candidate."""
     probed: list[str] = []
 
-    def fake_health_check(self: OpencodeServeClient) -> bool:
+    def fake_status(self: OpencodeServeClient) -> int | None:
         probed.append(self._base_url)
-        if self._base_url == _SERVICE_URL:
-            raise ConnectionError("cluster DNS not resolvable from CI runner")
-        return self._base_url == _POD_IP_URL
+        return None if self._base_url == _SERVICE_URL else 200
 
-    monkeypatch.setattr(OpencodeServeClient, "health_check", fake_health_check)
+    monkeypatch.setattr(OpencodeServeClient, "health_check_status", fake_status)
 
     mgr = _FakeManager(health_check_url=_POD_IP_URL)
     assert mgr._wait_for_opencode_serve_ready(_SBX, timeout=5.0) is True
@@ -83,10 +79,10 @@ def test_not_ready_when_no_candidate_answers(
 ) -> None:
     """Both candidates refuse for the whole window → not ready."""
 
-    def fake_health_check(self: OpencodeServeClient) -> bool:  # noqa: ARG001
-        raise ConnectionError("refused")
+    def fake_status(self: OpencodeServeClient) -> int | None:  # noqa: ARG001
+        return None
 
-    monkeypatch.setattr(OpencodeServeClient, "health_check", fake_health_check)
+    monkeypatch.setattr(OpencodeServeClient, "health_check_status", fake_status)
 
     mgr = _FakeManager(health_check_url=_POD_IP_URL)
     assert mgr._wait_for_opencode_serve_ready(_SBX, timeout=0.4) is False
