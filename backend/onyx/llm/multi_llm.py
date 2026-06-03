@@ -675,7 +675,7 @@ class LitellmLLM(LLM):
             SEND_USER_METADATA_TO_LLM_PROVIDER
             and self._model_provider == LlmProviderNames.OPENROUTER
             and user_identity is not None
-            and user_identity.session_id is not None
+            and user_identity.session_id
         ):
             if passthrough_kwargs is self._model_kwargs:
                 passthrough_kwargs = copy.deepcopy(self._model_kwargs)

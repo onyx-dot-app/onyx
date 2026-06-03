@@ -51,6 +51,12 @@ def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
                 "Prompt caching enabled for OpenRouter Google/Gemini model: %s",
                 model_name,
             )
+            # NOTE: Reusing VertexAIPromptCacheProvider is safe today because it
+            # only does implicit caching (no message mutation). These requests go
+            # through OpenRouter, not the Vertex SDK.
+            # TODO: once Vertex explicit caching (context-cache block IDs) lands,
+            # split this out into a dedicated OpenRouter Google provider so the
+            # Vertex-specific behavior doesn't leak into OpenRouter requests.
             return VertexAIPromptCacheProvider()
         elif model_name.startswith(OPENROUTER_OPENAI_PREFIX):
             logger.debug(
