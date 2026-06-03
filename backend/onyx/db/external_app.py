@@ -181,9 +181,8 @@ def get_built_in_external_app(
             selectinload(ExternalApp.policies),
         )
         .where(ExternalApp.app_type == app_type)
-        .order_by(ExternalApp.id)
     )
-    return db_session.scalars(stmt).first()
+    return db_session.scalars(stmt).one_or_none()
 
 
 def get_user_credentials_by_app_id(

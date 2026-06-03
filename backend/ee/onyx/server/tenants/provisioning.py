@@ -547,20 +547,14 @@ def configure_default_api_keys(db_session: Session) -> None:
 
 
 def provision_built_in_external_apps(db_session: Session) -> None:
-    """Provision every Onyx-managed built-in external app into the current tenant
-    (disabled), populating Onyx-owned credentials from operator config where
-    available. Non-managed built-ins (not an ``OnyxManagedProvider``) are not seeded.
+    """Seed the tenant's Onyx-managed built-in apps from operator config.
 
-    - **New app:** created disabled, with the operator's credentials (or empty if
-      none configured — still provisioned, just not enableable until creds exist).
-    - **Existing app:** credentials are refreshed in place; enabled state and
-      action policies are left untouched. Credentials are only overwritten when
-      operator config has an entry for that type, so a re-run never wipes the
-      credentials of an app the config no longer mentions.
-
-    Per-app failures are logged and skipped. Gated by
-    ``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS`` (the external-app analogue of
-    ``AUTO_PROVISION_DEFAULT_LLM_PROVIDERS``); when disabled, nothing is seeded.
+    Idempotent: a missing app is created (disabled); an existing one only has its
+    credentials refreshed, leaving enabled state and policies alone. Credentials
+    are updated only for types the config still lists, so a re-run never wipes
+    them. Non-managed built-ins are skipped, as is everything when
+    ``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS`` is off. Per-app failures are logged
+    and skipped.
     """
     if not AUTO_PROVISION_DEFAULT_EXTERNAL_APPS:
         logger.info(
