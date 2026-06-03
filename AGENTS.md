@@ -4,11 +4,8 @@ This file provides guidance to AI agents when working with code in this reposito
 
 ## KEY NOTES
 
-- Python deps live in a `uv`-managed virtualenv at `.venv` (repo root). If `.venv` doesn't exist yet, create \
-  it with `uv sync --frozen` (run from the repo root; installs the exact versions from `uv.lock` without \
-  re-resolving or rewriting the lockfile), then `source .venv/bin/activate`. Re-run `uv sync --frozen` if you hit \
-  missing-dependency errors. Use `--frozen` so environment setup never mutates `uv.lock` as a side effect — \
-  deliberately adding or upgrading a dependency is a separate step (`uv add` / `uv lock`).
+- Python deps live in a `uv`-managed virtualenv at `.venv` (repo root). If it doesn't exist yet, create it \
+  with `uv sync --frozen`, then `source .venv/bin/activate`.
 - To make tests work, check the `.env` file at the root of the project to find an OpenAI key.
 - If using `playwright` to explore the frontend, you can usually log in with username `a@example.com` and password
   `a`. The app can be accessed at `http://localhost:3000`.
@@ -198,7 +195,7 @@ Write the migration manually and place it in the file that alembic creates when 
 
 ## Testing Strategy
 
-First, activate the virtualenv: `source .venv/bin/activate`. If `.venv` doesn't exist yet, create it first with `uv sync --frozen` (from the repo root).
+First, activate the virtualenv: `source .venv/bin/activate`. If `.venv` doesn't exist yet, create it first with `uv sync --frozen`.
 
 There are 4 main types of tests within Onyx:
 
