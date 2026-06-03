@@ -34,6 +34,7 @@ import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
+import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import ScheduledRunBanner from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
@@ -80,18 +81,28 @@ export default function BuildChatPanel({
   const toggleOutputPanel = useToggleOutputPanel();
 
   // Model the next message will use, seeded from the loaded session's row.
+  const { llmProviders } = useLLMProviders();
   const [selectedModel, setSelectedModel] = useState<BuildLlmSelection | null>(
     null
   );
   useEffect(() => {
-    if (session?.agentProvider && session?.agentModel) {
-      setSelectedModel({
-        provider: session.agentProvider,
-        providerName: session.agentProvider,
-        modelName: session.agentModel,
-      });
+    // Reset on session switch so a prior session's pick can't leak into a new
+    // session's first message.
+    if (!session?.agentProvider || !session?.agentModel) {
+      setSelectedModel(null);
+      return;
     }
-  }, [session?.agentProvider, session?.agentModel]);
+    // Resolve providerName to the configured provider's name (same contract as
+    // getDefaultLlmSelection) rather than the raw provider key.
+    const match = llmProviders?.find(
+      (p) => p.provider === session.agentProvider
+    );
+    setSelectedModel({
+      provider: session.agentProvider,
+      providerName: match?.name ?? session.agentProvider,
+      modelName: session.agentModel,
+    });
+  }, [session?.agentProvider, session?.agentModel, llmProviders]);
 
   // Main-column view mode: chat (main agent) vs a subagent transcript.
   const viewedSubagentSessionId = useViewedSubagentSessionId();
