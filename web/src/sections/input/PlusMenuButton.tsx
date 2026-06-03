@@ -41,8 +41,7 @@ interface FlyoutRowProps {
   children: ReactNode[];
 }
 
-// Nested inside the main menu's content so Radix treats it as a
-// dismissable-layer "branch" — interacting with the flyout won't close the menu.
+// Nested in the main menu so Radix treats it as a dismissable-layer branch.
 function FlyoutRow({
   icon,
   label,
@@ -70,9 +69,8 @@ function FlyoutRow({
         width="lg"
         // Hover-opening shouldn't yank focus out of the textarea.
         onOpenAutoFocus={(e) => e.preventDefault()}
-        // Open/close is driven entirely by hover state; suppress Radix's own
-        // focus/pointer-outside dismissal so the panel doesn't flicker closed
-        // while the pointer is still on it.
+        // Hover drives open/close; suppress Radix's own dismissal so it
+        // doesn't flicker closed while the pointer is still on the panel.
         onInteractOutside={(e) => e.preventDefault()}
       >
         <Popover.Menu>{children}</Popover.Menu>

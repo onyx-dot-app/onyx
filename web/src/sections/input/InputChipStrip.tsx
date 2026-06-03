@@ -165,8 +165,7 @@ export function InputChipStrip({
   const reduceMotion = useReducedMotion();
   const hasContent = files.length > 0 || entries.length > 0;
 
-  // Collapse/expand height so the bar grows and shrinks smoothly as the
-  // first/last chip is added or removed (rather than jumping).
+  // Animate height so the bar grows/shrinks smoothly on first/last chip.
   const stripTransition = reduceMotion
     ? { duration: 0 }
     : { duration: 0.2, ease: EASE };
