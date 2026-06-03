@@ -8,13 +8,13 @@ import { Button, Divider, Text } from "@opal/components";
 import { Content } from "@opal/layouts";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Popover } from "@opal/components";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
 import {
   SvgAlertTriangle,
   SvgCheckCircle,
   SvgMaximize2,
   SvgXOctagon,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
@@ -226,7 +226,7 @@ export default function HookStatusPopover({
           >
             {isLoading ? (
               <Section justifyContent="center">
-                <SimpleLoader />
+                <SvgSimpleLoader />
               </Section>
             ) : error ? (
               <Text font="secondary-body" color="text-03">

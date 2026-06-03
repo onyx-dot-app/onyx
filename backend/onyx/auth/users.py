@@ -1797,28 +1797,24 @@ async def _maybe_refresh_oauth_tokens(
         )
 
 
+def scope_exempt() -> None:
+    """Marker dependency: tags a route reachable by any scoped PAT."""
+
+
+scope_exempt._is_scope_exempt = True  # ty: ignore[unresolved-attribute]
+
+
 def _scoped_pat_permitted_on_route(
     token_scopes: list[Permission] | None, route: BaseRoute | None
 ) -> bool:
-    """Fail-closed coverage check for scoped PATs.
-
-    Unrestricted PAT / session / API-key auth (token_scopes is None) is
-    unaffected. A scoped PAT may only reach routes that declare a
-    require_permission dependency; require_permission then adjudicates whether
-    the scopes actually cover it. A route with no require_permission is denied,
-    so a narrowly-scoped token can't reach arbitrary endpoints that merely lack
-    a permission guard.
-    """
-    # No scopes (None) == unrestricted: session / unrestricted PAT / API-key
-    # auth carry no token cap, so every route is allowed.
+    """Whether a scoped PAT may proceed on this route (fail-closed)."""
     if token_scopes is None:
         return True
-    # Only an APIRoute carries a dependant; anything else (no match, a mounted
-    # or websocket route) declares no permission, so deny the scoped PAT.
     if not isinstance(route, APIRoute):
         return False
     return any(
-        getattr(dependency.cache_key[0], "_is_require_permission", False)
+        getattr(dependency.call, "_is_require_permission", False)
+        or getattr(dependency.call, "_is_scope_exempt", False)
         for dependency in route.dependant.dependencies
     )
 

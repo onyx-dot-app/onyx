@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Text } from "@opal/components";
 
-interface SkillInfoPopoverProps {
+interface EntryInfoPopoverProps {
   name: string;
   description: string;
   tileElement: HTMLElement;
@@ -13,12 +13,12 @@ interface SkillInfoPopoverProps {
 
 // Read-only popover anchored to a skill tile, showing its name + description.
 // Raw container (anchors to a raw DOM tile node) but renders text via Opal Text.
-function SkillInfoPopover({
+function EntryInfoPopover({
   name,
   description,
   tileElement,
   onDismiss,
-}: SkillInfoPopoverProps) {
+}: EntryInfoPopoverProps) {
   const [rect, setRect] = useState(() => tileElement.getBoundingClientRect());
   const rafId = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -135,5 +135,5 @@ function SkillInfoPopover({
   );
 }
 
-export type { SkillInfoPopoverProps };
-export default SkillInfoPopover;
+export type { EntryInfoPopoverProps };
+export default EntryInfoPopover;

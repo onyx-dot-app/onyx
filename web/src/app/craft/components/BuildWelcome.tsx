@@ -4,7 +4,9 @@ import { useRef } from "react";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
 import Text from "@/refresh-components/texts/Text";
 import Logo from "@/refresh-components/Logo";
-import InputBar, { InputBarHandle } from "@/app/craft/components/InputBar";
+import CraftInputBar, {
+  CraftInputBarHandle,
+} from "@/app/craft/components/CraftInputBar";
 import SuggestedPrompts from "@/app/craft/components/SuggestedPrompts";
 import ConnectDataBanner from "@/app/craft/components/ConnectDataBanner";
 
@@ -25,7 +27,7 @@ export default function BuildWelcome({
   isRunning,
   sandboxInitializing = false,
 }: BuildWelcomeProps) {
-  const inputBarRef = useRef<InputBarHandle>(null);
+  const inputBarRef = useRef<CraftInputBarHandle>(null);
 
   const handlePromptClick = (promptText: string) => {
     inputBarRef.current?.setMessage(promptText);
@@ -40,7 +42,7 @@ export default function BuildWelcome({
         </Text>
       </div>
       <div className="w-full max-w-[720px]">
-        <InputBar
+        <CraftInputBar
           ref={inputBarRef}
           onSubmit={onSubmit}
           isRunning={isRunning}

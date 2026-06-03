@@ -34,6 +34,7 @@ from onyx.server.features.build.db.sandbox import get_idle_sandboxes
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.sandbox_lifecycle import provision_sandbox
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config
 from tests.external_dependency_unit.craft._test_helpers import make_sandbox
@@ -50,10 +51,9 @@ class TestProvisionTransitions:
         db_session: Session,
         test_user: User,
         stub_sandbox_manager: StubSandboxManager,
-        session_manager_with_stub: SessionManager,
     ) -> None:
         # Create a sandbox row in PROVISIONING (the state set by
-        # create_sandbox__no_commit before _provision_sandbox is called).
+        # create_sandbox__no_commit before provision_sandbox is called).
         sandbox = create_sandbox__no_commit(db_session, test_user.id)
         db_session.commit()
         assert sandbox.status == SandboxStatus.PROVISIONING
@@ -66,7 +66,9 @@ class TestProvisionTransitions:
             last_heartbeat=None,
         )
 
-        session_manager_with_stub._provision_sandbox(
+        provision_sandbox(
+            db_session=db_session,
+            sandbox_manager=stub_sandbox_manager,
             sandbox=sandbox,
             user=test_user,
             user_id=test_user.id,
@@ -88,17 +90,19 @@ class TestProvisionFailureRollback:
         self,
         db_session: Session,
         test_user: User,
-        session_manager_with_stub: SessionManager,
+        stub_sandbox_manager: StubSandboxManager,
     ) -> None:
         # Mirror the endpoint pattern: create_sandbox__no_commit (flush only),
-        # then call _provision_sandbox; if it raises, the caller rolls back so
+        # then call provision_sandbox; if it raises, the caller rolls back so
         # no Sandbox row persists.
         sandbox = create_sandbox__no_commit(db_session, test_user.id)
         sandbox_id = sandbox.id
         # No provision_returns => stub raises NotImplementedError on provision().
 
         with pytest.raises(NotImplementedError):
-            session_manager_with_stub._provision_sandbox(
+            provision_sandbox(
+                db_session=db_session,
+                sandbox_manager=stub_sandbox_manager,
                 sandbox=sandbox,
                 user=test_user,
                 user_id=test_user.id,

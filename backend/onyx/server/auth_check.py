@@ -129,7 +129,7 @@ def check_router_auth(
         )
         if route_dependant_obj:
             for dependency in route_dependant_obj.dependencies:
-                depends_fn = dependency.cache_key[0]
+                depends_fn = dependency.call
                 if (
                     depends_fn == current_limited_user
                     or depends_fn == current_user

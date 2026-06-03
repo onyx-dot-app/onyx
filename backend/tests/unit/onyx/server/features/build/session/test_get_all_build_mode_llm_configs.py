@@ -80,14 +80,14 @@ class TestGetAllBuildModeLlmConfigs:
                 _provider(
                     name="Anthropic",
                     provider="anthropic",
-                    models=[_model("claude-opus-4-7")],
+                    models=[_model("claude-opus-4-8")],
                     api_key="k-anthropic",
                 )
             ]
         )
         assert [(c.provider, c.model_name) for c in configs] == [
             ("openai", "gpt-4o"),
-            ("anthropic", "claude-opus-4-7"),
+            ("anthropic", "claude-opus-4-8"),
         ]
         assert configs[1].api_key == "k-anthropic"
 
@@ -124,13 +124,13 @@ class TestGetAllBuildModeLlmConfigs:
                     provider="anthropic",
                     models=[
                         _model("claude-opus-4-6"),
-                        _model("claude-opus-4-7"),
+                        _model("claude-opus-4-8"),
                         _model("claude-sonnet-4-6"),
                     ],
                 )
             ]
         )
-        assert configs[1].model_name == "claude-opus-4-7"
+        assert configs[1].model_name == "claude-opus-4-8"
 
     def test_uses_first_visible_for_type_without_recommended(self) -> None:
         # A provider type with no recommended-model entry falls back to first visible.
@@ -146,19 +146,21 @@ class TestGetAllBuildModeLlmConfigs:
         assert configs[1].model_name == "gemini-2.5-pro"
 
     def test_skips_hidden_models_when_picking_first(self) -> None:
+        # A provider type without a recommended-model entry falls back to the
+        # first *visible* model, skipping hidden ones.
         configs = _run(
             [
                 _provider(
-                    name="Anthropic",
-                    provider="anthropic",
+                    name="Google",
+                    provider="google",
                     models=[
-                        _model("claude-hidden-1", is_visible=False),
-                        _model("claude-opus-4-7"),
+                        _model("gemini-hidden", is_visible=False),
+                        _model("gemini-2.5-pro"),
                     ],
                 )
             ]
         )
-        assert configs[1].model_name == "claude-opus-4-7"
+        assert configs[1].model_name == "gemini-2.5-pro"
 
     def test_dedupes_when_default_provider_also_in_build_mode_rows(self) -> None:
         """If the default's provider type is also tagged as build-mode, we
@@ -183,7 +185,7 @@ class TestGetAllBuildModeLlmConfigs:
                 _provider(
                     name="Anthropic",
                     provider="anthropic",
-                    models=[_model("claude-opus-4-7")],
+                    models=[_model("claude-opus-4-8")],
                 ),
                 _provider(
                     name="Google",
@@ -194,7 +196,7 @@ class TestGetAllBuildModeLlmConfigs:
         )
         assert [(c.provider, c.model_name) for c in configs] == [
             ("openai", "gpt-4o"),
-            ("anthropic", "claude-opus-4-7"),
+            ("anthropic", "claude-opus-4-8"),
             ("google", "gemini-2.5-pro"),
         ]
 
@@ -242,14 +244,14 @@ class TestGetLlmConfigFallback:
         provider = _provider(
             name="Anthropic",
             provider="anthropic",
-            models=[_model("claude-opus-4-7")],
+            models=[_model("claude-opus-4-8")],
             api_key="k-anthropic",
         )
         with self._patch_providers([provider]):
             config = self._manager().build_llm_configs(self._user(), None, None)[0]
         assert (config.provider, config.model_name) == (
             "anthropic",
-            "claude-opus-4-7",
+            "claude-opus-4-8",
         )
         assert config.api_key == "k-anthropic"
 
@@ -273,7 +275,7 @@ class TestGetLlmConfigFallback:
             [_provider(name="az", provider="azure", models=[_model("gpt-5.5")])]
         ):
             try:
-                self._manager().build_llm_configs(self._user(), None, None)[0]
+                self._manager().build_llm_configs(self._user(), None, None)
             except OnyxError as e:
                 assert e.status_code == 400
             else:
@@ -296,7 +298,7 @@ class TestGetLlmConfigFallback:
     def test_raises_onyx_error_when_no_supported_provider(self) -> None:
         with self._patch_providers([]):
             try:
-                self._manager().build_llm_configs(self._user(), None, None)[0]
+                self._manager().build_llm_configs(self._user(), None, None)
             except OnyxError as e:
                 assert e.status_code == 400
             else:
@@ -326,7 +328,7 @@ class TestGetLlmConfigFallback:
         with self._patch_providers(
             [
                 _provider(
-                    name="a", provider="anthropic", models=[_model("claude-opus-4-7")]
+                    name="a", provider="anthropic", models=[_model("claude-opus-4-8")]
                 )
             ]
         ):
@@ -335,18 +337,22 @@ class TestGetLlmConfigFallback:
             )[0]
         assert (config.provider, config.model_name) == (
             "anthropic",
-            "claude-opus-4-7",
+            "claude-opus-4-8",
         )
 
 
-class TestSessionManagerProvisionForwardsAllLlmConfigs:
-    """``SessionManager._provision_sandbox`` must forward the full
+class TestProvisionSandboxForwardsAllLlmConfigs:
+    """``sandbox_lifecycle.provision_sandbox`` must forward the full
     multi-provider list to ``sandbox_manager.provision()`` — passing only
     the default collapses ``opencode.json`` and per-prompt model
     overrides start failing with "Model not found" until pod restart.
     """
 
     def test_provision_passes_all_llm_configs(self) -> None:
+        from onyx.server.features.build.session.sandbox_lifecycle import (
+            provision_sandbox,
+        )
+
         sandbox_id = uuid4()
         user_id = uuid4()
         tenant_id = "tenant-x"
@@ -363,10 +369,6 @@ class TestSessionManagerProvisionForwardsAllLlmConfigs:
             last_heartbeat=datetime.now(),
         )
 
-        manager = SessionManager.__new__(SessionManager)
-        manager._db_session = cast(Session, MagicMock())  # type: ignore[attr-defined]
-        manager._sandbox_manager = sandbox_manager  # type: ignore[attr-defined]
-
         all_configs = [
             _OPENAI_DEFAULT,
             LLMProviderConfig(
@@ -379,14 +381,18 @@ class TestSessionManagerProvisionForwardsAllLlmConfigs:
 
         with (
             patch(
-                "onyx.server.features.build.session.manager.ensure_sandbox_pat",
+                "onyx.server.features.build.session.sandbox_lifecycle."
+                "ensure_sandbox_pat",
                 return_value="pat-token",
             ),
             patch(
-                "onyx.server.features.build.session.manager.update_sandbox_status__no_commit"
+                "onyx.server.features.build.session.sandbox_lifecycle."
+                "update_sandbox_status__no_commit"
             ),
         ):
-            manager._provision_sandbox(
+            provision_sandbox(
+                db_session=cast(Session, MagicMock()),
+                sandbox_manager=sandbox_manager,
                 sandbox=sandbox,
                 user=user,
                 user_id=user_id,
