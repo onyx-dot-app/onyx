@@ -1,8 +1,8 @@
-"""Cross-replica prompt-slot serialization, against a real cache (Redis).
+"""Prompt-slot serialization for build sessions, against a real cache (Redis).
 
-Two manager instances stand in for two ``api_server`` replicas sharing one
-cache; the distributed lock must stop both from running a turn for the same
-build session at once — the proof an in-process test can't give.
+The slot is a distributed lock, so these run against a real cache rather than
+a stub: two manager instances stand in for two ``api_server`` replicas sharing
+one cache, proving cross-pod serialization an in-process test can't.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
+from redis.exceptions import RedisError
 
 from onyx.cache import factory
 from onyx.cache.interface import CacheBackendType
@@ -28,27 +29,21 @@ def _make_replica() -> KubernetesSandboxManager:
 
 
 @pytest.fixture
-def _fast_acquire(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Short contention wait so the "second replica refused" path returns
-    # quickly instead of blocking the full default budget.
+def slot_env(
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tenant context + a short acquire timeout + the Redis backend forced on,
+    so the contended path returns quickly and the cross-replica lock is real."""
     monkeypatch.setattr(serve_transport, "PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS", 1.0)
-
-
-@pytest.fixture
-def _redis_backend(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Force Redis so this exercises the real cross-replica lock regardless of
-    # the env default.
     monkeypatch.setattr(factory, "CACHE_BACKEND", CacheBackendType.REDIS)
 
 
 def test_second_replica_refused_then_admitted_after_release(
-    tenant_context: None,  # noqa: ARG001
-    _fast_acquire: None,  # noqa: ARG001
-    _redis_backend: None,  # noqa: ARG001
+    slot_env: None,  # noqa: ARG001
 ) -> None:
     sandbox_id = uuid4()
     build_session_id = uuid4()
-
     replica_a = _make_replica()
     replica_b = _make_replica()
 
@@ -57,10 +52,43 @@ def test_second_replica_refused_then_admitted_after_release(
     with replica_a.prompt_slot(sandbox_id, build_session_id) as first:
         assert first is True
         with replica_b.prompt_slot(sandbox_id, build_session_id) as second:
-            assert second is False, (
-                "a second replica must be refused while the slot is held"
-            )
+            assert second is False
 
     # A released → a queued third turn can now proceed.
     with replica_b.prompt_slot(sandbox_id, build_session_id) as third:
-        assert third is True, "slot must be acquirable once the holder releases"
+        assert third is True
+
+
+def test_distinct_build_sessions_do_not_block(slot_env: None) -> None:  # noqa: ARG001
+    sandbox_id = uuid4()
+    mgr = _make_replica()
+    with mgr.prompt_slot(sandbox_id, uuid4()) as first:
+        assert first is True
+        with mgr.prompt_slot(sandbox_id, uuid4()) as second:
+            assert second is True
+
+
+def test_slot_released_on_exception(slot_env: None) -> None:  # noqa: ARG001
+    sandbox_id = uuid4()
+    build_session_id = uuid4()
+    mgr = _make_replica()
+
+    with pytest.raises(RuntimeError, match="boom"):
+        with mgr.prompt_slot(sandbox_id, build_session_id) as acquired:
+            assert acquired is True
+            raise RuntimeError("boom")
+
+    with mgr.prompt_slot(sandbox_id, build_session_id) as after:
+        assert after is True
+
+
+def test_fails_open_when_cache_unavailable(
+    slot_env: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom() -> None:
+        raise RedisError("cache down")
+
+    monkeypatch.setattr(serve_transport, "get_cache_backend", _boom)
+    with _make_replica().prompt_slot(uuid4(), uuid4()) as acquired:
+        assert acquired is True
