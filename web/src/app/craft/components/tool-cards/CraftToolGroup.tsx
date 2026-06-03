@@ -10,7 +10,11 @@ import {
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
-import { SvgLoader } from "@/app/craft/components/tool-cards/helpers";
+import CometEdge from "@/app/craft/components/CometEdge";
+import {
+  isSkillCall,
+  SvgLoader,
+} from "@/app/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 
 interface CraftToolGroupProps {
@@ -56,6 +60,10 @@ export default function CraftToolGroup({
     defaultOpen ?? aggregate === "in_progress"
   );
   const failedCount = toolCalls.filter((t) => t.status === "failed").length;
+  // A group that involves a skill stays distinct from plain tool groups: a
+  // comet while it runs, and a thin border that persists once it's done.
+  const skillGroup = toolCalls.some(isSkillCall);
+  const skillActive = aggregate === "in_progress" && skillGroup;
 
   // Fold closed once a message follows; fire once so a manual re-open sticks.
   const didAutoCollapse = useRef(false);
@@ -67,47 +75,58 @@ export default function CraftToolGroup({
   }, [autoCollapse]);
 
   return (
-    <div className="rounded-08 overflow-hidden">
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger asChild>
-          <button
-            className={cn(
-              "w-full text-left px-3 py-2 rounded-md",
-              "transition-colors hover:bg-background-tint-02"
-            )}
-          >
-            <div className="flex items-center gap-2 min-w-0 w-full">
-              {renderStatusIcon(toolCalls)}
-              <Text font="main-ui-muted" color="text-04" nowrap>
-                Working
-              </Text>
-              <span className="ml-auto shrink-0 flex items-center gap-2">
-                {failedCount > 0 && (
-                  <Tag title={`${failedCount} failed`} size="sm" color="red" />
-                )}
-                <Tag
-                  title={`${toolCalls.length} calls`}
-                  size="sm"
-                  color="gray"
+    <CometEdge active={skillActive} tone="info" speedSeconds={2.6}>
+      <div
+        className={cn(
+          "rounded-08 overflow-hidden",
+          skillGroup && "border-[0.5px] border-border-01"
+        )}
+      >
+        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+          <CollapsibleTrigger asChild>
+            <button
+              className={cn(
+                "w-full text-left px-3 py-2 rounded-md",
+                "transition-colors hover:bg-background-tint-02"
+              )}
+            >
+              <div className="flex items-center gap-2 min-w-0 w-full">
+                {renderStatusIcon(toolCalls)}
+                <Text font="main-ui-muted" color="text-04" nowrap>
+                  Working
+                </Text>
+                <span className="ml-auto shrink-0 flex items-center gap-2">
+                  {failedCount > 0 && (
+                    <Tag
+                      title={`${failedCount} failed`}
+                      size="sm"
+                      color="red"
+                    />
+                  )}
+                  <Tag
+                    title={`${toolCalls.length} calls`}
+                    size="sm"
+                    color="gray"
+                  />
+                </span>
+                <SvgChevronDown
+                  className={cn(
+                    "size-4 stroke-text-03 transition-transform duration-150 shrink-0",
+                    !isOpen && "-rotate-90"
+                  )}
                 />
-              </span>
-              <SvgChevronDown
-                className={cn(
-                  "size-4 stroke-text-03 transition-transform duration-150 shrink-0",
-                  !isOpen && "-rotate-90"
-                )}
-              />
+              </div>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="flex flex-col border-t-[0.5px] border-border-01">
+              {toolCalls.map((toolCall) => (
+                <CraftToolCard key={toolCall.id} toolCall={toolCall} nested />
+              ))}
             </div>
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="flex flex-col border-t-[0.5px] border-border-01">
-            {toolCalls.map((toolCall) => (
-              <CraftToolCard key={toolCall.id} toolCall={toolCall} nested />
-            ))}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
+    </CometEdge>
   );
 }

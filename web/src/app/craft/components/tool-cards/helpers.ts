@@ -94,6 +94,23 @@ export function isTerminalStatus(status: ToolCallStatus): boolean {
 }
 
 /**
+ * A skill invocation — the "Using <skill> skill" card. Drives the skill-only
+ * chrome (leading sparkle, thin border).
+ */
+export function isSkillInvocation(toolCall: ToolCallState): boolean {
+  return toolCall.toolName === "skill";
+}
+
+/**
+ * Skill-related work: the invocation itself, or a tool call made inside a
+ * skill (carries `skillName`). Drives the comet edge (a card in flight, a
+ * group that involves a skill).
+ */
+export function isSkillCall(toolCall: ToolCallState): boolean {
+  return toolCall.toolName === "skill" || !!toolCall.skillName;
+}
+
+/**
  * Returns the language hint to use for syntax highlighting in the body.
  * Uses the file path's extension when present, falls back to the tool kind.
  */

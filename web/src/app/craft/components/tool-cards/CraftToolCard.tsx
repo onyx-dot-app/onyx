@@ -3,12 +3,13 @@
 import { useState, type ReactNode } from "react";
 import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgChevronDown } from "@opal/icons";
+import { SvgChevronDown, SvgSparkle } from "@opal/icons";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
+import CometEdge from "@/app/craft/components/CometEdge";
 import SkillBadge from "@/app/craft/components/tool-cards/SkillBadge";
 import BashBody from "@/app/craft/components/tool-cards/BashBody";
 import DiffBody from "@/app/craft/components/tool-cards/DiffBody";
@@ -21,6 +22,8 @@ import GenericBody from "@/app/craft/components/tool-cards/GenericBody";
 import {
   getStatusDisplay,
   getToolIcon,
+  isSkillCall,
+  isSkillInvocation,
   SvgLoader,
 } from "@/app/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
@@ -159,6 +162,16 @@ function renderStatusIcon(toolCall: ToolCallState) {
       />
     );
   }
+  // A finished skill leads with its sparkle identity (in brand blue) rather
+  // than the same completion check every tool row shows — the distinguishing
+  // mark for a skill card, in a group or standalone.
+  if (isSkillInvocation(toolCall) && toolCall.status === "completed") {
+    return (
+      <SvgSparkle
+        className={cn(baseClass, "stroke-status-info-05 fill-status-info-05")}
+      />
+    );
+  }
   const StatusIcon = statusDisplay.icon;
   if (StatusIcon) {
     return <StatusIcon className={cn(baseClass, statusDisplay.iconClass)} />;
@@ -215,10 +228,26 @@ export default function CraftToolCard({
     expandable && "transition-colors hover:bg-background-tint-02"
   );
 
-  return (
+  // Skill work in flight gets a comet edge — the live signal. A skill
+  // invocation (`toolName === "skill"`) or a tool call made inside a skill
+  // (carries `skillName`) both count; a plain tool call never does.
+  // Suppressed when nested in a group — the group carries the comet instead
+  // (its `overflow-hidden` would clip a per-row comet).
+  const isSkillInFlight =
+    !nested &&
+    isSkillCall(toolCall) &&
+    (toolCall.status === "pending" || toolCall.status === "in_progress");
+
+  // A standalone skill invocation keeps a thin border at rest so it stays
+  // distinct from plain tool cards even after the comet stops. Grouped skill
+  // rows stay borderless — the group carries the border.
+  const skillCard = !nested && isSkillInvocation(toolCall);
+
+  const card = (
     <div
       className={cn(
         "rounded-08",
+        skillCard && !failed && "border-[0.5px] border-border-01",
         failed &&
           (nested
             ? "bg-status-error-00"
@@ -237,4 +266,13 @@ export default function CraftToolCard({
       )}
     </div>
   );
+
+  if (isSkillInFlight) {
+    return (
+      <CometEdge active tone="info" speedSeconds={2.6}>
+        {card}
+      </CometEdge>
+    );
+  }
+  return card;
 }
