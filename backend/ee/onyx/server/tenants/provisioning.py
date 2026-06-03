@@ -34,7 +34,7 @@ from onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.external_app import create_external_app
-from onyx.db.external_app import get_external_app_by_app_type
+from onyx.db.external_app import get_built_in_external_app
 from onyx.db.external_app import set_external_app_organization_credentials
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
 from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
@@ -46,9 +46,9 @@ from onyx.db.models import AvailableTenant
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
 from onyx.db.models import UserTenantMapping
-from onyx.external_apps.managed_credentials import load_managed_external_app_credentials
 from onyx.external_apps.providers.registry import build_action_policies
 from onyx.external_apps.providers.registry import fetch_onyx_managed_built_in_apps
+from onyx.external_apps.providers.registry import get_onyx_managed_provider
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
@@ -549,7 +549,7 @@ def configure_default_api_keys(db_session: Session) -> None:
 def provision_built_in_external_apps(db_session: Session) -> None:
     """Provision every Onyx-managed built-in external app into the current tenant
     (disabled), populating Onyx-owned credentials from operator config where
-    available. ``onyx_managed=False`` built-ins are not seeded.
+    available. Non-managed built-ins (not an ``OnyxManagedProvider``) are not seeded.
 
     - **New app:** created disabled, with the operator's credentials (or empty if
       none configured — still provisioned, just not enableable until creds exist).
@@ -569,18 +569,18 @@ def provision_built_in_external_apps(db_session: Session) -> None:
         )
         return
 
-    managed_credentials = load_managed_external_app_credentials()
-
     for descriptor in fetch_onyx_managed_built_in_apps():
         app_type = descriptor.app_type
-        credentials = managed_credentials.get(app_type)
+        provider = get_onyx_managed_provider(app_type)
+        credentials = provider.configured_managed_credentials() if provider else None
         try:
-            existing = get_external_app_by_app_type(db_session, app_type)
+            existing = get_built_in_external_app(db_session, app_type)
             if existing:
                 if credentials is not None:
                     set_external_app_organization_credentials(
                         db_session, existing, credentials
                     )
+                    db_session.commit()
                     logger.info(
                         "Refreshed Onyx-managed credentials for built-in app '%s'.",
                         app_type.value,

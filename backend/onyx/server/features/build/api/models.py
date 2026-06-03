@@ -307,8 +307,11 @@ class PptxPreviewResponse(BaseModel):
 
 
 # ===== External App Models =====
-class UpsertExternalAppRequest(BaseModel):
-    """Create or update an external app.
+class UpsertBuiltInExternalAppRequest(BaseModel):
+    """Create or update a built-in external app (``POST /admin/apps/built-in``).
+
+    Built-in providers only — ``app_type=CUSTOM`` is rejected (custom apps use
+    ``POST /admin/apps/custom``).
 
     If `id` is provided, the row with that id is updated; otherwise a
     new row is inserted (and a backing ``Skill`` row is created in the
@@ -332,6 +335,15 @@ class UpsertExternalAppRequest(BaseModel):
     # Per-action overrides by catalog action id (built-in apps); validated on
     # upsert. A map full-replaces stored overrides (empty clears); None leaves
     # them untouched, so a partial update can't wipe the admin's choices.
+    action_policies: dict[str, EndpointPolicy] | None = None
+
+
+class SetExternalAppEnablementRequest(BaseModel):
+    """Narrow update of a built-in app's enablement + per-action policies,
+    keyed solely by the path ``id``.
+    """
+
+    enabled: bool
     action_policies: dict[str, EndpointPolicy] | None = None
 
 

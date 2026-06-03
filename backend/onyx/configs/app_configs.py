@@ -1405,21 +1405,26 @@ AUTO_PROVISION_DEFAULT_LLM_PROVIDERS = (
 )
 
 # Whether tenant provisioning auto-creates built-in external app rows (disabled,
-# seeded with MANAGED_EXTERNAL_APP_CREDENTIALS below). Defaults to True so cloud
-# tenants get Onyx-managed built-ins they can enable without registering their
-# own OAuth app. Set False to skip provisioning built-in external apps entirely.
+# seeded with Onyx-owned credentials). Defaults to True so cloud tenants get
+# Onyx-managed built-ins they can enable without registering their own OAuth app.
+# Set False to skip provisioning built-in external apps entirely.
 AUTO_PROVISION_DEFAULT_EXTERNAL_APPS = (
     os.environ.get("AUTO_PROVISION_DEFAULT_EXTERNAL_APPS", "true").lower() == "true"
 )
 
-# Onyx-owned OAuth credentials for built-in external apps, seeded per tenant at
-# provisioning time so cloud admins never register their own OAuth app. JSON
-# object mapping a built-in app_type to its credential fields, e.g.
-# {"gmail": {"client_id": "...", "client_secret": "..."}}. Parsed in
-# onyx/external_apps/managed_credentials.py; unset/empty is a valid no-op.
-MANAGED_EXTERNAL_APP_CREDENTIALS = os.environ.get(
-    "MANAGED_EXTERNAL_APP_CREDENTIALS", ""
+# Onyx-owned OAuth credentials for built-in external apps (managed cloud)
+EXT_APP_SLACK_CLIENT_ID = os.environ.get("EXT_APP_SLACK_CLIENT_ID", "")
+EXT_APP_SLACK_CLIENT_SECRET = os.environ.get("EXT_APP_SLACK_CLIENT_SECRET", "")
+EXT_APP_GMAIL_CLIENT_ID = os.environ.get("EXT_APP_GMAIL_CLIENT_ID", "")
+EXT_APP_GMAIL_CLIENT_SECRET = os.environ.get("EXT_APP_GMAIL_CLIENT_SECRET", "")
+EXT_APP_GOOGLE_CALENDAR_CLIENT_ID = os.environ.get(
+    "EXT_APP_GOOGLE_CALENDAR_CLIENT_ID", ""
 )
+EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET = os.environ.get(
+    "EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET", ""
+)
+EXT_APP_LINEAR_CLIENT_ID = os.environ.get("EXT_APP_LINEAR_CLIENT_ID", "")
+EXT_APP_LINEAR_CLIENT_SECRET = os.environ.get("EXT_APP_LINEAR_CLIENT_SECRET", "")
 
 INSTANCE_TYPE = (
     "managed"

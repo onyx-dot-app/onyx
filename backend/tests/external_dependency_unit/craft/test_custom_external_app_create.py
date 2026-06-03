@@ -19,7 +19,7 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
-from onyx.server.features.build.api.models import UpsertExternalAppRequest
+from onyx.server.features.build.api.models import UpsertBuiltInExternalAppRequest
 from onyx.utils.encryption import is_masked_credential
 
 _AUTH_TEMPLATE = {"Authorization": "Bearer {api_key}"}
@@ -313,8 +313,8 @@ def test_json_admin_apps_rejects_custom(
 ) -> None:
     # The JSON /admin/apps endpoint is built-in only.
     with pytest.raises(OnyxError):
-        api.upsert_external_app(
-            request=UpsertExternalAppRequest(
+        api.upsert_built_in_external_app(
+            request=UpsertBuiltInExternalAppRequest(
                 id=None,
                 name="Nope",
                 description="",

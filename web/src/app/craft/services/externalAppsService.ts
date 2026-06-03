@@ -19,7 +19,7 @@ async function readErrorDetail(
   return data.detail ?? `${fallback} (HTTP ${res.status}).`;
 }
 
-interface UpsertExternalAppBody {
+interface UpsertBuiltInExternalAppBody {
   id: number | null;
   name: string;
   description: string;
@@ -32,10 +32,14 @@ interface UpsertExternalAppBody {
   action_policies?: Record<string, EndpointPolicy>;
 }
 
-export async function upsertExternalApp(
-  body: UpsertExternalAppBody
+/**
+ * Create or edit a built-in external app (`POST /admin/apps/built-in`). Built-in
+ * providers only — custom apps use {@link upsertCustomExternalApp}.
+ */
+export async function upsertBuiltInExternalApp(
+  body: UpsertBuiltInExternalAppBody
 ): Promise<ExternalAppAdminResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/admin/apps`, {
+  const res = await fetch(`${BUILD_API_BASE}/admin/apps/built-in`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -95,37 +99,43 @@ export async function upsertCustomExternalApp(
   return res.json();
 }
 
+interface SetEnablementBody {
+  enabled: boolean;
+  // Full replace when present; omit to leave stored policies untouched.
+  action_policies?: Record<string, EndpointPolicy>;
+}
+
 /**
- * Toggle `enabled` without touching credentials. Custom apps route through the
- * custom endpoint (resending their current config, no bundle); built-in
- * providers use the JSON endpoint.
+ * Narrow update of a built-in app's enablement + action policies, keyed by id
+ * (PATCH /admin/apps/{id}). Never touches credentials or gateway config, so
+ * it's the only mutation path for Onyx-managed built-ins — and the simplest
+ * way to toggle enablement on any app.
+ */
+export async function setExternalAppEnablement(
+  id: number,
+  body: SetEnablementBody
+): Promise<ExternalAppAdminResponse> {
+  const res = await fetch(`${BUILD_API_BASE}/admin/apps/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Save failed"));
+  }
+  return res.json();
+}
+
+/**
+ * Toggle `enabled` without touching credentials or stored policies — works the
+ * same for built-in and custom apps via the narrow PATCH endpoint.
  */
 export async function setExternalAppEnabled(
   app: ExternalAppAdminResponse,
   enabled: boolean
 ): Promise<ExternalAppAdminResponse> {
-  if (app.app_type === "CUSTOM") {
-    return upsertCustomExternalApp({
-      id: app.id,
-      name: app.name,
-      description: app.description,
-      upstream_url_patterns: app.upstream_url_patterns,
-      auth_template: app.auth_template,
-      organization_credentials: app.organization_credentials,
-      enabled,
-    });
-  }
-  return upsertExternalApp({
-    id: app.id,
-    name: app.name,
-    description: app.description,
-    app_type: app.app_type,
-    upstream_url_patterns: app.upstream_url_patterns,
-    auth_template: app.auth_template,
-    organization_credentials: app.organization_credentials,
-    enabled,
-    // action_policies omitted: a toggle must not touch stored policies.
-  });
+  // action_policies omitted: a toggle must not touch stored policies.
+  return setExternalAppEnablement(app.id, { enabled });
 }
 
 export async function deleteExternalApp(id: number): Promise<void> {

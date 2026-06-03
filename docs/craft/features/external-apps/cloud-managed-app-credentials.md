@@ -1,261 +1,114 @@
-# Cloud-Managed External-App Credentials — Plan
+# Cloud-Managed External-App Credentials
 
-> **Scope.** On Onyx Cloud, **Onyx owns the OAuth credentials** for built-in
-> external apps. Every built-in app is **pre-provisioned (disabled) into each
-> tenant** with Onyx's credentials already populated. A tenant admin's only
-> actions are to **enable/disable** an app and **configure its action policies** —
-> they cannot create built-in apps, cannot see or edit the credentials, and
-> cannot delete the apps. Users then run the normal per-user OAuth flow against
-> Onyx's app. Builds on the existing external-app subsystem
-> ([action-policies.md](./action-policies.md),
-> [oauth-token-refresh.md](./oauth-token-refresh.md)).
+On Onyx Cloud, Onyx owns the OAuth client credentials for built-in external apps
+(Gmail, Google Calendar, Slack, Linear). Each tenant is seeded with these apps
+already configured, so a tenant admin never registers their own OAuth
+application. An admin only **enables/disables** an app and sets its **action
+policies**; users then run the normal per-user OAuth flow against Onyx's app.
 
-## Refined requirement
+Self-hosted is unchanged: admins create built-ins and supply their own
+credentials, as before.
 
-Today a tenant admin must register their own OAuth application with each
-provider, obtain a `client_id` / `client_secret`, and paste them into the app's
-`organization_credentials` before anyone can use a built-in app. On managed
-cloud we want to remove that entirely and own the credentials ourselves:
+## Behavior
 
-1. **One built-in app per type.** A tenant may have at most **one** built-in
-   external app of a given `app_type` (Gmail, Slack, Google Calendar, Linear).
-   (`CUSTOM` apps are exempt — a tenant can have many.)
-2. **Cloud pre-provisions all built-ins.** When a tenant is created, Onyx
-   provisions **every** built-in app into that tenant, with Onyx's credentials
-   already populated, **initially disabled**.
-3. **Admins toggle + set policies only.** A tenant admin enables/disables a
-   provisioned app and configures its action policies. That is the entire
-   surface.
-4. **Cloud admins cannot, for built-in apps:** create them (they already exist,
-   and only one per type is allowed), update credentials (Onyx-owned), or delete
-   them.
-5. **Hide the rest.** The admin UI/API for a cloud built-in app exposes only its
-   identity, enabled state, and policies — never the credentials or gateway
-   config.
-6. **Users authenticate normally.** Once enabled, each user runs the existing
-   OAuth flow and gets their own per-user token against Onyx's OAuth app.
-7. **Self-hosted is unchanged** except that the new one-per-type rule now
-   applies there too; self-hosted admins still create built-ins and supply their
-   own credentials.
+- **One built-in per type per tenant.** A tenant has at most one built-in app of
+  each `app_type`, enforced by the built-in skill's unique slug. (`CUSTOM` apps
+  may repeat.)
+- **Seeded, disabled, on Cloud.** When a tenant is created, every Onyx-managed
+  built-in is provisioned disabled with Onyx's credentials populated.
+- **Admins toggle + set policies only.** On Cloud a tenant admin cannot create,
+  edit credentials/config for, or delete a built-in app. Credentials and gateway
+  config (`auth_template`, `upstream_url_patterns`) are never sent to the client.
+- **Users authenticate normally.** Once an app is enabled, each user runs the
+  existing OAuth flow and gets their own per-user token against Onyx's app.
 
-## Design decision: cloud + built-in ⟹ Onyx-managed
+## Onyx-managed providers
 
-We do **not** add a separate `managed_external_app` table or a
-`creation_source` column. In cloud, **every built-in app is Onyx-managed by
-definition** (admins can't create their own), so the discriminator is simply:
+A built-in provider whose credentials Onyx owns subclasses `OnyxManagedProvider`
+(`onyx/external_apps/providers/base.py`). This interface is the single source of
+truth for "is this app Onyx-managed":
+
+- It declares `managed_org_credentials`, mapping each credential field to its
+  value. Keys must match the provider's `required_org_credential_fields`
+  (validated at class-definition time in `ExternalAppProvider.__init_subclass__`).
+- `configured_managed_credentials()` returns those values when all are set, or
+  `None` when none/only some are set (a partial set is logged and skipped).
+- A built-in that admins configure themselves simply doesn't inherit
+  `OnyxManagedProvider`; it carries no Onyx-owned credentials and stays editable
+  even on Cloud.
+
+`is_onyx_managed_app_type(app_type)` (`registry.py`) is an `isinstance` check
+against this interface; the API combines it with `MULTI_TENANT` for the
+Cloud-only lockdown.
+
+## Credential configuration
+
+Operators supply credentials through per-field environment variables, defined as
+constants in `onyx/configs/app_configs.py`:
 
 ```
-is_managed(app) := MULTI_TENANT  and  app.app_type != ExternalAppType.CUSTOM
+EXT_APP_<APP_TYPE>_<FIELD>     e.g. EXT_APP_GMAIL_CLIENT_ID, EXT_APP_SLACK_CLIENT_SECRET
 ```
 
-- Credentials live in the existing `external_app.organization_credentials`
-  column (seeded server-side at provisioning; see below). No new storage.
-- The one-per-type rule (req. 1) guarantees a built-in `app_type` uniquely
-  identifies its row within a tenant, so the cloud restrictions can key off
-  `app_type` alone.
-- `MULTI_TENANT` (`backend/shared_configs/configs.py:167`) /
-  `AuthType.CLOUD` (`backend/onyx/configs/constants.py:314`) gates all cloud-only
-  enforcement; self-hosted code paths are untouched apart from the uniqueness
-  constraint.
+The `EXT_APP_` prefix and specific app type (e.g. `GMAIL`, not `GOOGLE`) keep
+these distinct from the auth-flow `GOOGLE_OAUTH_*` variables. Each constant is
+mapped to its field on the provider's `managed_org_credentials`. Stored values
+are encrypted at rest (`organization_credentials`, an `EncryptedJson` column).
 
-This is the "seed the external_apps table directly" approach, with the
-managed-vs-user ambiguity resolved by environment + app type rather than by an
-extra column or table.
+Leaving a provider's variables unset is valid: the app is still provisioned, just
+without credentials until they are configured (it can't be meaningfully enabled
+until then).
 
-## Issues to Address
+## Provisioning
 
-- **No uniqueness on built-in `app_type`.** The model explicitly allows
-  duplicates today (`backend/onyx/db/models.py:5850-5854` comment: "NOT
-  unique"). Requirement 1 reverses that for non-`CUSTOM` types.
-- **No cloud provisioning of built-ins.** `provision_tenant`
-  (`backend/ee/onyx/server/tenants/provisioning.py:177`) seeds default LLM
-  providers (`configure_default_api_keys`, `:324`) but nothing seeds external
-  apps. We need to provision every built-in (disabled, with Onyx creds) here.
-- **Admin write paths are unrestricted.** All of these allow a tenant admin to
-  do things cloud must forbid for built-ins
-  (`backend/onyx/server/features/build/api/external_apps_api.py`):
-  - create — `POST /admin/apps` create branch (`:110`, `request.id is None`);
-  - edit credentials/config — same endpoint's update branch (`:135`);
-  - delete — `DELETE /admin/apps/{external_app_id}` (`:392`);
-  - the "available built-ins to add" lists feed a create UI that must be hidden
-    in cloud — `GET /admin/apps/built-in/options` (`:376`).
-- **Credentials are exposed (masked) to the admin.** `_to_admin_response`
-  (`:56`) returns masked `organization_credentials` and the full gateway config.
-  For cloud built-ins it must expose **only** identity + enabled + policies.
+`provision_built_in_external_apps(db_session)`
+(`ee/onyx/server/tenants/provisioning.py`) runs from `setup_tenant`, alongside
+`configure_default_api_keys`, when a tenant is created. It is gated by
+`AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` (default `true`). For each managed
+built-in it:
 
-## Important Notes (from research)
+- creates the app disabled, with the operator's credentials (or empty if none
+  are configured), or
+- if the app already exists (e.g. a `setup_tenant` retry), refreshes its
+  credentials in place and leaves enabled state and policies untouched.
+  Credentials are overwritten only when configured for that type, so a re-run
+  never wipes credentials the config no longer mentions.
 
-- **Provider registry is the source of "all built-ins."** `_PROVIDER_CLASSES` /
-  `fetch_available_built_in_apps()`
-  (`backend/onyx/external_apps/providers/registry.py:17,155`) enumerate every
-  built-in and carry each provider's `auth_template`, `upstream_url_patterns`,
-  `required_org_credential_fields`, and default action policies — everything the
-  provisioning seed needs except the secret values.
-- **Per-tenant seeding from operator config is the established pattern.**
-  `configure_default_api_keys` (`provisioning.py:324`) and
-  `seed_exa_provider_from_env.py` both read operator secrets from env/config,
-  encrypt with the existing crypto, and write per tenant. We reuse that posture
-  for the external-app credentials.
-- **`create_external_app`** (`backend/onyx/db/external_app.py`) already builds
-  the skill + app + default policies; the provisioning seed calls it with
-  `enabled=False`.
-- **Single-instance built-ins only.** The current built-ins (Slack, Google
-  Calendar, Gmail, Linear) are all single-instance, so one-per-type is safe. A
-  future multi-instance built-in (e.g. self-hosted GitLab/Jira) would not fit
-  this rule and would have to be modeled as `CUSTOM` or revisited — call this
-  out so the reversed uniqueness decision is intentional.
-- **Encryption** is unchanged: `organization_credentials` is already
-  `EncryptedJson` / `SensitiveValue`.
+Per-app failures are rolled back and logged so one bad app can't block the rest.
 
-## Implementation strategy
+## Admin API
 
-### 1. One-per-type uniqueness (all deployments) — already enforced
+- `POST /admin/apps/built-in` — create/update a built-in app (self-hosted). On
+  Cloud, managed built-ins are rejected here; use the PATCH endpoint.
+- `PATCH /admin/apps/{id}` — toggle `enabled` and set `action_policies`, keyed
+  solely by id. This is the only mutation path for Cloud-managed built-ins;
+  it never touches credentials or gateway config.
+- `DELETE /admin/apps/{id}` — rejected on Cloud for managed built-ins.
+- `POST /admin/apps/custom` — `CUSTOM` apps, unaffected by the Cloud rules.
 
-**No migration needed.** A built-in app is created through
-`create_built_in_skill_row__no_commit` (`onyx/db/skill.py:268`), whose slug is
-the provider's stable built-in id, guarded by the existing `uq_skill_slug`
-unique constraint. Each built-in `app_type` maps to exactly one skill id
-(`EXTERNAL_APP_BUILT_IN_SKILL_IDS`), so a second built-in of the same type
-already fails with `OnyxError(DUPLICATE_RESOURCE)` per tenant. A separate
-partial unique index on `external_app(app_type)` would be redundant and only add
-migration risk, so it was intentionally **not** added. (`CUSTOM` apps repeat
-freely — they don't go through the built-in slug path.) The "single-instance
-built-ins only" note above records why reversing the old multi-instance comment
-is safe for the current providers.
+`_to_admin_response` blanks `organization_credentials`, `auth_template`, and
+`upstream_url_patterns` for a managed app (and sets `is_onyx_managed=True`),
+exposing only identity, enabled state, and policies. Self-hosted built-ins still
+return masked (not blanked) credentials. After a mutation the helper flushes and
+the endpoint commits once the sandbox push succeeds, so a push failure doesn't
+leave the database ahead of the runtime.
 
-### 2. Cloud provisioning of built-ins (`provision_tenant`)
+The frontend (`web/src/app/craft/v1/apps/`) reads `is_onyx_managed` to hide the
+credential form, the "add built-in" affordance, and the delete control for
+managed apps, leaving only the enable toggle and policy editor.
 
-- Add an idempotent `provision_built_in_external_apps(db_session)` beside
-  `configure_default_api_keys` in `ee/onyx/server/tenants/provisioning.py` — the
-  cloud analogue that seeds per-tenant rows from deployment config. It
-  orchestrates by calling DB-layer helpers in `onyx/db/external_app.py` (so the
-  actual queries stay under `onyx/db`). For each provider in the registry,
-  **upsert** one `external_app` row keyed on `app_type`:
-  - config (`auth_template`, `upstream_url_patterns`, default policies) from the
-    provider descriptor;
-  - `organization_credentials` from operator config
-    (`MANAGED_EXTERNAL_APP_CREDENTIALS` env JSON keyed by `app_type`, parsed in
-    `onyx/external_apps/managed_credentials.py`), encrypted at rest;
-  - `enabled=False`.
-  Idempotent upsert means a `setup_tenant` retry is safe; per-app failures are
-  logged and skipped.
-- Called from `setup_tenant` (same file), alongside `configure_default_api_keys`,
-  and only there — exactly like `configure_default_api_keys`. New tenants get
-  every built-in, disabled, with Onyx creds populated.
-- Gated by `AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` (default `true`), the
-  external-app analogue of `AUTO_PROVISION_DEFAULT_LLM_PROVIDERS`. Set `false` to
-  skip provisioning built-ins entirely.
-- **No separate backfill/rotation script.** This mirrors
-  `configure_default_api_keys`, which is also only invoked at tenant creation.
-  Cross-tenant credential rotation and backfilling tenants that predate a
-  newly-added built-in are **out of scope** here; if needed later they would be
-  handled the same way LLM keys are (a dedicated ops script), not baked into the
-  provisioning seed.
-- **Decided — provision even without creds.** A built-in with no operator creds
-  configured is **still provisioned** (disabled). It simply can't be
-  meaningfully enabled/used until creds are seeded. We always provision the full
-  set of built-ins.
+## OAuth
 
-### 3. Cloud write-path lockdown (built-in apps)
-
-Add a single guard `assert_built_in_mutable(app_type)` (raises in cloud for
-non-`CUSTOM` types) and apply it in `external_apps_api.py`:
-
-- **Create** — `POST /admin/apps`, create branch: in cloud, reject any built-in
-  create with `OnyxError(INVALID_INPUT, "Built-in apps are provided by Onyx and
-  cannot be created.")`. (The uniqueness index is a second line of defense.)
-- **Update** — `POST /admin/apps` update branch: in cloud, for a built-in,
-  accept **only** `enabled` and `action_policies`; reject (or ignore) any change
-  to `organization_credentials`, `auth_template`, `upstream_url_patterns`,
-  `name`, `description`. The clean contract: a cloud built-in update may toggle
-  enablement and set policies — nothing else.
-- **Delete** — `DELETE /admin/apps/{external_app_id}` (`:392`): in cloud, reject
-  for built-in apps.
-- `CUSTOM` apps (`POST /admin/apps/custom`, `:184`) are unaffected by these
-  rules in cloud — they remain user-owned, create/edit/delete as today.
-
-### 4. Hide credentials + config (read path)
-
-- `_to_admin_response` (`:56`): for a managed (cloud built-in) app, return
-  `organization_credentials={}` and blank/omit the gateway config
-  (`auth_template`, `upstream_url_patterns`), exposing only `id`, `name`,
-  `description`, `app_type`, `enabled`, and `actions` (policies). The secret and
-  config never leave the server.
-- `GET /admin/apps/built-in/options` + `/{app_type}` (`:376`, `:384`): in cloud
-  these power "add a built-in" — return empty (or have the UI not call them) so
-  no create affordance is offered.
-- **Frontend** (`web/src/app/craft/...`): for cloud built-ins, render only the
-  enable toggle + policy editor; hide the credential form, the "add built-in"
-  entry point, and the delete control.
-
-### 5. User-facing + OAuth paths (unchanged)
-
-- `GET /apps`, `POST /apps/{id}/credentials`
-  (`external_apps_api.py:445,421`) and the OAuth start/callback
-  (`external_apps_oauth_api.py:83,130`) are unchanged. Once an admin enables a
-  provisioned app, users OAuth in exactly as today; the existing credential
-  injection / token-refresh seams read the seeded `organization_credentials`
-  with no change.
+User-facing endpoints (`GET /apps`, `POST /apps/{id}/credentials`) and the OAuth
+start/callback are unchanged. Cloud uses a single Onyx-owned OAuth client with
+one fixed callback (`{WEB_DOMAIN}/craft/v1/apps/oauth/callback`) shared across all
+tenants; credential injection and token refresh read the seeded
+`organization_credentials` with no change.
 
 ## Tests
 
-Prefer **external dependency unit tests** for the constraint, the provisioning
-reconcile, and the cloud guards (they need DB + encryption and benefit from
-toggling the cloud flag); one **integration** test for the admin happy path.
-
-- **External dependency unit:**
-  - Uniqueness: a second built-in of the same `app_type` is rejected; two
-    `CUSTOM` apps are allowed.
-  - `provision_built_in_external_apps`: provisions every registry built-in as
-    `enabled=False` with creds from operator config; is idempotent (a re-run
-    refreshes creds in place, preserves enabled state, and never wipes creds for
-    an app the config no longer mentions); populates encrypted creds.
-  - Cloud guards (with the cloud flag on): create/delete/credential-edit of a
-    built-in are rejected; enable-toggle and policy update succeed; `CUSTOM`
-    apps are unaffected.
-  - Read masking: `_to_admin_response` for a cloud built-in returns no
-    credential or gateway-config material, only identity + enabled + policies.
-- **Integration:**
-  - In a cloud-configured run, a provisioned built-in starts disabled; the admin
-    enables it and sets policies successfully; attempts to create a duplicate
-    built-in, edit its credentials, or delete it are all rejected; the admin
-    response exposes only policies + enabled state.
-- **Out of scope here:** the full OAuth round-trip (existing tests cover it) and
-  self-hosted create flows (unchanged apart from the uniqueness check, which the
-  unit test covers).
-
-## Resolved decisions
-
-- **Provision built-ins even without creds.** We always provision the full set
-  of built-in apps per tenant (disabled). One lacking operator creds is present
-  but un-enableable until creds are seeded.
-- **No backfill/rotation tooling.** Provisioning happens only at tenant
-  creation, exactly like `configure_default_api_keys`. Cross-tenant credential
-  rotation and backfilling tenants provisioned before a new built-in existed are
-  out of scope; there is no management script or beat task. If needed later, it
-  would be a dedicated ops script (as with LLM keys), not part of the seed.
-- **Single OAuth client, one redirect URI.** Cloud uses **no per-tenant
-  subdomains** — all tenants share one app domain — so a single Onyx-owned OAuth
-  client with the one fixed callback `{WEB_DOMAIN}/craft/v1/apps/oauth/callback`
-  covers every tenant. No canonical-host relay or per-tenant redirect handling
-  needed.
-
-## Implemented in
-
-- **Operator config** — `onyx/external_apps/managed_credentials.py`
-  (`MANAGED_EXTERNAL_APP_CREDENTIALS` env JSON → `{app_type: {field: value}}`,
-  case-insensitive keys, malformed entries skipped).
-- **Provisioning** — `provision_built_in_external_apps` in
-  `ee/onyx/server/tenants/provisioning.py` (the cloud analogue of, and beside,
-  `configure_default_api_keys`; idempotent — creates disabled, refreshes creds
-  in place, never wipes), called only from `setup_tenant` in the same file.
-- **DB helpers** — `onyx/db/external_app.py`: `get_external_app_by_app_type`,
-  `set_external_app_organization_credentials`,
-  `set_external_app_enablement_and_policies`.
-- **Cloud guards + masking** — `onyx/server/features/build/api/external_apps_api.py`
-  (`_is_onyx_managed`; create/credential-edit/delete blocked; admin response
-  blanks creds + config) and `is_onyx_managed` on `ExternalAppAdminResponse`
-  (`api/models.py`).
-- **Frontend** — `web/src/app/craft/v1/apps/{registry.ts,admin/page.tsx,admin/ConfigureProviderModal.tsx}`
-  (hide add/delete/credential controls for managed built-ins; policies-only edit).
-- **Tests** — `tests/external_dependency_unit/craft/test_managed_external_apps.py`.
+`tests/external_dependency_unit/craft/test_managed_external_apps.py` covers
+provisioning (seeding, idempotent re-run, credential refresh without wiping) and
+the Cloud guards (create/update/delete blocked; PATCH toggles enablement;
+response masking). `tests/unit/external_apps/test_managed_credentials.py` covers
+credential resolution from the provider.

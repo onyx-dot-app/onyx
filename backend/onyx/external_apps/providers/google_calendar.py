@@ -1,8 +1,11 @@
+from onyx.configs.app_configs import EXT_APP_GOOGLE_CALENDAR_CLIENT_ID
+from onyx.configs.app_configs import EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.actions import ExternalAppAction
 from onyx.external_apps.providers.actions import RestRoute
+from onyx.external_apps.providers.base import OnyxManagedProvider
 from onyx.external_apps.providers.google_base import GoogleOAuthProvider
 
 
@@ -73,7 +76,7 @@ _ENDPOINTS: list[EndpointSpec] = [
 ]
 
 
-class GoogleCalendarProvider(GoogleOAuthProvider):
+class GoogleCalendarProvider(GoogleOAuthProvider, OnyxManagedProvider):
     spec = GoogleOAuthProvider.build_spec(
         app_type=ExternalAppType.GOOGLE_CALENDAR,
         app_name="Google Calendar",
@@ -85,3 +88,8 @@ class GoogleCalendarProvider(GoogleOAuthProvider):
         google_api_name="Google Calendar API",
         endpoint_catalog=_ENDPOINTS,
     )
+
+    managed_org_credentials = {
+        "client_id": EXT_APP_GOOGLE_CALENDAR_CLIENT_ID,
+        "client_secret": EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET,
+    }

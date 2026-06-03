@@ -13,7 +13,10 @@ import {
   EndpointPolicy,
   ExternalAppAdminResponse,
 } from "@/app/craft/v1/apps/registry";
-import { upsertExternalApp } from "@/app/craft/services/externalAppsService";
+import {
+  setExternalAppEnablement,
+  upsertBuiltInExternalApp,
+} from "@/app/craft/services/externalAppsService";
 
 const POLICY_OPTIONS: { value: EndpointPolicy; label: string }[] = [
   { value: "ALWAYS", label: "Auto-approve" },
@@ -147,26 +150,35 @@ export default function ConfigureProviderModal({
     setIsSaving(true);
     setError(null);
     try {
-      // Merge so future non-credential metadata on the row (region,
-      // instance URL, …) survives a credential edit.
-      const merged = {
-        ...existingApp?.organization_credentials,
-        ...credentialValues,
-      };
-      await upsertExternalApp({
-        id: existingApp?.id ?? null,
-        name: name.trim(),
-        description: descriptor.description,
-        app_type: descriptor.app_type,
-        upstream_url_patterns: descriptor.upstream_url_patterns,
-        auth_template: descriptor.auth_template,
-        organization_credentials: merged,
-        // Saving credentials implies enable; disable is a separate action on the
-        // admin page. For a managed app this modal only edits policies, so
-        // preserve the current enabled state rather than force-enabling.
-        enabled: managed && existingApp ? existingApp.enabled : true,
-        action_policies: policies,
-      });
+      if (managed && existingApp) {
+        // Onyx-managed built-in: credentials + config are Onyx-owned, so the
+        // only thing this modal can persist is the action policies. Keep the
+        // current enabled state (enable/disable is a separate admin action).
+        await setExternalAppEnablement(existingApp.id, {
+          enabled: existingApp.enabled,
+          action_policies: policies,
+        });
+      } else {
+        // Merge so future non-credential metadata on the row (region,
+        // instance URL, …) survives a credential edit.
+        const merged = {
+          ...existingApp?.organization_credentials,
+          ...credentialValues,
+        };
+        await upsertBuiltInExternalApp({
+          id: existingApp?.id ?? null,
+          name: name.trim(),
+          description: descriptor.description,
+          app_type: descriptor.app_type,
+          upstream_url_patterns: descriptor.upstream_url_patterns,
+          auth_template: descriptor.auth_template,
+          organization_credentials: merged,
+          // Saving credentials implies enable; disable is a separate action on
+          // the admin page.
+          enabled: true,
+          action_policies: policies,
+        });
+      }
       onSaved();
       onClose();
     } catch (e) {

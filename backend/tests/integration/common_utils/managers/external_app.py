@@ -8,7 +8,8 @@ from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
-from onyx.server.features.build.api.models import UpsertExternalAppRequest
+from onyx.server.features.build.api.models import SetExternalAppEnablementRequest
+from onyx.server.features.build.api.models import UpsertBuiltInExternalAppRequest
 from onyx.server.features.build.api.models import UpsertUserCredentialsRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -115,7 +116,7 @@ class ExternalAppManager:
                 enabled,
             )
         else:
-            body = UpsertExternalAppRequest(
+            body = UpsertBuiltInExternalAppRequest(
                 id=app_id,
                 name=name,
                 description=description,
@@ -127,7 +128,7 @@ class ExternalAppManager:
                 action_policies=action_policies,
             )
             response = client.post(
-                f"{_BUILD_PREFIX}/admin/apps",
+                f"{_BUILD_PREFIX}/admin/apps/built-in",
                 json=body.model_dump(mode="json"),
                 headers=user_performing_action.headers,
                 cookies=user_performing_action.cookies,
@@ -181,6 +182,27 @@ class ExternalAppManager:
             headers=headers,
             cookies=user_performing_action.cookies,
         )
+
+    @staticmethod
+    def set_enablement(
+        user_performing_action: DATestUser,
+        app_id: int,
+        enabled: bool,
+        action_policies: dict[str, EndpointPolicy] | None = None,
+    ) -> ExternalAppAdminResponse:
+        """PATCH the narrow enablement + policies endpoint, keyed by id."""
+        body = SetExternalAppEnablementRequest(
+            enabled=enabled,
+            action_policies=action_policies,
+        )
+        response = client.patch(
+            f"{_BUILD_PREFIX}/admin/apps/{app_id}",
+            json=body.model_dump(mode="json"),
+            headers=user_performing_action.headers,
+            cookies=user_performing_action.cookies,
+        )
+        response.raise_for_status()
+        return ExternalAppAdminResponse.model_validate(response.json())
 
     @staticmethod
     def list_admin(
