@@ -1,3 +1,5 @@
+import threading
+import time
 from typing import cast
 from unittest.mock import MagicMock
 
@@ -202,6 +204,45 @@ def test_apply_event_skips_malformed() -> None:
     assert lookup.lookup("172.18.0.5") is None
 
 
+def test_apply_event_start_evicts_stale_by_id_on_ip_reclaim() -> None:
+    """If a start event lands on an IP that ``_cache`` already maps to a
+    different container (we missed a die event for the prior owner), the
+    stale ``_by_id`` entry pointing to that IP must be evicted. Without
+    this, the prior owner's eventual die event would pop the new
+    container's cache entry, silently un-identifying a live sandbox.
+    """
+    lookup, client = _make_lookup()
+    other_uuid = "22222222-2222-2222-2222-222222222222"
+
+    # Container A starts at IP X.
+    client.containers.get.return_value = _make_container(
+        container_id="cid-a", ip="172.18.0.5"
+    )
+    lookup._apply_event({"Action": "start", "Actor": {"ID": "cid-a"}})
+    assert lookup.lookup("172.18.0.5") is not None
+    assert lookup._by_id["cid-a"] == "172.18.0.5"
+
+    # Container B starts at the same IP (we missed A's die event).
+    client.containers.get.return_value = _make_container(
+        container_id="cid-b", sandbox_id=other_uuid, ip="172.18.0.5"
+    )
+    lookup._apply_event({"Action": "start", "Actor": {"ID": "cid-b"}})
+
+    # _cache now reflects B; _by_id should NOT still have a stale cid-a
+    # entry pointing at this IP (otherwise A's die would wipe B).
+    identity = lookup.lookup("172.18.0.5")
+    assert identity is not None
+    assert str(identity.sandbox_id) == other_uuid
+    assert "cid-a" not in lookup._by_id
+    assert lookup._by_id["cid-b"] == "172.18.0.5"
+
+    # The original failure mode: A's belated die event must not wipe B.
+    lookup._apply_event({"Action": "die", "Actor": {"ID": "cid-a"}})
+    identity_after = lookup.lookup("172.18.0.5")
+    assert identity_after is not None
+    assert str(identity_after.sandbox_id) == other_uuid
+
+
 # ---------------------------------------------------------------------------
 # Initial sync
 # ---------------------------------------------------------------------------
@@ -228,3 +269,106 @@ def test_initial_sync_skips_unidentifiable_containers() -> None:
 
     assert lookup.lookup("172.18.0.5") is not None
     assert lookup.lookup("172.18.0.6") is None
+
+
+# ---------------------------------------------------------------------------
+# Watch loop
+# ---------------------------------------------------------------------------
+
+
+def test_watch_loop_passes_since_to_events() -> None:
+    """The events stream must start from ``since_ts`` (captured before the
+    list) so events fired during the [list, stream-open] window are
+    replayed instead of silently dropped. Without ``since`` a sandbox
+    that starts in that gap is unidentifiable until the next reconnect.
+    """
+    lookup, client = _make_lookup()
+    # iter([]) so the for-loop in _watch_loop returns immediately.
+    client.events.return_value = iter([])
+
+    lookup._watch_loop(since_ts=12345)
+
+    client.events.assert_called_once()
+    _, kwargs = client.events.call_args
+    assert kwargs["since"] == 12345
+    assert kwargs["decode"] is True
+    assert kwargs["filters"]["type"] == "container"
+
+
+def test_stop_closes_active_stream_to_unblock_watch_loop() -> None:
+    """``stop()`` must call ``close()`` on the currently-active events
+    stream. Without this, the ``for event in stream`` iterator blocks on
+    socket read indefinitely in a quiescent system and ``stop()`` is a
+    no-op (the stop_event is only checked between events). The daemon
+    thread would never honor stop and any future join() would hang.
+    """
+    lookup, client = _make_lookup()
+
+    # Block the iterator so _watch_loop is mid-for-loop when stop() fires.
+    # Concrete class instead of MagicMock-with-lambdas so __next__ can
+    # raise StopIteration directly without PEP 479 generator confusion.
+    iter_event = threading.Event()
+    close_calls = [0]
+
+    class _BlockingStream:
+        def __iter__(self) -> "_BlockingStream":
+            return self
+
+        def __next__(self) -> dict[str, str]:
+            iter_event.wait()
+            raise StopIteration
+
+        def close(self) -> None:
+            close_calls[0] += 1
+
+    stream_mock = _BlockingStream()
+    client.events.return_value = stream_mock
+
+    # Run _watch_loop in a thread so we can call stop() against it.
+    thread = threading.Thread(target=lookup._watch_loop, args=(0,))
+    thread.start()
+
+    # Wait until _watch_loop has published the stream (i.e. we're past the
+    # open-vs-stop race window and into the blocking iterator).
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        with lookup._stream_lock:
+            if lookup._stream is stream_mock:
+                break
+        time.sleep(0.01)
+    else:
+        iter_event.set()
+        thread.join(timeout=1.0)
+        pytest.fail("_watch_loop never published its stream")
+
+    lookup.stop()
+    # stop() must have invoked close() on the live stream.
+    assert close_calls[0] >= 1
+
+    # Release the blocking iterator so the thread can drain its finally
+    # block. In production, close() would raise OSError -> StopIteration
+    # inside the iterator; here we just unblock it directly.
+    iter_event.set()
+    thread.join(timeout=2.0)
+    assert not thread.is_alive(), "_watch_loop thread failed to exit after stop()"
+
+
+def test_watch_loop_close_race_when_stop_fires_between_open_and_publish() -> None:
+    """If ``stop()`` runs between ``events()`` returning and the stream
+    being published under the lock, ``_watch_loop`` must close the
+    just-opened stream itself rather than entering the blocking iterator.
+    Otherwise the stop_event is set but no one holds a reference to the
+    stream to cancel it.
+    """
+    lookup, client = _make_lookup()
+    stream_mock = MagicMock()
+    client.events.return_value = stream_mock
+
+    # Pre-set the stop event so _watch_loop sees it under the lock and
+    # bails before assigning self._stream.
+    lookup._stop_event.set()
+
+    lookup._watch_loop(since_ts=0)
+
+    stream_mock.close.assert_called_once()
+    assert lookup._stream is None

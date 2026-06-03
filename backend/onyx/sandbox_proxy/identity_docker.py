@@ -12,6 +12,7 @@ on restart.
 """
 
 import threading
+import time
 from typing import Any
 from uuid import UUID
 
@@ -19,12 +20,15 @@ from docker import DockerClient
 from docker.errors import APIError
 from docker.errors import NotFound
 from docker.models.containers import Container
+from docker.types.daemon import CancellableStream
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
 from onyx.sandbox_proxy.identity import SandboxIdentity
 from onyx.sandbox_proxy.identity import SandboxIPLookup
 from onyx.server.features.build.configs import SANDBOX_DOCKER_NETWORK
 from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
+from onyx.server.features.build.sandbox.labels import LABEL_DOCKER_COMPONENT
+from onyx.server.features.build.sandbox.labels import LABEL_DOCKER_COMPONENT_SANDBOX
 from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
 from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
 from onyx.utils.logger import setup_logger
@@ -34,12 +38,12 @@ logger = setup_logger()
 _RECONNECT_INITIAL_SECONDS = 1.0
 _RECONNECT_MAX_SECONDS = 30.0
 
-# Mirrors ``LABEL_COMPONENT`` / ``LABEL_COMPONENT_VALUE`` in
-# ``docker_sandbox_manager.py``. Duplicated here rather than imported so
-# the sandbox-proxy package doesn't pull the docker manager into its
-# import graph. Keep in sync (Phase D consolidates them into labels.py).
-_LABEL_COMPONENT = "onyx.app/component"
-_LABEL_COMPONENT_VALUE = "craft-sandbox"
+
+def _safe_close(stream: CancellableStream) -> None:
+    try:
+        stream.close()
+    except Exception:
+        logger.debug("ignoring error closing events stream", exc_info=True)
 
 
 def _identity_from_container(
@@ -57,7 +61,7 @@ def _identity_from_container(
 
     # Re-check the component label even though the events filter already
     # restricts to it -- belt and braces against a future filter loosen.
-    if labels.get(_LABEL_COMPONENT) != _LABEL_COMPONENT_VALUE:
+    if labels.get(LABEL_DOCKER_COMPONENT) != LABEL_DOCKER_COMPONENT_SANDBOX:
         return None
 
     sandbox_id_raw = labels.get(LABEL_SANDBOX_ID)
@@ -114,6 +118,13 @@ class DockerEventsLookup(SandboxIPLookup):
         self._stop_event = threading.Event()
         self._synced = threading.Event()
 
+        # Held so ``stop()`` can cancel the blocking ``for event in stream``
+        # in ``_watch_loop``. Without this, a quiescent docker daemon (no
+        # container churn) leaves the iterator blocked on socket read
+        # forever and ``stop()`` becomes a no-op.
+        self._stream_lock = threading.Lock()
+        self._stream: CancellableStream | None = None
+
         self._thread = threading.Thread(
             target=self._run, name="sandbox-proxy-docker-events", daemon=True
         )
@@ -125,6 +136,12 @@ class DockerEventsLookup(SandboxIPLookup):
 
     def stop(self) -> None:
         self._stop_event.set()
+        with self._stream_lock:
+            stream = self._stream
+        if stream is not None:
+            # Best-effort cancel; the daemon thread tears down its own
+            # resources in the ``_watch_loop`` finally block.
+            _safe_close(stream)
 
     def wait_for_initial_sync(self, timeout_seconds: float) -> bool:
         return self._initial_sync_done.wait(timeout=timeout_seconds)
@@ -144,11 +161,22 @@ class DockerEventsLookup(SandboxIPLookup):
         backoff = _RECONNECT_INITIAL_SECONDS
         while not self._stop_event.is_set():
             try:
+                # Capture ``since`` *before* the list so the events stream
+                # replays any start/die that fires during the list ->
+                # stream-open window. Without this the [list, stream-open]
+                # gap silently drops events: a sandbox starting in that
+                # window would be permanently unidentifiable until the next
+                # reconnect-driven re-sync. The K8s informer uses the list
+                # response's ``resource_version`` for the same guarantee.
+                # ``-1`` guards against sub-second events (docker's
+                # ``since`` is second-resolution). Replay overlap is safe
+                # because ``_apply_event`` is idempotent.
+                since_ts = int(time.time()) - 1
                 self._initial_sync()
                 self._initial_sync_done.set()
                 self._synced.set()
                 backoff = _RECONNECT_INITIAL_SECONDS
-                self._watch_loop()
+                self._watch_loop(since_ts)
             except (APIError, RequestsConnectionError, OSError) as e:
                 self._synced.clear()
                 logger.warning(
@@ -169,7 +197,9 @@ class DockerEventsLookup(SandboxIPLookup):
 
     def _initial_sync(self) -> None:
         containers = self._docker.containers.list(
-            filters={"label": f"{_LABEL_COMPONENT}={_LABEL_COMPONENT_VALUE}"},
+            filters={
+                "label": f"{LABEL_DOCKER_COMPONENT}={LABEL_DOCKER_COMPONENT_SANDBOX}"
+            },
         )
         new_cache: dict[str, SandboxIdentity] = {}
         new_by_id: dict[str, str] = {}
@@ -201,26 +231,32 @@ class DockerEventsLookup(SandboxIPLookup):
             "docker events initial sync: %d sandbox containers cached", len(new_cache)
         )
 
-    def _watch_loop(self) -> None:
+    def _watch_loop(self, since_ts: int) -> None:
         stream = self._docker.events(
             decode=True,
+            since=since_ts,
             filters={
                 "type": "container",
-                "label": f"{_LABEL_COMPONENT}={_LABEL_COMPONENT_VALUE}",
+                "label": f"{LABEL_DOCKER_COMPONENT}={LABEL_DOCKER_COMPONENT_SANDBOX}",
             },
         )
+        with self._stream_lock:
+            # If ``stop()`` raced us between events() returning and the
+            # assignment below, close immediately -- otherwise stop()
+            # observed ``self._stream is None`` and we'd block forever.
+            if self._stop_event.is_set():
+                _safe_close(stream)
+                return
+            self._stream = stream
         try:
             for event in stream:
                 if self._stop_event.is_set():
                     return
                 self._apply_event(event)
         finally:
-            close = getattr(stream, "close", None)
-            if callable(close):
-                try:
-                    close()
-                except Exception:
-                    pass
+            with self._stream_lock:
+                self._stream = None
+            _safe_close(stream)
 
     def _apply_event(self, event: dict[str, Any]) -> None:
         action = event.get("Action") or event.get("status")
@@ -246,6 +282,33 @@ class DockerEventsLookup(SandboxIPLookup):
                 stale_ip = self._by_id.get(container_id)
                 if stale_ip is not None and stale_ip != identity.sandbox_ip:
                     self._cache.pop(stale_ip, None)
+
+                # Evict any stale ``_by_id`` entries that still point to
+                # the IP we are about to claim. Two containers cannot
+                # legitimately share a bridge IP at the same instant; if
+                # our state says they do, we missed a die event for the
+                # prior owner. Leaving the orphan in ``_by_id`` means its
+                # eventual die event would pop *this* IP from the cache
+                # via line ``_cache.pop(stale_ip)`` in the die branch,
+                # silently un-identifying the new container.
+                existing = self._cache.get(identity.sandbox_ip)
+                if existing is not None and existing.sandbox_id != identity.sandbox_id:
+                    orphans = [
+                        cid
+                        for cid, ip in self._by_id.items()
+                        if ip == identity.sandbox_ip and cid != container_id
+                    ]
+                    for cid in orphans:
+                        self._by_id.pop(cid, None)
+                    logger.warning(
+                        "ip %s reclaimed by container %s; evicted stale "
+                        "by_id entries for %s (prior sandbox_id=%s)",
+                        identity.sandbox_ip,
+                        container_id,
+                        orphans,
+                        existing.sandbox_id,
+                    )
+
                 self._cache[identity.sandbox_ip] = identity
                 self._by_id[container_id] = identity.sandbox_ip
             return

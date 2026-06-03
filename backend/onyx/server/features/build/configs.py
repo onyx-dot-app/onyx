@@ -116,10 +116,11 @@ SANDBOX_PROXY_CA_CONFIGMAP = os.environ.get(
 
 # Filesystem path the docker FileCAStore reads/writes the proxy CA at.
 # Both the proxy (RW) and every sandbox container (RO) mount the same
-# named compose volume here. Ignored when SANDBOX_BACKEND=kubernetes.
-SANDBOX_PROXY_CA_VOLUME_PATH = os.environ.get(
-    "SANDBOX_PROXY_CA_VOLUME_PATH", "/var/lib/sandbox-proxy/ca"
-)
+# named compose volume here. Not env-tunable: the source of truth for
+# this path is the compose volume mount declaration, and an operator
+# changing one must change the other in lockstep. Ignored when
+# SANDBOX_BACKEND=kubernetes.
+SANDBOX_PROXY_CA_VOLUME_PATH = "/var/lib/sandbox-proxy/ca"
 
 # ============================================================================
 # Docker sandbox (SANDBOX_BACKEND=docker, self-hosted docker-compose)

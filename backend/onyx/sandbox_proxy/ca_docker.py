@@ -5,11 +5,21 @@ it read-write so it can persist on cold start; every sandbox container
 mounts it read-only so ``firewall-init.sh`` can install ``ca.crt`` into
 the trust store.
 
-Cold-start race: two proxy replicas booting against a cold volume both
-try to ``persist``; exactly one wins via ``O_EXCL`` on ``ca.crt``. The
-loser raises ``CAStoreConflictError`` and ``CABootstrap.ensure_ca``
-falls into the reload-the-winner branch -- the same contract the K8s
-store satisfies via a ``409 Conflict`` on conditional Secret create.
+Concurrent-persist arbitration: the shipped compose deployment runs
+exactly one ``sandbox-proxy`` replica, so the cold-start race is not
+a routine concern in docker mode. ``persist`` still rendezvouses on
+``O_EXCL`` against ``ca.crt`` for two reasons:
+
+1. Defense against an operator running ``docker compose up --scale
+   sandbox-proxy=2``. Without ``O_EXCL`` both replicas would
+   race-overwrite each other's key, leaving sandbox trust stores
+   pointing at a cert whose private key the proxy doesn't have.
+2. Contract parity with ``K8sSecretCAStore``, which uses a 409
+   Conflict on conditional Secret create for the same rendezvous so
+   ``CABootstrap.ensure_ca`` stays backend-agnostic.
+
+The loser raises ``CAStoreConflictError`` and ``CABootstrap.ensure_ca``
+falls into the reload-the-winner branch.
 
 Crash recovery: a crash between writing ``ca.crt`` and writing
 ``ca.key`` leaves the cert without a key. The next boot's ``load()``
@@ -98,10 +108,13 @@ class FileCAStore(CAStore):
             raise CAStoreConflictError(
                 f"proxy CA cert already present at {self._cert_path}"
             ) from e
-        try:
-            os.write(fd, cert_pem)
-        finally:
-            os.close(fd)
+        # Wrap the fd in a buffered writer so ``write`` loops on short
+        # writes. ``os.write`` is a thin wrapper around write(2) and
+        # POSIX permits it to return fewer bytes than requested; for
+        # regular files this is rare but a truncated CA would propagate
+        # silently into every sandbox's trust store.
+        with os.fdopen(fd, "wb") as f:
+            f.write(cert_pem)
         # mkdir + O_CREAT honour umask; chmod explicitly so a restrictive
         # umask doesn't leave sandboxes unable to read the cert.
         os.chmod(self._cert_path, _CA_CERT_MODE)
@@ -113,10 +126,8 @@ class FileCAStore(CAStore):
             os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
             _CA_KEY_MODE,
         )
-        try:
-            os.write(fd, key_pem)
-        finally:
-            os.close(fd)
+        with os.fdopen(fd, "wb") as f:
+            f.write(key_pem)
         os.chmod(self._key_path, _CA_KEY_MODE)
 
         logger.info(
