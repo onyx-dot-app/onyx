@@ -24,10 +24,12 @@ import httpx
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
 from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
+from onyx.server.features.build.db.sandbox import get_sandbox_status
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
@@ -335,6 +337,10 @@ class _ServeMixin:
                     f"Sandbox {sandbox_id} has been terminated; refusing to "
                     "create a new event bus against its (deleted) backend"
                 )
+            # The local tombstone above only covers the replica that ran
+            # terminate. Consult the authoritative DB status so the refusal
+            # fires on every replica, not just the terminating one.
+            self._assert_sandbox_not_terminal(sandbox_id)
             info = self._serve_connection_info(sandbox_id)
             bus = PodEventBus(
                 base_url=info.base_url,
@@ -353,6 +359,27 @@ class _ServeMixin:
                 directory,
             )
             return bus
+
+    def _assert_sandbox_not_terminal(self, sandbox_id: UUID) -> None:
+        """Refuse to build a bus against a sandbox the DB reports terminal.
+
+        ``Sandbox.status`` is the strongly-consistent, indexed authority shared
+        by all api_server replicas, so this makes the terminate-time refusal
+        fire everywhere — not just on the pod that holds the local
+        ``_terminated_sandboxes`` tombstone.
+
+        Only terminal states (``TERMINATED`` / ``FAILED``) are fast-failed.
+        PROVISIONING / not-yet-ready sandboxes are not terminal and must flow
+        on to the readiness wait. A missing row (status ``None``) is left to
+        the existing connection-info handling rather than treated as terminal.
+        """
+        with get_session_with_current_tenant() as db_session:
+            status = get_sandbox_status(db_session, sandbox_id)
+        if status is not None and status.is_terminal():
+            raise RuntimeError(
+                f"Sandbox {sandbox_id} is {status.value} (terminal per DB); "
+                "refusing to create a new event bus against its (deleted) backend"
+            )
 
     def _build_serve_client(
         self, sandbox_id: UUID, directory: str

@@ -120,6 +120,17 @@ def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
     return db_session.execute(stmt).scalar_one_or_none()
 
 
+def get_sandbox_status(db_session: Session, sandbox_id: UUID) -> SandboxStatus | None:
+    """Return the sandbox's current status, or None if no such row exists.
+
+    Reads only the indexed ``status`` column (``ix_sandbox_status``). Used by
+    the serve transport to fast-fail event-bus creation for terminal sandboxes
+    uniformly across all api_server replicas.
+    """
+    stmt = select(Sandbox.status).where(Sandbox.id == sandbox_id)
+    return db_session.execute(stmt).scalar_one_or_none()
+
+
 def update_sandbox_status__no_commit(
     db_session: Session,
     sandbox_id: UUID,
