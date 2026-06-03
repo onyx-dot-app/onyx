@@ -379,9 +379,9 @@ def test_stop_closes_active_stream_to_unblock_watch_loop() -> None:
     # stop() must have invoked close() on the live stream.
     assert close_calls[0] >= 1
 
-    # Release the blocking iterator so the thread can drain its finally
-    # block. In production, close() would raise OSError -> StopIteration
-    # inside the iterator; here we just unblock it directly.
+    # Release the blocking iterator so the thread can drain its finally block.
+    # In production, close() would raise OSError -> StopIteration inside the
+    # iterator; here we just unblock it directly.
     iter_event.set()
     thread.join(timeout=2.0)
     assert not thread.is_alive(), "_watch_loop thread failed to exit after stop()."
@@ -389,33 +389,24 @@ def test_stop_closes_active_stream_to_unblock_watch_loop() -> None:
 
 def test_synced_clears_after_watch_loop_returns_cleanly() -> None:
     """
-    A clean return from ``_watch_loop`` (stream EOF, daemon close, network
-    hiccup -- all converted to StopIteration by CancellableStream) must clear
-    ``_synced``. Otherwise ``/healthz`` keeps reporting 200 during the reconnect
-    backoff window even though we are not actively watching events; a sandbox
-    starting in that window would 403 with ``gate.unidentified_sandbox`` because
-    the cache never saw its start event.
+    Clean watch EOF clears ``_synced`` so /healthz reports not-ready during the
+    reconnect window.
     """
     lookup, client = _make_lookup()
     client.containers.list.return_value = []
 
-    # events() returns an empty iterator so _watch_loop's for-loop exhausts
-    # immediately, simulating a clean daemon-side close. Set stop after the
-    # first iteration so _run exits.
+    # Empty iter -> _watch_loop exhausts without raising. Stop after one pass.
     call_count = [0]
 
     def events_side_effect(**_: object) -> object:
         call_count[0] += 1
-        if call_count[0] >= 1:
-            lookup._stop_event.set()
+        lookup._stop_event.set()
         return iter([])
 
     client.events.side_effect = events_side_effect
 
     lookup._run()
 
-    # The full iteration ran: _initial_sync_done was set, _synced was set inside
-    # the try, and the finally clause cleared _synced again.
     assert lookup._initial_sync_done.is_set()
     assert not lookup._synced.is_set()
     assert call_count[0] == 1

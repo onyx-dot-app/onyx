@@ -184,13 +184,9 @@ class DockerEventsLookup(SandboxIPLookup):
                     backoff,
                 )
             finally:
-                # Clear after every iteration -- including clean returns from
-                # _watch_loop. CancellableStream converts every daemon-side
-                # close (EOF, restart, network hiccup) to StopIteration, so the
-                # for-loop exhausts cleanly and we return without raising.
-                # Without this clear, /healthz would lie during the reconnect
-                # backoff window: we are no longer actively watching events but
-                # _synced is still set from the prior iteration.
+                # CancellableStream turns daemon-side closes into clean iterator
+                # exhaustion, not an exception. Clear here so /healthz reports
+                # not-ready during the reconnect window.
                 self._synced.clear()
 
             if self._stop_event.wait(backoff):
@@ -230,7 +226,7 @@ class DockerEventsLookup(SandboxIPLookup):
             self._by_id = new_by_id
 
         logger.info(
-            "docker events initial sync: %d sandbox containers cached", len(new_cache)
+            "Docker events initial sync: %d sandbox containers cached.", len(new_cache)
         )
 
     def _watch_loop(self, since_ts: int) -> None:

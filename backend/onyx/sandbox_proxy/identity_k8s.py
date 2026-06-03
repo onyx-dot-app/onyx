@@ -1,9 +1,8 @@
 """Kubernetes implementation of `SandboxIPLookup`.
 
-Background thread watches sandbox pods and maintains a
-`{pod_ip: SandboxIdentity}` cache. On any error or EOF the watch
-loop reconnects with exponential backoff capped at
-`_RECONNECT_MAX_SECONDS`; on 410 Gone we relist.
+Background thread watches sandbox pods and maintains a `{pod_ip:
+SandboxIdentity}` cache. On any error or EOF the watch loop reconnects with
+exponential backoff capped at `_RECONNECT_MAX_SECONDS`; on 410 Gone we relist.
 """
 
 import threading
@@ -51,8 +50,8 @@ def _identity_from_pod(pod: client.V1Pod) -> SandboxIdentity | None:
         return None
 
     labels = metadata.labels or {}
-    # Re-check managed-by even though the selector filters it, so loosening
-    # the selector later can't enable label spoofing.
+    # Re-check managed-by even though the selector filters it, so loosening the
+    # selector later can't enable label spoofing.
     if labels.get(LABEL_K8S_MANAGED_BY) != LABEL_K8S_MANAGED_BY_ONYX:
         return None
     sandbox_id_raw = labels.get(LABEL_SANDBOX_ID)
@@ -64,7 +63,7 @@ def _identity_from_pod(pod: client.V1Pod) -> SandboxIdentity | None:
         sandbox_id = UUID(sandbox_id_raw)
     except ValueError:
         logger.warning(
-            "skipping sandbox pod %s with non-UUID sandbox-id label %r",
+            "Skipping sandbox pod %s with non-UUID sandbox-id label %r",
             metadata.name,
             sandbox_id_raw,
         )
@@ -129,7 +128,7 @@ class K8sInformerLookup(SandboxIPLookup):
                 self._watch_loop(resource_version)
             except ApiException as e:
                 logger.warning(
-                    "informer error: %s (status=%s); reconnecting in %.1fs",
+                    "Informer error: %s (status=%s); reconnecting in %.1fs.",
                     e.reason,
                     e.status,
                     backoff,
@@ -141,22 +140,20 @@ class K8sInformerLookup(SandboxIPLookup):
                 OSError,
             ) as e:
                 logger.warning(
-                    "informer connection error: %s; reconnecting in %.1fs",
+                    "Informer connection error: %s; reconnecting in %.1fs.",
                     e,
                     backoff,
                 )
             except Exception:
                 logger.exception(
-                    "unexpected informer failure; reconnecting in %.1fs",
+                    "Unexpected informer failure; reconnecting in %.1fs.",
                     backoff,
                 )
             finally:
-                # Clear after every iteration -- including clean returns from
-                # _watch_loop. The K8s API server closes the watch cleanly every
-                # _WATCH_TIMEOUT_SECONDS, so the watch iterator returns without
-                # raising. Without this clear, /healthz would lie during the
-                # reconnect backoff window: we are no longer actively watching
-                # events but _synced is still set from the prior iteration.
+                # The K8s API server closes the watch every
+                # _WATCH_TIMEOUT_SECONDS, returning the iterator cleanly. Clear
+                # here so /healthz reports not-ready during the reconnect
+                # window.
                 self._synced.clear()
 
             # Wait on the stop event so shutdown is prompt.
@@ -179,23 +176,22 @@ class K8sInformerLookup(SandboxIPLookup):
                 # Duplicate IPs = deploy-time bug; fail loud rather than
                 # route traffic with ambiguous identity.
                 raise RuntimeError(
-                    f"duplicate sandbox IP {identity.sandbox_ip} mapped to "
-                    f"{existing.sandbox_id} and {identity.sandbox_id}; "
-                    "refusing to serve traffic with ambiguous identity"
+                    f"Duplicate sandbox IP {identity.sandbox_ip} mapped to {existing.sandbox_id} "
+                    f"and {identity.sandbox_id}; Refusing to serve traffic with ambiguous identity."
                 )
             new_cache[identity.sandbox_ip] = identity
 
         with self._cache_lock:
             self._cache = new_cache
 
-        logger.info("informer initial sync: %d sandbox pods cached", len(new_cache))
+        logger.info("Informer initial sync: %d sandbox pods cached.", len(new_cache))
 
         # Typed Optional by the client though K8s always sets it on a list.
         list_metadata = listing.metadata
         if list_metadata is None or not list_metadata.resource_version:
             raise RuntimeError(
-                "K8s list response missing metadata.resource_version; "
-                "cannot start incremental watch"
+                "K8s list response missing metadata.resource_version; cannot start incremental "
+                "watch."
             )
         return list_metadata.resource_version
 
