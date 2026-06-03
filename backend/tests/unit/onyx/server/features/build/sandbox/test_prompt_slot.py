@@ -15,19 +15,92 @@ it would let concurrent requests in the recovery path acquire
 different locks and bypass serialization. These tests lock the
 contract.
 
+``prompt_slot`` layers a cross-replica ``CacheBackend`` lock under the
+in-process ``threading.Lock``. These are *unit* tests (no external
+services), so the cache is replaced with an in-memory fake; they assert the
+same-pod behaviour and the fail-open-on-cache-error contract. The
+cross-replica behaviour the fake can't prove lives in the external
+dependency unit suite (``test_prompt_slot_distributed.py``).
+
 Bypasses ``_initialize`` (no K8s config needed) — pure lock logic.
 """
 
 from __future__ import annotations
 
+import threading
+from typing import NoReturn
 from uuid import UUID
 from uuid import uuid4
 
 import pytest
+from redis.exceptions import RedisError
 
+from onyx.cache.interface import CacheLock
+from onyx.server.features.build.sandbox import serve_transport
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
+
+
+class _FakeCacheLock(CacheLock):
+    """In-memory ``CacheLock`` backed by a process-local ``threading.Lock``,
+    shared by name across backend instances so it serializes like the real one."""
+
+    def __init__(self, lock: threading.Lock) -> None:
+        self._lock = lock
+        self._owned = False
+
+    def acquire(
+        self, blocking: bool = True, blocking_timeout: float | None = None
+    ) -> bool:
+        if not blocking:
+            self._owned = self._lock.acquire(blocking=False)
+        else:
+            self._owned = self._lock.acquire(
+                timeout=blocking_timeout if blocking_timeout is not None else -1
+            )
+        return self._owned
+
+    def release(self) -> None:
+        if self._owned:
+            self._lock.release()
+            self._owned = False
+
+    def owned(self) -> bool:
+        return self._owned
+
+
+class _FakeCacheBackend:
+    """Minimal fake exposing only ``lock`` — the one method ``prompt_slot`` uses."""
+
+    def __init__(self, registry: dict[str, threading.Lock]) -> None:
+        self._registry = registry
+
+    def lock(
+        self,
+        name: str,
+        timeout: float | None = None,  # noqa: ARG002
+    ) -> CacheLock:
+        return _FakeCacheLock(self._registry.setdefault(name, threading.Lock()))
+
+
+@pytest.fixture(autouse=True)
+def _fake_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hermetic: swap the real (Redis/Postgres) cache for an in-memory fake so
+    unit tests never touch an external service."""
+    registry: dict[str, threading.Lock] = {}
+    monkeypatch.setattr(
+        serve_transport,
+        "get_cache_backend",
+        lambda: _FakeCacheBackend(registry),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _fast_acquire(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the contended-acquire wait short so the "refused" tests don't block
+    the full default budget."""
+    monkeypatch.setattr(serve_transport, "PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS", 0.5)
 
 
 @pytest.fixture
@@ -111,3 +184,18 @@ def test_prompt_slot_different_sandboxes_dont_block(
         assert first is True
         with mgr.prompt_slot(other_sandbox, _SES) as second:
             assert second is True
+
+
+def test_prompt_slot_fails_open_on_cache_error(
+    mgr: KubernetesSandboxManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cache outage must not brick every turn: when the cache raises a
+    transient error, the slot fails open (yields True) and the local guard
+    still serializes same-pod."""
+
+    def _boom() -> NoReturn:
+        raise RedisError("cache down")
+
+    monkeypatch.setattr(serve_transport, "get_cache_backend", _boom)
+    with mgr.prompt_slot(_SBX, _SES) as acquired:
+        assert acquired is True
