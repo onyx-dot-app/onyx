@@ -608,10 +608,10 @@ def provision_built_in_external_apps(db_session: Session) -> None:
                 app_type.value,
                 "" if credentials else "; no credentials configured yet",
             )
-        except Exception as e:
+        except Exception:
             # Reset the aborted transaction so a failure stays a per-app skip.
             db_session.rollback()
-            logger.error("Failed to provision built-in app '%s': %s", app_type.value, e)
+            logger.exception("Failed to provision built-in app '%s'.", app_type.value)
 
 
 async def submit_to_hubspot(
