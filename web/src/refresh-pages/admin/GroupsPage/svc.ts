@@ -202,6 +202,7 @@ async function updateDocSetGroupSharing(
 interface TokenLimitPayload {
   tokenBudget: number | null;
   periodHours: number | null;
+  costBudgetDollars: number | null;
 }
 
 interface ExistingTokenLimit {
@@ -209,6 +210,14 @@ interface ExistingTokenLimit {
   enabled: boolean;
   token_budget: number;
   period_hours: number;
+  cost_budget_cents: number | null;
+}
+
+interface ValidTokenLimit {
+  // token_budget is NOT NULL on the backend; a cost-only limit sends 0.
+  tokenBudget: number;
+  periodHours: number;
+  costBudgetCents: number | null;
 }
 
 async function saveTokenLimits(
@@ -216,11 +225,21 @@ async function saveTokenLimits(
   limits: TokenLimitPayload[],
   existing: ExistingTokenLimit[]
 ): Promise<void> {
-  // Filter to only valid (non-null) limits
-  const validLimits = limits.filter(
-    (l): l is { tokenBudget: number; periodHours: number } =>
-      l.tokenBudget != null && l.periodHours != null
-  );
+  // A row is valid with a time window plus a token and/or cost budget.
+  const validLimits: ValidTokenLimit[] = limits
+    .filter(
+      (l) =>
+        l.periodHours != null &&
+        (l.tokenBudget != null || l.costBudgetDollars != null)
+    )
+    .map((l) => ({
+      tokenBudget: l.tokenBudget ?? 0,
+      periodHours: l.periodHours!,
+      costBudgetCents:
+        l.costBudgetDollars != null
+          ? Math.round(l.costBudgetDollars * 100)
+          : null,
+    }));
 
   // Update existing limits (match by index position)
   const toUpdate = Math.min(validLimits.length, existing.length);
@@ -236,6 +255,7 @@ async function saveTokenLimits(
           enabled: existingLimit.enabled,
           token_budget: limit.tokenBudget,
           period_hours: limit.periodHours,
+          cost_budget_cents: limit.costBudgetCents,
         }),
       }
     );
@@ -258,6 +278,7 @@ async function saveTokenLimits(
           enabled: true,
           token_budget: limit.tokenBudget,
           period_hours: limit.periodHours,
+          cost_budget_cents: limit.costBudgetCents,
         }),
       }
     );

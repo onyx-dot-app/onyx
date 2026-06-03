@@ -53,6 +53,7 @@ export const TokenRateLimitTable = ({
     updateTokenRateLimit(id, {
       token_budget: tokenRateLimit.token_budget,
       period_hours: tokenRateLimit.period_hours,
+      cost_budget_cents: tokenRateLimit.cost_budget_cents,
       enabled: !tokenRateLimit.enabled,
     }).then(() => {
       mutate(fetchUrl);
@@ -103,6 +104,7 @@ export const TokenRateLimitTable = ({
             {shouldRenderGroupName() && <TableHead>Group Name</TableHead>}
             <TableHead>Time Window (Hours)</TableHead>
             <TableHead>Token Budget (Tokens)</TableHead>
+            <TableHead>Cost Budget (USD)</TableHead>
             {isAdmin && <TableHead>Delete</TableHead>}
           </TableRow>
         </TableHeader>
@@ -151,8 +153,11 @@ export const TokenRateLimitTable = ({
                     " hour" +
                     (tokenRateLimit.period_hours > 1 ? "s" : "")}
                 </TableCell>
+                <TableCell>{tokenRateLimit.token_budget + " tokens"}</TableCell>
                 <TableCell>
-                  {tokenRateLimit.token_budget + " tokens"}
+                  {tokenRateLimit.cost_budget_cents != null
+                    ? "$" + (tokenRateLimit.cost_budget_cents / 100).toFixed(2)
+                    : "—"}
                 </TableCell>
                 {isAdmin && (
                   <TableCell>

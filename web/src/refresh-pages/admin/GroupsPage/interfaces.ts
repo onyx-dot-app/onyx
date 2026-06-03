@@ -19,4 +19,5 @@ export interface TokenRateLimitDisplay {
   enabled: boolean;
   token_budget: number;
   period_hours: number;
+  cost_budget_cents: number | null;
 }
