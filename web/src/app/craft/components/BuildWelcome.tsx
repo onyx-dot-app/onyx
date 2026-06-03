@@ -4,11 +4,11 @@ import { useRef } from "react";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
 import Text from "@/refresh-components/texts/Text";
 import Logo from "@/refresh-components/Logo";
-import InputBar, { InputBarHandle } from "@/app/craft/components/InputBar";
+import CraftInputBar, {
+  CraftInputBarHandle,
+} from "@/app/craft/components/CraftInputBar";
 import SuggestedPrompts from "@/app/craft/components/SuggestedPrompts";
 import ConnectDataBanner from "@/app/craft/components/ConnectDataBanner";
-import { getBuildUserPersona } from "@/app/craft/onboarding/constants";
-import { workAreaToPersona } from "@/app/craft/constants/exampleBuildPrompts";
 
 interface BuildWelcomeProps {
   onSubmit: (message: string, files: BuildFile[]) => void;
@@ -27,9 +27,7 @@ export default function BuildWelcome({
   isRunning,
   sandboxInitializing = false,
 }: BuildWelcomeProps) {
-  const inputBarRef = useRef<InputBarHandle>(null);
-  const userPersona = getBuildUserPersona();
-  const persona = workAreaToPersona(userPersona?.workArea);
+  const inputBarRef = useRef<CraftInputBarHandle>(null);
 
   const handlePromptClick = (promptText: string) => {
     inputBarRef.current?.setMessage(promptText);
@@ -43,8 +41,8 @@ export default function BuildWelcome({
           What shall we craft today?
         </Text>
       </div>
-      <div className="w-full max-w-2xl">
-        <InputBar
+      <div className="w-full max-w-[720px]">
+        <CraftInputBar
           ref={inputBarRef}
           onSubmit={onSubmit}
           isRunning={isRunning}
@@ -52,7 +50,7 @@ export default function BuildWelcome({
           sandboxInitializing={sandboxInitializing}
         />
         <ConnectDataBanner />
-        <SuggestedPrompts persona={persona} onPromptClick={handlePromptClick} />
+        <SuggestedPrompts onPromptClick={handlePromptClick} />
       </div>
     </div>
   );

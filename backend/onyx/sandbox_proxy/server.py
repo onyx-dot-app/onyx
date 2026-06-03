@@ -13,6 +13,7 @@ from http.server import HTTPServer
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
+from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.sandbox_proxy.action_matcher import ExternalAppActionMatcher
@@ -21,14 +22,19 @@ from onyx.sandbox_proxy.backend import build_ca_store
 from onyx.sandbox_proxy.backend import build_ip_lookup
 from onyx.sandbox_proxy.ca import CABootstrap
 from onyx.sandbox_proxy.ca import MaterializedCA
-from onyx.sandbox_proxy.identity import default_session_factory
+from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
+from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIPLookup
+from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
+from onyx.sandbox_proxy.resolvers.llm_provider_key import LLMProviderKeyResolver
+from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_HEALTHZ_PORT
 from onyx.server.features.build.configs import SANDBOX_PROXY_LISTEN_PORT
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
 
 _DB_POOL_SIZE = 4
 _DB_MAX_OVERFLOW = 4
@@ -141,9 +147,8 @@ def _build_lookup() -> SandboxIPLookup:
     return lookup
 
 
-def _build_cache_factory() -> "Callable[[str], CacheBackend]":
-    """tenant_id → CacheBackend; must match the API side's namespace to share keys."""
-    from onyx.cache.factory import get_cache_backend
+def _build_cache_factory() -> Callable[[str], CacheBackend]:
+    """tenant_id -> CacheBackend; must match the API side's namespace to share keys."""
 
     def _factory(tenant_id: str) -> CacheBackend:
         return get_cache_backend(tenant_id=tenant_id)
@@ -163,6 +168,17 @@ def _build_mitm_options() -> Options:
 
 async def _run_master(master: DumpMaster) -> None:
     await master.run()
+
+
+def build_resolvers() -> list[CredentialResolver]:
+    """The registered credential resolvers, in first-claim-wins order.
+
+    Host-claim sets are designed to be disjoint (external-app requests are
+    attributed by the matcher; host-only resolvers added later claim their own
+    canonical hosts). Order is a safety net against accidental overlap, not a
+    designed-in priority.
+    """
+    return [OnyxPatResolver(), LLMProviderKeyResolver(), ExternalAppResolver()]
 
 
 def _install_signal_handlers(
@@ -197,6 +213,8 @@ def _install_signal_handlers(
 
 
 def main() -> int:
+    set_is_ee_based_on_env_variable()
+
     logger.info(
         "starting sandbox proxy listen=%d healthz=%d namespace=%s",
         SANDBOX_PROXY_LISTEN_PORT,
@@ -230,15 +248,17 @@ def main() -> int:
                 snapshot_policy.bucket,
                 snapshot_policy.endpoint_host,
             )
-        db_session_factory = default_session_factory
+        resolvers = build_resolvers()
+        logger.info(
+            "credential resolvers registered: %s",
+            [type(r).__name__ for r in resolvers],
+        )
         gate = GateAddon(
             identity=identity,
-            action_matcher=ExternalAppActionMatcher(
-                db_session_factory=db_session_factory
-            ),
-            db_session_factory=db_session_factory,
+            action_matcher=ExternalAppActionMatcher(),
             cache_factory=_build_cache_factory(),
             proxy_instance_id=proxy_instance_id,
+            credential_dispatcher=CredentialInjectionDispatcher(resolvers),
             snapshot_policy=snapshot_policy,
         )
 

@@ -7,10 +7,7 @@ timeout).
 
 Uses the real Postgres DB (via the ``db_session`` fixture) and the real
 ``KubernetesSandboxManager`` against a kind cluster. Each test cleans
-up its sandbox via ``mgr.terminate()`` so consecutive runs stay
-hermetic. ``_get_llm_config`` is stubbed because the wake state machine
-forwards the config opaquely to ``provision()`` and the test DB doesn't
-seed a default LLM provider.
+up its sandbox via ``mgr.terminate()`` so consecutive runs stay hermetic.
 
 Gated to the K8s CI lane (``pr-craft-k8s-tests.yml``) since the local
 sandbox backend was removed in
@@ -45,21 +42,8 @@ pytestmark = pytest.mark.skipif(
 
 
 def _make_session_manager(db_session: Session) -> SessionManager:
-    """Construct a SessionManager wired to the env's real SandboxManager.
-
-    ``_get_llm_config`` is stubbed because the wake state machine just
-    forwards the config to ``provision()`` and the external-dependency
-    test DB doesn't seed a default LLM provider.
-    """
-    sm = SessionManager(db_session)
-    stub_config = LLMProviderConfig(
-        provider="test",
-        model_name="test-model",
-        api_key="test-key",
-        api_base=None,
-    )
-    setattr(sm, "_get_llm_config", lambda *_args, **_kwargs: stub_config)
-    return sm
+    """Construct a SessionManager wired to the env's real SandboxManager."""
+    return SessionManager(db_session)
 
 
 @pytest.fixture
@@ -269,7 +253,7 @@ class TestEnsureSandboxRunning:
                 db_session.commit()
 
         monkeypatch.setattr(
-            "onyx.server.features.build.session.manager.time.sleep",
+            "onyx.server.features.build.session.sandbox_lifecycle.time.sleep",
             _flipping_sleep,
         )
 
@@ -308,7 +292,7 @@ class TestEnsureSandboxRunning:
             return None
 
         monkeypatch.setattr(
-            "onyx.server.features.build.session.manager.time.sleep",
+            "onyx.server.features.build.session.sandbox_lifecycle.time.sleep",
             _sleep_noop,
         )
 

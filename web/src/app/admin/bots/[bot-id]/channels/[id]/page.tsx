@@ -3,7 +3,7 @@
 import { use } from "react";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { SvgSimpleLoader } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import { SvgSlack } from "@opal/logos";
 import { useSlackChannelConfigs } from "@/app/admin/bots/[bot-id]/hooks";
@@ -65,7 +65,7 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
       />
       <SettingsLayouts.Body>
         {isLoading ? (
-          <SimpleLoader />
+          <SvgSimpleLoader />
         ) : channelsError || !slackChannelConfigs ? (
           <ErrorCallout
             errorTitle="Something went wrong :("

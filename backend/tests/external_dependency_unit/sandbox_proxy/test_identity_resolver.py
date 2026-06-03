@@ -13,7 +13,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
@@ -25,12 +24,7 @@ from tests.unit.sandbox_proxy.conftest import StaticLookup
 
 
 def _resolver_with(identity: SandboxIdentity | None) -> IdentityResolver:
-    return IdentityResolver(
-        ip_lookup=StaticLookup.single(identity),
-        db_session_factory=lambda tenant_id: get_session_with_tenant(
-            tenant_id=tenant_id
-        ),
-    )
+    return IdentityResolver(ip_lookup=StaticLookup.single(identity))
 
 
 @pytest.fixture

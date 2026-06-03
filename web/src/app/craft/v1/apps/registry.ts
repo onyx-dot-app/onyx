@@ -1,15 +1,23 @@
-import { SvgSlack, SvgLinear } from "@opal/logos";
+import { SvgSlack, SvgLinear, SvgGmail, SvgGithub } from "@opal/logos";
 import { SvgCalendar, SvgPlug } from "@opal/icons";
 import { IconFunctionComponent } from "@opal/types";
 
 // Mirrors `onyx.db.enums.ExternalAppType` on the backend.
-export type ExternalAppType = "SLACK" | "GOOGLE_CALENDAR" | "LINEAR" | "CUSTOM";
+export type ExternalAppType =
+  | "SLACK"
+  | "GOOGLE_CALENDAR"
+  | "GMAIL"
+  | "LINEAR"
+  | "GITHUB"
+  | "CUSTOM";
 
 const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
   {
     SLACK: SvgSlack,
     GOOGLE_CALENDAR: SvgCalendar,
+    GMAIL: SvgGmail,
     LINEAR: SvgLinear,
+    GITHUB: SvgGithub,
   };
 
 /** Logo for a known `app_type`, with a generic fallback for CUSTOM /
@@ -38,6 +46,9 @@ export interface EndpointDescriptor {
   action_id: string;
   normalised_name: string;
   description: string;
+  // Policy a newly-created app seeds this action's selector with (admin can
+  // override). Mirrors `EndpointSpec.default_policy` on the backend.
+  default_policy: EndpointPolicy;
 }
 
 export interface ActionPolicyView {
@@ -74,6 +85,7 @@ export interface ExternalAppUserResponse {
   id: number;
   name: string;
   description: string;
+  slug: string;
   app_type: ExternalAppType;
   credential_keys: string[];
   credential_values: Record<string, string>;

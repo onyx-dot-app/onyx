@@ -7,7 +7,6 @@ Fail-open: `ActionMatcher` exceptions and non-matching action types.
 import asyncio
 import base64
 import binascii
-import json
 from collections.abc import Callable
 from typing import Protocol
 from uuid import UUID
@@ -17,14 +16,17 @@ from mitmproxy import http
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import NotificationType
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.db.notification import create_notification
-from onyx.external_apps.credentials import resolve_injection_headers
+from onyx.external_apps.matching.engine import RequestMatch
 from onyx.sandbox_proxy import approval_cache
-from onyx.sandbox_proxy.action_matcher import ActionMatch
 from onyx.sandbox_proxy.action_matcher import ActionMatcher
-from onyx.sandbox_proxy.identity import DBSessionFactory
+from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
+from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.sandbox_proxy.errors import http_403
+from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
@@ -41,7 +43,9 @@ PARSER_MAX_BODY_BYTES = 1_048_576
 _SNAPSHOT_STREAM_FLAG = "onyx_snapshot_stream"
 
 
-class _Resolver(Protocol):
+class _IdentityResolver(Protocol):
+    """Subset of `IdentityResolver` the gate uses."""
+
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None: ...
 
     def resolve_session_by_id(
@@ -51,16 +55,6 @@ class _Resolver(Protocol):
 
 CacheFactory = Callable[[str], CacheBackend]
 
-
-# 403 codes exposed to the sandbox-side caller (distinct from `OnyxError`).
-_CODE_UNIDENTIFIED_SANDBOX = "unidentified_sandbox"
-_CODE_NO_ACTIVE_SESSION = "no_active_session"
-_CODE_BODY_TOO_LARGE = "body_too_large"
-_CODE_USER_REJECTED = "user_rejected"
-_CODE_NOT_AUTHORIZED = "not_authorized"
-_CODE_INTERNAL_ERROR = "internal_error"
-_CODE_POLICY_DENIED = "policy_denied"
-_CODE_CREDENTIAL_ERROR = "credential_error"
 
 # Relative deep link routed through the Next router by NotificationsPopover.tsx;
 # must mirror the frontend's CRAFT_PATH + sessionId search param.
@@ -98,19 +92,19 @@ class GateAddon:
 
     def __init__(
         self,
-        identity: _Resolver,
+        identity: _IdentityResolver,
         action_matcher: ActionMatcher,
-        db_session_factory: DBSessionFactory,
         cache_factory: CacheFactory,
         proxy_instance_id: str,
+        credential_dispatcher: CredentialInjectionDispatcher,
         snapshot_policy: SnapshotEgressPolicy | None = None,
         stream_responses: bool = True,
     ) -> None:
         self._identity = identity
         self._action_matcher = action_matcher
-        self._db_session_factory = db_session_factory
         self._cache_factory = cache_factory
         self._proxy_instance_id = proxy_instance_id
+        self._credential_dispatcher = credential_dispatcher
         self._snapshot_policy = snapshot_policy
         self._stream_responses = stream_responses
         # Invariant: `_persist_approval_row` is the only writer;
@@ -136,11 +130,19 @@ class GateAddon:
         `client_disconnected`. Best-effort.
         """
         conn_id = getattr(flow.client_conn, "id", None)
+        auth_header = flow.request.headers.get("Proxy-Authorization")
+        tag = _parse_proxy_auth_username(auth_header)
+
+        logger.debug(
+            "gate.http_connect conn_id=%s host=%s port=%s proxy_auth=%r parsed_tag=%s",
+            conn_id,
+            flow.request.host,
+            flow.request.port,
+            auth_header,
+            tag,
+        )
         if conn_id is None:
             return
-        tag = _parse_proxy_auth_username(
-            flow.request.headers.get("Proxy-Authorization")
-        )
         if tag:
             self._conn_session_tags[conn_id] = tag
 
@@ -213,11 +215,8 @@ class GateAddon:
             # Already validated in `requestheaders`; body is streaming.
             return
 
-        gate_target = self._resolve_and_match(flow)
-        # Strip the session tag so it never reaches the origin. mitmproxy does
-        # NOT strip `Proxy-Authorization` from plain-HTTP requests in regular
-        # mode (no-op for HTTPS, which carries it on the already-consumed
-        # CONNECT). Safe here: `_resolve_and_match` has already read it.
+        gate_target = await self._resolve_and_match(flow)
+        # Strip the in-band session tag so it never reaches the origin
         flow.request.headers.pop("Proxy-Authorization", None)
         if gate_target is None:
             return
@@ -229,12 +228,17 @@ class GateAddon:
         try:
             approval_id = self._persist_approval_row(ctx, match)
             decision = await self._await_decision(approval_id, ctx, match)
-            # APPROVED → forward (no 403) WITH credential injection; REJECTED /
-            # EXPIRED → `_write_response_for_decision` sets a 403 (stop here).
             self._write_response_for_decision(flow, decision)
             if decision == ApprovalDecision.APPROVED:
-                self._inject_credentials_or_block(
-                    flow, match, user_id=ctx.user_id, tenant_id=ctx.tenant_id
+                # Off-thread: the external-app resolver may refresh an expiring
+                # OAuth token (token POST + Redis lock) before rendering headers;
+                # keep that off the proxy event loop so a slow token endpoint
+                # stalls only this request, not every in-flight flow.
+                await asyncio.to_thread(
+                    self._dispatch_injection_or_block,
+                    flow,
+                    sandbox=ctx.without_session(),
+                    match=match,
                 )
         except Exception:
             logger.exception(
@@ -243,9 +247,9 @@ class GateAddon:
                 ctx.session_id,
                 ctx.tenant_id,
                 approval_id,
-                match.action_type,
+                match.decisive.action_type,
             )
-            flow.response = _http_403(_CODE_INTERNAL_ERROR)
+            flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             if approval_id is not None:
                 self._terminalize_after_unhandled_error(approval_id, ctx.tenant_id)
 
@@ -253,9 +257,9 @@ class GateAddon:
     # request() helpers
     # ------------------------------------------------------------------
 
-    def _resolve_and_match(
+    async def _resolve_and_match(
         self, flow: http.HTTPFlow
-    ) -> tuple[SessionContext, ActionMatch] | None:
+    ) -> tuple[SessionContext, RequestMatch] | None:
         """Identity → matcher → (only if gated) in-band session resolution.
 
         Returns `(ctx, match)` to proceed, or `None` two ways:
@@ -269,7 +273,7 @@ class GateAddon:
         """
         src_ip = self._extract_src_ip(flow)
         if src_ip is None:
-            # mitmproxy peername returned no usable IP — should never happen
+            # mitmproxy peername returned no usable IP -- should never happen
             # over real TCP. Log loudly so a stuck NAT or transport-mode
             # mishap doesn't read as "everything just 403's silently".
             logger.warning(
@@ -277,7 +281,7 @@ class GateAddon:
                 flow.request.host,
                 flow.client_conn.peername,
             )
-            flow.response = _http_403(_CODE_UNIDENTIFIED_SANDBOX)
+            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
             return None
 
         try:
@@ -289,7 +293,7 @@ class GateAddon:
                 src_ip,
                 flow.request.host,
             )
-            flow.response = _http_403(_CODE_UNIDENTIFIED_SANDBOX)
+            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
             return None
         if sandbox is None:
             # Source IP isn't in the lookup cache. Two common causes:
@@ -303,25 +307,28 @@ class GateAddon:
                 src_ip,
                 flow.request.host,
             )
-            flow.response = _http_403(_CODE_UNIDENTIFIED_SANDBOX)
+            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
             return None
 
         # raw_content is None for streamed bodies; treat None as oversize so a
         # future stream opt-in can't silently bypass the cap.
         raw = flow.request.raw_content
         if raw is None or len(raw) > PARSER_MAX_BODY_BYTES:
-            flow.response = _http_403(_CODE_BODY_TOO_LARGE)
+            flow.response = http_403(SandboxProxyError.BODY_TOO_LARGE)
             return None
 
         try:
             match = self._action_matcher.match(flow.request, sandbox.tenant_id)
         except Exception as e:
+            # Matcher crash falls through as off-catalog: host-only resolvers
+            # still get a chance to inject so the request doesn't forward with
+            # a placeholder credential.
             logger.exception(
                 "gate.matcher_error host=%s error=%s",
                 flow.request.host,
                 str(e),
             )
-            return None
+            match = None
 
         # Audit every evaluated request. session_id is the unvalidated claimed
         # tag (the ASK path validates it below); off_catalog = nothing matched.
@@ -332,25 +339,25 @@ class GateAddon:
             sandbox.sandbox_id,
             self._extract_session_tag(flow),
             flow.request.host,
-            match.action_type if match is not None else "-",
-            match.policy.value if match is not None else "off_catalog",
+            match.decisive.action_type if match is not None else "-",
+            match.decisive.policy.value if match is not None else "off_catalog",
         )
 
-        # Path per verdict (see _inject_credentials for the injection contract):
-        #   off-catalog -> forward, no credentials
-        #   DENY        -> block
-        #   ALWAYS      -> forward + inject credentials (auto-approved)
-        #   ASK         -> approval pipeline (forward+inject or block, in request())
+        # ALWAYS / DENY / off-catalog terminate here; ASK falls through to the
+        # approval pipeline in `request()`.
         if match is None:
+            self._dispatch_injection_or_block(flow, sandbox=sandbox, match=None)
             return None
 
-        if match.policy is EndpointPolicy.DENY:
-            flow.response = _http_403(_CODE_POLICY_DENIED)
+        if match.decisive.policy is EndpointPolicy.DENY:
+            flow.response = http_403(SandboxProxyError.POLICY_DENIED)
             return None
 
-        if match.policy is EndpointPolicy.ALWAYS:
-            self._inject_credentials_or_block(
-                flow, match, user_id=sandbox.user_id, tenant_id=sandbox.tenant_id
+        if match.decisive.policy is EndpointPolicy.ALWAYS:
+            # Off-thread: see the ASK path in `request` — the resolver may refresh
+            # an expiring OAuth token before injecting on this auto-approved call.
+            await asyncio.to_thread(
+                self._dispatch_injection_or_block, flow, sandbox=sandbox, match=match
             )
             return None
 
@@ -365,7 +372,7 @@ class GateAddon:
                 sandbox.user_id,
                 flow.request.host,
             )
-            flow.response = _http_403(_CODE_NO_ACTIVE_SESSION)
+            flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
             return None
         if session_id is None:
             logger.info(
@@ -374,10 +381,10 @@ class GateAddon:
                 sandbox.sandbox_id,
                 sandbox.user_id,
                 sandbox.tenant_id,
-                match.action_type,
+                match.decisive.action_type,
                 flow.request.host,
             )
-            flow.response = _http_403(_CODE_NO_ACTIVE_SESSION)
+            flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
             return None
 
         ctx = sandbox.with_session(session_id)
@@ -387,22 +394,24 @@ class GateAddon:
             ctx.session_id,
             ctx.tenant_id,
             ctx.sandbox_id,
-            match.action_type,
+            match.decisive.action_type,
             flow.request.host,
         )
         return ctx, match
 
-    def _persist_approval_row(self, ctx: SessionContext, match: ActionMatch) -> UUID:
+    def _persist_approval_row(self, ctx: SessionContext, match: RequestMatch) -> UUID:
         """Commit the row, register it for the drain, announce to the chat.
 
         Announce is best-effort: a miss degrades to the FE surfacing the
         card on the next `/live` refetch, so we don't fail the request.
         """
-        with self._db_session_factory(ctx.tenant_id) as db:
+        actions_payload = [a.model_dump(mode="json") for a in match.actions]
+        with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
             row = action_approval.insert_action_approval(
                 db,
                 session_id=ctx.session_id,
-                action_type=match.action_type,
+                actions=actions_payload,
+                app_name=match.app_name,
                 payload=match.payload,
             )
             approval_id = row.approval_id
@@ -424,13 +433,14 @@ class GateAddon:
 
         logger.info(
             "gate.row_committed approval_id=%s session_id=%s tenant_id=%s "
-            "sandbox_id=%s proxy_instance_id=%s action_type=%s",
+            "sandbox_id=%s proxy_instance_id=%s action_type=%s action_count=%s",
             approval_id,
             ctx.session_id,
             ctx.tenant_id,
             ctx.sandbox_id,
             self._proxy_instance_id,
-            match.action_type,
+            match.decisive.action_type,
+            len(match.actions),
         )
 
         try:
@@ -448,7 +458,7 @@ class GateAddon:
         self,
         approval_id: UUID,
         ctx: SessionContext,
-        match: ActionMatch,
+        match: RequestMatch,
     ) -> ApprovalDecision:
         """Park on the wake channel; claim EXPIRED on timeout / cancel.
 
@@ -475,7 +485,7 @@ class GateAddon:
                 approval_id,
                 ctx.session_id,
                 ctx.tenant_id,
-                match.action_type,
+                match.decisive.action_type,
             )
             resolved = self._claim_expired_or_read_winner(approval_id, ctx.tenant_id)
             if resolved == ApprovalDecision.EXPIRED:
@@ -500,7 +510,7 @@ class GateAddon:
         """Conditionally claim EXPIRED; if the API already wrote a decision,
         return that winner instead so the caller forwards/rejects correctly.
         """
-        with self._db_session_factory(tenant_id) as db:
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
             claimed = action_approval.try_record_decision(
                 db,
                 approval_id=approval_id,
@@ -527,81 +537,27 @@ class GateAddon:
         if decision == ApprovalDecision.APPROVED:
             return
         code = (
-            _CODE_USER_REJECTED
+            SandboxProxyError.USER_REJECTED
             if decision == ApprovalDecision.REJECTED
-            else _CODE_NOT_AUTHORIZED
+            else SandboxProxyError.NOT_AUTHORIZED
         )
-        flow.response = _http_403(code)
+        flow.response = http_403(code)
 
-    def _inject_credentials_or_block(
+    def _dispatch_injection_or_block(
         self,
         flow: http.HTTPFlow,
-        match: ActionMatch,
         *,
-        user_id: UUID,
-        tenant_id: str,
+        sandbox: ResolvedSandbox,
+        match: RequestMatch | None,
     ) -> None:
-        """Inject credentials onto a verified forward, or block it with a 403.
-
-        Wraps ``_inject_credentials`` for the verdict paths: if resolution fails,
-        the request is blocked rather than forwarded with the sandbox's own
-        headers (which would bypass the proxy-only credential boundary).
-        """
-        if not self._inject_credentials(
-            flow, match, user_id=user_id, tenant_id=tenant_id
-        ):
-            flow.response = _http_403(_CODE_CREDENTIAL_ERROR)
-
-    def _inject_credentials(
-        self,
-        flow: http.HTTPFlow,
-        match: ActionMatch,
-        *,
-        user_id: UUID,
-        tenant_id: str,
-    ) -> bool:
-        """Attach the connected app's credentials to a verified forward.
-
-        The sole credential-injection seam: called only on ALWAYS (auto-approved)
-        and ASK-approved requests, never on off-catalog or blocked ones. Renders
-        the app's ``auth_template`` from the org + per-user (``user_id``)
-        credentials and sets the resulting headers on the outbound request, so
-        the real secret lives only here — never in the sandbox.
-
-        Returns ``False`` only when resolution raises — the caller blocks rather
-        than forward the request with the sandbox's own headers. Any successful
-        resolution returns ``True`` (including when there are no headers to
-        inject, e.g. an allowlist-only app).
-        """
-        try:
-            with self._db_session_factory(tenant_id) as db:
-                headers = resolve_injection_headers(db, match.external_app_id, user_id)
-        except Exception:
-            logger.exception(
-                "gate.inject_error external_app_id=%s host=%s",
-                match.external_app_id,
-                flow.request.host,
-            )
-            return False
-
-        if not headers:
-            logger.info(
-                "gate.inject_skipped external_app_id=%s host=%s (no credentials)",
-                match.external_app_id,
-                flow.request.host,
-            )
-            return True
-
-        for name, value in headers.items():
-            flow.request.headers[name] = value
-        # Log header NAMES only — never the injected secret values.
-        logger.info(
-            "gate.inject external_app_id=%s host=%s headers=%s",
-            match.external_app_id,
-            flow.request.host,
-            sorted(headers),
+        """Run the credential dispatcher; fail closed with a 403 on BLOCKED."""
+        self._credential_dispatcher.apply_or_block(
+            flow,
+            InjectionContext(
+                sandbox=sandbox,
+                match=match,
+            ),
         )
-        return True
 
     def _terminalize_after_unhandled_error(
         self, approval_id: UUID, tenant_id: str
@@ -691,14 +647,14 @@ class GateAddon:
     # ------------------------------------------------------------------
 
     def _notify_approval_requested(
-        self, approval_id: UUID, ctx: SessionContext, match: ActionMatch
+        self, approval_id: UUID, ctx: SessionContext, match: RequestMatch
     ) -> None:
         """Best-effort APPROVAL_REQUESTED notification dispatch.
 
         Body carries no PII; the full payload lives on the action_approval
         row, which the popover fetches when the chat loads.
         """
-        with self._db_session_factory(ctx.tenant_id) as db:
+        with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
             create_notification(
                 user_id=ctx.user_id,
                 notif_type=NotificationType.APPROVAL_REQUESTED,
@@ -707,7 +663,9 @@ class GateAddon:
                 additional_data={
                     "approval_id": str(approval_id),
                     "session_id": str(ctx.session_id),
-                    "action_type": match.action_type,
+                    "action_type": match.decisive.action_type,
+                    "action_count": len(match.actions),
+                    "app_name": match.app_name,
                     "link": _CRAFT_SESSION_LINK_TEMPLATE.format(
                         session_id=ctx.session_id
                     ),
@@ -783,13 +741,22 @@ class GateAddon:
         request directly, since there's no CONNECT to carry the header.
         """
         conn_id = getattr(flow.client_conn, "id", None)
-        if conn_id is not None:
-            cached = self._conn_session_tags.get(conn_id)
-            if cached:
-                return cached
-        return _parse_proxy_auth_username(
-            flow.request.headers.get("Proxy-Authorization")
+        cached = self._conn_session_tags.get(conn_id) if conn_id else None
+        direct_auth_header = flow.request.headers.get("Proxy-Authorization")
+        direct = _parse_proxy_auth_username(direct_auth_header)
+        tag = cached or direct
+
+        logger.debug(
+            "gate.session_tag_extract conn_id=%s host=%s cached=%s "
+            "direct=%s direct_proxy_auth=%r resolved=%s",
+            conn_id,
+            flow.request.host,
+            cached,
+            direct,
+            direct_auth_header,
+            tag,
         )
+        return tag
 
 
 # -----------------------------------------------------------------------
@@ -800,8 +767,11 @@ class GateAddon:
 def _parse_proxy_auth_username(header_value: str | None) -> str | None:
     """Extract the basic-auth username from a `Proxy-Authorization` header.
 
-    The proxy-tag plugin encodes the BuildSession id as the username with an
-    empty password: `Basic base64("<session_id>:")`. Never raises.
+    The proxy-tag plugin encodes the BuildSession id as the username and
+    uses a placeholder password (the password is required for Python's
+    `urllib.request.ProxyHandler` to emit the header at all, but the
+    proxy treats it as discardable — see session-proxy-tag.ts). Never
+    raises.
     """
     if not header_value:
         return None
@@ -814,21 +784,3 @@ def _parse_proxy_auth_username(header_value: str | None) -> str | None:
         return None
     username = decoded.split(":", 1)[0]
     return username or None
-
-
-# -----------------------------------------------------------------------
-# Sandbox-facing 403 helper
-# -----------------------------------------------------------------------
-
-
-def _http_403(code: str) -> http.Response:
-    """Build a 403 response visible to the sandbox.
-
-    `code` is a stable string the SDK / curl wrapper matches on.
-    """
-    body = json.dumps({"error": code}).encode()
-    return http.Response.make(
-        403,
-        content=body,
-        headers={"content-type": "application/json"},
-    )

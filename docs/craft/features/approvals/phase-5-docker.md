@@ -523,9 +523,17 @@ Notes:
   install-flow change needed.
 - The healthcheck consumes `/healthz` which the proxy already serves
   (Phase 1). Compose's healthcheck flips the container's health status
-  to `unhealthy` on consecutive failures; `restart: unless-stopped`
-  rebuilds it. No load balancer to flip out of, since there is one
-  replica.
+  to `unhealthy` on consecutive failures. Note: `restart:
+  unless-stopped` does NOT auto-recover unhealthy containers --
+  Docker only restarts on process exit, not on healthcheck failure
+  (Swarm's `deploy.restart_policy` and third-party watchdogs like
+  `autoheal` are the mechanisms that do). The `_run` loop's
+  reconnect-with-backoff covers the common transient failures
+  (daemon hiccup, stream EOF) and `/healthz` flips back to 200
+  without intervention; truly stuck-unhealthy states would require
+  an operator-initiated restart. Acceptable for the single-replica
+  MVP; a self-crash on detected unrecoverable state is a Phase 6+
+  follow-up if we see this in practice.
 
 ### T5.8 -- Sandbox image dependencies
 

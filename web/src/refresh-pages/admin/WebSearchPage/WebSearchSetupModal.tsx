@@ -2,11 +2,10 @@
 
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { SvgArrowExchange } from "@opal/icons";
+import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import { useWebSearchProviders } from "@/lib/webSearch/hooks";
@@ -250,7 +249,7 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
                   disabled={
                     (!hasNoFields && (!dirty || !isValid)) || isSubmitting
                   }
-                  icon={isSubmitting ? SimpleLoader : undefined}
+                  icon={isSubmitting ? SvgSimpleLoader : undefined}
                 >
                   {isEditing ? "Update" : "Connect"}
                 </Button>

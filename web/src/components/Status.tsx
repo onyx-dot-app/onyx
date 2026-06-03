@@ -2,7 +2,7 @@
 
 import { ValidStatuses } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import {
   FiAlertTriangle,
   FiCheckCircle,

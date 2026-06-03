@@ -8,35 +8,25 @@ lockdown, not this heuristic.
 import json
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
 from typing import Any
 from typing import Protocol
 from urllib.parse import parse_qs
 
 from mitmproxy import http
 
-from onyx.db.enums import EndpointPolicy
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.external_app import get_external_apps
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.engine import match_action
+from onyx.external_apps.matching.engine import RequestMatch
 from onyx.external_apps.matching.request import ProxiedRequest
-from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-@dataclass(frozen=True)
-class ActionMatch:
-    action_type: str
-    payload: dict[str, Any]
-    policy: EndpointPolicy
-    # The connected app the request resolved to — for the gate's credential seam.
-    external_app_id: int
-
-
 class ActionMatcher(Protocol):
-    def match(self, request: http.Request, tenant_id: str) -> ActionMatch | None: ...
+    def match(self, request: http.Request, tenant_id: str) -> RequestMatch | None: ...
 
 
 def resolve_app_for_url(
@@ -65,7 +55,7 @@ def resolve_app_for_url(
     return None
 
 
-class ExternalAppActionMatcher:
+class ExternalAppActionMatcher(ActionMatcher):
     """Matches a request against the tenant's connected external apps.
 
     Opens its own short tenant-scoped DB session (mirrors ``IdentityResolver``):
@@ -73,11 +63,8 @@ class ExternalAppActionMatcher:
     the pre-written ``match_action`` for the policy verdict.
     """
 
-    def __init__(self, db_session_factory: DBSessionFactory) -> None:
-        self._db_session_factory = db_session_factory
-
-    def match(self, request: http.Request, tenant_id: str) -> ActionMatch | None:
-        with self._db_session_factory(tenant_id) as db:
+    def match(self, request: http.Request, tenant_id: str) -> RequestMatch | None:
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
             apps = get_external_apps(db)
             app = resolve_app_for_url(request.url, apps)
             if app is None:
@@ -90,26 +77,16 @@ class ExternalAppActionMatcher:
                 path=(request.path or "").split("?", 1)[0],
                 body=request.raw_content,
             )
-            policy = match_action(db, app, proxied)
-            if policy is None:
+            matched = match_action(db, app, proxied)
+            if matched is None:
                 return None
 
-            # `match_action` returns only the verdict, so the recorded action is
-            # the owning app (its app_type). Read the loaded columns inside the
-            # session so they're safe to use after it closes.
-            action_type = app.app_type.value
-            external_app_id = app.id
-
+        # Engine leaves `payload` empty — we own the raw content + content-type.
         payload = _decode_body(
             request.raw_content or b"",
             (request.headers.get("content-type") or "").lower(),
         )
-        return ActionMatch(
-            action_type=action_type,
-            external_app_id=external_app_id,
-            payload=payload or {},
-            policy=policy,
-        )
+        return matched.model_copy(update={"payload": payload or {}})
 
 
 def _decode_body(body: bytes, content_type: str) -> dict[str, Any] | None:
@@ -118,9 +95,14 @@ def _decode_body(body: bytes, content_type: str) -> dict[str, Any] | None:
             decoded = json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             return None
-        if not isinstance(decoded, dict):
-            return None
-        return decoded
+        if isinstance(decoded, dict):
+            return decoded
+        # A batched GraphQL POST (the canonical multi-action case) is a JSON
+        # array at the top level. Wrap so the FE's dict-keyed payload view
+        # still surfaces the queries.
+        if isinstance(decoded, list):
+            return {"batch": decoded}
+        return None
 
     if "application/x-www-form-urlencoded" in content_type:
         try:

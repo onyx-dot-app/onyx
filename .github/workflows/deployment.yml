@@ -241,15 +241,18 @@ jobs:
 
       - name: Create GitHub Release
         id: create-release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # zizmor: ignore[superfluous-actions] action emits release id consumed by downstream jobs
-        with:
-          tag_name: ${{ steps.release-tag.outputs.tag }}
-          name: ${{ steps.release-tag.outputs.tag }}
-          body: "See the assets to download this version and install."
-          draft: true
-          prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release-tag.outputs.tag }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes "See the assets to download this version and install." \
+              --draft
+          fi
+          release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.id')
+          echo "id=${release_id}" >> "$GITHUB_OUTPUT"
 
   build-desktop:
     needs:
@@ -1591,7 +1594,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner
         if: steps.should-run.outputs.run == 'true'
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # ratchet:aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: ${{ steps.scan-image.outputs.image }}
           severity: CRITICAL,HIGH

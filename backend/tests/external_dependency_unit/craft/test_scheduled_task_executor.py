@@ -71,7 +71,6 @@ def _seed_task_and_queued_run(
         name="nightly-report",
         prompt="Summarise yesterday's events",
         cron_expression="0 9 * * *",
-        timezone="UTC",
         editor_mode="advanced",
         status=ScheduledTaskStatus.ACTIVE,
         next_run_at=datetime.datetime.now(datetime.timezone.utc)
@@ -163,7 +162,6 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
             name=f"due-{i}",
             prompt=f"prompt-{i}",
             cron_expression="* * * * *",
-            timezone="UTC",
             editor_mode="advanced",
             status=ScheduledTaskStatus.ACTIVE,
             next_run_at=now - datetime.timedelta(seconds=10),
@@ -255,7 +253,6 @@ def test_cleanup_stuck_runs_marks_queued_over_threshold_failed(
         name="stale",
         prompt="...",
         cron_expression="0 9 * * *",
-        timezone="UTC",
         editor_mode="advanced",
         status=ScheduledTaskStatus.ACTIVE,
         next_run_at=datetime.datetime.now(datetime.timezone.utc)
@@ -301,7 +298,6 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
         name="long-running",
         prompt="...",
         cron_expression="0 9 * * *",
-        timezone="UTC",
         editor_mode="advanced",
         status=ScheduledTaskStatus.ACTIVE,
         next_run_at=datetime.datetime.now(datetime.timezone.utc)

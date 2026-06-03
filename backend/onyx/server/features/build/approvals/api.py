@@ -29,6 +29,7 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.matching.engine import ActionMatch
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.db import action_approval
 from onyx.server.features.build.db.build_session import get_build_session
@@ -52,7 +53,9 @@ class ApprovalView(BaseModel):
 
     approval_id: UUID
     session_id: UUID
-    action_type: str
+    # Non-empty by construction; sorted strictest-policy-first.
+    actions: list[ActionMatch]
+    app_name: str
     payload: dict[str, Any]
     created_at: datetime
     decision: ApprovalDecision | None

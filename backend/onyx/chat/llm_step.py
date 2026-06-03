@@ -173,6 +173,21 @@ def _find_function_calls_open_marker(text_lower: str) -> int:
         search_from = idx + 1
 
 
+def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
+    """Detect XML-style marshaled tool calls emitted as plain text.
+
+    Intentionally does NOT require a <parameter> tag: zero-argument invocations
+    (e.g. <function_calls><invoke name="get_time"></invoke></function_calls>) are
+    valid tool calls that _extract_xml_tool_calls_from_response_text can parse, so
+    requiring <parameter> would both miss them in fallback extraction and let the
+    empty-answer recovery leak the raw markup as an answer.
+    """
+    if not text:
+        return False
+    lowered = text.lower()
+    return "<function_calls" in lowered and "<invoke" in lowered
+
+
 def _try_parse_json_string(value: Any) -> Any:
     """Attempt to parse a JSON string value into its Python equivalent.
 
@@ -1372,6 +1387,65 @@ def run_llm_step_pkt_generator(
             tab_index=tab_index if use_existing_tab_index else None,
             sub_turn_index=sub_turn_index,
         )
+        # Run the flush + recovery below while the span is still open, so the
+        # span output recorded afterward reflects the answer the user received.
+        yield from _close_reasoning_if_active()
+
+        # Flush any remaining content from citation processor
+        # Reasoning is always first so this should use the post-incremented value of turn_index
+        # Note that this doesn't need to handle any sub-turns as those docs will not have citations
+        # as clickable items and will be stripped out instead.
+        if citation_processor:
+            yield from _emit_citation_results(citation_processor.process_token(None))
+
+        # Empty-answer recovery: the model emitted text but content/citation
+        # processing consumed all of it (e.g. an unmapped bracketed-numeric answer
+        # like "[123456789012345]" that the citation processor strips). Surface the
+        # raw output instead of returning an empty answer, which would raise a
+        # misleading EmptyLLMResponseError downstream. Skipped for REQUIRED tool
+        # choice, where empty pre-tool content is expected (fallback extraction).
+        # Also skipped when the raw output is XML tool-call markup: run_llm_loop's
+        # fallback extraction will parse it into a real tool call, so surfacing it
+        # as an answer would leak raw markup to the client and pollute context.
+        if (
+            tool_choice != ToolChoiceOptions.REQUIRED
+            and not tool_calls
+            and not accumulated_answer.strip()
+            and accumulated_raw_answer.strip()
+            and not _looks_like_xml_tool_call_payload(accumulated_raw_answer)
+        ):
+            logger.warning(
+                "Answer empty after content/citation processing; recovering raw "
+                "model output (%d chars). provider=%s, model=%s, finish_reasons=%s",
+                len(accumulated_raw_answer),
+                llm.config.model_provider,
+                llm.config.model_name,
+                sorted(finish_reasons),
+            )
+            if not answer_start:
+                # Mirror _emit_content_chunk: persist pre-answer timing before the
+                # first AgentResponseStart.
+                if state_container and pre_answer_processing_time is not None:
+                    state_container.set_pre_answer_processing_time(
+                        pre_answer_processing_time
+                    )
+                yield Packet(
+                    placement=_current_placement(),
+                    obj=AgentResponseStart(
+                        final_documents=final_documents,
+                        pre_answer_processing_seconds=pre_answer_processing_time,
+                    ),
+                )
+                answer_start = True
+            yield Packet(
+                placement=_current_placement(),
+                obj=AgentResponseDelta(content=accumulated_raw_answer),
+            )
+            accumulated_answer = accumulated_raw_answer
+            if state_container:
+                state_container.set_answer_tokens(accumulated_answer)
+
+        # Record assistant output for tracing (after flush + recovery).
         if tool_calls:
             tool_calls_list: list[ToolCall] = [
                 ToolCall(
@@ -1402,17 +1476,6 @@ def run_llm_step_pkt_generator(
         # Record reasoning content for tracing (extended thinking from reasoning models)
         if accumulated_reasoning:
             span_generation.span_data.reasoning = accumulated_reasoning
-
-    # This may happen if the custom token processor is used to modify other packets into reasoning
-    # Then there won't necessarily be anything else to come after the reasoning tokens
-    yield from _close_reasoning_if_active()
-
-    # Flush any remaining content from citation processor
-    # Reasoning is always first so this should use the post-incremented value of turn_index
-    # Note that this doesn't need to handle any sub-turns as those docs will not have citations
-    # as clickable items and will be stripped out instead.
-    if citation_processor:
-        yield from _emit_citation_results(citation_processor.process_token(None))
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)

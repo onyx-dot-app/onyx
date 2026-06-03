@@ -66,7 +66,7 @@ Use the theme toggle (paint roller icon) in the Storybook toolbar to switch betw
 
 The production Storybook is deployed as a static site on Vercel. The build runs `bun run storybook:build` which outputs to `storybook-static/`, and Vercel serves that directory.
 
-Deploys are triggered on merges to `main` when files in `web/lib/opal/`, `web/src/refresh-components/`, `web/.storybook/`, or any `Apps/`-layer source path (currently `web/src/app/craft/components/tool-cards/`) change.
+Deploys are triggered on merges to `main` when files in `web/lib/opal/`, `web/src/refresh-components/`, `web/.storybook/`, or any `Apps/`-layer source path change.
 
 ## Component Layers
 
@@ -78,13 +78,13 @@ The sidebar organizes components by their layer in the design system:
 | **Components** | `lib/opal/src/components/` | Button, OpenButton, Tag |
 | **Layouts** | `lib/opal/src/layouts/` | Content, ContentAction, IllustrationContent |
 | **refresh-components** | `src/refresh-components/` | Inputs, tables, modals, text, cards, tiles, etc. |
-| **Apps** | `src/app/<app>/...` | Per-app feature components (currently: Craft tool-cards) |
+| **Apps** | `src/app/<app>/...` | Per-app feature components |
 
 ### Apps layer
 
 The `Apps/` layer is a deliberately bounded extension of the catalog: feature components that have **multi-state visual contracts** (statuses, variants, kinds) and are **data-driven** (take props, don't fetch) earn a story. Components that orchestrate state — fetch data, manage SWR, own context — stay out of Storybook; they belong in the running app.
 
 Current coverage:
-- `Apps/Craft/Tool Cards/*` — the per-tool rendering surfaces consumed by `BuildMessageList`. See `src/app/craft/components/tool-cards/`.
+- `Apps/Craft/` - components built specifically for Craft's UI
 
 Title format: `Apps/<App>/<Category>/<Name>`, e.g. `Apps/Craft/Tool Cards/Bash Body`.

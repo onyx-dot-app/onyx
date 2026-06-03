@@ -1,5 +1,6 @@
 from typing import Any
 
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -32,12 +33,14 @@ _ENDPOINTS: list[EndpointSpec] = [
         normalised_name="Read the connected user",
         description="Read the authenticated user's profile (viewer).",
         matches=(GraphQLOp(operation_type="query", field="viewer"),),
+        default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=LinearAction.TEAMS_READ,
         normalised_name="Read teams",
         description="List the workspace's teams.",
         matches=(GraphQLOp(operation_type="query", field="teams"),),
+        default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=LinearAction.ISSUES_READ,
@@ -48,12 +51,14 @@ _ENDPOINTS: list[EndpointSpec] = [
             GraphQLOp(operation_type="query", field="issue"),
             GraphQLOp(operation_type="query", field="issueSearch"),
         ),
+        default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=LinearAction.PROJECTS_READ,
         normalised_name="Read projects",
         description="List projects.",
         matches=(GraphQLOp(operation_type="query", field="projects"),),
+        default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=LinearAction.ISSUES_CREATE,

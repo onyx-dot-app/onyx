@@ -58,7 +58,7 @@ router = APIRouter(prefix="/search")
 @router.post("", dependencies=[Depends(require_vector_db)])
 def search(
     request: SearchRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> SearchResponse:
     # 1. Load persona

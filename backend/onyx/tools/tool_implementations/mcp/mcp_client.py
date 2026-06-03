@@ -23,6 +23,7 @@ from mcp.types import TextResourceContents
 from mcp.types import Tool as MCPLibTool
 from pydantic import BaseModel
 
+from onyx.configs.app_configs import MCP_TOOL_CALL_TIMEOUT_SECONDS
 from onyx.db.enums import MCPTransport
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
@@ -156,7 +157,9 @@ def _create_mcp_client_function_runner(
             from datetime import timedelta
 
             async with ClientSession(
-                read, write, read_timeout_seconds=timedelta(seconds=300)
+                read,
+                write,
+                read_timeout_seconds=timedelta(seconds=MCP_TOOL_CALL_TIMEOUT_SECONDS),
             ) as session:
                 return await function(session, **kwargs)
 
