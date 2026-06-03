@@ -60,7 +60,6 @@ from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session import sandbox_lifecycle as _sandbox
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import RateLimitError
-from onyx.server.features.build.session.errors import SandboxProvisioningError
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
 from onyx.server.features.build.session.llm_config import get_all_build_mode_llm_configs
@@ -74,18 +73,6 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
-
-
-# Re-exports kept for backward compatibility — these used to live in this
-# module before the split into focused submodules.
-__all__ = [
-    "BuildStreamingState",
-    "RateLimitError",
-    "SandboxProvisioningError",
-    "SessionManager",
-    "UploadLimitExceededError",
-    "get_all_build_mode_llm_configs",
-]
 
 
 # Hidden directories/files to filter from listings
