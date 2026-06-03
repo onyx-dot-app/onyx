@@ -62,8 +62,8 @@ Invalid combinations (e.g. `sizePreset="headline" + variant="body"`) are exclude
 | `description`   | `string`                     | —              | Optional description below the title                                                                                 |
 | `editable`      | `boolean`                    | `false`        | Enable inline editing of the title                                                                                   |
 | `onTitleChange` | `(newTitle: string) => void` | —              | Called when user commits an edit                                                                                     |
-| `moreIcon1`     | `IconFunctionComponent`      | —              | Secondary icon in icon row (ContentXl only)                                                                          |
-| `moreIcon2`     | `IconFunctionComponent`      | —              | Tertiary icon in icon row (ContentXl only)                                                                           |
+| `moreIcon1`     | `IconFunctionComponent`      | —              | Secondary icon in icon row (ContentXl only); colored with the secondary foreground (`text-03`)                       |
+| `moreIcon2`     | `IconFunctionComponent`      | —              | Tertiary icon in icon row (ContentXl only); boxed and sized exactly like `icon`                                       |
 | `color`         | `ColorTypes`                 | `"default"`    | Icon and title color pair. `"muted-success"` / `"muted-warning"` color only the icon and leave the text at `text-03` |
 | `strikethrough` | `boolean`                    | `false`        | Strike the title through, for a title whose option is switched off                                                   |
 

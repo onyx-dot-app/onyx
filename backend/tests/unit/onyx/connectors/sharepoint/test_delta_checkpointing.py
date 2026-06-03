@@ -11,13 +11,23 @@ Validates that:
 
 from __future__ import annotations
 
+import json
 from collections import deque
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime, timezone
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
+import requests
+from office365.graph_client import GraphClient
+from office365.onedrive.lists.list import List as GraphList
 
+from onyx.connectors.microsoft_utils.drive_delta import (
+    DriveDeltaFetchResult,
+    DriveDeltaPage,
+)
+from onyx.connectors.microsoft_utils.drive_items import DriveFolderReference
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -26,10 +36,14 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.sharepoint import connector as sp_connector
 from onyx.connectors.sharepoint.connector import (
+    DRIVE_EXPAND_FIELDS,
+    DRIVE_LIST_PROPERTY,
+    DRIVE_SELECT_FIELDS,
     DriveItemData,
     SharepointConnector,
     SharepointConnectorCheckpoint,
     SiteDescriptor,
+    SiteDrive,
 )
 
 # ---------------------------------------------------------------------------
@@ -39,6 +53,7 @@ from onyx.connectors.sharepoint.connector import (
 SITE_URL = "https://example.sharepoint.com/sites/sample"
 DRIVE_WEB_URL = f"{SITE_URL}/Shared Documents"
 DRIVE_ID = "fake-drive-id"
+LIST_ID = "fake-list-id"
 
 # Use a start time in the future so delta URLs include a timestamp token
 _START_TS = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
@@ -70,6 +85,62 @@ def _make_document(item: DriveItemData) -> Document:
         semantic_identifier=item.name,
         metadata={},
         sections=[TextSection(link=item.web_url, text="content")],
+    )
+
+
+def _delta_result(
+    items: list[DriveItemData],
+    next_url: str | None,
+    *,
+    resync_after_410: bool = False,
+) -> DriveDeltaFetchResult:
+    page = DriveDeltaPage.model_validate(
+        {
+            "value": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "webUrl": item.web_url,
+                    "parentReference": {
+                        "driveId": item.drive_id,
+                        "path": item.parent_reference_path,
+                    },
+                }
+                for item in items
+            ]
+        }
+    )
+    return DriveDeltaFetchResult(
+        page=page,
+        next_checkpoint_url=next_url,
+        resync_after_410=resync_after_410,
+    )
+
+
+def _patch_delta_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+    fetch_page: Callable[..., tuple[list[DriveItemData], str | None]],
+) -> None:
+    def typed_fetch(
+        client: Any,
+        *,
+        page_url: str,
+        drive_id: str,
+        page_size: int = 200,
+        **_kwargs: Any,
+    ) -> DriveDeltaFetchResult:
+        items, next_url = fetch_page(
+            client,
+            page_url,
+            drive_id,
+            page_size=page_size,
+        )
+        return _delta_result(items, next_url)
+
+    monkeypatch.setattr(
+        sp_connector,
+        "fetch_drive_delta_checkpoint_page",
+        typed_fetch,
     )
 
 
@@ -108,7 +179,15 @@ def _build_ready_checkpoint(
         drive_name=None,
         folder_path=folder_path,
     )
-    cp.cached_drive_names = deque(drive_names or ["Documents"])
+    cp.cached_drives = deque(
+        SiteDrive(
+            drive_id=f"{DRIVE_ID}-{name}",
+            list_id=f"{LIST_ID}-{name}",
+            display_name=name,
+            web_url=f"{SITE_URL}/{name}",
+        )
+        for name in (drive_names or ["Documents"])
+    )
     cp.process_site_pages = False
     return cp
 
@@ -119,19 +198,18 @@ def _setup_connector(monkeypatch: pytest.MonkeyPatch) -> SharepointConnector:
     connector._graph_client = object()  # ty: ignore[invalid-assignment]
     connector.include_site_pages = False
 
-    def fake_resolve_drive(
-        self: SharepointConnector,  # noqa: ARG001
-        site_descriptor: SiteDescriptor,  # noqa: ARG001
-        drive_name: str,  # noqa: ARG001
-    ) -> tuple[str, str | None]:
-        return (DRIVE_ID, DRIVE_WEB_URL)
-
     def fake_get_access_token(self: SharepointConnector) -> str:  # noqa: ARG001
         return "fake-access-token"
 
-    monkeypatch.setattr(SharepointConnector, "_resolve_drive", fake_resolve_drive)
     monkeypatch.setattr(
         SharepointConnector, "_get_graph_access_token", fake_get_access_token
+    )
+    monkeypatch.setattr(
+        sp_connector,
+        "resolve_drive_folder",
+        lambda *_args, **_kwargs: DriveFolderReference(
+            id="folder-id", web_url=f"{DRIVE_WEB_URL}/Engineering/Docs"
+        ),
     )
 
     return connector
@@ -142,7 +220,7 @@ def _mock_convert(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def fake_convert(
         driveitem: DriveItemData,
-        drive_name: str,  # noqa: ARG001
+        drive: SiteDrive,  # noqa: ARG001
         ctx: Any = None,  # noqa: ARG001
         graph_client: Any = None,  # noqa: ARG001
         graph_api_base: str = "",  # noqa: ARG001
@@ -198,7 +276,7 @@ class TestDeltaPerPageCheckpointing:
                 return items_p2, "https://graph.microsoft.com/next3"
             return items_p3, None
 
-        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
+        _patch_delta_fetch(monkeypatch, fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint()
 
@@ -212,7 +290,8 @@ class TestDeltaPerPageCheckpointing:
             checkpoint.current_drive_delta_next_link
             == "https://graph.microsoft.com/next2"
         )
-        assert checkpoint.current_drive_id == DRIVE_ID
+        assert checkpoint.current_drive is not None
+        assert checkpoint.current_drive.drive_id == f"{DRIVE_ID}-Documents"
         assert checkpoint.has_more is True
 
         # Call 2: Phase 3b processes page 2
@@ -232,8 +311,7 @@ class TestDeltaPerPageCheckpointing:
         )
         yielded, checkpoint = _consume_generator(gen)
         assert len(_docs_from(yielded)) == 2
-        assert checkpoint.current_drive_name is None
-        assert checkpoint.current_drive_id is None
+        assert checkpoint.current_drive is None
         assert checkpoint.current_drive_delta_next_link is None
 
     def test_resume_after_simulated_crash(
@@ -262,7 +340,7 @@ class TestDeltaPerPageCheckpointing:
                 return [_make_item("a")], "https://graph.microsoft.com/next2"
             return [_make_item("b")], None
 
-        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
+        _patch_delta_fetch(monkeypatch, fake_fetch_page)
 
         # Process page 1
         checkpoint = _build_ready_checkpoint()
@@ -282,7 +360,7 @@ class TestDeltaPerPageCheckpointing:
         # New connector instance (as if process restarted)
         connector2 = _setup_connector(monkeypatch)
         _mock_convert(monkeypatch)
-        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
+        _patch_delta_fetch(monkeypatch, fake_fetch_page)
 
         # Resume — should pick up from next2
         gen = connector2._load_from_checkpoint(
@@ -294,8 +372,96 @@ class TestDeltaPerPageCheckpointing:
         assert len(docs) == 1
         assert docs[0].id == "b"
         assert captured_urls[-1] == "https://graph.microsoft.com/next2"
-        assert final_cp.current_drive_name is None
+        assert final_cp.current_drive is None
         assert final_cp.current_drive_delta_next_link is None
+
+    def test_legacy_checkpoint_resolves_drive_identity_once(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        connector = _setup_connector(monkeypatch)
+        _mock_convert(monkeypatch)
+        graph_drive = MagicMock()
+        graph_drive.id = DRIVE_ID
+        graph_drive.name = "OneDrive"
+        graph_drive.web_url = DRIVE_WEB_URL
+        graph_list = GraphList(GraphClient(lambda: {"access_token": "unused"}))
+        graph_list.properties["id"] = LIST_ID
+        graph_drive.properties = {DRIVE_LIST_PROPERTY: graph_list}
+        graph_client = MagicMock()
+        drives = graph_client.sites.get_by_url.return_value.drives
+        selected_drives = drives.select.return_value
+        expanded_drives = selected_drives.expand.return_value
+        expanded_drives.get_all.return_value.execute_query.return_value = [graph_drive]
+        connector._graph_client = graph_client
+        monkeypatch.setattr(
+            sp_connector,
+            "fetch_drive_delta_checkpoint_page",
+            lambda *_args, **_kwargs: _delta_result([_make_item("resumed")], None),
+        )
+        legacy_json = json.dumps(
+            {
+                "has_more": True,
+                "cached_site_descriptors": [],
+                "current_site_descriptor": {
+                    "url": SITE_URL,
+                    "drive_name": "Documents",
+                    "folder_path": None,
+                },
+                "cached_drive_names": [],
+                "current_drive_name": "Documents",
+                "current_drive_id": DRIVE_ID,
+                "current_drive_web_url": "https://stale.example/Documents",
+                "current_drive_delta_next_link": "https://graph.example/next",
+            }
+        )
+
+        checkpoint = connector.validate_checkpoint_json(legacy_json)
+        yielded, migrated = _consume_generator(
+            connector._load_from_checkpoint(
+                _START_TS, _END_TS, checkpoint, include_permissions=False
+            )
+        )
+
+        assert [doc.id for doc in _docs_from(yielded)] == ["resumed"]
+        drives.select.assert_called_once_with(DRIVE_SELECT_FIELDS)
+        selected_drives.expand.assert_called_once_with(DRIVE_EXPAND_FIELDS)
+        expanded_drives.get_all.assert_called_once()
+        graph_client.drives.__getitem__.assert_not_called()
+        assert migrated.current_drive is None
+        dumped = migrated.model_dump()
+        assert "cached_drive_names" not in dumped
+        assert "current_drive_name" not in dumped
+
+    def test_legacy_drive_listing_failure_propagates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        connector = _setup_connector(monkeypatch)
+        graph_client = MagicMock()
+        drives = graph_client.sites.get_by_url.return_value.drives
+        expanded_drives = drives.select.return_value.expand.return_value
+        expanded_drives.get_all.return_value.execute_query.side_effect = RuntimeError(
+            "Graph unavailable"
+        )
+        connector._graph_client = graph_client
+        checkpoint = SharepointConnectorCheckpoint(
+            has_more=True,
+            cached_site_descriptors=deque(),
+            current_site_descriptor=SiteDescriptor(
+                url=SITE_URL,
+                drive_name="Documents",
+                folder_path=None,
+            ),
+            legacy_cached_drive_names=deque(),
+            legacy_current_drive_name="Documents",
+            legacy_current_drive_id=DRIVE_ID,
+        )
+
+        with pytest.raises(RuntimeError, match="Graph unavailable"):
+            _consume_generator(
+                connector._load_from_checkpoint(
+                    _START_TS, _END_TS, checkpoint, include_permissions=False
+                )
+            )
 
     def test_single_page_drive_completes_in_one_cycle(
         self, monkeypatch: pytest.MonkeyPatch
@@ -315,7 +481,7 @@ class TestDeltaPerPageCheckpointing:
         ) -> tuple[list[DriveItemData], str | None]:
             return [_make_item("only")], None
 
-        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
+        _patch_delta_fetch(monkeypatch, fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint()
         gen = connector._load_from_checkpoint(
@@ -324,8 +490,7 @@ class TestDeltaPerPageCheckpointing:
         yielded, final_cp = _consume_generator(gen)
 
         assert len(_docs_from(yielded)) == 1
-        assert final_cp.current_drive_name is None
-        assert final_cp.current_drive_id is None
+        assert final_cp.current_drive is None
         assert final_cp.current_drive_delta_next_link is None
 
 
@@ -343,6 +508,7 @@ class TestBfsPathNoCheckpointing:
             client: Any,  # noqa: ARG001
             drive_id: str,  # noqa: ARG001
             folder_path: str | None = None,  # noqa: ARG001
+            folder_id: str | None = None,  # noqa: ARG001
             start: datetime | None = None,  # noqa: ARG001
             end: datetime | None = None,  # noqa: ARG001
             page_size: int = 200,  # noqa: ARG001
@@ -358,63 +524,140 @@ class TestBfsPathNoCheckpointing:
         yielded, final_cp = _consume_generator(gen)
 
         assert len(_docs_from(yielded)) == 3
-        assert final_cp.current_drive_name is None
-        assert final_cp.current_drive_id is None
+        assert final_cp.current_drive is None
         assert final_cp.current_drive_delta_next_link is None
+
+    def test_bfs_resume_uses_checkpointed_folder_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        connector = _setup_connector(monkeypatch)
+        _mock_convert(monkeypatch)
+        folder_ids: list[str | None] = []
+
+        def fake_iter_paged(
+            client: Any,  # noqa: ARG001
+            drive_id: str,  # noqa: ARG001
+            folder_id: str | None = None,
+            **_: Any,
+        ) -> Generator[DriveItemData, None, None]:
+            folder_ids.append(folder_id)
+            yield _make_item("resumed")
+
+        monkeypatch.setattr(sp_connector, "iter_drive_items_paged", fake_iter_paged)
+        monkeypatch.setattr(
+            sp_connector,
+            "resolve_drive_folder",
+            lambda *_args, **_kwargs: pytest.fail("folder path was resolved again"),
+        )
+        checkpoint = _build_ready_checkpoint(folder_path="Engineering/Docs")
+        assert checkpoint.cached_drives is not None
+        checkpoint.current_drive = checkpoint.cached_drives.popleft()
+        checkpoint.current_folder = DriveFolderReference(
+            id="saved-folder-id", web_url=f"{DRIVE_WEB_URL}/Engineering/Docs"
+        )
+
+        yielded, _ = _consume_generator(
+            connector._load_from_checkpoint(
+                _EPOCH_START, _END_TS, checkpoint, include_permissions=False
+            )
+        )
+
+        assert [doc.id for doc in _docs_from(yielded)] == ["resumed"]
+        assert folder_ids == ["saved-folder-id"]
 
 
 class TestDelta410GoneResync:
-    """On 410 Gone the checkpoint should be updated with a full-resync URL
-    and the next cycle should re-enumerate from scratch."""
+    """A drive can enter full resync at most once."""
 
-    def test_410_stores_full_resync_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_resync_bound_survives_resume_and_repeated_410_progresses(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         connector = _setup_connector(monkeypatch)
         _mock_convert(monkeypatch)
 
-        call_count = 0
-
         def fake_fetch_page(
-            client: Any,  # noqa: ARG001
+            _client: Any,
+            *,
             page_url: str,  # noqa: ARG001
             drive_id: str,
-            start: datetime | None = None,  # noqa: ARG001
-            end: datetime | None = None,  # noqa: ARG001
             page_size: int = 200,
-        ) -> tuple[list[DriveItemData], str | None]:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                # Simulate the 410 handler returning a full-resync URL
-                full_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/delta?$top={page_size}"
-                return [], full_url
-            return [_make_item("recovered")], None
+            allow_full_resync: bool,
+            **_kwargs: Any,
+        ) -> DriveDeltaFetchResult:
+            allow_attempts.append(allow_full_resync)
+            full_url = (
+                f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/delta"
+                f"?$top={page_size}"
+            )
+            if len(allow_attempts) <= 2:
+                return _delta_result([], full_url, resync_after_410=True)
+            if len(allow_attempts) == 3:
+                return _delta_result([_make_item("recovered")], f"{full_url}&page=2")
+            if len(allow_attempts) == 4:
+                response = requests.Response()
+                response.status_code = 410
+                raise requests.HTTPError(response=response)
+            return _delta_result([], None)
 
-        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
-
-        checkpoint = _build_ready_checkpoint()
-
-        # Call 1: 3a inits, 3b gets empty page + resync URL
-        gen = connector._load_from_checkpoint(
-            _START_TS, _END_TS, checkpoint, include_permissions=False
+        allow_attempts: list[bool] = []
+        monkeypatch.setattr(
+            sp_connector,
+            "fetch_drive_delta_checkpoint_page",
+            fake_fetch_page,
         )
-        yielded, checkpoint = _consume_generator(gen)
-        assert len(_docs_from(yielded)) == 0
+        checkpoint = _build_ready_checkpoint(["Documents", "Second"])
+        stale_checkpoint_json = checkpoint.model_dump_json()
+
+        _, checkpoint = _consume_generator(
+            connector._load_from_checkpoint(
+                _START_TS, _END_TS, checkpoint, include_permissions=False
+            )
+        )
+        assert checkpoint.current_drive_delta_resync_attempted
         assert checkpoint.current_drive_delta_next_link is not None
         assert "token=" not in checkpoint.current_drive_delta_next_link
 
-        # Call 2: processes the full resync
-        gen = connector._load_from_checkpoint(
-            _START_TS, _END_TS, checkpoint, include_permissions=False
+        stale_checkpoint = SharepointConnectorCheckpoint.model_validate_json(
+            stale_checkpoint_json
         )
-        yielded, checkpoint = _consume_generator(gen)
-        docs = _docs_from(yielded)
-        assert len(docs) == 1
-        assert docs[0].id == "recovered"
-        assert checkpoint.current_drive_name is None
+        _, stale_checkpoint = _consume_generator(
+            connector._load_from_checkpoint(
+                _START_TS, _END_TS, stale_checkpoint, include_permissions=False
+            )
+        )
+        assert stale_checkpoint.current_drive_delta_resync_attempted
+
+        checkpoint = SharepointConnectorCheckpoint.model_validate_json(
+            checkpoint.model_dump_json()
+        )
+        yielded, checkpoint = _consume_generator(
+            connector._load_from_checkpoint(
+                _START_TS, _END_TS, checkpoint, include_permissions=False
+            )
+        )
+        assert [document.id for document in _docs_from(yielded)] == ["recovered"]
+        assert checkpoint.current_drive_delta_resync_attempted
+
+        yielded, checkpoint = _consume_generator(
+            connector._load_from_checkpoint(
+                _START_TS, _END_TS, checkpoint, include_permissions=False
+            )
+        )
+        assert len(_failures_from(yielded)) == 1
+        assert checkpoint.current_drive is None
+        assert not checkpoint.current_drive_delta_resync_attempted
+
+        _, checkpoint = _consume_generator(
+            connector._load_from_checkpoint(
+                _START_TS, _END_TS, checkpoint, include_permissions=False
+            )
+        )
+        assert checkpoint.current_drive is None
+        assert allow_attempts == [True, True, False, False, True]
 
 
 class TestDeltaPageFetchFailure:
-    """If fetch_one_delta_page raises, the drive should be abandoned with a
+    """If a delta page fetch fails, the drive should be abandoned with a
     ConnectorFailure and the checkpoint should be cleared for the next drive."""
 
     def test_page_fetch_error_yields_failure_and_clears_state(
@@ -433,7 +676,7 @@ class TestDeltaPageFetchFailure:
         ) -> tuple[list[DriveItemData], str | None]:
             raise RuntimeError("network blip")
 
-        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
+        _patch_delta_fetch(monkeypatch, fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint()
         gen = connector._load_from_checkpoint(
@@ -444,8 +687,7 @@ class TestDeltaPageFetchFailure:
         failures = _failures_from(yielded)
         assert len(failures) == 1
         assert "network blip" in failures[0].failure_message
-        assert final_cp.current_drive_name is None
-        assert final_cp.current_drive_id is None
+        assert final_cp.current_drive is None
         assert final_cp.current_drive_delta_next_link is None
 
 
@@ -478,7 +720,7 @@ class TestDeltaDuplicateDocumentDedup:
                 return [_make_item("a"), _make_item("dup")], "https://next2"
             return [_make_item("dup"), _make_item("b")], None
 
-        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
+        _patch_delta_fetch(monkeypatch, fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint()
 
@@ -517,7 +759,7 @@ class TestDeltaDuplicateDocumentDedup:
         ) -> tuple[list[DriveItemData], str | None]:
             return [_make_item("x"), _make_item("x"), _make_item("y")], None
 
-        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
+        _patch_delta_fetch(monkeypatch, fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint()
         gen = connector._load_from_checkpoint(
@@ -551,7 +793,7 @@ class TestDeltaDuplicateDocumentDedup:
                 return [_make_item("a")], "https://next2"
             return [_make_item("a"), _make_item("b")], None
 
-        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
+        _patch_delta_fetch(monkeypatch, fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint()
 
@@ -571,7 +813,7 @@ class TestDeltaDuplicateDocumentDedup:
         # Page 2 with restored checkpoint: 'a' should be skipped
         connector2 = _setup_connector(monkeypatch)
         _mock_convert(monkeypatch)
-        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
+        _patch_delta_fetch(monkeypatch, fake_fetch_page)
 
         gen = connector2._load_from_checkpoint(
             _START_TS, _END_TS, restored, include_permissions=False
@@ -598,7 +840,7 @@ class TestDeltaDuplicateDocumentDedup:
         ) -> tuple[list[DriveItemData], str | None]:
             return [_make_item("a")], None
 
-        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
+        _patch_delta_fetch(monkeypatch, fake_fetch_page)
 
         # First run
         cp1 = _build_ready_checkpoint()
@@ -636,7 +878,7 @@ class TestDeltaDuplicateDocumentDedup:
         ) -> tuple[list[DriveItemData], str | None]:
             return [_make_item("shared-id")], None
 
-        monkeypatch.setattr(sp_connector, "fetch_one_delta_page", fake_fetch_page)
+        _patch_delta_fetch(monkeypatch, fake_fetch_page)
 
         checkpoint = _build_ready_checkpoint(drive_names=["DriveA", "DriveB"])
 

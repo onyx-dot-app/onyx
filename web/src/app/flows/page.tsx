@@ -60,8 +60,9 @@ export default function FlowsListPage() {
         icon={SvgZap}
         title={t("title")}
         description={t("description")}
-        rightChildren={
+        actions={[
           <Button
+            key="create"
             variant="default"
             prominence="primary"
             icon={SvgPlus}
@@ -69,8 +70,8 @@ export default function FlowsListPage() {
             onClick={handleCreate}
           >
             {t("actions.create")}
-          </Button>
-        }
+          </Button>,
+        ]}
       />
       <SettingsLayouts.Body>
         {isLoading ? <PageLoader /> : null}

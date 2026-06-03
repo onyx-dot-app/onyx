@@ -109,6 +109,7 @@ type PRInfo struct {
 	Title          string `json:"title"`
 	Body           string `json:"body"`
 	HeadRefName    string `json:"headRefName"`
+	HeadRefOid     string `json:"headRefOid"`
 	HeadRepository struct {
 		Name string `json:"name"`
 	} `json:"headRepository"`
@@ -293,7 +294,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 		if existingPRURL != "" {
 			action = "Update existing CI branch"
 		}
-		if !prompt.Confirm(fmt.Sprintf("%s for PR #%s? (yes/no): ", action, prNumber)) {
+		if !prompt.Confirm(fmt.Sprintf("%s for PR #%s (%s:%s @ %s)? (yes/no): ", action, prNumber, forkRepo, prInfo.HeadRefName, prInfo.HeadRefOid)) {
 			log.Info("Exiting...")
 			return nil
 		}
@@ -309,7 +310,15 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 		return fatalErrorf("Failed to fetch fork branch: %w", err)
 	}
 
-	// Create or update the CI branch from FETCH_HEAD
+	fetchedSHA, err := git.ResolveCommit("FETCH_HEAD")
+	if err != nil {
+		return fatalErrorf("Failed to resolve FETCH_HEAD: %w", err)
+	}
+	if fetchedSHA != prInfo.HeadRefOid {
+		return fatalErrorf("Fork branch moved since PR #%s was read: fetched %s, expected %s. Re-run to review the new head", prNumber, fetchedSHA, prInfo.HeadRefOid)
+	}
+
+	// Create or update the CI branch from the confirmed commit
 	if originalBranch == ciBranch {
 		// Already on the CI branch - stash any uncommitted changes before resetting
 		stashResult, err := git.StashChanges()
@@ -317,7 +326,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 			return fatalErrorf("Failed to stash changes: %w", err)
 		}
 		log.Infof("Already on %s, resetting to fork's HEAD", ciBranch)
-		if err := git.RunCommand("reset", "--hard", "FETCH_HEAD"); err != nil {
+		if err := git.RunCommand("reset", "--hard", fetchedSHA); err != nil {
 			return fatalErrorf("Failed to reset branch to fork's HEAD: %w", err)
 		}
 		git.RestoreStash(stashResult)
@@ -330,7 +339,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 			}
 		}
 		log.Infof("Creating CI branch: %s", ciBranch)
-		if err := git.RunCommand("checkout", "--quiet", "-b", ciBranch, "FETCH_HEAD"); err != nil {
+		if err := git.RunCommand("checkout", "--quiet", "-b", ciBranch, fetchedSHA); err != nil {
 			return fatalErrorf("Failed to create CI branch: %w", err)
 		}
 	}
@@ -360,13 +369,22 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 	} else {
 		pushArgs = append(pushArgs, "-f")
 	}
-	pushArgs = append(pushArgs, "--quiet", "-u", "origin", ciBranch)
+	pushArgs = append(pushArgs, "--quiet", "origin", fetchedSHA+":refs/heads/"+ciBranch)
 	if err := pushWithHookHint(opts.NoVerify, func() error { return git.RunCommand(pushArgs...) }); err != nil {
 		// Switch back to original branch before exiting
 		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
 			log.Warnf("Failed to switch back to original branch: %v", switchErr)
 		}
 		return fatalErrorf("Failed to push CI branch: %w", err)
+	}
+
+	for _, setting := range [][2]string{{"remote", "origin"}, {"merge", "refs/heads/" + ciBranch}} {
+		if err := git.RunCommand("config", "branch."+ciBranch+"."+setting[0], setting[1]); err != nil {
+			if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
+				log.Warnf("Failed to switch back to original branch: %v", switchErr)
+			}
+			return fatalErrorf("Failed to set CI branch upstream %s: %w", setting[0], err)
+		}
 	}
 
 	if existingPRURL != "" {
@@ -409,7 +427,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 // getPRInfo fetches PR information using the GitHub CLI
 func getPRInfo(prNumber string) (*PRInfo, error) {
 	cmd := exec.Command("gh", "pr", "view", prNumber,
-		"--json", "number,title,body,headRefName,headRepository,headRepositoryOwner,baseRefName,isCrossRepository")
+		"--json", "number,title,body,headRefName,headRefOid,headRepository,headRepositoryOwner,baseRefName,isCrossRepository")
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

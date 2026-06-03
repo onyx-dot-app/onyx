@@ -221,7 +221,11 @@ export interface IconProps extends SVGProps<SVGSVGElement> {
 }
 
 /** Strips `className` and `style` from a props type to enforce design-system styling. */
-export type WithoutStyles<T> = Omit<T, "className" | "style">;
+// Distributive so a union prop type keeps its arms (identical to plain Omit
+// for non-union types) — e.g. the selects' mode/options pairing survives.
+export type WithoutStyles<T> = T extends unknown
+  ? Omit<T, "className" | "style">
+  : never;
 
 // ---------------------------------------------------------------------------
 // Rich Strings

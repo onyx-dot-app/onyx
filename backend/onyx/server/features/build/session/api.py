@@ -23,6 +23,7 @@ from onyx.db.models import BuildMessage, Sandbox, User
 from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.serving import build_content_disposition
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
 from onyx.server.features.build.db.build_session import (
@@ -584,24 +585,11 @@ def download_artifact(
 
     content, mime_type, filename = result
 
-    # Handle Unicode filenames in Content-Disposition header
-    # HTTP headers require Latin-1 encoding, so we use RFC 5987 for Unicode
-    try:
-        # Try Latin-1 encoding first (ASCII-compatible filenames)
-        filename.encode("latin-1")
-        content_disposition = f'attachment; filename="{filename}"'
-    except UnicodeEncodeError:
-        # Use RFC 5987 encoding for Unicode filenames
-        from urllib.parse import quote
-
-        encoded_filename = quote(filename, safe="")
-        content_disposition = f"attachment; filename*=UTF-8''{encoded_filename}"
-
     return Response(
         content=content,
         media_type=mime_type,
         headers={
-            "Content-Disposition": content_disposition,
+            "Content-Disposition": build_content_disposition("attachment", filename),
         },
     )
 
@@ -632,19 +620,12 @@ def export_docx(
 
     docx_bytes, filename = result
 
-    try:
-        filename.encode("latin-1")
-        content_disposition = f'attachment; filename="{filename}"'
-    except UnicodeEncodeError:
-        from urllib.parse import quote
-
-        encoded_filename = quote(filename, safe="")
-        content_disposition = f"attachment; filename*=UTF-8''{encoded_filename}"
-
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": content_disposition},
+        headers={
+            "Content-Disposition": build_content_disposition("attachment", filename)
+        },
     )
 
 
@@ -722,7 +703,7 @@ def download_webapp(
         content=zip_bytes,
         media_type="application/zip",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": build_content_disposition("attachment", filename),
         },
     )
 
@@ -759,7 +740,7 @@ def download_directory(
         content=zip_bytes,
         media_type="application/zip",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": build_content_disposition("attachment", filename),
         },
     )
 

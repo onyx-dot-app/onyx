@@ -20,6 +20,7 @@ from onyx.flows.expressions import ExpressionError, RunContext, render_text
 from onyx.flows.models import AiNode, AiOutputField
 from onyx.flows.nodes.base import NodeExecutionError, NodeOutcome, NodeRuntime
 from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.multi_llm import LLMTimeoutError
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import parse_llm_json_response
 
@@ -85,8 +86,13 @@ def _ask(node: AiNode, runtime: NodeRuntime, prompt: str) -> str:
         response = runtime.llm().invoke(
             prompt=UserMessage(content=prompt),
             reasoning_effort=ReasoningEffort.OFF,
-            timeout_override=int(node.timeout_seconds),
+            total_timeout_s=node.timeout_seconds,
         )
+    except LLMTimeoutError as exc:
+        raise NodeExecutionError(
+            FlowErrorClass.TIMEOUT,
+            f"model did not answer within {node.timeout_seconds:g}s",
+        ) from exc
     except Exception as exc:
         raise NodeExecutionError(
             FlowErrorClass.LLM_ERROR, f"{type(exc).__name__}: {exc}"

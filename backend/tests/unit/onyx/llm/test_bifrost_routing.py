@@ -23,7 +23,6 @@ def _make_bifrost_llm(
     custom_config = {BIFROST_API_MODE_CONFIG_KEY: mode} if mode is not None else None
     return LitellmLLM(
         api_key="bf-test-key",
-        timeout=30,
         model_provider=LlmProviderNames.BIFROST,
         model_name=model_name,
         max_input_tokens=128_000,

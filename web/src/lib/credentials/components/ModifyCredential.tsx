@@ -5,11 +5,11 @@ import Text from "@/refresh-components/texts/Text";
 import { Badge } from "@/components/ui/badge";
 import { AccessType } from "@/lib/types";
 import { SvgEdit } from "@opal/icons";
-import {
+import type {
   ConfluenceCredentialJson,
   Credential,
-} from "@/lib/connectors/credentials";
-import { Connector } from "@/lib/connectors/connectors";
+} from "@/lib/connectors/types";
+import type { Connector } from "@/lib/connectors/types";
 import {
   SvgArrowExchange,
   SvgAlertTriangle,

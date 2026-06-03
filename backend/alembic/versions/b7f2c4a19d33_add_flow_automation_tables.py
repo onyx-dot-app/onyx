@@ -1,7 +1,7 @@
 """Add flow automation tables
 
 Revision ID: b7f2c4a19d33
-Revises: ad99acb9be41
+Revises: ac05f4a21dbd
 Create Date: 2026-06-03 10:14:52.118374
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "b7f2c4a19d33"
-down_revision = "ad99acb9be41"
+down_revision = "ac05f4a21dbd"
 branch_labels = None
 depends_on = None
 

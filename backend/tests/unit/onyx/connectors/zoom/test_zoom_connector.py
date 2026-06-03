@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import Permission
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialInvalidError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
@@ -20,7 +25,7 @@ from onyx.connectors.models import (
     HierarchyNode,
     InputType,
 )
-from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.client import ZoomClient, ZoomNotEntitledError
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
 from onyx.connectors.zoom.models import (
     ZoomRecordingEntry,
@@ -42,13 +47,8 @@ from onyx.connectors.zoom.recordings.models import (
 )
 from onyx.db.enums import AccessType
 from onyx.db.models import User
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import connector as connector_router
-from onyx.server.documents.connector import (
-    create_connector_from_model,
-    create_connector_with_mock_credential,
-)
+from onyx.server.documents.connector import create_connector_from_model
 from onyx.server.documents.models import (
     ConnectorBase,
     ConnectorUpdateRequest,
@@ -59,9 +59,14 @@ from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector,
     load_everything_from_checkpoint_connector_from_checkpoint,
 )
-from tests.unit.onyx.connectors.zoom.helpers import SAMPLE_VTT, mock_zoom_client
+from tests.unit.onyx.connectors.zoom.helpers import (
+    SAMPLE_VTT,
+    http_error,
+    mock_zoom_client,
+)
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     invitee,
+    occurrence,
     participant,
     past_meeting_details,
     recording_entry,
@@ -124,7 +129,7 @@ def _configure_happy_path(mock_client: MagicMock) -> None:
             ZoomSessionOccurrence(uuid=f"uuid-{session_id}", start_time=_days_ago(7))
         ]
     )
-    mock_client.get_meeting_transcript.side_effect = lambda uuid: transcript(
+    mock_client.get_transcript.side_effect = lambda uuid: transcript(
         download_url=f"https://zoom.example/{uuid}.vtt",
         meeting_topic="Recorded Session",
     )
@@ -143,8 +148,8 @@ def _configure_happy_path(mock_client: MagicMock) -> None:
 def _transcript_without_a_topic(mock_client: MagicMock) -> None:
     """Zoom names the session in the transcript response, so the details
     endpoints are only reached when it doesn't."""
-    mock_client.get_meeting_transcript.side_effect = lambda uuid: transcript(
-        download_url=f"https://zoom.example/{uuid}.vtt", meeting_topic=""
+    mock_client.get_transcript.side_effect = lambda uuid: transcript(
+        download_url=f"https://zoom.example/{uuid}.vtt"
     )
 
 
@@ -215,14 +220,12 @@ class TestPruningDrivesTheConnectorFromTheEpoch:
         assert [d.id for d in documents] == ["ZOOM_MEETING_uuid-111"]
 
 
-class TestIndexingStartIsRequiredAtConfigTime:
-    """Enforced where the connector cannot: the class above is why a start date
-    cannot be demanded at index time. These drive the endpoints an admin posts to
-    rather than the check itself, which an endpoint could quietly stop calling.
+class TestIndexingStartAtConfigTime:
+    """These drive the endpoints an admin posts to rather than any check itself,
+    so an endpoint that quietly stops forwarding the date is still caught.
     """
 
     _START = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    _ENDPOINTS = [create_connector_from_model, create_connector_with_mock_credential]
 
     @staticmethod
     def _admin() -> User:
@@ -266,16 +269,13 @@ class TestIndexingStartIsRequiredAtConfigTime:
             db_session=cast(Session, MagicMock(spec=Session)),
         )
 
-    @pytest.mark.parametrize("endpoint", _ENDPOINTS, ids=["connector", "mock-cred"])
-    def test_zoom_without_a_start_date_never_reaches_the_row(
-        self, endpoint: Callable[..., Any]
-    ) -> None:
+    def test_zoom_creates_without_a_start_date(self) -> None:
+        """Zoom used to be refused here. The crawl now floors itself at Zoom's
+        launch instead, so a missing date costs calls rather than the connector."""
         with self._rows_written() as written:
-            with pytest.raises(OnyxError) as raised:
-                self._post(endpoint)
+            self._post(create_connector_from_model)
 
-        assert raised.value.error_code is OnyxErrorCode.INVALID_INPUT
-        assert written == []
+        assert [row.indexing_start for row in written] == [None]
 
     # Only the plain endpoint: the mock-credential one carries on into credential
     # creation and a Celery dispatch that a stubbed session cannot answer for.
@@ -287,11 +287,18 @@ class TestIndexingStartIsRequiredAtConfigTime:
 
         assert [row.indexing_start for row in written] == [self._START]
 
-    def test_another_source_still_creates_without_one(self) -> None:
+    def test_another_source_also_creates_without_one(self) -> None:
         with self._rows_written() as written:
             self._post(create_connector_from_model, source=DocumentSource.CONFLUENCE)
 
         assert [row.indexing_start for row in written] == [None]
+
+
+def _with_client(**config: Any) -> tuple[ZoomConnector, MagicMock]:
+    connector = ZoomConnector(**config)
+    client = mock_zoom_client()
+    connector.client = client
+    return connector, client
 
 
 class TestZoomConnectorValidateSettings:
@@ -301,19 +308,19 @@ class TestZoomConnectorValidateSettings:
             connector.validate_connector_settings()
 
     def test_configured_meeting_ids_accepted(self) -> None:
-        connector = ZoomConnector(meeting_ids=["111"])
+        connector, _ = _with_client(meeting_ids=["111"])
         connector.validate_connector_settings()
 
     def test_webinar_ids_alone_are_a_discovery_mechanism(self) -> None:
-        connector = ZoomConnector(webinar_ids=["222"])
+        connector, _ = _with_client(webinar_ids=["222"])
         connector.validate_connector_settings()
 
     def test_host_emails_alone_are_a_discovery_mechanism(self) -> None:
-        connector = ZoomConnector(host_emails=["host@example.com"])
+        connector, _ = _with_client(host_emails=["host@example.com"])
         connector.validate_connector_settings()
 
     def test_a_group_alone_is_a_discovery_mechanism(self) -> None:
-        connector = ZoomConnector(group_id="group-1")
+        connector, _ = _with_client(group_id="group-1")
         connector.validate_connector_settings()
 
     def test_all_three_mechanisms_empty_is_rejected(self) -> None:
@@ -358,6 +365,255 @@ class TestZoomConnectorValidateSettings:
         connector = ZoomConnector(meeting_ids=["111"], plan_tier=plan)
         with pytest.raises(ConnectorValidationError):
             connector.validate_connector_settings()
+
+    def test_validation_without_credentials_is_refused(self) -> None:
+        connector = ZoomConnector(meeting_ids=["111"])
+        with pytest.raises(ConnectorMissingCredentialError):
+            connector.validate_connector_settings()
+
+    def test_a_blank_form_is_rejected_before_zoom_is_called(self) -> None:
+        connector, client = _with_client(meeting_ids=[])
+        with pytest.raises(ConnectorValidationError):
+            connector.validate_connector_settings()
+        client.check_credentials.assert_not_called()
+
+    def test_a_wrong_secret_is_rejected_at_setup(self) -> None:
+        connector, client = _with_client(meeting_ids=["111"])
+        client.check_credentials.side_effect = CredentialInvalidError("refused")
+
+        with pytest.raises(CredentialInvalidError):
+            connector.validate_connector_settings()
+
+        client.list_past_meeting_occurrences.assert_not_called()
+
+    def test_a_missing_scope_is_rejected_at_setup(self) -> None:
+        connector, client = _with_client(meeting_ids=["111"])
+        client.list_past_meeting_occurrences.side_effect = InsufficientPermissionsError(
+            "Zoom denied access (pastMeetings)"
+        )
+
+        with pytest.raises(InsufficientPermissionsError) as exc:
+            connector.validate_connector_settings()
+
+        assert "pastMeetings" in str(exc.value)
+
+    def test_a_missing_webinar_add_on_is_rejected_at_setup(self) -> None:
+        connector, client = _with_client(webinar_ids=["222"])
+        client.list_past_webinar_occurrences.side_effect = ZoomNotEntitledError(
+            "Webinars need the Webinar add-on"
+        )
+
+        with pytest.raises(ZoomNotEntitledError) as exc:
+            connector.validate_connector_settings()
+
+        assert "add-on" in str(exc.value)
+
+    def test_an_id_pasted_with_spaces_is_probed_without_them(self) -> None:
+        connector, client = _with_client(webinar_ids=["857 9609 3688"])
+        client.list_past_webinar_occurrences.return_value = []
+
+        connector.validate_connector_settings()
+
+        client.list_past_webinar_occurrences.assert_called_once_with("85796093688")
+
+    def test_a_malformed_meeting_id_is_rejected_at_setup(self) -> None:
+        # Zoom answers a non-numeric id with a 400, not a 404.
+        connector, client = _with_client(meeting_ids=["not-a-meeting"])
+        client.list_past_meeting_occurrences.side_effect = http_error(400, 300)
+
+        with pytest.raises(ConnectorValidationError) as exc:
+            connector.validate_connector_settings()
+
+        assert "not-a-meeting" in str(exc.value)
+
+    def test_a_missing_directory_scope_is_rejected_at_setup(self) -> None:
+        connector, client = _with_client(host_emails=["host@example.com"])
+        client.list_users.side_effect = InsufficientPermissionsError(
+            "Zoom denied the account's users: does not contain scopes"
+        )
+
+        with pytest.raises(InsufficientPermissionsError):
+            connector.validate_connector_settings()
+
+    def test_the_recordings_scope_is_probed_with_a_directory_user(self) -> None:
+        connector, client = _with_client(host_emails=["host@example.com"])
+        client.list_users.return_value = ZoomUserPage(users=[user(id="u1")])
+
+        connector.validate_connector_settings()
+
+        client.list_user_recordings.assert_called_once()
+        assert client.list_user_recordings.call_args.args[0] == "u1"
+
+    def test_the_recordings_scope_is_probed_with_a_group_member(self) -> None:
+        connector, client = _with_client(group_id="group-1")
+        client.list_group_members.return_value = ZoomUserPage(
+            users=[user(id="member-1")]
+        )
+
+        connector.validate_connector_settings()
+
+        assert client.list_user_recordings.call_args.args[0] == "member-1"
+
+    def test_the_recordings_scope_is_not_probed_for_id_scoping(self) -> None:
+        connector, client = _with_client(meeting_ids=["111"])
+        client.list_past_meeting_occurrences.return_value = []
+
+        connector.validate_connector_settings()
+
+        client.list_user_recordings.assert_not_called()
+        client.get_transcript.assert_not_called()
+
+    def test_the_transcript_scope_is_probed_on_the_first_occurrence(self) -> None:
+        connector, client = _with_client(meeting_ids=["111"])
+        client.list_past_meeting_occurrences.return_value = [
+            occurrence(uuid="occ-1"),
+            occurrence(uuid="occ-2"),
+        ]
+
+        connector.validate_connector_settings()
+
+        client.get_transcript.assert_called_once_with("occ-1")
+
+    def test_the_transcript_scope_is_probed_on_the_first_recording(self) -> None:
+        connector, client = _with_client(host_emails=["host@example.com"])
+        client.list_users.return_value = ZoomUserPage(users=[user(id="u1")])
+        client.list_user_recordings.return_value = ZoomRecordingPage(
+            recordings=[recording_entry(uuid="rec-1")]
+        )
+
+        connector.validate_connector_settings()
+
+        client.get_transcript.assert_called_once_with("rec-1")
+
+    def test_a_recorded_session_is_preferred_over_a_bare_occurrence(self) -> None:
+        # An occurrence may have no recording, and then the transcript endpoint
+        # answers 404 and never reveals whether the scope is granted. A
+        # recordings listing only returns sessions that have one.
+        connector, client = _with_client(
+            meeting_ids=["111"], host_emails=["host@example.com"]
+        )
+        client.list_past_meeting_occurrences.return_value = [occurrence(uuid="occ-1")]
+        client.list_users.return_value = ZoomUserPage(users=[user(id="u1")])
+        client.list_user_recordings.return_value = ZoomRecordingPage(
+            recordings=[recording_entry(uuid="rec-1")]
+        )
+
+        connector.validate_connector_settings()
+
+        client.get_transcript.assert_called_once_with("rec-1")
+
+    def test_the_recording_sample_asks_for_zooms_widest_window(self) -> None:
+        # A single day is usually empty, and an empty sample leaves the
+        # transcript scope unprobed.
+        connector, client = _with_client(host_emails=["host@example.com"])
+        client.list_users.return_value = ZoomUserPage(users=[user(id="u1")])
+        client.list_user_recordings.return_value = ZoomRecordingPage(recordings=[])
+
+        connector.validate_connector_settings()
+
+        _, start, end = client.list_user_recordings.call_args.args
+        assert (end - start).days == 30
+
+    def test_a_sample_session_without_a_recording_still_passes(self) -> None:
+        connector, client = _with_client(meeting_ids=["111"])
+        client.list_past_meeting_occurrences.return_value = [occurrence()]
+        client.get_transcript.side_effect = http_error(404)
+
+        connector.validate_connector_settings()
+
+    def test_a_missing_recording_scope_is_rejected_at_setup(self) -> None:
+        connector, client = _with_client(meeting_ids=["111"])
+        client.list_past_meeting_occurrences.return_value = [occurrence()]
+        client.get_transcript.side_effect = InsufficientPermissionsError(
+            "does not contain scopes:[cloud_recording:read:list_recording_files:admin]"
+        )
+
+        with pytest.raises(InsufficientPermissionsError):
+            connector.validate_connector_settings()
+
+    def test_an_unknown_meeting_id_does_not_pause_the_connector(self) -> None:
+        # validate_connector_settings runs before every indexing attempt and a
+        # ConnectorValidationError pauses the cc_pair, so one meeting that Zoom
+        # has deleted must not stop the other mechanisms from crawling.
+        # Discovery reports it as an indexing error instead.
+        connector, client = _with_client(meeting_ids=["111"])
+        client.list_past_meeting_occurrences.side_effect = http_error(404, 3001)
+
+        connector.validate_connector_settings()
+
+    @pytest.mark.parametrize("code", [12702, 3001], ids=["too-old", "not-found"])
+    def test_a_gone_meeting_reported_under_a_400_does_not_pause_either(
+        self, code: int
+    ) -> None:
+        # Zoom says a session is gone with a 404 on some endpoints and with its
+        # own code under a 400 on others. A meeting ages past a year on its own,
+        # so this one arrives without anyone touching the connector.
+        connector, client = _with_client(meeting_ids=["111"])
+        client.list_past_meeting_occurrences.side_effect = http_error(400, code)
+
+        connector.validate_connector_settings()
+
+    def test_the_webinar_add_on_is_probed_even_when_a_meeting_gave_a_sample(
+        self,
+    ) -> None:
+        connector, client = _with_client(meeting_ids=["111"], webinar_ids=["222"])
+        client.list_past_meeting_occurrences.return_value = [occurrence(uuid="occ-1")]
+
+        connector.validate_connector_settings()
+
+        client.list_past_webinar_occurrences.assert_called_once_with("222")
+
+    def test_an_unknown_group_does_not_pause_the_connector(self) -> None:
+        connector, client = _with_client(group_id="group-1")
+        client.list_group_members.side_effect = http_error(404)
+
+        connector.validate_connector_settings()
+
+    @pytest.mark.parametrize(
+        "failure",
+        [http_error(503), http_error(429), requests.ConnectionError("down")],
+    )
+    def test_a_zoom_outage_at_setup_is_not_read_as_bad_settings(
+        self, failure: Exception
+    ) -> None:
+        connector, client = _with_client(meeting_ids=["111"])
+        client.list_past_meeting_occurrences.side_effect = failure
+
+        with pytest.raises(UnexpectedValidationError):
+            connector.validate_connector_settings()
+
+    def test_each_configured_mechanism_is_probed_once_on_its_first_value(
+        self,
+    ) -> None:
+        connector, client = _with_client(
+            meeting_ids=["111", "112"],
+            webinar_ids=["222", "223"],
+            host_emails=["a@example.com", "b@example.com"],
+            group_id="group-1",
+        )
+        client.list_users.return_value = ZoomUserPage(users=[user(id="u1")])
+        client.list_group_members.return_value = ZoomUserPage(
+            users=[user(id="member-1")]
+        )
+
+        connector.validate_connector_settings()
+
+        client.check_credentials.assert_called_once()
+        client.list_past_meeting_occurrences.assert_called_once()
+        assert client.list_past_meeting_occurrences.call_args.args[0] == "111"
+        client.list_past_webinar_occurrences.assert_called_once_with("222")
+        client.list_users.assert_called_once()
+        client.list_group_members.assert_called_once_with("group-1")
+        client.list_user_recordings.assert_called_once()
+
+    def test_only_configured_mechanisms_are_probed(self) -> None:
+        connector, client = _with_client(meeting_ids=["111"], host_emails=["  "])
+
+        connector.validate_connector_settings()
+
+        client.list_past_webinar_occurrences.assert_not_called()
+        client.list_users.assert_not_called()
+        client.list_group_members.assert_not_called()
 
 
 class TestZoomConnectorCheckpoint:
@@ -408,7 +664,7 @@ class TestZoomConnectorCheckpoint:
         # Assert on the occurrence UUID, not the meeting id: passing the bare
         # meeting id would silently index only the most recent occurrence.
         assert doc.id == "ZOOM_MEETING_uuid-111"
-        mock_client.get_meeting_transcript.assert_called_once_with("uuid-111")
+        mock_client.get_transcript.assert_called_once_with("uuid-111")
         # The transcript names the session, so the details endpoint — and the
         # one-year cap that comes with it — is never reached.
         assert doc.semantic_identifier == "Recorded Session"
@@ -462,7 +718,7 @@ class TestZoomConnectorCheckpoint:
                 raise RuntimeError("boom")
             return transcript(download_url=f"https://zoom.example/{uuid}.vtt")
 
-        mock_client.get_meeting_transcript.side_effect = _transcript
+        mock_client.get_transcript.side_effect = _transcript
 
         outputs = load_everything_from_checkpoint_connector(
             connector, _POLL_START, _FULL_HISTORY_END
@@ -519,7 +775,7 @@ class TestZoomConnectorCheckpoint:
         )
 
         assert all(output.items == [] for output in outputs)
-        mock_client.get_meeting_transcript.assert_not_called()
+        mock_client.get_transcript.assert_not_called()
         assert outputs[-1].next_checkpoint.has_more is False
 
     def test_discovery_failure_surfaces_as_connector_failure(self) -> None:
@@ -635,7 +891,7 @@ class TestSystemicFailureDoesNotAdvanceWork:
         connector, mock_client = _make_connector(meeting_ids=["111"])
         response = requests.Response()
         response.status_code = 429
-        mock_client.get_meeting_transcript.side_effect = requests.HTTPError(
+        mock_client.get_transcript.side_effect = requests.HTTPError(
             "429", response=response
         )
 
@@ -655,7 +911,7 @@ class TestSystemicFailureDoesNotAdvanceWork:
         connector, mock_client = _make_connector(meeting_ids=["111"])
         response = requests.Response()
         response.status_code = 400
-        mock_client.get_meeting_transcript.side_effect = requests.HTTPError(
+        mock_client.get_transcript.side_effect = requests.HTTPError(
             "400", response=response
         )
 
@@ -678,7 +934,7 @@ class TestSystemicFailureDoesNotAdvanceWork:
         connector, mock_client = _make_connector(meeting_ids=["111"])
         response = requests.Response()
         response.status_code = 404
-        mock_client.get_meeting_transcript.side_effect = requests.HTTPError(
+        mock_client.get_transcript.side_effect = requests.HTTPError(
             "404", response=response
         )
 
@@ -736,7 +992,7 @@ class TestSessionSourceTypes:
         mock_client.get_webinar_details.assert_not_called()
         # A webinar's transcript comes from the meeting endpoint; Zoom has no
         # webinar one.
-        mock_client.get_meeting_transcript.assert_called_once_with("uuid-222")
+        mock_client.get_transcript.assert_called_once_with("uuid-222")
         mock_client.list_past_meeting_occurrences.assert_not_called()
 
     def test_both_dispatches_each_id_to_its_own_endpoint(self) -> None:

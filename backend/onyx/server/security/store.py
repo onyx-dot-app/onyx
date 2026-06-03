@@ -102,6 +102,8 @@ def _build_env_defaults() -> SecuritySettings:
         # No env knob on purpose: incognito is off until an admin enables it.
         incognito_availability=IncognitoAvailability.OFF,
         incognito_record_mode=IncognitoRecordMode.USAGE_ONLY,
+        # No env knob on purpose: off until an admin opts in.
+        allow_connector_group_restrictions=False,
         ssrf_protection_level=_derive_ssrf_level_from_env(),
         mask_credential_prefix=_cfg.MASK_CREDENTIAL_PREFIX,
         llm_custom_config_env_injection=not MULTI_TENANT,

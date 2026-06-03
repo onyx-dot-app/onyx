@@ -66,8 +66,8 @@ const MAX_REPEAT_PASSES = 50;
 /**
  * The picker value for "this branch ends here".
  *
- * Radix Select refuses an empty string as an item value, and a node id can
- * never start with an underscore, so this cannot collide with a real step.
+ * An empty value means nothing is picked yet, and a node id can never start
+ * with an underscore, so this cannot collide with a real step.
  */
 const ENDS_HERE = "__end__";
 
@@ -269,20 +269,16 @@ export function NodeInspector({
       <InputVertical withLabel title={t("fields.onError")}>
         <InputSingleSelect
           value={node.on_error}
+          defaultOption="stop"
+          placeholder={t("fields.onError")}
+          options={[
+            { value: "stop", title: t("onError.stop") },
+            { value: "skip", title: t("onError.skip") },
+          ]}
           onValueChange={(value) =>
             onChange({ ...node, on_error: value === "skip" ? "skip" : "stop" })
           }
-        >
-          <InputSingleSelect.Trigger />
-          <InputSingleSelect.Content>
-            <InputSingleSelect.Item value="stop">
-              {t("onError.stop")}
-            </InputSingleSelect.Item>
-            <InputSingleSelect.Item value="skip">
-              {t("onError.skip")}
-            </InputSingleSelect.Item>
-          </InputSingleSelect.Content>
-        </InputSingleSelect>
+        />
       </InputVertical>
 
       <InputVertical
@@ -394,19 +390,16 @@ function HttpFields<T extends HttpNode | ParallelNode>({
       <InputVertical withLabel title={t("fields.method")}>
         <InputSingleSelect
           value={node.method}
+          defaultOption="GET"
+          placeholder={t("fields.method")}
+          options={HTTP_METHODS.map((method) => ({
+            value: method,
+            title: method,
+          }))}
           onValueChange={(value) =>
             onChange({ ...node, method: asHttpMethod(value) })
           }
-        >
-          <InputSingleSelect.Trigger />
-          <InputSingleSelect.Content>
-            {HTTP_METHODS.map((method) => (
-              <InputSingleSelect.Item key={method} value={method}>
-                {method}
-              </InputSingleSelect.Item>
-            ))}
-          </InputSingleSelect.Content>
-        </InputSingleSelect>
+        />
       </InputVertical>
 
       <InputVertical
@@ -636,20 +629,19 @@ function RepeatFields({
           // One place each pass starts. A body written against the API can
           // name several; choosing one here replaces them.
           value={node.body[0] ?? ""}
-          onValueChange={(picked) => onChange({ ...node, body: [picked] })}
-        >
-          <InputSingleSelect.Trigger
-            aria-label={t("fields.repeatBody")}
-            placeholder={t("placeholder.repeatBody")}
-          />
-          <InputSingleSelect.Content>
-            {bodyTargets.map((target) => (
-              <InputSingleSelect.Item key={target} value={target}>
-                {target}
-              </InputSingleSelect.Item>
-            ))}
-          </InputSingleSelect.Content>
-        </InputSingleSelect>
+          placeholder={t("placeholder.repeatBody")}
+          // The placeholder is a hint, so the field keeps its title as its
+          // name.
+          aria-label={t("fields.repeatBody")}
+          options={bodyTargets.map((target) => ({
+            value: target,
+            title: target,
+          }))}
+          // Picking the chosen step again clears it.
+          onValueChange={(picked) =>
+            onChange({ ...node, body: picked === "" ? [] : [picked] })
+          }
+        />
       </InputVertical>
 
       {node.body.length === 0 ? (
@@ -673,6 +665,12 @@ function RepeatFields({
       <InputVertical withLabel title={t("fields.operator")}>
         <InputSingleSelect
           value={node.operator}
+          defaultOption="eq"
+          placeholder={t("fields.operator")}
+          options={OPERATORS.map((operator) => ({
+            value: operator,
+            title: t(`operator.${operator}`),
+          }))}
           onValueChange={(raw) => {
             const operator = asOperator(raw);
             onChange({
@@ -683,16 +681,7 @@ function RepeatFields({
                 : (node.value ?? ""),
             });
           }}
-        >
-          <InputSingleSelect.Trigger />
-          <InputSingleSelect.Content>
-            {OPERATORS.map((operator) => (
-              <InputSingleSelect.Item key={operator} value={operator}>
-                {t(`operator.${operator}`)}
-              </InputSingleSelect.Item>
-            ))}
-          </InputSingleSelect.Content>
-        </InputSingleSelect>
+        />
       </InputVertical>
 
       {needsValue ? (
@@ -818,20 +807,14 @@ function BranchTargetSelect({
   return (
     <InputSingleSelect
       value={value[0] ?? ENDS_HERE}
+      defaultOption={ENDS_HERE}
+      placeholder={label}
+      options={[
+        { value: ENDS_HERE, title: t("fields.branchEnds") },
+        ...targets.map((target) => ({ value: target, title: target })),
+      ]}
       onValueChange={(picked) => onChange(picked === ENDS_HERE ? [] : [picked])}
-    >
-      <InputSingleSelect.Trigger aria-label={label} />
-      <InputSingleSelect.Content>
-        <InputSingleSelect.Item value={ENDS_HERE}>
-          {t("fields.branchEnds")}
-        </InputSingleSelect.Item>
-        {targets.map((target) => (
-          <InputSingleSelect.Item key={target} value={target}>
-            {target}
-          </InputSingleSelect.Item>
-        ))}
-      </InputSingleSelect.Content>
-    </InputSingleSelect>
+    />
   );
 }
 
@@ -873,6 +856,12 @@ function ConditionFields({ node, onChange }: FieldProps<ConditionNode>) {
       <InputVertical withLabel title={t("fields.operator")}>
         <InputSingleSelect
           value={node.operator}
+          defaultOption="eq"
+          placeholder={t("fields.operator")}
+          options={OPERATORS.map((operator) => ({
+            value: operator,
+            title: t(`operator.${operator}`),
+          }))}
           onValueChange={(value) => {
             const operator = asOperator(value);
             onChange({
@@ -885,16 +874,7 @@ function ConditionFields({ node, onChange }: FieldProps<ConditionNode>) {
                 : (node.right ?? ""),
             });
           }}
-        >
-          <InputSingleSelect.Trigger />
-          <InputSingleSelect.Content>
-            {OPERATORS.map((operator) => (
-              <InputSingleSelect.Item key={operator} value={operator}>
-                {t(`operator.${operator}`)}
-              </InputSingleSelect.Item>
-            ))}
-          </InputSingleSelect.Content>
-        </InputSingleSelect>
+        />
       </InputVertical>
 
       {needsRight ? (
@@ -1219,18 +1199,14 @@ function MergeFields({
       >
         <InputSingleSelect
           value={node.mode}
+          defaultOption="combine"
+          placeholder={t("fields.mergeMode")}
+          options={[
+            { value: "combine", title: t("mergeMode.combine") },
+            { value: "append", title: t("mergeMode.append") },
+          ]}
           onValueChange={(raw) => onChange({ ...node, mode: asMergeMode(raw) })}
-        >
-          <InputSingleSelect.Trigger />
-          <InputSingleSelect.Content>
-            <InputSingleSelect.Item value="combine">
-              {t("mergeMode.combine")}
-            </InputSingleSelect.Item>
-            <InputSingleSelect.Item value="append">
-              {t("mergeMode.append")}
-            </InputSingleSelect.Item>
-          </InputSingleSelect.Content>
-        </InputSingleSelect>
+        />
       </InputVertical>
     </>
   );
@@ -1303,6 +1279,12 @@ function FilterFields({ node, onChange }: FieldProps<FilterNode>) {
       <InputVertical withLabel title={t("fields.operator")}>
         <InputSingleSelect
           value={node.operator}
+          defaultOption="eq"
+          placeholder={t("fields.operator")}
+          options={OPERATORS.map((operator) => ({
+            value: operator,
+            title: t(`operator.${operator}`),
+          }))}
           onValueChange={(raw) => {
             const operator = asOperator(raw);
             onChange({
@@ -1313,16 +1295,7 @@ function FilterFields({ node, onChange }: FieldProps<FilterNode>) {
                 : (node.right ?? ""),
             });
           }}
-        >
-          <InputSingleSelect.Trigger />
-          <InputSingleSelect.Content>
-            {OPERATORS.map((operator) => (
-              <InputSingleSelect.Item key={operator} value={operator}>
-                {t(`operator.${operator}`)}
-              </InputSingleSelect.Item>
-            ))}
-          </InputSingleSelect.Content>
-        </InputSingleSelect>
+        />
       </InputVertical>
 
       {needsRight ? (
@@ -1384,6 +1357,12 @@ function RetryFields({ node, onChange }: FieldProps<RetryNode>) {
       <InputVertical withLabel title={t("fields.operator")}>
         <InputSingleSelect
           value={node.operator}
+          defaultOption="eq"
+          placeholder={t("fields.operator")}
+          options={OPERATORS.map((operator) => ({
+            value: operator,
+            title: t(`operator.${operator}`),
+          }))}
           onValueChange={(raw) => {
             const operator = asOperator(raw);
             onChange({
@@ -1394,16 +1373,7 @@ function RetryFields({ node, onChange }: FieldProps<RetryNode>) {
                 : (node.value ?? ""),
             });
           }}
-        >
-          <InputSingleSelect.Trigger />
-          <InputSingleSelect.Content>
-            {OPERATORS.map((operator) => (
-              <InputSingleSelect.Item key={operator} value={operator}>
-                {t(`operator.${operator}`)}
-              </InputSingleSelect.Item>
-            ))}
-          </InputSingleSelect.Content>
-        </InputSingleSelect>
+        />
       </InputVertical>
 
       {needsValue ? (
@@ -1544,6 +1514,7 @@ function stringifyPayload(payload: JsonValue): string {
 function parsePayload(raw: string): JsonValue {
   if (raw.trim() === "") return null;
   try {
+    // SAFETY: JSON.parse only ever builds JSON values.
     return JSON.parse(raw) as JsonValue;
   } catch {
     return raw;

@@ -3,7 +3,7 @@
 import { adminSearch } from "@/lib/searchFilters/svc";
 import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { InputCheckbox } from "@opal/components";
 import { updateHiddenStatus } from "../lib";
@@ -16,7 +16,7 @@ import { buildFilters } from "@/lib/searchFilters/utils";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
 import { DocumentSetSummary } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
-import { Connector } from "@/lib/connectors/connectors";
+import type { Connector } from "@/lib/connectors/types";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
 import { InputTypeIn } from "@opal/components";
 import SvgSimpleLoader from "@opal/icons/simple-loader";

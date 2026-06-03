@@ -287,11 +287,16 @@ def test_a_step_walks_one_page_and_the_checkpoint_resumes_on_the_next() -> None:
     assert checkpoint.has_more is False
 
 
-def test_members_are_read_once_per_channel_per_attempt() -> None:
-    """A long channel pays one members read, not one per page. The cache dies
-    with the connector, so a resumed attempt (a new connector) re-reads them."""
+def test_indexing_channels_reads_no_members() -> None:
+    """A thread names its channel's group, so a long channel and the one after
+    it pay no members read at all: naming the people is the group sync's work."""
     page_two = f"teams/{TEAM_ID}/channels/{CHANNEL.id}/messages/delta?$skiptoken=p2"
-    other = ChannelRef(team_id=TEAM_ID, id="19:other@thread.tacv2", display_name="B")
+    other = ChannelRef(
+        team_id=TEAM_ID,
+        id="19:other@thread.tacv2",
+        display_name="B",
+        membership_type="standard",
+    )
     other_members = f"teams/{TEAM_ID}/channels/{other.id}/allMembers"
     client = graph_client(
         {
@@ -313,20 +318,19 @@ def test_members_are_read_once_per_channel_per_attempt() -> None:
         _, checkpoint = step(teams_connector, checkpoint)
 
     requested = [call.args[0] for call in client.execute_request_direct.call_args_list]
-    assert requested.count(MEMBERS_URL) == 1
-    assert requested.count(other_members) == 1
-    assert teams_connector._channel_state == {}
-
-    step(connector(client), channel_checkpoint())
-    requested = [call.args[0] for call in client.execute_request_direct.call_args_list]
-    assert requested.count(MEMBERS_URL) == 2
+    assert MEMBERS_URL not in requested
+    assert other_members not in requested
+    assert teams_connector._files is None
 
 
 def test_a_channel_that_fails_mid_walk_is_one_failure_and_the_next_channel_runs() -> (
     None
 ):
     other = ChannelRef(
-        team_id=TEAM_ID, id="19:other@thread.tacv2", display_name="Other"
+        team_id=TEAM_ID,
+        id="19:other@thread.tacv2",
+        display_name="Other",
+        membership_type="standard",
     )
     other_members = f"teams/{TEAM_ID}/channels/{other.id}/allMembers"
     page_two = f"teams/{TEAM_ID}/channels/{CHANNEL.id}/messages/delta?$skiptoken=p2"
@@ -387,7 +391,7 @@ def test_a_thread_whose_replies_cannot_be_read_is_one_failure_and_the_page_goes_
 @pytest.mark.parametrize(
     ("refused", "raised"),
     [
-        pytest.param({MEMBERS_URL: 401}, requests.HTTPError, id="expired token"),
+        pytest.param({DELTA_URL: 401}, requests.HTTPError, id="expired token"),
         pytest.param({DELTA_URL: 400}, requests.HTTPError, id="rejected first page"),
         pytest.param({DELTA_URL: 429}, GraphRetriesExhausted, id="throttled page"),
         pytest.param(
@@ -490,7 +494,7 @@ def test_a_channel_restarts_once_per_attempt_and_again_on_the_next() -> None:
 def _sdk_channel(channel_id: str, name: str) -> MagicMock:
     channel = MagicMock()
     channel.id = channel_id
-    channel.properties = {"displayName": name}
+    channel.properties = {"displayName": name, "membershipType": "standard"}
     return channel
 
 
@@ -500,13 +504,13 @@ def test_the_walk_lists_teams_then_channels_then_pages_and_ends(
     team = MagicMock()
     team.id = TEAM_ID
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._collect_all_teams", lambda **_: [team]
+        "onyx.connectors.teams.listing.collect_all_teams", lambda **_: [team]
     )
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._get_team_by_id", lambda **_: team
+        "onyx.connectors.teams.listing.get_team_by_id", lambda **_: team
     )
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._collect_all_channels_from_team",
+        "onyx.connectors.teams.listing.collect_all_channels_from_team",
         lambda **_: [
             _sdk_channel(CHANNEL.id, "General"),
             _sdk_channel("19:b@thread.tacv2", "B"),
@@ -555,7 +559,7 @@ def test_a_dummy_checkpoint_with_no_teams_ends_at_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._collect_all_teams", lambda **_: []
+        "onyx.connectors.teams.listing.collect_all_teams", lambda **_: []
     )
 
     _, checkpoint = step(connector(graph_client({})), TeamsCheckpoint(has_more=True))
@@ -570,10 +574,10 @@ def test_a_checkpoint_saved_before_channel_cursors_existed_still_walks(
     team = MagicMock()
     team.id = TEAM_ID
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._get_team_by_id", lambda **_: team
+        "onyx.connectors.teams.listing.get_team_by_id", lambda **_: team
     )
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._collect_all_channels_from_team",
+        "onyx.connectors.teams.listing.collect_all_channels_from_team",
         lambda **_: [_sdk_channel(CHANNEL.id, "General")],
     )
     teams_connector = connector(
@@ -610,10 +614,10 @@ def test_the_slim_walk_lists_the_same_roots_the_indexing_walk_keeps(
     team = MagicMock()
     team.id = TEAM_ID
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._collect_all_teams", lambda **_: [team]
+        "onyx.connectors.teams.listing.collect_all_teams", lambda **_: [team]
     )
     monkeypatch.setattr(
-        "onyx.connectors.teams.connector._collect_all_channels_from_team",
+        "onyx.connectors.teams.listing.collect_all_channels_from_team",
         lambda **_: [_sdk_channel(CHANNEL.id, "General")],
     )
     client = graph_client(

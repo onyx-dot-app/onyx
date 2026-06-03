@@ -166,6 +166,8 @@ _CLUSTER_BLOCK_ERROR_TYPE = "cluster_block_exception"
 # Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
 # one page covers a batch; paging still protects against a pathological doc.
 _PIT_SCAN_PAGE_SIZE = 1000
+# Ids per mget request, so the body stays under the cluster's http.max_content_length.
+_MGET_BATCH_SIZE = 500
 
 
 def is_cluster_block_error(e: Exception) -> bool:
@@ -1949,6 +1951,8 @@ class OpenSearchIndexClient(OpenSearchClient):
             # matches everything; kept as a guard if that changes
             {"term": {MAX_CHUNK_SIZE_FIELD_NAME: DEFAULT_MAX_CHUNK_SIZE}},
         ]
+        # Only the _id carries a tenant prefix, so the document_id filter alone would
+        # match other tenants' chunks.
         if tenant_state.multitenant:
             filter_clauses.append(
                 {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
@@ -1978,6 +1982,29 @@ class OpenSearchIndexClient(OpenSearchClient):
         return _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(
             getattr(error, "info", "")  # ods: ignore[getattr]
         ) or _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(error)
+
+    def get_existing_chunk_ids(self, chunk_ids: list[str]) -> set[str]:
+        """Returns the subset of `chunk_ids` that exist in the index.
+
+        Uses the OpenSearch mget API, which fetches documents by _id in one request
+        and, unlike a search, sees writes that have not been refreshed yet. Raises on
+        transport errors rather than returning an empty set.
+        """
+        if not chunk_ids:
+            return set()
+
+        found: set[str] = set()
+        for start in range(0, len(chunk_ids), _MGET_BATCH_SIZE):
+            batch = chunk_ids[start : start + _MGET_BATCH_SIZE]
+            response = self._client.mget(
+                index=self._index_name,
+                body={"ids": batch},
+                _source=False,
+            )
+            found.update(
+                doc["_id"] for doc in response.get("docs", []) if doc.get("found")
+            )
+        return found
 
     @log_function_time(print_only=True, debug_only=True)
     def refresh_index(self) -> None:

@@ -4,7 +4,7 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { PageLoader } from "@opal/layouts";
 import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import {
@@ -21,7 +21,7 @@ import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { getProvider } from "@/lib/languageModels";
+import { getProvider } from "@/lib/languageModels/utils";
 import {
   refreshLlmProviderCaches,
   setDefaultLlmModelAndRefresh,
@@ -337,7 +337,7 @@ export default function LanguageModelsPage() {
     boolean | null
   >(null);
   const { llmProviders: existingLlmProviders, defaultText } =
-    useAdminLLMProviders();
+    useAdminLanguageModels();
   const isConfigurationDisabled = usePHFeatureFlag(
     PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED
   );
@@ -367,7 +367,9 @@ export default function LanguageModelsPage() {
       {
         id: "addProvider",
         title: t("groups.addProvider.title"),
-        description: t("groups.addProvider.description"),
+        description: t("groups.addProvider.description", {
+          appName: settings.appName,
+        }),
         emphasis: true,
         providerNames: [
           LLMProviderName.OPENAI,
@@ -384,6 +386,7 @@ export default function LanguageModelsPage() {
           LLMProviderName.OPENROUTER,
           LLMProviderName.LITELLM_PROXY,
           LLMProviderName.PORTKEY,
+          LLMProviderName.VERCEL_AI_GATEWAY,
           LLMProviderName.NEBIUS_TOKENFACTORY,
           LLMProviderName.BIFROST,
         ],
@@ -399,7 +402,7 @@ export default function LanguageModelsPage() {
         includeCustom: true,
       },
     ],
-    [t]
+    [t, settings.appName]
   );
 
   if (!existingLlmProviders) {
@@ -468,7 +471,9 @@ export default function LanguageModelsPage() {
             <Section alignItems="stretch">
               <InputHorizontal
                 title={t("defaultModel.title")}
-                description={t("defaultModel.description")}
+                description={t("defaultModel.description", {
+                  appName: settings.appName,
+                })}
                 center
                 withLabel
               >

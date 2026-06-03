@@ -24,6 +24,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorFailure, EntityFailure
 from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.endpoints import normalize_session_id
 from onyx.connectors.zoom.models import ZoomRecordingEntry, ZoomSessionOccurrence
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
@@ -55,6 +56,11 @@ _MAX_LISTING_WINDOW_DAYS = 30
 # Past about two years, a poll window this wide is far more likely a connector with
 # no indexing start date than a deliberate backfill.
 _WIDE_BACKFILL_WINDOWS = 24
+
+# Zoom 1.0 shipped in January 2013, so no cloud recording can predate it. Without
+# this floor a connector with no indexing start date asks Zoom for every 30-day
+# window back to 1970, which is four times the calls and finds nothing.
+_EARLIEST_RECORDING_DATE = date(2013, 1, 1)
 
 
 def _poll_window_range(
@@ -105,11 +111,18 @@ def _poll_window_dates(
     start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
 ) -> tuple[date, date]:
     """The lag buffer comes off the start before the dates are rounded, or a
-    transcript that lands slowly falls outside the window and is never indexed."""
+    transcript that lands slowly falls outside the window and is never indexed.
+
+    The start is floored at Zoom's own launch, because a connector with no
+    indexing start date arrives here asking for 1970.
+    """
     from_moment = datetime.fromtimestamp(
         max(start - _OCCURRENCE_POLL_OVERLAP_SECONDS, 0), tz=timezone.utc
     )
-    return from_moment.date(), datetime.fromtimestamp(end, tz=timezone.utc).date()
+    return (
+        max(from_moment.date(), _EARLIEST_RECORDING_DATE),
+        datetime.fromtimestamp(end, tz=timezone.utc).date(),
+    )
 
 
 def _listing_windows(from_date: date, to_date: date) -> list[tuple[date, date]]:
@@ -179,15 +192,25 @@ class _AllowlistCursor(BaseModel):
     offset: int = 0
 
 
+def session_ids(values: list[str] | None) -> list[str]:
+    """Deduplicated, because Zoom shows one id both spaced and unspaced and an
+    allowlist holding both forms would crawl that session twice."""
+    cleaned = (normalize_session_id(value) for value in values or [] if value)
+    return list(dict.fromkeys(value for value in cleaned if value))
+
+
 class IdAllowlistSource(DiscoverySource):
     def __init__(
         self, meeting_ids: list[str], webinar_ids: list[str] | None = None
     ) -> None:
         self._refs: list[tuple[ZoomSessionType, str]] = [
-            *((ZoomSessionType.MEETING, meeting_id) for meeting_id in meeting_ids),
+            *(
+                (ZoomSessionType.MEETING, meeting_id)
+                for meeting_id in session_ids(meeting_ids)
+            ),
             *(
                 (ZoomSessionType.WEBINAR, webinar_id)
-                for webinar_id in webinar_ids or []
+                for webinar_id in session_ids(webinar_ids)
             ),
         ]
 
@@ -518,8 +541,8 @@ class _UserRecordingsSource(DiscoverySource):
             return
         logger.warning(
             "Zoom %s is listing recordings from %s, which Zoom's %s-day range cap "
-            "splits into %s calls per host (%s hosts, about %s calls). Set an "
-            "indexing start date on the connector to narrow this.",
+            "splits into %s calls per host (%s hosts, about %s calls). Set "
+            "Advanced Configuration > Indexing Start on this connector to narrow it.",
             self._scope_entity_id,
             windows[0][0],
             _MAX_LISTING_WINDOW_DAYS,
@@ -714,7 +737,7 @@ def build_discovery_sources(
     group_id: str | None = None,
 ) -> list[DiscoverySource]:
     sources: list[DiscoverySource] = []
-    if meeting_ids or webinar_ids:
+    if session_ids(meeting_ids) or session_ids(webinar_ids):
         sources.append(IdAllowlistSource(meeting_ids or [], webinar_ids or []))
     if host_emails and any(email.strip() for email in host_emails):
         sources.append(HostAllowlistSource(host_emails))

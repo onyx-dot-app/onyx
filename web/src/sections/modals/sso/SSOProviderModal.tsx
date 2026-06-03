@@ -8,7 +8,7 @@ import {
   Button,
   Card,
   CopyButton,
-  InputMultiSelect,
+  InputTypeInTag,
   type TagItem,
   Text,
 } from "@opal/components";
@@ -35,7 +35,7 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import { Modal } from "@opal/components";
 import { useModalClose } from "@opal/components";
 
@@ -181,7 +181,7 @@ interface TagListFieldProps {
   transform?: (value: string) => string;
 }
 
-// Formik-bound Opal InputMultiSelect for string[] values. Always writes an array, so
+// Formik-bound Opal InputTypeInTag for string[] values. Always writes an array, so
 // clearing every tag stores [] rather than leaving the previous value.
 function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   const [field, meta, helpers] = useField<string[]>(name);
@@ -190,7 +190,7 @@ function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   const tags: TagItem[] = values.map((value) => ({ id: value, label: value }));
   return (
     <>
-      <InputMultiSelect
+      <InputTypeInTag
         tags={tags}
         onRemoveTag={(id) => {
           void helpers.setValue(values.filter((value) => value !== id));
@@ -357,38 +357,28 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                     )}
                     withLabel="provider_type"
                   >
-                    <InputSelect
+                    <InputSingleSelect
                       value={values.provider_type}
                       onValueChange={(value) => {
                         void setFieldValue("provider_type", value);
                       }}
                       disabled={isEditing || providerTypesLoading}
-                      error={Boolean(
+                      isError={Boolean(
                         touched.provider_type && errors.provider_type
                       )}
-                    >
-                      <InputSelect.Trigger
-                        placeholder={t(
-                          "modals.provider.providerTypeField.placeholder"
-                        )}
-                      />
-                      <InputSelect.Content>
-                        {providerTypes.map((type) => {
-                          const detail = SSO_PROVIDER_DETAILS[type];
-                          return (
-                            <InputSelect.Item
-                              key={type}
-                              value={type}
-                              icon={detail.icon}
-                              description={t(detail.descriptionKey)}
-                              wrapDescription
-                            >
-                              {detail.label}
-                            </InputSelect.Item>
-                          );
-                        })}
-                      </InputSelect.Content>
-                    </InputSelect>
+                      placeholder={t(
+                        "modals.provider.providerTypeField.placeholder"
+                      )}
+                      options={providerTypes.map((type) => {
+                        const detail = SSO_PROVIDER_DETAILS[type];
+                        return {
+                          value: type,
+                          title: detail.label,
+                          description: t(detail.descriptionKey),
+                          icon: detail.icon,
+                        };
+                      })}
+                    />
                   </InputVertical>
 
                   <InputVertical

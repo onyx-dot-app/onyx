@@ -77,7 +77,7 @@ RUNS_DEFAULT_PAGE_SIZE = 50
 RUNS_MAX_PAGE_SIZE = 200
 
 # Header an inbound webhook must carry.
-WEBHOOK_TOKEN_HEADER = "X-Onyx-Flow-Token"
+WEBHOOK_TOKEN_HEADER = "X-Onyx-Flow-Token"  # pragma: allowlist secret
 
 # A webhook body larger than this is refused rather than persisted: the whole
 # payload becomes `{{ trigger }}` and lands in the run row.

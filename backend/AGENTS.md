@@ -6,7 +6,8 @@ tests. Additive to the root `AGENTS.md`.
 ## Key Rules
 
 - Put ALL db operations under the `backend/onyx/db` / `backend/ee/onyx/db` directories. Don't run
-  queries outside of those directories.
+  queries outside of those directories. Exception: `backend/onyx/cache/postgres_backend.py` is the
+  PostgreSQL implementation of `CacheBackend`, so its queries belong there.
 - When creating new FastAPI APIs, do NOT use the `response_model` field. Instead, just type the
   function.
 - OpenSearch is the current document index backend for search and indexing. Some legacy modules,

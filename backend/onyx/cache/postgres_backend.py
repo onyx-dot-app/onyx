@@ -46,6 +46,14 @@ def _to_bytes(value: str | bytes | int | float) -> bytes:
     return str(value).encode()
 
 
+def _set_statement_timeout(session: Session, timeout_ms: int | None) -> None:
+    """Limit statements and lock waits for this transaction, not connection acquisition."""
+    if timeout_ms is None:
+        return
+    for setting in ("statement_timeout", "lock_timeout"):
+        session.execute(select(func.set_config(setting, str(timeout_ms), True)))
+
+
 # ------------------------------------------------------------------
 # Lock
 # ------------------------------------------------------------------
@@ -62,10 +70,17 @@ class PostgresCacheLock(CacheLock):
     called or when the session is closed.
     """
 
-    def __init__(self, lock_id: int, timeout: float | None, tenant_id: str) -> None:
+    def __init__(
+        self,
+        lock_id: int,
+        timeout: float | None,
+        tenant_id: str,
+        statement_timeout_ms: int | None = None,
+    ) -> None:
         self._lock_id = lock_id
         self._timeout = timeout
         self._tenant_id = tenant_id
+        self._statement_timeout_ms = statement_timeout_ms
         self._session_cm: AbstractContextManager[Session] | None = None
         self._session: Session | None = None
         self._acquired = False
@@ -80,6 +95,7 @@ class PostgresCacheLock(CacheLock):
         self._session_cm = get_session_with_tenant(tenant_id=self._tenant_id)
         self._session = self._session_cm.__enter__()
         try:
+            _set_statement_timeout(self._session, self._statement_timeout_ms)
             if not blocking:
                 return self._try_lock()
 
@@ -145,8 +161,11 @@ class PostgresCacheBackend(CacheBackend):
     SQLAlchemy's ``schema_translate_map`` (set by ``get_session_with_tenant``).
     """
 
-    def __init__(self, tenant_id: str) -> None:
+    def __init__(
+        self, tenant_id: str, *, statement_timeout_ms: int | None = None
+    ) -> None:
         self._tenant_id = tenant_id
+        self._statement_timeout_ms = statement_timeout_ms
 
     # -- basic key/value ---------------------------------------------------
 
@@ -158,6 +177,7 @@ class PostgresCacheBackend(CacheBackend):
             or_(CacheStore.expires_at.is_(None), CacheStore.expires_at > func.now()),
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             value = session.execute(stmt).scalar_one_or_none()
         if value is None:
             return None
@@ -178,6 +198,7 @@ class PostgresCacheBackend(CacheBackend):
             .returning(CacheStore.value)
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             value = session.execute(stmt).scalar_one_or_none()
             session.commit()
         if value is None:
@@ -207,6 +228,7 @@ class PostgresCacheBackend(CacheBackend):
             )
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             session.execute(stmt)
             session.commit()
 
@@ -238,6 +260,7 @@ class PostgresCacheBackend(CacheBackend):
             .returning(CacheStore.key)
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             stored_key = session.execute(stmt).scalar_one_or_none()
             session.commit()
         return stored_key is not None
@@ -246,6 +269,7 @@ class PostgresCacheBackend(CacheBackend):
         from onyx.db.engine.sql_engine import get_session_with_tenant
 
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             session.execute(delete(CacheStore).where(CacheStore.key == key))
             session.commit()
 
@@ -264,6 +288,7 @@ class PostgresCacheBackend(CacheBackend):
             .limit(1)
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             return session.execute(stmt).first() is not None
 
     # -- TTL ---------------------------------------------------------------
@@ -276,6 +301,7 @@ class PostgresCacheBackend(CacheBackend):
             update(CacheStore).where(CacheStore.key == key).values(expires_at=new_exp)
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             session.execute(stmt)
             session.commit()
 
@@ -284,6 +310,7 @@ class PostgresCacheBackend(CacheBackend):
 
         stmt = select(CacheStore.expires_at).where(CacheStore.key == key)
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             result = session.execute(stmt).first()
         if result is None:
             return TTL_KEY_NOT_FOUND
@@ -299,7 +326,10 @@ class PostgresCacheBackend(CacheBackend):
 
     def lock(self, name: str, timeout: float | None = None) -> CacheLock:
         return PostgresCacheLock(
-            self._lock_id_for(name), timeout, tenant_id=self._tenant_id
+            self._lock_id_for(name),
+            timeout,
+            tenant_id=self._tenant_id,
+            statement_timeout_ms=self._statement_timeout_ms,
         )
 
     # -- blocking list (MCP OAuth BLPOP pattern) ---------------------------
@@ -336,6 +366,7 @@ class PostgresCacheBackend(CacheBackend):
                     .with_for_update(skip_locked=True)
                 )
                 with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+                    _set_statement_timeout(session, self._statement_timeout_ms)
                     row = session.execute(stmt).scalars().first()
                     if row is not None:
                         value = bytes(row.value) if row.value else b""

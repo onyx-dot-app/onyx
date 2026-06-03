@@ -26,6 +26,10 @@ CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
 LLM_SOCKET_READ_TIMEOUT = int(
     os.environ.get("LLM_SOCKET_READ_TIMEOUT") or "60"
 )  # 60 seconds
+# Default total timeout for LLM.invoke. It reuses LLM_SOCKET_READ_TIMEOUT so that
+# existing operator tuning still applies: on a plain request, the single socket
+# read was already the whole call.
+LLM_INVOKE_TIMEOUT_S = LLM_SOCKET_READ_TIMEOUT
 # Total per-call timeout for image summarization. Unlike LLM_SOCKET_READ_TIMEOUT
 # (per-packet gap), this bounds the whole call so a keepalive-only stream can't
 # wedge a docprocessing thread. A generous backstop against hangs.

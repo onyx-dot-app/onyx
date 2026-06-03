@@ -36,6 +36,7 @@ A plain line with no title or description.
 | -------------- | ------------------------- | -------------- | ------------------------------- |
 | `title`        | `string \| RichStr`       | **(required)** | Label to the left of the line   |
 | `foldable`     | `true`                    | **(required)** | Enables fold/expand behavior    |
+| `interaction`  | `"rest" \| "hover" \| "active"` | —      | Overrides the header's interaction state; unset, an open header reads as hover |
 | `open`         | `boolean`                 | —              | Controlled open state           |
 | `defaultOpen`  | `boolean`                 | `false`        | Uncontrolled initial open state |
 | `onOpenChange` | `(open: boolean) => void` | —              | Callback when toggled           |

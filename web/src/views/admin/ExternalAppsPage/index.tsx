@@ -11,7 +11,7 @@ import { Button, Card, Tabs, Text } from "@opal/components";
 import { IllustrationContent, SettingsLayouts } from "@opal/layouts";
 import { SvgUnPlugged } from "@opal/illustrations";
 import { SvgArrowLeft, SvgPlus, SvgSettings } from "@opal/icons";
-import { MCPServer, MCPServersResponse } from "@/lib/tools/types";
+import { MCPServer, MCPServersResponse } from "@/lib/mcp/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   availableBuiltInDescriptors,
@@ -67,8 +67,8 @@ export default function ExternalAppsPage() {
         icon={ADMIN_ROUTES.CRAFT_APPS.icon}
         title={adminRouteTitle(ADMIN_ROUTES.CRAFT_APPS)}
         description={t("page.description")}
-        rightChildren={
-          <div className="flex items-center gap-2">
+        actions={[
+          <div key="primary" className="flex items-center gap-2">
             <Button
               href="/craft/v1/apps"
               prominence="secondary"
@@ -79,8 +79,8 @@ export default function ExternalAppsPage() {
             <Button icon={SvgPlus} onClick={() => setCatalogOpen(true)}>
               {t("page.addAppButton.label")}
             </Button>
-          </div>
-        }
+          </div>,
+        ]}
       />
       <SettingsLayouts.Body>
         <AppsAdminContent

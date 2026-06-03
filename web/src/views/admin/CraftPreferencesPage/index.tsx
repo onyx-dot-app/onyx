@@ -24,7 +24,7 @@ import { toSettings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { DefaultModel } from "@/lib/languageModels/types";
 import {
   deleteDefaultCraftModel,
@@ -108,7 +108,7 @@ export default function CraftPreferencesPage() {
     defaultCraft,
     defaultText,
     isLoading: isLoadingModels,
-  } = useAdminLLMProviders();
+  } = useAdminLanguageModels();
   const [isSavingModel, setIsSavingModel] = useState(false);
 
   // Hidden models still resolve, so an admin can clear or replace a default
@@ -186,21 +186,26 @@ export default function CraftPreferencesPage() {
       icon={ADMIN_ROUTES.CRAFT_PREFERENCES.icon}
       title={t("header.title")}
       description={t("header.description")}
-      rightChildren={
-        craftAvailable && !settings.isLoading && !settings.error ? (
-          <div className="flex items-start gap-2">
-            <Button
-              href="/craft"
-              prominence="secondary"
-              rightIcon={SvgArrowUpRight}
-            >
-              {t("tryInCraftButton.label")}
-            </Button>
-            <Button disabled={!isDirty || isSaving} onClick={() => save(value)}>
-              {isSaving ? t("saveButton.savingLabel") : t("saveButton.label")}
-            </Button>
-          </div>
-        ) : undefined
+      actions={
+        craftAvailable && !settings.isLoading && !settings.error
+          ? [
+              <Button
+                key="try"
+                href="/craft"
+                prominence="secondary"
+                rightIcon={SvgArrowUpRight}
+              >
+                {t("tryInCraftButton.label")}
+              </Button>,
+              <Button
+                key="save"
+                disabled={!isDirty || isSaving}
+                onClick={() => save(value)}
+              >
+                {isSaving ? t("saveButton.savingLabel") : t("saveButton.label")}
+              </Button>,
+            ]
+          : []
       }
       divider
     />

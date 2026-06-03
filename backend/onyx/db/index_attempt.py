@@ -1,8 +1,8 @@
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import TypeVarTuple
 
-from sqlalchemy import Select, and_, delete, desc, func, select, update
+from sqlalchemy import Select, and_, delete, desc, exists, func, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from onyx.connectors.models import ConnectorFailure
@@ -226,6 +226,31 @@ def get_in_progress_index_attempts(
 
     incomplete_attempts = db_session.scalars(stmt)
     return list(incomplete_attempts.all())
+
+
+def any_running_index_attempt_for_cc_pairs(
+    db_session: Session,
+    search_settings_id: int,
+    cc_pair_ids: Collection[int],
+) -> bool:
+    """Returns True if any cc_pair has an IN_PROGRESS index attempt on these settings.
+
+    Queued NOT_STARTED attempts do not count. They still run after the swap against
+    the same settings, and the queue rarely empties during a port-flow reindex.
+    """
+    if not cc_pair_ids:
+        return False
+    return bool(
+        db_session.scalar(
+            select(
+                exists().where(
+                    IndexAttempt.search_settings_id == search_settings_id,
+                    IndexAttempt.connector_credential_pair_id.in_(cc_pair_ids),
+                    IndexAttempt.status == IndexingStatus.IN_PROGRESS,
+                )
+            )
+        )
+    )
 
 
 def get_all_index_attempts_by_status(

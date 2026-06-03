@@ -34,7 +34,7 @@ test.describe("Flows loop until", () => {
     await flows.addStep("Transform");
     await flows.selectNode("repeat");
     await flows.expectInspectorNotContains("The first step you add");
-    await expect(flows.branchPicker("Repeat from")).toContainText("transform");
+    await flows.expectBranchTarget("Repeat from", "transform");
 
     // Once it has something to repeat, added steps follow the loop.
     await flows.addStep("Transform");
@@ -67,7 +67,7 @@ test.describe("Flows loop until", () => {
       "when done",
     ]);
     await flows.selectNode("repeat");
-    await expect(flows.branchPicker("Repeat from")).toContainText("transform");
+    await flows.expectBranchTarget("Repeat from", "transform");
     await flows.expectFieldValue("Stop when", "{{ steps.transform.value }}");
     await flows.expectFieldValue("Most passes", "5");
   });

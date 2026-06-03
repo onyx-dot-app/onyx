@@ -259,6 +259,19 @@
         color: var(--text-light-03);
       }
 
+      .managed-notice {
+        font-size: 12px;
+        color: var(--text-light-03);
+        padding: 0 12px 12px;
+        display: none;
+      }
+
+      .input-field:disabled,
+      .toggle-switch input:disabled + .toggle-slider {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
       .setting-divider {
         height: 1px;
         background: var(--white-10);
@@ -460,6 +473,9 @@
                   placeholder="https://cloud.onyx.app"
                 />
               </div>
+              <div id="domainManagedNotice" class="managed-notice">
+                This setting is managed by your organization.
+              </div>
               <div class="setting-divider"></div>
               <div class="setting-row">
                 <div class="setting-row-content">
@@ -471,6 +487,9 @@
                   <input type="checkbox" id="useOnyxAsDefault" />
                   <span class="toggle-slider"></span>
                 </label>
+              </div>
+              <div id="newTabManagedNotice" class="managed-notice">
+                This setting is managed by your organization.
               </div>
             </div>
           </section>

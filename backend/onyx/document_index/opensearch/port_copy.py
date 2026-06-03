@@ -164,6 +164,32 @@ def copy_present_chunks_to_future(
     return chunks_written, False
 
 
+def find_documents_with_no_chunks(
+    search_settings: SearchSettings, document_ids: list[str]
+) -> list[str]:
+    """Gets the IDs of the documents with no chunks in the index of `search_settings`.
+
+    Raises if the cluster is unreachable.
+    """
+    index = build_opensearch_document_index(search_settings)
+    with_chunks = index.get_documents_with_any_chunk(document_ids)
+    return [
+        document_id for document_id in document_ids if document_id not in with_chunks
+    ]
+
+
+def find_documents_missing_from_index(
+    search_settings: SearchSettings, document_ids: list[str]
+) -> list[str]:
+    """Gets the IDs of the documents missing from the index of `search_settings`.
+
+    A document is missing when its chunk 0 is absent. Raises if the cluster is
+    unreachable.
+    """
+    index = build_opensearch_document_index(search_settings)
+    return index.get_documents_missing_chunks(document_ids)
+
+
 class PortCopier:
     """Resolves the OpenSearch handles, reembed strategy, and embedder once so
     copy_doc_batch runs with no DB session held. Build it while the search

@@ -19,6 +19,7 @@ see README.md.
 from __future__ import annotations
 
 import os
+import random
 import time
 import uuid
 from typing import Any
@@ -26,27 +27,8 @@ from typing import Any
 from locust import HttpUser, constant, task
 
 from onyx_client.env import env_float, env_int
+from onyx_client.messages import load_messages, sized_message
 from onyx_client.stream_parser import ChatStreamAnalyzer
-
-DEFAULT_MESSAGES = [
-    "What are the key features of the product?",
-    "How does the search functionality work?",
-    "What deployment options are available?",
-    "Explain the security and access control model.",
-    "What integrations and connectors are supported?",
-    "Summarize how background indexing works.",
-]
-
-_PAD = "Please consider the full context of the conversation so far in detail. "
-
-
-def _sized_message(question: str, target_chars: int) -> str:
-    """Pad a question with filler up to ~target_chars so histories grow fast
-    enough to cross the summarization threshold (compression testing)."""
-    if target_chars <= len(question):
-        return question
-    filler = _PAD * (target_chars // len(_PAD) + 1)
-    return (question + " " + filler)[:target_chars]
 
 
 class OnyxChatUser(HttpUser):
@@ -101,11 +83,14 @@ class OnyxChatUser(HttpUser):
 
         msg_chars = env_int("ONYX_MSG_CHARS", self.default_msg_chars)
         self.messages: list[str] = (
-            [_sized_message(q, msg_chars) for q in DEFAULT_MESSAGES]
+            [sized_message(q, msg_chars) for q in load_messages()]
             if msg_chars > 0
-            else DEFAULT_MESSAGES
+            else load_messages()
         )
-        self.turn_index: int = 0
+        # Stagger users through the corpus. Starting everyone at 0 would have
+        # the whole fleet asking the same question at the same moment, which
+        # restores the cache-hit problem a large corpus is meant to avoid.
+        self.turn_index: int = random.randrange(len(self.messages))
 
         # Multi-turn session state (only used when max_session_turns > 1).
         self._session_id: str | None = None

@@ -33,6 +33,7 @@ from onyx.db.connector_credential_pair import (
     user_owns_groupless_cc_pair,
     verify_user_can_edit_all_cc_pairs,
 )
+from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.document import get_document_counts_for_cc_pairs, get_documents_for_cc_pair
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
@@ -114,6 +115,19 @@ def _get_readable_cc_pair(
     )
 
 
+def _get_readable_cc_pair_or_raise(
+    cc_pair_id: int, db_session: Session, user: User
+) -> ConnectorCredentialPair:
+    """Same as _get_readable_cc_pair, but 403s when the caller cannot read the pair."""
+    cc_pair = _get_readable_cc_pair(cc_pair_id, db_session, user)
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user permissions",
+        )
+    return cc_pair
+
+
 @router.get("/admin/cc-pair/{cc_pair_id}/index-attempts", tags=PUBLIC_API_TAGS)
 def get_cc_pair_index_attempts(
     cc_pair_id: int,
@@ -124,11 +138,7 @@ def get_cc_pair_index_attempts(
     ),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptSnapshot]:
-    if _get_readable_cc_pair(cc_pair_id, db_session, user) is None:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "CC Pair not found for current user permissions",
-        )
+    _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
 
     total_count = count_index_attempts_for_cc_pair(
         db_session=db_session,
@@ -390,7 +400,7 @@ def get_cc_pair_full_info(
 
     # Get latest permission sync attempt for status
     latest_permission_sync_attempt = None
-    if cc_pair.access_type == AccessType.SYNC:
+    if cc_pair.access_type.is_perm_synced():
         latest_permission_sync_attempt = (
             get_latest_doc_permission_sync_attempt_for_cc_pair(
                 db_session=db_session,
@@ -671,13 +681,7 @@ def get_cc_pair_last_pruned(
     ),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
-    cc_pair = _get_readable_cc_pair(cc_pair_id, db_session, user)
-    if not cc_pair:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "CC Pair not found for current user's permissions",
-        )
-
+    cc_pair = _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
     return cc_pair.last_pruned
 
 
@@ -740,9 +744,13 @@ def prune_cc_pair(
 @router.get("/admin/cc-pair/{cc_pair_id}/get-docs-sync-status")
 def get_docs_sync_status(
     cc_pair_id: int,
-    _: User = Depends(require_permission(Permission.READ_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> list[DocumentSyncStatus]:
+    _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
+
     all_docs_for_cc_pair = get_documents_for_cc_pair(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
@@ -756,7 +764,9 @@ def get_cc_pair_indexing_errors(
     include_resolved: bool = Query(False),
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=100),
-    _: User = Depends(require_permission(Permission.READ_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptErrorPydantic]:
     """Gives back all errors for a given CC Pair. Allows pagination based on page and page_size params.
@@ -766,12 +776,14 @@ def get_cc_pair_indexing_errors(
         include_resolved: Whether to include resolved errors in the results
         page_num: Page number for pagination, starting at 0
         page_size: Number of errors to return per page
-        _: Current user, must be curator or admin
+        user: Current user; must be able to read this CC pair
         db_session: Database session
 
     Returns:
         Paginated list of indexing errors for the CC pair.
     """
+    _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
+
     total_count = count_index_attempt_errors_for_cc_pair(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
@@ -810,6 +822,23 @@ def associate_credential_to_connector(
     The intent of this endpoint is to handle connectors that actually need credentials.
     """
 
+    if metadata.access_type == AccessType.SYNC_RESTRICTED:
+        # Becomes creatable in the same change that enforces its data-access
+        # groups at query time, so no restricted pair exists without them.
+        # TODO(evan, ENG-4342): remove this rejection in the enforcement change,
+        # together with:
+        # - the allowed-connector query filter and the /chat/file check
+        # - the creation path: restriction_group_ids, validation, persistence
+        #   (branch jtahara/connector-group-restrictions-creation-path)
+        # - SYNC-only checks in connector_credential_pair.py: listing
+        #   visibility, tier/source validation, get_all_auto_sync_cc_pairs,
+        #   get_cc_pairs_by_source
+        # - creating the pair and its data-access rows in one transaction
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Restricted perm-synced connectors are not available yet.",
+        )
+
     # GATE 2 write authorization (see assert_within_scope).
     #
     # A permission-synced connector carrying no groups is exempt: its ACLs are
@@ -819,7 +848,7 @@ def associate_credential_to_connector(
     # Groups may still be supplied to scope who may *manage* it, and those are
     # checked normally below.
     is_groupless_perm_sync = (
-        metadata.access_type == AccessType.SYNC and not metadata.groups
+        metadata.access_type.is_perm_synced() and not metadata.groups
     )
     if not is_groupless_perm_sync:
         assert_within_scope(
@@ -840,6 +869,14 @@ def associate_credential_to_connector(
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
+        )
+
+    # GATE 2 on the credential: validate_ccpair_for_user builds and probes the
+    # connector, so ownership has to be settled before it runs.
+    if fetch_credential_by_id_for_user(credential_id, user, db_session) is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     try:

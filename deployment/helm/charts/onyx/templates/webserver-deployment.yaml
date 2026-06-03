@@ -39,6 +39,9 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      {{- with .Values.webserver.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.webserver.podSecurityContext | nindent 8 }}
       {{- with .Values.webserver.nodeSelector }}
@@ -47,6 +50,10 @@ spec:
       {{- end }}
       {{- with .Values.webserver.affinity }}
       affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.webserver.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.webserver.tolerations }}
@@ -69,9 +76,11 @@ spec:
           startupProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.webserver.readinessProbe }}
-          readinessProbe:
-            {{- toYaml . | nindent 12 }}
+          {{- with include "onyx.preStopSleep" (dict "ctx" . "values" .Values.webserver) | trim }}
+          {{- . | nindent 10 }}
+          {{- end }}
+          {{- with include "onyx.readinessProbe" (dict "values" .Values.webserver "handler" (dict "tcpSocket" (dict "port" "http"))) | trim }}
+          {{- . | nindent 10 }}
           {{- end }}
           {{- with .Values.webserver.livenessProbe }}
           livenessProbe:

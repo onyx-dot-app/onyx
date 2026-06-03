@@ -65,9 +65,7 @@ test.describe("Flows switch step", () => {
     await flows.selectNode("switch");
     await flows.expectFieldValue("Case 1 value", "high");
     await flows.expectFieldValue("Case 2 value", "low");
-    await expect(flows.branchPicker("Case 2 goes to")).toContainText(
-      "transform_2"
-    );
+    await flows.expectBranchTarget("Case 2 goes to", "transform_2");
 
     // Routing per item has no answer once the items disagree, so the field
     // is not offered. A transform has it, which keeps this honest.

@@ -1,9 +1,11 @@
-"""Capability and token-limit lookups backed by the LiteLLM model map.
+"""Capability and token-limit lookups backed by the vendored model catalog
+(`onyx.llm.model_catalog`, sourced from models.dev).
 
 This module is deliberately lightweight to import: no DB / SQLAlchemy
-dependencies, and `litellm` itself is only imported lazily at call time.
-Keep it that way — API schema modules (e.g. `onyx.server.manage.llm.models`)
-import from here at module scope.
+dependencies, and `litellm` itself is only imported lazily at call time for
+live capability probes of unregistered models. Keep it that way — API schema
+modules (e.g. `onyx.server.manage.llm.models`) import from here at module
+scope.
 
 Helpers that layer DB or `LLMProviderView` lookups on top of these live in
 `onyx.llm.utils`.
@@ -16,7 +18,7 @@ import time
 from collections.abc import Sequence
 from enum import Enum
 from functools import lru_cache
-from typing import Any, cast
+from typing import Any
 
 from onyx.configs.model_configs import (
     GEN_AI_MAX_TOKENS,
@@ -38,7 +40,7 @@ _TWELVE_LABS_PEGASUS_MODEL_NAMES = [
     "twelvelabs/us.twelvelabs.pegasus-1-2-v1",
 ]
 _TWELVE_LABS_PEGASUS_OUTPUT_TOKENS = max(512, GEN_AI_MODEL_FALLBACK_MAX_TOKENS // 4)
-CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
+CUSTOM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
     model_name: {
         "max_input_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
         "max_output_tokens": _TWELVE_LABS_PEGASUS_OUTPUT_TOKENS,
@@ -52,53 +54,23 @@ CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
 
 @lru_cache(maxsize=1)  # the copy.deepcopy is expensive, so we cache the result
 def get_model_map() -> dict:
-    import litellm
+    """The catalog rendered in the legacy model-map shape. Provider-scoped
+    keys ({provider}/{model}) plus bare model keys, extras, and enrichments
+    are all handled by the catalog builder."""
+    from onyx.llm.model_catalog import build_model_map
 
-    DIVIDER = "/"
-
-    original_map = cast(dict[str, dict], litellm.model_cost)
-    starting_map = copy.deepcopy(original_map)
-    for key in original_map:
-        if DIVIDER in key:
-            truncated_key = key.split(DIVIDER)[-1]
-            # make sure not to overwrite an original key
-            if truncated_key in original_map:
-                continue
-
-            # if there are multiple possible matches, choose the most "detailed"
-            # one as a heuristic. "detailed" = the description of the model
-            # has the most filled out fields.
-            existing_truncated_value = starting_map.get(truncated_key)
-            potential_truncated_value = original_map[key]
-            if not existing_truncated_value or len(potential_truncated_value) > len(
-                existing_truncated_value
-            ):
-                starting_map[truncated_key] = potential_truncated_value
-
-    for model_name, model_metadata in CUSTOM_LITELLM_MODEL_OVERRIDES.items():
+    starting_map = copy.deepcopy(build_model_map())
+    for model_name, model_metadata in CUSTOM_MODEL_OVERRIDES.items():
         if model_name in starting_map:
             continue
         starting_map[model_name] = copy.deepcopy(model_metadata)
 
-    # NOTE: outside of the explicit CUSTOM_LITELLM_MODEL_OVERRIDES,
-    # we avoid hard-coding additional models here. Ollama, for example,
-    # allows the user to specify their desired max context window, and it's
-    # unlikely to be standard across users even for the same model
-    # (it heavily depends on their hardware). For those cases, we rely on
+    # NOTE: outside of the explicit CUSTOM_MODEL_OVERRIDES, we avoid
+    # hard-coding additional models here. Ollama, for example, allows the
+    # user to specify their desired max context window, and it's unlikely
+    # to be standard across users even for the same model (it heavily
+    # depends on their hardware). For those cases, we rely on
     # GEN_AI_MODEL_FALLBACK_MAX_TOKENS to cover this.
-    # for model_name in [
-    #     "llama3.2",
-    #     "llama3.2:1b",
-    #     "llama3.2:3b",
-    #     "llama3.2:11b",
-    #     "llama3.2:90b",
-    # ]:
-    #     starting_map[f"ollama/{model_name}"] = {
-    #         "max_tokens": 128000,
-    #         "max_input_tokens": 128000,
-    #         "max_output_tokens": 128000,
-    #     }
-
     return starting_map
 
 
@@ -159,7 +131,7 @@ def llm_max_input_tokens(
     )
     if not model_obj:
         logger.warning(
-            "Model '%s' not found in LiteLLM. Falling back to %s tokens.",
+            "Model '%s' not found in the model catalog. Falling back to %s tokens.",
             model_name,
             GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
         )
@@ -193,7 +165,7 @@ def get_llm_max_output_tokens(
 
     if not model_obj:
         logger.warning(
-            "Model '%s' not found in LiteLLM. Falling back to %s output tokens.",
+            "Model '%s' not found in the model catalog. Falling back to %s output tokens.",
             model_name,
             default_output_tokens,
         )
@@ -221,19 +193,13 @@ def get_max_input_tokens(
     model_provider: str,
     output_tokens: int = GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
 ) -> int:
-    # NOTE: we previously used `litellm.get_max_tokens()`, but despite the name, this actually
-    # returns the max OUTPUT tokens. Under the hood, this uses the `litellm.model_cost` dict,
-    # and there is no other interface to get what we want. This should be okay though, since the
-    # `model_cost` dict is a named public interface:
-    # https://litellm.vercel.app/docs/completion/token_usage#7-model_cost
-    # model_map is  litellm.model_cost
-    litellm_model_map = get_model_map()
+    model_map = get_model_map()
 
     input_toks = (
         llm_max_input_tokens(
             model_name=model_name,
             model_provider=model_provider,
-            model_map=litellm_model_map,
+            model_map=model_map,
         )
         - output_tokens
     )
@@ -252,7 +218,7 @@ def get_bedrock_token_limit(model_id: str) -> int:
 
     Lookup order:
     1. Parse from model ID suffix (e.g., ":200k" → 200000)
-    2. Check LiteLLM's model_cost dictionary
+    2. Check the vendored model catalog
     3. Fall back to our hardcoded BEDROCK_MODEL_TOKEN_LIMITS mapping
     4. Default to 32000 if not found anywhere
     """
@@ -265,7 +231,7 @@ def get_bedrock_token_limit(model_id: str) -> int:
     if context_match:
         return int(context_match.group(1)) * 1000
 
-    # 2. Check LiteLLM's model_cost dictionary
+    # 2. Check the model catalog
     try:
         model_map = get_model_map()
         # Try with bedrock/ prefix first, then without
@@ -292,9 +258,7 @@ def get_bedrock_token_limit(model_id: str) -> int:
     return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
 
-def litellm_thinks_model_supports_image_input(
-    model_name: str, model_provider: str
-) -> bool:
+def catalog_model_supports_image_input(model_name: str, model_provider: str) -> bool:
     """Generally should call `model_supports_image_input` unless you already know that
     `model_supports_image_input` from the DB is not set OR you need to avoid the performance
     hit of querying the DB."""
@@ -302,7 +266,7 @@ def litellm_thinks_model_supports_image_input(
         model_obj = find_model_obj(get_model_map(), model_provider, model_name)
         if not model_obj:
             logger.warning(
-                "No litellm entry found for %s/%s, this model may or may not support image input.",
+                "No catalog entry found for %s/%s, this model may or may not support image input.",
                 model_provider,
                 model_name,
             )
@@ -322,7 +286,7 @@ _REASONING_PROBE_FAILURE_TTL_SECONDS = 300
 # different models, so probe results must never cross tenant boundaries.
 # (result, expires_at): None expiry = permanent probe result (static metadata);
 # float = failure placeholder that re-probes once the TTL passes
-_LITELLM_SUPPORTS_REASONING_CACHE: dict[str, tuple[bool, float | None]] = {}
+_SUPPORTS_REASONING_PROBE_CACHE: dict[str, tuple[bool, float | None]] = {}
 
 # per-(tenant, model) locks so concurrent cold misses probe once; a single
 # shared lock would serialize unrelated models behind one slow host
@@ -335,7 +299,7 @@ def _reasoning_cache_key(full_model_name: str) -> str:
 
 
 def _cached_reasoning_result(cache_key: str) -> bool | None:
-    entry = _LITELLM_SUPPORTS_REASONING_CACHE.get(cache_key)
+    entry = _SUPPORTS_REASONING_PROBE_CACHE.get(cache_key)
     if entry is None:
         return None
     result, expires_at = entry
@@ -344,13 +308,14 @@ def _cached_reasoning_result(cache_key: str) -> bool | None:
     return None
 
 
-def _litellm_supports_reasoning(full_model_name: str) -> bool:
+def _probe_supports_reasoning(full_model_name: str) -> bool:
     """Single-flight, process-lifetime, tenant-scoped cache around
-    litellm.supports_reasoning, which can fetch model info over the network
-    (e.g. Ollama hosts). Successful probes cache permanently; failures cache as
-    False with a short TTL so an unreachable host isn't probed per-request but
-    recovers without a restart (a stuck False silently downgrades reasoning
-    models)."""
+    litellm.supports_reasoning, a live SDK probe (not a table read) which can
+    fetch model info over the network (e.g. Ollama hosts). Only reached for
+    models missing from the catalog. Successful probes cache permanently;
+    failures cache as False with a short TTL so an unreachable host isn't
+    probed per-request but recovers without a restart (a stuck False silently
+    downgrades reasoning models)."""
     cache_key = _reasoning_cache_key(full_model_name)
     cached = _cached_reasoning_result(cache_key)
     if cached is not None:
@@ -375,7 +340,7 @@ def _litellm_supports_reasoning(full_model_name: str) -> bool:
             )
             result = False
             expires_at = time.monotonic() + _REASONING_PROBE_FAILURE_TTL_SECONDS
-        _LITELLM_SUPPORTS_REASONING_CACHE[cache_key] = (result, expires_at)
+        _SUPPORTS_REASONING_PROBE_CACHE[cache_key] = (result, expires_at)
         return result
 
 
@@ -403,7 +368,7 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
             if model_provider not in model_name
             else model_name
         )
-        return _litellm_supports_reasoning(full_model_name)
+        return _probe_supports_reasoning(full_model_name)
 
     except Exception:
         logger.exception(
@@ -473,12 +438,14 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
     model_map = get_model_map()
 
     def _check_if_model_name_is_openai_provider(model_name: str) -> bool:
-        if model_name not in model_map:
+        # A name still carrying a provider/vendor prefix is gateway-served,
+        # not a bare OpenAI registry name.
+        if "/" in model_name or model_name not in model_map:
             return False
         return model_map[model_name].get("litellm_provider") == LlmProviderNames.OPENAI
 
     try:
-        # Check if any model exists in litellm's registry with openai prefix
+        # Check if any model exists in the catalog under the openai provider.
         # If it's registered as "openai/model-name", it's a real OpenAI model
         if f"{LlmProviderNames.OPENAI}/{model_name}" in model_map:
             return True
@@ -688,6 +655,26 @@ def anthropic_omits_sampling_params(model_name: str) -> bool:
     )
 
 
+_GEMINI_FLASH_NO_MINIMAL_MIN_VERSION = (3, 7)
+
+_GEMINI_VERSION_PATTERN = re.compile(r"gemini-(\d+)(?:\.(\d+))?")
+
+
+def parse_gemini_version(model_name: str) -> tuple[int, int] | None:
+    match = _GEMINI_VERSION_PATTERN.search(model_name.lower())
+    if match is None:
+        return None
+    return (int(match.group(1)), int(match.group(2) or 0))
+
+
+def gemini_lowest_thinking_level_is_low(model_name: str) -> bool:
+    name = model_name.lower().split("/")[-1]
+    if "flash" not in name or "lite" in name:
+        return False
+    version = parse_gemini_version(name)
+    return version is not None and version >= _GEMINI_FLASH_NO_MINIMAL_MIN_VERSION
+
+
 def model_identity_names(model_name: str, deployment_name: str | None) -> list[str]:
     """Every string that could carry a model's identity: model_name, plus a
     custom provider's deployment alias when set (e.g. Azure AI Foundry, where
@@ -781,7 +768,9 @@ def supported_reasoning_efforts(
     style = resolve_reasoning_param_style(model_provider, model_names, api_surface)
     # A model that always thinks honors no off on any route, gateway included,
     # so offering the level would promise a saving that never arrives.
-    always_thinking = anthropic_identity_is_always_thinking(model_names)
+    always_thinking = anthropic_identity_is_always_thinking(model_names) or any(
+        gemini_lowest_thinking_level_is_low(name) for name in model_names
+    )
     efforts = [] if always_thinking else [ReasoningEffort.OFF]
     efforts += [ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH]
     if style in _XHIGH_REASONING_STYLES:

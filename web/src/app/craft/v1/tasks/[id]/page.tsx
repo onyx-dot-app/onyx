@@ -119,7 +119,7 @@ export default function ScheduledTaskDetailPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title={t("fallbackTitle")}
-          backButton={handleBack}
+          cancel={handleBack}
         />
         <SettingsLayouts.Body>
           <Text font="main-ui-body" color="text-03">
@@ -136,54 +136,60 @@ export default function ScheduledTaskDetailPage() {
         icon={SvgClock}
         title={data?.name ?? t("fallbackTitle")}
         description={scheduleDescription}
-        backButton={handleBack}
-        rightChildren={
-          data ? (
-            <div className="flex items-center gap-2">
-              <TaskStatusBadge status={data.status} />
-              <Button
-                icon={SvgPlayCircle}
-                variant="default"
-                prominence="secondary"
-                onClick={() => void handleRunNow()}
-                disabled={busy}
-                data-testid="run-now-button"
-              >
-                {t("runNowButton")}
-              </Button>
-              <Button
-                icon={data.status === "ACTIVE" ? SvgPauseCircle : SvgPlayCircle}
-                variant="default"
-                prominence="secondary"
-                onClick={() => void handleToggleStatus()}
-                disabled={busy}
-                data-testid="status-toggle"
-              >
-                {data.status === "ACTIVE"
-                  ? t("pauseButton")
-                  : t("resumeButton")}
-              </Button>
-              <Button
-                icon={SvgEdit}
-                variant="default"
-                prominence="secondary"
-                href={taskEditPath(data.id)}
-                disabled={busy}
-              >
-                {t("editButton")}
-              </Button>
-              <Button
-                icon={SvgTrash}
-                variant="danger"
-                prominence="secondary"
-                onClick={() => setConfirmDelete(true)}
-                disabled={busy}
-                data-testid="delete-button"
-              >
-                {t("deleteButton")}
-              </Button>
-            </div>
-          ) : undefined
+        cancel={handleBack}
+        actions={
+          data
+            ? [
+                <TaskStatusBadge key="status" status={data.status} />,
+                <Button
+                  key="run"
+                  icon={SvgPlayCircle}
+                  variant="default"
+                  prominence="secondary"
+                  onClick={() => void handleRunNow()}
+                  disabled={busy}
+                  data-testid="run-now-button"
+                >
+                  {t("runNowButton")}
+                </Button>,
+                <Button
+                  key="toggle"
+                  icon={
+                    data.status === "ACTIVE" ? SvgPauseCircle : SvgPlayCircle
+                  }
+                  variant="default"
+                  prominence="secondary"
+                  onClick={() => void handleToggleStatus()}
+                  disabled={busy}
+                  data-testid="status-toggle"
+                >
+                  {data.status === "ACTIVE"
+                    ? t("pauseButton")
+                    : t("resumeButton")}
+                </Button>,
+                <Button
+                  key="edit"
+                  icon={SvgEdit}
+                  variant="default"
+                  prominence="secondary"
+                  href={taskEditPath(data.id)}
+                  disabled={busy}
+                >
+                  {t("editButton")}
+                </Button>,
+                <Button
+                  key="delete"
+                  icon={SvgTrash}
+                  variant="danger"
+                  prominence="secondary"
+                  onClick={() => setConfirmDelete(true)}
+                  disabled={busy}
+                  data-testid="delete-button"
+                >
+                  {t("deleteButton")}
+                </Button>,
+              ]
+            : []
         }
       />
       <SettingsLayouts.Body>

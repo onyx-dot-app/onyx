@@ -526,7 +526,12 @@ export class FlowsPage {
   async chooseBranchTarget(label: string, stepId: string): Promise<void> {
     await this.branchPicker(label).click();
     await this.page.getByRole("option", { name: stepId, exact: true }).click();
-    await expect(this.branchPicker(label)).toContainText(stepId);
+    await this.expectBranchTarget(label, stepId);
+  }
+
+  /** The step a branch picker shows as chosen. */
+  async expectBranchTarget(label: string, stepId: string): Promise<void> {
+    await expect(this.branchPicker(label)).toHaveValue(stepId);
   }
 
   /**

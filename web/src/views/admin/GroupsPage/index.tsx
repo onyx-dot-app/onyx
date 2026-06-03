@@ -18,9 +18,11 @@ import GroupsList from "./GroupsList";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
+import { useSettings } from "@/lib/settings/hooks";
 
 function GroupsPage() {
   const t = useTranslations("admin.groups");
+  const { appName } = useSettings();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const { user } = useUser();
@@ -57,7 +59,7 @@ function GroupsPage() {
           <MessageCard
             variant="info"
             title={t("permissionsChanged.title")}
-            description={t("permissionsChanged.description")}
+            description={t("permissionsChanged.description", { appName })}
             rightChildren={
               <Button
                 icon={SvgExternalLink}

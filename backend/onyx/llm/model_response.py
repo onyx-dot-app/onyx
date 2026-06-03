@@ -175,13 +175,74 @@ def _extract_id_and_created(
     return str(response_id), str(created)
 
 
-def _require_first_choice(
+def _merge_choices_into_one(
     response_data: dict[str, Any], error_prefix: str
 ) -> dict[str, Any]:
+    """Collapse a response's ``choices`` into the single answer they describe.
+
+    ``choices`` normally holds one entry per requested completion, and Onyx only
+    ever requests one. litellm's OpenAI-responses bridge (non-streamed) is the
+    exception: it emits one choice per message content part, then one holding
+    every tool call. Reading ``choices[0]`` drops the tool calls, and on
+    gpt-5.4+ it can return a preamble instead of the answer.
+
+    Upstream: BerriAI/litellm#37299, open PRs #33931 and #41123 (unfixed in
+    1.102.1). Once a single choice comes back, this is a pass-through.
+
+    Merging is safe because Onyx never sets ``n``: more than one choice always
+    means a split answer, never alternative answers.
+    """
     choices: list[dict[str, Any]] = response_data.get("choices") or []
     if not choices:
         raise ValueError(f"{error_prefix} must include at least one choice.")
-    return choices[0] or {}
+    if len(choices) == 1:
+        return choices[0] or {}
+
+    messages = [(choice or {}).get("message") or {} for choice in choices]
+    reasonings = [message.get("reasoning_content") for message in messages]
+    # Kept as sent, repeats included. gpt-5.4+ sometimes re-sends a message
+    # item, but a choice carries no item id, so a resend cannot be told apart
+    # from text that really repeats. The streamed path keeps resends too
+    # (litellm#41117 is open), so both transports return the same text.
+    merged_text = "".join(
+        message["content"] for message in messages if message.get("content")
+    )
+    # The bridge appends the tool-call choice after the text ones, so the last
+    # stated finish_reason is the one describing how the answer ended.
+    finish_reasons = [
+        (choice or {}).get("finish_reason")
+        for choice in choices
+        if (choice or {}).get("finish_reason")
+    ]
+
+    merged_message: dict[str, Any] = {
+        "role": next(
+            (message["role"] for message in messages if message.get("role")),
+            "assistant",
+        ),
+        "content": merged_text or None,
+        "tool_calls": [
+            tool_call
+            for message in messages
+            for tool_call in (message.get("tool_calls") or [])
+        ]
+        or None,
+        "reasoning_content": "\n\n".join(
+            reasoning for reasoning in reasonings if reasoning
+        )
+        or None,
+        "thinking_blocks": [
+            block
+            for message in messages
+            for block in (message.get("thinking_blocks") or [])
+        ]
+        or None,
+    }
+    return {
+        "index": 0,
+        "finish_reason": finish_reasons[-1] if finish_reasons else None,
+        "message": merged_message,
+    }
 
 
 def _usage_from_usage_data(usage_data: dict[str, Any]) -> Usage:
@@ -248,7 +309,7 @@ def from_litellm_model_response(
     """
     response_data = response.model_dump()
     response_id, created = _extract_id_and_created(response_data, "LiteLLM response")
-    choice_data = _require_first_choice(response_data, "LiteLLM response")
+    choice_data = _merge_choices_into_one(response_data, "LiteLLM response")
 
     message_data: dict[str, Any] = choice_data.get("message") or {}
     parsed_tool_calls = _parse_message_tool_calls(message_data.get("tool_calls"))

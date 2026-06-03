@@ -25,6 +25,7 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
             DocumentSource.GMAIL,
             DocumentSource.GOOGLE_DRIVE,
             DocumentSource.JIRA,
+            DocumentSource.ONEDRIVE,
             DocumentSource.SHAREPOINT,
             DocumentSource.SLACK,
             DocumentSource.TEAMS,
@@ -36,6 +37,7 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
         DocumentSource.CANVAS,
         DocumentSource.CONFLUENCE,
         DocumentSource.GOOGLE_DRIVE,
+        DocumentSource.ONEDRIVE,
         DocumentSource.SHAREPOINT,
     }
 

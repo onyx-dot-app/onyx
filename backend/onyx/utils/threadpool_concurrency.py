@@ -589,7 +589,11 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_index: dict[Future[tuple[int, R | None]], int] = (  # ty: ignore[invalid-assignment]
             {
-                executor.submit(_next_or_none, ind, gen): ind
+                # The caller's context rides along, as in the rest of this
+                # module: the tenant id and the log prefix live in contextvars.
+                executor.submit(
+                    contextvars.copy_context().run, _next_or_none, ind, gen
+                ): ind
                 for ind, gen in enumerate(gens)
             }
         )
@@ -601,9 +605,14 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
                 ind, result = future.result()
                 if result is not None:
                     yield result
-                    future_to_index[executor.submit(_next_or_none, ind, gens[ind])] = (
-                        next_ind  # ty: ignore[invalid-assignment]
-                    )
+                    future_to_index[
+                        executor.submit(
+                            contextvars.copy_context().run,
+                            _next_or_none,
+                            ind,
+                            gens[ind],
+                        )
+                    ] = next_ind  # ty: ignore[invalid-assignment]
                     next_ind += 1
                 del future_to_index[future]
 

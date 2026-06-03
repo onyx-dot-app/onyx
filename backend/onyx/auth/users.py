@@ -119,7 +119,7 @@ from onyx.configs.constants import (
     MilestoneRecordType,
     OnyxRedisLocks,
 )
-from onyx.db.api_key import fetch_api_key_auth_result
+from onyx.db.api_key import fetch_api_key_auth_result, is_api_key_email_address
 from onyx.db.auth import (
     get_access_token_db,
     get_default_admin_user_emails,
@@ -1427,6 +1427,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token: str,
         request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
+        # Return silently so the response matches the one for an unknown address.
+        if not user.account_type.allows_password_login() or is_api_key_email_address(
+            user.email
+        ):
+            logger.warning("Refused password reset for non-login account %s", user.id)
+            return
         if not EMAIL_CONFIGURED:
             logger.error(
                 "Email is not configured. Please configure email in the admin panel"
@@ -1584,7 +1590,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 _audit_login_failure()
                 return None
 
-            if not user.account_type.is_web_login():
+            if not user.account_type.allows_password_login():
                 _audit_login_failure(AuditOutcome.DENIED)
                 raise BasicAuthenticationError(
                     detail="NO_WEB_LOGIN_AND_HAS_NO_PASSWORD",
@@ -2253,7 +2259,8 @@ async def _resolve_optional_user(
                 )
         elif hashed_api_key := get_hashed_api_key_from_request(request):
             api_key = await fetch_api_key_auth_result(hashed_api_key, async_db_session)
-            if api_key is not None:
+            # Deactivating a service account revokes its key, as for PATs.
+            if api_key is not None and api_key.user.is_active:
                 user = api_key.user
                 request.state.usage_credential = UsageCredentialIdentity(
                     UsageCredentialType.API_KEY,

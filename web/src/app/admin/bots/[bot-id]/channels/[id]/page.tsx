@@ -59,12 +59,7 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgSlack}
-        title={title}
-        divider
-        backButton
-      />
+      <SettingsLayouts.Header icon={SvgSlack} title={title} divider cancel />
       <SettingsLayouts.Body>
         {isLoading ? (
           <SvgSimpleLoader />

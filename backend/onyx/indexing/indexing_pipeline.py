@@ -226,7 +226,11 @@ def _upsert_documents_in_db(
         )
         document_metadata_list.append(db_doc_metadata)
 
-    upsert_documents(db_session, document_metadata_list)
+    upsert_documents(
+        db_session,
+        document_metadata_list,
+        source=documents[0].source if documents else None,
+    )
 
     # Insert document content metadata
     for doc in documents:
@@ -364,6 +368,8 @@ def get_docs_to_update(
 
     Two-gate dedup:
 
+    Permission changes bypass both gates so ACL updates persist.
+
     Gate 1 — timestamp skip (fast path):
       If the connector supplies doc_updated_at and it hasn't advanced past what we
       already indexed, skip immediately. No hash computation needed.
@@ -394,6 +400,18 @@ def get_docs_to_update(
     updatable_docs: list[Document] = []
     doc_id_to_content_hash: dict[str, str] = {}
     for doc in documents:
+        db_doc = id_to_db_doc_map.get(doc.id)
+        access_changed = bool(
+            db_doc
+            and doc.external_access is not None
+            and (
+                doc.external_access.external_user_emails
+                != set(db_doc.external_user_emails or [])
+                or doc.external_access.external_user_group_ids
+                != set(db_doc.external_user_group_ids or [])
+                or doc.external_access.is_public != db_doc.is_public
+            )
+        )
         timestamp_advanced = (
             doc.doc_updated_at is not None
             and doc.id in id_update_time_map
@@ -406,6 +424,7 @@ def get_docs_to_update(
             and doc.doc_updated_at
             and doc.id in id_update_time_map
             and not timestamp_advanced
+            and not access_changed
         ):
             continue
 
@@ -414,8 +433,7 @@ def get_docs_to_update(
         # check so we never suppress a legitimate re-index (see docstring).
         content_hash = doc.content_hash()
         if not timestamp_advanced and not ignore_content_hash_gate:
-            db_doc = id_to_db_doc_map.get(doc.id)
-            if db_doc and db_doc.content_hash == content_hash:
+            if db_doc and db_doc.content_hash == content_hash and not access_changed:
                 logger.debug("Skipping document %r — content hash unchanged", doc.id)
                 continue
 
@@ -840,9 +858,9 @@ def _get_image_summarization_llm(
     llm = get_default_llm_with_vision()
     if llm is None:
         logger.warning(
-            "Image analysis is enabled but no vision-capable LLM is "
-            "available — images will not be summarized. Configure a "
-            "vision model in the admin LLM settings."
+            "Image analysis is enabled but no usable captioning model is "
+            "available — images will not be summarized. Check the captioning "
+            "model under Index Settings."
         )
     return llm
 
@@ -974,7 +992,7 @@ def add_document_summaries(
             prompt_msg,
             max_tokens=MAX_CONTEXT_TOKENS,
             reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-            total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
+            total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
         )
         record_llm_response(span_generation, response)
     doc_summary = llm_response_to_string(response)
@@ -1029,7 +1047,7 @@ def add_chunk_summaries(
                 fallback_prompt,
                 max_tokens=MAX_CONTEXT_TOKENS,
                 reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-                total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
+                total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
             )
             record_llm_response(span_generation, response)
         doc_info = llm_response_to_string(response)
@@ -1060,7 +1078,7 @@ def add_chunk_summaries(
                     processed_prompt,
                     max_tokens=MAX_CONTEXT_TOKENS,
                     reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-                    total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
+                    total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
                 )
                 record_llm_response(span_generation, response)
             chunk.chunk_context = llm_response_to_string(response)

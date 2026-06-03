@@ -113,8 +113,8 @@ export default function FlowRunPage() {
       <SettingsLayouts.Header
         icon={SvgZap}
         title={t("title", { flow: flow.name })}
-        backButton={() => router.push(flowDetailPath(params.id))}
-        rightChildren={<RunStatusBadge status={run.status} />}
+        cancel={() => router.push(flowDetailPath(params.id))}
+        actions={[<RunStatusBadge key="status" status={run.status} />]}
       >
         {run.error_detail !== null ? (
           <Text font="main-ui-body" color="text-04">

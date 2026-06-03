@@ -15,7 +15,7 @@ import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import useFilter from "@/hooks/useFilter";
 import { useAvailableSources } from "@/lib/connectors/hooks";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument } from "@/lib/search/types";
 import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
@@ -213,6 +213,7 @@ const AppInputBar = React.memo(
     const appMode = state.phase === "idle" ? state.appMode : undefined;
     const isSearchMode =
       (isNewSession && appMode === "search") || isSearchActive;
+    const combinedSettingsData = useSettings();
 
     const activePlaceholder =
       queuedMessages.length > 0 && !message
@@ -220,7 +221,9 @@ const AppInputBar = React.memo(
         : isRecording
           ? t("appInputBar.input.listeningPlaceholder")
           : isVoicePlaybackActive
-            ? t("appInputBar.input.speakingPlaceholder")
+            ? t("appInputBar.input.speakingPlaceholder", {
+                appName: combinedSettingsData.appName,
+              })
             : isSearchMode
               ? t("appInputBar.input.searchPlaceholder")
               : t("appInputBar.input.placeholder");
@@ -384,8 +387,6 @@ const AppInputBar = React.memo(
       },
       [handleFileUpload]
     );
-
-    const combinedSettingsData = useSettings();
 
     const prevChatStateRef = useRef(chatState);
     const prevRenderCompleteRef = useRef(latestMessageRenderComplete);

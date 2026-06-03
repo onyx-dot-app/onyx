@@ -192,54 +192,56 @@ export default function FlowEditorPage() {
         icon={SvgZap}
         title={flow.name}
         description={flow.description ?? undefined}
-        backButton={() => router.push(FLOWS_PATH)}
-        rightChildren={
-          <div className="flex flex-row items-center gap-2">
-            <FlowStatusBadge status={flow.status} />
-            <Button
-              variant="default"
-              prominence="secondary"
-              icon={SvgPlayCircle}
-              disabled={busy}
-              onClick={handleTestRun}
-            >
-              {t("actions.test")}
-            </Button>
-            <Button
-              variant="default"
-              prominence="secondary"
-              icon={SvgCheck}
-              disabled={busy || !dirty}
-              onClick={handleSave}
-            >
-              {dirty ? t("actions.save") : t("actions.saved")}
-            </Button>
-            <Button
-              variant="default"
-              prominence="primary"
-              icon={SvgUploadCloud}
-              disabled={busy}
-              onClick={handlePublish}
-            >
-              {t("actions.publish")}
-            </Button>
-            <Button
-              variant={flow.status === "ACTIVE" ? "danger" : "action"}
-              prominence="secondary"
-              disabled={busy || flow.published_version === null}
-              tooltip={
-                flow.published_version === null
-                  ? t("actions.publishFirst")
-                  : undefined
-              }
-              onClick={handleToggleStatus}
-            >
-              {flow.status === "ACTIVE"
-                ? t("actions.pause")
-                : t("actions.activate")}
-            </Button>
-          </div>
-        }
+        cancel={() => router.push(FLOWS_PATH)}
+        actions={[
+          <FlowStatusBadge key="status" status={flow.status} />,
+          <Button
+            key="test"
+            variant="default"
+            prominence="secondary"
+            icon={SvgPlayCircle}
+            disabled={busy}
+            onClick={handleTestRun}
+          >
+            {t("actions.test")}
+          </Button>,
+          <Button
+            key="save"
+            variant="default"
+            prominence="secondary"
+            icon={SvgCheck}
+            disabled={busy || !dirty}
+            onClick={handleSave}
+          >
+            {dirty ? t("actions.save") : t("actions.saved")}
+          </Button>,
+          <Button
+            key="publish"
+            variant="default"
+            prominence="primary"
+            icon={SvgUploadCloud}
+            disabled={busy}
+            onClick={handlePublish}
+          >
+            {t("actions.publish")}
+          </Button>,
+          <Button
+            key="status-toggle"
+            variant={flow.status === "ACTIVE" ? "danger" : "action"}
+            prominence="secondary"
+            disabled={busy || flow.published_version === null}
+            tooltip={
+              flow.published_version === null
+                ? t("actions.publishFirst")
+                : undefined
+            }
+            onClick={handleToggleStatus}
+          >
+            {flow.status === "ACTIVE"
+              ? t("actions.pause")
+              : t("actions.activate")}
+          </Button>,
+        ]}
       >
         <NodePalette afterNodeId={selectedNodeId} onAdd={handleAddNode} />
       </SettingsLayouts.Header>

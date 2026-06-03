@@ -21,6 +21,7 @@ from onyx.connectors.zoom.models import (
     ZoomUserPage,
 )
 from onyx.connectors.zoom.recordings.discovery import (
+    _EARLIEST_RECORDING_DATE,
     _MAX_LISTING_WINDOW_DAYS,
     _MAX_WORK_PER_STEP,
     _OCCURRENCE_POLL_OVERLAP_SECONDS,
@@ -403,6 +404,9 @@ class TestBuildDiscoverySources:
     def test_blank_host_emails_and_group_id_are_not_configuration(self) -> None:
         assert build_discovery_sources(None, None, ["  "], "  ") == []
 
+    def test_blank_ids_are_not_configuration_either(self) -> None:
+        assert build_discovery_sources(["  "], [" "], None, None) == []
+
     def test_host_emails_alone_yield_a_host_source(self) -> None:
         sources = build_discovery_sources(None, None, ["host@example.com"])
         assert len(sources) == 1
@@ -499,6 +503,30 @@ class TestIdAllowlistWebinars:
         assert work.session_type == ZoomSessionType.WEBINAR
         assert work.session_id == "222"
         assert work.occurrence_uuid == "w-1"
+
+    def test_an_id_pasted_with_spaces_reaches_zoom_without_them(self) -> None:
+        # Zoom's own UI shows numbers grouped with spaces, and a space in the
+        # URL path is an invalid id to Zoom.
+        source = IdAllowlistSource([], ["857 9609 3688"])
+        client = self._client_with_webinar_occurrences(
+            [ZoomSessionOccurrence(uuid="w-1", start_time="2026-01-15T10:00:00Z")]
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        client.list_past_webinar_occurrences.assert_called_once_with("85796093688")
+        assert result.work[0].session_id == "85796093688"
+
+    def test_the_same_id_in_both_forms_is_crawled_once(self) -> None:
+        source = IdAllowlistSource([], ["857 9609 3688", "85796093688"])
+        client = self._client_with_webinar_occurrences(
+            [ZoomSessionOccurrence(uuid="w-1", start_time="2026-01-15T10:00:00Z")]
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        client.list_past_webinar_occurrences.assert_called_once_with("85796093688")
+        assert len(result.work) == 1
 
     def test_meetings_run_before_webinars_in_one_cursor_walk(self) -> None:
         source = IdAllowlistSource(["111"], ["222"])
@@ -993,13 +1021,24 @@ class TestUserRecordingsPollWindow:
         # A day past the poll end, so an exclusive `to` still covers 2026-03-17.
         assert self._window(client) == ("2026-03-07", "2026-03-18")
 
-    def test_the_lag_buffer_never_pushes_the_start_before_the_epoch(self) -> None:
+    def test_a_first_run_asks_zoom_no_earlier_than_its_own_launch(self) -> None:
+        """A poll window starting at the epoch would otherwise have Zoom listing
+        the 43 years before it existed, one 30-day call at a time."""
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[user(id="u1")])
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc).timestamp()
+
+        source.discover_step(client, 0, end, None)
+
+        assert self._window(client)[0] == _EARLIEST_RECORDING_DATE.isoformat()
+
+    def test_a_window_that_ends_before_zoom_existed_asks_nothing(self) -> None:
         source = GroupSource("group-1")
         client = _client_for_hosts(members=[user(id="u1")])
 
         source.discover_step(client, _ONE_HOUR, _ONE_HOUR * 2, None)
 
-        assert self._window(client)[0] == "1970-01-01"
+        client.list_user_recordings.assert_not_called()
 
     def test_an_occurrence_outside_the_window_is_zooms_call_not_ours(self) -> None:
         source = GroupSource("group-1")
@@ -1194,6 +1233,29 @@ class TestUserRecordingsListingWindow:
     and the next run moves the window on rather than coming back for them.
     """
 
+    def test_a_connector_with_no_start_date_asks_back_to_zoom_launch_only(
+        self,
+    ) -> None:
+        """A connector with no indexing start date polls from the epoch. Asking
+        Zoom for the 43 years before it existed is four times the calls for
+        nothing, against an account-wide rate limit."""
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
+
+        from_date, _ = _poll_window_dates(0, end.timestamp())
+
+        assert from_date == _EARLIEST_RECORDING_DATE
+
+    def test_a_start_date_after_zoom_launch_is_left_alone(self) -> None:
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+        from_date, _ = _poll_window_dates(start.timestamp(), end.timestamp())
+
+        assert (
+            from_date
+            == (start - timedelta(seconds=_OCCURRENCE_POLL_OVERLAP_SECONDS)).date()
+        )
+
     def test_each_window_starts_on_the_day_the_last_one_ended(self) -> None:
         windows = _listing_windows(date(2025, 1, 1), date(2025, 6, 30))
 
@@ -1332,7 +1394,7 @@ class TestUserRecordingsListingWindow:
             result = source.discover_step(client, 0, _END, None)
             source.discover_step(client, 0, _END, result.next_cursor)
 
-        said = [r for r in caplog.records if "indexing start date" in r.getMessage()]
+        said = [r for r in caplog.records if "Indexing Start" in r.getMessage()]
         assert len(said) == 1
 
     def test_a_narrow_backfill_says_nothing(
@@ -1349,6 +1411,4 @@ class TestUserRecordingsListingWindow:
         with caplog.at_level("WARNING"):
             source.discover_step(client, narrow, end, None)
 
-        assert not [
-            r for r in caplog.records if "indexing start date" in r.getMessage()
-        ]
+        assert not [r for r in caplog.records if "Indexing Start" in r.getMessage()]

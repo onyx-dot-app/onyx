@@ -139,7 +139,8 @@ def _summarize_image(
             content_mode=TraceContentMode.METADATA_ONLY,
         ) as span_generation:
             response = llm.invoke(
-                messages, total_timeout_override=IMAGE_SUMMARIZATION_TIMEOUT
+                messages,
+                total_timeout_s=IMAGE_SUMMARIZATION_TIMEOUT,
             )
             record_llm_response(span_generation, response)
             summary = llm_response_to_string(response)
