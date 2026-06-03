@@ -296,7 +296,8 @@ const BaseInputBar = memo(
               noBottomRounding ? "rounded-t-16 rounded-b-none" : "rounded-16"
             )}
           >
-            {topSlot && <div className="px-3 pt-2">{topSlot}</div>}
+            {/* Slot owns its own padding so it can animate (e.g. collapse). */}
+            {topSlot}
 
             <div ref={inputWrapperRef} className="flex-1 overflow-hidden">
               <div

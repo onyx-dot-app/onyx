@@ -173,16 +173,17 @@ const CraftInputBar = memo(
 
       // ── Slots ─────────────────────────────────────────────────────────────
 
-      const topSlot =
-        currentMessageFiles.length > 0 || activeEntries.length > 0 ? (
-          <InputChipStrip
-            files={currentMessageFiles}
-            entries={activeEntries}
-            onRemoveFile={removeFile}
-            onRemoveEntry={removeEntry}
-            onClickEntry={(entry, chipEl) => setEntryInfo({ entry, chipEl })}
-          />
-        ) : undefined;
+      // Always rendered so the strip can animate its own collapse/expand as
+      // the first/last chip is added or removed.
+      const topSlot = (
+        <InputChipStrip
+          files={currentMessageFiles}
+          entries={activeEntries}
+          onRemoveFile={removeFile}
+          onRemoveEntry={removeEntry}
+          onClickEntry={(entry, chipEl) => setEntryInfo({ entry, chipEl })}
+        />
+      );
 
       const plusMenuItems = useMemo(
         () =>
