@@ -15,7 +15,6 @@ import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import {
   SvgPlug,
-  SvgSettings,
   SvgChevronDown,
   SvgChevronRight,
   SvgFolder,
@@ -27,9 +26,6 @@ import { useUser } from "@/providers/UserProvider";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { getModelIcon } from "@/lib/languageModels";
 import {
-  getBuildUserPersona,
-  WORK_AREA_OPTIONS,
-  LEVEL_OPTIONS,
   BuildLlmSelection,
   BUILD_MODE_PROVIDERS,
 } from "@/app/craft/onboarding/constants";
@@ -38,7 +34,7 @@ export default function BuildConfigPage() {
   const { llmProviders } = useLLMProviders();
   const { isAdmin, isCurator } = useUser();
   const canManageConnectors = isAdmin || isCurator;
-  const { openUserInfoEditor, openLlmSetup } = useOnboarding();
+  const { openLlmSetup } = useOnboarding();
   const [showUserLibraryModal, setShowUserLibraryModal] = useState(false);
 
   const [pendingLlmSelection, setPendingLlmSelection] =
@@ -148,19 +144,6 @@ export default function BuildConfigPage() {
     ensurePreProvisionedSession,
   ]);
 
-  const existingPersona = getBuildUserPersona();
-  const roleLabel = existingPersona?.workArea
-    ? WORK_AREA_OPTIONS.find((o) => o.value === existingPersona.workArea)?.label
-    : undefined;
-  const levelLabel = existingPersona?.level
-    ? LEVEL_OPTIONS.find((o) => o.value === existingPersona.level)?.label
-    : undefined;
-  const roleDescription = roleLabel
-    ? levelLabel
-      ? `${roleLabel}, ${levelLabel}`
-      : roleLabel
-    : "Not set";
-
   return (
     <div className="relative w-full h-full">
       <div className="absolute top-3 left-4 z-20">
@@ -198,21 +181,6 @@ export default function BuildConfigPage() {
               gap={0.5}
               height="fit"
             >
-              <Card>
-                <InputHorizontal
-                  title="Your Role"
-                  description={roleDescription}
-                  center
-                >
-                  <button
-                    type="button"
-                    onClick={() => openUserInfoEditor()}
-                    className="p-2 rounded-08 text-text-03 hover:bg-background-tint-02 transition-colors"
-                  >
-                    <SvgSettings className="w-5 h-5" />
-                  </button>
-                </InputHorizontal>
-              </Card>
               <Card
                 className={isUpdating || isPreProvisioning ? "opacity-50" : ""}
                 title={
