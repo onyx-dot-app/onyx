@@ -1,14 +1,12 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Button, MessageCard } from "@opal/components";
+import { Button, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SvgBlocks, SvgSettings, SvgSimpleLoader } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
 import TextSeparator from "@/refresh-components/TextSeparator";
-import { InputTypeIn } from "@opal/components";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
 import { useUser } from "@/providers/UserProvider";
@@ -119,7 +117,7 @@ export default function UserSkillsPage() {
             ) : (
               <>
                 <section className="flex flex-col gap-2">
-                  <Text as="p" secondaryBody text03>
+                  <Text font="secondary-body" color="text-03">
                     Browse skills
                   </Text>
                   <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -136,10 +134,12 @@ export default function UserSkillsPage() {
             )}
 
             {visibleItems.length > 0 && (
-              <Text as="p" secondaryBody text03 className="pt-2">
-                Skills are managed by org admins. To request a new custom skill,
-                talk to your Onyx admin.
-              </Text>
+              <div className="pt-2">
+                <Text as="p" font="secondary-body" color="text-03">
+                  Skills are managed by org admins. To request a new custom
+                  skill, talk to your Onyx admin.
+                </Text>
+              </div>
             )}
           </>
         )}
