@@ -1,3 +1,4 @@
+import copy
 import os
 import threading
 from collections.abc import Iterator
@@ -657,6 +658,26 @@ class LitellmLLM(LLM):
             model_kwargs=self._model_kwargs,
             user_identity=user_identity,
         )
+
+        # OpenRouter sticky routing: inject session_id into extra_body so that
+        # OpenRouter pins all turns of a conversation to the same upstream provider,
+        # enabling prompt cache hits across turns.
+        # Without this, OpenRouter may alternate between e.g. Anthropic and Google
+        # for the same model, causing cache misses on every other turn.
+        # See: https://openrouter.ai/docs/features/provider-routing#session-id
+        if (
+            self._model_provider == LlmProviderNames.OPENROUTER
+            and user_identity is not None
+            and user_identity.session_id is not None
+        ):
+            if passthrough_kwargs is self._model_kwargs:
+                passthrough_kwargs = copy.deepcopy(self._model_kwargs)
+            existing_extra_body = passthrough_kwargs.get("extra_body") or {}
+            if isinstance(existing_extra_body, dict):
+                passthrough_kwargs["extra_body"] = {
+                    **existing_extra_body,
+                    "session_id": user_identity.session_id,
+                }
 
         try:
             # NOTE: must pass in None instead of empty strings otherwise litellm
