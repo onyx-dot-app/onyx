@@ -1,18 +1,18 @@
 """Each Onyx-managed provider resolves its Onyx-owned credentials from the
 per-field ``managed_org_credentials`` values
-(``OnyxManagedProvider.configured_managed_credentials``)."""
+(``OnyxManagedExtApp.configured_managed_credentials``)."""
 
 from __future__ import annotations
 
 import pytest
 
 from onyx.db.enums import ExternalAppType
-from onyx.external_apps.providers.base import OnyxManagedProvider
+from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
 from onyx.external_apps.providers.registry import PROVIDERS
 
 
-def _gmail() -> OnyxManagedProvider:
+def _gmail() -> OnyxManagedExtApp:
     provider = get_onyx_managed_provider(ExternalAppType.GMAIL)
     assert provider is not None
     return provider
@@ -22,7 +22,7 @@ def test_managed_credential_keys_match_required_fields() -> None:
     """Each Onyx-managed provider maps exactly its required credential fields.
     (Also enforced at class-definition time in ExternalAppProvider.__init_subclass__;
     this pins it as an explicit, readable invariant.)"""
-    managed = [p for p in PROVIDERS.values() if isinstance(p, OnyxManagedProvider)]
+    managed = [p for p in PROVIDERS.values() if isinstance(p, OnyxManagedExtApp)]
     assert managed  # sanity: at least one managed provider exists
     for provider in managed:
         required = {

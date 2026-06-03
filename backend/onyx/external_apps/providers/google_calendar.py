@@ -5,7 +5,7 @@ from onyx.db.enums import ExternalAppType
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.actions import ExternalAppAction
 from onyx.external_apps.providers.actions import RestRoute
-from onyx.external_apps.providers.base import OnyxManagedProvider
+from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.google_base import GoogleOAuthProvider
 
 
@@ -76,7 +76,7 @@ _ENDPOINTS: list[EndpointSpec] = [
 ]
 
 
-class GoogleCalendarProvider(GoogleOAuthProvider, OnyxManagedProvider):
+class GoogleCalendarProvider(GoogleOAuthProvider, OnyxManagedExtApp):
     spec = GoogleOAuthProvider.build_spec(
         app_type=ExternalAppType.GOOGLE_CALENDAR,
         app_name="Google Calendar",

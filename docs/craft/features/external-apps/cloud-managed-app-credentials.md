@@ -24,7 +24,7 @@ credentials, as before.
 
 ## Onyx-managed providers
 
-A built-in provider whose credentials Onyx owns subclasses `OnyxManagedProvider`
+A built-in provider whose credentials Onyx owns subclasses `OnyxManagedExtApp`
 (`onyx/external_apps/providers/base.py`). This interface is the single source of
 truth for "is this app Onyx-managed":
 
@@ -34,12 +34,12 @@ truth for "is this app Onyx-managed":
 - `configured_managed_credentials()` returns those values when all are set, or
   `None` when none/only some are set (a partial set is logged and skipped).
 - A built-in that admins configure themselves simply doesn't inherit
-  `OnyxManagedProvider`; it carries no Onyx-owned credentials and stays editable
+  `OnyxManagedExtApp`; it carries no Onyx-owned credentials and stays editable
   even on Cloud.
 
-`is_onyx_managed_app_type(app_type)` (`registry.py`) is an `isinstance` check
-against this interface; the API combines it with `MULTI_TENANT` for the
-Cloud-only lockdown.
+`get_onyx_managed_provider(app_type)` (`registry.py`) returns the provider if it
+inherits `OnyxManagedExtApp`, else `None`; the API treats `… is not None`,
+combined with `MULTI_TENANT`, as the Cloud-only lockdown check.
 
 ## Credential configuration
 

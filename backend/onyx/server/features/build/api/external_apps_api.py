@@ -24,13 +24,15 @@ from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
+from onyx.db.utils import none_as_unset
+from onyx.db.utils import UNSET
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import action_policy_views
 from onyx.external_apps.providers.registry import build_action_policies
 from onyx.external_apps.providers.registry import fetch_available_built_in_apps
 from onyx.external_apps.providers.registry import fetch_built_in_app
-from onyx.external_apps.providers.registry import is_onyx_managed_app_type
+from onyx.external_apps.providers.registry import get_onyx_managed_provider
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
 from onyx.server.features.build.api.models import CreateBuiltInExternalAppRequest
@@ -65,7 +67,7 @@ def _get_app_or_404(db_session: Session, external_app_id: int) -> ExternalApp:
 
 def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
     stored = {policy.action_id: policy.policy for policy in app.policies}
-    managed = MULTI_TENANT and is_onyx_managed_app_type(app.app_type)
+    managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
     return ExternalAppAdminResponse(
         id=app.id,
         name=app.skill.name,
@@ -135,7 +137,7 @@ def create_built_in_external_app(
             "Custom apps must be managed via POST /admin/apps/custom.",
         )
 
-    if MULTI_TENANT and is_onyx_managed_app_type(request.app_type):
+    if MULTI_TENANT and get_onyx_managed_provider(request.app_type) is not None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx; use PATCH /admin/apps/{id} to "
@@ -182,7 +184,7 @@ def update_external_app_admin(
     A custom app's bundle bytes are swapped via ``PUT /admin/apps/{id}/bundle``.
     """
     app = _get_app_or_404(db_session, external_app_id)
-    managed = MULTI_TENANT and is_onyx_managed_app_type(app.app_type)
+    managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
 
     # Full policy set; None map leaves stored policies untouched.
     action_policies = build_action_policies(
@@ -194,13 +196,17 @@ def update_external_app_admin(
         db_session=db_session,
         external_app_id=external_app_id,
         app_type=app.app_type,
-        name=request.name,
-        description=request.description,
-        enabled=request.enabled,
-        # Gateway config is Onyx-owned for managed built-ins; drop it.
-        upstream_url_patterns=None if managed else request.upstream_url_patterns,
-        auth_template=None if managed else request.auth_template,
-        organization_credentials=None if managed else request.organization_credentials,
+        name=none_as_unset(request.name),
+        description=none_as_unset(request.description),
+        enabled=none_as_unset(request.enabled),
+        # Gateway config is Onyx-owned for managed built-ins; leave it untouched.
+        upstream_url_patterns=(
+            UNSET if managed else none_as_unset(request.upstream_url_patterns)
+        ),
+        auth_template=UNSET if managed else none_as_unset(request.auth_template),
+        organization_credentials=(
+            UNSET if managed else none_as_unset(request.organization_credentials)
+        ),
         action_policies=action_policies,
     )
     # Push before commit so a push failure rolls back the change.
@@ -364,7 +370,7 @@ def delete_external_app_admin(
     """
     # Resolve affected users before the delete cascades the skill row away.
     app = _get_app_or_404(db_session, external_app_id)
-    if MULTI_TENANT and is_onyx_managed_app_type(app.app_type):
+    if MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx and cannot be deleted.",

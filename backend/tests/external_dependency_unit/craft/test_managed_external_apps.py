@@ -27,7 +27,7 @@ from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.base import OnyxManagedProvider
+from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.registry import fetch_onyx_managed_built_in_apps
 from onyx.external_apps.providers.registry import PROVIDERS
 from onyx.server.features.build.api.models import CreateBuiltInExternalAppRequest
@@ -65,7 +65,7 @@ def _set_managed_creds(
     """Set each managed provider's ``managed_org_credentials`` to the given
     values (or empty when unmentioned), mirroring how operator config flows in."""
     for app_type, provider in PROVIDERS.items():
-        if not isinstance(provider, OnyxManagedProvider):
+        if not isinstance(provider, OnyxManagedExtApp):
             continue
         monkeypatch.setattr(
             provider, "managed_org_credentials", creds.get(app_type, {})
@@ -101,7 +101,7 @@ def _create_request(
 
 def test_all_currently_defined_built_ins_are_onyx_managed() -> None:
     """For now every built-in is Onyx-managed (seeded per tenant). When a future
-    built-in opts out (not an ``OnyxManagedProvider``), update this deliberately."""
+    built-in opts out (not an ``OnyxManagedExtApp``), update this deliberately."""
     assert set(_MANAGED_APP_TYPES) == set(EXTERNAL_APP_BUILT_IN_SKILL_IDS)
 
 

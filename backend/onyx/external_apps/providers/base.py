@@ -146,7 +146,7 @@ class ExternalAppProvider(ABC):
             )
 
 
-class OnyxManagedProvider(ExternalAppProvider, abstract=True):
+class OnyxManagedExtApp(ExternalAppProvider, abstract=True):
     """Interface for a built-in provider whose OAuth client credentials Onyx
     owns. On managed cloud these are seeded per tenant and locked down (admins
     may only enable/disable + set policies — never edit credentials/config or
@@ -175,34 +175,31 @@ class OnyxManagedProvider(ExternalAppProvider, abstract=True):
         configured = set(cls.managed_org_credentials)
         if configured != required:
             raise TypeError(
-                f"{cls.__name__} is an OnyxManagedProvider but its "
+                f"{cls.__name__} is an OnyxManagedExtApp but its "
                 f"managed_org_credentials keys {sorted(configured)} do not "
                 f"match its required credential fields {sorted(required)}."
             )
 
     def configured_managed_credentials(self) -> dict[str, str] | None:
         """This provider's Onyx-owned credentials if fully configured, else None."""
-        present = {
-            field_key: stripped
-            for field_key, raw in self.managed_org_credentials.items()
-            if (stripped := raw.strip())
-        }
-        if not present:
-            return None
-        if len(present) != len(self.managed_org_credentials):
-            missing = [
-                f"EXT_APP_{self.spec.app_type.value}_{field_key.upper()}"
-                for field_key in self.managed_org_credentials
-                if field_key not in present
-            ]
-            logger.warning(
-                "Incomplete managed credentials for built-in app '%s'; missing "
-                "%s. Treating as unconfigured.",
-                self.spec.app_type.value,
-                ", ".join(missing),
-            )
-            return None
-        return present
+        creds = {k: v.strip() for k, v in self.managed_org_credentials.items()}
+        if not any(creds.values()):
+            return None  # nothing configured
+        if all(creds.values()):
+            return creds
+        # partially set — almost always a config mistake worth surfacing
+        missing = ", ".join(
+            f"EXT_APP_{self.spec.app_type.value}_{k.upper()}"
+            for k, v in creds.items()
+            if not v
+        )
+        logger.warning(
+            "Incomplete managed credentials for built-in app '%s'; missing %s. "
+            "Treating as unconfigured.",
+            self.spec.app_type.value,
+            missing,
+        )
+        return None
 
 
 class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):

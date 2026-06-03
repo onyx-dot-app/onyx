@@ -14,6 +14,9 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppPolicy
 from onyx.db.models import ExternalAppUserCredential
+from onyx.db.utils import is_set
+from onyx.db.utils import UNSET
+from onyx.db.utils import UnsetType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
@@ -284,7 +287,7 @@ def create_external_app(
     )
     db_session.add(app)
     if action_policies is not None:
-        _write_policies__no_commit(app, action_policies)
+        _write_policies__no_commit(db_session, app, action_policies)
     db_session.flush()
     return app
 
@@ -293,21 +296,21 @@ def update_external_app(
     db_session: Session,
     external_app_id: int,
     app_type: ExternalAppType,
-    name: str | None = None,
-    description: str | None = None,
-    enabled: bool | None = None,
-    upstream_url_patterns: list[str] | None = None,
-    auth_template: dict[str, Any] | None = None,
-    organization_credentials: dict[str, str] | None = None,
+    name: str | UnsetType = UNSET,
+    description: str | UnsetType = UNSET,
+    enabled: bool | UnsetType = UNSET,
+    upstream_url_patterns: list[str] | UnsetType = UNSET,
+    auth_template: dict[str, Any] | UnsetType = UNSET,
+    organization_credentials: dict[str, str] | UnsetType = UNSET,
     new_bundle_file_id: str | None = None,
     new_bundle_sha256: str | None = None,
-    action_policies: dict[str, EndpointPolicy] | None = None,
+    action_policies: dict[str, EndpointPolicy] | UnsetType = UNSET,
 ) -> tuple[ExternalApp, str | None]:
     """Partial-update the external app and its linked skill (flush only — the
     caller commits after pushing, so a push failure rolls back). Returns
     ``(app, old_bundle_file_id)``.
 
-    Every field is optional; ``None`` leaves the stored value untouched.
+    Patch fields default to ``UNSET`` (left untouched); pass a value to set one.
     ``app_type`` is required and immutable — a mismatch raises, blocking
     cross-editing built-in vs custom. Passing ``new_bundle_file_id`` swaps the
     bundle (slug unchanged) and returns the previous blob id for post-commit
@@ -332,11 +335,11 @@ def update_external_app(
             f"'{app.app_type.value}' to '{app_type.value}'.",
         )
 
-    if name is not None:
+    if is_set(name):
         app.skill.name = name
-    if description is not None:
+    if is_set(description):
         app.skill.description = description
-    if enabled is not None:
+    if is_set(enabled):
         app.skill.enabled = enabled
 
     old_bundle_file_id: str | None = None
@@ -346,19 +349,19 @@ def update_external_app(
         app.skill.bundle_file_id = new_bundle_file_id
         app.skill.bundle_sha256 = new_bundle_sha256
 
-    if upstream_url_patterns is not None:
+    if is_set(upstream_url_patterns):
         app.upstream_url_patterns = upstream_url_patterns
-    if auth_template is not None:
+    if is_set(auth_template):
         app.auth_template = auth_template
-    if organization_credentials is not None:
+    if is_set(organization_credentials):
         # Admin responses mask org credentials; restore any masked value the form
         # echoed back so an unchanged secret isn't overwritten with its mask.
         app.organization_credentials = resolve_masked_credentials(  # ty: ignore[invalid-assignment]
             organization_credentials, app.organization_credentials
         )
 
-    if action_policies is not None:
-        _write_policies__no_commit(app, action_policies)
+    if is_set(action_policies):
+        _write_policies__no_commit(db_session, app, action_policies)
 
     db_session.flush()
     return app, old_bundle_file_id
@@ -394,31 +397,22 @@ def get_policies(
 
 
 def _write_policies__no_commit(
+    db_session: Session,
     app: ExternalApp,
     policies: dict[str, EndpointPolicy],
 ) -> None:
     """Replace ``app``'s per-action policy rows with exactly ``policies``.
 
-    Reconciles ``app.policies`` in place (update survivors, delete dropped,
-    insert new) so the in-memory collection stays consistent and no surviving
-    ``action_id`` is re-inserted before its old row is deleted — which would
-    violate the ``(external_app_id, action_id)`` unique constraint, since the
-    ORM flushes inserts before deletes. No commit — runs inside the caller's
-    transaction. ``action_id`` validation is the caller's responsibility.
+    Clears the existing rows and flushes the DELETEs before inserting the new
+    set. The flush is required: within a single flush the ORM emits INSERTs
+    before DELETEs, so a re-inserted ``action_id`` would collide with its
+    not-yet-deleted row on the ``(external_app_id, action_id)`` unique
+    constraint. No commit — runs inside the caller's transaction. ``action_id``
+    validation is the caller's responsibility.
     """
-    # Mutable copy we drain as we match rows; whatever's left is genuinely new.
-    desired = dict(policies)
-    # Snapshot the collection since we mutate it inside the loop.
-    for existing_policy in list(app.policies):
-        new_policy = desired.pop(existing_policy.action_id, None)
-        if new_policy is not None:
-            # action_id survives → update in place (no delete + re-insert).
-            existing_policy.policy = new_policy
-        else:
-            # action_id dropped → orphan it; delete-orphan cascade emits a DELETE.
-            app.policies.remove(existing_policy)
-    # Action ids with no existing row → insert (FK set from app.id on flush).
-    for action_id, policy in desired.items():
+    app.policies.clear()  # delete-orphan cascade deletes the rows on flush
+    db_session.flush()
+    for action_id, policy in policies.items():
         app.policies.append(ExternalAppPolicy(action_id=action_id, policy=policy))
 
 

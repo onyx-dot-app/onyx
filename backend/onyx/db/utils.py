@@ -1,6 +1,8 @@
 from enum import Enum
 from typing import Any
 from typing import Final
+from typing import TypeGuard
+from typing import TypeVar
 
 from psycopg2 import errorcodes
 from psycopg2 import OperationalError
@@ -11,6 +13,8 @@ from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 
 from onyx.db.models import Base
+
+_T = TypeVar("_T")
 
 
 class UnsetType:
@@ -24,6 +28,22 @@ class UnsetType:
 
 
 UNSET: Final[UnsetType] = UnsetType()
+
+
+def is_set(value: _T | UnsetType) -> TypeGuard[_T]:
+    """True if a patch field was provided. Narrows away ``UnsetType`` so the
+    value can be assigned in the guarded branch."""
+    return not isinstance(value, UnsetType)
+
+
+def none_as_unset(value: _T | None) -> _T | UnsetType:
+    """Map a request field's ``None`` (omitted) to ``UNSET`` for a patch helper.
+
+    ONLY for non-nullable patch fields. If the column is nullable — i.e. ``None``
+    is a legitimate "clear to NULL" value — this silently turns that clear into a
+    no-op; use ``model_fields_set`` to tell omitted from explicit null instead.
+    """
+    return UNSET if value is None else value
 
 
 def is_unique_violation(exc: IntegrityError, constraint: str) -> bool:

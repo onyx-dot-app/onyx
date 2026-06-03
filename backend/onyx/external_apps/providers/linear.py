@@ -13,7 +13,7 @@ from onyx.external_apps.providers.base import AdminDescriptorSpec
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.base import OAuthFlowSpec
 from onyx.external_apps.providers.base import OAuthProviderSpec
-from onyx.external_apps.providers.base import OnyxManagedProvider
+from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.base import OrgCredentialField
 
 
@@ -78,7 +78,7 @@ _ENDPOINTS: list[EndpointSpec] = [
 ]
 
 
-class LinearProvider(OAuthExternalAppProvider, OnyxManagedProvider):
+class LinearProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
     spec = OAuthProviderSpec(
         app_type=ExternalAppType.LINEAR,
         app_name="Linear",
