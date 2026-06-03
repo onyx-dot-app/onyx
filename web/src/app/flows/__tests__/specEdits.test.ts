@@ -18,6 +18,7 @@ import type {
   FlowNode,
   FlowSpec,
   HumanNode,
+  SwitchNode,
   TransformNode,
 } from "@/app/flows/types";
 
@@ -70,6 +71,33 @@ function human(id: string, onApprove: string[], onReject: string[]): HumanNode {
     assignee: null,
     on_approve: onApprove,
     on_reject: onReject,
+  };
+}
+
+/** Narrow for assertions; a wrong kind here means the test is wrong. */
+function asSwitch(node: FlowNode | undefined): SwitchNode {
+  if (node === undefined || node.kind !== "SWITCH") {
+    throw new Error(`expected a switch, got ${node?.kind ?? "nothing"}`);
+  }
+  return node;
+}
+
+function switchNode(
+  id: string,
+  cases: Array<[string, string[]]>,
+  otherwise: string[] = []
+): SwitchNode {
+  return {
+    id,
+    name: id,
+    kind: "SWITCH",
+    next: [],
+    for_each: null,
+    on_error: "stop",
+    retry: { max_attempts: 1, backoff_seconds: 1 },
+    value: "{{ trigger.priority }}",
+    cases: cases.map(([equals, then]) => ({ equals, then })),
+    otherwise,
   };
 }
 
@@ -129,6 +157,17 @@ describe("blankNode", () => {
     expect(blankNode("x", "MERGE")).toMatchObject({
       sources: [],
       mode: "combine",
+    });
+    // One row to fill in; the server refuses it blank, so a half-built
+    // switch cannot be saved.
+    expect(blankNode("x", "SWITCH")).toMatchObject({
+      cases: [{ equals: "", then: [] }],
+      otherwise: [],
+    });
+    expect(blankNode("x", "PARALLEL")).toMatchObject({
+      method: "GET",
+      over: "",
+      concurrency: 5,
     });
   });
 
@@ -213,6 +252,24 @@ describe("addNode after an approval", () => {
   });
 });
 
+describe("addNode after a switch", () => {
+  it("puts the new node on the first case", () => {
+    const flow = spec("route", [
+      switchNode("route", [
+        ["high", []],
+        ["low", []],
+      ]),
+    ]);
+
+    const { spec: next, nodeId } = addNode(flow, "HTTP", "route");
+
+    const route = asSwitch(next.nodes[0]);
+    expect(route.cases.map((branch) => branch.then)).toEqual([[nodeId], []]);
+    expect(route.otherwise).toEqual([]);
+    expect(route.next).toEqual([]);
+  });
+});
+
 describe("removeNode", () => {
   it("joins the two ends of a chain", () => {
     const flow = spec("a", [
@@ -279,6 +336,31 @@ describe("removeNode", () => {
     expect(gate.on_approve).toEqual(["tell"]);
     expect(gate.on_reject).toEqual(["tell"]);
     expect(next.nodes).toHaveLength(2);
+  });
+
+  it("repairs every case and the otherwise of a switch", () => {
+    const flow = spec("route", [
+      switchNode(
+        "route",
+        [
+          ["high", ["page"]],
+          ["low", ["queue"]],
+        ],
+        ["page"]
+      ),
+      transform("page", ["tell"]),
+      transform("queue"),
+      transform("tell"),
+    ]);
+
+    const next = removeNode(flow, "page");
+
+    const route = asSwitch(next.nodes[0]);
+    expect(route.cases.map((branch) => branch.then)).toEqual([
+      ["tell"],
+      ["queue"],
+    ]);
+    expect(route.otherwise).toEqual(["tell"]);
   });
 
   it("promotes a successor when the start node goes", () => {

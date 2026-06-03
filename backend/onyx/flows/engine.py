@@ -236,12 +236,13 @@ def execute_flow(
     order = _execution_order(spec)
     predecessors = _predecessor_map(spec, order)
 
-    # Successors each executed node handed control to. A condition or an
-    # approval narrows this to one branch; everything else passes its whole
-    # `next` list.
+    # Successors each executed node handed control to. A condition, a switch
+    # or an approval narrows this to one branch; everything else passes its
+    # whole `next` list.
     handed_to: dict[str, set[str]] = {}
     executed: set[str] = set()
     deadline = time.monotonic() + budget_seconds
+    runtime.deadline = deadline
 
     for node_id in order:
         node = by_id[node_id]

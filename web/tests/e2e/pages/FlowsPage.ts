@@ -46,6 +46,8 @@ export type StepKind =
   | "Schedule"
   | "Merge"
   | "Split"
+  | "Switch"
+  | "Parallel"
   | "Approval";
 
 export class FlowsPage {
@@ -455,6 +457,58 @@ export class FlowsPage {
       .filter({ hasText: stepId })
       .getByRole("checkbox")
       .check();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Switch
+  // ---------------------------------------------------------------------------
+
+  /** The value box of one switch case, counted from 1 as the editor does. */
+  caseValue(number: number): Locator {
+    return this.inspector.getByLabel(`Case ${number} value`);
+  }
+
+  async fillCase(number: number, value: string): Promise<void> {
+    await this.caseValue(number).fill(value);
+  }
+
+  async addCase(): Promise<void> {
+    const before = await this.inspector.getByLabel(/^Case \d+ value$/).count();
+    await this.inspector.getByRole("button", { name: "Add case" }).click();
+    await expect(this.caseValue(before + 1)).toBeVisible();
+  }
+
+  /** A branch picker, by its label: "Case 2 goes to", or the catch-all. */
+  branchPicker(label: string): Locator {
+    return this.inspector.getByRole("combobox", { name: label });
+  }
+
+  async chooseBranchTarget(label: string, stepId: string): Promise<void> {
+    await this.branchPicker(label).click();
+    await this.page.getByRole("option", { name: stepId, exact: true }).click();
+    await expect(this.branchPicker(label)).toContainText(stepId);
+  }
+
+  /**
+   * What a branch picker offers, in order.
+   *
+   * Returned rather than asserted so a spec can say what must be missing —
+   * a step before the switch would close a loop the server refuses.
+   */
+  async readBranchTargets(label: string): Promise<string[]> {
+    await this.branchPicker(label).click();
+    const options = this.page.getByRole("option");
+    await expect(options.first()).toBeVisible();
+    const offered = await options.allInnerTexts();
+    await this.page.keyboard.press("Escape");
+    await expect(options).toHaveCount(0);
+    return offered.map((text) => text.trim());
+  }
+
+  /** The words written on the canvas's edges, sorted. */
+  async readEdgeLabels(): Promise<string[]> {
+    const labels = await this.edges.locator("text").allTextContents();
+    return labels.map((label) => label.trim()).sort();
   }
 
   /** When a run parked on a delay will carry on. */

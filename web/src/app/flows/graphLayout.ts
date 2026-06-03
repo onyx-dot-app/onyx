@@ -35,7 +35,17 @@ const COLUMN_STRIDE = NODE_WIDTH + COLUMN_GAP;
 const ROW_STRIDE = NODE_HEIGHT + ROW_GAP;
 
 /** Which side of a branching node an edge leaves from. */
-export type EdgeBranch = "true" | "false" | "approve" | "reject" | null;
+export type EdgeBranch =
+  | "true"
+  | "false"
+  | "approve"
+  | "reject"
+  | "case"
+  | "otherwise"
+  | null;
+
+/** Longest switch case shown on an edge before it is cut short. */
+const MAX_CASE_LABEL_LENGTH = 18;
 
 export interface PositionedNode {
   node: FlowNode;
@@ -52,6 +62,9 @@ export interface PositionedEdge {
   from: string;
   to: string;
   branch: EdgeBranch;
+  /** What a switch case matches, shown as typed. Null for every other edge,
+   *  whose label is a fixed word the canvas translates. */
+  caseLabel: string | null;
   /** SVG cubic path from the source's right edge to the target's left. */
   path: string;
   labelX: number;
@@ -76,6 +89,10 @@ export function successorsOf(node: FlowNode): string[] {
   if (node.kind === "HUMAN") {
     return [...node.next, ...node.on_approve, ...node.on_reject];
   }
+  if (node.kind === "SWITCH") {
+    const cases = node.cases.flatMap((branch) => branch.then);
+    return [...node.next, ...cases, ...node.otherwise];
+  }
   return [...node.next];
 }
 
@@ -91,7 +108,48 @@ function branchOf(node: FlowNode, target: string): EdgeBranch {
     if (node.on_reject.includes(target)) return "reject";
     return null;
   }
+  if (node.kind === "SWITCH") {
+    if (node.cases.some((branch) => branch.then.includes(target))) {
+      return "case";
+    }
+    if (node.otherwise.includes(target)) return "otherwise";
+    return null;
+  }
   return null;
+}
+
+/**
+ * The values of every switch case that leads to ``target``.
+ *
+ * Two cases may share a step — "high" and "critical" both paging someone is
+ * ordinary — and one edge labelled with both reads better than two edges
+ * drawn on top of each other.
+ */
+function caseLabelOf(node: FlowNode, target: string): string | null {
+  if (node.kind !== "SWITCH") return null;
+  const matched = node.cases
+    .filter((branch) => branch.then.includes(target))
+    .map((branch) => branch.equals.trim());
+  if (matched.length === 0) return null;
+
+  const label = matched.join(", ");
+  return label.length > MAX_CASE_LABEL_LENGTH
+    ? `${label.slice(0, MAX_CASE_LABEL_LENGTH - 1)}…`
+    : label;
+}
+
+/**
+ * Steps a branch of ``nodeId`` may lead to.
+ *
+ * Everything except the node itself and the steps before it. Pointing at
+ * either would close a loop, which the server refuses, so the switch's
+ * pickers never offer one.
+ */
+export function branchTargetsOf(spec: FlowSpec, nodeId: string): string[] {
+  const before = new Set(ancestorsOf(spec, nodeId));
+  return spec.nodes
+    .filter((node) => node.id !== nodeId && !before.has(node.id))
+    .map((node) => node.id);
 }
 
 /**
@@ -313,7 +371,8 @@ export function layoutFlow(spec: FlowSpec): FlowLayout {
 
   const edges: PositionedEdge[] = [];
   for (const source of positioned) {
-    for (const targetId of successorsOf(source.node)) {
+    // One edge per pair, however many branches of the source lead there.
+    for (const targetId of new Set(successorsOf(source.node))) {
       const target = positionById.get(targetId);
       if (target === undefined) continue;
 
@@ -327,6 +386,7 @@ export function layoutFlow(spec: FlowSpec): FlowLayout {
         from: source.node.id,
         to: targetId,
         branch: branchOf(source.node, targetId),
+        caseLabel: caseLabelOf(source.node, targetId),
         path: edgePath(fromX, fromY, toX, toY),
         labelX: (fromX + toX) / 2,
         labelY: (fromY + toY) / 2,

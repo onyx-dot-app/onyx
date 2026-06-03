@@ -12,7 +12,7 @@ import {
   Text,
 } from "@opal/components";
 import { InputVertical } from "@opal/layouts";
-import { SvgTrash } from "@opal/icons";
+import { SvgPlus, SvgTrash } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { visualFor } from "@/app/flows/components/nodeVisuals";
 import { UNARY_OPERATORS } from "@/app/flows/types";
@@ -32,9 +32,12 @@ import type {
   HttpMethod,
   HumanNode,
   LoopNode,
+  ParallelNode,
   RetryNode,
   ScheduleNode,
   SplitNode,
+  SwitchCase,
+  SwitchNode,
   TransformNode,
   WebhookNode,
 } from "@/app/flows/types";
@@ -52,6 +55,18 @@ const INLINE_DELAY_SECONDS = 60;
 
 /** Thirty days, matching the server's ceiling. */
 const MAX_DELAY_SECONDS = 30 * 24 * 60 * 60;
+
+/** Matching the server's ceilings. */
+const MAX_SWITCH_CASES = 10;
+const MAX_PARALLEL_CALLS = 10;
+
+/**
+ * The picker value for "this branch ends here".
+ *
+ * Radix Select refuses an empty string as an item value, and a node id can
+ * never start with an underscore, so this cannot collide with a real step.
+ */
+const ENDS_HERE = "__end__";
 
 const OPERATORS: readonly ConditionOperator[] = [
   "eq",
@@ -76,6 +91,9 @@ export interface NodeInspectorProps {
   webhookSigningSecret?: string | null;
   /** Steps that lead to this one, which a merge may name as sources. */
   mergeCandidates?: readonly string[];
+  /** Steps a switch case may lead to: everything but this one and its
+   *  ancestors, since either would close a loop. */
+  branchTargets?: readonly string[];
   onChange: (node: FlowNode) => void;
   onDelete: (nodeId: string) => void;
   className?: string;
@@ -95,6 +113,7 @@ export function NodeInspector({
   canDelete,
   webhookSigningSecret,
   mergeCandidates,
+  branchTargets,
   onChange,
   onDelete,
   className,
@@ -173,6 +192,16 @@ export function NodeInspector({
       ) : null}
       {node.kind === "FILTER" ? (
         <FilterFields node={node} onChange={onChange} />
+      ) : null}
+      {node.kind === "PARALLEL" ? (
+        <ParallelFields node={node} onChange={onChange} />
+      ) : null}
+      {node.kind === "SWITCH" ? (
+        <SwitchFields
+          node={node}
+          targets={branchTargets ?? []}
+          onChange={onChange}
+        />
       ) : null}
       {node.kind === "WEBHOOK" ? (
         <WebhookFields
@@ -262,17 +291,20 @@ export function NodeInspector({
  *
  * Each has its own reason — a branch has no answer once the items disagree,
  * a wait would be the same wall clock spent N times over, a merge has one
- * output per source already — but the rule for the editor is the same: do
- * not offer a field that only gets refused on save.
+ * output per source already, a parallel step fans out on its own — but the
+ * rule for the editor is the same: do not offer a field that only gets
+ * refused on save.
  *
  * Mirrors the `_no_fan_out` validators in `backend/onyx/flows/models.py`.
  */
 const NEVER_FANS_OUT: readonly FlowNodeKind[] = [
   "CONDITION",
+  "SWITCH",
   "HUMAN",
   "DELAY",
   "SCHEDULE",
   "MERGE",
+  "PARALLEL",
 ];
 
 function canFanOut(node: FlowNode): boolean {
@@ -308,7 +340,10 @@ interface FieldProps<T extends FlowNode> {
   onChange: (node: FlowNode) => void;
 }
 
-function HttpFields({ node, onChange }: FieldProps<HttpNode>) {
+function HttpFields<T extends HttpNode | ParallelNode>({
+  node,
+  onChange,
+}: FieldProps<T>) {
   const t = useTranslations("flows.inspector");
 
   return (
@@ -368,6 +403,213 @@ function HttpFields({ node, onChange }: FieldProps<HttpNode>) {
         />
       </InputVertical>
     </>
+  );
+}
+
+function ParallelFields({ node, onChange }: FieldProps<ParallelNode>) {
+  const t = useTranslations("flows.inspector");
+
+  return (
+    <>
+      <InputVertical
+        withLabel
+        title={t("fields.parallelOver")}
+        description={t("fields.parallelOverHelp")}
+      >
+        <InputTypeIn
+          value={node.over}
+          placeholder={t("placeholder.over")}
+          onChange={(event) => onChange({ ...node, over: event.target.value })}
+        />
+      </InputVertical>
+
+      <HttpFields node={node} onChange={onChange} />
+
+      <InputVertical
+        withLabel
+        title={t("fields.concurrency")}
+        description={t("fields.concurrencyHelp")}
+      >
+        <InputTypeIn
+          type="number"
+          min={1}
+          max={MAX_PARALLEL_CALLS}
+          value={String(node.concurrency)}
+          onChange={(event) =>
+            onChange({
+              ...node,
+              concurrency: clampConcurrency(event.target.value),
+            })
+          }
+        />
+      </InputVertical>
+    </>
+  );
+}
+
+/** Keep the calls in flight inside what the server will accept. */
+function clampConcurrency(raw: string): number {
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isNaN(parsed)) return 1;
+  return Math.min(MAX_PARALLEL_CALLS, Math.max(1, parsed));
+}
+
+function SwitchFields({
+  node,
+  targets,
+  onChange,
+}: FieldProps<SwitchNode> & { targets: readonly string[] }) {
+  const t = useTranslations("flows.inspector");
+
+  function updateCase(position: number, change: Partial<SwitchCase>): void {
+    onChange({
+      ...node,
+      cases: node.cases.map((branch, index) =>
+        index === position ? { ...branch, ...change } : branch
+      ),
+    });
+  }
+
+  function removeCase(position: number): void {
+    onChange({
+      ...node,
+      cases: node.cases.filter((_, index) => index !== position),
+    });
+  }
+
+  return (
+    <>
+      <InputVertical
+        withLabel
+        title={t("fields.switchValue")}
+        description={t("fields.switchValueHelp")}
+      >
+        <InputTypeIn
+          value={node.value}
+          placeholder={t("placeholder.switchValue")}
+          onChange={(event) => onChange({ ...node, value: event.target.value })}
+        />
+      </InputVertical>
+
+      <InputVertical
+        withLabel
+        title={t("fields.switchCases")}
+        description={t("fields.switchCasesHelp")}
+      >
+        <div data-testid="switch-cases" className="flex flex-col gap-3 w-full">
+          {node.cases.map((branch, position) => {
+            const number = position + 1;
+            return (
+              // Rows have no identity of their own; the position is what the
+              // run history records, so it is the honest key.
+              <div key={position} className="flex flex-col gap-1 w-full">
+                <Text font="figure-small-label" color="text-03">
+                  {t("fields.caseHeading", { number })}
+                </Text>
+                <div className="flex flex-row items-center gap-1 w-full">
+                  <div className="flex-1 min-w-0">
+                    <InputTypeIn
+                      aria-label={t("fields.caseValue", { number })}
+                      value={branch.equals}
+                      placeholder={t("placeholder.caseValue")}
+                      onChange={(event) =>
+                        updateCase(position, { equals: event.target.value })
+                      }
+                    />
+                  </div>
+                  <Button
+                    variant="default"
+                    prominence="tertiary"
+                    size="sm"
+                    icon={SvgTrash}
+                    tooltip={t("actions.removeCase", { number })}
+                    aria-label={t("actions.removeCase", { number })}
+                    // The server needs one case; a switch with none is a
+                    // condition that always says no.
+                    disabled={node.cases.length === 1}
+                    onClick={() => removeCase(position)}
+                  />
+                </div>
+                <BranchTargetSelect
+                  label={t("fields.caseTarget", { number })}
+                  value={branch.then}
+                  targets={targets}
+                  onChange={(then) => updateCase(position, { then })}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </InputVertical>
+
+      {node.cases.length < MAX_SWITCH_CASES ? (
+        <Button
+          variant="default"
+          prominence="secondary"
+          size="sm"
+          icon={SvgPlus}
+          onClick={() =>
+            onChange({
+              ...node,
+              cases: [...node.cases, { equals: "", then: [] }],
+            })
+          }
+        >
+          {t("actions.addCase")}
+        </Button>
+      ) : null}
+
+      <InputVertical withLabel title={t("fields.switchOtherwise")}>
+        <BranchTargetSelect
+          label={t("fields.switchOtherwise")}
+          value={node.otherwise}
+          targets={targets}
+          onChange={(otherwise) => onChange({ ...node, otherwise })}
+        />
+      </InputVertical>
+    </>
+  );
+}
+
+interface BranchTargetSelectProps {
+  label: string;
+  value: readonly string[];
+  targets: readonly string[];
+  onChange: (targets: string[]) => void;
+}
+
+/**
+ * Where one branch goes: a step, or nowhere.
+ *
+ * One destination per branch here. A spec written against the API can give
+ * a branch several; picking a new one replaces them all, because choosing a
+ * destination is what the picker is for.
+ */
+function BranchTargetSelect({
+  label,
+  value,
+  targets,
+  onChange,
+}: BranchTargetSelectProps) {
+  const t = useTranslations("flows.inspector");
+
+  return (
+    <InputSingleSelect
+      value={value[0] ?? ENDS_HERE}
+      onValueChange={(picked) => onChange(picked === ENDS_HERE ? [] : [picked])}
+    >
+      <InputSingleSelect.Trigger aria-label={label} />
+      <InputSingleSelect.Content>
+        <InputSingleSelect.Item value={ENDS_HERE}>
+          {t("fields.branchEnds")}
+        </InputSingleSelect.Item>
+        {targets.map((target) => (
+          <InputSingleSelect.Item key={target} value={target}>
+            {target}
+          </InputSingleSelect.Item>
+        ))}
+      </InputSingleSelect.Content>
+    </InputSingleSelect>
   );
 }
 

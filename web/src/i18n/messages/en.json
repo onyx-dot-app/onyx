@@ -12536,7 +12536,9 @@
         "FILTER": "Filter",
         "SCHEDULE": "Schedule",
         "MERGE": "Merge",
-        "SPLIT": "Split"
+        "SPLIT": "Split",
+        "PARALLEL": "Parallel",
+        "SWITCH": "Switch"
       },
       "startBadge": "start",
       "fanOutBadge": "per item",
@@ -12545,7 +12547,9 @@
         "true": "true",
         "false": "false",
         "approve": "approved",
-        "reject": "rejected"
+        "reject": "rejected",
+        "case": "case",
+        "otherwise": "otherwise"
       },
       "controls": {
         "zoomIn": "Zoom in",
@@ -12570,7 +12574,9 @@
         "FILTER": "Filter",
         "SCHEDULE": "Schedule",
         "MERGE": "Merge",
-        "SPLIT": "Split"
+        "SPLIT": "Split",
+        "PARALLEL": "Parallel",
+        "SWITCH": "Switch"
       }
     },
     "status": {
@@ -12601,7 +12607,9 @@
         "FILTER": "Filter",
         "SCHEDULE": "Schedule",
         "MERGE": "Merge",
-        "SPLIT": "Split"
+        "SPLIT": "Split",
+        "PARALLEL": "Parallel",
+        "SWITCH": "Switch"
       },
       "fields": {
         "name": "Name",
@@ -12673,7 +12681,20 @@
         "separator": "Split on",
         "separatorHelp": "Type '\\n' for a line break, '\\t' for a tab.",
         "splitTrim": "Trim spaces around each piece",
-        "splitDropEmpty": "Drop empty pieces"
+        "splitDropEmpty": "Drop empty pieces",
+        "parallelOver": "Call once for each item in",
+        "parallelOverHelp": "An expression that resolves to a list. Use '{{' item '}}' and '{{' index '}}' in the request.",
+        "concurrency": "Calls at a time",
+        "concurrencyHelp": "Up to 10. Results keep the order of the list, and the first failed call stops the calls not yet sent.",
+        "switchValue": "Value to check",
+        "switchValueHelp": "Compared with each case in order. The first case that matches wins.",
+        "switchCases": "Cases",
+        "switchCasesHelp": "Each case has a value and a step to go to. A number matches the same number written as text.",
+        "caseHeading": "Case {number}",
+        "caseValue": "Case {number} value",
+        "caseTarget": "Case {number} goes to",
+        "switchOtherwise": "When nothing matches, go to",
+        "branchEnds": "End here"
       },
       "onError": {
         "stop": "Stop the run",
@@ -12692,7 +12713,9 @@
         "is_not_empty": "is not empty"
       },
       "actions": {
-        "delete": "Delete step"
+        "delete": "Delete step",
+        "addCase": "Add case",
+        "removeCase": "Remove case {number}"
       },
       "placeholder": {
         "forEach": "'{{' steps.fetch.items '}}'",
@@ -12707,7 +12730,9 @@
         "payload": "'{' \"text\": \"a summary\" '}'",
         "filterLeft": "'{{' item.state '}}'",
         "cron": "0 9 * * 1-5",
-        "splitValue": "'{{' trigger.tags '}}'"
+        "splitValue": "'{{' trigger.tags '}}'",
+        "switchValue": "'{{' trigger.priority '}}'",
+        "caseValue": "high"
       },
       "mergeMode": {
         "combine": "Keep each step's output under its own name",

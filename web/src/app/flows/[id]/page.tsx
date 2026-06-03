@@ -17,7 +17,7 @@ import { FlowCanvas } from "@/app/flows/components/FlowCanvas";
 import { FlowStatusBadge } from "@/app/flows/components/StatusBadge";
 import { NodeInspector } from "@/app/flows/components/NodeInspector";
 import { NodePalette } from "@/app/flows/components/NodePalette";
-import { ancestorsOf } from "@/app/flows/graphLayout";
+import { ancestorsOf, branchTargetsOf } from "@/app/flows/graphLayout";
 import { FLOWS_API_BASE, FLOWS_PATH, flowRunPath } from "@/app/flows/constants";
 import {
   addNode,
@@ -259,6 +259,7 @@ export default function FlowEditorPage() {
               canDelete={!isLastNode(draft)}
               webhookSigningSecret={flow.webhook_signing_secret}
               mergeCandidates={ancestorsOf(draft, selectedNode.id)}
+              branchTargets={branchTargetsOf(draft, selectedNode.id)}
               onChange={handleNodeChange}
               onDelete={handleNodeDelete}
               className="w-80 shrink-0"

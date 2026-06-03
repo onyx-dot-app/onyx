@@ -21,9 +21,11 @@ import type {
   HttpNode,
   HumanNode,
   LoopNode,
+  ParallelNode,
   RetryNode,
   ScheduleNode,
   SplitNode,
+  SwitchNode,
   TransformNode,
   WebhookNode,
 } from "@/app/flows/types";
@@ -222,6 +224,36 @@ export function blankNode(id: string, kind: FlowNodeKind): FlowNode {
       };
       return node;
     }
+    case "PARALLEL": {
+      const node: ParallelNode = {
+        ...base,
+        kind: "PARALLEL",
+        method: "GET",
+        url: "https://",
+        headers: {},
+        query: {},
+        body: null,
+        timeout_seconds: 30,
+        result_path: null,
+        fail_on_error_status: true,
+        over: "",
+        // Enough to be worth it, few enough not to trip anyone's rate limit.
+        concurrency: 5,
+      };
+      return node;
+    }
+    case "SWITCH": {
+      const node: SwitchNode = {
+        ...base,
+        kind: "SWITCH",
+        value: "",
+        // One empty row to fill in, which is what a switch is for. The server
+        // refuses a blank case, so it cannot be saved half-built.
+        cases: [{ equals: "", then: [] }],
+        otherwise: [],
+      };
+      return node;
+    }
     case "WEBHOOK": {
       const node: WebhookNode = {
         ...base,
@@ -260,14 +292,22 @@ export function addNode(
 
   const nodes = spec.nodes.map((node) => {
     if (node.id !== afterNodeId) return node;
-    // Neither branching kind has a plain `next` in practice, so a node added
+    // No branching kind has a plain `next` in practice, so a node added
     // after one joins the positive branch — the branch people mean when they
-    // say "and then".
+    // say "and then". For a switch that is the first case.
     if (node.kind === "CONDITION") {
       return { ...node, on_true: [...node.on_true, id] };
     }
     if (node.kind === "HUMAN") {
       return { ...node, on_approve: [...node.on_approve, id] };
+    }
+    if (node.kind === "SWITCH") {
+      return {
+        ...node,
+        cases: node.cases.map((branch, position) =>
+          position === 0 ? { ...branch, then: [...branch.then, id] } : branch
+        ),
+      };
     }
     return { ...node, next: [...node.next, id] };
   });
@@ -311,6 +351,17 @@ export function removeNode(spec: FlowSpec, nodeId: string): FlowSpec {
           next: repoint(node.next),
           on_approve: repoint(node.on_approve),
           on_reject: repoint(node.on_reject),
+        };
+      }
+      if (node.kind === "SWITCH") {
+        return {
+          ...node,
+          next: repoint(node.next),
+          cases: node.cases.map((branch) => ({
+            ...branch,
+            then: repoint(branch.then),
+          })),
+          otherwise: repoint(node.otherwise),
         };
       }
       return { ...node, next: repoint(node.next) };

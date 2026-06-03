@@ -9,15 +9,19 @@ from onyx.flows.models import (
     MAX_CODE_LENGTH,
     MAX_DELAY_SECONDS,
     MAX_FAN_OUT_ITEMS,
+    MAX_PARALLEL_CALLS,
+    MAX_SWITCH_CASES,
     ConditionNode,
     DelayNode,
     FilterNode,
     FlowSpec,
     MergeNode,
+    ParallelNode,
     RetryNode,
     ScheduleNode,
     SpecError,
     SplitNode,
+    SwitchNode,
     WebhookNode,
     parse_spec,
 )
@@ -585,3 +589,163 @@ def test_a_split_may_fan_out_because_splitting_per_item_makes_sense() -> None:
     )
 
     assert only(spec, SplitNode).for_each == "{{ trigger.rows }}"
+
+
+def switch_spec(**switch_overrides: Any) -> dict[str, Any]:
+    switch: dict[str, Any] = {
+        "id": "route",
+        "kind": "SWITCH",
+        "value": "{{ trigger.priority }}",
+        "cases": [
+            {"equals": "high", "then": ["page"]},
+            {"equals": "low", "then": ["queue"]},
+        ],
+        "otherwise": ["triage"],
+    }
+    switch.update(switch_overrides)
+    return {
+        "start": "route",
+        "nodes": [
+            switch,
+            http_node("page"),
+            http_node("queue"),
+            http_node("triage"),
+        ],
+    }
+
+
+def test_a_switch_reaches_every_case_and_its_otherwise() -> None:
+    spec = parse_spec(switch_spec())
+
+    assert spec.reachable_ids() == {"route", "page", "queue", "triage"}
+    assert only(spec, SwitchNode).successors() == ["page", "queue", "triage"]
+
+
+def test_rejects_a_switch_case_pointing_at_nothing() -> None:
+    with pytest.raises(SpecError, match="points at undefined node 'nowhere'"):
+        parse_spec(
+            switch_spec(cases=[{"equals": "high", "then": ["nowhere"]}]),
+        )
+
+
+def test_rejects_a_cycle_through_a_switch_case() -> None:
+    raw = switch_spec()
+    raw["nodes"][1]["next"] = ["route"]
+
+    with pytest.raises(SpecError, match="cycle"):
+        parse_spec(raw)
+
+
+def test_rejects_a_case_that_could_never_match() -> None:
+    """The first match wins, so the second copy is dead — whitespace and all."""
+    with pytest.raises(SpecError, match="case 'high' appears twice"):
+        parse_spec(
+            switch_spec(
+                cases=[
+                    {"equals": "high", "then": ["page"]},
+                    {"equals": " high ", "then": ["queue"]},
+                ]
+            )
+        )
+
+
+def test_rejects_a_blank_case() -> None:
+    with pytest.raises(SpecError, match="equals: must not be empty"):
+        parse_spec(switch_spec(cases=[{"equals": "  ", "then": ["page"]}]))
+
+
+def test_rejects_a_switch_with_no_cases() -> None:
+    with pytest.raises(SpecError, match="cases"):
+        parse_spec(switch_spec(cases=[]))
+
+
+def test_rejects_a_switch_with_more_cases_than_the_limit() -> None:
+    cases = [{"equals": f"v{n}"} for n in range(MAX_SWITCH_CASES + 1)]
+
+    with pytest.raises(SpecError, match="cases"):
+        parse_spec(switch_spec(cases=cases))
+
+
+def test_rejects_a_switch_that_fans_out() -> None:
+    with pytest.raises(SpecError, match="a switch cannot use 'for_each'"):
+        parse_spec(switch_spec(for_each="{{ trigger.rows }}"))
+
+
+def test_a_switch_may_leave_a_case_and_otherwise_unwired() -> None:
+    """An empty branch ends there, the same as a condition's."""
+    spec = parse_spec(
+        {
+            "start": "route",
+            "nodes": [
+                {
+                    "id": "route",
+                    "kind": "SWITCH",
+                    "value": "{{ trigger.priority }}",
+                    "cases": [{"equals": "high"}],
+                }
+            ],
+        }
+    )
+
+    switch = only(spec, SwitchNode)
+    assert switch.cases[0].then == []
+    assert switch.otherwise == []
+
+
+def parallel_node(**overrides: Any) -> dict[str, Any]:
+    node: dict[str, Any] = {
+        "id": "lookup",
+        "kind": "PARALLEL",
+        "url": "https://example.test/users/{{ item }}",
+        "over": "{{ trigger.ids }}",
+    }
+    node.update(overrides)
+    return node
+
+
+def test_a_parallel_step_takes_every_http_field() -> None:
+    spec = parse_spec(
+        {
+            "start": "lookup",
+            "nodes": [
+                parallel_node(
+                    method="POST",
+                    body={"id": "{{ item }}"},
+                    result_path="data",
+                    fail_on_error_status=False,
+                    concurrency=3,
+                )
+            ],
+        }
+    )
+
+    node = only(spec, ParallelNode)
+    assert node.method == "POST"
+    assert node.body == {"id": "{{ item }}"}
+    assert node.result_path == "data"
+    assert node.concurrency == 3
+
+
+def test_rejects_a_parallel_step_over_the_concurrency_cap() -> None:
+    with pytest.raises(SpecError, match="concurrency"):
+        parse_spec(
+            {
+                "start": "lookup",
+                "nodes": [parallel_node(concurrency=MAX_PARALLEL_CALLS + 1)],
+            }
+        )
+
+
+def test_rejects_a_parallel_step_with_nothing_to_go_over() -> None:
+    with pytest.raises(SpecError, match="over: must not be empty"):
+        parse_spec({"start": "lookup", "nodes": [parallel_node(over=" ")]})
+
+
+def test_rejects_a_parallel_step_that_also_fans_out() -> None:
+    with pytest.raises(SpecError, match="a parallel step cannot use 'for_each'"):
+        parse_spec(
+            {
+                "start": "lookup",
+                "nodes": [parallel_node(for_each="{{ trigger.groups }}")],
+            }
+        )

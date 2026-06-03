@@ -29,9 +29,11 @@ from onyx.flows.nodes.http import build_http_client, execute_http
 from onyx.flows.nodes.human import execute_human, resume_human
 from onyx.flows.nodes.loop import execute_loop
 from onyx.flows.nodes.merge import execute_merge
+from onyx.flows.nodes.parallel import execute_parallel
 from onyx.flows.nodes.retry import execute_retry
 from onyx.flows.nodes.schedule import execute_schedule
 from onyx.flows.nodes.split import execute_split
+from onyx.flows.nodes.switch import execute_switch, resume_switch
 from onyx.flows.nodes.transform import execute_transform
 from onyx.flows.nodes.webhook import execute_webhook
 
@@ -50,11 +52,14 @@ NODE_EXECUTORS: dict[FlowNodeKind, NodeExecutor] = {
     FlowNodeKind.SCHEDULE: execute_schedule,
     FlowNodeKind.MERGE: execute_merge,
     FlowNodeKind.SPLIT: execute_split,
+    FlowNodeKind.PARALLEL: execute_parallel,
+    FlowNodeKind.SWITCH: execute_switch,
 }
 
 NODE_REPLAYERS: dict[FlowNodeKind, NodeReplayer] = {
     FlowNodeKind.CONDITION: resume_condition,
     FlowNodeKind.HUMAN: resume_human,
+    FlowNodeKind.SWITCH: resume_switch,
 }
 
 __all__ = [

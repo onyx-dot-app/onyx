@@ -8,6 +8,7 @@ import {
   COLUMN_GAP,
   NODE_WIDTH,
   ancestorsOf,
+  branchTargetsOf,
   layoutFlow,
   reachableFrom,
   successorsOf,
@@ -17,6 +18,7 @@ import type {
   FlowNode,
   FlowSpec,
   HumanNode,
+  SwitchNode,
   TransformNode,
 } from "@/app/flows/types";
 
@@ -70,6 +72,25 @@ function human(id: string, onApprove: string[], onReject: string[]): HumanNode {
   };
 }
 
+function switchNode(
+  id: string,
+  cases: Array<[string, string[]]>,
+  otherwise: string[] = []
+): SwitchNode {
+  return {
+    id,
+    name: id,
+    kind: "SWITCH",
+    next: [],
+    for_each: null,
+    on_error: "stop",
+    retry: { max_attempts: 1, backoff_seconds: 1 },
+    value: "{{ trigger.priority }}",
+    cases: cases.map(([equals, then]) => ({ equals, then })),
+    otherwise,
+  };
+}
+
 function spec(start: string, nodes: FlowNode[]): FlowSpec {
   return { spec_version: 1, start, nodes };
 }
@@ -87,6 +108,18 @@ describe("successorsOf", () => {
 
   it("includes both branches of an approval", () => {
     expect(successorsOf(human("g", ["a"], ["b"]))).toEqual(["a", "b"]);
+  });
+
+  it("includes every case of a switch and its otherwise", () => {
+    const route = switchNode(
+      "route",
+      [
+        ["high", ["page"]],
+        ["low", ["queue"]],
+      ],
+      ["triage"]
+    );
+    expect(successorsOf(route)).toEqual(["page", "queue", "triage"]);
   });
 
   it("is just next for every other kind", () => {
@@ -303,5 +336,76 @@ describe("layoutFlow", () => {
     const layout = layoutFlow(spec("a", [transform("a", ["ghost"])]));
     expect(layout.edges).toHaveLength(0);
     expect(layout.nodes).toHaveLength(1);
+  });
+});
+
+describe("switch edges", () => {
+  it("labels each case with what it matches", () => {
+    const layout = layoutFlow(
+      spec("route", [
+        switchNode(
+          "route",
+          [
+            ["high", ["page"]],
+            ["low", ["queue"]],
+          ],
+          ["triage"]
+        ),
+        transform("page"),
+        transform("queue"),
+        transform("triage"),
+      ])
+    );
+
+    const byTarget = Object.fromEntries(
+      layout.edges.map((edge) => [edge.to, [edge.branch, edge.caseLabel]])
+    );
+    expect(byTarget).toEqual({
+      page: ["case", "high"],
+      queue: ["case", "low"],
+      triage: ["otherwise", null],
+    });
+  });
+
+  it("draws one edge for two cases that share a step", () => {
+    const layout = layoutFlow(
+      spec("route", [
+        switchNode("route", [
+          ["high", ["page"]],
+          ["critical", ["page"]],
+        ]),
+        transform("page"),
+      ])
+    );
+
+    expect(layout.edges).toHaveLength(1);
+    expect(layout.edges[0]?.caseLabel).toBe("high, critical");
+  });
+
+  it("cuts a long case short rather than running over the next node", () => {
+    const layout = layoutFlow(
+      spec("route", [
+        switchNode("route", [["{{ steps.owner.body.team_name }}", ["page"]]]),
+        transform("page"),
+      ])
+    );
+
+    const label = layout.edges[0]?.caseLabel ?? "";
+    expect(label).toHaveLength(18);
+    expect(label.endsWith("…")).toBe(true);
+  });
+});
+
+describe("branchTargetsOf", () => {
+  it("offers what follows and what stands apart, never what came before", () => {
+    const flow = spec("fetch", [
+      transform("fetch", ["route"]),
+      switchNode("route", [["high", ["page"]]]),
+      transform("page", ["tell"]),
+      transform("tell"),
+      transform("loose"),
+    ]);
+
+    expect(branchTargetsOf(flow, "route")).toEqual(["page", "tell", "loose"]);
   });
 });

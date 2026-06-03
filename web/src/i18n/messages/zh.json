@@ -12506,7 +12506,9 @@
         "FILTER": "筛选",
         "SCHEDULE": "定时",
         "MERGE": "合并",
-        "SPLIT": "拆分"
+        "SPLIT": "拆分",
+        "PARALLEL": "并行",
+        "SWITCH": "多路分支"
       },
       "startBadge": "起点",
       "fanOutBadge": "逐项",
@@ -12515,7 +12517,9 @@
         "true": "true",
         "false": "false",
         "approve": "已批准",
-        "reject": "已拒绝"
+        "reject": "已拒绝",
+        "case": "情况",
+        "otherwise": "其他"
       },
       "controls": {
         "zoomIn": "放大",
@@ -12540,7 +12544,9 @@
         "FILTER": "筛选",
         "SCHEDULE": "定时",
         "MERGE": "合并",
-        "SPLIT": "拆分"
+        "SPLIT": "拆分",
+        "PARALLEL": "并行",
+        "SWITCH": "多路分支"
       }
     },
     "status": {
@@ -12571,7 +12577,9 @@
         "FILTER": "筛选",
         "SCHEDULE": "定时",
         "MERGE": "合并",
-        "SPLIT": "拆分"
+        "SPLIT": "拆分",
+        "PARALLEL": "并行",
+        "SWITCH": "多路分支"
       },
       "fields": {
         "name": "名称",
@@ -12643,7 +12651,20 @@
         "separator": "按什么拆分",
         "separatorHelp": "换行输入 '\\n'，制表符输入 '\\t'。",
         "splitTrim": "去掉每段前后的空格",
-        "splitDropEmpty": "丢弃空的片段"
+        "splitDropEmpty": "丢弃空的片段",
+        "parallelOver": "为此列表中的每一项各调用一次",
+        "parallelOverHelp": "结果为列表的表达式。请求中可以使用 '{{' item '}}' 和 '{{' index '}}'。",
+        "concurrency": "同时调用数",
+        "concurrencyHelp": "最多 10 个。结果保持列表顺序，第一个失败的调用会停止尚未发送的调用。",
+        "switchValue": "要检查的值",
+        "switchValueHelp": "按顺序与每个情况比较，第一个匹配的情况胜出。",
+        "switchCases": "情况",
+        "switchCasesHelp": "每个情况都有一个值和要前往的步骤。数字也会与以文本书写的同一数字匹配。",
+        "caseHeading": "情况 {number}",
+        "caseValue": "情况 {number} 的值",
+        "caseTarget": "情况 {number} 前往",
+        "switchOtherwise": "都不匹配时前往",
+        "branchEnds": "在此结束"
       },
       "onError": {
         "stop": "停止运行",
@@ -12662,7 +12683,9 @@
         "is_not_empty": "不为空"
       },
       "actions": {
-        "delete": "删除步骤"
+        "delete": "删除步骤",
+        "addCase": "添加情况",
+        "removeCase": "删除情况 {number}"
       },
       "placeholder": {
         "forEach": "'{{' steps.fetch.items '}}'",
@@ -12677,7 +12700,9 @@
         "payload": "'{' \"text\": \"一段摘要\" '}'",
         "filterLeft": "'{{' item.state '}}'",
         "cron": "0 9 * * 1-5",
-        "splitValue": "'{{' trigger.tags '}}'"
+        "splitValue": "'{{' trigger.tags '}}'",
+        "switchValue": "'{{' trigger.priority '}}'",
+        "caseValue": "high"
       },
       "mergeMode": {
         "combine": "按各步骤的名称分别保留其输出",

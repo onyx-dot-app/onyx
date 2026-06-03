@@ -8,10 +8,10 @@ once a run has started.
 Two conventions are worth knowing before reading the node types:
 
 * **Adjacency lives on the node.** A node names its successors in ``next``, or
-  in a pair of branch lists when it chooses between two paths — ``on_true`` /
-  ``on_false`` for a condition, ``on_approve`` / ``on_reject`` for an
-  approval. The canvas draws edges from that; keeping one representation
-  avoids the spec and the picture disagreeing.
+  in branch lists when it chooses a path — ``on_true`` / ``on_false`` for a
+  condition, ``on_approve`` / ``on_reject`` for an approval, one ``then`` per
+  case plus ``otherwise`` for a switch. The canvas draws edges from that;
+  keeping one representation avoids the spec and the picture disagreeing.
 * **Fan-out is explicit.** A node with ``for_each`` set runs once per element
   of that list and records the per-item outputs as its own output. The editor
   fills ``for_each`` in automatically when it notices an upstream list, so the
@@ -64,6 +64,11 @@ INLINE_DELAY_SECONDS = 60.0
 MAX_DELAY_SECONDS = 30 * 24 * 60 * 60.0
 MAX_MERGE_SOURCES = 10
 MAX_SEPARATOR_LENGTH = 20
+MAX_SWITCH_CASES = 10
+
+# Calls a parallel step keeps in flight at once. Past this the step stops being
+# a faster loop and starts looking like a load test against someone's API.
+MAX_PARALLEL_CALLS = 10
 
 # What a person can answer at a human step. Stored on the node's run row and
 # read back by the engine when the run resumes, so the strings are part of the
@@ -629,6 +634,127 @@ class MergeNode(NodeBase):
         return self
 
 
+class ParallelNode(HttpNode):
+    """Call an endpoint once per item, several calls at a time.
+
+    ``for_each`` on an HTTP node already calls once per item, but one call
+    after another, each waiting for the last. Two hundred lookups at a second
+    each is over three minutes of a fifteen-minute budget spent standing in
+    line. This sends up to ``concurrency`` of them at once and hands the
+    results back in the order of the list, not the order they arrived in.
+
+    The request fields are the HTTP node's, rendered per item with
+    ``{{ item }}`` and ``{{ index }}`` bound. The first call that fails stops
+    every call not yet sent. Calls already in flight are left to finish,
+    because a request that has left cannot be taken back.
+
+    The node's ``retry`` policy re-runs the whole set, not only the call that
+    failed. Leave it off for a POST that must not be sent twice.
+    """
+
+    kind: Literal[FlowNodeKind.PARALLEL] = FlowNodeKind.PARALLEL
+
+    # Expression yielding the list to call once per element.
+    over: str
+    concurrency: int = Field(default=5, ge=1, le=MAX_PARALLEL_CALLS)
+
+    @field_validator("over")
+    @classmethod
+    def _non_empty_over(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value
+
+    @model_validator(mode="after")
+    def _no_fan_out(self) -> ParallelNode:
+        # Fanning out a fan-out would multiply the calls in flight by the
+        # outer list, which is exactly the number `concurrency` exists to cap.
+        if self.for_each is not None:
+            raise ValueError(
+                "a parallel step cannot use 'for_each' — it already runs once "
+                "per item of 'over'"
+            )
+        return self
+
+
+class SwitchCase(BaseModel):
+    """One value a switch routes on, and where it sends the run."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # Resolved as an expression, so a case can match what an earlier step
+    # produced as well as a constant.
+    equals: str
+    then: list[str] = Field(default_factory=list)
+
+    @field_validator("equals")
+    @classmethod
+    def _non_empty_equals(cls, value: str) -> str:
+        # A blank case is almost always a row somebody added and forgot. Test
+        # for "nothing" with a condition's `is_empty`, which says so.
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value
+
+
+class SwitchNode(NodeBase):
+    """Route the run down one of several branches by value.
+
+    A condition answers yes or no. A switch answers "which one" — a ticket's
+    priority, an order's state, the region a customer is in. Doing that with
+    conditions means chaining them, each ``on_false`` feeding the next, and a
+    canvas that reads like a staircase.
+
+    ``value`` is resolved once and compared with each case in order using the
+    condition's ``eq``, so a webhook's ``"2"`` matches an API's ``2``. The first
+    case that matches wins and ``otherwise`` takes everything that matched
+    nothing. Any of them may be empty, which ends that branch, exactly as a
+    condition's does. ``next`` is unused.
+    """
+
+    kind: Literal[FlowNodeKind.SWITCH] = FlowNodeKind.SWITCH
+
+    value: str
+    cases: list[SwitchCase] = Field(min_length=1, max_length=MAX_SWITCH_CASES)
+    otherwise: list[str] = Field(default_factory=list)
+
+    @field_validator("value")
+    @classmethod
+    def _non_empty_value(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value
+
+    @field_validator("cases")
+    @classmethod
+    def _unique_cases(cls, value: list[SwitchCase]) -> list[SwitchCase]:
+        # The first match wins, so a repeated case is a branch that can never
+        # be taken — and the canvas would draw it as if it could.
+        seen: set[str] = set()
+        for case in value:
+            key = case.equals.strip()
+            if key in seen:
+                raise ValueError(
+                    f"case '{key}' appears twice — the second could never match"
+                )
+            seen.add(key)
+        return value
+
+    @model_validator(mode="after")
+    def _no_fan_out(self) -> SwitchNode:
+        # Same reason as a condition: once items disagree there is no answer
+        # to "which way did the switch go".
+        if self.for_each is not None:
+            raise ValueError(
+                "a switch cannot use 'for_each' — route once, then fan out"
+            )
+        return self
+
+    def successors(self) -> list[str]:
+        branches = [target for case in self.cases for target in case.then]
+        return [*self.next, *branches, *self.otherwise]
+
+
 class FilterNode(NodeBase):
     """Keep the items of a list that match a comparison.
 
@@ -679,7 +805,9 @@ FlowNode = Annotated[
     | FilterNode
     | ScheduleNode
     | MergeNode
-    | SplitNode,
+    | SplitNode
+    | ParallelNode
+    | SwitchNode,
     Field(discriminator="kind"),
 ]
 

@@ -32,7 +32,9 @@ export type FlowNodeKind =
   | "FILTER"
   | "SCHEDULE"
   | "MERGE"
-  | "SPLIT";
+  | "SPLIT"
+  | "PARALLEL"
+  | "SWITCH";
 export type FlowTriggerKind = "SCHEDULE" | "WEBHOOK" | "MANUAL";
 export type FlowTriggerSource = "SCHEDULE" | "WEBHOOK" | "MANUAL" | "TEST";
 
@@ -200,6 +202,29 @@ export interface SplitNode extends NodeBase {
   drop_empty: boolean;
 }
 
+/** Calls an endpoint once per item of `over`, several calls at a time. */
+export interface ParallelNode extends Omit<HttpNode, "kind"> {
+  kind: "PARALLEL";
+  over: string;
+  /** Calls kept in flight at once, 1 to 10. */
+  concurrency: number;
+}
+
+export interface SwitchCase {
+  /** Compared with the switch's value using `eq`, so "2" matches 2. */
+  equals: string;
+  then: string[];
+}
+
+export interface SwitchNode extends NodeBase {
+  kind: "SWITCH";
+  value: string;
+  /** Checked in order; the first case that matches wins. */
+  cases: SwitchCase[];
+  /** Where the run goes when no case matches. Empty ends the branch. */
+  otherwise: string[];
+}
+
 export type FlowNode =
   | HttpNode
   | TransformNode
@@ -214,7 +239,9 @@ export type FlowNode =
   | FilterNode
   | ScheduleNode
   | MergeNode
-  | SplitNode;
+  | SplitNode
+  | ParallelNode
+  | SwitchNode;
 
 export interface FlowSpec {
   spec_version: 1;

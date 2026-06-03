@@ -12508,7 +12508,9 @@
         "FILTER": "Filtern",
         "SCHEDULE": "Zeitplan",
         "MERGE": "Zusammenführen",
-        "SPLIT": "Aufteilen"
+        "SPLIT": "Aufteilen",
+        "PARALLEL": "Parallel",
+        "SWITCH": "Weiche"
       },
       "startBadge": "Start",
       "fanOutBadge": "pro Element",
@@ -12517,7 +12519,9 @@
         "true": "wahr",
         "false": "falsch",
         "approve": "freigegeben",
-        "reject": "abgelehnt"
+        "reject": "abgelehnt",
+        "case": "Fall",
+        "otherwise": "sonst"
       },
       "controls": {
         "zoomIn": "Vergrößern",
@@ -12542,7 +12546,9 @@
         "FILTER": "Filtern",
         "SCHEDULE": "Zeitplan",
         "MERGE": "Zusammenführen",
-        "SPLIT": "Aufteilen"
+        "SPLIT": "Aufteilen",
+        "PARALLEL": "Parallel",
+        "SWITCH": "Weiche"
       }
     },
     "status": {
@@ -12573,7 +12579,9 @@
         "FILTER": "Filtern",
         "SCHEDULE": "Zeitplan",
         "MERGE": "Zusammenführen",
-        "SPLIT": "Aufteilen"
+        "SPLIT": "Aufteilen",
+        "PARALLEL": "Parallel",
+        "SWITCH": "Weiche"
       },
       "fields": {
         "name": "Name",
@@ -12645,7 +12653,20 @@
         "separator": "Trennen bei",
         "separatorHelp": "'\\n' für einen Zeilenumbruch, '\\t' für einen Tabulator.",
         "splitTrim": "Leerzeichen um jedes Stück entfernen",
-        "splitDropEmpty": "Leere Stücke verwerfen"
+        "splitDropEmpty": "Leere Stücke verwerfen",
+        "parallelOver": "Einmal pro Element aufrufen aus",
+        "parallelOverHelp": "Ein Ausdruck, der eine Liste ergibt. In der Anfrage stehen '{{' item '}}' und '{{' index '}}' zur Verfügung.",
+        "concurrency": "Gleichzeitige Aufrufe",
+        "concurrencyHelp": "Bis zu 10. Die Ergebnisse behalten die Reihenfolge der Liste, und der erste fehlgeschlagene Aufruf stoppt alle noch nicht gesendeten.",
+        "switchValue": "Zu prüfender Wert",
+        "switchValueHelp": "Wird der Reihe nach mit jedem Fall verglichen. Der erste passende Fall gewinnt.",
+        "switchCases": "Fälle",
+        "switchCasesHelp": "Jeder Fall hat einen Wert und einen Schritt, zu dem er führt. Eine Zahl passt auch zur selben Zahl als Text.",
+        "caseHeading": "Fall {number}",
+        "caseValue": "Wert von Fall {number}",
+        "caseTarget": "Fall {number} führt zu",
+        "switchOtherwise": "Wenn nichts passt, weiter zu",
+        "branchEnds": "Hier enden"
       },
       "onError": {
         "stop": "Lauf anhalten",
@@ -12664,7 +12685,9 @@
         "is_not_empty": "ist nicht leer"
       },
       "actions": {
-        "delete": "Schritt löschen"
+        "delete": "Schritt löschen",
+        "addCase": "Fall hinzufügen",
+        "removeCase": "Fall {number} entfernen"
       },
       "placeholder": {
         "forEach": "'{{' steps.fetch.items '}}'",
@@ -12679,7 +12702,9 @@
         "payload": "'{' \"text\": \"eine Zusammenfassung\" '}'",
         "filterLeft": "'{{' item.state '}}'",
         "cron": "0 9 * * 1-5",
-        "splitValue": "'{{' trigger.tags '}}'"
+        "splitValue": "'{{' trigger.tags '}}'",
+        "switchValue": "'{{' trigger.priority '}}'",
+        "caseValue": "hoch"
       },
       "mergeMode": {
         "combine": "Ausgabe jedes Schritts unter seinem Namen behalten",

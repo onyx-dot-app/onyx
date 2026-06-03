@@ -230,7 +230,7 @@ export function FlowCanvas({
                     fill="currentColor"
                     className="font-figure-small-label"
                   >
-                    {t(`branch.${edge.branch}`)}
+                    {edge.caseLabel ?? t(`branch.${edge.branch}`)}
                   </text>
                 ) : null}
               </g>
@@ -296,7 +296,8 @@ export function FlowCanvas({
  *
  * A condition and an approval share the palette deliberately — both are a
  * fork, and someone scanning the canvas should not have to learn two colour
- * schemes to see which way the run can go.
+ * schemes to see which way the run can go. A switch's cases are neither yes
+ * nor no, so they take the switch's own colour, and the catch-all is muted.
  */
 function branchColourOf(branch: EdgeBranch): string {
   switch (branch) {
@@ -306,6 +307,10 @@ function branchColourOf(branch: EdgeBranch): string {
     case "false":
     case "reject":
       return "text-status-error-05";
+    case "case":
+      return "text-status-warning-05";
+    case "otherwise":
+      return "text-text-03";
     case null:
       return "text-border-02";
   }

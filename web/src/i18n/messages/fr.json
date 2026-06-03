@@ -12510,7 +12510,9 @@
         "FILTER": "Filtrer",
         "SCHEDULE": "Planifier",
         "MERGE": "Fusionner",
-        "SPLIT": "Découper"
+        "SPLIT": "Découper",
+        "PARALLEL": "Parallèle",
+        "SWITCH": "Aiguillage"
       },
       "startBadge": "début",
       "fanOutBadge": "par élément",
@@ -12519,7 +12521,9 @@
         "true": "vrai",
         "false": "faux",
         "approve": "approuvé",
-        "reject": "refusé"
+        "reject": "refusé",
+        "case": "cas",
+        "otherwise": "sinon"
       },
       "controls": {
         "zoomIn": "Zoom avant",
@@ -12544,7 +12548,9 @@
         "FILTER": "Filtrer",
         "SCHEDULE": "Planifier",
         "MERGE": "Fusionner",
-        "SPLIT": "Découper"
+        "SPLIT": "Découper",
+        "PARALLEL": "Parallèle",
+        "SWITCH": "Aiguillage"
       }
     },
     "status": {
@@ -12575,7 +12581,9 @@
         "FILTER": "Filtrer",
         "SCHEDULE": "Planifier",
         "MERGE": "Fusionner",
-        "SPLIT": "Découper"
+        "SPLIT": "Découper",
+        "PARALLEL": "Parallèle",
+        "SWITCH": "Aiguillage"
       },
       "fields": {
         "name": "Nom",
@@ -12647,7 +12655,20 @@
         "separator": "Découper sur",
         "separatorHelp": "Tapez '\\n' pour un saut de ligne, '\\t' pour une tabulation.",
         "splitTrim": "Retirer les espaces autour de chaque morceau",
-        "splitDropEmpty": "Écarter les morceaux vides"
+        "splitDropEmpty": "Écarter les morceaux vides",
+        "parallelOver": "Appeler une fois pour chaque élément de",
+        "parallelOverHelp": "Une expression qui donne une liste. Utilisez '{{' item '}}' et '{{' index '}}' dans la requête.",
+        "concurrency": "Appels simultanés",
+        "concurrencyHelp": "Jusqu'à 10. Les résultats gardent l'ordre de la liste, et le premier appel en échec arrête ceux qui ne sont pas encore partis.",
+        "switchValue": "Valeur à tester",
+        "switchValueHelp": "Comparée à chaque cas, dans l'ordre. Le premier cas qui correspond l'emporte.",
+        "switchCases": "Cas",
+        "switchCasesHelp": "Chaque cas a une valeur et une étape vers laquelle aller. Un nombre correspond au même nombre écrit en texte.",
+        "caseHeading": "Cas {number}",
+        "caseValue": "Valeur du cas {number}",
+        "caseTarget": "Le cas {number} mène à",
+        "switchOtherwise": "Si rien ne correspond, aller à",
+        "branchEnds": "Terminer ici"
       },
       "onError": {
         "stop": "Arrêter l'exécution",
@@ -12666,7 +12687,9 @@
         "is_not_empty": "n'est pas vide"
       },
       "actions": {
-        "delete": "Supprimer l'étape"
+        "delete": "Supprimer l'étape",
+        "addCase": "Ajouter un cas",
+        "removeCase": "Retirer le cas {number}"
       },
       "placeholder": {
         "forEach": "'{{' steps.fetch.items '}}'",
@@ -12681,7 +12704,9 @@
         "payload": "'{' \"text\": \"un résumé\" '}'",
         "filterLeft": "'{{' item.state '}}'",
         "cron": "0 9 * * 1-5",
-        "splitValue": "'{{' trigger.tags '}}'"
+        "splitValue": "'{{' trigger.tags '}}'",
+        "switchValue": "'{{' trigger.priority '}}'",
+        "caseValue": "haute"
       },
       "mergeMode": {
         "combine": "Garder la sortie de chaque étape sous son nom",

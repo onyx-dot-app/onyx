@@ -46,7 +46,9 @@ nodes:
 Parsing a spec guarantees four things:
 
 - node ids are unique and match `^[a-z][a-z0-9_]{0,63}$`
-- every `next` / `on_true` / `on_false` reference resolves
+- every successor reference resolves: `next`, and each branch list
+  (`on_true` / `on_false`, `on_approve` / `on_reject`, a switch's `then` and
+  `otherwise`)
 - the graph has no cycles
 - `start` exists
 
@@ -335,8 +337,8 @@ Brings the output of several earlier steps back together. Output is
 
 A graph could already fan out and join — a node runs as soon as any
 predecessor hands control to it. What it could not do is see what the *other*
-branch produced, and that is what this is for: two calls in parallel, one step
-that uses both.
+branch produced, and that is what this is for: two calls on separate branches,
+one step that uses both.
 
 ```
 left.next     = ["both"]
@@ -391,6 +393,81 @@ which is half of what anyone wants this for.
 A value that is already a list passes straight through, being what the node
 is trying to produce; nothing at all splits to nothing; and a shape that
 cannot be cut up says so rather than being stringified into one useless item.
+
+### SWITCH
+
+Routes the run down one of several branches by value. Output is
+`{value, case, equals}`.
+
+A [CONDITION](#condition) answers yes or no. A switch answers "which one": a
+ticket's priority, an order's state, the region a customer is in. With
+conditions alone that is a chain of them, each `on_false` feeding the next.
+
+```
+route.value     = "{{ trigger.priority }}"
+route.cases     = [{ equals: "high", then: ["page"] },
+                   { equals: "low",  then: ["queue"] }]
+route.otherwise = ["triage"]
+```
+
+`value` is resolved once and compared with each case in order, using the
+condition's `eq`, so `"2"` matches `2`. The first case that matches wins.
+Cases after it are never resolved, so a case that reads a step on another
+branch cannot fail a run that did not need it. `otherwise` takes everything
+that matched nothing. Any branch may be empty, which ends it there, the same
+as a condition's.
+
+`case` is the position of the case that won, or `null` for `otherwise`. A
+resumed run reads it to take the same branch again; the value is never
+compared a second time.
+
+A spec is refused when two cases have the same value (the second could never
+match), when a case is blank, or with more than 10 cases. A switch cannot fan
+out.
+
+In the editor each case has its own destination picker. It offers every step
+except the switch and the steps before it, because either would close a loop.
+
+### PARALLEL
+
+Calls an endpoint once per item of a list, several calls at a time. Output is
+`{results, total}`.
+
+`for_each` on an [HTTP](#http) step already calls once per item, but one call
+after another, each waiting for the last. Two hundred lookups at a second each
+is over three minutes of a fifteen-minute budget spent waiting in line. This
+sends up to `concurrency` calls at once (1 to 10, default 5).
+
+```
+lookup.over        = "{{ steps.fetch.body.ids }}"
+lookup.url         = "https://api.example.com/users/{{ item }}"
+lookup.concurrency = 5
+notify.for_each    = "{{ steps.lookup.results }}"
+```
+
+The request fields are the HTTP node's, rendered per item with `{{ item }}`
+and `{{ index }}` bound. `results` keeps the order of the list, not the order
+the replies arrived in.
+
+- **The first failed call stops the calls not yet sent.** Calls already in
+  flight finish, because a request that has left cannot be taken back. The
+  error names the lowest failing item (`item 3: GET … returned 500`), so the
+  same broken item is reported however the calls raced. Set
+  `fail_on_error_status: false` to collect the statuses instead.
+- **The run budget still applies.** The engine hands its deadline to the step,
+  which stops sending once it passes and fails with `budget_exceeded`.
+- **`retry` re-runs the whole set,** not only the call that failed. Leave it
+  off for a POST that must not be sent twice.
+
+A parallel step cannot use `for_each` itself. Fanning out a fan-out would
+multiply the calls in flight by the outer list, which is the number
+`concurrency` exists to cap.
+
+The calls run on a small thread pool inside the step, and each one runs in a
+copy of the caller's `contextvars`. The SSRF policy is read per tenant, and a
+bare pool thread would apply the default schema's policy instead. Only the
+calls leave the engine's thread: the engine writes the step's row after the
+step returns, so no database session is shared between threads.
 
 ## Execution
 
@@ -477,7 +554,9 @@ predictable.
 ### Budgets
 
 A run gets 15 minutes of wall clock, checked before each node and before each
-retry sleep. This is enforced in the engine because Celery's thread-pool worker
+retry sleep. The deadline is also on `NodeRuntime`, so a step that does many
+things at once — [PARALLEL](#parallel) — stops starting new ones when it
+passes. This is enforced in the engine because Celery's thread-pool worker
 silently ignores `soft_time_limit`.
 
 ## Triggers
@@ -557,3 +636,6 @@ its recent history and a quiet one does not hoard a year of green ticks.
 
 Handlers are plain functions so a test can call one with a hand-built context.
 That is most of why the engine stays easy to reason about.
+
+A handler that hands work to other threads must run it in a copy of the
+caller's `contextvars`: the tenant lives in one. See [PARALLEL](#parallel).

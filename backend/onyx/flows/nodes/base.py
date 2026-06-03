@@ -8,6 +8,7 @@ the engine stays easy to reason about.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -75,7 +76,7 @@ class NodeOutcome:
     """What a node produced and where control goes next.
 
     ``next_ids`` is None for every node that just follows its declared
-    successors; the two branching kinds set it to the path they chose.
+    successors; the branching kinds set it to the path they chose.
     """
 
     output: Any
@@ -129,6 +130,10 @@ class NodeRuntime:
     # unsigned, which the webhook node warns about rather than refusing —
     # a flow written before the secret existed should still deliver.
     webhook_signing_secret: str | None = None
+    # Monotonic time the run has to finish by, set by the engine. The engine
+    # checks it between nodes; a node that does many things in one step reads
+    # it too, so it stops starting new work instead of overrunning the budget.
+    deadline: float | None = None
 
     _llm: LLM | None = None
     _code_runner: CodeRunner | None = None
@@ -144,6 +149,10 @@ class NodeRuntime:
         if self._code_runner is None:
             self._code_runner = self.code_runner_provider()
         return self._code_runner
+
+    def out_of_time(self) -> bool:
+        """Whether the run's budget is spent. Never true without a deadline."""
+        return self.deadline is not None and time.monotonic() > self.deadline
 
     def close(self) -> None:
         """Release what the run opened. Safe to call twice."""
@@ -165,8 +174,8 @@ class NodeReplayer(Protocol):
     """Rebuilds the outcome of a node execution already on record.
 
     Only kinds that choose a branch need one: a plain node's successors are
-    the same whatever it produced, while a condition or an approval has to
-    read its own recorded output to know which way the run went. Without this
+    the same whatever it produced, while a condition, a switch or an approval
+    has to read its own recorded output to know which way the run went. Without this
     a resumed run would take the empty ``next`` list and skip everything
     downstream of the branch it actually chose.
     """

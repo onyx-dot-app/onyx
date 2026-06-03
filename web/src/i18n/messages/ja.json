@@ -12508,7 +12508,9 @@
         "FILTER": "絞り込み",
         "SCHEDULE": "スケジュール",
         "MERGE": "結合",
-        "SPLIT": "分割"
+        "SPLIT": "分割",
+        "PARALLEL": "並列",
+        "SWITCH": "スイッチ"
       },
       "startBadge": "開始",
       "fanOutBadge": "項目ごと",
@@ -12517,7 +12519,9 @@
         "true": "true",
         "false": "false",
         "approve": "承認",
-        "reject": "却下"
+        "reject": "却下",
+        "case": "ケース",
+        "otherwise": "その他"
       },
       "controls": {
         "zoomIn": "拡大",
@@ -12542,7 +12546,9 @@
         "FILTER": "絞り込み",
         "SCHEDULE": "スケジュール",
         "MERGE": "結合",
-        "SPLIT": "分割"
+        "SPLIT": "分割",
+        "PARALLEL": "並列",
+        "SWITCH": "スイッチ"
       }
     },
     "status": {
@@ -12573,7 +12579,9 @@
         "FILTER": "絞り込み",
         "SCHEDULE": "スケジュール",
         "MERGE": "結合",
-        "SPLIT": "分割"
+        "SPLIT": "分割",
+        "PARALLEL": "並列",
+        "SWITCH": "スイッチ"
       },
       "fields": {
         "name": "名前",
@@ -12645,7 +12653,20 @@
         "separator": "区切り文字",
         "separatorHelp": "改行は '\\n'、タブは '\\t' と入力します。",
         "splitTrim": "各要素の前後の空白を取り除く",
-        "splitDropEmpty": "空の要素を捨てる"
+        "splitDropEmpty": "空の要素を捨てる",
+        "parallelOver": "各項目ごとに呼び出す一覧",
+        "parallelOverHelp": "一覧になる式です。リクエストでは '{{' item '}}' と '{{' index '}}' を使えます。",
+        "concurrency": "同時に送る呼び出し数",
+        "concurrencyHelp": "最大 10。結果は一覧の順序を保ちます。最初に失敗した呼び出しで、まだ送っていない呼び出しは止まります。",
+        "switchValue": "判定する値",
+        "switchValueHelp": "各ケースと順に比較します。最初に一致したケースが選ばれます。",
+        "switchCases": "ケース",
+        "switchCasesHelp": "各ケースには値と移動先のステップがあります。数値は、同じ数値を表すテキストとも一致します。",
+        "caseHeading": "ケース {number}",
+        "caseValue": "ケース {number} の値",
+        "caseTarget": "ケース {number} の移動先",
+        "switchOtherwise": "どれにも一致しないときの移動先",
+        "branchEnds": "ここで終了"
       },
       "onError": {
         "stop": "実行を停止",
@@ -12664,7 +12685,9 @@
         "is_not_empty": "空でない"
       },
       "actions": {
-        "delete": "ステップを削除"
+        "delete": "ステップを削除",
+        "addCase": "ケースを追加",
+        "removeCase": "ケース {number} を削除"
       },
       "placeholder": {
         "forEach": "'{{' steps.fetch.items '}}'",
@@ -12679,7 +12702,9 @@
         "payload": "'{' \"text\": \"要約\" '}'",
         "filterLeft": "'{{' item.state '}}'",
         "cron": "0 9 * * 1-5",
-        "splitValue": "'{{' trigger.tags '}}'"
+        "splitValue": "'{{' trigger.tags '}}'",
+        "switchValue": "'{{' trigger.priority '}}'",
+        "caseValue": "high"
       },
       "mergeMode": {
         "combine": "各ステップの出力をその名前のまま残す",

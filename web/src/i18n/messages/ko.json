@@ -12506,7 +12506,9 @@
         "FILTER": "필터",
         "SCHEDULE": "일정",
         "MERGE": "병합",
-        "SPLIT": "분할"
+        "SPLIT": "분할",
+        "PARALLEL": "병렬",
+        "SWITCH": "스위치"
       },
       "startBadge": "시작",
       "fanOutBadge": "항목별",
@@ -12515,7 +12517,9 @@
         "true": "true",
         "false": "false",
         "approve": "승인",
-        "reject": "거부"
+        "reject": "거부",
+        "case": "케이스",
+        "otherwise": "그 외"
       },
       "controls": {
         "zoomIn": "확대",
@@ -12540,7 +12544,9 @@
         "FILTER": "필터",
         "SCHEDULE": "일정",
         "MERGE": "병합",
-        "SPLIT": "분할"
+        "SPLIT": "분할",
+        "PARALLEL": "병렬",
+        "SWITCH": "스위치"
       }
     },
     "status": {
@@ -12571,7 +12577,9 @@
         "FILTER": "필터",
         "SCHEDULE": "일정",
         "MERGE": "병합",
-        "SPLIT": "분할"
+        "SPLIT": "분할",
+        "PARALLEL": "병렬",
+        "SWITCH": "스위치"
       },
       "fields": {
         "name": "이름",
@@ -12643,7 +12651,20 @@
         "separator": "구분 문자",
         "separatorHelp": "줄바꿈은 '\\n', 탭은 '\\t' 로 입력하세요.",
         "splitTrim": "각 조각의 앞뒤 공백 제거",
-        "splitDropEmpty": "빈 조각 버리기"
+        "splitDropEmpty": "빈 조각 버리기",
+        "parallelOver": "항목마다 한 번씩 호출할 목록",
+        "parallelOverHelp": "목록이 되는 표현식입니다. 요청에서 '{{' item '}}'과 '{{' index '}}'를 쓸 수 있습니다.",
+        "concurrency": "동시 호출 수",
+        "concurrencyHelp": "최대 10개입니다. 결과는 목록 순서를 유지하며, 처음 실패한 호출이 아직 보내지 않은 호출을 멈춥니다.",
+        "switchValue": "확인할 값",
+        "switchValueHelp": "각 케이스와 순서대로 비교합니다. 처음 일치한 케이스가 선택됩니다.",
+        "switchCases": "케이스",
+        "switchCasesHelp": "각 케이스에는 값과 이동할 단계가 있습니다. 숫자는 같은 숫자를 텍스트로 쓴 값과도 일치합니다.",
+        "caseHeading": "케이스 {number}",
+        "caseValue": "케이스 {number} 값",
+        "caseTarget": "케이스 {number} 이동 대상",
+        "switchOtherwise": "일치하는 항목이 없을 때 이동할 단계",
+        "branchEnds": "여기서 종료"
       },
       "onError": {
         "stop": "실행 중단",
@@ -12662,7 +12683,9 @@
         "is_not_empty": "비어 있지 않음"
       },
       "actions": {
-        "delete": "단계 삭제"
+        "delete": "단계 삭제",
+        "addCase": "케이스 추가",
+        "removeCase": "케이스 {number} 삭제"
       },
       "placeholder": {
         "forEach": "'{{' steps.fetch.items '}}'",
@@ -12677,7 +12700,9 @@
         "payload": "'{' \"text\": \"요약\" '}'",
         "filterLeft": "'{{' item.state '}}'",
         "cron": "0 9 * * 1-5",
-        "splitValue": "'{{' trigger.tags '}}'"
+        "splitValue": "'{{' trigger.tags '}}'",
+        "switchValue": "'{{' trigger.priority '}}'",
+        "caseValue": "high"
       },
       "mergeMode": {
         "combine": "각 단계의 출력을 이름 그대로 두기",

@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -27,9 +28,11 @@ from onyx.flows.nodes.http import execute_http
 from onyx.flows.nodes.human import execute_human, resume_human
 from onyx.flows.nodes.loop import execute_loop
 from onyx.flows.nodes.merge import execute_merge
+from onyx.flows.nodes.parallel import execute_parallel
 from onyx.flows.nodes.retry import execute_retry
 from onyx.flows.nodes.schedule import execute_schedule
 from onyx.flows.nodes.split import execute_split
+from onyx.flows.nodes.switch import execute_switch, resume_switch
 from onyx.flows.nodes.webhook import (
     SIGNATURE_HEADER,
     TIMESTAMP_HEADER,
@@ -39,6 +42,7 @@ from onyx.flows.nodes.webhook import (
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     ExecuteResponse,
 )
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
 def only_node(raw: dict) -> Any:
@@ -1332,3 +1336,384 @@ def test_split_refuses_more_pieces_than_the_fan_out_limit() -> None:
         execute_split(split_node(), context, MagicMock())
 
     assert caught.value.error_class == FlowErrorClass.INVALID_SPEC
+
+
+# ---------------------------------------------------------------------------
+# Parallel
+# ---------------------------------------------------------------------------
+
+
+def parallel_node(**overrides: Any) -> Any:
+    node: dict[str, Any] = {
+        "id": "lookup",
+        "kind": "PARALLEL",
+        "url": "https://api.test/users/{{ item }}?at={{ index }}",
+        "over": "{{ trigger.ids }}",
+    }
+    node.update(overrides)
+    return only_node(node)
+
+
+def user_id(request: httpx.Request) -> int:
+    return int(request.url.path.rsplit("/", 1)[-1])
+
+
+def test_parallel_calls_once_per_item_with_item_and_index_bound() -> None:
+    seen: list[str] = []
+    lock = threading.Lock()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        with lock:
+            seen.append(str(request.url))
+        return httpx.Response(200, json={"id": user_id(request)})
+
+    context = RunContext(trigger={"ids": [7, 8, 9]})
+
+    outcome = execute_parallel(parallel_node(), context, runtime_with(handler))
+
+    assert sorted(seen) == [
+        "https://api.test/users/7?at=0",
+        "https://api.test/users/8?at=1",
+        "https://api.test/users/9?at=2",
+    ]
+    assert outcome.output["total"] == 3
+    assert [result["body"] for result in outcome.output["results"]] == [
+        {"id": 7},
+        {"id": 8},
+        {"id": 9},
+    ]
+
+
+def test_parallel_results_keep_list_order_not_arrival_order() -> None:
+    """The first item is the slowest, so it arrives last."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        position = user_id(request)
+        time.sleep((3 - position) * 0.05)
+        return httpx.Response(200, json={"position": position})
+
+    node = parallel_node(concurrency=3, result_path="position")
+    context = RunContext(trigger={"ids": [0, 1, 2]})
+
+    outcome = execute_parallel(node, context, runtime_with(handler))
+
+    assert outcome.output["results"] == [0, 1, 2]
+
+
+def test_parallel_keeps_exactly_the_configured_number_of_calls_in_flight() -> None:
+    """A barrier only opens once three calls are waiting at it together.
+
+    Run the calls one at a time and it never opens; let a fourth in and the
+    high-water mark says so.
+    """
+    barrier = threading.Barrier(3, timeout=5)
+    lock = threading.Lock()
+    in_flight = {"now": 0, "most": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        with lock:
+            in_flight["now"] += 1
+            in_flight["most"] = max(in_flight["most"], in_flight["now"])
+        barrier.wait()
+        time.sleep(0.02)
+        with lock:
+            in_flight["now"] -= 1
+        return httpx.Response(200, json={})
+
+    context = RunContext(trigger={"ids": list(range(9))})
+
+    outcome = execute_parallel(
+        parallel_node(concurrency=3), context, runtime_with(handler)
+    )
+
+    assert outcome.output["total"] == 9
+    assert in_flight["most"] == 3
+
+
+def test_each_call_runs_as_the_tenant_that_started_the_run() -> None:
+    """The SSRF policy is read per tenant, and a bare pool thread has none."""
+    tenants: list[str | None] = []
+    lock = threading.Lock()
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        with lock:
+            tenants.append(CURRENT_TENANT_ID_CONTEXTVAR.get())
+        return httpx.Response(200, json={})
+
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_parallel")
+    try:
+        execute_parallel(
+            parallel_node(concurrency=4),
+            RunContext(trigger={"ids": [1, 2, 3, 4]}),
+            runtime_with(handler),
+        )
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    assert tenants == ["tenant_parallel"] * 4
+
+
+def test_the_first_failure_stops_the_calls_not_yet_sent() -> None:
+    """Item 1 fails at once while item 0 is still out. Nothing after is sent."""
+    sent: list[int] = []
+    lock = threading.Lock()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        position = user_id(request)
+        with lock:
+            sent.append(position)
+        if position == 1:
+            return httpx.Response(500, json={"error": "down"})
+        time.sleep(0.2)
+        return httpx.Response(200, json={})
+
+    context = RunContext(trigger={"ids": list(range(20))})
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_parallel(parallel_node(concurrency=2), context, runtime_with(handler))
+
+    assert caught.value.error_class == FlowErrorClass.HTTP_ERROR
+    assert caught.value.detail.startswith("item 1: GET https://api.test/users/1")
+    assert sorted(sent) == [0, 1]
+
+
+def test_the_lowest_failing_item_is_reported_however_the_calls_raced() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        position = user_id(request)
+        # Item 2 fails first; item 0 fails later.
+        time.sleep(0.1 if position == 0 else 0.0)
+        return httpx.Response(500 if position in (0, 2) else 200, json={})
+
+    context = RunContext(trigger={"ids": [0, 1, 2]})
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_parallel(parallel_node(concurrency=3), context, runtime_with(handler))
+
+    assert caught.value.detail.startswith("item 0:")
+
+
+def test_parallel_can_collect_error_statuses_instead_of_stopping() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404 if user_id(request) == 2 else 200, json={})
+
+    node = parallel_node(fail_on_error_status=False)
+    context = RunContext(trigger={"ids": [1, 2, 3]})
+
+    outcome = execute_parallel(node, context, runtime_with(handler))
+
+    assert [result["status"] for result in outcome.output["results"]] == [
+        200,
+        404,
+        200,
+    ]
+
+
+def test_a_timeout_in_one_call_is_reported_as_a_timeout() -> None:
+    """The class survives the trip through the pool, so the retry policy
+    still sees something it knows is worth another go."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if user_id(request) == 2:
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, json={})
+
+    context = RunContext(trigger={"ids": [1, 2]})
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_parallel(parallel_node(), context, runtime_with(handler))
+
+    assert caught.value.error_class == FlowErrorClass.TIMEOUT
+    assert caught.value.error_class in RETRYABLE_ERROR_CLASSES
+
+
+def test_parallel_stops_sending_once_the_run_is_out_of_time() -> None:
+    runtime: NodeRuntime
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        # The budget runs out while the first call is out.
+        runtime.deadline = time.monotonic() - 1
+        return httpx.Response(200, json={})
+
+    runtime = runtime_with(handler)
+    runtime.deadline = time.monotonic() + 60
+    context = RunContext(trigger={"ids": [1, 2, 3, 4, 5]})
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_parallel(parallel_node(concurrency=1), context, runtime)
+
+    assert caught.value.error_class == FlowErrorClass.BUDGET_EXCEEDED
+    assert caught.value.detail == "run ran out of time after sending 1 of 5 calls"
+
+
+def test_parallel_over_nothing_sends_nothing() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("nothing should be sent")
+
+    outcome = execute_parallel(
+        parallel_node(), RunContext(trigger={"ids": None}), runtime_with(handler)
+    )
+
+    assert outcome.output == {"results": [], "total": 0}
+
+
+def test_parallel_rejects_a_value_that_is_not_a_list() -> None:
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_parallel(
+            parallel_node(), RunContext(trigger={"ids": "1,2,3"}), MagicMock()
+        )
+
+    assert caught.value.error_class == FlowErrorClass.EXPRESSION_ERROR
+    assert "got str" in caught.value.detail
+
+
+def test_parallel_refuses_more_items_than_the_fan_out_limit() -> None:
+    context = RunContext(trigger={"ids": list(range(MAX_FAN_OUT_ITEMS + 1))})
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_parallel(parallel_node(), context, MagicMock())
+
+    assert caught.value.error_class == FlowErrorClass.INVALID_SPEC
+
+
+# ---------------------------------------------------------------------------
+# Switch
+# ---------------------------------------------------------------------------
+
+
+def switch_node(**overrides: Any) -> Any:
+    node: dict[str, Any] = {
+        "id": "route",
+        "kind": "SWITCH",
+        "value": "{{ trigger.priority }}",
+        "cases": [
+            {"equals": "high", "then": ["page"]},
+            {"equals": "low", "then": ["queue"]},
+        ],
+        "otherwise": ["triage"],
+    }
+    node.update(overrides)
+    return parse_spec(
+        {
+            "start": "route",
+            "nodes": [
+                node,
+                {"id": "page", "kind": "TRANSFORM", "fields": {"v": "p"}},
+                {"id": "queue", "kind": "TRANSFORM", "fields": {"v": "q"}},
+                {"id": "triage", "kind": "TRANSFORM", "fields": {"v": "t"}},
+            ],
+        }
+    ).nodes[0]
+
+
+def test_switch_takes_the_case_that_matches() -> None:
+    outcome = execute_switch(
+        switch_node(), RunContext(trigger={"priority": "low"}), MagicMock()
+    )
+
+    assert outcome.next_ids == ["queue"]
+    assert outcome.output == {"value": "low", "case": 1, "equals": "low"}
+
+
+def test_switch_falls_through_to_otherwise() -> None:
+    outcome = execute_switch(
+        switch_node(), RunContext(trigger={"priority": "urgent"}), MagicMock()
+    )
+
+    assert outcome.next_ids == ["triage"]
+    assert outcome.output == {"value": "urgent", "case": None, "equals": None}
+
+
+def test_switch_with_no_otherwise_ends_the_branch() -> None:
+    outcome = execute_switch(
+        switch_node(otherwise=[]),
+        RunContext(trigger={"priority": "urgent"}),
+        MagicMock(),
+    )
+
+    assert outcome.next_ids == []
+
+
+def test_switch_matches_across_the_json_text_boundary() -> None:
+    """A case is typed as text; the value is often a number."""
+    node = switch_node(
+        cases=[
+            {"equals": "1", "then": ["page"]},
+            {"equals": "2", "then": ["queue"]},
+        ]
+    )
+
+    outcome = execute_switch(node, RunContext(trigger={"priority": 2}), MagicMock())
+
+    assert outcome.next_ids == ["queue"]
+
+
+def test_the_first_matching_case_wins() -> None:
+    node = switch_node(
+        cases=[
+            {"equals": "2", "then": ["page"]},
+            {"equals": "2.0", "then": ["queue"]},
+        ]
+    )
+
+    outcome = execute_switch(node, RunContext(trigger={"priority": 2}), MagicMock())
+
+    assert outcome.next_ids == ["page"]
+    assert outcome.output["case"] == 0
+
+
+def test_a_case_can_match_what_an_earlier_step_produced() -> None:
+    node = switch_node(
+        cases=[{"equals": "{{ steps.owner.team }}", "then": ["page"]}],
+    )
+    context = RunContext(
+        trigger={"priority": "platform"}, steps={"owner": {"team": "platform"}}
+    )
+
+    outcome = execute_switch(node, context, MagicMock())
+
+    assert outcome.next_ids == ["page"]
+    assert outcome.output["equals"] == "platform"
+
+
+def test_cases_after_the_match_are_never_resolved() -> None:
+    """A later case reading a step that did not run must not fail the run."""
+    node = switch_node(
+        cases=[
+            {"equals": "high", "then": ["page"]},
+            {"equals": "{{ steps.never_ran.value }}", "then": ["queue"]},
+        ]
+    )
+
+    outcome = execute_switch(
+        node, RunContext(trigger={"priority": "high"}), MagicMock()
+    )
+
+    assert outcome.next_ids == ["page"]
+
+
+def test_an_unresolvable_switch_value_is_an_expression_error() -> None:
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_switch(switch_node(), RunContext(trigger={}), MagicMock())
+
+    assert caught.value.error_class == FlowErrorClass.EXPRESSION_ERROR
+
+
+def test_a_replayed_switch_takes_the_case_on_record() -> None:
+    """The recorded position decides, even if the value now reads otherwise."""
+    outcome = resume_switch(switch_node(), {"value": "low", "case": 1, "equals": "low"})
+
+    assert outcome.next_ids == ["queue"]
+
+
+def test_a_replayed_switch_that_matched_nothing_goes_to_otherwise() -> None:
+    outcome = resume_switch(
+        switch_node(), {"value": "urgent", "case": None, "equals": None}
+    )
+
+    assert outcome.next_ids == ["triage"]
+
+
+@pytest.mark.parametrize("recorded", [5, -1, True, "1"])
+def test_an_unreadable_recorded_case_is_an_error_not_a_branch(recorded: Any) -> None:
+    with pytest.raises(NodeExecutionError, match="unreadable case"):
+        resume_switch(switch_node(), {"value": "x", "case": recorded})

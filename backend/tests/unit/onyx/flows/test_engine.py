@@ -1,9 +1,11 @@
 """Engine behaviour: traversal, branching, fan-out, retries and resume."""
 
+import time
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 
 from onyx.db.enums import FlowErrorClass, FlowNodeKind, FlowNodeRunStatus, FlowRunStatus
@@ -690,3 +692,132 @@ def test_a_merge_runs_once_even_though_two_branches_reach_it(
     merged = [entry for entry in recorder.entries if entry["node_id"] == "both"]
     assert len(merged) == 1, "a join must not run once per incoming branch"
     assert result.outputs["both"]["present"] == ["left", "right"]
+
+
+# ---------------------------------------------------------------------------
+# Switching between several branches
+# ---------------------------------------------------------------------------
+
+
+def switch_spec() -> Any:
+    return parse_spec(
+        {
+            "start": "route",
+            "nodes": [
+                {
+                    "id": "route",
+                    "kind": "SWITCH",
+                    "value": "{{ trigger.priority }}",
+                    "cases": [
+                        {"equals": "high", "then": ["page"]},
+                        {"equals": "low", "then": ["queue"]},
+                    ],
+                    "otherwise": ["triage"],
+                },
+                transform("page", "paged", next=["done"]),
+                transform("queue", "queued", next=["done"]),
+                transform("triage", "triaged", next=["done"]),
+                transform("done", "done"),
+            ],
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "priority, taken",
+    [("high", "page"), ("low", "queue"), ("whatever", "triage")],
+)
+def test_a_switch_runs_one_branch_and_skips_the_rest(
+    runtime: NodeRuntime, priority: str, taken: str
+) -> None:
+    recorder = InMemoryRecorder()
+
+    result = execute_flow(
+        spec=switch_spec(),
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"priority": priority},
+    )
+
+    assert result.status == FlowRunStatus.SUCCEEDED
+    ran = {"page", "queue", "triage"} & set(result.outputs)
+    assert ran == {taken}
+    for branch in {"page", "queue", "triage"} - {taken}:
+        assert statuses(recorder)[branch] == FlowNodeRunStatus.SKIPPED
+    assert result.outputs["done"] == {"value": "done"}, "the branches rejoin"
+
+
+def test_a_replayed_switch_keeps_the_branch_it_first_took(
+    runtime: NodeRuntime,
+) -> None:
+    """The row says case 1 was taken, and the trigger now says otherwise.
+
+    Replay follows the row. Without a replayer the node would hand control to
+    its empty `next` and skip every branch; re-evaluating would pick the
+    wrong one.
+    """
+    recorder = InMemoryRecorder()
+    recorder._finished[("route", 0)] = RecordedNode(
+        status=FlowNodeRunStatus.SUCCEEDED,
+        output={"value": "low", "case": 1, "equals": "low"},
+    )
+
+    result = execute_flow(
+        spec=switch_spec(),
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"priority": "high"},
+    )
+
+    assert result.outputs["queue"] == {"value": "queued"}
+    assert statuses(recorder)["page"] == FlowNodeRunStatus.SKIPPED
+    assert statuses(recorder)["triage"] == FlowNodeRunStatus.SKIPPED
+
+
+# ---------------------------------------------------------------------------
+# Parallel calls
+# ---------------------------------------------------------------------------
+
+
+def test_a_parallel_step_stops_sending_when_the_run_budget_runs_out() -> None:
+    """The engine hands its deadline to the node, not only checks it between
+    nodes — otherwise one step could spend the budget several times over."""
+    sent: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(str(request.url))
+        time.sleep(0.3)
+        return httpx.Response(200, json={})
+
+    spec = parse_spec(
+        {
+            "start": "lookup",
+            "nodes": [
+                {
+                    "id": "lookup",
+                    "kind": "PARALLEL",
+                    "url": "https://api.test/users/{{ item }}",
+                    "over": "{{ trigger.ids }}",
+                    "concurrency": 1,
+                }
+            ],
+        }
+    )
+    runtime = NodeRuntime(
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        llm_provider=MagicMock(),
+    )
+
+    result = execute_flow(
+        spec=spec,
+        runtime=runtime,
+        recorder=InMemoryRecorder(),
+        trigger_payload={"ids": [1, 2, 3]},
+        budget_seconds=0.2,
+    )
+
+    assert result.status == FlowRunStatus.FAILED
+    assert result.error_class == FlowErrorClass.BUDGET_EXCEEDED
+    assert result.failed_node_id == "lookup"
+    assert result.error_detail == "run ran out of time after sending 1 of 3 calls"
+    assert sent == ["https://api.test/users/1"]

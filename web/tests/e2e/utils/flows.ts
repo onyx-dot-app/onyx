@@ -35,7 +35,9 @@ interface FlowNodeSeed {
     | "HUMAN"
     | "LOOP"
     | "DELAY"
-    | "FILTER";
+    | "FILTER"
+    | "SWITCH"
+    | "PARALLEL";
   next: string[];
   for_each: string | null;
   on_error: "stop" | "skip";
@@ -389,4 +391,148 @@ export async function seedFinishedRun(
     .toMatch(TERMINAL_STATUS);
 
   return { flowId: flow.id, runId: run.id };
+}
+
+/** The priority a seeded switch routes on, and the step each one reaches. */
+export const SWITCH_ROUTES = {
+  high: "page",
+  low: "queue",
+  otherwise: "triage",
+} as const;
+
+/**
+ * A switch with a case per priority and a catch-all.
+ *
+ * Transforms on every branch, so the run needs no network: what is under
+ * test is which branch ran and which were skipped.
+ */
+function switchFlowSpec() {
+  return {
+    spec_version: 1,
+    start: "route",
+    nodes: [
+      {
+        id: "route",
+        name: "Route by priority",
+        kind: "SWITCH",
+        next: [],
+        for_each: null,
+        on_error: "stop",
+        retry: { max_attempts: 1, backoff_seconds: 1 },
+        value: "{{ trigger.priority }}",
+        cases: [
+          { equals: "high", then: [SWITCH_ROUTES.high] },
+          { equals: "low", then: [SWITCH_ROUTES.low] },
+        ],
+        otherwise: [SWITCH_ROUTES.otherwise],
+      } satisfies FlowNodeSeed,
+      transform(SWITCH_ROUTES.high, "Page on-call", {
+        paged: "{{ trigger.priority }}",
+      }),
+      transform(SWITCH_ROUTES.low, "Queue for later", {
+        queued: "{{ trigger.priority }}",
+      }),
+      transform(SWITCH_ROUTES.otherwise, "Triage", {
+        triaged: "{{ trigger.priority }}",
+      }),
+    ],
+  };
+}
+
+/**
+ * A parallel step aimed at this machine.
+ *
+ * The SSRF policy refuses loopback, so every call fails before it leaves.
+ * That is the point: it is the one outcome that needs no outside endpoint,
+ * and it proves the calls ran on the worker, under the tenant's policy, and
+ * that the failure names the item it came from.
+ */
+function parallelFlowSpec() {
+  return {
+    spec_version: 1,
+    start: "lookup",
+    nodes: [
+      {
+        id: "lookup",
+        name: "Look up users",
+        kind: "PARALLEL",
+        next: [],
+        for_each: null,
+        on_error: "stop",
+        retry: { max_attempts: 1, backoff_seconds: 1 },
+        method: "GET",
+        url: "http://127.0.0.1:9/users/{{ item }}",
+        headers: {},
+        query: {},
+        body: null,
+        timeout_seconds: 5,
+        result_path: null,
+        fail_on_error_status: true,
+        over: "{{ trigger.ids }}",
+        concurrency: 3,
+      } satisfies FlowNodeSeed,
+    ],
+  };
+}
+
+/** Create a flow, fire a test run of it, and wait for the run to settle. */
+async function runToTheEnd(
+  request: APIRequestContext,
+  name: string,
+  spec: object,
+  payload: object
+): Promise<SeededRun> {
+  const createRes = await request.post("/api/flows", {
+    data: { name, description: "Seeded for the run view", spec },
+  });
+  if (!createRes.ok()) {
+    throw new Error(
+      `creating the flow failed: ${createRes.status()} ${await createRes.text()}`
+    );
+  }
+  const flow: { id: string } = await createRes.json();
+
+  const runRes = await request.post(`/api/flows/${flow.id}/run?test=true`, {
+    data: { payload },
+  });
+  if (!runRes.ok()) {
+    throw new Error(
+      `starting the run failed: ${runRes.status()} ${await runRes.text()}`
+    );
+  }
+  const run: { id: string } = await runRes.json();
+
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(`/api/flows/${flow.id}/runs/${run.id}`);
+        if (!res.ok()) return `HTTP ${res.status()}`;
+        const body: { status: string } = await res.json();
+        return body.status;
+      },
+      {
+        timeout: RUN_TIMEOUT_MS,
+        message:
+          "the run never reached a terminal status — is a worker consuming the scheduled_tasks queue?",
+      }
+    )
+    .toMatch(TERMINAL_STATUS);
+
+  return { flowId: flow.id, runId: run.id };
+}
+
+export async function seedSwitchRun(
+  request: APIRequestContext,
+  name: string,
+  priority: string
+): Promise<SeededRun> {
+  return runToTheEnd(request, name, switchFlowSpec(), { priority });
+}
+
+export async function seedParallelRun(
+  request: APIRequestContext,
+  name: string,
+  ids: number[]
+): Promise<SeededRun> {
+  return runToTheEnd(request, name, parallelFlowSpec(), { ids });
 }

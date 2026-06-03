@@ -12506,7 +12506,9 @@
         "FILTER": "تصفية",
         "SCHEDULE": "جدولة",
         "MERGE": "دمج",
-        "SPLIT": "تقسيم"
+        "SPLIT": "تقسيم",
+        "PARALLEL": "متوازٍ",
+        "SWITCH": "تبديل"
       },
       "startBadge": "البداية",
       "fanOutBadge": "لكل عنصر",
@@ -12515,7 +12517,9 @@
         "true": "صحيح",
         "false": "خطأ",
         "approve": "تمت الموافقة",
-        "reject": "مرفوض"
+        "reject": "مرفوض",
+        "case": "حالة",
+        "otherwise": "غير ذلك"
       },
       "controls": {
         "zoomIn": "تكبير",
@@ -12540,7 +12544,9 @@
         "FILTER": "تصفية",
         "SCHEDULE": "جدولة",
         "MERGE": "دمج",
-        "SPLIT": "تقسيم"
+        "SPLIT": "تقسيم",
+        "PARALLEL": "متوازٍ",
+        "SWITCH": "تبديل"
       }
     },
     "status": {
@@ -12571,7 +12577,9 @@
         "FILTER": "تصفية",
         "SCHEDULE": "جدولة",
         "MERGE": "دمج",
-        "SPLIT": "تقسيم"
+        "SPLIT": "تقسيم",
+        "PARALLEL": "متوازٍ",
+        "SWITCH": "تبديل"
       },
       "fields": {
         "name": "الاسم",
@@ -12643,7 +12651,20 @@
         "separator": "التقسيم عند",
         "separatorHelp": "اكتب '\\n' لسطر جديد، و'\\t' لعلامة جدولة.",
         "splitTrim": "إزالة المسافات حول كل جزء",
-        "splitDropEmpty": "إسقاط الأجزاء الفارغة"
+        "splitDropEmpty": "إسقاط الأجزاء الفارغة",
+        "parallelOver": "استدعِ مرة لكل عنصر في",
+        "parallelOverHelp": "تعبير ينتج قائمة. استخدم '{{' item '}}' و'{{' index '}}' في الطلب.",
+        "concurrency": "الاستدعاءات في الوقت نفسه",
+        "concurrencyHelp": "حتى 10. تحافظ النتائج على ترتيب القائمة، ويوقف أول استدعاء فاشل الاستدعاءات التي لم تُرسل بعد.",
+        "switchValue": "القيمة المراد فحصها",
+        "switchValueHelp": "تُقارن بكل حالة بالترتيب. تفوز أول حالة مطابقة.",
+        "switchCases": "الحالات",
+        "switchCasesHelp": "لكل حالة قيمة وخطوة تنتقل إليها. يطابق الرقم الرقم نفسه مكتوبًا كنص.",
+        "caseHeading": "الحالة {number}",
+        "caseValue": "قيمة الحالة {number}",
+        "caseTarget": "الحالة {number} تنتقل إلى",
+        "switchOtherwise": "إذا لم يطابق شيء، انتقل إلى",
+        "branchEnds": "انتهِ هنا"
       },
       "onError": {
         "stop": "إيقاف التشغيل",
@@ -12662,7 +12683,9 @@
         "is_not_empty": "غير فارغ"
       },
       "actions": {
-        "delete": "حذف الخطوة"
+        "delete": "حذف الخطوة",
+        "addCase": "إضافة حالة",
+        "removeCase": "إزالة الحالة {number}"
       },
       "placeholder": {
         "forEach": "'{{' steps.fetch.items '}}'",
@@ -12677,7 +12700,9 @@
         "payload": "'{' \"text\": \"ملخّص\" '}'",
         "filterLeft": "'{{' item.state '}}'",
         "cron": "0 9 * * 1-5",
-        "splitValue": "'{{' trigger.tags '}}'"
+        "splitValue": "'{{' trigger.tags '}}'",
+        "switchValue": "'{{' trigger.priority '}}'",
+        "caseValue": "high"
       },
       "mergeMode": {
         "combine": "الاحتفاظ بمخرجات كل خطوة باسمها",
