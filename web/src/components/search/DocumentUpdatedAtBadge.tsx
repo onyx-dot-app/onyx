@@ -1,4 +1,4 @@
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import { MetadataBadge } from "../MetadataBadge";
 
 export function DocumentUpdatedAtBadge({

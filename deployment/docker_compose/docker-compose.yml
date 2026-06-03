@@ -377,7 +377,7 @@ services:
       start_period: 600s
 
   relational_db:
-    image: postgres:15.2-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/postgres:15.2-alpine
     shm_size: 1g
     command: -c 'max_connections=250'
     env_file:
@@ -402,7 +402,7 @@ services:
       - db_volume:/var/lib/postgresql/data
 
   opensearch:
-    image: opensearchproject/opensearch:3.6.0
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/opensearchproject/opensearch:3.6.0
     restart: unless-stopped
     # OpenSearch is the search backend and is enabled by default. To run against
     # an external OpenSearch instance, set OPENSEARCH_HOST in your env and
@@ -441,7 +441,7 @@ services:
         max-file: "6"
 
   nginx:
-    image: nginx:1.25.5-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.25.5-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
@@ -501,7 +501,7 @@ services:
       start_period: 30s
 
   cache:
-    image: redis:7.4-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/redis:7.4-alpine
     restart: unless-stopped
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
@@ -519,7 +519,7 @@ services:
       - /data
 
   minio:
-    image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
     profiles: ["s3-filestore"]
     restart: unless-stopped
     # DEV: To expose ports, either:

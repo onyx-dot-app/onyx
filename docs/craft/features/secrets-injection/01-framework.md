@@ -23,8 +23,7 @@ This plan generalises that single call site into a dispatcher with a uniform con
 @dataclass(frozen=True)
 class InjectionContext:
     sandbox: ResolvedSandbox
-    match: ActionMatch | None      # None on off-catalog flows
-    db_session_factory: DBSessionFactory
+    match: RequestMatch | None     # None on off-catalog flows
 
 
 class CredentialUnavailableError(Exception):
@@ -63,9 +62,9 @@ placeholder can't be rendered — that's correct for user-in-the-loop apps where
 surfaces to the user. The dispatcher's outer `BLOCKED` and the renderer's per-header drop coexist.
 
 **Claim disjointness.** External-app hosts come from `ExternalApp.upstream_url_patterns`; the Onyx
-API host is `SANDBOX_API_SERVER_URL`; LLM hosts are the canonical provider hosts plus each tenant's
-`LLMProvider.api_base`. These sets are disjoint by construction. The dispatcher's unit test fails
-the build on overlap, and startup logs any predicate collision.
+API host is `SANDBOX_API_SERVER_URL`; LLM hosts are the canonical provider hosts. These sets are
+disjoint by construction. The dispatcher's unit test fails the build on overlap, and startup logs
+any predicate collision.
 
 **Placeholder / overwrite contract.** The pod ships a non-empty placeholder for each credential
 header — opencode's AI SDK throws on unset keys and onyx-cli treats empty as unconfigured. The
@@ -74,28 +73,30 @@ proxy overwrites only the named header. The real secret never leaves the proxy.
 ## Resolvers
 
 - **`ExternalAppResolver`** — claims iff `match is not None`. The matcher has already done URL→app
-  resolution; the resolver opens a session via `ctx.db_session_factory(ctx.sandbox.tenant_id)` and
-  delegates to `resolve_injection_headers(db, ctx.match.external_app_id, ctx.sandbox.user_id)`.
+  resolution; the resolver opens a session via `get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id)`
+  and delegates to `resolve_injection_headers(db, ctx.match.external_app_id, ctx.sandbox.user_id)`.
   Behaviour identical to the current `_inject_credentials`.
 - **`OnyxPatResolver`** — claims the `SANDBOX_API_SERVER_URL` host; reads `Sandbox.encrypted_pat`.
   See [Plan 2](./02-onyx-pat.md).
-- **`LLMProviderKeyResolver`** — claims canonical LLM provider hosts plus each tenant's `api_base`;
-  reads `llm_provider` rows. See [Plan 3](./03-llm-key.md).
+- **`LLMProviderKeyResolver`** — claims the canonical LLM provider hosts (custom `api_base` out of
+  scope); reads `llm_provider` rows. See [Plan 3](./03-llm-key.md).
 
 In-proxy decryption works because the proxy Deployment already has `ENCRYPTION_KEY_SECRET` wired.
 
-**Kubernetes-only.** The egress proxy exists only in the K8s sandbox backend. The docker
-self-hosted manager has no `HTTPS_PROXY` / `NO_PROXY` / CA env vars and keeps injecting real
-credentials via env vars. Every pod-side placeholder swap below is scoped to the K8s manager.
+**Kubernetes-only, and mandatory there.** The egress proxy exists only in the K8s sandbox backend,
+where it is now unconditional: `provision()` requires `SANDBOX_PROXY_HOST` (and
+`SANDBOX_API_SERVER_URL`) and always wires the initContainer, proxy env vars, and CA bundle — the
+earlier `SANDBOX_PROXY_HOST`-empty skip for tests/dev is gone (#11604), so every secret-bearing
+request provably transits the proxy. The docker self-hosted manager has no `HTTPS_PROXY` /
+`NO_PROXY` / CA env vars and keeps injecting real credentials via env vars. Every pod-side
+placeholder swap below is scoped to the K8s manager.
 
 ## Implementation
 
 1. **Refactor the gate call site.** `_inject_credentials_or_block` delegates to the dispatcher:
 
    ```python
-   ctx = InjectionContext(
-       sandbox=sandbox, match=match, db_session_factory=self._db_session_factory
-   )
+   ctx = InjectionContext(sandbox=sandbox, match=match)
    if self._dispatcher.apply(flow, ctx) is InjectionOutcome.BLOCKED:
        flow.response = http_403(SandboxProxyError.CREDENTIAL_ERROR)
    ```
@@ -116,13 +117,16 @@ credentials via env vars. Every pod-side placeholder swap below is scoped to the
    - `ONYX_PAT` env in `kubernetes_sandbox_manager.py` → non-empty placeholder. `ensure_sandbox_pat`
      keeps minting and persisting the PAT on the `Sandbox` row.
    - LLM keys in `OPENCODE_CONFIG_CONTENT` (built by `opencode_config.py`) → non-empty placeholders
-     for each `options.apiKey`. While in `_build_provider_block`, fix the pre-existing
-     `block["api"]` → `provider.<provider_name>.options.baseURL` field-name bug.
+     for each `options.apiKey`.
+
+   Not yet landed: the pre-existing `block["api"]` → `provider.<provider_name>.options.baseURL`
+   field-name bug in `_build_provider_block` (`opencode_config.py` still writes
+   `block["api"] = provider_config.api_base`). Tracked separately; placeholder swaps shipped without it.
 
    The docker manager continues to inject real credentials in both cases.
 
 5. **Wire in `server.py`.** `build_resolvers()` returns
-   `[OnyxPatResolver(), ExternalAppResolver()]` (the LLM resolver joins per Plan 3). The dispatcher
+   `[OnyxPatResolver(), LLMProviderKeyResolver(), ExternalAppResolver()]`. The dispatcher
    is constructed once at startup and passed into `GateAddon`.
 
 ## Tests
@@ -153,7 +157,7 @@ Each step is an independently revertible PR (Craft is beta — no feature flags)
 2. **Route the Onyx API through the proxy.** Loopback-only `NO_PROXY`; also fixes a pre-existing
    `EPERM` on outbound Onyx API calls from the sandbox. _Shipped with the Onyx PAT resolver._
 3. **Onyx PAT resolver** ([Plan 2](./02-onyx-pat.md)). _Shipped._
-4. **LLM provider-key resolver** ([Plan 3](./03-llm-key.md)). Remaining.
+4. **LLM provider-key resolver** ([Plan 3](./03-llm-key.md)). _Shipped._
 
 ## Out of scope
 

@@ -47,8 +47,8 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
+from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.server.features.build.session.manager import UploadLimitExceededError
 from onyx.server.features.build.utils import sanitize_filename
 from onyx.server.features.build.utils import validate_file
 from onyx.skills.push import build_user_skills_payload
@@ -328,18 +328,9 @@ def restore_session(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> DetailedSessionResponse:
-    """Restore sandbox and load session snapshot. Blocks until complete.
-
-    Uses Redis lock to ensure only one restore runs per sandbox at a time.
-    If another restore is in progress, waits for it to complete.
-
-    Handles two cases:
-    1. Sandbox is SLEEPING: Re-provision pod, then load session snapshot
-    2. Sandbox is RUNNING but session not loaded: Just load session snapshot
-
-    Returns immediately if session workspace already exists in pod.
-    Always returns session_loaded_in_sandbox=True on success.
-    """
+    """Restore the sandbox (re-provisioning if asleep) and load the session
+    workspace. Serialized per-sandbox via a Redis lock; returns 409 if another
+    restore holds it."""
     session = get_build_session(session_id, user.id, db_session)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -348,17 +339,14 @@ def restore_session(
     if not sandbox:
         raise HTTPException(status_code=404, detail="Sandbox not found")
 
-    # If sandbox is already running, check if session workspace exists
     sandbox_manager = get_sandbox_manager()
     tenant_id = get_current_tenant_id()
 
-    # Need to do some work - acquire Redis lock
     redis_client = get_redis_client(tenant_id=tenant_id)
     lock_key = f"sandbox_restore:{sandbox.id}"
     lock = redis_client.lock(lock_key, timeout=RESTORE_LOCK_TIMEOUT_SECONDS)
 
-    # Non-blocking: if another restore is already running, return 409 immediately
-    # instead of making the user wait. The frontend will retry.
+    # 409 instead of blocking — the frontend retries.
     acquired = lock.acquire(blocking=False)
     if not acquired:
         raise HTTPException(
@@ -367,11 +355,8 @@ def restore_session(
         )
 
     try:
-        # Re-fetch sandbox status (may have changed while waiting for lock)
         db_session.refresh(sandbox)
 
-        # Also re-check if session workspace exists (another request may have
-        # restored it while we were waiting)
         if sandbox.status == SandboxStatus.RUNNING:
             is_healthy = sandbox_manager.health_check(sandbox.id, timeout=10.0)
             if is_healthy and sandbox_manager.session_workspace_exists(
@@ -389,29 +374,19 @@ def restore_session(
                     "Sandbox %s marked as RUNNING but pod is unhealthy/missing. Entering recovery mode.",
                     sandbox.id,
                 )
-                # Terminate to clean up any lingering K8s resources
                 sandbox_manager.terminate(sandbox.id)
-
                 update_sandbox_status__no_commit(
                     db_session, sandbox.id, SandboxStatus.TERMINATED
                 )
                 db_session.commit()
                 db_session.refresh(sandbox)
-                # Fall through to TERMINATED handling below
 
-        session_manager = SessionManager(db_session)
-        # One access-scoped read → default config + all pre-registered configs.
-        llm_config, all_llm_configs = session_manager.build_llm_configs(user)
+        llm_config, all_llm_configs = SessionManager(db_session).build_llm_configs(user)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
-            # Mint/look up the PAT before flipping to PROVISIONING so that a
-            # failure here can be retried without the sandbox getting stuck.
-            # Docker (and Kubernetes) require the PAT at provision time so
-            # the sandbox can talk back to Onyx via onyx-cli.
+            # Mint the PAT before flipping to PROVISIONING so a failure is retriable.
             onyx_pat = ensure_sandbox_pat(db_session, sandbox, user)
 
-            # Mark as PROVISIONING before the long-running provision() call
-            # so other requests know work is in progress
             update_sandbox_status__no_commit(
                 db_session, sandbox.id, SandboxStatus.PROVISIONING
             )
@@ -426,27 +401,21 @@ def restore_session(
                 all_llm_configs=all_llm_configs,
             )
 
-            # Mark as RUNNING after successful provision
             update_sandbox_status__no_commit(
                 db_session, sandbox.id, SandboxStatus.RUNNING
             )
             db_session.commit()
 
-        # 2. Check if session workspace needs to be loaded
         if sandbox.status == SandboxStatus.RUNNING:
             workspace_exists = sandbox_manager.session_workspace_exists(
                 sandbox.id, session_id
             )
 
             if not workspace_exists:
-                # Allocate port if not already set (needed for both snapshot restore and fresh setup)
                 if not session.nextjs_port:
                     session.nextjs_port = allocate_nextjs_port(db_session)
-                    # Commit port allocation before long-running operations
                     db_session.commit()
 
-                # All supported backends snapshot session state to durable
-                # storage (S3 for kubernetes, host disk for docker).
                 snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
                 skills_section, skills_files = build_user_skills_payload(
@@ -473,7 +442,6 @@ def restore_session(
                         db_session.commit()
                         raise
                 else:
-                    # No snapshot - set up fresh workspace
                     sandbox_manager.setup_session_workspace(
                         sandbox_id=sandbox.id,
                         session_id=session_id,
@@ -503,16 +471,12 @@ def restore_session(
 
     except Exception as e:
         logger.error("Failed to restore session %s: %s", session_id, e, exc_info=True)
-        # Roll the sandbox out of ``PROVISIONING`` so the frontend's
-        # ``needsRestore`` check picks it back up and the next attempt isn't
-        # blocked by a stuck status. Without this, an api_server restart
-        # mid-provision (or any other transient failure) leaves the sandbox
-        # marked PROVISIONING forever and the user has to manually unstick it
-        # in the DB. Re-fetch the sandbox in case the session was rolled back.
+        # Recover so the next attempt isn't blocked by a half-finished state.
         try:
             db_session.rollback()
             stuck = get_sandbox_by_user_id(db_session, user.id)
             if stuck is not None and stuck.status == SandboxStatus.PROVISIONING:
+                # provision() failed — back to SLEEPING so it isn't stuck.
                 update_sandbox_status__no_commit(
                     db_session, stuck.id, SandboxStatus.SLEEPING
                 )
@@ -521,9 +485,23 @@ def restore_session(
                     "Rolled sandbox %s back to SLEEPING after failed restore",
                     stuck.id,
                 )
+            elif stuck is not None and stuck.status == SandboxStatus.RUNNING:
+                # Workspace load failed after provision — drop the partial dir
+                # so session_workspace_exists() doesn't later report it restored.
+                failed_session = get_build_session(session_id, user.id, db_session)
+                failed_port = (
+                    failed_session.nextjs_port if failed_session is not None else None
+                )
+                sandbox_manager.cleanup_session_workspace(
+                    stuck.id, session_id, failed_port
+                )
+                logger.info(
+                    "Cleaned up partial workspace for session %s after failed restore",
+                    session_id,
+                )
         except Exception as rollback_err:
             logger.warning(
-                "Failed to roll sandbox status back after restore failure: %s",
+                "Failed to recover sandbox state after restore failure: %s",
                 rollback_err,
             )
         raise HTTPException(

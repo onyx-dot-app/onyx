@@ -22,9 +22,12 @@ from uuid import UUID
 
 import httpx
 
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
+from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
@@ -45,7 +48,10 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 
 # opencode-serve boot lags backend Ready by ~1–3s warm, up to ~15s cold.
 OPENCODE_SERVE_READY_TIMEOUT_SECONDS = 30
-OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.5
+OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.25
+
+# How long a new turn waits for the previous turn's slot before giving up.
+PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS = 10.0
 
 
 @dataclass(frozen=True)
@@ -87,9 +93,6 @@ class _ServeMixin:
             # Tombstone: blocks late subscribe from racing a terminate.
             self._terminated_sandboxes: set[UUID] = set()
             self._event_buses_lock = threading.Lock()
-            # Key on build_session_id, not opencode_session_id — see prompt_slot.
-            self._prompt_locks: dict[tuple[UUID, UUID], threading.Lock] = {}
-            self._prompt_locks_meta = threading.Lock()
             self._serve_conn_info: dict[UUID, ServeConnectionInfo] = {}
             self._serve_conn_info_lock = threading.Lock()
             self._serve_state_initialized = True
@@ -143,39 +146,55 @@ class _ServeMixin:
         sandbox_id: UUID,
         build_session_id: UUID,
     ) -> Generator[bool, None, None]:
-        """Non-blocking try-acquire of a per-build-session lock; yields True
-        if acquired, False if a turn is already in flight (caller must
-        abort without side effects).
+        """Serialize turns for a build session across replicas via the cache.
 
-        opencode-serve's ``prompt_async`` is fire-and-forget and not
-        concurrent-safe: a second POST while a turn is in flight is
-        silently dropped, the second subscriber catches the *first* turn's
-        terminator, and a phantom user_message gets persisted with no
-        assistant reply. Key on ``build_session_id`` (not
-        ``opencode_session_id``) so the lock survives id rotation from
-        ``on_opencode_session_resolved`` and bounds the dict to one entry
-        per build session.
+        opencode-serve's ``prompt_async`` isn't concurrent-safe, so a second
+        in-flight POST corrupts session state. Yields False if a turn is
+        already in flight (caller aborts without side effects); fails open if
+        the cache is down. Auto-expires after a turn's max length. Keyed on
+        ``build_session_id``, which (unlike the opencode id) is stable per turn.
         """
-        key = (sandbox_id, build_session_id)
-        with self._prompt_locks_meta:
-            lock = self._prompt_locks.get(key)
-            if lock is None:
-                lock = threading.Lock()
-                self._prompt_locks[key] = lock
+        # Tenant isolation is handled by the cache backend's key-prefixing.
+        try:
+            lock = get_cache_backend().lock(
+                f"buildpromptslot_{sandbox_id}_{build_session_id}",
+                timeout=SANDBOX_TURN_TIMEOUT_SECONDS,
+            )
+            acquired = lock.acquire(
+                blocking=True, blocking_timeout=PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS
+            )
+        except CACHE_TRANSIENT_ERRORS as e:
+            logger.warning(
+                "[SANDBOX-SERVE] prompt_slot: cache unreachable (%s) — failing open "
+                "on sandbox=%s build_session=%s",
+                e,
+                sandbox_id,
+                build_session_id,
+            )
+            yield True
+            return
 
-        acquired = lock.acquire(blocking=False)
         try:
             if not acquired:
                 logger.warning(
-                    "[SANDBOX-SERVE] prompt_slot: refused — concurrent send_message "
-                    "on sandbox=%s build_session=%s",
+                    "[SANDBOX-SERVE] prompt_slot: refused — concurrent turn in flight "
+                    "for sandbox=%s build_session=%s",
                     sandbox_id,
                     build_session_id,
                 )
             yield acquired
         finally:
             if acquired:
-                lock.release()
+                try:
+                    lock.release()
+                except CACHE_TRANSIENT_ERRORS as e:
+                    logger.warning(
+                        "[SANDBOX-SERVE] prompt_slot: lock release failed (%s) on "
+                        "sandbox=%s build_session=%s — relying on TTL",
+                        e,
+                        sandbox_id,
+                        build_session_id,
+                    )
 
     @staticmethod
     def _session_directory(session_id: UUID) -> str:
@@ -326,11 +345,9 @@ class _ServeMixin:
             )
 
     def _close_all_sandbox_buses(self, sandbox_id: UUID) -> None:
-        """Tombstone + pop + close every bus for ``sandbox_id``, and drop
-        the per-build-session prompt-slot locks. Call from ``terminate``
-        before destroying the container/pod so late subscribes can't race
-        a fresh bus in, and so we don't leak one ``threading.Lock`` per
-        ``(sandbox_id, build_session_id)`` for the api_server's lifetime."""
+        """Tombstone + pop + close every bus for ``sandbox_id``. Call from
+        ``terminate`` before destroying the container/pod so late subscribes
+        can't race a fresh bus in."""
         with self._event_buses_lock:
             self._terminated_sandboxes.add(sandbox_id)
             doomed_keys = [k for k in self._event_buses if k[0] == sandbox_id]
@@ -343,10 +360,6 @@ class _ServeMixin:
                     "[SANDBOX-SERVE] PodEventBus close failed during terminate for %s",
                     sandbox_id,
                 )
-        with self._prompt_locks_meta:
-            stale = [k for k in self._prompt_locks if k[0] == sandbox_id]
-            for k in stale:
-                self._prompt_locks.pop(k, None)
         self._invalidate_serve_connection_info(sandbox_id)
 
     def _send_message_via_serve(
@@ -359,6 +372,7 @@ class _ServeMixin:
         agent_model: str | None,
         *,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
+        should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream sandbox events via the in-sandbox ``opencode serve``. Preflight
         ``opencode_session_id`` via :meth:`ensure_opencode_session` to avoid
@@ -409,6 +423,7 @@ class _ServeMixin:
                     directory=session_path,
                     model_provider=agent_provider,
                     model_id=agent_model,
+                    should_interrupt=should_interrupt,
                 ):
                     events_count += 1
                     if isinstance(event, PromptResponse):
@@ -484,6 +499,80 @@ class _ServeMixin:
             error=error,
             events_count=events_count,
         )
+
+    def send_subagent_message_via_serve(
+        self,
+        sandbox_id: UUID,
+        parent_session_id: UUID,
+        subagent_opencode_session_id: str,
+        message: str,
+        agent_provider: str | None = None,
+        agent_model: str | None = None,
+    ) -> Generator[SandboxEvent, None, None]:
+        """Stream a follow-up turn against an existing subagent (child)
+        opencode session.
+
+        The child session runs in the SAME directory as its parent build
+        session, so we anchor the serve client at the parent's session
+        directory. Unlike :meth:`_send_message_via_serve` this does NOT call
+        ``ensure_session`` (the child id is supplied and already exists). It
+        passes the parent session's ``agent_provider``/``agent_model`` so the
+        follow-up uses the same model as the parent (not the child session's
+        own default).
+        """
+        packet_logger = get_packet_logger()
+        session_path = self._session_directory(parent_session_id)
+        client = self._build_serve_client(sandbox_id, session_path)
+        try:
+            logger.info(
+                "[SANDBOX-SERVE] send_subagent_message: parent_build_session=%s "
+                "subagent_opencode_session=%s api_pod=%s",
+                parent_session_id,
+                subagent_opencode_session_id,
+                _API_SERVER_HOSTNAME,
+            )
+            packet_logger.log_session_start(parent_session_id, sandbox_id, message)
+
+            events_count = 0
+            try:
+                for event in client.send_message(
+                    subagent_opencode_session_id,
+                    message,
+                    directory=session_path,
+                    model_provider=agent_provider,
+                    model_id=agent_model,
+                ):
+                    events_count += 1
+                    yield event
+                packet_logger.log_session_end(
+                    parent_session_id, success=True, events_count=events_count
+                )
+            except GeneratorExit:
+                self._abort_and_log_turn_failure(
+                    client=client,
+                    session_id=parent_session_id,
+                    resolved_session_id=subagent_opencode_session_id,
+                    session_path=session_path,
+                    events_count=events_count,
+                    packet_logger=packet_logger,
+                    error="GeneratorExit",
+                    log_level=logging.WARNING,
+                )
+                raise
+            except Exception as e:
+                self._abort_and_log_turn_failure(
+                    client=client,
+                    session_id=parent_session_id,
+                    resolved_session_id=subagent_opencode_session_id,
+                    session_path=session_path,
+                    events_count=events_count,
+                    packet_logger=packet_logger,
+                    error=f"Exception: {e}",
+                    log_level=logging.ERROR,
+                )
+                raise
+        finally:
+            client.close()
 
     def subscribe_to_opencode_session(
         self,

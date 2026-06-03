@@ -15,5 +15,12 @@ if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
     // Disable performance monitoring and only capture errors
     tracesSampleRate: 0,
     profilesSampleRate: 0,
+
+    // We don't use tracing (tracesSampleRate: 0), so the ESM loader hooks that
+    // Sentry registers to auto-instrument libraries provide no value here. Skip
+    // registering them to avoid the Node DEP0205 deprecation warning emitted by
+    // @sentry/node-core's `module.register('import-in-the-middle/hook.mjs', ...)`
+    // call (`module.register()` is deprecated in favor of `module.registerHooks()`).
+    registerEsmLoaderHooks: false,
   });
 }

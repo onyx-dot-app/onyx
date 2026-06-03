@@ -38,7 +38,12 @@ async function clickAndWaitForPatch(
   await patchPromise;
 }
 
-test.describe("Chat Preferences Admin Page", () => {
+// @exclusive: every test here mutates the global (tenant-wide) default-assistant
+// `tool_ids` and creates/deletes the singleton default image-generation config in
+// beforeEach/afterEach. Running in the parallel `admin` project races against other
+// files that touch the same global state (e.g. chat/default_agent.spec.ts,
+// chat/actions_popover.spec.ts), causing flaky toggle-persistence failures.
+test.describe("Chat Preferences Admin Page @exclusive", () => {
   let testCcPairId: number | null = null;
   let webSearchProviderId: number | null = null;
   let imageGenConfigId: string | null = null;

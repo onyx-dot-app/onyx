@@ -15,6 +15,7 @@ from mitmproxy import http
 from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME
 from onyx.auth.constants import API_KEY_HEADER_NAME
 from onyx.auth.constants import BEARER_PREFIX
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
 from onyx.sandbox_proxy.credential_injection import InjectionContext
@@ -50,7 +51,7 @@ class OnyxPatResolver(CredentialResolver):
 
     def resolve(self, request: http.Request, ctx: InjectionContext) -> dict[str, str]:
         sandbox_id = ctx.sandbox.sandbox_id
-        with ctx.db_session_factory(ctx.sandbox.tenant_id) as db:
+        with get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id) as db:
             sandbox = get_sandbox_by_id(db, sandbox_id)
             if sandbox is None:
                 raise CredentialUnavailableError(f"sandbox {sandbox_id} not found")

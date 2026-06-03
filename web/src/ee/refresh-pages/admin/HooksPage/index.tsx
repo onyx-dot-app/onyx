@@ -15,7 +15,6 @@ import {
   useCreateModal,
   useModalClose,
 } from "@/refresh-components/contexts/ModalContext";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Button, LinkButton, SelectCard, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { markdown } from "@opal/utils";
@@ -32,6 +31,7 @@ import {
   SvgSettings,
   SvgTrash,
   SvgUnplug,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { SvgNoResult, SvgEmpty } from "@opal/illustrations";
@@ -518,7 +518,7 @@ export default function HooksPage() {
   }, [settingsLoading, enterpriseTier, settings.hooks_enabled, router]);
 
   if (settingsLoading || !enterpriseTier || !settings.hooks_enabled) {
-    return <SimpleLoader />;
+    return <SvgSimpleLoader />;
   }
 
   const isLoading = specsLoading || hooksLoading;
@@ -584,7 +584,7 @@ export default function HooksPage() {
         />
         <SettingsLayouts.Body>
           {isLoading ? (
-            <SimpleLoader />
+            <SvgSimpleLoader />
           ) : specsError || hooksError ? (
             <Text font="secondary-body" color="text-03">
               {`Failed to load${

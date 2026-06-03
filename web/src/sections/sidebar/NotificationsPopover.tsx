@@ -7,16 +7,16 @@ import { track, AnalyticsEvent } from "@/lib/analytics";
 import type { Notification as NotificationData } from "@/lib/notifications/interfaces";
 import { NotificationType } from "@/lib/notifications/interfaces";
 import { getNotificationIcon } from "@/lib/notifications";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import useNotifications from "@/hooks/useNotifications";
 import {
   SvgCheckAll,
   SvgNotificationBubble,
   SvgCheckSquare,
   SvgChevronLeft,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import { Button, Divider, LineItemButton, Text } from "@opal/components";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
 import { IllustrationContent } from "@opal/layouts";
 import { SvgEmpty } from "@opal/illustrations";
@@ -234,7 +234,7 @@ export default function NotificationsPopover({
       {isLoading ? (
         <div className="h-(--notifications-popover)">
           <Section>
-            <SimpleLoader />
+            <SvgSimpleLoader />
           </Section>
         </div>
       ) : !notifications || notifications.length === 0 ? (

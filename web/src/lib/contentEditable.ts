@@ -126,3 +126,72 @@ export function getTextContent(element: HTMLElement): string {
   }
   return parts.join("");
 }
+
+/**
+ * Remove the stray leading `<br>` Chrome inserts when the last char before a
+ * leading inline tile is deleted. Scoped to a `<br>` immediately followed by a
+ * rich tile so a normal leading newline (followed by text) is preserved.
+ * Returns whether anything was removed.
+ */
+export function stripLeadingBr(el: HTMLElement): boolean {
+  const first = el.firstChild;
+  const next = first?.nextSibling;
+  if (
+    first?.nodeName === "BR" &&
+    next instanceof HTMLElement &&
+    next.hasAttribute("data-rich-tile")
+  ) {
+    el.removeChild(first);
+    return true;
+  }
+  return false;
+}
+
+// ─── Token Deletion (rich-tile insertion) ───────────────────────────────────
+
+/**
+ * Delete `token` immediately before the collapsed cursor, but only after
+ * verifying the characters to remove equal it (else bail + restore the caret).
+ * Returns whether the token was removed.
+ */
+export function deleteTokenBeforeCursor(
+  el: HTMLElement,
+  token: string
+): boolean {
+  const n = token.length;
+  if (n <= 0) return false;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return false;
+  const range = sel.getRangeAt(0);
+  if (!range.collapsed || !el.contains(range.startContainer)) return false;
+
+  const { startContainer, startOffset } = range;
+
+  // Fast path: the token lives entirely within the caret's text node.
+  if (
+    startContainer.nodeType === Node.TEXT_NODE &&
+    startOffset >= n &&
+    startContainer.textContent?.slice(startOffset - n, startOffset) === token
+  ) {
+    range.setStart(startContainer, startOffset - n);
+    range.deleteContents();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return true;
+  }
+
+  // Fallback for node-spanning tokens; modify is absent in jsdom.
+  if (typeof sel.modify !== "function") return false;
+  const steps = Array.from(token).length; // code points, not UTF-16 units
+  for (let i = 0; i < steps; i++) sel.modify("extend", "backward", "character");
+  if (sel.toString() === token) {
+    sel.deleteFromDocument();
+    return true;
+  }
+  const restored = document.createRange();
+  restored.setStart(startContainer, startOffset);
+  restored.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(restored);
+  return false;
+}

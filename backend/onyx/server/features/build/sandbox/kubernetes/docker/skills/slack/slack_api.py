@@ -17,6 +17,7 @@ _BASE = "https://slack.com/api/"
 _METHOD_RE = re.compile(r"^[a-z][a-zA-Z0-9._]*$")
 _PAGE_SIZE = 200
 _DEFAULT_LIMIT = 200
+_HTTP_TIMEOUT_SECONDS = 180
 
 
 def _prune(value: Any) -> Any:
@@ -39,7 +40,7 @@ def _call(method: str, body: dict[str, Any]) -> dict[str, Any]:
         method="POST",
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+    with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_SECONDS) as resp:  # noqa: S310
         return json.loads(resp.read().decode("utf-8"))
 
 

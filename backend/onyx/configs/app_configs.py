@@ -1032,11 +1032,17 @@ CODE_INTERPRETER_MAX_OUTPUT_LENGTH = int(
     os.environ.get("CODE_INTERPRETER_MAX_OUTPUT_LENGTH") or 50_000
 )
 
+# Per-call MCP read timeout; configurable since some tools (e.g. data-agent
+# servers) run longer than the default.
+MCP_TOOL_CALL_TIMEOUT_SECONDS = int(
+    os.environ.get("MCP_TOOL_CALL_TIMEOUT_SECONDS") or 300
+)
+
 
 #####
 # Miscellaneous
 #####
-JOB_TIMEOUT = 60 * 60 * 6  # 6 hours default
+JOB_TIMEOUT = int(os.environ.get("JOB_TIMEOUT_SECONDS") or 60 * 60 * 6)  # default 6h
 # Logs Onyx only model interactions like prompts, responses, messages etc.
 LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"

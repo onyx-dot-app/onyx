@@ -62,6 +62,7 @@ import {
   SvgSliders,
   SvgUsers,
   SvgTrash,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import CustomAgentAvatar, {
   agentAvatarIconMap,
@@ -92,7 +93,6 @@ import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
 
@@ -325,7 +325,7 @@ function MCPServerCard({
     cardContent = (
       <div className="flex flex-col gap-2 p-2">
         <GeneralLayouts.Section padding={1}>
-          <SimpleLoader />
+          <SvgSimpleLoader />
         </GeneralLayouts.Section>
       </div>
     );

@@ -113,6 +113,7 @@ export const WithInProgress: Story = {
 
 export const WithFailure: Story = {
   args: {
+    defaultOpen: true,
     toolCalls: [
       EDIT_API_SERVICES,
       BASH_TYPECHECK_FAIL,

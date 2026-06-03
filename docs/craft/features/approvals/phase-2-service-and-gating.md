@@ -785,7 +785,9 @@ def _write_response_for_decision(
 protocol from `OnyxError`. Locked enum:
 `unidentified_sandbox | no_active_session | body_too_large | user_rejected | not_authorized | internal_error`.
 `policy_denied` is reserved for Phase 4. The body is
-`json.dumps({"error": code})` with `content-type: application/json`.
+`json.dumps({"error": code, "message": prose})` with
+`content-type: application/json` — `error` is the stable code, `message` is
+human-readable prose the sandbox agent acts on.
 Matcher exceptions do not produce 403s — they fail open per T2.6.
 
 **SIGTERM drain (`drain_inflight`).** Two phases, each best-effort:

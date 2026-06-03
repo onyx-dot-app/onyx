@@ -37,8 +37,8 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
     providerName: "anthropic",
     recommended: true,
     models: [
-      { name: "claude-opus-4-7", label: "Claude Opus 4.7", recommended: true },
-      { name: "claude-opus-4-6", label: "Claude Opus 4.6" },
+      { name: "claude-opus-4-8", label: "Claude Opus 4.8", recommended: true },
+      { name: "claude-opus-4-7", label: "Claude Opus 4.7" },
       { name: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
     ],
     apiKeyPlaceholder: "sk-ant-...",
@@ -64,9 +64,13 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
     providerName: "openrouter",
     models: [
       {
+        name: "minimax/minimax-m3",
+        label: "MiniMax M3",
+        recommended: true,
+      },
+      {
         name: "moonshotai/kimi-k2.6",
         label: "Kimi K2.6",
-        recommended: true,
       },
     ],
     apiKeyPlaceholder: "sk-or-...",
@@ -94,6 +98,15 @@ interface MinimalLlmProvider {
 
 export function isSupportedProviderType(provider: string): boolean {
   return ALLOWED_PROVIDER_TYPES.has(provider);
+}
+
+// True when at least one configured provider is a supported Craft type
+// (anthropic/openai/openrouter). The gate for both onboarding LLM setup and
+// pre-provisioning — an unsupported-only setup (e.g. Azure) can't craft.
+export function hasSupportedCraftProvider(
+  llmProviders: { provider: string }[] | undefined
+): boolean {
+  return !!llmProviders?.some((p) => isSupportedProviderType(p.provider));
 }
 
 export function isRecommendedModel(modelName: string): boolean {
@@ -158,93 +171,24 @@ export function clearBuildLlmSelection(): void {
 }
 
 // =============================================================================
-// User Info Constants
+// Onboarding "seen" flag
 // =============================================================================
 
-export enum WorkArea {
-  ENGINEERING = "engineering",
-  PRODUCT = "product",
-  EXECUTIVE = "executive",
-  SALES = "sales",
-  MARKETING = "marketing",
-  OTHER = "other",
-}
+// Tracks whether the user has dismissed the craft onboarding modal so the
+// intro only auto-shows once.
+const CRAFT_ONBOARDING_SEEN_COOKIE_NAME = "craft_onboarding_seen";
 
-export enum Level {
-  IC = "ic",
-  MANAGER = "manager",
-}
-
-// Helper to capitalize first letter
-const capitalize = (str: string): string => {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-};
-
-// Derive WORK_AREA_OPTIONS from WorkArea enum
-export const WORK_AREA_OPTIONS = Object.values(WorkArea).map((value) => ({
-  value,
-  label: capitalize(value),
-}));
-
-// Derive LEVEL_OPTIONS from Level enum
-export const LEVEL_OPTIONS = Object.values(Level).map((value) => ({
-  value,
-  label: value === Level.IC ? "IC" : capitalize(value),
-}));
-
-// Work areas where level selection is required
-// Executive has the same persona for both levels, so level is optional
-export const WORK_AREAS_REQUIRING_LEVEL: WorkArea[] = [
-  WorkArea.ENGINEERING,
-  WorkArea.PRODUCT,
-  WorkArea.SALES,
-  WorkArea.MARKETING,
-  WorkArea.OTHER,
-];
-
-export const BUILD_USER_PERSONA_COOKIE_NAME = "build_user_persona";
-
-// Helper type for the consolidated cookie
-export interface BuildUserPersona {
-  workArea: WorkArea;
-  level?: Level;
-}
-
-// Helper functions for getting/setting the consolidated cookie
-export function getBuildUserPersona(): BuildUserPersona | null {
-  if (typeof window === "undefined") return null;
-
-  const cookieValue = document.cookie
+export function getCraftOnboardingSeen(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie
     .split("; ")
-    .find((row) => row.startsWith(`${BUILD_USER_PERSONA_COOKIE_NAME}=`))
-    ?.split("=")[1];
-
-  if (!cookieValue) return null;
-
-  try {
-    const parsed = JSON.parse(decodeURIComponent(cookieValue));
-    // Validate and cast to enum types
-    if (
-      parsed.workArea &&
-      Object.values(WorkArea).includes(parsed.workArea as WorkArea)
-    ) {
-      return {
-        workArea: parsed.workArea as WorkArea,
-        level:
-          parsed.level && Object.values(Level).includes(parsed.level as Level)
-            ? (parsed.level as Level)
-            : undefined,
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
+    .some((row) => row.startsWith(`${CRAFT_ONBOARDING_SEEN_COOKIE_NAME}=`));
 }
 
-export function setBuildUserPersona(persona: BuildUserPersona): void {
-  const cookieValue = encodeURIComponent(JSON.stringify(persona));
-  const expires = new Date();
-  expires.setFullYear(expires.getFullYear() + 1);
-  document.cookie = `${BUILD_USER_PERSONA_COOKIE_NAME}=${cookieValue}; path=/; expires=${expires.toUTCString()}`;
+export function setCraftOnboardingSeen(): void {
+  if (typeof document === "undefined") return;
+  const expires = new Date(
+    Date.now() + 365 * 24 * 60 * 60 * 1000
+  ).toUTCString();
+  document.cookie = `${CRAFT_ONBOARDING_SEEN_COOKIE_NAME}=1; path=/; expires=${expires}; SameSite=Lax`;
 }

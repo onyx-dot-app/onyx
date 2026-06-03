@@ -5,6 +5,8 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.base import ExternalAppProvider
+from onyx.external_apps.providers.github import GitHubProvider
+from onyx.external_apps.providers.gmail import GmailProvider
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
 from onyx.external_apps.providers.linear import LinearProvider
 from onyx.external_apps.providers.slack import SlackProvider
@@ -16,7 +18,9 @@ from onyx.server.features.build.api.models import OrgCredentialFieldDescriptor
 _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     SlackProvider,
     GoogleCalendarProvider,
+    GmailProvider,
     LinearProvider,
+    GitHubProvider,
 ]
 
 
@@ -78,6 +82,7 @@ def _descriptor_for(
                 action_id=e.id,
                 normalised_name=e.normalised_name,
                 description=e.description,
+                default_policy=e.default_policy,
             )
             for e in spec.endpoint_catalog
         ],
@@ -116,15 +121,15 @@ def build_action_policies(
     catalog action, so the stored rows are the full source of truth.
 
     Each action resolves to the admin's validated override if supplied, else the
-    value already stored, else the ``ASK`` default. Unmentioned actions keep
-    their stored choice — a partial update (or an enable toggle that omits the
-    map) never clobbers existing policies. Raises if ``requested`` names an
-    action id outside the catalog.
+    value already stored, else the action's ``default_policy`` (``ASK`` unless the
+    provider declared otherwise). Unmentioned actions keep their stored choice — a
+    partial update (or an enable toggle that omits the map) never clobbers existing
+    policies. Raises if ``requested`` names an action id outside the catalog.
     """
     validated = validate_action_policies(app_type, requested or {})
     return {
         endpoint.id: validated.get(
-            endpoint.id, existing.get(endpoint.id, EndpointPolicy.ASK)
+            endpoint.id, existing.get(endpoint.id, endpoint.default_policy)
         )
         for endpoint in get_endpoint_catalog(app_type)
     }
@@ -135,14 +140,15 @@ def action_policy_views(
     stored: dict[str, EndpointPolicy],
 ) -> list[ActionPolicyView]:
     """Merge the catalog with the admin's stored overrides: each action's
-    effective ``state`` is the override if present, else ``ASK``.
-    Orphan stored ids (no longer in the catalog) are silently dropped."""
+    effective ``state`` is the override if present, else the action's
+    ``default_policy``. Orphan stored ids (no longer in the catalog) are
+    silently dropped."""
     return [
         ActionPolicyView(
             action_id=endpoint.id,
             normalised_name=endpoint.normalised_name,
             description=endpoint.description,
-            state=stored.get(endpoint.id, EndpointPolicy.ASK),
+            state=stored.get(endpoint.id, endpoint.default_policy),
         )
         for endpoint in get_endpoint_catalog(app_type)
     ]

@@ -78,6 +78,7 @@ from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.enums import OpenSearchDocumentMigrationStatus
@@ -538,6 +539,14 @@ class PersonalAccessToken(Base):
         Enum(PatType, native_enum=False),
         nullable=False,
         server_default=PatType.USER.value,
+    )
+
+    # Permission values this token may exercise; NULL = no restriction (full
+    # user access). An empty list grants nothing (fail-closed).
+    scopes: Mapped[list[str] | None] = mapped_column(
+        postgresql.JSONB(),
+        nullable=True,
+        default=None,
     )
 
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
@@ -4868,6 +4877,21 @@ class MCPServer(Base):
     # Who performs authentication for this server (ADMIN or PER_USER)
     auth_performer: Mapped[MCPAuthenticationPerformer | None] = mapped_column(
         Enum(MCPAuthenticationPerformer, native_enum=False), nullable=True
+    )
+    oauth_provider_mode: Mapped[MCPOAuthProviderMode] = mapped_column(
+        Enum(MCPOAuthProviderMode, native_enum=False),
+        nullable=False,
+        server_default=MCPOAuthProviderMode.AUTO_DISCOVERY.value,
+    )
+    oauth_authorization_endpoint: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    oauth_token_endpoint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    oauth_scopes_override: Mapped[list[str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    oauth_additional_auth_params: Mapped[dict[str, str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
     )
     # Status tracking for configuration flow
     status: Mapped[MCPServerStatus] = mapped_column(
