@@ -243,3 +243,189 @@ class TestEEGroupRejectionPath:
         import uuid
 
         ee_token_limit._user_is_rate_limited_by_group(uuid.uuid4())  # no raise
+
+
+def _cost_limit(
+    cost_budget_cents: float | None,
+    scope: TokenRateLimitScope,
+    period_hours: int = 1,
+    token_budget: int = 10**12,  # effectively unbounded so only cost can trigger
+) -> TokenRateLimit:
+    limit = TokenRateLimit(
+        enabled=True,
+        token_budget=token_budget,
+        period_hours=period_hours,
+        scope=scope,
+    )
+    limit.cost_budget_cents = cost_budget_cents
+    return limit
+
+
+class TestFirstTriggeredCostLimit:
+    """Unit of the shared cost evaluator (no DB; cost is injected)."""
+
+    def test_over_cost_budget_returns_row(self) -> None:
+        limit = _cost_limit(100.0, TokenRateLimitScope.USER)
+        triggered = token_limit._first_triggered_cost_limit(
+            [limit], cost_in_window=lambda _ws: 150.0
+        )
+        assert triggered is limit
+
+    def test_under_cost_budget_returns_none(self) -> None:
+        limit = _cost_limit(100.0, TokenRateLimitScope.USER)
+        assert (
+            token_limit._first_triggered_cost_limit(
+                [limit], cost_in_window=lambda _ws: 99.99
+            )
+            is None
+        )
+
+    def test_at_cost_budget_triggers(self) -> None:
+        limit = _cost_limit(100.0, TokenRateLimitScope.USER)
+        assert (
+            token_limit._first_triggered_cost_limit(
+                [limit], cost_in_window=lambda _ws: 100.0
+            )
+            is limit
+        )
+
+    def test_row_without_cost_budget_is_exempt(self) -> None:
+        # token-only row (cost_budget_cents is None) is never cost-limited
+        limit = _cost_limit(None, TokenRateLimitScope.USER)
+        assert (
+            token_limit._first_triggered_cost_limit(
+                [limit], cost_in_window=lambda _ws: 10**9
+            )
+            is None
+        )
+
+
+class TestGlobalCostRejectionPath:
+    """CE global path: a global cost budget summed across the tenant raises."""
+
+    def test_over_global_cost_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        limit = _cost_limit(500.0, TokenRateLimitScope.GLOBAL, period_hours=3)
+        monkeypatch.setattr(
+            token_limit, "get_session_with_current_tenant", lambda: _SessionCtx()
+        )
+        monkeypatch.setattr(
+            token_limit, "fetch_all_global_token_rate_limits", lambda **_: [limit]
+        )
+        # under token budget so only cost can trigger
+        monkeypatch.setattr(token_limit, "_fetch_global_usage", lambda *_: _usage(1))
+        monkeypatch.setattr(
+            token_limit, "get_total_cost_cents_in_window", lambda *_: 600.0
+        )
+
+        with pytest.raises(OnyxError) as ei:
+            token_limit._user_is_rate_limited_by_global()
+        _assert_structured_429(ei.value, "organization", 3)
+
+    def test_under_global_cost_does_not_raise(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        limit = _cost_limit(500.0, TokenRateLimitScope.GLOBAL)
+        monkeypatch.setattr(
+            token_limit, "get_session_with_current_tenant", lambda: _SessionCtx()
+        )
+        monkeypatch.setattr(
+            token_limit, "fetch_all_global_token_rate_limits", lambda **_: [limit]
+        )
+        monkeypatch.setattr(token_limit, "_fetch_global_usage", lambda *_: _usage(1))
+        monkeypatch.setattr(
+            token_limit, "get_total_cost_cents_in_window", lambda *_: 100.0
+        )
+
+        token_limit._user_is_rate_limited_by_global()  # no raise
+
+
+class TestEEUserCostRejectionPath:
+    def test_over_user_cost_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        limit = _cost_limit(200.0, TokenRateLimitScope.USER, period_hours=4)
+        monkeypatch.setattr(
+            ee_token_limit, "get_session_with_current_tenant", lambda: _SessionCtx()
+        )
+        monkeypatch.setattr(
+            ee_token_limit, "fetch_all_user_token_rate_limits", lambda **_: [limit]
+        )
+        monkeypatch.setattr(ee_token_limit, "_fetch_user_usage", lambda *_: _usage(1))
+        monkeypatch.setattr(
+            ee_token_limit, "get_user_cost_cents_in_window", lambda *_: 250.0
+        )
+
+        import uuid
+
+        with pytest.raises(OnyxError) as ei:
+            ee_token_limit._user_is_rate_limited(uuid.uuid4())
+        _assert_structured_429(ei.value, "user", 4)
+
+    def test_under_user_cost_does_not_raise(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        limit = _cost_limit(200.0, TokenRateLimitScope.USER)
+        monkeypatch.setattr(
+            ee_token_limit, "get_session_with_current_tenant", lambda: _SessionCtx()
+        )
+        monkeypatch.setattr(
+            ee_token_limit, "fetch_all_user_token_rate_limits", lambda **_: [limit]
+        )
+        monkeypatch.setattr(ee_token_limit, "_fetch_user_usage", lambda *_: _usage(1))
+        monkeypatch.setattr(
+            ee_token_limit, "get_user_cost_cents_in_window", lambda *_: 50.0
+        )
+
+        import uuid
+
+        ee_token_limit._user_is_rate_limited(uuid.uuid4())  # no raise
+
+
+class TestEEGroupCostRejectionPath:
+    """Cost mirrors tokens: a higher-budget group raises the ceiling (any under-budget exempts)."""
+
+    def _patch_common(
+        self, monkeypatch: pytest.MonkeyPatch, group_limits: dict[int, list]
+    ) -> None:
+        monkeypatch.setattr(
+            ee_token_limit, "get_session_with_current_tenant", lambda: _SessionCtx()
+        )
+        monkeypatch.setattr(
+            ee_token_limit,
+            "_fetch_all_user_group_rate_limits",
+            lambda *_: group_limits,
+        )
+        # token side never triggers (no token budget reached)
+        monkeypatch.setattr(ee_token_limit, "_fetch_user_group_usage", lambda *_: {})
+
+    def test_all_groups_over_cost_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        g1 = _cost_limit(100.0, TokenRateLimitScope.USER_GROUP, period_hours=1)
+        g2 = _cost_limit(100.0, TokenRateLimitScope.USER_GROUP, period_hours=5)
+        self._patch_common(monkeypatch, {10: [g1], 20: [g2]})
+        # both group windows over their 100c budget
+        monkeypatch.setattr(
+            ee_token_limit, "get_group_cost_cents_in_window", lambda *_: 200.0
+        )
+
+        import uuid
+
+        with pytest.raises(OnyxError) as ei:
+            ee_token_limit._user_is_rate_limited_by_group(uuid.uuid4())
+        # longest triggering window is the conservative retry
+        _assert_structured_429(ei.value, "user's groups", 5)
+
+    def test_higher_budget_group_raises_ceiling(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # g1 cheap budget (over), g2 generous budget (under) -> under-budget group exempts
+        g1 = _cost_limit(100.0, TokenRateLimitScope.USER_GROUP, period_hours=1)
+        g2 = _cost_limit(5000.0, TokenRateLimitScope.USER_GROUP, period_hours=5)
+        self._patch_common(monkeypatch, {10: [g1], 20: [g2]})
+
+        # group 10 over its 100c budget; group 20 well under its 5000c budget
+        def _cost(_session: object, gid: int, _ws: object) -> float:
+            return 200.0 if gid == 10 else 50.0
+
+        monkeypatch.setattr(ee_token_limit, "get_group_cost_cents_in_window", _cost)
+
+        import uuid
+
+        ee_token_limit._user_is_rate_limited_by_group(uuid.uuid4())  # no raise

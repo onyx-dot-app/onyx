@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
@@ -17,6 +18,8 @@ from onyx.db.models import ChatSession
 from onyx.db.models import TokenRateLimit
 from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
+from onyx.db.user_usage import get_total_cost_cents_in_window
+from onyx.db.user_usage import get_window_start
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -61,6 +64,15 @@ def _user_is_rate_limited_by_global() -> None:
             triggered = _first_triggered_limit(global_rate_limits, global_usage)
             if triggered is not None:
                 raise_rate_limited("organization", triggered.period_hours)
+
+            cost_triggered = _first_triggered_cost_limit(
+                global_rate_limits,
+                lambda window_start: get_total_cost_cents_in_window(
+                    db_session, window_start
+                ),
+            )
+            if cost_triggered is not None:
+                raise_rate_limited("organization", cost_triggered.period_hours)
 
 
 def _fetch_global_usage(
@@ -108,6 +120,30 @@ def _first_triggered_limit(
 
         # token_budget is stored as a raw token count, matching the admin input.
         if tokens_used >= rate_limit.token_budget:
+            return rate_limit
+
+    return None
+
+
+def _first_triggered_cost_limit(
+    rate_limits: Sequence[TokenRateLimit],
+    cost_in_window: Callable[[datetime], float],
+) -> TokenRateLimit | None:
+    """First row whose cost_budget_cents is set and exceeded, or None.
+
+    Cost is sourced from the UserUsage ledger (not ChatMessage.token_count):
+    each row's window is aligned via get_window_start so the accumulated cost
+    compared is exactly the cents recorded in that fixed window. Rows without a
+    cost_budget_cents are cost-exempt (token-only).
+    """
+    now = datetime.now(tz=timezone.utc)
+    for rate_limit in rate_limits:
+        budget = rate_limit.cost_budget_cents
+        if budget is None:
+            continue
+
+        window_start = get_window_start(now, rate_limit.period_hours)
+        if cost_in_window(window_start) >= budget:
             return rate_limit
 
     return None

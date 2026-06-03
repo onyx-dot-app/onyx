@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User
+from onyx.db.models import User__UserGroup
 from onyx.db.models import UserUsage
 from onyx.utils.logger import setup_logger
 
@@ -237,6 +238,36 @@ def get_user_cost_cents_in_window(
     total = db_session.execute(
         select(func.coalesce(func.sum(UserUsage.cost_cents), 0.0)).where(
             UserUsage.user_id == user_id,
+            UserUsage.window_start == window_start,
+        )
+    ).scalar_one()
+    return float(total)
+
+
+def get_total_cost_cents_in_window(
+    db_session: Session,
+    window_start: datetime,
+) -> float:
+    """Tenant-wide cost (cents) in a single window — for global cost-budget checks."""
+    total = db_session.execute(
+        select(func.coalesce(func.sum(UserUsage.cost_cents), 0.0)).where(
+            UserUsage.window_start == window_start,
+        )
+    ).scalar_one()
+    return float(total)
+
+
+def get_group_cost_cents_in_window(
+    db_session: Session,
+    user_group_id: int,
+    window_start: datetime,
+) -> float:
+    """Total cost (cents) accrued by all members of a group in a window — group budgets."""
+    total = db_session.execute(
+        select(func.coalesce(func.sum(UserUsage.cost_cents), 0.0))
+        .join(User__UserGroup, User__UserGroup.user_id == UserUsage.user_id)
+        .where(
+            User__UserGroup.user_group_id == user_group_id,
             UserUsage.window_start == window_start,
         )
     ).scalar_one()

@@ -15,7 +15,10 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
+from onyx.db.models import User__UserGroup
 from onyx.db.models import UserUsage
+from onyx.db.user_usage import get_group_cost_cents_in_window
+from onyx.db.user_usage import get_total_cost_cents_in_window
 from onyx.db.user_usage import get_user_cost_cents_in_window
 from onyx.db.user_usage import get_user_usage_by_day_and_model
 from onyx.db.user_usage import get_window_start
@@ -291,3 +294,56 @@ class TestCostInWindow:
             datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc),
         )
         assert total == 0.0
+
+
+class TestTotalCostInWindow:
+    def test_sums_across_users(self, db_session: Session) -> None:
+        u1, u2 = str(uuid4()), str(uuid4())
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        record_user_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 3.0, window)
+        record_user_usage(db_session, u2, "m", "CHAT", None, 1, 1, 0, 4.0, window)
+
+        assert get_total_cost_cents_in_window(db_session, window) == pytest.approx(7.0)
+
+    def test_other_window_excluded(self, db_session: Session) -> None:
+        u1 = str(uuid4())
+        w1 = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        w2 = datetime.datetime(2026, 6, 2, tzinfo=datetime.timezone.utc)
+        record_user_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 3.0, w1)
+        record_user_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 9.0, w2)
+
+        assert get_total_cost_cents_in_window(db_session, w1) == pytest.approx(3.0)
+
+
+@pytest.fixture
+def db_session_with_groups() -> Generator[Session, None, None]:
+    """UserUsage + User__UserGroup tables, for group-scoped cost aggregation."""
+    engine: Engine = create_engine("sqlite://")
+    cast(Table, UserUsage.__table__).create(bind=engine)
+    cast(Table, User__UserGroup.__table__).create(bind=engine)
+    SessionLocal = sessionmaker(bind=engine)
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+class TestGroupCostInWindow:
+    def test_sums_members_of_group(self, db_session_with_groups: Session) -> None:
+        s = db_session_with_groups
+        u1, u2, outsider = str(uuid4()), str(uuid4()), str(uuid4())
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+
+        s.add_all(
+            [
+                User__UserGroup(user_group_id=10, user_id=u1),
+                User__UserGroup(user_group_id=10, user_id=u2),
+            ]
+        )
+        s.flush()
+        record_user_usage(s, u1, "m", "CHAT", None, 1, 1, 0, 2.0, window)
+        record_user_usage(s, u2, "m", "CHAT", None, 1, 1, 0, 5.0, window)
+        record_user_usage(s, outsider, "m", "CHAT", None, 1, 1, 0, 99.0, window)
+
+        assert get_group_cost_cents_in_window(s, 10, window) == pytest.approx(7.0)

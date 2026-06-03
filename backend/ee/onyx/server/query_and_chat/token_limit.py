@@ -21,6 +21,9 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
+from onyx.db.user_usage import get_group_cost_cents_in_window
+from onyx.db.user_usage import get_user_cost_cents_in_window
+from onyx.server.query_and_chat.token_limit import _first_triggered_cost_limit
 from onyx.server.query_and_chat.token_limit import _first_triggered_limit
 from onyx.server.query_and_chat.token_limit import _get_cutoff_time
 from onyx.server.query_and_chat.token_limit import _user_is_rate_limited_by_global
@@ -66,6 +69,15 @@ def _user_is_rate_limited(user_id: UUID) -> None:
             if triggered is not None:
                 raise_rate_limited("user", triggered.period_hours)
 
+            cost_triggered = _first_triggered_cost_limit(
+                user_rate_limits,
+                lambda window_start: get_user_cost_cents_in_window(
+                    db_session, str(user_id), window_start
+                ),
+            )
+            if cost_triggered is not None:
+                raise_rate_limited("user", cost_triggered.period_hours)
+
 
 def _fetch_user_usage(
     user_id: UUID, cutoff_time: datetime, db_session: Session
@@ -95,31 +107,48 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
     with get_session_with_current_tenant() as db_session:
         group_rate_limits = _fetch_all_user_group_rate_limits(user_id, db_session)
 
-        if group_rate_limits:
-            # Group cutoff time is the same for all groups.
-            # This could be optimized to only fetch the maximum cutoff time for
-            # a specific group, but seems unnecessary for now.
-            group_cutoff_time = _get_cutoff_time(
-                [e for sublist in group_rate_limits.values() for e in sublist]
+        if not group_rate_limits:
+            return
+
+        # Group cutoff time is the same for all groups.
+        # This could be optimized to only fetch the maximum cutoff time for
+        # a specific group, but seems unnecessary for now.
+        group_cutoff_time = _get_cutoff_time(
+            [e for sublist in group_rate_limits.values() for e in sublist]
+        )
+
+        user_group_ids = list(group_rate_limits.keys())
+        group_usage = _fetch_user_group_usage(
+            user_group_ids, group_cutoff_time, db_session
+        )
+
+        # Token + cost are independent gates, each with most-permissive-group-wins:
+        # the user is limited only when EVERY group the user belongs to is over
+        # that gate's budget; one under-budget group exempts the user. Reset uses
+        # the longest triggering window across the all-over groups.
+        token_periods: list[int] = []
+        for user_group_id, rate_limits in group_rate_limits.items():
+            usage = group_usage.get(user_group_id, [])
+            triggered = _first_triggered_limit(rate_limits, usage)
+            if triggered is None:
+                break  # an under-budget group means the user is not token-limited
+            token_periods.append(triggered.period_hours)
+        else:
+            raise_rate_limited("user's groups", max(token_periods))
+
+        cost_periods: list[int] = []
+        for user_group_id, rate_limits in group_rate_limits.items():
+            cost_triggered = _first_triggered_cost_limit(
+                rate_limits,
+                lambda window_start, gid=user_group_id: get_group_cost_cents_in_window(
+                    db_session, gid, window_start
+                ),
             )
-
-            user_group_ids = list(group_rate_limits.keys())
-            group_usage = _fetch_user_group_usage(
-                user_group_ids, group_cutoff_time, db_session
-            )
-
-            # Limited only when every group the user belongs to is over budget.
-            # Reset uses the longest triggering window (most conservative retry).
-            triggered_periods: list[int] = []
-            for user_group_id, rate_limits in group_rate_limits.items():
-                usage = group_usage.get(user_group_id, [])
-
-                triggered = _first_triggered_limit(rate_limits, usage)
-                if triggered is None:
-                    return  # an under-budget group means the user is not group-limited
-                triggered_periods.append(triggered.period_hours)
-
-            raise_rate_limited("user's groups", max(triggered_periods))
+            if cost_triggered is None:
+                break  # an under-budget group means the user is not cost-limited
+            cost_periods.append(cost_triggered.period_hours)
+        else:
+            raise_rate_limited("user's groups", max(cost_periods))
 
 
 def _fetch_all_user_group_rate_limits(

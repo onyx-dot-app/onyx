@@ -4458,6 +4458,9 @@ class TokenRateLimit(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     token_budget: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Optional cost ceiling (cents) enforced alongside token_budget over the same
+    # window/scope. A row may carry a token budget, a cost budget, or both.
+    cost_budget_cents: Mapped[float | None] = mapped_column(Float, nullable=True)
     period_hours: Mapped[int] = mapped_column(Integer, nullable=False)
     scope: Mapped[TokenRateLimitScope] = mapped_column(
         Enum(TokenRateLimitScope, native_enum=False)
