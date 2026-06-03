@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from typing import Union
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
@@ -665,8 +666,14 @@ class LitellmLLM(LLM):
         # Without this, OpenRouter may alternate between e.g. Anthropic and Google
         # for the same model, causing cache misses on every other turn.
         # See: https://openrouter.ai/docs/features/provider-routing#session-id
+        #
+        # Gated on SEND_USER_METADATA_TO_LLM_PROVIDER for consistency with the
+        # user/session metadata handled in build_litellm_passthrough_kwargs: an
+        # operator who opted out of sending session identifiers to providers
+        # should not have the session_id forwarded to OpenRouter either.
         if (
-            self._model_provider == LlmProviderNames.OPENROUTER
+            SEND_USER_METADATA_TO_LLM_PROVIDER
+            and self._model_provider == LlmProviderNames.OPENROUTER
             and user_identity is not None
             and user_identity.session_id is not None
         ):
