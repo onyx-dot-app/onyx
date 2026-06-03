@@ -88,20 +88,40 @@ sandbox HTTPS ──► gate (mitmproxy) ── match → decisive policy
                     ├─ DENY ───► 403                      (unchanged)
                     ├─ ALWAYS ─► forward                  (unchanged)
                     └─ ASK
-                        │  session origin == SCHEDULED
-                        │  AND owning run RUNNING
-                        │  AND match.external_app_id ∈ task grants?
-                        ├─ yes ► insert action_approval pre-decided
-                        │        (APPROVED, decided_via=pre_approval),
-                        │        notify, forward — no park
-                        └─ no ─► park ≤ 180s              (unchanged)
+                        │  _resolve_auto_approval: first grant
+                        │  source to cover this request wins
+                        │  (today: RUNNING scheduled run whose
+                        │  task grants match.external_app_id)
+                        ├─ hit ► mint action_approval pre-decided
+                        │        (APPROVED, decided_via), notify,
+                        │        forward (fail-closed: dispatch raise
+                        │        → 403, never an unguarded forward)
+                        └─ none ► park ≤ 180s             (unchanged)
 ```
 
 The lookup runs once per gated request, threaded, before the pending
-row would be persisted. Any condition failing → existing park flow,
+row would be persisted. No source hitting → existing park flow,
 untouched. A partially-granted run degrades gracefully: requests to
 non-granted apps park and expire exactly as today — per-app isolation
 is the point.
+
+**Grant-source seam.** The short-circuit is not monolithic. In
+`gate.py`, `_try_auto_approve` is the generic orchestrator;
+`_resolve_auto_approval(db, ctx, match)` is the single extension point —
+grant sources are checked in order, first hit wins, `None` parks. Each
+source returns an `_AutoApproval` dataclass carrying `decided_via` plus
+the notification payload; `_try_auto_approve` mints the row and
+`_notify_auto_approved` are source-agnostic. The only source today is
+`_scheduled_task_grant` (app-level, RUNNING scheduled run). This is the
+seam future grant sources plug into — they add a `_resolve_auto_approval`
+source and reuse the mint/notify path unchanged.
+
+**Fail-closed dispatch.** mitmproxy forwards the original request on any
+unhandled addon exception, silently bypassing the gate. In `request()`,
+the auto-approved forward (`_dispatch_injection_or_block`) is wrapped in
+try/except that sets `http_403(INTERNAL_ERROR)` on any raise — so an
+unhandled exception cannot make the proxy forward the original request
+unguarded after an `APPROVED` row is already committed.
 
 ## Data Model
 
@@ -122,8 +142,8 @@ No new table. New columns:
 - `action_approval.external_app_id` — nullable FK (NULL for legacy
   rows), populated from `match.external_app_id` on every new gated
   insert. Needed because `app_name` is not unique (self-hosted
-  instances share an `app_type`); the run-history feedback loop and its
-  one-click enable key off this id.
+  instances share an `app_type`); the planned run-history feedback loop
+  keys its one-click enable off this id.
 
 The gate's grant lookup lives in `backend/onyx/db/scheduled_task.py`;
 pre-decided inserts go through `insert_action_approval` in
@@ -133,21 +153,10 @@ pre-decided inserts go through `insert_action_approval` in
 
 - `ScheduledTaskCreate` / `ScheduledTaskPatch` gain
   `pre_approved_app_ids: list[int]`; `ScheduledTaskDetail` returns it.
-  The write path validates ids against the tenant's apps and dedupes —
-  existence only; the credential and ≥1-`ASK` filters below are
-  editor-side advisory (a grant on a no-`ASK` app is inert, never
-  consulted).
-- `GET /api/build/scheduled-tasks/approvable-apps` (existing router,
-  `require_onyx_craft_enabled`): the external apps the user can
-  actually use (org credentials or `is_user_authenticated_for_app`)
-  that have ≥1 `ASK` action. Shape:
-  `{external_app_id, display_name, actions: [{action_type,
-  display_name}]}` — the FE keys toggles on `external_app_id` and
-  renders the action list in the disclosure expander.
-- `RunSummary` (the `/runs` payload) gains the apps whose approvals
-  expired during that run (`[{external_app_id, display_name}]`, joined
-  from EXPIRED `action_approval` rows via `session_id`) — this powers
-  the feedback loop.
+  The write path validates ids via `_validated_app_ids` and dedupes
+  (order-preserving) — existence only; a credential / ≥1-`ASK` filter is
+  editor-side advisory, since a grant on a no-`ASK` app is inert and
+  never consulted.
 - New `NotificationType.SCHEDULED_TASK_PRE_APPROVED_ACTION`, emitted
   per `(run, app)` on the first unattended forward so chatty tasks
   don't flood the bell. Dedup rides `create_notification`'s existing
@@ -155,27 +164,15 @@ pre-decided inserts go through `insert_action_approval` in
   `(run_id, external_app_id)` pair — anything per-request in it would
   defeat the dedup.
 
-## UI
-
-- **Task editor** (`ScheduleTaskForm`,
-  `web/src/app/craft/v1/tasks/components/`): an "Approvals" section
-  with one toggle per approvable app — "Allow this task to use
-  **Slack** without asking" — plus a "see what this allows" expander
-  listing the covered actions, and warning copy on enable. Types in
-  `interfaces.ts`, client calls in `api.ts`.
-- **Task detail page**: shows enabled apps; run rows whose approvals
-  expired surface "Needed **Slack** approval" with one-click enable
-  (PATCHes the grant onto the task). Grounded in an action that
-  actually fired — no guessing.
-
 ## Lifecycle & Security
 
 - **Prompt edits clear grants.** A `PATCH` whose `prompt` value differs
   from the stored one resets `pre_approved_app_ids` to `[]` — the grant
   was made against a specific intent, and a rewritten prompt must not
-  inherit it. Resubmitting an identical prompt does not reset; the
-  editor warns and lets the user re-enable in the same submit. Schedule
-  changes do not reset grants; cadence doesn't change intent.
+  inherit it. Resubmitting an identical prompt does not reset, and grants
+  supplied in the same patch win over the reset (so the planned editor can
+  warn and re-enable in one submit). Schedule changes do not reset grants;
+  cadence doesn't change intent.
 - **The grant boundary is the app.** There is no cross-app
   "auto-approve everything" toggle — that would convert any prompt
   injection into write capability across every connected app.
@@ -190,18 +187,48 @@ pre-decided inserts go through `insert_action_approval` in
   supremacy, prompt-edit reset, and the unattended-forward
   notifications.
 - **An app grant covers actions the user never enumerated**, including
-  catalog actions added in later releases. Mitigated by the
-  covered-actions expander at grant time and admin per-action `DENY`.
+  catalog actions added in later releases. Mitigated today by admin
+  per-action `DENY`; the planned grant-time covered-actions expander will
+  surface the scope.
 - **One extra DB round-trip per gated request on scheduled sessions.**
   Acceptable — `ASK` is already the slow path (row insert + notify),
   and the lookup is a single indexed join behind `asyncio.to_thread`.
 
+## Planned (not in this PR)
+
+This PR is backend-only — no `web/` changes. The next increment is the
+feedback-loop UI plus the two read APIs that feed it:
+
+- **Task editor** (`ScheduleTaskForm`,
+  `web/src/app/craft/v1/tasks/components/`): an "Approvals" section, one
+  toggle per approvable app — "Allow this task to use **Slack** without
+  asking" — with a "see what this allows" expander and warning copy on
+  enable.
+- **Task detail page**: shows enabled apps; run rows whose approvals
+  expired surface "Needed **Slack** approval" with one-click enable
+  (PATCHes the grant onto the task). Grounded in an action that actually
+  fired — no guessing.
+- `GET /api/build/scheduled-tasks/approvable-apps`: the external apps the
+  user can use (org credentials or `is_user_authenticated_for_app`) with
+  ≥1 `ASK` action, for the editor toggles.
+- `RunSummary` expansion: the apps whose approvals expired during a run
+  (joined from EXPIRED `action_approval` rows via `session_id`,
+  resolvable through the shipped `external_app_id`), to drive the
+  one-click enable.
+
 ## Future Work
 
+The grant-source seam means future modes drop in as new
+`_resolve_auto_approval` sources without restructuring `request()`:
+
+- **Session-scoped grants** — (a) "auto-approve all for this session",
+  (b) per-app session grant, (c) per-action-type session grant (e.g.
+  "allow Slack send-message this session but not other Slack `ASK`
+  actions" — a source can scope on `match.decisive.action_type`, not
+  just `match.external_app_id`). The store backing session-scoped grants
+  is still to build; the gate integration point is the seam.
 - **"Allow for this task" on the live `ApprovalCard`** when the session
   resolves to a RUNNING scheduled run — approving also grants the app.
-- **Per-action "advanced" subset** within an app grant, if a real
-  customer asks.
 - **Payload-level constraints** (e.g. "only this channel").
 - **LLM prompt classification** to suggest which apps to pre-enable.
   Deferred: false negatives defeat the feature, false positives widen
@@ -209,17 +236,26 @@ pre-decided inserts go through `insert_action_approval` in
 
 ## Tests
 
-- **External dependency unit** (primary; existing homes):
-  - `tests/external_dependency_unit/craft/test_approval_gate.py`: ASK +
-    app granted + RUNNING run → pre-decided APPROVED row,
-    `decided_via=pre_approval`, no park; run SUCCEEDED → parks;
-    interactive-origin session → parks; matched app not in grants →
-    parks; `DENY` decisive → 403 regardless of grant.
-  - db-ops tests: prompt-edit PATCH resets grants; create/patch rejects
-    unknown app ids and dedupes.
-- **Integration**
-  (`tests/integration/tests/craft/test_scheduled_tasks_api.py`): create
-  task with grants, read back via detail; approvable-apps shape; an
-  expired approval surfaces a resolvable `external_app_id` on the run
-  payload (the feedback-loop join).
-- No Playwright — the editor section is a standard form addition.
+- **External dependency unit** (real SQL):
+  `tests/external_dependency_unit/craft/test_scheduled_task_pre_approvals.py`
+  - `get_live_scheduled_run_grants`: RUNNING run returns
+    `(run_id, grants)`; non-RUNNING (SUCCEEDED / FAILED /
+    AWAITING_APPROVAL) → `None`; interactive / no-run session → `None`.
+  - `insert_action_approval`: pre-decided `APPROVED` vs default-pending.
+  - Prompt-edit reset: a differing prompt resets grants, an identical
+    prompt keeps them, grants supplied in the same patch win over the
+    reset.
+  - Create persistence + `_validated_app_ids` dedupe and unknown-id
+    rejection.
+- **Unit** (gate, stubbed DB):
+  `backend/tests/unit/sandbox_proxy/test_gate.py`
+  - Granted + RUNNING → skips park, mints the `PRE_APPROVAL` row,
+    notifies; non-RUNNING / not-granted / other-app / lookup-error all
+    park; `DENY` wins before the grant lookup is reached;
+    dispatch-failure-after-approval fails closed (403).
+- **End-to-end (manual, local kind cluster):** the gate path was
+  verified against the real proxy with a real Slack `chat.postMessage`
+  through the egress gate — a granted RUNNING run forwarded with injected
+  creds, a `gate.auto_approved` log line, a `PRE_APPROVAL` row, and the
+  notification; non-RUNNING and ungranted parked; `DENY` → 403.
+- No Playwright — no `web/` changes in this PR.
