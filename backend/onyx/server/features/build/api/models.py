@@ -181,6 +181,14 @@ class MessageRequest(BaseModel):
     content: str
 
 
+class MessageInterruptResponse(BaseModel):
+    """Response to an interrupt request. ``interrupted`` is False when there was
+    no directly-interruptible turn (no running sandbox or no opencode session);
+    the interrupt fence is set regardless."""
+
+    interrupted: bool
+
+
 class MessageResponse(BaseModel):
     """Response containing message details.
 
@@ -320,7 +328,7 @@ class UpsertExternalAppRequest(BaseModel):
     app_type: ExternalAppType
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
-    organization_credentials: dict[str, Any]
+    organization_credentials: dict[str, str]
     # Per-action overrides by catalog action id (built-in apps); validated on
     # upsert. A map full-replaces stored overrides (empty clears); None leaves
     # them untouched, so a partial update can't wipe the admin's choices.
@@ -329,7 +337,7 @@ class UpsertExternalAppRequest(BaseModel):
 
 class ActionPolicyView(BaseModel):
     """One action of a built-in app, with its effective policy — the admin's
-    stored override if set, otherwise ``ASK``."""
+    stored override if set, otherwise the action's ``default_policy``."""
 
     action_id: str
     normalised_name: str
@@ -377,6 +385,7 @@ class ExternalAppUserResponse(BaseModel):
     id: int
     name: str
     description: str
+    slug: str
     app_type: ExternalAppType
     credential_keys: list[str]
     credential_values: dict[str, Any]
@@ -414,6 +423,9 @@ class EndpointDescriptor(BaseModel):
     action_id: str
     normalised_name: str
     description: str
+    # The policy a new app's instance of this action defaults to; the create
+    # form seeds each action's selector with it (the admin can still override).
+    default_policy: EndpointPolicy
 
 
 class BuiltInExternalAppDescriptor(BaseModel):

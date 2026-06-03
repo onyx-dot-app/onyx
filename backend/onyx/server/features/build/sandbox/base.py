@@ -169,7 +169,6 @@ class SandboxManager(_ServeMixin, ABC):
         skills_section: str,
         snapshot_path: str | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -188,7 +187,6 @@ class SandboxManager(_ServeMixin, ABC):
             skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for AGENTS.md.
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
-            user_role: User's role/title for personalization in AGENTS.md
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -333,6 +331,7 @@ class SandboxManager(_ServeMixin, ABC):
         agent_provider: str | None = None,
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
+        should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream typed sandbox events for one user message via
         opencode-serve.
@@ -353,6 +352,33 @@ class SandboxManager(_ServeMixin, ABC):
             agent_provider,
             agent_model,
             on_opencode_session_resolved=on_opencode_session_resolved,
+            should_interrupt=should_interrupt,
+        )
+
+    def send_subagent_message(
+        self,
+        sandbox_id: UUID,
+        parent_session_id: UUID,
+        subagent_opencode_session_id: str,
+        message: str,
+        agent_provider: str | None = None,
+        agent_model: str | None = None,
+    ) -> Generator[SandboxEvent, None, None]:
+        """Stream a follow-up turn against an existing subagent (child)
+        opencode session that was spawned under ``parent_session_id``.
+
+        The child session shares the parent's session directory. Pass the
+        parent session's ``agent_provider``/``agent_model`` so the follow-up
+        uses the same model as the parent rather than the child session's own
+        default.
+        """
+        yield from self.send_subagent_message_via_serve(
+            sandbox_id,
+            parent_session_id,
+            subagent_opencode_session_id,
+            message,
+            agent_provider=agent_provider,
+            agent_model=agent_model,
         )
 
     @abstractmethod

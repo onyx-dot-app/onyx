@@ -1,6 +1,6 @@
 {
   "name": "Onyx Dev Sandbox",
-  "image": "onyxdotapp/onyx-devcontainer@sha256:0cc5c815b430c0463cff047b8ecbc66eb7ed54abfaf19295f4cafa80a1367905",
+  "image": "onyxdotapp/onyx-devcontainer@sha256:616f411af60ef8e868d3b486c00484d539096e7012bb4ac173ace15979f6950e",
   "runArgs": [
     "--cap-add=NET_ADMIN",
     "--cap-add=NET_RAW",
@@ -9,6 +9,7 @@
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/home/dev/.claude,type=bind",
     "source=${localEnv:HOME}/.claude.json,target=/home/dev/.claude.json,type=bind",
+    "source=${localWorkspaceFolder}/.devcontainer/claude-code,target=/etc/claude-code,type=bind,readonly",
     "source=${localEnv:HOME}/.zshrc,target=/home/dev/.zshrc.host,type=bind,readonly",
     "source=${localEnv:HOME}/.gitconfig,target=/home/dev/.gitconfig,type=bind,readonly",
     "source=${localEnv:HOME}/.config/nvim,target=/home/dev/.config/nvim,type=bind,readonly",
@@ -27,6 +28,7 @@
     "REDIS_HOST": "cache",
     "S3_ENDPOINT_URL": "http://minio:9000",
     "SSH_AUTH_SOCK": "/tmp/ssh-agent.sock",
+    "UV_LINK_MODE": "copy",
     "VESPA_HOST": "index"
   },
   "remoteUser": "${localEnv:DEVCONTAINER_REMOTE_USER:dev}",

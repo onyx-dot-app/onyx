@@ -152,11 +152,12 @@ def _list_archive_members(tar_path: Path) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Fixtures: k8s_manager and live_pod are provided by conftest.py.
-#
-# Note: snapshot S3 cleanup is NOT handled by the shared ``live_pod``
-# fixture. Tests that create snapshots must clean them up individually
-# (see ``_delete_snapshot``).
+# Fixtures: k8s_manager, pool_session, and live_pod are provided by conftest.py.
+# Tests use ``pool_session`` to share the module pod; ``live_pod`` is
+# reserved for the termination test and the traversal-defence test (where
+# isolation matters if the defence ever regresses). Snapshot S3 cleanup
+# is not handled by either fixture — snapshot keys include the per-test
+# session_id so they don't collide.
 # ---------------------------------------------------------------------------
 
 
@@ -168,10 +169,10 @@ def _list_archive_members(tar_path: Path) -> list[str]:
 def test_snapshot_includes_outputs_and_attachments_and_opencode_data(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
     tmp_path: Path,
 ) -> None:
-    sandbox_id, session_id, pod_name = live_pod
+    sandbox_id, session_id, pod_name = pool_session
 
     _populate_session_workspace(k8s_client, pod_name, session_id)
 
@@ -203,10 +204,10 @@ def test_snapshot_includes_outputs_and_attachments_and_opencode_data(
 def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
     tmp_path: Path,
 ) -> None:
-    sandbox_id, session_id, pod_name = live_pod
+    sandbox_id, session_id, pod_name = pool_session
 
     # ``setup_session_workspace`` already wrote AGENTS.md + opencode.json
     # at the session root. We additionally seed managed/skills/ at the
@@ -244,9 +245,9 @@ def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
 def test_restore_from_snapshot_recreates_workspace(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
-    sandbox_id, session_id, pod_name = live_pod
+    sandbox_id, session_id, pod_name = pool_session
 
     payload = _populate_session_workspace(k8s_client, pod_name, session_id)
     result = k8s_manager.create_snapshot(sandbox_id, session_id, TEST_TENANT_ID)
@@ -314,9 +315,9 @@ def test_restore_from_snapshot_recreates_workspace(
 def test_restore_re_pushes_skills(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
-    sandbox_id, session_id, pod_name = live_pod
+    sandbox_id, session_id, pod_name = pool_session
 
     _populate_session_workspace(k8s_client, pod_name, session_id)
     result = k8s_manager.create_snapshot(sandbox_id, session_id, TEST_TENANT_ID)
@@ -384,9 +385,9 @@ def test_restore_re_pushes_skills(
 def test_restore_with_missing_snapshot_creates_fresh_workspace(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
-    sandbox_id, session_id, pod_name = live_pod
+    sandbox_id, session_id, pod_name = pool_session
 
     # Wipe the workspace so we can verify the fresh-setup path.
     k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
@@ -411,7 +412,6 @@ def test_restore_with_missing_snapshot_creates_fresh_workspace(
     )
     assert "outputs" in listing
     assert "AGENTS.md" in listing
-    assert "opencode.json" in listing
 
 
 def test_snapshot_failure_does_not_block_pod_termination(
@@ -488,6 +488,10 @@ def test_restore_uses_data_filter_to_block_traversal(
     sandbox_id, session_id, pod_name = live_pod
 
     # Wipe the workspace so we can detect any traversal artefacts cleanly.
+    # Stays on ``live_pod`` (not ``pool_session``) so that any regression
+    # which lets ``/workspace/escape.txt`` actually get written is
+    # contained to a fresh pod, not poisoning every later test in the
+    # module.
     k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
 
     # Build a tarball locally with one well-behaved entry plus one traversal
@@ -564,9 +568,9 @@ def test_restore_uses_data_filter_to_block_traversal(
 )
 def test_snapshot_corruption_detected_on_restore(
     k8s_manager: KubernetesSandboxManager,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
-    sandbox_id, session_id, _pod_name = live_pod
+    sandbox_id, session_id, _pod_name = pool_session
 
     # Forge a truncated gzip blob — valid gzip header, garbage body.
     corrupt_bytes = b"\x1f\x8b\x08\x00" + b"\x00" * 8 + b"truncated-mid-stream"

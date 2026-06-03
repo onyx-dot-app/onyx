@@ -49,7 +49,6 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from urllib.parse import urlparse
 from uuid import UUID
 from uuid import uuid4
 
@@ -58,6 +57,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import PublicFormat
 from kubernetes import client
+from kubernetes import watch
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
 
@@ -128,16 +128,6 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 # SANDBOX_NEXTJS_PORT_END range, with one port per session.
 PUSH_DAEMON_PORT = 8731
 POD_READY_TIMEOUT_SECONDS = 60
-# Progressive poll cadence: short intervals up front (pods usually become
-# Ready in 12–18s, so we want to catch the transition quickly), then back
-# off so a stuck pod doesn't hammer the API server. Each tuple is
-# (count, interval_seconds). Sum of count × interval must stay ≤
-# POD_READY_TIMEOUT_SECONDS.
-POD_READY_POLL_SCHEDULE: tuple[tuple[int, float], ...] = (
-    (6, 0.5),  # 0–3s
-    (5, 1.0),  # 3–8s
-    (26, 2.0),  # 8–60s
-)
 
 # Resource deletion timeout and polling interval
 # Kubernetes deletes are async - we need to wait for resources to actually be gone
@@ -167,8 +157,6 @@ _PROXY_DNS_RETRY_BACKOFF_S = 0.5
 
 
 def _resolve_proxy_ip() -> str:
-    if not SANDBOX_PROXY_HOST:
-        raise RuntimeError("_resolve_proxy_ip called without SANDBOX_PROXY_HOST")
     last_err: OSError | None = None
     for attempt in range(_PROXY_DNS_RETRY_ATTEMPTS):
         try:
@@ -183,11 +171,31 @@ def _resolve_proxy_ip() -> str:
     )
 
 
+# Loopback only: the firewall permits nothing else to bypass the proxy, and the
+# Onyx API host must transit the proxy so the PAT can be injected on the wire.
+_NO_PROXY = "127.0.0.1,localhost"
+
+# Non-empty sentinel for every proxy-injected credential (ONYX_PAT + each
+# opencode apiKey); the proxy overwrites the real value on the wire.
+_PROXY_INJECTED_PLACEHOLDER = "replaced_by_egress_proxy"
+
+
+def _placeholder_llm_configs(
+    configs: list[LLMProviderConfig],
+) -> list[LLMProviderConfig]:
+    """Swap real LLM keys for the proxy placeholder before the opencode config
+    reaches the pod; provider/model/api_base stay so routing is unchanged."""
+    return [
+        c.model_copy(update={"api_key": _PROXY_INJECTED_PLACEHOLDER})
+        if c.api_key
+        else c
+        for c in configs
+    ]
+
+
 def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
-    if not SANDBOX_PROXY_HOST:
-        return []
     proxy_url = f"http://{_PROXY_ALIAS}:{SANDBOX_PROXY_PORT}"
-    no_proxy = _compute_no_proxy_list()
+    no_proxy = _NO_PROXY
     return [
         client.V1EnvVar(name="HTTPS_PROXY", value=proxy_url),
         client.V1EnvVar(name="HTTP_PROXY", value=proxy_url),
@@ -203,15 +211,6 @@ def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
         client.V1EnvVar(name="CURL_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
         client.V1EnvVar(name="GIT_SSL_CAINFO", value=_PROXY_CA_BUNDLE_FILE),
     ]
-
-
-def _compute_no_proxy_list() -> str:
-    entries = ["127.0.0.1", "localhost"]
-    if SANDBOX_API_SERVER_URL:
-        parsed = urlparse(SANDBOX_API_SERVER_URL)
-        if parsed.hostname:
-            entries.append(parsed.hostname)
-    return ",".join(entries)
 
 
 def _proxy_init_container() -> client.V1Container:
@@ -355,6 +354,7 @@ fi
 set -e
 cd {session_path}/outputs/web
 {install_check}
+export WEBAPP_ASSET_PREFIX="/api/build/sessions/$(basename {session_path})/webapp"
 echo "Starting Next.js dev server on port {nextjs_port}..."
 nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
@@ -558,7 +558,6 @@ class KubernetesSandboxManager(SandboxManager):
         nextjs_port: int | None = None,
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> str:
         """Load and populate agent instructions from template file."""
         return generate_agent_instructions(
@@ -569,14 +568,12 @@ class KubernetesSandboxManager(SandboxManager):
             nextjs_port=nextjs_port,
             disabled_tools=disabled_tools,
             user_name=user_name,
-            user_role=user_role,
         )
 
     def _create_sandbox_pod(
         self,
         sandbox_id: str,
         tenant_id: str,
-        onyx_pat: str,
     ) -> client.V1Pod:
         """Create Pod specification for sandbox (user-level).
 
@@ -604,7 +601,7 @@ class KubernetesSandboxManager(SandboxManager):
             command=["/workspace/entrypoint.sh"],
             ports=sandbox_ports,
             env=[
-                client.V1EnvVar(name="ONYX_PAT", value=onyx_pat),
+                client.V1EnvVar(name="ONYX_PAT", value=_PROXY_INJECTED_PLACEHOLDER),
                 client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
                 client.V1EnvVar(
                     name=OPENCODE_SERVER_PASSWORD,
@@ -633,16 +630,10 @@ class KubernetesSandboxManager(SandboxManager):
                 client.V1VolumeMount(
                     name="managed", mount_path="/workspace/managed", read_only=True
                 ),
-                *(
-                    [
-                        client.V1VolumeMount(
-                            name=_PROXY_CA_BUNDLE_VOLUME,
-                            mount_path=_PROXY_CA_BUNDLE_DIR,
-                            read_only=True,
-                        )
-                    ]
-                    if SANDBOX_PROXY_HOST
-                    else []
+                client.V1VolumeMount(
+                    name=_PROXY_CA_BUNDLE_VOLUME,
+                    mount_path=_PROXY_CA_BUNDLE_DIR,
+                    read_only=True,
                 ),
             ],
             resources=client.V1ResourceRequirements(
@@ -718,16 +709,10 @@ class KubernetesSandboxManager(SandboxManager):
                     name="workspace", mount_path="/workspace/sessions"
                 ),
                 client.V1VolumeMount(name="managed", mount_path="/workspace/managed"),
-                *(
-                    [
-                        client.V1VolumeMount(
-                            name=_PROXY_CA_BUNDLE_VOLUME,
-                            mount_path=_PROXY_CA_BUNDLE_DIR,
-                            read_only=True,
-                        )
-                    ]
-                    if SANDBOX_PROXY_HOST
-                    else []
+                client.V1VolumeMount(
+                    name=_PROXY_CA_BUNDLE_VOLUME,
+                    mount_path=_PROXY_CA_BUNDLE_DIR,
+                    read_only=True,
                 ),
             ],
             resources=client.V1ResourceRequirements(
@@ -747,8 +732,9 @@ class KubernetesSandboxManager(SandboxManager):
             ),
             readiness_probe=client.V1Probe(
                 http_get=client.V1HTTPGetAction(path="/health", port=PUSH_DAEMON_PORT),
-                initial_delay_seconds=3,
-                period_seconds=10,
+                initial_delay_seconds=1,
+                period_seconds=2,
+                failure_threshold=10,
             ),
         )
 
@@ -763,34 +749,30 @@ class KubernetesSandboxManager(SandboxManager):
             ),
         ]
 
-        init_containers: list[client.V1Container] = []
-        host_aliases: list[client.V1HostAlias] | None = None
-        if SANDBOX_PROXY_HOST:
-            init_containers.append(_proxy_init_container())
-            volumes.extend(
-                [
-                    client.V1Volume(
-                        name=_PROXY_CA_SOURCE_VOLUME,
-                        config_map=client.V1ConfigMapVolumeSource(
-                            name=SANDBOX_PROXY_CA_CONFIGMAP,
-                            optional=False,
-                        ),
+        volumes.extend(
+            [
+                client.V1Volume(
+                    name=_PROXY_CA_SOURCE_VOLUME,
+                    config_map=client.V1ConfigMapVolumeSource(
+                        name=SANDBOX_PROXY_CA_CONFIGMAP,
+                        optional=False,
                     ),
-                    client.V1Volume(
-                        name=_PROXY_CA_BUNDLE_VOLUME,
-                        empty_dir=client.V1EmptyDirVolumeSource(),
-                    ),
-                ]
-            )
-            # kubelet injects hostAliases into every container's /etc/hosts;
-            # initContainer mutations don't propagate, so we set it here.
-            host_aliases = [
-                client.V1HostAlias(ip=_resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
+                ),
+                client.V1Volume(
+                    name=_PROXY_CA_BUNDLE_VOLUME,
+                    empty_dir=client.V1EmptyDirVolumeSource(),
+                ),
             ]
+        )
+        # kubelet injects hostAliases into every container's /etc/hosts;
+        # initContainer mutations don't propagate, so we set it here.
+        host_aliases = [
+            client.V1HostAlias(ip=_resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
+        ]
 
         pod_spec = client.V1PodSpec(
             service_account_name=self._service_account,
-            init_containers=init_containers or None,
+            init_containers=[_proxy_init_container()],
             containers=[sandbox_container, sidecar_container],
             host_aliases=host_aliases,
             share_process_namespace=False,
@@ -1065,93 +1047,112 @@ class KubernetesSandboxManager(SandboxManager):
 
         return None
 
-    def _pod_ready_poll_intervals(self) -> Iterator[float]:
-        """Yield poll intervals according to ``POD_READY_POLL_SCHEDULE``.
+    def _evaluate_pod_readiness(self, pod: client.V1Pod, pod_name: str) -> bool | None:
+        """Inspect one pod snapshot for readiness/failure.
 
-        Fast-path detection in the first few seconds (pods usually transition
-        Pending→Running→Ready in 12–18s), then back off so a stuck pod
-        doesn't hammer the API server.
+        Returns ``True`` if Ready, ``False`` if still progressing, and raises
+        ``RuntimeError`` on a terminal failure (init failure, Failed phase,
+        Succeeded phase).
         """
-        for count, interval in POD_READY_POLL_SCHEDULE:
-            for _ in range(count):
-                yield interval
+        init_error = self._check_init_container_status(pod)
+        if init_error:
+            raise RuntimeError(f"Pod {pod_name} failed to start: {init_error}")
+
+        phase = pod.status.phase
+        if phase == "Failed":
+            raise RuntimeError(f"Pod {pod_name} failed to start")
+        if phase == "Succeeded":
+            raise RuntimeError(
+                f"Pod {pod_name} completed unexpectedly "
+                f"(sandbox pods should run indefinitely)"
+            )
+        if phase == "Running":
+            for condition in pod.status.conditions or []:
+                if condition.type == "Ready" and condition.status == "True":
+                    return True
+        return False
 
     def _wait_for_pod_ready(
         self,
         pod_name: str,
         timeout: float = POD_READY_TIMEOUT_SECONDS,
     ) -> bool:
-        """Wait for pod to become ready.
+        """Block on a single-pod watch until Ready or timeout.
 
-        Args:
-            pod_name: Name of the pod to wait for
-            timeout: Maximum time to wait in seconds
-
-        Returns:
-            True if pod is ready, False if timeout
-
-        Raises:
-            RuntimeError: If pod fails or is deleted
+        Watching beats polling: the apiserver pushes status transitions as
+        they happen, so we catch ``Ready`` within ~100ms instead of waiting
+        for the next poll tick. A bounded retry loop covers ``410 Gone``
+        (resource version aged out under us) by re-listing and resuming.
         """
         start_time = time.time()
-        poll_intervals = self._pod_ready_poll_intervals()
+        field_selector = f"metadata.name={pod_name}"
 
-        while time.time() - start_time < timeout:
+        try:
+            initial = self._core_api.read_namespaced_pod(
+                name=pod_name, namespace=self._namespace
+            )
+            if self._evaluate_pod_readiness(initial, pod_name):
+                logger.info("Pod %s is ready", pod_name)
+                return True
+            resource_version = initial.metadata.resource_version
+        except ApiException as e:
+            if e.status == 404:
+                raise RuntimeError(f"Pod {pod_name} was deleted")
+            raise
+
+        while True:
+            remaining = timeout - (time.time() - start_time)
+            if remaining <= 0:
+                break
+
+            w = watch.Watch()
             try:
-                pod = self._core_api.read_namespaced_pod(
-                    name=pod_name,
+                stream = w.stream(
+                    self._core_api.list_namespaced_pod,
                     namespace=self._namespace,
+                    field_selector=field_selector,
+                    resource_version=resource_version,
+                    timeout_seconds=int(remaining),
                 )
-
-                # Check init container status first (they run before main container)
-                init_error = self._check_init_container_status(pod)
-                if init_error:
-                    raise RuntimeError(f"Pod {pod_name} failed to start: {init_error}")
-
-                phase = pod.status.phase
-
-                # Check for failure conditions
-                if phase == "Failed":
-                    # Try to get more details about the failure
-                    init_error = self._check_init_container_status(pod)
-                    error_msg = f"Pod {pod_name} failed to start"
-                    if init_error:
-                        error_msg += f": {init_error}"
-                    raise RuntimeError(error_msg)
-
-                if phase == "Succeeded":
-                    raise RuntimeError(
-                        f"Pod {pod_name} completed unexpectedly (sandbox pods should run indefinitely)"
+                for event in stream:
+                    event_type = event.get("type")
+                    obj = event.get("object")
+                    if event_type == "DELETED":
+                        raise RuntimeError(f"Pod {pod_name} was deleted")
+                    if not isinstance(obj, client.V1Pod):
+                        continue
+                    resource_version = obj.metadata.resource_version
+                    if self._evaluate_pod_readiness(obj, pod_name):
+                        logger.info("Pod %s is ready", pod_name)
+                        return True
+            except ApiException as e:
+                # 410 Gone: resource_version aged out — re-list, check the
+                # snapshot for Ready (the pod may have flipped while the
+                # watch was expiring), then resume from the list's RV.
+                if e.status == 410:
+                    listing = self._core_api.list_namespaced_pod(
+                        namespace=self._namespace, field_selector=field_selector
                     )
-
-                # Check if running and ready
-                if phase == "Running":
-                    conditions = pod.status.conditions or []
-                    for condition in conditions:
-                        if condition.type == "Ready" and condition.status == "True":
+                    for pod in listing.items or []:
+                        if self._evaluate_pod_readiness(pod, pod_name):
                             logger.info("Pod %s is ready", pod_name)
                             return True
+                    resource_version = listing.metadata.resource_version
+                    continue
+                raise
+            finally:
+                w.stop()
 
-                logger.debug("Pod %s status: %s, waiting...", pod_name, phase)
-
-            except ApiException as e:
-                if e.status == 404:
-                    raise RuntimeError(f"Pod {pod_name} was deleted")
-                logger.warning("Error checking pod status: %s", e)
-
-            time.sleep(next(poll_intervals, 2.0))
-
-        # On timeout, check one more time for init container failures
+        # On timeout, re-check init container status one more time.
         try:
             pod = self._core_api.read_namespaced_pod(
-                name=pod_name,
-                namespace=self._namespace,
+                name=pod_name, namespace=self._namespace
             )
             init_error = self._check_init_container_status(pod)
             if init_error:
                 raise RuntimeError(f"Pod {pod_name} failed to start: {init_error}")
         except ApiException:
-            pass  # Pod might be deleted, ignore
+            pass
 
         logger.warning("Timeout waiting for pod %s to become ready", pod_name)
         return False
@@ -1217,7 +1218,9 @@ class KubernetesSandboxManager(SandboxManager):
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             llm_config: LLM provider configuration
-            onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the pod
+            onyx_pat: Required by the interface and the Docker backend; on K8s
+                the pod ships a placeholder and the proxy injects the real PAT,
+                so this is only checked as a provisioning precondition.
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -1233,6 +1236,17 @@ class KubernetesSandboxManager(SandboxManager):
         )
 
         pod_name = self._get_pod_name(str(sandbox_id))
+
+        if not onyx_pat:
+            raise ValueError("onyx_pat is required for Kubernetes sandbox provisioning")
+        if not SANDBOX_API_SERVER_URL:
+            raise ValueError(
+                "SANDBOX_API_SERVER_URL must be set for Kubernetes sandbox provisioning"
+            )
+        if not SANDBOX_PROXY_HOST:
+            raise ValueError(
+                "SANDBOX_PROXY_HOST must be set for Kubernetes sandbox provisioning"
+            )
 
         # Check if pod already exists and is healthy (idempotency check)
         if self._pod_exists_and_healthy(pod_name):
@@ -1264,13 +1278,6 @@ class KubernetesSandboxManager(SandboxManager):
                 last_heartbeat=None,
             )
 
-        if not onyx_pat:
-            raise ValueError("onyx_pat is required for Kubernetes sandbox provisioning")
-        if not SANDBOX_API_SERVER_URL:
-            raise ValueError(
-                "SANDBOX_API_SERVER_URL must be set for Kubernetes sandbox provisioning"
-            )
-
         try:
             # Re-provision: clear tombstone + cached info so subscribes
             # build a fresh bus with the new Secret's password.
@@ -1278,23 +1285,17 @@ class KubernetesSandboxManager(SandboxManager):
                 self._terminated_sandboxes.discard(sandbox_id)
             self._invalidate_serve_connection_info(sandbox_id)
 
-            # Secret must exist before the Pod (env references it via
-            # secretKeyRef). Pre-load every configured provider so
-            # cross-provider per-prompt model overrides work without a
-            # pod restart.
-            providers = all_llm_configs or [llm_config]
-            # Only register the egress-tagging plugin when the proxy is
-            # deployed; otherwise it would no-op (no HTTP(S)_PROXY to re-tag).
-            session_tag_plugins = (
-                [_OPENCODE_SESSION_TAG_PLUGIN_PATH] if SANDBOX_PROXY_HOST else None
-            )
+            # Secret must exist before the Pod (secretKeyRef). Pre-load every
+            # provider for cross-provider model overrides; keys are swapped for
+            # the proxy placeholder so the pod never holds them.
+            providers = _placeholder_llm_configs(all_llm_configs or [llm_config])
             opencode_config_json = json.dumps(
                 build_multi_provider_opencode_config(
                     providers=providers,
                     default_provider=llm_config.provider,
                     default_model=llm_config.model_name,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
-                    plugins=session_tag_plugins,
+                    plugins=[_OPENCODE_SESSION_TAG_PLUGIN_PATH],
                 )
             )
             self._provision_opencode_secret(str(sandbox_id), opencode_config_json)
@@ -1304,7 +1305,6 @@ class KubernetesSandboxManager(SandboxManager):
             pod = self._create_sandbox_pod(
                 sandbox_id=str(sandbox_id),
                 tenant_id=tenant_id,
-                onyx_pat=onyx_pat,
             )
             try:
                 self._core_api.create_namespaced_pod(
@@ -1525,7 +1525,6 @@ class KubernetesSandboxManager(SandboxManager):
         skills_section: str,
         snapshot_path: str | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
@@ -1543,7 +1542,6 @@ class KubernetesSandboxManager(SandboxManager):
             llm_config: LLM provider configuration for opencode.json
             snapshot_path: Optional S3 path - logged but ignored (no S3 access)
             user_name: User's name for personalization in AGENTS.md
-            user_role: User's role/title for personalization in AGENTS.md
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -1569,7 +1567,6 @@ class KubernetesSandboxManager(SandboxManager):
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
-            user_role=user_role,
         )
 
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
@@ -2021,7 +2018,6 @@ echo "Session cleanup complete"
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=None,
-            user_role=None,
         )
 
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
@@ -2076,6 +2072,17 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             ),
             password=self._read_opencode_password(sandbox_id),
         )
+
+    def _serve_health_check_base_url(self, sandbox_id: UUID) -> str | None:
+        """Probe the pod IP, not the Service FQDN ``base_url`` — an
+        out-of-cluster caller (CI test process) can't resolve cluster DNS.
+        ``None`` falls back to ``base_url`` until the IP is assigned."""
+        pod_name = self._get_pod_name(str(sandbox_id))
+        try:
+            pod_ip = self._get_pod_ip(pod_name)
+        except (FatalWriteError, RetriableWriteError):
+            return None
+        return f"http://{pod_ip}:{OPENCODE_SERVE_PORT}"
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
