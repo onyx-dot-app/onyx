@@ -7,6 +7,8 @@ from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import InstanceOf
 
+from onyx.db.enums import EndpointPolicy
+
 
 class ExternalAppAction(str, Enum):
     """Marker base for every built-in provider's action-id enum.
@@ -85,3 +87,6 @@ class EndpointSpec(BaseModel):
     normalised_name: str
     description: str
     matches: tuple[MatchRule, ...]
+    # The policy a freshly-created built-in app starts this action at, unless the
+    # admin overrides it.
+    default_policy: EndpointPolicy = EndpointPolicy.ASK

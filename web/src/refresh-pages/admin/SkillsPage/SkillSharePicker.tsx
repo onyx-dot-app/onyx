@@ -2,11 +2,9 @@
 
 import { useMemo } from "react";
 import { SvgOrganization, SvgUsers, SvgX } from "@opal/icons";
-import { Button, Card, MessageCard } from "@opal/components";
+import { Button, Card, MessageCard, Switch, Tabs } from "@opal/components";
 import { ContentAction, InputHorizontal } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
-import Tabs from "@/refresh-components/Tabs";
-import { Switch } from "@opal/components";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
 import { Section } from "@/layouts/general-layouts";
 import useShareableGroups from "@/hooks/useShareableGroups";
@@ -132,8 +130,8 @@ export default function SkillSharePicker({
           )}
         </Tabs.Content>
 
-        <Tabs.Content value={YOUR_ORGANIZATION_TAB} padding={0.5}>
-          <Section gap={1} alignItems="stretch">
+        <Tabs.Content value={YOUR_ORGANIZATION_TAB}>
+          <Section gap={1} alignItems="stretch" padding={0.5}>
             <InputHorizontal
               title="Publish This Skill"
               description="Make this skill available to everyone in your organization."

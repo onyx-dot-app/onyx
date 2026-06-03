@@ -1,56 +1,93 @@
 "use client";
 
-import { Text, Tag } from "@opal/components";
-import { SvgBubbleText } from "@opal/icons";
+import { Text } from "@opal/components";
+import {
+  SvgCpu,
+  SvgArrowRight,
+  SvgLoader,
+  SvgCheckCircle,
+  SvgAlertTriangle,
+} from "@opal/icons";
+import { cn } from "@opal/utils";
+import {
+  useSubagents,
+  useBuildSessionStore,
+} from "@/app/craft/hooks/useBuildSessionStore";
 import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interfaces";
 
 /**
- * TaskBody - Renderer for the task (subagent) tool.
- *
- * Shows the subagent type badge, the prompt, and the final output. Each
- * content block sits inside the card-wide quote-bar pattern.
+ * TaskBody - The whole "Spawning subagent: …" row. An accent-tinted, clickable
+ * affordance that opens the spawned subagent's transcript, with a live status
+ * icon. (Rendered directly by CraftToolCard — no collapsible body.)
  */
 export default function TaskBody({ toolCall }: ToolCardBodyProps) {
-  const subagentType = toolCall.subagentType;
-  const prompt = toolCall.command || toolCall.rawOutput;
-  const output = toolCall.taskOutput;
+  const subagents = useSubagents();
+  const viewSubagent = useBuildSessionStore((s) => s.viewSubagent);
+
+  const subagent =
+    Array.from(subagents.values()).find(
+      (s) => s.parentToolCallId === toolCall.id
+    ) ?? null;
+
+  const status =
+    subagent?.status ??
+    (toolCall.status === "completed"
+      ? "done"
+      : toolCall.status === "failed"
+        ? "failed"
+        : "running");
+
+  const label = toolCall.description || "Spawning subagent";
+
+  function open() {
+    const sessionId = useBuildSessionStore.getState().currentSessionId;
+    if (sessionId && subagent) viewSubagent(sessionId, subagent.sessionId);
+  }
 
   return (
-    <div className="px-3 flex flex-col gap-3">
-      {subagentType && (
-        <div className="flex items-center gap-2">
-          <Tag icon={SvgBubbleText} title={subagentType} color="purple" />
-          <Text font="main-ui-muted" color="text-02">
-            subagent
-          </Text>
-        </div>
+    <button
+      type="button"
+      disabled={!subagent}
+      onClick={open}
+      aria-label={subagent ? `View subagent: ${label}` : label}
+      className={cn(
+        "group/task flex w-full items-center gap-2 rounded-08 px-3 py-2 text-left",
+        subagent
+          ? "cursor-pointer transition-colors hover:bg-background-tint-02"
+          : "cursor-default"
       )}
-
-      {prompt && (
-        <div>
-          <Text font="main-ui-muted" color="text-02">
-            Prompt
-          </Text>
-          <div className="mt-1 overflow-auto max-h-[14rem] whitespace-pre-wrap wrap-break-word">
-            <Text as="p" font="secondary-body" color="text-04">
-              {prompt}
-            </Text>
-          </div>
-        </div>
-      )}
-
-      {output && (
-        <div>
-          <Text font="main-ui-muted" color="text-02">
-            Result
-          </Text>
-          <div className="mt-1 overflow-auto max-h-[20rem] whitespace-pre-wrap wrap-break-word">
-            <Text as="p" font="main-content-body" color="text-04">
-              {output}
-            </Text>
-          </div>
-        </div>
-      )}
-    </div>
+    >
+      {/* The accent cpu icon is the one spot of color — it marks this row as a
+          delegated subagent you can open, without washing the whole surface. */}
+      <SvgCpu className="w-4 h-4 stroke-action-link-05 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">
+        <Text font="main-ui-action" color="text-04" nowrap>
+          {label}
+        </Text>
+      </span>
+      {/* Single right-edge slot (aligns with the tool-card chevron column):
+          status by default, the "open" arrow on hover. */}
+      <span className="relative h-4 w-4 shrink-0">
+        <span
+          className={cn(
+            "absolute inset-0 transition-opacity",
+            subagent && "group-hover/task:opacity-0"
+          )}
+        >
+          {status === "running" && (
+            <SvgLoader className="h-4 w-4 stroke-action-link-05 animate-spin" />
+          )}
+          {status === "done" && (
+            <SvgCheckCircle className="h-4 w-4 stroke-status-success-05" />
+          )}
+          {status === "failed" && (
+            <SvgAlertTriangle className="h-4 w-4 stroke-status-error-05" />
+          )}
+        </span>
+        {subagent && (
+          <SvgArrowRight className="absolute inset-0 h-4 w-4 stroke-text-03 opacity-0 transition-opacity group-hover/task:opacity-100" />
+        )}
+      </span>
+    </button>
   );
 }

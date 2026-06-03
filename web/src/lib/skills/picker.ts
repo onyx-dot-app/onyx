@@ -1,60 +1,89 @@
-/**
- * Shared types + utilities for the `/` skill picker.
- *
- * Used by the Craft chat input (`InputBar`) and the scheduled trigger prompt
- * (`ScheduleTaskForm`). Both surfaces read the same `GET /skills` payload via
- * `useUserSkills` and feed it through `toPickerSkills` to get the picker's
- * `{ slug, name, description }` shape.
- */
-
+import type {
+  ExternalAppType,
+  ExternalAppUserResponse,
+} from "@/app/craft/v1/apps/registry";
 import type { SkillsList } from "@/refresh-pages/admin/SkillsPage/interfaces";
 
 export interface PickerSkill {
+  kind: "skill";
   slug: string;
   name: string;
   description: string;
 }
 
-/**
- * Normalize the user-facing skills payload to picker rows. The server already
- * filters to the user's accessible set; we defensively drop unavailable
- * builtins and disabled customs here too. Sorted by slug for stable ordering.
- */
-export function toPickerSkills(data: SkillsList | undefined): PickerSkill[] {
-  if (!data) return [];
-  const builtins = data.builtins
-    .filter((b) => b.is_available)
-    .map((b) => ({
+export interface PickerApp {
+  kind: "app";
+  slug: string;
+  name: string;
+  description: string;
+  appType: ExternalAppType;
+  authenticated: boolean;
+}
+
+export type PickerEntry = PickerSkill | PickerApp;
+
+export interface PickerSections {
+  skills: PickerSkill[];
+  apps: PickerApp[];
+}
+
+const EMPTY_SECTIONS: PickerSections = { skills: [], apps: [] };
+
+// `/api/skills` omits external-app-backed skills; the Apps section is built
+// from `/api/build/apps` instead.
+export function toPickerSections(
+  skillsData: SkillsList | undefined,
+  externalApps: ExternalAppUserResponse[] | undefined
+): PickerSections {
+  if (!skillsData && !externalApps) return EMPTY_SECTIONS;
+
+  const skills: PickerSkill[] = [];
+  const apps: PickerApp[] = [];
+
+  for (const b of skillsData?.builtins ?? []) {
+    if (!b.is_available) continue;
+    skills.push({
+      kind: "skill",
       slug: b.slug,
       name: b.name,
       description: b.description,
-    }));
-  const customs = data.customs
-    .filter((c) => c.enabled)
-    .map((c) => ({
+    });
+  }
+
+  for (const c of skillsData?.customs ?? []) {
+    if (!c.enabled) continue;
+    skills.push({
+      kind: "skill",
       slug: c.slug,
       name: c.name,
       description: c.description,
-    }));
-  return [...builtins, ...customs].sort((a, b) => a.slug.localeCompare(b.slug));
+    });
+  }
+
+  for (const app of externalApps ?? []) {
+    apps.push({
+      kind: "app",
+      slug: app.slug,
+      name: app.name,
+      description: app.description,
+      appType: app.app_type,
+      authenticated: app.authenticated,
+    });
+  }
+
+  skills.sort((a, b) => a.slug.localeCompare(b.slug));
+  apps.sort((a, b) => a.slug.localeCompare(b.slug));
+
+  return { skills, apps };
 }
 
 export interface SlashTrigger {
-  /** Index of the active "/" character in the full text. */
   slashIndex: number;
-  /** Text typed between "/" and the cursor (exclusive of "/"). */
   query: string;
 }
 
-/**
- * Detect whether the cursor is currently inside a "/" trigger scope.
- *
- * Rules:
- * - The "/" must be at the start of the text or preceded by whitespace.
- * - Between the "/" and the cursor there must be no whitespace.
- * - The cursor must be at or after the "/" position (always true since the
- *   slash is found by lastIndexOf in `textBeforeCursor`).
- */
+// Trigger rules: "/" must be at start-of-text or after whitespace; the query
+// (chars between "/" and the cursor) must not contain whitespace.
 export function detectSlashTrigger(
   textBeforeCursor: string
 ): SlashTrigger | null {
@@ -72,19 +101,27 @@ export function detectSlashTrigger(
   return { slashIndex, query };
 }
 
-/**
- * Filter picker rows by a query string. Matches against slug, name, and
- * description (case-insensitive substring).
- */
-export function filterPickerSkills(
-  skills: PickerSkill[],
-  query: string
-): PickerSkill[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return skills;
-  return skills.filter((s) =>
-    [s.slug, s.name, s.description].some((field) =>
-      field.toLowerCase().includes(q)
-    )
+function matchesQuery(entry: PickerEntry, query: string): boolean {
+  if (!query) return true;
+  return [entry.slug, entry.name, entry.description].some((field) =>
+    field.toLowerCase().includes(query)
   );
+}
+
+export function filterPickerSections(
+  sections: PickerSections,
+  query: string
+): PickerSections {
+  const q = query.trim().toLowerCase();
+  if (!q) return sections;
+  return {
+    skills: sections.skills.filter((s) => matchesQuery(s, q)),
+    apps: sections.apps.filter((a) => matchesQuery(a, q)),
+  };
+}
+
+// Skills first, then apps — must match the popover's visual render order so
+// keyboard nav indices line up.
+export function flattenSections(sections: PickerSections): PickerEntry[] {
+  return [...sections.skills, ...sections.apps];
 }

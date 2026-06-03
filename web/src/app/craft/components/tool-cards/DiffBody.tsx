@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { cn } from "@opal/utils";
 import { Text, Button } from "@opal/components";
 import { SvgColumn, SvgMenu } from "@opal/icons";
+import ToolCardSurface from "@/app/craft/components/tool-cards/ToolCardSurface";
 import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interfaces";
 
 type DiffLineType = "added" | "removed" | "unchanged" | "header";
@@ -301,12 +302,7 @@ export default function DiffBody({ toolCall }: ToolCardBodyProps) {
   }
 
   return (
-    <div
-      className={cn(
-        "rounded-08 border-[0.5px] overflow-hidden",
-        "bg-background-neutral-01 border-border-01"
-      )}
-    >
+    <ToolCardSurface scroll={false}>
       <div
         className={cn(
           "px-2 py-0.5 border-b-[0.5px] border-border-01",
@@ -357,6 +353,6 @@ export default function DiffBody({ toolCall }: ToolCardBodyProps) {
       ) : (
         <SideBySideDiff lines={diffLines} />
       )}
-    </div>
+    </ToolCardSurface>
   );
 }

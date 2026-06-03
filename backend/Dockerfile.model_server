@@ -1,5 +1,10 @@
+# Registry prefix for base images. Defaults to Docker Hub; CI overrides this to the ECR
+# pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker
+# Hub rate limits.
+ARG BASE_IMAGE_REGISTRY=docker.io
+
 # Base stage with dependencies
-FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2 AS base
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2 AS base
 
 ENV ONYX_RUNNING_IN_DOCKER="true" \
     HF_HOME=/app/.cache/huggingface

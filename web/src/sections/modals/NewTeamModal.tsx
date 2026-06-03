@@ -8,13 +8,13 @@ import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
 import { useModalContext } from "@/components/context/ModalContext";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import {
   SvgArrowRight,
   SvgArrowUp,
   SvgCheckCircle,
   SvgOrganization,
   SvgPlus,
+  SvgSimpleLoader,
 } from "@opal/icons";
 export interface TenantByDomainResponse {
   tenant_id: string;
@@ -196,7 +196,7 @@ export default function NewTeamModal() {
                   disabled={isSubmitting}
                   onClick={handleRequestInvite}
                   width="full"
-                  icon={isSubmitting ? SimpleLoader : SvgArrowUp}
+                  icon={isSubmitting ? SvgSimpleLoader : SvgArrowUp}
                 >
                   {isSubmitting
                     ? "Sending request..."

@@ -7,7 +7,6 @@ import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import {
   SvgClock,
@@ -15,6 +14,7 @@ import {
   SvgPauseCircle,
   SvgPlayCircle,
   SvgTrash,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import {
   deleteScheduledTask,
@@ -28,6 +28,7 @@ import type {
   ScheduledTaskDetail,
   ScheduledTaskStatus,
 } from "@/app/craft/v1/tasks/interfaces";
+import { humanReadableScheduleFromCron } from "@/app/craft/v1/tasks/schedule";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
@@ -46,6 +47,9 @@ export default function ScheduledTaskDetailPage() {
 
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const scheduleDescription = data
+    ? humanReadableScheduleFromCron(data.editor_mode, data.cron_expression)
+    : undefined;
 
   const handleBack = useCallback(() => {
     router.push(TASKS_PATH);
@@ -124,7 +128,7 @@ export default function ScheduledTaskDetailPage() {
       <SettingsLayouts.Header
         icon={SvgClock}
         title={data?.name ?? "Scheduled task"}
-        description={data?.human_readable_schedule}
+        description={scheduleDescription}
         backButton={handleBack}
         rightChildren={
           data ? (
@@ -176,7 +180,7 @@ export default function ScheduledTaskDetailPage() {
       <SettingsLayouts.Body>
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <SimpleLoader className="h-6 w-6" />
+            <SvgSimpleLoader className="h-6 w-6" />
           </div>
         ) : error || !data ? (
           <Text mainUiBody text03>

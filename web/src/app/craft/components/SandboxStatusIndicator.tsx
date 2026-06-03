@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "motion/react";
+import { cn } from "@opal/utils";
 
 import {
   useSession,
@@ -8,8 +9,7 @@ import {
   useIsPreProvisioningReady,
   useIsPreProvisioningFailed,
 } from "@/app/craft/hooks/useBuildSessionStore";
-import { Card } from "@/components/ui/card";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 const STATUS_CONFIG = {
   provisioning: {
@@ -129,11 +129,13 @@ export default function SandboxStatusIndicator(
 
   return (
     <motion.div layout transition={{ duration: 0.3, ease: "easeInOut" }}>
-      <Card className="flex items-center gap-2 p-2 overflow-hidden">
+      <div className="flex items-center gap-2 p-2 overflow-hidden rounded-12 border border-border-01 bg-background-neutral-00">
         <div
-          className={`w-2 h-2 rounded-full shrink-0 ${color} ${
-            pulse ? "animate-pulse" : ""
-          }`}
+          className={cn(
+            "w-2 h-2 rounded-full shrink-0",
+            color,
+            pulse && "animate-pulse"
+          )}
         />
         <AnimatePresence mode="wait">
           <motion.span
@@ -143,10 +145,12 @@ export default function SandboxStatusIndicator(
             exit={{ opacity: 0, y: -5 }}
             transition={{ duration: 0.2 }}
           >
-            <Text text05>{label}</Text>
+            <Text font="main-ui-body" color="text-05" nowrap>
+              {label}
+            </Text>
           </motion.span>
         </AnimatePresence>
-      </Card>
+      </div>
     </motion.div>
   );
 }

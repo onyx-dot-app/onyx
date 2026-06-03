@@ -278,9 +278,11 @@ function buildDescription(
   ri: Record<string, unknown> | null,
   rawDescription: string
 ): string {
-  // Task tool: use description from rawInput
+  // Task tool: spawns a subagent. Read as "Spawning subagent: <description>".
   if (toolName === "task") {
-    return rawDescription || "Running subagent";
+    return rawDescription
+      ? `Spawning subagent: ${rawDescription}`
+      : "Spawning subagent";
   }
   // Read/edit: show file path. For new-file writes, append a line count
   // so the row reads "Writing  src/app/page.tsx (42 lines)" — useful when
@@ -495,6 +497,7 @@ function parseToolCallStart(p: Record<string, unknown>): ParsedToolCallStart {
   const toolName = resolveToolName(p);
   const rawKind = p.kind as string | null;
   const kind = resolveKind(toolName, rawKind);
+  const meta = (p._meta as Record<string, unknown> | undefined) ?? {};
   return {
     type: "tool_call_start",
     toolCallId: getToolCallId(p),
@@ -502,6 +505,9 @@ function parseToolCallStart(p: Record<string, unknown>): ParsedToolCallStart {
     kind,
     isTodo: toolName === "todowrite",
     title: buildTitle(toolName, kind, true),
+    sessionId: (meta.sessionId as string | undefined) ?? null,
+    parentSessionId: (meta.parentSessionId as string | undefined) ?? null,
+    subagentSessionId: (meta.subagentSessionId as string | undefined) ?? null,
   };
 }
 
@@ -554,7 +560,10 @@ function parseToolCallProgress(
   }
 
   // ── Command (freeform → sanitizePathsInText) ──────────────────
-  const rawCommand = (ri?.command ?? "") as string;
+  // The task tool carries its subagent prompt in `prompt`, not `command`.
+  const rawCommand = (ri?.command ??
+    (toolName === "task" ? ri?.prompt : undefined) ??
+    "") as string;
   const command = sanitizePathsInText(rawCommand);
 
   // ── Description ───────────────────────────────────────────────
@@ -586,13 +595,25 @@ function parseToolCallProgress(
     | null;
 
   // ── Skill detection ───────────────────────────────────────────
-  // Skill-namespaced tool calls arrive with raw names like
-  // "skills.brainstorming" or "superpowers:test-driven-development".
-  const skillName = detectSkillName(p, toolName);
+  // Two shapes: (1) skill-namespaced tool calls with raw names like
+  // "skills.brainstorming" (toolName "unknown"); (2) the dedicated "skill"
+  // tool, whose invoked skill is in rawInput.name (e.g. "company-search").
+  const skillName =
+    detectSkillName(p, toolName) ??
+    (toolName === "skill" && typeof ri?.name === "string"
+      ? (ri.name as string)
+      : null);
   const taskOutput =
     toolName === "task" && status === "completed"
       ? extractTaskOutput(ro)
       : null;
+
+  // ── Subagent routing (from ACP _meta) ─────────────────────────
+  const meta = (p._meta as Record<string, unknown> | undefined) ?? {};
+  const sessionId = (meta.sessionId as string | undefined) ?? null;
+  const parentSessionId = (meta.parentSessionId as string | undefined) ?? null;
+  const subagentSessionId =
+    (meta.subagentSessionId as string | undefined) ?? null;
 
   return {
     type: "tool_call_progress",
@@ -616,5 +637,8 @@ function parseToolCallProgress(
     newContent: diffData.newText,
     todos,
     taskOutput,
+    sessionId,
+    parentSessionId,
+    subagentSessionId,
   };
 }

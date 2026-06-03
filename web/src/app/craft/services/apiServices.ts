@@ -13,6 +13,11 @@ import {
   DirectoryListing,
   SharingScope,
 } from "@/app/craft/types/streamingTypes";
+import {
+  ApprovalListResponse,
+  ApprovalSubmitDecision,
+  ApprovalView,
+} from "@/app/craft/types/approvals";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 
 // =============================================================================
@@ -86,6 +91,20 @@ export interface CreateSessionOptions {
   llmModelName?: string | null;
 }
 
+// Pull the backend's human-readable error detail out of a failed response,
+// falling back to the status code when the body isn't the expected shape.
+async function errorDetail(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = await res.json();
+    if (typeof body?.detail === "string" && body.detail.trim()) {
+      return body.detail;
+    }
+  } catch {
+    // body wasn't JSON — fall through
+  }
+  return `${fallback}: ${res.status}`;
+}
+
 export async function createSession(
   options?: CreateSessionOptions
 ): Promise<ApiDetailedSessionResponse> {
@@ -100,7 +119,7 @@ export async function createSession(
   });
 
   if (!res.ok) {
-    throw new Error(`Failed to create session: ${res.status}`);
+    throw new Error(await errorDetail(res, "Failed to create session"));
   }
 
   return res.json();
@@ -192,32 +211,41 @@ export async function deleteSession(sessionId: string): Promise<void> {
   }
 }
 
-/**
- * Restore a sleeping sandbox and load the session's snapshot.
- * This is a blocking call that waits until the restore is complete.
- *
- * Handles two cases:
- * 1. Sandbox is SLEEPING: Re-provisions pod, then loads session snapshot
- * 2. Sandbox is RUNNING but session not loaded: Just loads session snapshot
- *
- * Returns immediately if session workspace already exists in pod.
- */
-export async function restoreSession(
-  sessionId: string
-): Promise<ApiDetailedSessionResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/restore`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-  });
+// ~2 min of retries — covers a concurrent provision + snapshot restore; the
+// backend's per-sandbox lock itself expires at 300s.
+const RESTORE_CONFLICT_RETRY_DELAY_MS = 2000;
+const RESTORE_CONFLICT_MAX_RETRIES = 60;
 
-  if (!res.ok) {
+export async function restoreSession(
+  sessionId: string,
+  // Overridable for tests; production callers use the module defaults.
+  opts: { retryDelayMs?: number; maxRetries?: number } = {}
+): Promise<ApiDetailedSessionResponse> {
+  const retryDelayMs = opts.retryDelayMs ?? RESTORE_CONFLICT_RETRY_DELAY_MS;
+  const maxRetries = opts.maxRetries ?? RESTORE_CONFLICT_MAX_RETRIES;
+
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/restore`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (res.ok) {
+      return res.json();
+    }
+
+    // 409 = another tab/request holds the restore lock; it's transient, so
+    // retry until that restore finishes rather than surfacing it as a failure.
+    if (res.status === 409 && attempt < maxRetries) {
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      continue;
+    }
+
     const errorData = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to restore session: ${res.status}`
     );
   }
-
-  return res.json();
 }
 
 /**
@@ -325,6 +353,20 @@ export async function sendMessageStream(
   }
 
   return res;
+}
+
+/**
+ * Interrupt the in-flight agent turn for a session. The backend interrupts the
+ * sandbox turn; the open /send-message stream then terminates normally.
+ */
+export async function interruptMessageStream(sessionId: string): Promise<void> {
+  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/interrupt`, {
+    method: "POST",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to interrupt message: ${res.status}`);
+  }
 }
 
 // =============================================================================
@@ -654,6 +696,62 @@ export async function fetchPptxPreview(
     );
   }
 
+  return res.json();
+}
+
+// =============================================================================
+// Approvals API
+// =============================================================================
+
+export async function fetchLiveApprovals(
+  sessionId: string
+): Promise<ApprovalListResponse> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/approvals/sessions/${sessionId}/live`
+  );
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch live approvals: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+// Lets the approval card distinguish "already resolved" from a generic
+// network error so both can flow through the same SWR revalidation
+// while keeping logs clean.
+export class ApprovalConflictError extends Error {
+  public readonly statusCode: number = 409;
+
+  constructor(detail: string) {
+    super(detail);
+    this.name = "ApprovalConflictError";
+  }
+}
+
+export async function postApprovalDecision(
+  approvalId: string,
+  decision: ApprovalSubmitDecision
+): Promise<ApprovalView> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/approvals/${approvalId}/decision`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    }
+  );
+
+  if (res.status === 409) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new ApprovalConflictError(body.detail ?? "decision conflict");
+  }
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Failed to post approval decision: ${res.status}`
+    );
+  }
   return res.json();
 }
 

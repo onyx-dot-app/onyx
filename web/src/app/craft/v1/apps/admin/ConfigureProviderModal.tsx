@@ -53,7 +53,9 @@ function bulkPolicyOf(
   actions: EndpointDescriptor[],
   policies: Record<string, EndpointPolicy>
 ): BulkPolicy {
-  const values = actions.map((action) => policies[action.action_id] ?? "ASK");
+  const values = actions.map(
+    (action) => policies[action.action_id] ?? action.default_policy
+  );
   if (values.length === 0) return "ASK";
   if (values.every((value) => value === "ALWAYS")) return "ALWAYS";
   if (values.every((value) => value === "ASK")) return "ASK";
@@ -97,15 +99,17 @@ export default function ConfigureProviderModal({
     }
     setCredentialValues(initial);
 
-    // Seed each action from the admin's stored choice (edit) or "Ask" by
-    // default (create) — every action starts in ask-approval mode.
+    // Seed each action from the admin's stored choice (edit) or the action's
+    // backend-declared default (create) — usually "Ask", but a provider can
+    // declare a different out-of-the-box stance per action.
     const storedState: Record<string, EndpointPolicy> = {};
     for (const action of existingApp?.actions ?? []) {
       storedState[action.action_id] = action.state;
     }
     const seededPolicies: Record<string, EndpointPolicy> = {};
     for (const action of descriptor.actions) {
-      seededPolicies[action.action_id] = storedState[action.action_id] ?? "ASK";
+      seededPolicies[action.action_id] =
+        storedState[action.action_id] ?? action.default_policy;
     }
     setPolicies(seededPolicies);
     // Open "Advanced" up front only when the stored choices can't be shown as a
@@ -260,7 +264,10 @@ export default function ConfigureProviderModal({
                             </Text>
                           </div>
                           <PolicyToggle
-                            value={policies[action.action_id] ?? "ASK"}
+                            value={
+                              policies[action.action_id] ??
+                              action.default_policy
+                            }
                             onChange={(value) =>
                               setPolicies((prev) => ({
                                 ...prev,
