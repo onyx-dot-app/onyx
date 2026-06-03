@@ -29,7 +29,7 @@ function parseRate(raw: string): number | null {
 }
 
 function formatRate(value: number): string {
-  return `$${value}`;
+  return `$${value.toFixed(2)}`;
 }
 
 // ============================================================================
