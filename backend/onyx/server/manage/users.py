@@ -34,6 +34,7 @@ from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import enforce_seat_limit_locked
 from onyx.auth.users import optional_user
+from onyx.auth.users import scope_exempt
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
@@ -873,7 +874,7 @@ def get_current_user_permissions(
     return sorted(p.value for p in get_effective_permissions(user))
 
 
-@router.get("/me", tags=PUBLIC_API_TAGS)
+@router.get("/me", tags=PUBLIC_API_TAGS, dependencies=[Depends(scope_exempt)])
 def verify_user_logged_in(
     request: Request,
     user: User | None = Depends(optional_user),
