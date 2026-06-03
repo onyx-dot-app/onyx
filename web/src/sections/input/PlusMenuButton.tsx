@@ -70,6 +70,10 @@ function FlyoutRow({
         width="lg"
         // Hover-opening shouldn't yank focus out of the textarea.
         onOpenAutoFocus={(e) => e.preventDefault()}
+        // Open/close is driven entirely by hover state; suppress Radix's own
+        // focus/pointer-outside dismissal so the panel doesn't flicker closed
+        // while the pointer is still on it.
+        onInteractOutside={(e) => e.preventDefault()}
       >
         <Popover.Menu>{children}</Popover.Menu>
       </Popover.Content>
