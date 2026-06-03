@@ -91,6 +91,8 @@ export function buildEntryMenuItems(
       icon: SvgFolder,
       label: "Library",
       flyoutItems: [
+        // TODO(craft-library): clicking a file should attach it to the message;
+        // until per-file attach is wired, every file row opens the manage modal.
         ...libraryFiles.map((file) => ({
           key: file.id,
           icon: SvgFileText,
