@@ -1,5 +1,6 @@
 "use client";
 
+import "@opal/layouts/root/styles.css";
 import { createContext, useContext, type ReactNode } from "react";
 import { cn } from "@opal/utils";
 import useScreenSize from "@opal/hooks/useScreenSize";
@@ -28,7 +29,7 @@ interface RootLayoutRootProps {
 }
 
 function RootLayoutRoot({ children }: RootLayoutRootProps) {
-  return <div className="flex flex-row w-full h-full">{children}</div>;
+  return <div className="opal-root-layout">{children}</div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -53,27 +54,24 @@ function RootLayoutSidebar({
   children,
 }: RootLayoutSidebarProps) {
   const { isMobile, isMediumScreen } = useScreenSize();
+  const foldedAttr = folded ? "true" : "false";
 
   if (isMobile) {
     return (
       <RootLayoutFoldedContext.Provider value={false}>
         <div
-          className={cn(
-            "fixed inset-y-0 left-0 z-50 transition-transform duration-200",
-            folded ? "-translate-x-full" : "translate-x-0"
-          )}
+          className="opal-root-layout__sidebar-overlay"
+          data-variant="mobile"
+          data-folded={foldedAttr}
         >
           {children}
         </div>
 
         {/* Closes the sidebar when anything outside it is tapped */}
         <div
-          className={cn(
-            "fixed inset-0 z-40 bg-mask-03 backdrop-blur-03 transition-opacity duration-200",
-            folded
-              ? "opacity-0 pointer-events-none"
-              : "opacity-100 pointer-events-auto"
-          )}
+          className="opal-root-layout__backdrop"
+          data-variant="mobile"
+          data-folded={foldedAttr}
           onClick={onFoldToggle}
         />
       </RootLayoutFoldedContext.Provider>
@@ -84,19 +82,21 @@ function RootLayoutSidebar({
     return (
       <RootLayoutFoldedContext.Provider value={folded}>
         {/* Spacer reserves the folded-sidebar width in the flex layout */}
-        <div className="shrink-0 w-(--sidebar-width-folded)" />
+        <div className="opal-root-layout__sidebar-spacer" />
 
         {/* Fixed so it overlays content when expanded */}
-        <div className="fixed inset-y-0 left-0 z-50">{children}</div>
+        <div
+          className="opal-root-layout__sidebar-overlay"
+          data-variant="medium"
+        >
+          {children}
+        </div>
 
         {/* Blur-only backdrop when expanded */}
         <div
-          className={cn(
-            "fixed inset-0 z-40 backdrop-blur-03 transition-opacity duration-200",
-            folded
-              ? "opacity-0 pointer-events-none"
-              : "opacity-100 pointer-events-auto"
-          )}
+          className="opal-root-layout__backdrop"
+          data-variant="medium"
+          data-folded={foldedAttr}
           onClick={onFoldToggle}
         />
       </RootLayoutFoldedContext.Provider>
@@ -116,7 +116,7 @@ function RootLayoutSidebar({
 // ---------------------------------------------------------------------------
 
 function RootLayoutMainContent({ children }: { children: ReactNode }) {
-  return <div className="flex-1 overflow-auto h-full w-full">{children}</div>;
+  return <div className="opal-root-layout__main">{children}</div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -130,17 +130,13 @@ interface RootLayoutPanelProps {
 
 function RootLayoutLeftPanel({ children, className }: RootLayoutPanelProps) {
   return (
-    <div className={cn("shrink-0 overflow-auto h-full", className)}>
-      {children}
-    </div>
+    <div className={cn("opal-root-layout__panel", className)}>{children}</div>
   );
 }
 
 function RootLayoutRightPanel({ children, className }: RootLayoutPanelProps) {
   return (
-    <div className={cn("shrink-0 overflow-auto h-full", className)}>
-      {children}
-    </div>
+    <div className={cn("opal-root-layout__panel", className)}>{children}</div>
   );
 }
 
@@ -153,7 +149,7 @@ interface RootLayoutHeaderProps {
 }
 
 function RootLayoutHeader({ children }: RootLayoutHeaderProps) {
-  return <div className="shrink-0">{children}</div>;
+  return <div className="opal-root-layout__header">{children}</div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +170,12 @@ function RootLayoutFooter({
   extraPadding = false,
 }: RootLayoutFooterProps) {
   return (
-    <div className={cn("shrink-0", extraPadding && "pt-3.5")}>{children}</div>
+    <div
+      className="opal-root-layout__footer"
+      data-extra-padding={extraPadding || undefined}
+    >
+      {children}
+    </div>
   );
 }
 
