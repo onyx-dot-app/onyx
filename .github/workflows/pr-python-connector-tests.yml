@@ -17,7 +17,18 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  merge_group:
+  # Connector tests are non-blocking (not a required status check) and exercise
+  # real external connector APIs, so they don't belong in the merge queue.
+  # Running on `merge_group` only exposed them to the ephemeral
+  # `gh-readonly-queue/*` branch-deletion race in paths-filter -- when an entry
+  # ahead in the queue fails and GitHub tears down/recreates the queue branches
+  # mid-run, paths-filter's fetch of the head ref by name fails and the whole job
+  # goes red for a reason unrelated to the change under test -- without gating any
+  # merge. Run on PRs for pre-merge signal and on push-to-main for post-merge
+  # detection of whatever actually landed; `main` is a permanent ref so the race
+  # can't happen. The daily schedule stays the full-coverage safety net. `paths`
+  # is not evaluated for tag pushes, so the `v*.*.*` release trigger below still
+  # fires regardless of changed files.
   pull_request:
     branches: [main]
     paths:
@@ -28,6 +39,15 @@ on:
       - ".github/actions/build-backend-image/**"
       - ".github/actions/login-ecr-pullthrough-cache/**"
   push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/pr-python-connector-tests.yml"
+      - ".github/actions/build-backend-image/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
     tags:
       - "v*.*.*"
   schedule:
