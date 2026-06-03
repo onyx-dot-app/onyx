@@ -30,9 +30,7 @@ const meta: Meta<typeof CometEdge> = {
 export default meta;
 type Story = StoryObj<typeof CometEdge>;
 
-// A real, completed CraftToolCall — so the card renders its normal chrome and
-// does NOT add its own (skill-in-flight) comet. The only comet on screen is
-// the wrapping CometEdge, fully driven by the story controls.
+// Completed call: no self-comet, so the only comet is the wrapping CometEdge.
 function toolCall(overrides: Partial<ToolCallState>): ToolCallState {
   return {
     id: "tool-1",
@@ -103,14 +101,12 @@ export const SkillInFlight: Story = {
   ),
 };
 
-// The real ApprovalCard — it wraps itself in a comet edge while pending and
-// settles to a solid edge on a decision, so no outer CometEdge here.
+// Real ApprovalCard — supplies its own comet, so no outer CometEdge.
 export const AwaitingApproval: Story = {
   render: () => <ApprovalCard approval={SLACK_APPROVAL} defaultOpen />,
 };
 
-// Decided ApprovalCards — settled solid edge + label (seeded via
-// defaultDecision, since real approvals drop from /live once decided).
+// Decided ApprovalCards (seeded via defaultDecision).
 export const Approved: Story = {
   render: () => (
     <ApprovalCard
@@ -131,9 +127,8 @@ export const Denied: Story = {
   ),
 };
 
-// Click the card's Approve / Reject to watch the live comet cross-fade into a
-// solid edge on a real ApprovalCard. A story-scoped fetch stub resolves the
-// decision request so the settle sticks; Reset re-mounts a pending card.
+// Click Approve/Reject to watch the settle cross-fade; a fetch stub makes it
+// stick, Reset re-mounts a pending card.
 export const SettleTransition: Story = {
   render: function SettleTransitionStory() {
     const [instance, setInstance] = useState(0);

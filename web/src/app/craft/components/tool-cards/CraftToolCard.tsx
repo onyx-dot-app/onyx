@@ -162,9 +162,7 @@ function renderStatusIcon(toolCall: ToolCallState) {
       />
     );
   }
-  // A finished skill leads with its sparkle identity (in brand blue) rather
-  // than the same completion check every tool row shows — the distinguishing
-  // mark for a skill card, in a group or standalone.
+  // Finished skill leads with its sparkle, not the generic completion check.
   if (isSkillInvocation(toolCall) && toolCall.status === "completed") {
     return (
       <SvgSparkle
@@ -207,8 +205,7 @@ export default function CraftToolCard({
     <div className="flex items-center gap-2 min-w-0 w-full">
       {renderStatusIcon(toolCall)}
       <span className="truncate min-w-0">{renderPrimary(toolCall)}</span>
-      {/* Skill badge + chevron are pinned right so the badge aligns vertically
-          across rows regardless of how long the primary text is. */}
+      {/* Pinned right so the skill badge aligns across rows. */}
       <span className="ml-auto flex items-center gap-2 shrink-0">
         {toolCall.skillName && toolCall.toolName !== "skill" && (
           <SkillBadge name={toolCall.skillName} />
@@ -232,19 +229,13 @@ export default function CraftToolCard({
     expandable && "transition-colors hover:bg-background-tint-02"
   );
 
-  // Skill work in flight gets a comet edge — the live signal. A skill
-  // invocation (`toolName === "skill"`) or a tool call made inside a skill
-  // (carries `skillName`) both count; a plain tool call never does.
-  // Suppressed when nested in a group — the group carries the comet instead
-  // (its `overflow-hidden` would clip a per-row comet).
+  // Comet only on standalone skill work; nested rows defer to the group's comet.
   const isSkillInFlight =
     !nested &&
     isSkillCall(toolCall) &&
     (toolCall.status === "pending" || toolCall.status === "in_progress");
 
-  // A standalone skill invocation keeps a thin border at rest so it stays
-  // distinct from plain tool cards even after the comet stops. Grouped skill
-  // rows stay borderless — the group carries the border.
+  // Thin border keeps a standalone skill distinct once the comet stops.
   const skillCard = !nested && isSkillInvocation(toolCall);
 
   const card = (

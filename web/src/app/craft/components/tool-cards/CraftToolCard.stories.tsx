@@ -227,9 +227,7 @@ export const WithSkillBadge: Story = {
 };
 
 // ──────────────────────────────────────────────────────────────────────────
-// Skill invocations — a skill in flight gets a traveling comet edge (the live
-// signal). Once it completes the comet is gone; only the check remains.
-// Regular tool calls never get the comet, even mid-flight.
+// Skill invocations — comet while in flight, gone once complete.
 // ──────────────────────────────────────────────────────────────────────────
 
 export const SkillInFlight: Story = {

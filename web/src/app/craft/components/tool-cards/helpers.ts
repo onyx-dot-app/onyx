@@ -93,19 +93,12 @@ export function isTerminalStatus(status: ToolCallStatus): boolean {
   );
 }
 
-/**
- * A skill invocation — the "Using <skill> skill" card. Drives the skill-only
- * chrome (leading sparkle, thin border).
- */
+/** The "Using <skill> skill" invocation card (drives the sparkle + border). */
 export function isSkillInvocation(toolCall: ToolCallState): boolean {
   return toolCall.toolName === "skill";
 }
 
-/**
- * Skill-related work: the invocation itself, or a tool call made inside a
- * skill (carries `skillName`). Drives the comet edge (a card in flight, a
- * group that involves a skill).
- */
+/** The invocation or a tool call made inside a skill (drives the comet edge). */
 export function isSkillCall(toolCall: ToolCallState): boolean {
   return toolCall.toolName === "skill" || !!toolCall.skillName;
 }

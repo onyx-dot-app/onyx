@@ -7,15 +7,14 @@ type CometTone = "info" | "success" | "error";
 
 interface CometEdgeProps {
   children: ReactNode;
-  /** Animate a comet traveling the perimeter (live activity). */
+  /** Animate the traveling comet (live). */
   active?: boolean;
-  /** Draw a solid colored edge with no travel (a settled outcome). */
+  /** Solid colored edge, no travel (a settled outcome). */
   settled?: boolean;
-  /** Edge color. @default "info" */
   tone?: CometTone;
-  /** Seconds for one full lap — lower is faster. @default 3.6 */
+  /** Seconds per lap; lower is faster. */
   speedSeconds?: number;
-  /** Corner radius in px; match the wrapped card (rounded-08 = 8). @default 8 */
+  /** px; match the wrapped card (rounded-08 = 8). */
   radius?: number;
   className?: string;
 }
@@ -26,7 +25,6 @@ const TONE_VAR: Record<CometTone, string> = {
   error: "var(--status-error-05)",
 };
 
-// Geometry shared by both stacked strokes (full-bleed rounded rect).
 const RECT_PROPS = {
   x: "0",
   y: "0",
@@ -36,16 +34,9 @@ const RECT_PROPS = {
 } as const;
 
 /**
- * CometEdge - Wraps a card and overlays a hairline "comet" that runs its
- * border. The comet is a single `<rect>` sized at 100% of the wrapper, so it
- * resizes natively with the card — no JS measurement — and stays smooth while
- * the card animates open/closed. `pathLength={100}` normalizes the dash so the
- * comet is one seamless segment at any size.
- *
- * Two strokes are always stacked when shown: the traveling comet (live,
- * info-blue) and a solid colored edge. Their opacities cross-fade between
- * `active` and `settled`, so a live approval visibly settles into a solid
- * green / red edge (`tone`) once it resolves.
+ * Hairline comet on a card border — travels while `active`, then cross-fades
+ * to a solid `tone` edge when `settled`. The comet is a full-size `<rect>`, so
+ * it resizes with the card; `pathLength={100}` keeps the dash seamless.
  */
 export default function CometEdge({
   children,
@@ -67,8 +58,7 @@ export default function CometEdge({
           className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
           style={
             {
-              // Live comet is always the "working" color; the settle color is
-              // the resolved outcome (success / error).
+              // Comet is always the live "working" color; tone is the settled edge.
               "--comet-color": "var(--status-info-05)",
               "--comet-settle-color": TONE_VAR[tone],
               "--comet-speed": `${speedSeconds}s`,
@@ -80,8 +70,7 @@ export default function CometEdge({
             rx={radius}
             ry={radius}
             className="craft-comet"
-            // Pause the travel when this stroke isn't the visible one (settled)
-            // so it isn't animating invisibly at opacity 0.
+            // Pause travel when hidden so it isn't animating at opacity 0.
             style={{
               opacity: active ? 1 : 0,
               animationPlayState: active ? "running" : "paused",

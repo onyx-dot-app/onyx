@@ -32,9 +32,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 interface ApprovalCardProps {
   approval: ApprovalView;
   defaultOpen?: boolean;
-  /** Seed an already-decided state (settled edge + label). For Storybook —
-   *  production approvals always start pending and drop from /live once
-   *  decided. */
+  /** Seed a decided state for Storybook (real approvals start pending). */
   defaultDecision?: ApprovalSubmitDecision | null;
 }
 
@@ -81,8 +79,7 @@ export default function ApprovalCard({
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  // The decided outcome, set optimistically on click so the comet settles
-  // into a solid edge before the row drops from /live.
+  // Optimistic decision so the comet settles before the row drops from /live.
   const [decision, setDecision] = useState<ApprovalSubmitDecision | null>(
     defaultDecision
   );
@@ -103,8 +100,7 @@ export default function ApprovalCard({
 
   const decided = decision !== null;
   const approved = decision === "APPROVED";
-  // Hold the settled edge briefly so the cross-fade is visible before the
-  // approval drops from /live and this card unmounts.
+  // Hold the settled edge so the cross-fade is visible before unmount.
   const SETTLE_HOLD_MS = 800;
 
   async function decide(next: ApprovalSubmitDecision) {

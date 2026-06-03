@@ -130,8 +130,7 @@ export const SingleStep: Story = {
   },
 };
 
-// A finished skill group keeps its thin border (the comet is gone). This is
-// what an auto-approved external-app invocation looks like at rest.
+// Finished skill group at rest: thin border, no comet.
 export const CompletedSkill: Story = {
   args: {
     defaultOpen: true,
@@ -157,8 +156,7 @@ export const CompletedSkill: Story = {
   },
 };
 
-// A group that involves an in-flight skill gets a comet edge around the whole
-// block (the skill invocation + the tool calls it makes inside it).
+// In-flight skill group: comet around the whole block.
 export const WithActiveSkill: Story = {
   args: {
     defaultOpen: true,

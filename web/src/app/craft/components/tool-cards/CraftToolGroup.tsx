@@ -60,8 +60,7 @@ export default function CraftToolGroup({
     defaultOpen ?? aggregate === "in_progress"
   );
   const failedCount = toolCalls.filter((t) => t.status === "failed").length;
-  // A group that involves a skill stays distinct from plain tool groups: a
-  // comet while it runs, and a thin border that persists once it's done.
+  // Skill groups get a comet while running and a thin border at rest.
   const skillGroup = toolCalls.some(isSkillCall);
   const skillActive = aggregate === "in_progress" && skillGroup;
 
