@@ -365,6 +365,15 @@ class UpdateExternalAppRequest(BaseModel):
     action_policies: dict[str, EndpointPolicy] | None = None
 
 
+class SetExternalAppEnablementRequest(BaseModel):
+    """Narrow update of a built-in app's enablement + per-action policies,
+    keyed solely by the path ``id``.
+    """
+
+    enabled: bool
+    action_policies: dict[str, EndpointPolicy] | None = None
+
+
 class ActionPolicyView(BaseModel):
     """One action of a built-in app, with its effective policy — the admin's
     stored override if set, otherwise the action's ``default_policy``."""

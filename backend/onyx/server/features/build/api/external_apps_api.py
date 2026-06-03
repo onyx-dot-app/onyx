@@ -216,6 +216,46 @@ def update_external_app_admin(
     return _to_admin_response(app)
 
 
+@router.patch("/admin/apps/{external_app_id}")
+def set_external_app_enablement(
+    external_app_id: int,
+    request: SetExternalAppEnablementRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ExternalAppAdminResponse:
+    """Toggle a built-in app's enablement and set its per-action policies,
+    keyed solely by ``external_app_id``. Credentials + gateway config are never
+    touched — this is the only mutation path for Onyx-managed built-ins (cloud),
+    whose config is Onyx-owned. 404 if the app doesn't exist.
+    """
+    app = get_external_app_by_id(db_session, external_app_id)
+    if app is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"External app with id {external_app_id} not found.",
+        )
+
+    # Resolve the full policy set up front (validates unknown ids before any
+    # mutation). A None map leaves stored policies untouched — every action just
+    # resolves back to its existing/default value.
+    action_policies = build_action_policies(
+        app.app_type,
+        request.action_policies,
+        get_policies(db_session, external_app_id),
+    )
+    app = set_external_app_enablement_and_policies(
+        db_session=db_session,
+        external_app_id=external_app_id,
+        enabled=request.enabled,
+        action_policies=action_policies,
+    )
+    # Commit after the push so a push failure rolls back the enablement/policy
+    # change rather than leaving the DB committed and the runtime stale.
+    push_skill_to_affected_sandboxes(app.skill, db_session)
+    db_session.commit()
+    return _to_admin_response(app)
+
+
 @router.post("/admin/apps/custom")
 def create_custom_external_app(
     name: str = Form(...),
@@ -376,7 +416,7 @@ def delete_external_app_admin(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx and cannot be deleted.",
         )
-    if _is_onyx_managed(app.app_type):
+    if MULTI_TENANT and is_onyx_managed_app_type(app.app_type):
         # Cloud built-ins are Onyx-provisioned; an admin disables (not deletes).
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,

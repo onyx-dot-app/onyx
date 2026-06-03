@@ -96,6 +96,12 @@ export async function createCustomExternalApp(
   return res.json();
 }
 
+interface SetEnablementBody {
+  enabled: boolean;
+  // Full replace when present; omit to leave stored policies untouched.
+  action_policies?: Record<string, EndpointPolicy>;
+}
+
 /**
  * Replace a custom app's bundle bytes, keeping its slug
  * (`PUT /admin/apps/{id}/bundle`). The only multipart channel for edits; all

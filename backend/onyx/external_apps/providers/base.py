@@ -108,11 +108,6 @@ class ProviderSpec(BaseModel):
     descriptor: AdminDescriptorSpec
     # The actions an admin can govern. Empty for a provider with no catalog yet.
     endpoint_catalog: list[EndpointSpec] = []
-    # When True (default), Onyx owns the OAuth credentials: cloud seeds the app
-    # per tenant and locks it down (admins may only enable/disable + set
-    # policies). Set False for a built-in that admins/users configure themselves
-    # (never seeded; editable like a self-hosted built-in even on cloud).
-    onyx_managed: bool = True
 
 
 class OAuthProviderSpec(ProviderSpec):
