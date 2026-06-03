@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from collections.abc import Iterator
 from contextlib import AbstractContextManager
 from contextlib import nullcontext
 from http import HTTPStatus
@@ -8,6 +9,7 @@ from typing import Any
 from typing import Generic
 from typing import TypeVar
 
+from opensearchpy import NotFoundError
 from opensearchpy import OpenSearch
 from opensearchpy import TransportError
 from opensearchpy.helpers import bulk
@@ -19,11 +21,18 @@ from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
 from onyx.configs.app_configs import OPENSEARCH_HOST
 from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
 from onyx.configs.app_configs import OPENSEARCH_USE_SSL
+from onyx.configs.app_configs import PIT_KEEP_ALIVE
 from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
+from onyx.document_index.opensearch.schema import CHUNK_INDEX_FIELD_NAME
+from onyx.document_index.opensearch.schema import CONTENT_VECTOR_FIELD_NAME
+from onyx.document_index.opensearch.schema import DOCUMENT_ID_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
+from onyx.document_index.opensearch.schema import MAX_CHUNK_SIZE_FIELD_NAME
+from onyx.document_index.opensearch.schema import TITLE_VECTOR_FIELD_NAME
 from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
 from onyx.server.metrics.opensearch_search import observe_opensearch_search
 from onyx.server.metrics.opensearch_search import record_opensearch_search_error
@@ -131,6 +140,11 @@ class OpenSearchDocumentMissingError(Exception):
 # _RETRYABLE_UPDATE_ERROR_TYPES above). Status codes use http.HTTPStatus.
 _DOCUMENT_MISSING_ERROR_TYPE = "document_missing_exception"
 _VERSION_CONFLICT_ERROR_TYPE = "version_conflict_engine_exception"
+# Raised by a search whose PIT has expired/been deleted; we re-open and retry.
+_SEARCH_CONTEXT_MISSING_ERROR_TYPE = "search_context_missing"
+# Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
+# one page covers a batch; paging still protects against a pathological doc.
+_PIT_SCAN_PAGE_SIZE = 1000
 
 
 def _external_version_ms(document: DocumentChunk) -> int | None:
@@ -1557,6 +1571,214 @@ class OpenSearchIndexClient(OpenSearchClient):
             len(document_chunk_ids),
         )
         return document_chunk_ids
+
+    def open_pit(self, keep_alive: str = PIT_KEEP_ALIVE) -> str:
+        """Opens a point-in-time (PIT) over this index for a consistent scan.
+
+        The PIT pins the index across searches so concurrent writes don't shift
+        the result set. The caller threads the returned id into
+        fetch_chunks_for_doc_ids and releases it with close_pit when done.
+
+        Args:
+            keep_alive: How long the PIT lives between uses; each search extends
+                the lease.
+
+        Raises:
+            RuntimeError: OpenSearch returned no pit_id.
+
+        Returns:
+            The point-in-time id.
+        """
+        response = self._client.create_pit(
+            index=self._index_name, params={"keep_alive": keep_alive}
+        )
+        pit_id = response.get("pit_id")
+        if not pit_id:
+            raise RuntimeError(
+                f"create_pit returned no pit_id for index {self._index_name}."
+            )
+        return pit_id
+
+    def close_pit(self, pit_id: str) -> None:
+        """Releases a PIT. Best-effort — a leaked PIT self-expires after keep_alive.
+
+        Args:
+            pit_id: The point-in-time id to delete.
+        """
+        try:
+            self._client.delete_pit(body={"pit_id": [pit_id]})
+        except NotFoundError:
+            pass
+
+    def fetch_chunks_for_doc_ids(
+        self,
+        pit_id: str,
+        doc_ids: list[str],
+        search_after: list[object] | None = None,
+        page_size: int = _PIT_SCAN_PAGE_SIZE,
+        keep_alive: str = PIT_KEEP_ALIVE,
+    ) -> tuple[list[DocumentChunkWithoutVectors], list[object] | None, str]:
+        """Fetches one page of regular chunks for a batch of documents from a PIT.
+
+        Filters to regular chunks (max_chunk_size == DEFAULT_MAX_CHUNK_SIZE) so
+        large/mini chunks are never ported, sorts by (document_id, chunk_index),
+        and pages with search_after. Vectors are excluded — the port re-embeds.
+        If the PIT expired the scan re-opens it and retries once.
+
+        Args:
+            pit_id: The point-in-time id from open_pit.
+            doc_ids: The document ids whose chunks to fetch.
+            search_after: The sort cursor from the previous page; None for the
+                first page.
+            page_size: Max chunks per page.
+            keep_alive: PIT lease extension applied on each search.
+
+        Raises:
+            OpenSearchServerSideTimeout: The search timed out server-side; the
+                caller should retry the batch.
+            Exception: There was an error searching the index.
+
+        Returns:
+            A tuple of (chunks, next_search_after, pit_id_in_use). next_search_after
+            is None once the batch is exhausted; pit_id_in_use reflects the new PIT
+            when the scan re-opened, so the caller threads it forward.
+        """
+        if not doc_ids:
+            return [], None, pit_id
+
+        # Background scans intentionally skip the user-search metrics/pipeline that
+        # search() applies; we still detect a server-side timeout below so a
+        # truncated page is never mistaken for the end of the scan.
+        try:
+            result = self._client.search(
+                body=self._pit_scan_body(
+                    pit_id, doc_ids, search_after, page_size, keep_alive
+                )
+            )
+        except NotFoundError as e:
+            if not self._is_pit_expired(e):
+                raise
+            logger.debug(
+                "PIT %s expired mid-scan for index %s; reopening.",
+                pit_id,
+                self._index_name,
+            )
+            pit_id = self.open_pit(keep_alive)
+            result = self._client.search(
+                body=self._pit_scan_body(
+                    pit_id, doc_ids, search_after, page_size, keep_alive
+                )
+            )
+
+        if result.get("timed_out"):
+            # A timed-out page returns partial hits; treating it as a short page
+            # would silently end the scan early, so fail and let the caller retry.
+            raise OpenSearchServerSideTimeout(
+                f"PIT scan of index {self._index_name} timed out server-side."
+            )
+
+        hits: list[dict[str, Any]] = result.get("hits", {}).get("hits", [])
+        chunks: list[DocumentChunkWithoutVectors] = []
+        last_sort: list[object] | None = None
+        for hit in hits:
+            source = hit.get("_source")
+            if not source:
+                raise RuntimeError(
+                    f'Document chunk with ID "{hit.get("_id", "")}" has no data.'
+                )
+            chunks.append(DocumentChunkWithoutVectors.model_validate(source))
+            last_sort = hit.get("sort")
+
+        # A short page means the batch is exhausted; a full page means resume from
+        # the last hit's sort values on the next call.
+        next_search_after = last_sort if len(hits) == page_size else None
+        return chunks, next_search_after, pit_id
+
+    def iter_chunks_for_doc_ids(
+        self,
+        doc_ids: list[str],
+        page_size: int = _PIT_SCAN_PAGE_SIZE,
+        keep_alive: str = PIT_KEEP_ALIVE,
+    ) -> Iterator[list[DocumentChunkWithoutVectors]]:
+        """Scans regular chunks for a batch of documents, one page at a time.
+
+        Owns the whole PIT lifecycle: opens it, pages with search_after, re-opens
+        transparently on expiry, and always closes it (even if the consumer
+        raises). The preferred entry point so callers can't leak a PIT.
+
+        Args:
+            doc_ids: The document ids whose chunks to scan.
+            page_size: Max chunks per page.
+            keep_alive: PIT lease extension applied on each search.
+
+        Yields:
+            One page (list) of chunks at a time.
+        """
+        if not doc_ids:
+            return
+        pit_id = self.open_pit(keep_alive)
+        try:
+            search_after: list[object] | None = None
+            while True:
+                chunks, search_after, pit_id = self.fetch_chunks_for_doc_ids(
+                    pit_id,
+                    doc_ids,
+                    search_after=search_after,
+                    page_size=page_size,
+                    keep_alive=keep_alive,
+                )
+                if chunks:
+                    yield chunks
+                if search_after is None:
+                    return
+        finally:
+            self.close_pit(pit_id)
+
+    def _pit_scan_body(
+        self,
+        pit_id: str,
+        doc_ids: list[str],
+        search_after: list[object] | None,
+        page_size: int,
+        keep_alive: str,
+    ) -> dict[str, Any]:
+        """Builds the PIT search body for one page.
+
+        No index= is sent — the PIT pins the index; keep_alive in the pit block
+        extends the lease on every page.
+        """
+        body: dict[str, Any] = {
+            "pit": {"id": pit_id, "keep_alive": keep_alive},
+            "size": page_size,
+            "_source": {
+                "excludes": [CONTENT_VECTOR_FIELD_NAME, TITLE_VECTOR_FIELD_NAME]
+            },
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"terms": {DOCUMENT_ID_FIELD_NAME: doc_ids}},
+                        {"term": {MAX_CHUNK_SIZE_FIELD_NAME: DEFAULT_MAX_CHUNK_SIZE}},
+                    ]
+                }
+            },
+            "sort": [
+                {DOCUMENT_ID_FIELD_NAME: "asc"},
+                {CHUNK_INDEX_FIELD_NAME: "asc"},
+            ],
+        }
+        if search_after is not None:
+            body["search_after"] = search_after
+        return body
+
+    @staticmethod
+    def _is_pit_expired(error: NotFoundError) -> bool:
+        """True if the 404 is an expired/deleted PIT (search_context_missing).
+
+        The type can be nested under root_cause, so match the stringified body.
+        """
+        return _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(
+            getattr(error, "info", "")
+        ) or _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(error)
 
     @log_function_time(print_only=True, debug_only=True)
     def refresh_index(self) -> None:

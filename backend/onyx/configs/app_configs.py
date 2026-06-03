@@ -384,6 +384,9 @@ VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
 OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE = int(
     os.environ.get("OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE") or 500
 )
+# Lifetime of a point-in-time used to scan an index consistently (reindex port).
+# Each search extends the lease; an idle PIT self-expires after this.
+PIT_KEEP_ALIVE = os.environ.get("PIT_KEEP_ALIVE") or "5m"
 # If set, will override the default number of shards and replicas for the index.
 OPENSEARCH_INDEX_NUM_SHARDS: int | None = (
     int(os.environ["OPENSEARCH_INDEX_NUM_SHARDS"])
