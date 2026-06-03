@@ -27,7 +27,9 @@ export type FlowNodeKind =
   | "CODE"
   | "LOOP"
   | "RETRY"
-  | "WEBHOOK";
+  | "WEBHOOK"
+  | "DELAY"
+  | "FILTER";
 export type FlowTriggerKind = "SCHEDULE" | "WEBHOOK" | "MANUAL";
 export type FlowTriggerSource = "SCHEDULE" | "WEBHOOK" | "MANUAL" | "TEST";
 
@@ -38,7 +40,9 @@ export type FlowRunStatus =
   | "FAILED"
   | "SKIPPED"
   /** Parked on a human step. Not terminal — a decision re-queues the run. */
-  | "AWAITING_DECISION";
+  | "AWAITING_DECISION"
+  /** Parked on a delay step. Not terminal — a sweep re-queues it when due. */
+  | "AWAITING_DELAY";
 
 /** What a person can answer at a human step. */
 export type FlowDecision = "approve" | "reject";
@@ -157,6 +161,19 @@ export interface WebhookNode extends NodeBase {
   fail_on_error_status: boolean;
 }
 
+export interface DelayNode extends NodeBase {
+  kind: "DELAY";
+  seconds: number;
+}
+
+export interface FilterNode extends NodeBase {
+  kind: "FILTER";
+  over: string;
+  left: string;
+  operator: ConditionOperator;
+  right: string | null;
+}
+
 export type FlowNode =
   | HttpNode
   | TransformNode
@@ -166,7 +183,9 @@ export type FlowNode =
   | CodeNode
   | LoopNode
   | RetryNode
-  | WebhookNode;
+  | WebhookNode
+  | DelayNode
+  | FilterNode;
 
 export interface FlowSpec {
   spec_version: 1;
@@ -227,6 +246,8 @@ export interface RunSummary {
   error_detail: string | null;
   started_at: string;
   finished_at: string | null;
+  /** Set only while a run is parked on a delay: when it carries on. */
+  resume_at: string | null;
 }
 
 export interface RunDetail extends RunSummary {

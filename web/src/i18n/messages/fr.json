@@ -12505,7 +12505,9 @@
         "CODE": "Code",
         "LOOP": "Boucle",
         "RETRY": "Réessayer",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Attendre",
+        "FILTER": "Filtrer"
       },
       "startBadge": "début",
       "fanOutBadge": "par élément",
@@ -12534,7 +12536,9 @@
         "CODE": "Code",
         "LOOP": "Boucle",
         "RETRY": "Réessayer",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Attendre",
+        "FILTER": "Filtrer"
       }
     },
     "status": {
@@ -12547,7 +12551,8 @@
       "SUCCEEDED": "Réussi",
       "FAILED": "Échoué",
       "SKIPPED": "Ignoré",
-      "AWAITING_DECISION": "En attente d'approbation"
+      "AWAITING_DECISION": "En attente d'approbation",
+      "AWAITING_DELAY": "En attente"
     },
     "inspector": {
       "kind": {
@@ -12559,7 +12564,9 @@
         "CODE": "Code",
         "LOOP": "Boucle",
         "RETRY": "Réessayer",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Attendre",
+        "FILTER": "Filtrer"
       },
       "fields": {
         "name": "Nom",
@@ -12608,7 +12615,16 @@
         "payload": "Contenu",
         "payloadHelp": "Le corps JSON envoyé. Les expressions sont résolues avant l'envoi.",
         "signingSecret": "Clé de signature",
-        "signingSecretHelp": "Copiez-la dans le système récepteur. Chaque envoi la porte dans l'en-tête X-Onyx-Signature."
+        "signingSecretHelp": "Copiez-la dans le système récepteur. Chaque envoi la porte dans l'en-tête X-Onyx-Signature.",
+        "waitSeconds": "Attendre (secondes)",
+        "waitSecondsHelp": "Combien de temps attendre avant l'étape suivante.",
+        "delayWaits": "Moins d'une minute, l'exécution attend donc sur place.",
+        "delayParks": "Plus d'une minute, l'exécution est donc mise de côté et reprise à l'échéance.",
+        "filterOver": "Liste à filtrer",
+        "filterOverHelp": "Une expression qui donne une liste.",
+        "filterLeft": "Pour chaque élément, comparer",
+        "filterLeftHelp": "Évaluée une fois par élément, avec '{item}' et '{index}'.",
+        "filterRight": "Valeur recherchée"
       },
       "onError": {
         "stop": "Arrêter l'exécution",
@@ -12639,7 +12655,8 @@
         "assignee": "personne@example.com",
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
-        "payload": "'{' \"text\": \"un résumé\" '}'"
+        "payload": "'{' \"text\": \"un résumé\" '}'",
+        "filterLeft": "'{{' item.state '}}'"
       }
     },
     "editor": {
@@ -12690,7 +12707,8 @@
       "commentPlaceholder": "La raison, pour qui relira l'exécution.",
       "assignedTo": "Assigné à {who}",
       "decisionFailed": "La décision n'a pas pu être enregistrée.",
-      "decisionFallbackQuestion": "Cette exécution attend une approbation."
+      "decisionFallbackQuestion": "Cette exécution attend une approbation.",
+      "resumesAt": "Reprend le {when}."
     }
   },
   "knowledge": {

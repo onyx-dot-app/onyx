@@ -57,6 +57,12 @@ MAX_RETRY_INTERVAL_SECONDS = 60.0
 # eating the run's 15-minute budget on its own.
 MAX_RETRY_WINDOW_SECONDS = 600.0
 
+# A delay longer than this parks the run instead of sleeping. Under it the
+# park would cost more than the wait: a resumed run waits for the next sweep
+# tick, and a five-second delay should not take half a minute.
+INLINE_DELAY_SECONDS = 60.0
+MAX_DELAY_SECONDS = 30 * 24 * 60 * 60.0
+
 # What a person can answer at a human step. Stored on the node's run row and
 # read back by the engine when the run resumes, so the strings are part of the
 # contract rather than display text.
@@ -470,6 +476,72 @@ class WebhookNode(NodeBase):
         return value
 
 
+class DelayNode(NodeBase):
+    """Wait, then carry on.
+
+    Short waits sleep where they stand. Anything longer parks the run — its
+    status becomes AWAITING_DELAY, the node keeps an open row, and a sweep
+    re-queues it when it comes due — so "follow up tomorrow" costs nothing
+    while it waits and survives a deploy in the middle.
+
+    The threshold is 60 seconds, and it is a threshold rather than a setting
+    because the trade is fixed: parking costs one sweep tick, so below a
+    minute the park is slower than the wait it replaces.
+    """
+
+    kind: Literal[FlowNodeKind.DELAY] = FlowNodeKind.DELAY
+
+    seconds: float = Field(default=60.0, ge=0.0, le=MAX_DELAY_SECONDS)
+
+    @model_validator(mode="after")
+    def _no_fan_out(self) -> DelayNode:
+        # Waiting once per item means the same wall clock spent N times over,
+        # which is never what anybody means. Wait once, then fan out.
+        if self.for_each is not None:
+            raise ValueError("a delay cannot use 'for_each' — wait once, then fan out")
+        return self
+
+    def parks_the_run(self) -> bool:
+        """Whether this delay is long enough to park rather than sleep."""
+        return self.seconds > INLINE_DELAY_SECONDS
+
+
+class FilterNode(NodeBase):
+    """Keep the items of a list that match a comparison.
+
+    The condition node picks a branch for the whole run; this one picks
+    elements. Pair it with ``for_each`` on whatever comes next and you have
+    "do this to the ones that matter", which is most of what a flow over a
+    list is for.
+
+    ``left`` is evaluated once per element with ``{{ item }}`` and
+    ``{{ index }}`` bound, so a filter can compare an element against
+    something a previous step produced rather than only against a constant.
+    """
+
+    kind: Literal[FlowNodeKind.FILTER] = FlowNodeKind.FILTER
+
+    over: str
+    left: str
+    operator: ConditionOperator = "eq"
+    right: str | None = None
+
+    @field_validator("over", "left")
+    @classmethod
+    def _non_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value
+
+    @model_validator(mode="after")
+    def _right_matches_operator(self) -> FilterNode:
+        if self.operator in UNARY_OPERATORS:
+            return self
+        if self.right is None:
+            raise ValueError(f"operator '{self.operator}' needs a 'right' value")
+        return self
+
+
 FlowNode = Annotated[
     HttpNode
     | TransformNode
@@ -479,7 +551,9 @@ FlowNode = Annotated[
     | CodeNode
     | LoopNode
     | RetryNode
-    | WebhookNode,
+    | WebhookNode
+    | DelayNode
+    | FilterNode,
     Field(discriminator="kind"),
 ]
 

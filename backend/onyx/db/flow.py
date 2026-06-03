@@ -463,9 +463,10 @@ def has_in_flight_run(*, db_session: Session, flow_id: UUID) -> bool:
     """Whether a previous run is still going.
 
     A schedule that fires faster than the flow completes should queue up
-    behind itself rather than run two copies over the same data. A run parked
-    on an approval counts: it is unfinished work over the same data, and
-    firing past it would put a second question in front of the same person.
+    behind itself rather than run two copies over the same data. A parked run
+    counts: it is unfinished work over the same data, and firing past one
+    would put a second question in front of the same person, or start a
+    second copy of work the first is still waiting to do.
     """
     stmt = (
         select(FlowRun.id)
@@ -476,6 +477,7 @@ def has_in_flight_run(*, db_session: Session, flow_id: UUID) -> bool:
                     FlowRunStatus.QUEUED,
                     FlowRunStatus.RUNNING,
                     FlowRunStatus.AWAITING_DECISION,
+                    FlowRunStatus.AWAITING_DELAY,
                 ]
             ),
         )
@@ -491,6 +493,7 @@ def mark_run_status(
     status: FlowRunStatus,
     error_class: FlowErrorClass | None = None,
     error_detail: str | None = None,
+    resume_at: datetime | None = None,
 ) -> FlowRun:
     run.status = status
     if error_class is not None:
@@ -498,10 +501,86 @@ def mark_run_status(
     if error_detail is not None:
         # Enough to diagnose without turning the run table into a log store.
         run.error_detail = error_detail[:4000]
+    # Always assigned, never only set: a run leaving AWAITING_DELAY has to
+    # drop out of the sweep's index, and leaving a stale time behind would
+    # have it picked up again after it had already moved on.
+    run.resume_at = resume_at
     if status.is_terminal():
         run.finished_at = datetime.now(tz=timezone.utc)
     db_session.flush()
     return run
+
+
+def find_due_delayed_runs(
+    *, db_session: Session, now: datetime, batch_size: int
+) -> list[FlowRun]:
+    """Claim up to ``batch_size`` runs whose delay has come round.
+
+    Locked the same way the trigger dispatcher locks: the caller must resume
+    each run and commit inside this transaction, or a concurrent tick claims
+    the same rows and enqueues the run twice.
+    """
+    if batch_size <= 0:
+        return []
+
+    stmt = (
+        select(FlowRun)
+        .where(
+            FlowRun.status == FlowRunStatus.AWAITING_DELAY,
+            FlowRun.resume_at.is_not(None),
+            FlowRun.resume_at <= now,
+        )
+        .order_by(FlowRun.resume_at)
+        .limit(batch_size)
+        .with_for_update(skip_locked=True)
+    )
+    return list(db_session.execute(stmt).scalars())
+
+
+def resume_delayed_run(*, db_session: Session, run: FlowRun) -> FlowNodeRun | None:
+    """Close the delay the run is parked on and put it back in the queue.
+
+    Mirrors ``apply_human_decision``: the waiting is recorded as finished on
+    the node's own row, which is what stops the replay walking into the same
+    delay and parking again. A run with no open delay row is left alone and
+    reported, because re-queueing it would do exactly that.
+    """
+    node_run = _open_node_run(
+        db_session=db_session, run_id=run.id, kind=FlowNodeKind.DELAY
+    )
+    if node_run is None:
+        logger.error("delayed run has no open delay step run_id=%s", run.id)
+        return None
+
+    finish_node_run(
+        db_session=db_session,
+        node_run=node_run,
+        status=FlowNodeRunStatus.SUCCEEDED,
+        output={
+            "waited_seconds": (node_run.input or {}).get("seconds"),
+            "parked": True,
+            "resumed_at": datetime.now(tz=timezone.utc).isoformat(),
+        },
+    )
+
+    run.status = FlowRunStatus.QUEUED
+    run.resume_at = None
+    db_session.flush()
+
+    logger.info("resuming delayed flow run run_id=%s node=%s", run.id, node_run.node_id)
+    return node_run
+
+
+def _open_node_run(
+    *, db_session: Session, run_id: UUID, kind: FlowNodeKind
+) -> FlowNodeRun | None:
+    """The one unfinished row of this kind, if there is one."""
+    stmt = select(FlowNodeRun).where(
+        FlowNodeRun.run_id == run_id,
+        FlowNodeRun.kind == kind,
+        FlowNodeRun.status == FlowNodeRunStatus.RUNNING,
+    )
+    return db_session.execute(stmt).scalars().first()
 
 
 def find_stuck_runs(

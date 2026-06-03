@@ -209,6 +209,8 @@ class RunSummary(BaseModel):
     error_detail: str | None
     started_at: datetime
     finished_at: datetime | None
+    # Set only while a run is parked on a delay: when it carries on.
+    resume_at: datetime | None = None
 
     @classmethod
     def from_model(cls, run: FlowRun) -> RunSummary:
@@ -222,6 +224,7 @@ class RunSummary(BaseModel):
             error_detail=run.error_detail,
             started_at=run.started_at,
             finished_at=run.finished_at,
+            resume_at=run.resume_at,
         )
 
 

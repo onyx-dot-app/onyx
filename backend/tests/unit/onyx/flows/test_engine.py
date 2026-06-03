@@ -1,5 +1,6 @@
 """Engine behaviour: traversal, branching, fan-out, retries and resume."""
 
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -545,3 +546,76 @@ def test_a_replayed_condition_keeps_the_branch_it_first_took(
 
     assert result.outputs["big"] == {"value": "big"}
     assert statuses(recorder)["small"] == FlowNodeRunStatus.SKIPPED
+
+
+# ---------------------------------------------------------------------------
+# Delays: parking on the clock
+# ---------------------------------------------------------------------------
+
+
+def delayed_spec(seconds: float) -> Any:
+    return parse_spec(
+        {
+            "start": "prepare",
+            "nodes": [
+                transform("prepare", "ready", next=["wait"]),
+                {"id": "wait", "kind": "DELAY", "seconds": seconds, "next": ["after"]},
+                transform("after", "done"),
+            ],
+        }
+    )
+
+
+def test_a_long_delay_parks_the_run_with_the_time_it_is_due(
+    runtime: NodeRuntime,
+) -> None:
+    recorder = InMemoryRecorder()
+
+    result = execute_flow(spec=delayed_spec(7200), runtime=runtime, recorder=recorder)
+
+    assert result.status == FlowRunStatus.AWAITING_DELAY
+    assert result.error_class is None
+    assert result.resume_at is not None
+    assert result.resume_at > datetime.now(tz=timezone.utc)
+    assert "after" not in statuses(recorder), "a parked run must not run ahead"
+
+
+def test_a_short_delay_does_not_park_at_all(runtime: NodeRuntime) -> None:
+    result = execute_flow(
+        spec=delayed_spec(0), runtime=runtime, recorder=InMemoryRecorder()
+    )
+
+    assert result.status == FlowRunStatus.SUCCEEDED
+    assert result.resume_at is None
+    assert result.outputs["after"] == {"value": "done"}
+
+
+def test_a_resumed_delay_does_not_wait_again(runtime: NodeRuntime) -> None:
+    """The row the sweep closed is what stops the replay walking back in."""
+    recorder = InMemoryRecorder()
+    recorder._finished[("wait", 0)] = RecordedNode(
+        status=FlowNodeRunStatus.SUCCEEDED,
+        output={"waited_seconds": 7200, "parked": True},
+    )
+
+    result = execute_flow(spec=delayed_spec(7200), runtime=runtime, recorder=recorder)
+
+    assert result.status == FlowRunStatus.SUCCEEDED
+    assert result.outputs["after"] == {"value": "done"}
+
+
+def test_parking_on_a_delay_is_not_swallowed_by_on_error_skip(
+    runtime: NodeRuntime,
+) -> None:
+    spec = parse_spec(
+        {
+            "start": "wait",
+            "nodes": [
+                {"id": "wait", "kind": "DELAY", "seconds": 7200, "on_error": "skip"}
+            ],
+        }
+    )
+
+    result = execute_flow(spec=spec, runtime=runtime, recorder=InMemoryRecorder())
+
+    assert result.status == FlowRunStatus.AWAITING_DELAY

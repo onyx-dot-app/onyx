@@ -12503,7 +12503,9 @@
         "CODE": "コード",
         "LOOP": "ループ",
         "RETRY": "再試行",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "待機",
+        "FILTER": "絞り込み"
       },
       "startBadge": "開始",
       "fanOutBadge": "項目ごと",
@@ -12532,7 +12534,9 @@
         "CODE": "コード",
         "LOOP": "ループ",
         "RETRY": "再試行",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "待機",
+        "FILTER": "絞り込み"
       }
     },
     "status": {
@@ -12545,7 +12549,8 @@
       "SUCCEEDED": "成功",
       "FAILED": "失敗",
       "SKIPPED": "スキップ",
-      "AWAITING_DECISION": "承認待ち"
+      "AWAITING_DECISION": "承認待ち",
+      "AWAITING_DELAY": "待機中"
     },
     "inspector": {
       "kind": {
@@ -12557,7 +12562,9 @@
         "CODE": "コード",
         "LOOP": "ループ",
         "RETRY": "再試行",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "待機",
+        "FILTER": "絞り込み"
       },
       "fields": {
         "name": "名前",
@@ -12606,7 +12613,16 @@
         "payload": "ペイロード",
         "payloadHelp": "送信する JSON 本文です。式は送信前に解決されます。",
         "signingSecret": "署名シークレット",
-        "signingSecretHelp": "受信側のシステムに登録してください。送信時に X-Onyx-Signature ヘッダーで送られます。"
+        "signingSecretHelp": "受信側のシステムに登録してください。送信時に X-Onyx-Signature ヘッダーで送られます。",
+        "waitSeconds": "待機時間（秒）",
+        "waitSecondsHelp": "次のステップを実行するまでの待ち時間です。",
+        "delayWaits": "1 分以内なので、実行はその場で待機します。",
+        "delayParks": "1 分を超えるので、実行はいったん保留し、時間になったら再開します。",
+        "filterOver": "絞り込む一覧",
+        "filterOverHelp": "一覧を返す式です。",
+        "filterLeft": "各項目で比較する値",
+        "filterLeftHelp": "項目ごとに評価されます。'{item}' と '{index}' が使えます。",
+        "filterRight": "一致させる値"
       },
       "onError": {
         "stop": "実行を停止",
@@ -12637,7 +12653,8 @@
         "assignee": "someone@example.com",
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
-        "payload": "'{' \"text\": \"要約\" '}'"
+        "payload": "'{' \"text\": \"要約\" '}'",
+        "filterLeft": "'{{' item.state '}}'"
       }
     },
     "editor": {
@@ -12688,7 +12705,8 @@
       "commentPlaceholder": "後で実行内容を読む人のための理由です。",
       "assignedTo": "担当: {who}",
       "decisionFailed": "判断を記録できませんでした。",
-      "decisionFallbackQuestion": "この実行は承認を待っています。"
+      "decisionFallbackQuestion": "この実行は承認を待っています。",
+      "resumesAt": "{when} に再開します。"
     }
   },
   "knowledge": {

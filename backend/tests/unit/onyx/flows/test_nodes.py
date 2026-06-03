@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -11,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from onyx.db.enums import FlowErrorClass
+from onyx.db.enums import FlowErrorClass, FlowRunStatus
 from onyx.flows.engine import RETRYABLE_ERROR_CLASSES
 from onyx.flows.expressions import RunContext
 from onyx.flows.models import MAX_FAN_OUT_ITEMS, parse_spec
@@ -20,6 +21,8 @@ from onyx.flows.nodes.ai import execute_ai
 from onyx.flows.nodes.base import NodeExecutionError, NodeSuspended
 from onyx.flows.nodes.code import MAX_CONTEXT_BYTES, RESULT_MARKER, execute_code
 from onyx.flows.nodes.condition import execute_condition
+from onyx.flows.nodes.delay import execute_delay
+from onyx.flows.nodes.filter import execute_filter
 from onyx.flows.nodes.http import execute_http
 from onyx.flows.nodes.human import execute_human, resume_human
 from onyx.flows.nodes.loop import execute_loop
@@ -945,3 +948,149 @@ def test_a_receiver_being_down_can_be_made_to_stop_the_run() -> None:
 
     assert caught.value.error_class == FlowErrorClass.HTTP_ERROR
     assert "503" in caught.value.detail
+
+
+# ---------------------------------------------------------------------------
+# Delay
+# ---------------------------------------------------------------------------
+
+
+def delay_node(seconds: float, **overrides: Any) -> Any:
+    node: dict[str, Any] = {"id": "wait", "kind": "DELAY", "seconds": seconds}
+    node.update(overrides)
+    return only_node(node)
+
+
+def test_a_short_delay_waits_where_it_stands() -> None:
+    with patch("onyx.flows.nodes.delay.time.sleep") as slept:
+        outcome = execute_delay(delay_node(30), RunContext(), MagicMock())
+
+    slept.assert_called_once_with(30.0)
+    assert outcome.output == {"waited_seconds": 30.0, "parked": False}
+
+
+def test_a_zero_delay_does_not_bother_sleeping() -> None:
+    with patch("onyx.flows.nodes.delay.time.sleep") as slept:
+        execute_delay(delay_node(0), RunContext(), MagicMock())
+
+    slept.assert_not_called()
+
+
+def test_a_long_delay_parks_the_run_instead_of_holding_a_worker() -> None:
+    """A wait measured in hours cannot sit in a thread, so it must not."""
+    before = datetime.now(tz=timezone.utc)
+
+    with patch("onyx.flows.nodes.delay.time.sleep") as slept:
+        with pytest.raises(NodeSuspended) as caught:
+            execute_delay(delay_node(3600), RunContext(), MagicMock())
+
+    slept.assert_not_called()
+    assert caught.value.status == FlowRunStatus.AWAITING_DELAY
+    assert caught.value.resume_at is not None
+    waited = (caught.value.resume_at - before).total_seconds()
+    assert 3595 <= waited <= 3605
+    assert caught.value.detail["seconds"] == 3600.0
+
+
+def test_the_line_between_sleeping_and_parking_is_a_minute() -> None:
+    assert delay_node(60).parks_the_run() is False
+    assert delay_node(61).parks_the_run() is True
+
+
+# ---------------------------------------------------------------------------
+# Filter
+# ---------------------------------------------------------------------------
+
+
+def filter_node(**overrides: Any) -> Any:
+    node: dict[str, Any] = {
+        "id": "keep",
+        "kind": "FILTER",
+        "over": "{{ trigger.rows }}",
+        "left": "{{ item.state }}",
+        "operator": "eq",
+        "right": "open",
+    }
+    node.update(overrides)
+    return only_node(node)
+
+
+def test_filter_keeps_what_matches_and_counts_what_it_dropped() -> None:
+    context = RunContext(
+        trigger={
+            "rows": [
+                {"id": 1, "state": "open"},
+                {"id": 2, "state": "closed"},
+                {"id": 3, "state": "open"},
+            ]
+        }
+    )
+
+    outcome = execute_filter(filter_node(), context, MagicMock())
+
+    assert [row["id"] for row in outcome.output["items"]] == [1, 3]
+    assert outcome.output == {
+        "items": [{"id": 1, "state": "open"}, {"id": 3, "state": "open"}],
+        "kept": 2,
+        "dropped": 1,
+        "total": 3,
+    }
+
+
+def test_filter_can_compare_against_something_an_earlier_step_produced() -> None:
+    """The point of an expression rather than a constant."""
+    node = filter_node(right="{{ steps.pick.state }}")
+    context = RunContext(
+        trigger={"rows": [{"state": "merged"}, {"state": "open"}]},
+        steps={"pick": {"state": "merged"}},
+    )
+
+    outcome = execute_filter(node, context, MagicMock())
+
+    assert outcome.output["items"] == [{"state": "merged"}]
+
+
+def test_filter_can_use_the_item_index() -> None:
+    node = filter_node(left="{{ index }}", operator="lt", right="2")
+    context = RunContext(trigger={"rows": ["a", "b", "c", "d"]})
+
+    outcome = execute_filter(node, context, MagicMock())
+
+    assert outcome.output["items"] == ["a", "b"]
+
+
+def test_filter_supports_an_operator_that_compares_against_nothing() -> None:
+    node = filter_node(left="{{ item.note }}", operator="is_not_empty", right=None)
+    context = RunContext(
+        trigger={"rows": [{"note": "look"}, {"note": ""}, {"note": "here"}]}
+    )
+
+    outcome = execute_filter(node, context, MagicMock())
+
+    assert outcome.output["kept"] == 2
+
+
+def test_filtering_everything_out_says_so_rather_than_looking_like_nothing() -> None:
+    context = RunContext(trigger={"rows": [{"state": "closed"}]})
+
+    outcome = execute_filter(filter_node(), context, MagicMock())
+
+    assert outcome.output["items"] == []
+    assert outcome.output["dropped"] == 1
+
+
+def test_filter_over_nothing_is_an_empty_result_not_an_error() -> None:
+    outcome = execute_filter(
+        filter_node(), RunContext(trigger={"rows": None}), MagicMock()
+    )
+
+    assert outcome.output == {"items": [], "kept": 0, "dropped": 0, "total": 0}
+
+
+def test_filter_rejects_a_value_that_is_not_a_list() -> None:
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_filter(
+            filter_node(), RunContext(trigger={"rows": "one, two"}), MagicMock()
+        )
+
+    assert caught.value.error_class == FlowErrorClass.EXPRESSION_ERROR

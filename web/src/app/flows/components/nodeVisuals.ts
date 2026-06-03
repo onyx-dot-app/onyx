@@ -3,11 +3,18 @@
  *
  * Kept out of the components so the canvas, the palette and the run inspector
  * cannot drift into showing the same node three different ways.
+ *
+ * The icon is what tells two kinds apart; the colour groups the ones that do
+ * the same sort of thing. Reaching out is info, reshaping is neutral,
+ * comparing is warning, waiting is muted — so a glance at a graph reads as
+ * shape before it reads as detail.
  */
 
 import {
   SvgBranch,
+  SvgClock,
   SvgCode,
+  SvgFilter,
   SvgGlobe,
   SvgHourglass,
   SvgRefreshCw,
@@ -77,15 +84,27 @@ const VISUALS = {
   },
   RETRY: {
     icon: SvgHourglass,
-    chipClassName: "bg-status-warning-01",
-    iconClassName: "text-status-warning-05",
-    accentBorderClassName: "border-status-warning-05",
+    chipClassName: "bg-background-tint-02",
+    iconClassName: "text-text-03",
+    accentBorderClassName: "border-text-03",
   },
   WEBHOOK: {
     icon: SvgShareWebhook,
     chipClassName: "bg-status-info-01",
     iconClassName: "text-status-info-05",
     accentBorderClassName: "border-status-info-05",
+  },
+  DELAY: {
+    icon: SvgClock,
+    chipClassName: "bg-background-tint-02",
+    iconClassName: "text-text-03",
+    accentBorderClassName: "border-text-03",
+  },
+  FILTER: {
+    icon: SvgFilter,
+    chipClassName: "bg-status-warning-01",
+    iconClassName: "text-status-warning-05",
+    accentBorderClassName: "border-status-warning-05",
   },
 } satisfies Record<FlowNodeKind, NodeVisual>;
 

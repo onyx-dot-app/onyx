@@ -27,7 +27,15 @@ export interface SeededRun {
 interface FlowNodeSeed {
   id: string;
   name: string;
-  kind: "HTTP" | "TRANSFORM" | "CONDITION" | "AI" | "HUMAN" | "LOOP";
+  kind:
+    | "HTTP"
+    | "TRANSFORM"
+    | "CONDITION"
+    | "AI"
+    | "HUMAN"
+    | "LOOP"
+    | "DELAY"
+    | "FILTER";
   next: string[];
   for_each: string | null;
   on_error: "stop" | "skip";
@@ -157,6 +165,48 @@ function gatedFlowSpec() {
   };
 }
 
+/** Long enough to park rather than sleep, and short enough to say so. */
+export const PARKED_DELAY_SECONDS = 3600;
+
+/**
+ * A flow that filters a list and then waits long enough to park.
+ *
+ * The filter in front is not decoration: it proves the run got somewhere
+ * before parking, which is what the run view has to show.
+ */
+function delayedFlowSpec() {
+  return {
+    spec_version: 1,
+    start: "keep",
+    nodes: [
+      {
+        id: "keep",
+        name: "Keep the open ones",
+        kind: "FILTER" as const,
+        next: ["wait"],
+        for_each: null,
+        on_error: "stop" as const,
+        retry: { max_attempts: 1, backoff_seconds: 1 },
+        over: "{{ trigger.rows }}",
+        left: "{{ item.state }}",
+        operator: "eq",
+        right: "open",
+      },
+      {
+        id: "wait",
+        name: "Sleep on it",
+        kind: "DELAY" as const,
+        next: ["after"],
+        for_each: null,
+        on_error: "stop" as const,
+        retry: { max_attempts: 1, backoff_seconds: 1 },
+        seconds: PARKED_DELAY_SECONDS,
+      },
+      transform("after", "Follow up", { done: "true" }),
+    ],
+  };
+}
+
 async function expectOk(
   label: string,
   send: () => Promise<{
@@ -229,6 +279,67 @@ export async function seedParkedRun(
  *
  * Returns the ids so a spec can navigate straight to the run view.
  */
+/**
+ * Create and fire a flow that parks on a long delay, then wait for it to park.
+ *
+ * Nothing here waits out the delay — an hour is the point. The run view has
+ * to show what it is waiting for without anybody sitting through it.
+ */
+export async function seedDelayedRun(
+  request: APIRequestContext,
+  name: string
+): Promise<SeededRun> {
+  const createRes = await request.post("/api/flows", {
+    data: {
+      name,
+      description: "Seeded for the delay view",
+      spec: delayedFlowSpec(),
+    },
+  });
+  if (!createRes.ok()) {
+    throw new Error(
+      `creating the flow failed: ${createRes.status()} ${await createRes.text()}`
+    );
+  }
+  const flow: { id: string } = await createRes.json();
+
+  const runRes = await request.post(`/api/flows/${flow.id}/run?test=true`, {
+    data: {
+      payload: {
+        rows: [
+          { id: 1, state: "open" },
+          { id: 2, state: "closed" },
+          { id: 3, state: "open" },
+        ],
+      },
+    },
+  });
+  if (!runRes.ok()) {
+    throw new Error(
+      `starting the run failed: ${runRes.status()} ${await runRes.text()}`
+    );
+  }
+  const run: { id: string } = await runRes.json();
+
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(`/api/flows/${flow.id}/runs/${run.id}`);
+        if (!res.ok()) return `HTTP ${res.status()}`;
+        const body: { status: string } = await res.json();
+        return body.status;
+      },
+      {
+        timeout: RUN_TIMEOUT_MS,
+        message:
+          "the run never parked on its delay — is a worker consuming the scheduled_tasks queue?",
+      }
+    )
+    .toBe("AWAITING_DELAY");
+
+  return { flowId: flow.id, runId: run.id };
+}
+
 export async function seedFinishedRun(
   request: APIRequestContext,
   name: string

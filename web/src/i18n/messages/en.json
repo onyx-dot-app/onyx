@@ -12531,7 +12531,9 @@
         "CODE": "Code",
         "LOOP": "Loop",
         "RETRY": "Retry",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Delay",
+        "FILTER": "Filter"
       },
       "startBadge": "start",
       "fanOutBadge": "per item",
@@ -12560,7 +12562,9 @@
         "CODE": "Code",
         "LOOP": "Loop",
         "RETRY": "Retry",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Delay",
+        "FILTER": "Filter"
       }
     },
     "status": {
@@ -12573,7 +12577,8 @@
       "SUCCEEDED": "Succeeded",
       "FAILED": "Failed",
       "SKIPPED": "Skipped",
-      "AWAITING_DECISION": "Waiting for approval"
+      "AWAITING_DECISION": "Waiting for approval",
+      "AWAITING_DELAY": "Waiting"
     },
     "inspector": {
       "kind": {
@@ -12585,7 +12590,9 @@
         "CODE": "Code",
         "LOOP": "Loop",
         "RETRY": "Retry",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Delay",
+        "FILTER": "Filter"
       },
       "fields": {
         "name": "Name",
@@ -12634,7 +12641,16 @@
         "payload": "Payload",
         "payloadHelp": "The JSON body to send. Expressions are resolved before it goes out.",
         "signingSecret": "Signing secret",
-        "signingSecretHelp": "Copy this into the receiving system. Deliveries carry it as an X-Onyx-Signature header."
+        "signingSecretHelp": "Copy this into the receiving system. Deliveries carry it as an X-Onyx-Signature header.",
+        "waitSeconds": "Wait (seconds)",
+        "waitSecondsHelp": "How long to wait before the next step runs.",
+        "delayWaits": "Under a minute, so the run waits where it is.",
+        "delayParks": "Over a minute, so the run is put aside and picked up when it is due.",
+        "filterOver": "List to filter",
+        "filterOverHelp": "An expression that resolves to a list.",
+        "filterLeft": "For each item, compare",
+        "filterLeftHelp": "Evaluated once per item, with '{item}' and '{index}' available.",
+        "filterRight": "Matching value"
       },
       "onError": {
         "stop": "Stop the run",
@@ -12665,7 +12681,8 @@
         "assignee": "someone@example.com",
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
-        "payload": "'{' \"text\": \"a summary\" '}'"
+        "payload": "'{' \"text\": \"a summary\" '}'",
+        "filterLeft": "'{{' item.state '}}'"
       }
     },
     "editor": {
@@ -12716,7 +12733,8 @@
       "commentPlaceholder": "Why, for whoever reads the run later.",
       "assignedTo": "Assigned to {who}",
       "decisionFailed": "The decision could not be recorded.",
-      "decisionFallbackQuestion": "This run is waiting for an approval."
+      "decisionFallbackQuestion": "This run is waiting for an approval.",
+      "resumesAt": "Carries on at {when}."
     }
   },
   "knowledge": {

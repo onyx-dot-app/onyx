@@ -192,9 +192,10 @@ class DatabaseRecorder:
 def run_flow_logic(run_id: UUID) -> None:
     """Drive one queued run as far as it can go.
 
-    Usually that is a terminal status. A flow with an approval step instead
-    ends up AWAITING_DECISION, and the same function runs it again — from the
-    top, reusing the recorded rows — once somebody answers.
+    Usually that is a terminal status. A flow with an approval or a long
+    delay instead parks, and the same function runs it again — from the top,
+    reusing the recorded rows — once somebody answers or the clock comes
+    round.
 
     Never raises for a flow-level problem: the run row is the report, and a
     raised exception would only tell Celery to try the whole thing again.
@@ -265,12 +266,13 @@ def run_flow_logic(run_id: UUID) -> None:
             status=result.status,
             error_class=result.error_class,
             error_detail=_failure_detail(result),
+            resume_at=result.resume_at,
         )
         db_session.commit()
 
     logger.info(
         "flow run %s run_id=%s status=%s seconds=%.1f",
-        "parked" if result.status == FlowRunStatus.AWAITING_DECISION else "finished",
+        "parked" if not result.status.is_terminal() else "finished",
         run_id,
         result.status.value,
         time.monotonic() - started,

@@ -20,10 +20,11 @@ whether grey means broken.
 **Expression errors are not retried.** A missing key will still be missing in
 two seconds. Only genuinely transient classes get another attempt.
 
-**A run waiting on a person holds nothing.** An approval step parks the run
-and returns; answering it re-queues the run, which walks the graph again from
-the top and reuses every row it already wrote. A parked run therefore survives
-a deploy, a worker crash and a week of nobody looking at it.
+**A parked run holds nothing.** An approval or a long delay parks the run and
+returns; whatever resumes it — a person answering, or the clock coming round —
+re-queues the run, which walks the graph again from the top and reuses every
+row it already wrote. A parked run therefore survives a deploy, a worker crash
+and a week of nobody looking at it.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Protocol
 
 from onyx.db.enums import FlowErrorClass, FlowNodeKind, FlowNodeRunStatus, FlowRunStatus
@@ -211,6 +213,8 @@ class RunResult:
     error_class: FlowErrorClass | None = None
     error_detail: str | None = None
     failed_node_id: str | None = None
+    # Set only for a run parked on a delay: when the sweep should pick it up.
+    resume_at: datetime | None = None
 
 
 def execute_flow(
@@ -265,14 +269,16 @@ def execute_flow(
                 recorder=recorder,
                 deadline=deadline,
             )
-        except NodeSuspended:
+        except NodeSuspended as exc:
             # Not a failure and not the end: the run keeps its open row at
-            # this node, and answering it re-queues the run to start again
-            # from the top, replaying everything already recorded.
-            logger.info("flow run parked for a decision node=%s", node_id)
+            # this node, and whatever resumes it — a person answering, or the
+            # clock coming round — re-queues the run to start again from the
+            # top, replaying everything already recorded.
+            logger.info("flow run parked node=%s status=%s", node_id, exc.status.value)
             return RunResult(
-                status=FlowRunStatus.AWAITING_DECISION,
+                status=exc.status,
                 outputs=dict(context.steps),
+                resume_at=exc.resume_at,
             )
         except RunBudgetExceeded as exc:
             return RunResult(

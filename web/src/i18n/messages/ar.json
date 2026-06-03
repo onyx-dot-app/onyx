@@ -12501,7 +12501,9 @@
         "CODE": "شيفرة",
         "LOOP": "تكرار",
         "RETRY": "إعادة المحاولة",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "انتظار",
+        "FILTER": "تصفية"
       },
       "startBadge": "البداية",
       "fanOutBadge": "لكل عنصر",
@@ -12530,7 +12532,9 @@
         "CODE": "شيفرة",
         "LOOP": "تكرار",
         "RETRY": "إعادة المحاولة",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "انتظار",
+        "FILTER": "تصفية"
       }
     },
     "status": {
@@ -12543,7 +12547,8 @@
       "SUCCEEDED": "نجح",
       "FAILED": "فشل",
       "SKIPPED": "تم تخطيه",
-      "AWAITING_DECISION": "بانتظار الموافقة"
+      "AWAITING_DECISION": "بانتظار الموافقة",
+      "AWAITING_DELAY": "في الانتظار"
     },
     "inspector": {
       "kind": {
@@ -12555,7 +12560,9 @@
         "CODE": "شيفرة",
         "LOOP": "تكرار",
         "RETRY": "إعادة المحاولة",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "انتظار",
+        "FILTER": "تصفية"
       },
       "fields": {
         "name": "الاسم",
@@ -12604,7 +12611,16 @@
         "payload": "الحمولة",
         "payloadHelp": "جسم JSON الذي يُرسل. تُحل التعبيرات قبل الإرسال.",
         "signingSecret": "مفتاح التوقيع",
-        "signingSecretHelp": "انسخه إلى النظام المستقبِل. يُرسل مع كل تسليم في ترويسة X-Onyx-Signature."
+        "signingSecretHelp": "انسخه إلى النظام المستقبِل. يُرسل مع كل تسليم في ترويسة X-Onyx-Signature.",
+        "waitSeconds": "الانتظار (بالثواني)",
+        "waitSecondsHelp": "كم يُنتظر قبل تنفيذ الخطوة التالية.",
+        "delayWaits": "أقل من دقيقة، لذا ينتظر التشغيل في مكانه.",
+        "delayParks": "أكثر من دقيقة، لذا يُنحّى التشغيل جانبًا ويُستأنف عند حلول موعده.",
+        "filterOver": "القائمة المراد تصفيتها",
+        "filterOverHelp": "تعبير ينتج قائمة.",
+        "filterLeft": "لكل عنصر، قارن",
+        "filterLeftHelp": "يُقيَّم لكل عنصر، مع توفر '{item}' و '{index}'.",
+        "filterRight": "القيمة المطابِقة"
       },
       "onError": {
         "stop": "إيقاف التشغيل",
@@ -12635,7 +12651,8 @@
         "assignee": "someone@example.com",
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
-        "payload": "'{' \"text\": \"ملخّص\" '}'"
+        "payload": "'{' \"text\": \"ملخّص\" '}'",
+        "filterLeft": "'{{' item.state '}}'"
       }
     },
     "editor": {
@@ -12686,7 +12703,8 @@
       "commentPlaceholder": "السبب، لمن يقرأ التشغيل لاحقًا.",
       "assignedTo": "مسند إلى {who}",
       "decisionFailed": "تعذّر تسجيل القرار.",
-      "decisionFallbackQuestion": "هذا التشغيل بانتظار موافقة."
+      "decisionFallbackQuestion": "هذا التشغيل بانتظار موافقة.",
+      "resumesAt": "يُستأنف في {when}."
     }
   },
   "knowledge": {

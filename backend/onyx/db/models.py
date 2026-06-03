@@ -7737,6 +7737,13 @@ class FlowRun(Base):
     error_class: Mapped[str | None] = mapped_column(String, nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # When a run parked on a delay step becomes due. NULL for every other
+    # state, which is what keeps the sweep's index small and its query one
+    # comparison wide — the same shape as `flow_trigger.next_run_at`.
+    resume_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     started_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -7758,6 +7765,13 @@ class FlowRun(Base):
     __table_args__ = (
         Index("ix_flow_run_flow_started", "flow_id", desc("started_at")),
         Index("ix_flow_run_status", "status"),
+        # Partial: only parked runs carry a resume time, so the index stays
+        # the size of what is actually waiting rather than of all history.
+        Index(
+            "ix_flow_run_resume_at",
+            "resume_at",
+            postgresql_where=text("resume_at IS NOT NULL"),
+        ),
     )
 
 

@@ -12503,7 +12503,9 @@
         "CODE": "Código",
         "LOOP": "Bucle",
         "RETRY": "Reintentar",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Esperar",
+        "FILTER": "Filtrar"
       },
       "startBadge": "inicio",
       "fanOutBadge": "por elemento",
@@ -12532,7 +12534,9 @@
         "CODE": "Código",
         "LOOP": "Bucle",
         "RETRY": "Reintentar",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Esperar",
+        "FILTER": "Filtrar"
       }
     },
     "status": {
@@ -12545,7 +12549,8 @@
       "SUCCEEDED": "Correcto",
       "FAILED": "Fallido",
       "SKIPPED": "Omitido",
-      "AWAITING_DECISION": "Esperando aprobación"
+      "AWAITING_DECISION": "Esperando aprobación",
+      "AWAITING_DELAY": "En espera"
     },
     "inspector": {
       "kind": {
@@ -12557,7 +12562,9 @@
         "CODE": "Código",
         "LOOP": "Bucle",
         "RETRY": "Reintentar",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Esperar",
+        "FILTER": "Filtrar"
       },
       "fields": {
         "name": "Nombre",
@@ -12606,7 +12613,16 @@
         "payload": "Contenido",
         "payloadHelp": "El cuerpo JSON que se envía. Las expresiones se resuelven antes de salir.",
         "signingSecret": "Clave de firma",
-        "signingSecretHelp": "Cópiala en el sistema receptor. Cada envío la lleva en la cabecera X-Onyx-Signature."
+        "signingSecretHelp": "Cópiala en el sistema receptor. Cada envío la lleva en la cabecera X-Onyx-Signature.",
+        "waitSeconds": "Esperar (segundos)",
+        "waitSecondsHelp": "Cuánto esperar antes de ejecutar el paso siguiente.",
+        "delayWaits": "Menos de un minuto, así que la ejecución espera donde está.",
+        "delayParks": "Más de un minuto, así que la ejecución se aparta y se retoma cuando toca.",
+        "filterOver": "Lista a filtrar",
+        "filterOverHelp": "Una expresión que da una lista.",
+        "filterLeft": "Para cada elemento, comparar",
+        "filterLeftHelp": "Se evalúa una vez por elemento, con '{item}' e '{index}' disponibles.",
+        "filterRight": "Valor que debe coincidir"
       },
       "onError": {
         "stop": "Detener la ejecución",
@@ -12637,7 +12653,8 @@
         "assignee": "alguien@example.com",
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
-        "payload": "'{' \"text\": \"un resumen\" '}'"
+        "payload": "'{' \"text\": \"un resumen\" '}'",
+        "filterLeft": "'{{' item.state '}}'"
       }
     },
     "editor": {
@@ -12688,7 +12705,8 @@
       "commentPlaceholder": "El motivo, para quien lea la ejecución más tarde.",
       "assignedTo": "Asignado a {who}",
       "decisionFailed": "No se pudo registrar la decisión.",
-      "decisionFallbackQuestion": "Esta ejecución espera una aprobación."
+      "decisionFallbackQuestion": "Esta ejecución espera una aprobación.",
+      "resumesAt": "Continúa el {when}."
     }
   },
   "knowledge": {

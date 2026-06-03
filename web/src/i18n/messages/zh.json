@@ -12501,7 +12501,9 @@
         "CODE": "代码",
         "LOOP": "循环",
         "RETRY": "重试",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "等待",
+        "FILTER": "筛选"
       },
       "startBadge": "起点",
       "fanOutBadge": "逐项",
@@ -12530,7 +12532,9 @@
         "CODE": "代码",
         "LOOP": "循环",
         "RETRY": "重试",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "等待",
+        "FILTER": "筛选"
       }
     },
     "status": {
@@ -12543,7 +12547,8 @@
       "SUCCEEDED": "成功",
       "FAILED": "失败",
       "SKIPPED": "已跳过",
-      "AWAITING_DECISION": "等待审批"
+      "AWAITING_DECISION": "等待审批",
+      "AWAITING_DELAY": "等待中"
     },
     "inspector": {
       "kind": {
@@ -12555,7 +12560,9 @@
         "CODE": "代码",
         "LOOP": "循环",
         "RETRY": "重试",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "等待",
+        "FILTER": "筛选"
       },
       "fields": {
         "name": "名称",
@@ -12604,7 +12611,16 @@
         "payload": "负载",
         "payloadHelp": "要发送的 JSON 内容。表达式在发送前解析。",
         "signingSecret": "签名密钥",
-        "signingSecretHelp": "把它复制到接收系统。每次投递都会通过 X-Onyx-Signature 请求头带上它。"
+        "signingSecretHelp": "把它复制到接收系统。每次投递都会通过 X-Onyx-Signature 请求头带上它。",
+        "waitSeconds": "等待时长（秒）",
+        "waitSecondsHelp": "执行下一步之前等待多久。",
+        "delayWaits": "不超过一分钟，运行会原地等待。",
+        "delayParks": "超过一分钟，运行会先搁置，到点再继续。",
+        "filterOver": "要筛选的列表",
+        "filterOverHelp": "一个返回列表的表达式。",
+        "filterLeft": "对每一项比较",
+        "filterLeftHelp": "对每一项求值，可使用 '{item}' 和 '{index}'。",
+        "filterRight": "匹配的值"
       },
       "onError": {
         "stop": "停止运行",
@@ -12635,7 +12651,8 @@
         "assignee": "someone@example.com",
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
-        "payload": "'{' \"text\": \"一段摘要\" '}'"
+        "payload": "'{' \"text\": \"一段摘要\" '}'",
+        "filterLeft": "'{{' item.state '}}'"
       }
     },
     "editor": {
@@ -12686,7 +12703,8 @@
       "commentPlaceholder": "写明原因，供之后查看运行的人参考。",
       "assignedTo": "指派给 {who}",
       "decisionFailed": "无法记录该决定。",
-      "decisionFallbackQuestion": "此运行正在等待审批。"
+      "decisionFallbackQuestion": "此运行正在等待审批。",
+      "resumesAt": "将于 {when} 继续。"
     }
   },
   "knowledge": {

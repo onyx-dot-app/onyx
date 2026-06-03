@@ -10,11 +10,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Protocol
 
 import httpx
 
-from onyx.db.enums import FlowErrorClass
+from onyx.db.enums import FlowErrorClass, FlowRunStatus
 from onyx.flows.expressions import RunContext
 from onyx.llm.interfaces import LLM
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
@@ -39,21 +40,34 @@ class NodeExecutionError(Exception):
 
 
 class NodeSuspended(Exception):
-    """A node is waiting on somebody, so the run parks instead of finishing.
+    """A node is waiting, so the run parks instead of finishing.
 
     Not a failure, and deliberately not a subclass of ``NodeExecutionError``:
     ``on_error`` and the retry policy must both leave it alone. The engine
-    catches it, returns AWAITING_DECISION, and the node keeps its open row for
-    whoever answers.
+    catches it, returns the status the node asked for, and the node keeps its
+    open row until whatever it is waiting for arrives.
+
+    Two things do the waiting. An approval waits on a person and carries no
+    ``resume_at``; a long delay waits on the clock and carries one, which the
+    sweep reads to know when the run is due.
     """
 
-    def __init__(self, *, node_id: str, detail: dict[str, Any]) -> None:
-        super().__init__(f"waiting on a decision at '{node_id}'")
+    def __init__(
+        self,
+        *,
+        node_id: str,
+        detail: dict[str, Any],
+        status: FlowRunStatus = FlowRunStatus.AWAITING_DECISION,
+        resume_at: datetime | None = None,
+    ) -> None:
+        super().__init__(f"run parked at '{node_id}' as {status.value}")
         self.node_id = node_id
         # Merged into the node row's input, which is what the run view shows
-        # beside the step. The question is rendered by then, so the reviewer
-        # reads real values rather than `{{ }}`.
+        # beside the step. Rendered by then, so a reader sees real values
+        # rather than `{{ }}`.
         self.detail = detail
+        self.status = status
+        self.resume_at = resume_at
 
 
 @dataclass(frozen=True)

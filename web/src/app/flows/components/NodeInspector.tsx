@@ -21,6 +21,8 @@ import type {
   CodeNode,
   ConditionNode,
   ConditionOperator,
+  DelayNode,
+  FilterNode,
   FlowNode,
   HttpNode,
   HttpMethod,
@@ -38,6 +40,12 @@ const HTTP_METHODS: readonly HttpMethod[] = [
   "PATCH",
   "DELETE",
 ];
+
+/** The line between a delay that sleeps and one that parks the run. */
+const INLINE_DELAY_SECONDS = 60;
+
+/** Thirty days, matching the server's ceiling. */
+const MAX_DELAY_SECONDS = 30 * 24 * 60 * 60;
 
 const OPERATORS: readonly ConditionOperator[] = [
   "eq",
@@ -137,6 +145,12 @@ export function NodeInspector({
       ) : null}
       {node.kind === "RETRY" ? (
         <RetryFields node={node} onChange={onChange} />
+      ) : null}
+      {node.kind === "DELAY" ? (
+        <DelayFields node={node} onChange={onChange} />
+      ) : null}
+      {node.kind === "FILTER" ? (
+        <FilterFields node={node} onChange={onChange} />
       ) : null}
       {node.kind === "WEBHOOK" ? (
         <WebhookFields
@@ -561,6 +575,112 @@ function clampBatchSize(raw: string): number {
   const parsed = Number.parseInt(raw, 10);
   if (Number.isNaN(parsed)) return 1;
   return Math.min(200, Math.max(1, parsed));
+}
+
+function DelayFields({ node, onChange }: FieldProps<DelayNode>) {
+  const t = useTranslations("flows.inspector");
+
+  return (
+    <>
+      <InputVertical
+        withLabel
+        title={t("fields.waitSeconds")}
+        description={t("fields.waitSecondsHelp")}
+      >
+        <InputTypeIn
+          type="number"
+          min={0}
+          max={MAX_DELAY_SECONDS}
+          value={String(node.seconds)}
+          onChange={(event) =>
+            onChange({ ...node, seconds: clampDelay(event.target.value) })
+          }
+        />
+      </InputVertical>
+
+      <Text font="main-ui-muted" color="text-03">
+        {node.seconds > INLINE_DELAY_SECONDS
+          ? t("fields.delayParks")
+          : t("fields.delayWaits")}
+      </Text>
+    </>
+  );
+}
+
+function FilterFields({ node, onChange }: FieldProps<FilterNode>) {
+  const t = useTranslations("flows.inspector");
+  const needsRight = !UNARY_OPERATORS.includes(node.operator);
+
+  return (
+    <>
+      <InputVertical
+        withLabel
+        title={t("fields.filterOver")}
+        description={t("fields.filterOverHelp")}
+      >
+        <InputTypeIn
+          value={node.over}
+          placeholder={t("placeholder.over")}
+          onChange={(event) => onChange({ ...node, over: event.target.value })}
+        />
+      </InputVertical>
+
+      <InputVertical
+        withLabel
+        title={t("fields.filterLeft")}
+        description={t("fields.filterLeftHelp")}
+      >
+        <InputTypeIn
+          value={node.left}
+          placeholder={t("placeholder.filterLeft")}
+          onChange={(event) => onChange({ ...node, left: event.target.value })}
+        />
+      </InputVertical>
+
+      <InputVertical withLabel title={t("fields.operator")}>
+        <InputSingleSelect
+          value={node.operator}
+          onValueChange={(raw) => {
+            const operator = asOperator(raw);
+            onChange({
+              ...node,
+              operator,
+              right: UNARY_OPERATORS.includes(operator)
+                ? null
+                : (node.right ?? ""),
+            });
+          }}
+        >
+          <InputSingleSelect.Trigger />
+          <InputSingleSelect.Content>
+            {OPERATORS.map((operator) => (
+              <InputSingleSelect.Item key={operator} value={operator}>
+                {t(`operator.${operator}`)}
+              </InputSingleSelect.Item>
+            ))}
+          </InputSingleSelect.Content>
+        </InputSingleSelect>
+      </InputVertical>
+
+      {needsRight ? (
+        <InputVertical withLabel title={t("fields.filterRight")}>
+          <InputTypeIn
+            value={node.right ?? ""}
+            onChange={(event) =>
+              onChange({ ...node, right: event.target.value })
+            }
+          />
+        </InputVertical>
+      ) : null}
+    </>
+  );
+}
+
+/** Keep the wait inside what the server will accept. */
+function clampDelay(raw: string): number {
+  const parsed = Number.parseFloat(raw);
+  if (Number.isNaN(parsed)) return 0;
+  return Math.min(MAX_DELAY_SECONDS, Math.max(0, parsed));
 }
 
 function RetryFields({ node, onChange }: FieldProps<RetryNode>) {

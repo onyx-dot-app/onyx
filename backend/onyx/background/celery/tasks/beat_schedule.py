@@ -250,6 +250,19 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "resume-delayed-flow-runs",
+        "task": OnyxCeleryTask.FLOWS_RESUME_DELAYS,
+        # Same cadence as the trigger dispatcher: a delay step is only
+        # offered for waits over a minute, so a tick of this size is well
+        # inside what the author asked for.
+        "schedule": timedelta(seconds=30),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": 60,
+            "queue": OnyxCeleryQueues.PRIMARY,
+        },
+    },
+    {
         "name": "cleanup-stuck-flow-runs",
         "task": OnyxCeleryTask.FLOWS_CLEANUP_STUCK,
         "schedule": timedelta(hours=1),

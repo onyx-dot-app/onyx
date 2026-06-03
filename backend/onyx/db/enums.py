@@ -931,6 +931,8 @@ class FlowNodeKind(str, PyEnum):
     LOOP = "LOOP"
     RETRY = "RETRY"
     WEBHOOK = "WEBHOOK"
+    DELAY = "DELAY"
+    FILTER = "FILTER"
 
 
 class FlowRunStatus(str, PyEnum):
@@ -942,6 +944,9 @@ class FlowRunStatus(str, PyEnum):
     # Parked on a human step. Not terminal: a decision re-queues the run,
     # which replays the completed nodes from their rows and carries on.
     AWAITING_DECISION = "AWAITING_DECISION"
+    # Parked on a delay step until `flow_run.resume_at`. Same resume path as
+    # a decision, minus the person: a beat tick re-queues it when it is due.
+    AWAITING_DELAY = "AWAITING_DELAY"
 
     def is_terminal(self) -> bool:
         return self in (

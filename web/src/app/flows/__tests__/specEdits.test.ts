@@ -114,6 +114,9 @@ describe("blankNode", () => {
     expect(blankNode("x", "WEBHOOK")).toMatchObject({
       fail_on_error_status: false,
     });
+    // The longest wait that still costs nothing to set up.
+    expect(blankNode("x", "DELAY")).toMatchObject({ seconds: 60 });
+    expect(blankNode("x", "FILTER")).toMatchObject({ operator: "eq" });
   });
 
   it("keeps a retry inside the server's wait budget", () => {

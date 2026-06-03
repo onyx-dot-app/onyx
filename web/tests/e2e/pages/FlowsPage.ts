@@ -41,6 +41,8 @@ export type StepKind =
   | "Loop"
   | "Retry"
   | "Webhook"
+  | "Delay"
+  | "Filter"
   | "Approval";
 
 export class FlowsPage {
@@ -67,6 +69,7 @@ export class FlowsPage {
   readonly approveButton: Locator;
   readonly rejectButton: Locator;
   readonly signingSecret: Locator;
+  readonly resumesAt: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -92,6 +95,7 @@ export class FlowsPage {
     this.approveButton = page.getByTestId("decision-approve");
     this.rejectButton = page.getByTestId("decision-reject");
     this.signingSecret = page.getByTestId("webhook-signing-secret");
+    this.resumesAt = page.getByTestId("run-resumes-at");
   }
 
   // ---------------------------------------------------------------------------
@@ -404,6 +408,11 @@ export class FlowsPage {
 
   async expectRunPanelContains(text: string): Promise<void> {
     await expect(this.runPanel).toContainText(text);
+  }
+
+  /** When a run parked on a delay will carry on. */
+  async expectResumeTimeShown(): Promise<void> {
+    await expect(this.resumesAt).toBeVisible();
   }
 
   /** Something the run page says outside the step panel, such as why it failed. */

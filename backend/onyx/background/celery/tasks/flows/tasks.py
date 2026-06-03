@@ -1,6 +1,6 @@
 """Celery tasks for flow automations.
 
-Four tasks across two queues, mirroring the Craft scheduled-task split that
+Five tasks across two queues, mirroring the Craft scheduled-task split that
 already works in production:
 
 - ``dispatch_due_flows`` (primary, every 30 s) claims due schedule triggers
@@ -12,6 +12,8 @@ already works in production:
   It shares that queue rather than claiming a new one because both are
   long-running user-triggered background work, and a new queue would mean new
   workers in every deployment target for no behavioural gain.
+- ``resume_delayed_flow_runs`` (primary, every 30 s) picks up runs parked on
+  a delay step whose time has come, closes the delay and re-queues them.
 - ``cleanup_stuck_flow_runs`` (primary, hourly) fails runs whose worker died.
 - ``purge_old_flow_runs`` (primary, daily) trims run history.
 
@@ -39,12 +41,14 @@ from onyx.db.enums import (
 from onyx.db.flow import (
     advance_next_run_at,
     claim_due_triggers,
+    find_due_delayed_runs,
     find_stuck_runs,
     get_flow_version,
     has_in_flight_run,
     insert_run,
     mark_run_status,
     purge_old_runs,
+    resume_delayed_run,
 )
 from onyx.flows.runner import RUN_BUDGET_SECONDS, run_flow_logic
 from onyx.utils.logger import setup_logger
@@ -193,6 +197,71 @@ def run_flow(self: Task, *, run_id: str, tenant_id: str) -> None:
         run_flow_logic(UUID(run_id))
     except Exception:
         task_logger.exception("run_flow wrapper failed run_id=%s", run_id)
+
+
+@shared_task(  # ty: ignore[invalid-argument-type]
+    name=OnyxCeleryTask.FLOWS_RESUME_DELAYS,
+    ignore_result=True,
+    bind=True,
+)
+def resume_delayed_flow_runs(self: Task, *, tenant_id: str) -> int | None:
+    """Re-queue runs whose delay step has come due.
+
+    The clock's half of the parking mechanism, and the exact counterpart of
+    the decision endpoint: close the open delay row, put the run back to
+    QUEUED, enqueue it, and let the engine replay what it already did.
+
+    Returns the number re-queued, which is what the beat log shows.
+    """
+    now = datetime.now(tz=timezone.utc)
+    to_enqueue: list[UUID] = []
+
+    try:
+        with get_session_with_current_tenant() as db_session:
+            due = find_due_delayed_runs(
+                db_session=db_session, now=now, batch_size=DISPATCH_BATCH_SIZE
+            )
+            if not due:
+                return 0
+
+            for run in due:
+                if resume_delayed_run(db_session=db_session, run=run) is not None:
+                    to_enqueue.append(run.id)
+                else:
+                    # No open delay row to close, so replaying would walk
+                    # straight back into the same wait. Fail it rather than
+                    # leave it circling.
+                    mark_run_status(
+                        db_session=db_session,
+                        run=run,
+                        status=FlowRunStatus.FAILED,
+                        error_class=FlowErrorClass.STUCK,
+                        error_detail=(
+                            "run was waiting on a delay with no open delay step"
+                        ),
+                    )
+
+            # Must happen before the transaction releases its row locks, or
+            # the next tick claims the same runs and enqueues them twice.
+            db_session.commit()
+
+        for run_id in to_enqueue:
+            self.app.send_task(
+                OnyxCeleryTask.FLOWS_RUN,
+                kwargs={"run_id": str(run_id), "tenant_id": tenant_id},
+                queue=OnyxCeleryQueues.SCHEDULED_TASKS,
+                priority=OnyxCeleryPriority.MEDIUM,
+                expires=QUEUE_RESIDENCY_SECONDS,
+            )
+    except Exception:
+        task_logger.exception("resume_delayed_flow_runs failed tenant=%s", tenant_id)
+        return None
+
+    if to_enqueue:
+        task_logger.info(
+            "resumed %d delayed flow run(s) tenant=%s", len(to_enqueue), tenant_id
+        )
+    return len(to_enqueue)
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]

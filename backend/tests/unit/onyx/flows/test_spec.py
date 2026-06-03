@@ -5,9 +5,13 @@ from typing import TypeVar
 import pytest
 
 from onyx.flows.models import (
+    INLINE_DELAY_SECONDS,
     MAX_CODE_LENGTH,
+    MAX_DELAY_SECONDS,
     MAX_FAN_OUT_ITEMS,
     ConditionNode,
+    DelayNode,
+    FilterNode,
     FlowSpec,
     RetryNode,
     SpecError,
@@ -363,3 +367,80 @@ def test_a_webhook_delivers_whatever_shape_you_give_it() -> None:
     )
 
     assert only(spec, WebhookNode).payload["blocks"][0]["type"] == "section"
+
+
+def test_rejects_a_delay_that_fans_out() -> None:
+    with pytest.raises(SpecError, match="wait once, then fan out"):
+        parse_spec(
+            {
+                "start": "wait",
+                "nodes": [
+                    {
+                        "id": "wait",
+                        "kind": "DELAY",
+                        "seconds": 30,
+                        "for_each": "{{ trigger.rows }}",
+                    }
+                ],
+            }
+        )
+
+
+def test_a_delay_longer_than_a_month_is_refused() -> None:
+    with pytest.raises(SpecError):
+        parse_spec(
+            {
+                "start": "wait",
+                "nodes": [
+                    {"id": "wait", "kind": "DELAY", "seconds": MAX_DELAY_SECONDS + 1}
+                ],
+            }
+        )
+
+
+def test_the_delay_threshold_decides_sleeping_from_parking() -> None:
+    def delay(seconds: float) -> DelayNode:
+        spec = parse_spec(
+            {"start": "w", "nodes": [{"id": "w", "kind": "DELAY", "seconds": seconds}]}
+        )
+        return only(spec, DelayNode)
+
+    assert delay(INLINE_DELAY_SECONDS).parks_the_run() is False
+    assert delay(INLINE_DELAY_SECONDS + 1).parks_the_run() is True
+
+
+def test_a_filter_needs_something_to_compare_unless_the_operator_does_not() -> None:
+    with pytest.raises(SpecError, match="needs a 'right' value"):
+        parse_spec(
+            {
+                "start": "keep",
+                "nodes": [
+                    {
+                        "id": "keep",
+                        "kind": "FILTER",
+                        "over": "{{ trigger.rows }}",
+                        "left": "{{ item.state }}",
+                        "operator": "eq",
+                    }
+                ],
+            }
+        )
+
+
+def test_a_filter_testing_for_presence_needs_no_comparison_value() -> None:
+    spec = parse_spec(
+        {
+            "start": "keep",
+            "nodes": [
+                {
+                    "id": "keep",
+                    "kind": "FILTER",
+                    "over": "{{ trigger.rows }}",
+                    "left": "{{ item.note }}",
+                    "operator": "is_not_empty",
+                }
+            ],
+        }
+    )
+
+    assert only(spec, FilterNode).right is None

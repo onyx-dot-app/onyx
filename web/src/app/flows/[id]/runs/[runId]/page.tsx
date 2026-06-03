@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, InputTextArea, Text } from "@opal/components";
 import { InputVertical, PageLoader, SettingsLayouts } from "@opal/layouts";
@@ -35,6 +35,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
  */
 export default function FlowRunPage() {
   const t = useTranslations("flows.run");
+  const format = useFormatter();
   const router = useRouter();
   const params = useParams<{ id: string; runId: string }>();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -112,6 +113,18 @@ export default function FlowRunPage() {
           <Text font="main-ui-body" color="text-04">
             {run.error_detail}
           </Text>
+        ) : null}
+        {run.resume_at !== null ? (
+          <span data-testid="run-resumes-at">
+            <Text font="main-ui-body" color="text-04">
+              {t("resumesAt", {
+                when: format.dateTime(new Date(run.resume_at), {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }),
+              })}
+            </Text>
+          </span>
         ) : null}
       </SettingsLayouts.Header>
 

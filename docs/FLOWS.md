@@ -269,6 +269,46 @@ A webhook does **not** fail the run on a 4xx or 5xx by default. A receiver
 being down is their outage, not a reason to stop an automation that has already
 done its work; `fail_on_error_status` turns that around.
 
+### DELAY
+
+Waits, then carries on. Output is `{waited_seconds, parked}`.
+
+How it waits depends on how long for:
+
+| `seconds` | what happens |
+|---|---|
+| ≤ 60 | sleeps where it stands |
+| > 60 | parks the run — see [Delays](#delays) |
+
+The threshold is fixed rather than configurable because the trade is fixed:
+parking costs one sweep tick, so below a minute the park would be slower than
+the wait it replaces. The ceiling is 30 days.
+
+### FILTER
+
+Keeps the elements of a list that match a comparison. Output is
+`{items, kept, dropped, total}`.
+
+A condition picks a branch for the whole run; a filter picks elements. Pair it
+with `for_each` on whatever comes next and you have "do this to the ones that
+matter", which is most of what a flow over a list is for.
+
+```
+keep.over     = "{{ steps.fetch.body.rows }}"
+keep.left     = "{{ item.state }}"
+keep.operator = "eq"
+keep.right    = "open"
+send.for_each = "{{ steps.keep.items }}"
+```
+
+`left` is evaluated once per element with `{{ item }}` and `{{ index }}`
+bound, so a filter can compare an element against something an earlier step
+produced rather than only against a constant.
+
+`dropped` comes back alongside the survivors because "it did nothing" and
+"everything was filtered out" look identical downstream otherwise, and those
+are very different bugs.
+
 ## Execution
 
 `execute_flow` walks the reachable subgraph in topological order (Kahn's
@@ -319,6 +359,24 @@ Two consequences worth knowing:
 schedule queues behind it rather than putting a second question in front of the
 same person.
 
+### Delays
+
+A DELAY node longer than 60 s parks the run the same way, with one difference:
+nobody has to do anything. The status becomes `AWAITING_DELAY` and the due time
+goes on `flow_run.resume_at`, behind a partial index that only covers parked
+runs.
+
+`resume_delayed_flow_runs` (primary, every 30 s) claims due runs with
+`FOR UPDATE SKIP LOCKED`, closes the open delay row, puts the run back to
+`QUEUED` and enqueues it — the exact counterpart of the decision endpoint.
+Closing that row is what matters: without it the replay would walk into the
+same delay and park again.
+
+So a delay costs no worker while it waits, and "follow up tomorrow" survives a
+deploy in the middle of it. A run that comes back finds no `resume_at` on its
+row, because `mark_run_status` always assigns it — a finished run must not
+advertise a wait that is no longer coming.
+
 ### Fan-out
 
 A node with `for_each` runs once per element, with `{{ item }}` and
@@ -346,7 +404,8 @@ silently ignores `soft_time_limit`.
 `dispatch_due_flows` runs every 30 s on the primary queue, claims due schedule
 triggers with `FOR UPDATE SKIP LOCKED`, advances `next_run_at`, and enqueues the
 executor. A flow whose previous run is still going records a `SKIPPED` run
-rather than running two copies over the same data.
+rather than running two copies over the same data — and a run parked on an
+approval or a delay counts as still going.
 
 Webhooks authenticate with a secret returned once, when the trigger is created.
 Every rejection answers 404, so the endpoint cannot be probed for which triggers

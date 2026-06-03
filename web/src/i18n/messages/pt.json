@@ -12503,7 +12503,9 @@
         "CODE": "Código",
         "LOOP": "Ciclo",
         "RETRY": "Repetir",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Esperar",
+        "FILTER": "Filtrar"
       },
       "startBadge": "início",
       "fanOutBadge": "por item",
@@ -12532,7 +12534,9 @@
         "CODE": "Código",
         "LOOP": "Ciclo",
         "RETRY": "Repetir",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Esperar",
+        "FILTER": "Filtrar"
       }
     },
     "status": {
@@ -12545,7 +12549,8 @@
       "SUCCEEDED": "Concluído",
       "FAILED": "Falhou",
       "SKIPPED": "Ignorado",
-      "AWAITING_DECISION": "À espera de aprovação"
+      "AWAITING_DECISION": "À espera de aprovação",
+      "AWAITING_DELAY": "À espera"
     },
     "inspector": {
       "kind": {
@@ -12557,7 +12562,9 @@
         "CODE": "Código",
         "LOOP": "Ciclo",
         "RETRY": "Repetir",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Esperar",
+        "FILTER": "Filtrar"
       },
       "fields": {
         "name": "Nome",
@@ -12606,7 +12613,16 @@
         "payload": "Conteúdo",
         "payloadHelp": "O corpo JSON a enviar. As expressões são resolvidas antes do envio.",
         "signingSecret": "Chave de assinatura",
-        "signingSecretHelp": "Copie-a para o sistema recetor. Cada envio leva-a no cabeçalho X-Onyx-Signature."
+        "signingSecretHelp": "Copie-a para o sistema recetor. Cada envio leva-a no cabeçalho X-Onyx-Signature.",
+        "waitSeconds": "Esperar (segundos)",
+        "waitSecondsHelp": "Quanto tempo esperar antes da etapa seguinte.",
+        "delayWaits": "Menos de um minuto, por isso a execução espera onde está.",
+        "delayParks": "Mais de um minuto, por isso a execução fica de parte e é retomada quando for devida.",
+        "filterOver": "Lista a filtrar",
+        "filterOverHelp": "Uma expressão que resulta numa lista.",
+        "filterLeft": "Para cada item, comparar",
+        "filterLeftHelp": "Avaliada uma vez por item, com '{item}' e '{index}' disponíveis.",
+        "filterRight": "Valor correspondente"
       },
       "onError": {
         "stop": "Parar a execução",
@@ -12637,7 +12653,8 @@
         "assignee": "alguem@example.com",
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
-        "payload": "'{' \"text\": \"um resumo\" '}'"
+        "payload": "'{' \"text\": \"um resumo\" '}'",
+        "filterLeft": "'{{' item.state '}}'"
       }
     },
     "editor": {
@@ -12688,7 +12705,8 @@
       "commentPlaceholder": "O motivo, para quem ler a execução mais tarde.",
       "assignedTo": "Atribuído a {who}",
       "decisionFailed": "Não foi possível registar a decisão.",
-      "decisionFallbackQuestion": "Esta execução está à espera de uma aprovação."
+      "decisionFallbackQuestion": "Esta execução está à espera de uma aprovação.",
+      "resumesAt": "Continua em {when}."
     }
   },
   "knowledge": {

@@ -12503,7 +12503,9 @@
         "CODE": "Code",
         "LOOP": "Schleife",
         "RETRY": "Wiederholen",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Warten",
+        "FILTER": "Filtern"
       },
       "startBadge": "Start",
       "fanOutBadge": "pro Element",
@@ -12532,7 +12534,9 @@
         "CODE": "Code",
         "LOOP": "Schleife",
         "RETRY": "Wiederholen",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Warten",
+        "FILTER": "Filtern"
       }
     },
     "status": {
@@ -12545,7 +12549,8 @@
       "SUCCEEDED": "Erfolgreich",
       "FAILED": "Fehlgeschlagen",
       "SKIPPED": "Übersprungen",
-      "AWAITING_DECISION": "Wartet auf Freigabe"
+      "AWAITING_DECISION": "Wartet auf Freigabe",
+      "AWAITING_DELAY": "Wartet"
     },
     "inspector": {
       "kind": {
@@ -12557,7 +12562,9 @@
         "CODE": "Code",
         "LOOP": "Schleife",
         "RETRY": "Wiederholen",
-        "WEBHOOK": "Webhook"
+        "WEBHOOK": "Webhook",
+        "DELAY": "Warten",
+        "FILTER": "Filtern"
       },
       "fields": {
         "name": "Name",
@@ -12606,7 +12613,16 @@
         "payload": "Nutzdaten",
         "payloadHelp": "Der JSON-Text, der gesendet wird. Ausdrücke werden vorher aufgelöst.",
         "signingSecret": "Signaturschlüssel",
-        "signingSecretHelp": "Kopieren Sie ihn in das empfangende System. Jede Zustellung trägt ihn als X-Onyx-Signature-Header."
+        "signingSecretHelp": "Kopieren Sie ihn in das empfangende System. Jede Zustellung trägt ihn als X-Onyx-Signature-Header.",
+        "waitSeconds": "Warten (Sekunden)",
+        "waitSecondsHelp": "Wie lange gewartet wird, bevor der nächste Schritt läuft.",
+        "delayWaits": "Unter einer Minute, der Lauf wartet also an Ort und Stelle.",
+        "delayParks": "Über einer Minute, der Lauf wird also beiseitegelegt und zur fälligen Zeit fortgesetzt.",
+        "filterOver": "Zu filternde Liste",
+        "filterOverHelp": "Ein Ausdruck, der eine Liste ergibt.",
+        "filterLeft": "Für jedes Element vergleiche",
+        "filterLeftHelp": "Wird je Element ausgewertet, mit '{item}' und '{index}'.",
+        "filterRight": "Passender Wert"
       },
       "onError": {
         "stop": "Lauf anhalten",
@@ -12637,7 +12653,8 @@
         "assignee": "person@example.com",
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
-        "payload": "'{' \"text\": \"eine Zusammenfassung\" '}'"
+        "payload": "'{' \"text\": \"eine Zusammenfassung\" '}'",
+        "filterLeft": "'{{' item.state '}}'"
       }
     },
     "editor": {
@@ -12688,7 +12705,8 @@
       "commentPlaceholder": "Begründung für alle, die den Lauf später lesen.",
       "assignedTo": "Zugewiesen an {who}",
       "decisionFailed": "Die Entscheidung konnte nicht gespeichert werden.",
-      "decisionFallbackQuestion": "Dieser Lauf wartet auf eine Freigabe."
+      "decisionFallbackQuestion": "Dieser Lauf wartet auf eine Freigabe.",
+      "resumesAt": "Läuft weiter am {when}."
     }
   },
   "knowledge": {

@@ -731,6 +731,7 @@ class OnyxCeleryTask:
     # Flow automations
     FLOWS_DISPATCH_DUE = "flows_dispatch_due"
     FLOWS_RUN = "flows_run"
+    FLOWS_RESUME_DELAYS = "flows_resume_delays"
     FLOWS_CLEANUP_STUCK = "flows_cleanup_stuck"
     FLOWS_PURGE_OLD_RUNS = "flows_purge_old_runs"
 

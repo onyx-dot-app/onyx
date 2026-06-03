@@ -94,6 +94,14 @@ function runLook(status: FlowRunStatus): BadgeLook {
         chipClassName: "bg-status-warning-01",
         iconClassName: "text-status-warning-05",
       };
+    case "AWAITING_DELAY":
+      // Muted rather than warning: nothing is stuck and nobody has to act,
+      // the run is simply not due yet.
+      return {
+        icon: SvgClock,
+        chipClassName: "bg-background-tint-02",
+        iconClassName: "text-text-03",
+      };
     case "QUEUED":
     case "SKIPPED":
       return {

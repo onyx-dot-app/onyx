@@ -30,14 +30,17 @@ from onyx.db.flow import (
     claim_due_triggers,
     create_flow,
     ensure_webhook_signing_secret,
+    find_due_delayed_runs,
     finish_node_run,
     get_flow,
     get_run,
     has_in_flight_run,
     insert_run,
+    mark_run_status,
     publish_flow,
     purge_old_runs,
     replace_triggers,
+    resume_delayed_run,
     set_flow_status,
     soft_delete_flow,
     start_node_run,
@@ -734,3 +737,153 @@ def test_a_flow_without_a_secret_gets_one_on_demand(
     assert minted
     assert flow.webhook_signing_secret is not None
     assert flow.webhook_signing_secret.get_value(apply_mask=False) == minted
+
+
+# ---------------------------------------------------------------------------
+# Delayed runs
+# ---------------------------------------------------------------------------
+
+
+def delayed_spec(seconds: float) -> dict[str, Any]:
+    return {
+        "start": "prepare",
+        "nodes": [
+            {
+                "id": "prepare",
+                "kind": "TRANSFORM",
+                "fields": {"tag": "{{ trigger.tag }}"},
+                "next": ["wait"],
+            },
+            {"id": "wait", "kind": "DELAY", "seconds": seconds, "next": ["after"]},
+            {"id": "after", "kind": "TRANSFORM", "fields": {"value": "followed up"}},
+        ],
+    }
+
+
+def _due_run_ids(db_session: Session, now: datetime) -> set[UUID]:
+    """Ids the delay sweep would claim at ``now``."""
+    due = find_due_delayed_runs(db_session=db_session, now=now, batch_size=200)
+    return {run.id for run in due}
+
+
+def delayed_run(db_session: Session, owner: User, name: str) -> FlowRun:
+    flow = create_flow(
+        db_session=db_session,
+        user_id=owner.id,
+        name=name,
+        draft_spec=delayed_spec(7200),
+    )
+    run = insert_run(
+        db_session=db_session,
+        flow_id=flow.id,
+        trigger_source=FlowTriggerSource.TEST,
+        trigger_payload={"tag": "v5"},
+    )
+    db_session.commit()
+    return run
+
+
+def test_a_long_delay_parks_the_run_and_the_sweep_picks_it_up_when_due(
+    db_session: Session, owner: User
+) -> None:
+    """The clock's half of the parking mechanism, against real rows."""
+    run_id = delayed_run(db_session, owner, "delayed flow").id
+
+    run_flow_logic(run_id)
+    db_session.expire_all()
+
+    run = get_run(db_session=db_session, run_id=run_id)
+    assert run is not None
+    assert run.status == FlowRunStatus.AWAITING_DELAY
+    assert run.resume_at is not None
+    assert run.finished_at is None
+    assert node_rows(db_session, run_id, "after") == [], "ran past the delay"
+
+    wait_row = node_rows(db_session, run_id, "wait")[0]
+    assert wait_row.status == FlowNodeRunStatus.RUNNING
+    assert wait_row.input is not None and wait_row.input["seconds"] == 7200
+
+    # Not due yet, so the sweep leaves it alone. Scoped to this run rather
+    # than to the whole result: the database is shared across the file, so a
+    # global assertion would depend on what the other tests left parked.
+    early = run.resume_at - timedelta(seconds=1)
+    assert run_id not in _due_run_ids(db_session, early)
+    assert run_id in _due_run_ids(db_session, run.resume_at)
+
+    prepare_finished_at = node_rows(db_session, run_id, "prepare")[0].finished_at
+    assert resume_delayed_run(db_session=db_session, run=run) is not None
+    db_session.commit()
+
+    assert run.status == FlowRunStatus.QUEUED
+    assert run.resume_at is None, "a resumed run must drop out of the sweep"
+
+    run_flow_logic(run_id)
+    db_session.expire_all()
+
+    run = get_run(db_session=db_session, run_id=run_id)
+    assert run is not None
+    assert run.status == FlowRunStatus.SUCCEEDED
+    after = node_rows(db_session, run_id, "after")[0].output
+    assert after is not None and after["value"] == {"value": "followed up"}
+
+    # The replayed step was reused, and the delay was not waited a second time.
+    assert node_rows(db_session, run_id, "prepare")[0].finished_at == (
+        prepare_finished_at
+    )
+    assert node_rows(db_session, run_id, "wait")[0].status == (
+        FlowNodeRunStatus.SUCCEEDED
+    )
+
+
+def test_a_run_waiting_on_a_delay_still_counts_as_in_flight(
+    db_session: Session, owner: User
+) -> None:
+    run = delayed_run(db_session, owner, "delayed in flight flow")
+    run_flow_logic(run.id)
+    db_session.expire_all()
+
+    assert has_in_flight_run(db_session=db_session, flow_id=run.flow_id) is True
+
+
+def test_the_sweep_ignores_runs_that_are_not_waiting_on_a_delay(
+    db_session: Session, owner: User
+) -> None:
+    """The partial index only covers parked runs; the query must match it."""
+    run = delayed_run(db_session, owner, "not delayed flow")
+    mark_run_status(
+        db_session=db_session,
+        run=run,
+        status=FlowRunStatus.RUNNING,
+        resume_at=datetime.now(tz=timezone.utc) - timedelta(hours=1),
+    )
+    db_session.commit()
+
+    later = datetime.now(tz=timezone.utc) + timedelta(days=1)
+    found = find_due_delayed_runs(db_session=db_session, now=later, batch_size=10)
+
+    assert run.id not in {row.id for row in found}
+
+
+def test_leaving_the_parked_state_clears_the_resume_time(
+    db_session: Session, owner: User
+) -> None:
+    """A finished run must not still advertise when it will carry on.
+
+    The assignment in `mark_run_status` is unconditional for this reason: a
+    run that parks and then moves on has to drop its resume time, or the run
+    view reports a wait that is no longer coming.
+    """
+    run = delayed_run(db_session, owner, "cleared resume flow")
+    mark_run_status(
+        db_session=db_session,
+        run=run,
+        status=FlowRunStatus.AWAITING_DELAY,
+        resume_at=datetime.now(tz=timezone.utc) + timedelta(hours=2),
+    )
+    db_session.commit()
+    assert run.resume_at is not None
+
+    mark_run_status(db_session=db_session, run=run, status=FlowRunStatus.SUCCEEDED)
+    db_session.commit()
+
+    assert run.resume_at is None

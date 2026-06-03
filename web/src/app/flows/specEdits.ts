@@ -12,6 +12,8 @@ import type {
   AiNode,
   CodeNode,
   ConditionNode,
+  DelayNode,
+  FilterNode,
   FlowNode,
   FlowNodeKind,
   FlowSpec,
@@ -160,6 +162,27 @@ export function blankNode(id: string, kind: FlowNodeKind): FlowNode {
         max_checks: 10,
         interval_seconds: 5,
         fail_when_exhausted: true,
+      };
+      return node;
+    }
+    case "DELAY": {
+      const node: DelayNode = {
+        ...base,
+        kind: "DELAY",
+        // A minute is the line between sleeping and parking, so the default
+        // is the longest wait that costs nothing to set up.
+        seconds: 60,
+      };
+      return node;
+    }
+    case "FILTER": {
+      const node: FilterNode = {
+        ...base,
+        kind: "FILTER",
+        over: "",
+        left: "",
+        operator: "eq",
+        right: "",
       };
       return node;
     }

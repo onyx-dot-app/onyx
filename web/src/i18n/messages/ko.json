@@ -12501,7 +12501,9 @@
         "CODE": "코드",
         "LOOP": "반복",
         "RETRY": "재시도",
-        "WEBHOOK": "웹훅"
+        "WEBHOOK": "웹훅",
+        "DELAY": "대기",
+        "FILTER": "필터"
       },
       "startBadge": "시작",
       "fanOutBadge": "항목별",
@@ -12530,7 +12532,9 @@
         "CODE": "코드",
         "LOOP": "반복",
         "RETRY": "재시도",
-        "WEBHOOK": "웹훅"
+        "WEBHOOK": "웹훅",
+        "DELAY": "대기",
+        "FILTER": "필터"
       }
     },
     "status": {
@@ -12543,7 +12547,8 @@
       "SUCCEEDED": "성공",
       "FAILED": "실패",
       "SKIPPED": "건너뜀",
-      "AWAITING_DECISION": "승인 대기 중"
+      "AWAITING_DECISION": "승인 대기 중",
+      "AWAITING_DELAY": "대기 중"
     },
     "inspector": {
       "kind": {
@@ -12555,7 +12560,9 @@
         "CODE": "코드",
         "LOOP": "반복",
         "RETRY": "재시도",
-        "WEBHOOK": "웹훅"
+        "WEBHOOK": "웹훅",
+        "DELAY": "대기",
+        "FILTER": "필터"
       },
       "fields": {
         "name": "이름",
@@ -12604,7 +12611,16 @@
         "payload": "페이로드",
         "payloadHelp": "보낼 JSON 본문입니다. 식은 보내기 전에 해석됩니다.",
         "signingSecret": "서명 비밀키",
-        "signingSecretHelp": "받는 시스템에 복사해 넣으세요. 전송할 때 X-Onyx-Signature 헤더로 함께 갑니다."
+        "signingSecretHelp": "받는 시스템에 복사해 넣으세요. 전송할 때 X-Onyx-Signature 헤더로 함께 갑니다.",
+        "waitSeconds": "대기 시간(초)",
+        "waitSecondsHelp": "다음 단계를 실행하기까지 기다리는 시간입니다.",
+        "delayWaits": "1분 이하라 실행이 그 자리에서 기다립니다.",
+        "delayParks": "1분을 넘으므로 실행을 잠시 보류했다가 시간이 되면 이어서 진행합니다.",
+        "filterOver": "필터링할 목록",
+        "filterOverHelp": "목록을 반환하는 식입니다.",
+        "filterLeft": "각 항목에서 비교할 값",
+        "filterLeftHelp": "항목마다 평가되며 '{item}' 과 '{index}' 를 쓸 수 있습니다.",
+        "filterRight": "일치시킬 값"
       },
       "onError": {
         "stop": "실행 중단",
@@ -12635,7 +12651,8 @@
         "assignee": "someone@example.com",
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
-        "payload": "'{' \"text\": \"요약\" '}'"
+        "payload": "'{' \"text\": \"요약\" '}'",
+        "filterLeft": "'{{' item.state '}}'"
       }
     },
     "editor": {
@@ -12686,7 +12703,8 @@
       "commentPlaceholder": "나중에 실행 기록을 볼 사람을 위한 이유입니다.",
       "assignedTo": "담당: {who}",
       "decisionFailed": "결정을 기록하지 못했습니다.",
-      "decisionFallbackQuestion": "이 실행은 승인을 기다리고 있습니다."
+      "decisionFallbackQuestion": "이 실행은 승인을 기다리고 있습니다.",
+      "resumesAt": "{when} 에 이어서 진행합니다."
     }
   },
   "knowledge": {
