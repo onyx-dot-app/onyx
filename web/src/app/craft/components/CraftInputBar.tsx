@@ -154,8 +154,6 @@ const CraftInputBar = memo(
         [pickerSections, addEntry]
       );
 
-      // ── Submit ────────────────────────────────────────────────────────────
-
       const handleSubmit = useCallback(
         (message: string) => {
           const skillPrefixes = activeEntries
@@ -171,10 +169,7 @@ const CraftInputBar = memo(
         [activeEntries, currentMessageFiles, onSubmit, clearFiles]
       );
 
-      // ── Slots ─────────────────────────────────────────────────────────────
-
-      // Always rendered so the strip can animate its own collapse/expand as
-      // the first/last chip is added or removed.
+      // Always rendered so the strip can animate its own collapse/expand.
       const topSlot = (
         <InputChipStrip
           files={currentMessageFiles}

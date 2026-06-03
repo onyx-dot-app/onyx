@@ -21,12 +21,9 @@ import {
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import type { PickerEntry } from "@/lib/skills/picker";
 
-// ── Shared chip primitive ─────────────────────────────────────────────────────
-
 interface InputChipProps {
   icon: ReactNode;
   label: string;
-  /** Tailwind classes for bg, border, and text color. */
   colorClassName: string;
   onRemove: () => void;
   onClick?: (chipEl: HTMLElement) => void;
@@ -73,8 +70,6 @@ function InputChip({
     </div>
   );
 }
-
-// ── File chip ─────────────────────────────────────────────────────────────────
 
 function BuildFileCard({
   file,
@@ -129,8 +124,6 @@ function BuildFileCard({
   return chip;
 }
 
-// ── Skill / app chip ──────────────────────────────────────────────────────────
-
 interface EntryChipProps {
   entry: PickerEntry;
   onRemove: () => void;
@@ -152,8 +145,6 @@ function EntryChip({ entry, onRemove, onClick }: EntryChipProps) {
   );
 }
 
-// ── Strip ─────────────────────────────────────────────────────────────────────
-
 export interface InputChipStripProps {
   files: BuildFile[];
   entries: PickerEntry[];
@@ -162,7 +153,6 @@ export interface InputChipStripProps {
   onClickEntry?: (entry: PickerEntry, chipEl: HTMLElement) => void;
 }
 
-// Confident ease-out; no bounce.
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 export function InputChipStrip({
@@ -175,17 +165,16 @@ export function InputChipStrip({
   const reduceMotion = useReducedMotion();
   const hasContent = files.length > 0 || entries.length > 0;
 
-  // Strip collapses/expands its height so the input bar grows and shrinks
-  // smoothly as the first/last chip is added or removed (rather than jumping).
+  // Collapse/expand height so the bar grows and shrinks smoothly as the
+  // first/last chip is added or removed (rather than jumping).
   const stripTransition = reduceMotion
     ? { duration: 0 }
     : { duration: 0.2, ease: EASE };
-  // Per-chip enter/exit (opacity + slight scale).
   const chipTransition = reduceMotion
     ? { duration: 0 }
     : { duration: 0.15, ease: EASE };
 
-  // Single wrapping row. Skills/apps lead (flush left), files follow.
+  // Entries (skills/apps) lead; files follow.
   return (
     <AnimatePresence initial={false}>
       {hasContent && (

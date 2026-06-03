@@ -35,9 +35,7 @@ export interface BaseInputBarHandle {
   focus: () => void;
   setMessage: (message: string) => void;
   pasteText: (text: string) => void;
-  /** Text content to the left of the caret; used by slash picker. */
   getTextBeforeCursor: () => string | null;
-  /** Bounding rect of the caret; used to position the slash picker popover. */
   getCaretRect: () => DOMRect | null;
   /** Delete `token` immediately before the caret (e.g. `"/pptx"`). */
   deleteBeforeToken: (token: string) => boolean;
@@ -51,34 +49,26 @@ export interface BaseInputBarProps {
   noBottomRounding?: boolean;
   pasteTilesEnabled?: boolean;
   sandboxInitializing?: boolean;
-  /** Blocks submit without applying disabled visual (e.g. files still uploading). */
+  /** Blocks submit without the disabled visual (e.g. files still uploading). */
   submitBlocked?: boolean;
-  /** Applies armed styling to the Stop button (set by variant from useDoubleEscapeInterrupt). */
   stopArmed?: boolean;
 
-  // Queue
   queuedMessages?: readonly QueuedMessage[];
   onQueueMessage?: (text: string) => void;
   onRemoveQueuedMessage?: (index: number) => void;
 
-  // Interrupt
   onInterrupt?: () => void;
   isInterrupting?: boolean;
 
-  // Slots
   topSlot?: ReactNode;
   bottomLeftSlot?: ReactNode;
 
-  // Extension hooks
   /** Return true to consume the event (skips BaseInputBar key handling). */
   onBeforeKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => boolean;
   /** Return true to consume the pasted text (skips pasteText). */
   onPasteText?: (text: string) => boolean;
-  /** Called when files are pasted. */
   onPasteFiles?: (files: File[]) => void;
-  /** Called after every input event; variant uses it for picker state. */
   onInputCallback?: () => void;
-  /** Called on caret moves (key up / mouse up); variant uses it for picker state. */
   onSelectionChange?: () => void;
 }
 

@@ -6,19 +6,16 @@ import { SvgChevronRight, SvgPlus } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
 
-// A single entry inside a flyout panel.
 export interface PlusMenuFlyoutItem {
   key: string;
   label: string;
   icon?: IconFunctionComponent;
   description?: string;
-  /** Right-aligned content (e.g. a shortcut hint or "Connect" label). */
   rightContent?: ReactNode;
   onSelect: () => void;
 }
 
-// A top-level menu row. Either a direct action (`onSelect`) or a flyout row
-// (`flyoutItems`) that opens a panel to the right.
+/** A direct-action row (`onSelect`) or a flyout row (`flyoutItems`). */
 export interface PlusMenuItem {
   key: string;
   label: string;
@@ -44,11 +41,8 @@ interface FlyoutRowProps {
   children: ReactNode[];
 }
 
-// A menu row that opens a flyout panel anchored to its right. The panel is its
-// own Popover nested inside the main menu's content; Radix treats nested
-// portaled content as a dismissable-layer "branch", so interacting with the
-// flyout doesn't close the main menu. Opens on hover (and click), matching the
-// Anthropic composer menu.
+// Nested inside the main menu's content so Radix treats it as a
+// dismissable-layer "branch" — interacting with the flyout won't close the menu.
 function FlyoutRow({
   icon,
   label,
@@ -97,8 +91,7 @@ export function PlusMenuButton({
     setOpenKey(null);
   }, []);
 
-  // Single flyout open at a time. Functional updates keep the open/close
-  // events from sibling nested popovers from racing each other.
+  // Functional update keeps sibling open/close events from racing.
   const flyoutOpenChange = useCallback((key: string, next: boolean) => {
     setOpenKey((prev) => (next ? key : prev === key ? null : prev));
   }, []);

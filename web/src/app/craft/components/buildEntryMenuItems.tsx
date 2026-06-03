@@ -9,12 +9,7 @@ interface EntryMenuHandlers {
   onSelectEntry: (entry: PickerEntry) => void;
 }
 
-/**
- * Maps the skill/app picker sections onto the generic PlusMenuButton model:
- * a Files action row, then Skills and Apps flyout rows (only when populated),
- * separated by a divider. Keeps all skill/app domain knowledge out of the
- * generic menu component.
- */
+/** Maps picker sections onto the generic PlusMenuButton model. */
 export function buildEntryMenuItems(
   sections: PickerSections,
   { onAttachFiles, onSelectEntry }: EntryMenuHandlers
