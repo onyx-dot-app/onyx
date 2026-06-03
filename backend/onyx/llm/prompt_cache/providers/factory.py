@@ -42,18 +42,18 @@ def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
     elif llm_config.model_provider == LlmProviderNames.OPENROUTER:
         model_name = llm_config.model_name or ""
         if model_name.startswith(OPENROUTER_ANTHROPIC_PREFIX):
-            logger.info(
+            logger.debug(
                 "Prompt caching enabled for OpenRouter Anthropic model: %s", model_name
             )
             return AnthropicPromptCacheProvider()
         elif model_name.startswith(OPENROUTER_GOOGLE_PREFIX):
-            logger.info(
+            logger.debug(
                 "Prompt caching enabled for OpenRouter Google/Gemini model: %s",
                 model_name,
             )
             return VertexAIPromptCacheProvider()
         elif model_name.startswith(OPENROUTER_OPENAI_PREFIX):
-            logger.info(
+            logger.debug(
                 "Prompt caching enabled for OpenRouter OpenAI model: %s", model_name
             )
             return OpenAIPromptCacheProvider()

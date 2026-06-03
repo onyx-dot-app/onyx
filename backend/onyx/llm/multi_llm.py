@@ -678,6 +678,12 @@ class LitellmLLM(LLM):
                     **existing_extra_body,
                     "session_id": user_identity.session_id,
                 }
+            else:
+                logger.warning(
+                    "OpenRouter sticky routing: extra_body is not a dict (%s), "
+                    "skipping session_id injection",
+                    type(existing_extra_body).__name__,
+                )
 
         try:
             # NOTE: must pass in None instead of empty strings otherwise litellm
