@@ -338,11 +338,8 @@ class _ServeMixin:
                     f"Sandbox {sandbox_id} has been terminated; refusing to "
                     "create a new event bus against its (deleted) backend"
                 )
-            # The local tombstone above only covers the replica that ran
-            # terminate. Consult the authoritative DB status so the refusal
-            # fires on every replica, not just the terminating one. The status
-            # read is a cheap indexed lookup, so holding the lock across it is
-            # fine.
+            # Tombstone is local to the terminating replica; the DB status
+            # makes the refusal fire on every replica.
             self._assert_sandbox_backend_live(sandbox_id)
             info = self._serve_connection_info(sandbox_id)
             bus = PodEventBus(
@@ -364,22 +361,11 @@ class _ServeMixin:
             return bus
 
     def _assert_sandbox_backend_live(self, sandbox_id: UUID) -> None:
-        """Refuse to build a bus against a sandbox with no live backend pod,
-        per the authoritative DB ``Sandbox.status``.
-
-        ``Sandbox.status`` is the strongly-consistent, indexed authority shared
-        by all api_server replicas, so this makes the refusal fire everywhere —
-        not just on the pod that holds the local ``_terminated_sandboxes``
-        tombstone.
-
-        A bus is refused for every state whose pod is gone: ``TERMINATED`` /
-        ``FAILED`` (permanent) and ``SLEEPING`` (pod torn down, snapshot in S3).
-        All three would otherwise burn the full reconnect budget (~30s) against
-        a dead Service before self-closing. ``RUNNING`` and ``PROVISIONING``
-        keep a (possibly still-coming-up) pod and flow on to the readiness wait.
-        A missing row (status ``None``) is left to the existing connection-info
-        handling rather than treated as gone.
-        """
+        """Raise if the DB reports the sandbox's pod is gone (TERMINATED /
+        FAILED / SLEEPING) — a bus there just burns its reconnect budget against
+        a dead Service. Authoritative across replicas, unlike the local
+        tombstone. RUNNING / PROVISIONING keep a pod and proceed; a missing row
+        falls through to the existing connection-info handling."""
         with get_session_with_current_tenant() as db_session:
             status = get_sandbox_status(db_session, sandbox_id)
         if status is not None and (status.is_terminal() or status.is_sleeping()):

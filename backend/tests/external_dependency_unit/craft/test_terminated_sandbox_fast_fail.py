@@ -1,15 +1,8 @@
 """Cross-replica fast-fail for sandboxes with no live backend.
 
-``_ServeMixin._terminated_sandboxes`` is a per-process tombstone: it only
-blocks racing subscribes on the replica that ran ``terminate``. A peer replica
-has an empty tombstone, so it would happily build a doomed bus against the
-deleted backend. The fix consults the authoritative DB ``Sandbox.status`` in
-``_get_or_create_event_bus`` so the refusal fires on every replica — for every
-state whose pod is gone: ``TERMINATED`` / ``FAILED`` (permanent) and
-``SLEEPING`` (pod torn down, snapshot in S3).
-
-These tests use a *fresh* ``StubSandboxManager`` (empty local tombstone) to
-stand in for that peer replica, and drive bus creation purely off DB state.
+A fresh ``StubSandboxManager`` (empty local tombstone) stands in for a peer
+replica, so bus creation is driven purely off the DB ``Sandbox.status``:
+TERMINATED / FAILED / SLEEPING are refused, RUNNING / PROVISIONING proceed.
 """
 
 from __future__ import annotations
@@ -33,8 +26,7 @@ class TestTerminatedSandboxFastFail:
         test_user: User,
         sandbox: Callable[..., Sandbox],
     ) -> None:
-        # TERMINATED row in the DB; the peer replica's local tombstone is empty
-        # (fresh manager). The DB authority must still force a refusal.
+        # Empty local tombstone (fresh manager); DB status must still refuse.
         row = sandbox(user=test_user, status=SandboxStatus.TERMINATED)
         manager = StubSandboxManager()
         assert row.id not in manager._terminated_sandboxes
@@ -61,9 +53,7 @@ class TestTerminatedSandboxFastFail:
         test_user: User,
         sandbox: Callable[..., Sandbox],
     ) -> None:
-        # SLEEPING = pod torn down, snapshot saved to S3. The backend is gone,
-        # so a bus built against it is just as doomed as a terminal one and must
-        # be refused (it would otherwise burn its full reconnect budget).
+        # SLEEPING = pod torn down (snapshot in S3); backend is gone, so refuse.
         row = sandbox(user=test_user, status=SandboxStatus.SLEEPING)
         manager = StubSandboxManager()
 
@@ -76,7 +66,7 @@ class TestTerminatedSandboxFastFail:
         test_user: User,
         sandbox: Callable[..., Sandbox],
     ) -> None:
-        # A RUNNING sandbox is healthy — the guard must let bus creation proceed.
+        # RUNNING is healthy — bus creation proceeds.
         row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
         manager = StubSandboxManager()
 
@@ -93,9 +83,7 @@ class TestTerminatedSandboxFastFail:
         test_user: User,
         sandbox: Callable[..., Sandbox],
     ) -> None:
-        # Guard against conflating "not yet ready" with "terminated": a
-        # PROVISIONING sandbox lacks a ready backend but is NOT terminal, so it
-        # must be allowed to build a bus and proceed toward the readiness wait.
+        # PROVISIONING is not-yet-ready, not gone — must not be fast-failed.
         row = sandbox(user=test_user, status=SandboxStatus.PROVISIONING)
         manager = StubSandboxManager()
 
