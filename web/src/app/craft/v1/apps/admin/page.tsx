@@ -70,10 +70,6 @@ export default function ExternalAppsAdminPage() {
     (descriptors ?? []).map((d) => [d.app_type, d])
   );
 
-  // At most one built-in app per type is allowed, so a type that's already
-  // configured is dropped from the "add" list (it would only error on submit).
-  // Covers cloud, where Onyx-managed built-ins are pre-provisioned; admin/user-
-  // configurable built-ins are still added here normally.
   const availableDescriptors = availableBuiltInDescriptors(
     descriptors ?? [],
     apps ?? []

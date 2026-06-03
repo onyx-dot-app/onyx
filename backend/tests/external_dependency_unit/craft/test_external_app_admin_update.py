@@ -101,7 +101,6 @@ def test_partial_patch_leaves_other_fields_untouched(
     app = _slack_app(db_session)
     app_id = app.id
 
-    # Only toggle enablement; name + config must survive untouched.
     api.update_external_app_admin(
         external_app_id=app_id,
         request=UpdateExternalAppRequest(enabled=False),
@@ -143,7 +142,6 @@ def test_patch_rolls_back_when_push_fails(
             db_session=db_session,
         )
 
-    # The handler never reached commit; rolling back discards the flushed change.
     db_session.rollback()
     stored = get_external_app_by_id(db_session, app_id)
     assert stored is not None

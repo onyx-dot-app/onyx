@@ -771,8 +771,6 @@ async def setup_tenant(tenant_id: str) -> None:
             # Configure default API keys
             configure_default_api_keys(db_session)
 
-            # Provision Onyx-managed built-in external apps (disabled) with
-            # Onyx-owned credentials
             provision_built_in_external_apps(db_session)
 
             # Set up Onyx with appropriate settings

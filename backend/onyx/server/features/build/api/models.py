@@ -330,9 +330,8 @@ class CreateBuiltInExternalAppRequest(BaseModel):
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
     organization_credentials: dict[str, str]
-    # Per-action overrides by catalog action id (built-in apps); validated on
-    # create. A map full-replaces stored overrides (empty clears); None leaves
-    # every action at its default.
+    # Map full-replaces stored overrides (empty clears); None defaults every
+    # action. Keyed by catalog action id; validated on create.
     action_policies: dict[str, EndpointPolicy] | None = None
 
 
@@ -382,9 +381,8 @@ class ExternalAppAdminResponse(BaseModel):
     enabled: bool
     # The merged per-action policy view (built-in apps; empty for custom).
     actions: list[ActionPolicyView]
-    # True for Onyx-managed built-in apps (cloud): credentials + gateway config
-    # are owned by Onyx and blanked above; the admin may only enable/disable and
-    # set policies. The UI uses this to hide credential/config/delete controls.
+    # Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked above;
+    # admin may only enable/disable + set policies. UI hides the rest.
     is_onyx_managed: bool = False
 
 

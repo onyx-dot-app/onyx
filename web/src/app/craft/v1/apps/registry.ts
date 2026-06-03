@@ -79,9 +79,8 @@ export interface ExternalAppAdminResponse {
   organization_credentials: Record<string, string>;
   enabled: boolean;
   actions: ActionPolicyView[];
-  // True for Onyx-managed built-in apps (cloud): credentials + gateway config
-  // are owned by Onyx (and blanked in this response). The admin may only
-  // enable/disable and set policies — not edit credentials/config or delete.
+  // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
+  // admin may only enable/disable + set policies (the UI hides the rest).
   is_onyx_managed: boolean;
 }
 
@@ -111,15 +110,11 @@ export function findUserAppByName(
 }
 
 /**
- * Built-in descriptors still available to add. At most one built-in app per
- * `app_type` is allowed per deployment (enforced server-side via the built-in
- * skill's unique slug, in cloud and self-hosted alike), so any type that is
- * already configured is dropped from the "Add another" list — offering it would
- * only lead to a duplicate-resource error on submit. On cloud, Onyx-managed
- * built-ins are pre-provisioned (always configured) so they never show here;
- * admin/user-configurable built-ins are not seeded and stay available until
- * configured. Descriptors only cover built-in types, so configured CUSTOM apps
- * (which may repeat) never match and are correctly left untouched.
+ * Built-in descriptors still available to add. Only one app per `app_type` is
+ * allowed (server-enforced via the built-in skill's unique slug), so configured
+ * types are dropped to avoid a duplicate-resource error. Cloud managed built-ins
+ * are pre-provisioned (always configured) and never show here. CUSTOM apps have
+ * no descriptor, so they never match and are left untouched.
  */
 export function availableBuiltInDescriptors(
   descriptors: BuiltInExternalAppDescriptor[],

@@ -131,11 +131,9 @@ interface UpdateExternalAppBody {
 }
 
 /**
- * Partial update of an app, keyed by id (PATCH /admin/apps/{id}). The single
- * update path for built-in apps. For Onyx-managed built-ins the gateway-config
- * fields are Onyx-owned and ignored server-side — only enablement + policies
- * apply. Works for custom apps too (field edits); a custom app's bundle bytes
- * are swapped via {@link replaceCustomAppBundle}.
+ * Partial update of any app (PATCH /admin/apps/{id}). For Onyx-managed built-ins
+ * the gateway-config fields are ignored server-side (only enablement + policies
+ * apply); a custom app's bundle bytes go through {@link replaceCustomAppBundle}.
  */
 export async function updateExternalApp(
   id: number,
@@ -160,7 +158,6 @@ export async function setExternalAppEnabled(
   app: ExternalAppAdminResponse,
   enabled: boolean
 ): Promise<ExternalAppAdminResponse> {
-  // Only `enabled` sent: a toggle must not touch stored policies/config.
   return updateExternalApp(app.id, { enabled });
 }
 

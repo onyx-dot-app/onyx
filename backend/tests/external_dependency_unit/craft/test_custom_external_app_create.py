@@ -152,7 +152,6 @@ def test_edit_updates_config_and_replaces_bundle(
     assert skill is not None
     original_bundle_id = skill.bundle_file_id
 
-    # Field edits go through the JSON PATCH (the unified update path).
     edited = api.update_external_app_admin(
         external_app_id=created.id,
         request=UpdateExternalAppRequest(
@@ -172,14 +171,13 @@ def test_edit_updates_config_and_replaces_bundle(
     assert edited.upstream_url_patterns == ["https://api.example.com/v2/*"]
     assert edited.organization_credentials == {}
 
-    # Bundle bytes are swapped through the dedicated multipart endpoint.
     rebundled = api.replace_custom_app_bundle(
         external_app_id=created.id,
         bundle=_upload(f"{slug}.zip", marker="v2"),
         _=test_user,
         db_session=db_session,
     )
-    # The bundle swap preserves the fields set by the PATCH above.
+    # Bundle swap preserves the fields set by the PATCH above.
     assert rebundled.name == "Renamed App"
 
     db_session.expire_all()
@@ -318,7 +316,6 @@ def test_json_admin_apps_rejects_custom(
     db_session: Session,
     test_user: User,
 ) -> None:
-    # The JSON /admin/apps/built-in endpoint is built-in only.
     with pytest.raises(OnyxError):
         api.create_built_in_external_app(
             request=CreateBuiltInExternalAppRequest(

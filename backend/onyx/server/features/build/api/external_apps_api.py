@@ -64,20 +64,15 @@ def _get_app_or_404(db_session: Session, external_app_id: int) -> ExternalApp:
 
 
 def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
-    # Display + lifecycle fields live on the linked Skill row.
     stored = {policy.action_id: policy.policy for policy in app.policies}
-    # In cloud, Onyx owns built-in creds/config: admins only toggle enablement +
-    # set policies. So blank creds/config below and flag the app as managed.
     managed = MULTI_TENANT and is_onyx_managed_app_type(app.app_type)
     return ExternalAppAdminResponse(
         id=app.id,
         name=app.skill.name,
         description=app.skill.description,
         app_type=app.app_type,
-        # Onyx-managed built-ins: the gateway config + credentials are owned by
-        # Onyx and never surfaced to the tenant admin — only identity,
-        # enablement, and policies are shown. Otherwise mask secrets (e.g.
-        # client_secret); the write path restores masked values echoed back.
+        # Managed built-ins: hide Onyx-owned config/creds. Else mask secrets — the
+        # write path restores masked values echoed back unchanged.
         upstream_url_patterns=[] if managed else list(app.upstream_url_patterns),
         auth_template={} if managed else app.auth_template,
         organization_credentials=(
@@ -278,8 +273,7 @@ def create_custom_external_app(
             is_public=True,
             slug=ingested.slug,
         )
-        # Push before commit so a failure rolls back the create; the orphaned
-        # blob is then cleaned up below.
+        # Push before commit so a failure rolls back the create + orphaned blob.
         push_skill_to_affected_sandboxes(app.skill, db_session)
         db_session.commit()
     except Exception:
@@ -319,8 +313,7 @@ def replace_custom_app_bundle(
             new_bundle_file_id=ingested.bundle_file_id,
             new_bundle_sha256=ingested.bundle_sha256,
         )
-        # Push before commit so a failure rolls back the swap; the orphaned
-        # blob is then cleaned up below.
+        # Push before commit so a failure rolls back the swap + orphaned blob.
         push_skill_to_affected_sandboxes(app.skill, db_session)
         db_session.commit()
     except Exception:
@@ -369,11 +362,9 @@ def delete_external_app_admin(
     """Delete an external app, cascading to its user-credential rows. 404 if
     absent.
     """
-    # Resolve affected users *before* the delete cascades the skill row away,
-    # then refresh their sandboxes so the skill is removed live.
+    # Resolve affected users before the delete cascades the skill row away.
     app = _get_app_or_404(db_session, external_app_id)
     if MULTI_TENANT and is_onyx_managed_app_type(app.app_type):
-        # Cloud built-ins are Onyx-provisioned; an admin disables (not deletes).
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx and cannot be deleted.",
@@ -382,8 +373,7 @@ def delete_external_app_admin(
 
     delete_external_app(db_session=db_session, external_app_id=external_app_id)
 
-    # Push before commit so a push failure rolls back the delete rather than
-    # leaving the DB committed and the runtime stale.
+    # Push before commit so a push failure rolls back the delete.
     push_skills_for_users(affected, db_session)
     db_session.commit()
 
@@ -411,9 +401,7 @@ def upsert_user_credentials(
         user_credentials=request.user_credentials,
     )
 
-    # Authenticating flips this user's per-user gate from blocked to allowed,
-    # so refresh their running sandboxes now rather than waiting for the next
-    # one. Scoped to the calling user — credentials are per-user.
+    # Authenticating opens this user's per-user gate; refresh their sandboxes now.
     push_skills_for_users({user.id}, db_session)
 
 

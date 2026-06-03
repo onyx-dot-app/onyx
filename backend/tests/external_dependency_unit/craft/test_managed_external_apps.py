@@ -114,13 +114,11 @@ def test_provisions_all_built_ins_disabled_with_credentials(
     prov.provision_built_in_external_apps(db_session)
     db_session.expire_all()
 
-    # Every Onyx-managed built-in is provisioned, disabled.
     for app_type in _MANAGED_APP_TYPES:
         app = get_built_in_external_app(db_session, app_type)
         assert app is not None, f"{app_type} not provisioned"
         assert app.skill.enabled is False
 
-    # Configured credentials land (decrypted) on the matching app.
     gmail = get_built_in_external_app(db_session, ExternalAppType.GMAIL)
     assert gmail is not None
     assert gmail.organization_credentials.get_value(apply_mask=False) == _GMAIL_CREDS
@@ -143,7 +141,6 @@ def test_provisioning_skipped_when_auto_provision_disabled(
     prov.provision_built_in_external_apps(db_session)
     db_session.expire_all()
 
-    # The flag short-circuits provisioning: no built-in rows are created.
     for app_type in _MANAGED_APP_TYPES:
         assert get_built_in_external_app(db_session, app_type) is None
 
@@ -158,7 +155,6 @@ def test_reconcile_is_idempotent_rotates_and_preserves_enabled(
     )
     prov.provision_built_in_external_apps(db_session)
 
-    # Admin enables the app.
     gmail = get_built_in_external_app(db_session, ExternalAppType.GMAIL)
     assert gmail is not None
     gmail.skill.enabled = True
@@ -172,22 +168,21 @@ def test_reconcile_is_idempotent_rotates_and_preserves_enabled(
     prov.provision_built_in_external_apps(db_session)
     db_session.expire_all()
 
+    # Enabled state survives the reconcile; credentials are rotated in place.
     gmail = get_built_in_external_app(db_session, ExternalAppType.GMAIL)
     assert gmail is not None
-    # Enabled state survives the reconcile; credentials are rotated in place.
     assert gmail.skill.enabled is True
     assert gmail.organization_credentials.get_value(apply_mask=False) == {
         "client_id": "id2",
         "client_secret": "v2",
     }
 
-    # No duplicate row was created.
     rows = list(
         db_session.scalars(
             select(ExternalApp).where(ExternalApp.app_type == ExternalAppType.GMAIL)
         ).all()
     )
-    assert len(rows) == 1
+    assert len(rows) == 1  # no duplicate row created
 
 
 def test_reconcile_does_not_wipe_creds_when_config_absent(
@@ -227,7 +222,6 @@ def test_cloud_blocks_built_in_create(
             db_session=db_session,
         )
     assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
-    # Nothing was created.
     assert get_built_in_external_app(db_session, ExternalAppType.GMAIL) is None
 
 
@@ -263,14 +257,11 @@ def test_cloud_patch_toggles_enablement_and_protects_creds_and_config(
         db_session=db_session,
     )
 
-    # The response never surfaces credentials or gateway config for a managed app.
     assert resp.organization_credentials == {}
     assert resp.auth_template == {}
     assert resp.upstream_url_patterns == []
     assert resp.enabled is True
 
-    # Stored state: enablement flipped; credentials + config untouched by the
-    # admin-supplied values.
     db_session.expire_all()
     gmail = get_built_in_external_app(db_session, ExternalAppType.GMAIL)
     assert gmail is not None
@@ -299,7 +290,6 @@ def test_cloud_blocks_built_in_delete(
             db_session=db_session,
         )
     assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
-    # Still present.
     assert get_built_in_external_app(db_session, ExternalAppType.GMAIL) is not None
 
 

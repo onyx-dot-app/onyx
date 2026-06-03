@@ -90,9 +90,8 @@ export default function ConfigureProviderModal({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Onyx-managed built-in (cloud): credentials + config are owned by Onyx, so
-  // the modal only edits action policies — name + credential fields are hidden,
-  // and saving never touches them (the backend ignores them for managed apps).
+  // Managed built-ins (cloud): Onyx owns creds/config, so the modal only edits
+  // policies — cred fields are hidden and the backend ignores them anyway.
   const managed = existingApp?.is_onyx_managed ?? false;
 
   // Re-seed every time the modal opens so admins can tweak one
@@ -151,17 +150,12 @@ export default function ConfigureProviderModal({
     setError(null);
     try {
       if (managed && existingApp) {
-        // Onyx-managed built-in: credentials + config are Onyx-owned, so the
-        // only thing this modal can persist is the action policies. A partial
-        // PATCH leaves enablement untouched (enable/disable is a separate
-        // admin action).
+        // Managed: only policies are persisted; a partial PATCH leaves the rest.
         await updateExternalApp(existingApp.id, {
           action_policies: policies,
         });
       } else if (existingApp) {
-        // Edit an existing built-in: PATCH the config + policies. Merge creds so
-        // future non-credential metadata on the row (region, instance URL, …)
-        // survives a credential edit.
+        // Merge creds so non-credential metadata survives a credential edit.
         await updateExternalApp(existingApp.id, {
           name: name.trim(),
           description: descriptor.description,
@@ -171,13 +165,11 @@ export default function ConfigureProviderModal({
             ...existingApp.organization_credentials,
             ...credentialValues,
           },
-          // Saving credentials implies enable; disable is a separate action on
-          // the admin page.
+          // Saving credentials implies enable; disable is separate.
           enabled: true,
           action_policies: policies,
         });
       } else {
-        // Create a new built-in.
         await createBuiltInExternalApp({
           name: name.trim(),
           description: descriptor.description,
