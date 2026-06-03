@@ -557,6 +557,34 @@ async def test_pre_approved_scheduled_run_skips_park(
 
 
 @pytest.mark.asyncio
+async def test_pre_approval_dispatch_failure_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dispatch raising after the APPROVED row is committed blocks (403) — it
+    must not let mitmproxy forward the original request."""
+    resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    _spy_pipeline(addon, monkeypatch)
+    _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    _spy_pre_approve_insert(monkeypatch)
+    monkeypatch.setattr(
+        gate_mod,
+        "create_notification",
+        lambda **kw: None,  # noqa: ARG005
+    )
+
+    def _boom(*args: Any, **kwargs: Any) -> None:  # noqa: ARG001
+        raise RuntimeError("credential refresh failed")
+
+    monkeypatch.setattr(addon, "_dispatch_injection_or_block", _boom)
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.INTERNAL_ERROR)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "grants",
     [

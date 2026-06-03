@@ -241,12 +241,24 @@ class GateAddon:
             pre_approved = False
         if pre_approved:
             # Same off-thread rationale as the ALWAYS / post-approval paths.
-            await asyncio.to_thread(
-                self._dispatch_injection_or_block,
-                flow,
-                sandbox=ctx.without_session(),
-                match=match,
-            )
+            # Fail closed: an unguarded raise would let mitmproxy forward the
+            # original request, bypassing the gate after an APPROVED row exists.
+            try:
+                await asyncio.to_thread(
+                    self._dispatch_injection_or_block,
+                    flow,
+                    sandbox=ctx.without_session(),
+                    match=match,
+                )
+            except Exception:
+                logger.exception(
+                    "gate.pre_approved_dispatch_error session_id=%s tenant_id=%s "
+                    "action_type=%s",
+                    ctx.session_id,
+                    ctx.tenant_id,
+                    match.decisive.action_type,
+                )
+                flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             return
 
         # mitmproxy forwards the original request on unhandled addon
