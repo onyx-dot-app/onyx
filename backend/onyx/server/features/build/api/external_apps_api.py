@@ -416,7 +416,6 @@ def delete_external_app_admin(
             "Built-in apps are provided by Onyx and cannot be deleted.",
         )
     if MULTI_TENANT and is_onyx_managed_app_type(app.app_type):
-        # Cloud built-ins are Onyx-provisioned; an admin disables (not deletes).
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx and cannot be deleted.",
