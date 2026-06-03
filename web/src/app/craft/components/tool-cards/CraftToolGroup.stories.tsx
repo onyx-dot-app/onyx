@@ -130,6 +130,68 @@ export const SingleStep: Story = {
   },
 };
 
+// A finished skill group keeps its thin border (the comet is gone). This is
+// what an auto-approved external-app invocation looks like at rest.
+export const CompletedSkill: Story = {
+  args: {
+    defaultOpen: true,
+    toolCalls: [
+      call("g-skill-done-1", {
+        kind: "other",
+        toolName: "skill",
+        title: "Running skill",
+        description: "Post to Slack",
+        skillName: "slack",
+        status: "completed",
+      }),
+      call("g-skill-done-curl", {
+        kind: "execute",
+        toolName: "bash",
+        description: "post message",
+        command: "curl -X POST https://slack.com/api/chat.postMessage ...",
+        skillName: "slack",
+        status: "completed",
+        rawOutput: '{"ok": true, "ts": "1717436531.001"}',
+      }),
+    ],
+  },
+};
+
+// A group that involves an in-flight skill gets a comet edge around the whole
+// block (the skill invocation + the tool calls it makes inside it).
+export const WithActiveSkill: Story = {
+  args: {
+    defaultOpen: true,
+    toolCalls: [
+      call("g-skill-1", {
+        kind: "other",
+        toolName: "skill",
+        title: "Running skill",
+        description: "Deep, multi-source research",
+        skillName: "deep-research",
+        status: "in_progress",
+      }),
+      call("g-skill-grep", {
+        kind: "search",
+        toolName: "grep",
+        title: "Searching content",
+        description: "cloud revenue",
+        skillName: "deep-research",
+        status: "completed",
+        rawOutput: "12 matches across 4 files",
+      }),
+      call("g-skill-fetch", {
+        kind: "other",
+        toolName: "websearch",
+        title: "Searching the web",
+        description: "q3 cloud market share",
+        skillName: "deep-research",
+        status: "in_progress",
+      }),
+    ],
+  },
+};
+
 export const ManyCalls: Story = {
   args: {
     toolCalls: [

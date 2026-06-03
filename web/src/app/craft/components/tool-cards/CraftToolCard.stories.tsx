@@ -227,6 +227,41 @@ export const WithSkillBadge: Story = {
 };
 
 // ──────────────────────────────────────────────────────────────────────────
+// Skill invocations — a skill in flight gets a traveling comet edge (the live
+// signal). Once it completes the comet is gone; only the check remains.
+// Regular tool calls never get the comet, even mid-flight.
+// ──────────────────────────────────────────────────────────────────────────
+
+export const SkillInFlight: Story = {
+  args: {
+    toolCall: call({
+      kind: "other",
+      toolName: "skill",
+      title: "Running skill",
+      description: "Deep, multi-source research",
+      skillName: "deep-research",
+      status: "in_progress",
+    }),
+  },
+};
+
+export const SkillCompleted: Story = {
+  args: {
+    toolCall: call({
+      kind: "other",
+      toolName: "skill",
+      title: "Running skill",
+      description: "Review the current diff for correctness bugs",
+      command: "/code-review medium",
+      skillName: "code-review",
+      status: "completed",
+      rawOutput:
+        "Found 2 must-fix and 3 should-consider findings. See full review for details.",
+    }),
+  },
+};
+
+// ──────────────────────────────────────────────────────────────────────────
 // Behavioral overrides — defaultOpen, dense mode.
 // ──────────────────────────────────────────────────────────────────────────
 
