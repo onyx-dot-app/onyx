@@ -35,7 +35,10 @@ Controlled sidebar that handles three viewport sizes:
 
 ### MainContent
 
-`flex-1` block that fills the remaining horizontal space.
+`flex-1 flex-col` block that fills the remaining horizontal space. Direct children
+stack vertically, so `Header`, a scrollable content div (`flex-1 overflow-auto`),
+and `Footer` pin correctly without an extra wrapper. Accepts all standard `div`
+props (e.g. `className`, `data-*`) for consumer-level overrides.
 
 ### LeftPanel / RightPanel
 

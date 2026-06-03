@@ -115,8 +115,18 @@ function RootLayoutSidebar({
 // MainContent — fills remaining flex space
 // ---------------------------------------------------------------------------
 
-function RootLayoutMainContent({ children }: { children: ReactNode }) {
-  return <div className="opal-root-layout__main">{children}</div>;
+type RootLayoutMainContentProps = React.HTMLAttributes<HTMLDivElement>;
+
+function RootLayoutMainContent({
+  children,
+  className,
+  ...props
+}: RootLayoutMainContentProps) {
+  return (
+    <div className={cn("opal-root-layout__main", className)} {...props}>
+      {children}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------

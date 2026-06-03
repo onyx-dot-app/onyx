@@ -41,9 +41,9 @@
   @apply opacity-100 pointer-events-auto;
 }
 
-/* Main content — fills remaining flex space */
+/* Main content — fills remaining flex space; flex-col so Header/Footer pin correctly */
 .opal-root-layout__main {
-  @apply flex-1 overflow-auto h-full w-full;
+  @apply flex-1 flex flex-col overflow-hidden h-full w-full;
 }
 
 /* Panel — permanent column (width is caller-supplied via className) */
