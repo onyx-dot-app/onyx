@@ -383,3 +383,15 @@ def test_sandbox_pod_hosts_degrades_to_fqdn_when_pod_unreadable() -> None:
     hosts = mgr._sandbox_pod_hosts(_sandbox_id())
     assert len(hosts) == 1
     assert hosts[0].endswith(".sandbox-test.svc.cluster.local")
+
+
+def test_push_pod_404_is_retriable() -> None:
+    mgr = _make_manager(pod_read_exc=ApiException(status=404, reason="Not Found"))
+    factory = _mock_httpx_client(raise_exc=httpx.ConnectError("no endpoints"))
+    with patch(_HTTPX_CLIENT_PATH, factory):
+        with pytest.raises(RetriableWriteError):
+            mgr.write_files_to_sandbox(
+                sandbox_id=_sandbox_id(),
+                mount_path="/workspace/managed/skills",
+                files=_files(),
+            )
