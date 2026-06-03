@@ -223,8 +223,12 @@ func runCelery(workers []celeryWorker, opts *CeleryOptions) {
 
 		log.Debugf("[%s] uv %s", w.name, strings.Join(runArgs, " "))
 		if err := svcCmd.Start(); err != nil {
+			// A partial startup would leave a silently degraded stack, so tear
+			// down the workers we did start and fail.
 			log.Errorf("Failed to start celery %s: %v", w.name, err)
-			continue
+			terminateCeleryWorkers(cmds)
+			wg.Wait()
+			os.Exit(1)
 		}
 
 		cmds = append(cmds, svcCmd)
@@ -237,10 +241,6 @@ func runCelery(workers []celeryWorker, opts *CeleryOptions) {
 		}(svcCmd, w.name)
 	}
 
-	if len(cmds) == 0 {
-		log.Fatal("No celery workers started")
-	}
-
 	// Forward the first interrupt to every worker's process group, then wait
 	// for them to drain.
 	sigCh := make(chan os.Signal, 1)
@@ -248,14 +248,20 @@ func runCelery(workers []celeryWorker, opts *CeleryOptions) {
 	go func() {
 		<-sigCh
 		log.Info("Shutting down celery workers...")
-		for _, c := range cmds {
-			if c.Process != nil {
-				_ = syscall.Kill(-c.Process.Pid, syscall.SIGTERM)
-			}
-		}
+		terminateCeleryWorkers(cmds)
 	}()
 
 	wg.Wait()
+}
+
+// terminateCeleryWorkers sends SIGTERM to each worker's process group, stopping
+// the whole tree (uv -> python -> watchfiles fork -> celery).
+func terminateCeleryWorkers(cmds []*exec.Cmd) {
+	for _, c := range cmds {
+		if c.Process != nil {
+			_ = syscall.Kill(-c.Process.Pid, syscall.SIGTERM)
+		}
+	}
 }
 
 // linePrefixWriter buffers bytes until a newline, then writes the complete line
