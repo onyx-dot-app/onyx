@@ -28,14 +28,6 @@ def upsert_document_external_perms(
         select(DbDocument).where(DbDocument.id == doc_id)
     ).first()
 
-    prefixed_external_groups: set[str] = {
-        build_ext_group_name_for_onyx(
-            ext_group_name=group_id,
-            source=source_type,
-        )
-        for group_id in external_access.external_user_group_ids
-    }
-
     if not document:
         # Do NOT pre-create a skeleton row here. The old behavior inserted
         # DbDocument(id=doc_id, semantic_id="") to "stage" permissions for a
@@ -46,12 +38,22 @@ def upsert_document_external_perms(
         # the external access fields from Document.external_access on insert),
         # so permissions land the moment the doc itself does. Worst case, the
         # doc is picked up by the next permission sync run after indexing.
-        logger.info(
+        # debug level since this can fire for every not-yet-indexed doc a
+        # perm sync run enumerates, which can be a very large number
+        logger.debug(
             f"Skipping permission upsert for doc_id={doc_id} since it has not "
             "been indexed yet. Permissions will be set when the document is "
             "indexed or on the next permission sync run."
         )
         return
+
+    prefixed_external_groups: set[str] = {
+        build_ext_group_name_for_onyx(
+            ext_group_name=group_id,
+            source=source_type,
+        )
+        for group_id in external_access.external_user_group_ids
+    }
 
     # If the document exists, we need to check if the external access has changed
     if (
