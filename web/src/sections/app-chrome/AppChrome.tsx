@@ -396,7 +396,10 @@ function HeaderInner({
                 }
                 onOpenChange={(state) => {
                   setPopoverOpen(state);
-                  if (!state) setShowMoveOptions(false);
+                  if (!state) {
+                    setShowMoveOptions(false);
+                    setSearchTerm("");
+                  }
                 }}
                 side="bottom"
                 align="end"
