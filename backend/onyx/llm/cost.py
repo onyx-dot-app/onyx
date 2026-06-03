@@ -47,6 +47,43 @@ def calculate_llm_cost_cents(
         return 0.0
 
 
+def get_model_price_per_million(
+    model: str,
+    provider: str | None,
+    db_session: Session | None = None,
+) -> tuple[float | None, float | None]:
+    """Return (input, output) USD price per 1M tokens for a model, override-aware.
+
+    Same resolution as compute_cost_cents: admin override wins, else litellm's
+    price map. Unknown/unpriced models yield (None, None) — never raises (drives
+    a read-only UI panel).
+    """
+    if db_session is not None:
+        try:
+            rates = cost_overrides.get_override(db_session, model)
+        except Exception:
+            logger.exception("Override lookup failed for model %s", model)
+            rates = None
+        if rates is not None:
+            return rates  # already USD per Mtok
+
+    try:
+        import litellm
+
+        # custom_llm_provider disambiguates non-self-identifying names so the
+        # same model resolves the same way it does for billing.
+        entry = litellm.get_model_info(model=model, custom_llm_provider=provider)
+        input_per_tok = entry.get("input_cost_per_token")
+        output_per_tok = entry.get("output_cost_per_token")
+        return (
+            float(input_per_tok) * 1_000_000 if input_per_tok is not None else None,
+            float(output_per_tok) * 1_000_000 if output_per_tok is not None else None,
+        )
+    except Exception:
+        logger.debug("No price-per-million for model %s (provider %s)", model, provider)
+        return None, None
+
+
 def _image_cost_cents(model: str) -> float:
     """Per-image cost in cents from litellm, falling back to a flat constant."""
     try:
