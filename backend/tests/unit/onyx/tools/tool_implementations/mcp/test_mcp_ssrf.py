@@ -8,6 +8,8 @@ import asyncio
 import httpx
 import pytest
 
+from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
+from onyx.auth.oauth_token_manager import OAuthFlowParams
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp import api
@@ -83,7 +85,9 @@ def test_transport_blocks_before_network() -> None:
 
 def test_error_hint_for_loopback_omits_env_var() -> None:
     with pytest.raises(OnyxError) as exc_info:
-        api._validate_mcp_server_url("http://localhost:9000/mcp", "server_url")
+        api._validate_mcp_server_url(
+            "http://localhost:9000/mcp", "server_url", require_https=False
+        )
     detail = exc_info.value.detail
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
     assert "never permitted" in detail
@@ -92,7 +96,43 @@ def test_error_hint_for_loopback_omits_env_var() -> None:
 
 def test_error_hint_for_private_points_at_env_var() -> None:
     with pytest.raises(OnyxError) as exc_info:
-        api._validate_mcp_server_url("http://10.0.0.5/mcp", "server_url")
+        api._validate_mcp_server_url(
+            "http://10.0.0.5/mcp", "server_url", require_https=False
+        )
     detail = exc_info.value.detail
     assert "MCP_SERVER_ALLOW_PRIVATE_NETWORK=true" in detail
     assert "never permitted" not in detail
+
+
+def test_oauth_endpoint_rejects_http_at_store_time() -> None:
+    """http OAuth endpoints must fail at save time, matching the fetch-time
+    https_only check, so a saved server can't silently fail the OAuth flow."""
+    with pytest.raises(OnyxError) as exc_info:
+        api._validate_mcp_server_url(
+            "http://token.example.com/token", "oauth_token_endpoint", require_https=True
+        )
+    detail = exc_info.value.detail
+    assert "https" in detail.lower()
+    # Scheme failure shouldn't tack on the private-network hint.
+    assert "MCP_SERVER_ALLOW_PRIVATE_NETWORK" not in detail
+
+
+def test_server_url_allows_http() -> None:
+    api._validate_mcp_server_url(
+        "http://8.8.8.8/mcp", "server_url", require_https=False
+    )
+
+
+def test_exchange_raises_ssrf_for_internal_token_url() -> None:
+    """Locks the contract the MCP callback relies on: an internal token endpoint
+    fails with SSRFException (before any network call), so the callback's
+    SSRFException handler converts it to a clean error instead of a 500."""
+    params = OAuthFlowParams(
+        authorization_url="https://provider.example.com/authorize",
+        token_url="https://169.254.169.254/token",
+        client_id="client-123",
+    )
+    with pytest.raises(SSRFException):
+        exchange_oauth_code_for_token(
+            params, code="abc", redirect_uri="https://onyx.example.com/cb"
+        )

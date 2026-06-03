@@ -17,12 +17,14 @@ from onyx.utils.sensitive import SensitiveValue
 from onyx.utils.url import validate_outbound_http_url
 
 
-def _validate_oauth_token_url(token_url: str) -> None:
-    """SSRF guard for admin-configured OAuth token endpoints. Private targets
-    gated behind ``MCP_SERVER_ALLOW_PRIVATE_NETWORK``; loopback/cloud-metadata
-    always blocked. ``https_only`` since token endpoints must be TLS."""
+def validate_oauth_endpoint_url(url: str) -> None:
+    """SSRF guard for admin-configured OAuth endpoints, shared by store-time
+    (MCP server upsert) and fetch-time (token exchange/refresh) so the policy
+    can't drift. Private targets gated behind ``MCP_SERVER_ALLOW_PRIVATE_NETWORK``;
+    loopback/cloud-metadata always blocked. ``https_only`` since OAuth endpoints
+    must be TLS."""
     validate_outbound_http_url(
-        token_url,
+        url,
         allow_private_network=MCP_SERVER_ALLOW_PRIVATE_NETWORK,
         https_only=True,
         block_loopback_and_link_local=True,
@@ -101,7 +103,7 @@ def exchange_oauth_code_for_token(
     if code_verifier:
         data["code_verifier"] = code_verifier
 
-    _validate_oauth_token_url(params.token_url)
+    validate_oauth_endpoint_url(params.token_url)
     response = requests.post(
         params.token_url, data=data, headers={"Accept": "application/json"}
     )
@@ -172,7 +174,7 @@ class OAuthTokenManager:
                 self.oauth_config.client_secret
             ),
         }
-        _validate_oauth_token_url(self.oauth_config.token_url)
+        validate_oauth_endpoint_url(self.oauth_config.token_url)
         response = requests.post(
             self.oauth_config.token_url,
             data=data,

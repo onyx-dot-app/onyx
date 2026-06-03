@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.oauth_token_manager import build_oauth_authorization_url
 from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
 from onyx.auth.oauth_token_manager import OAuthFlowParams
+from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
@@ -99,10 +100,13 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-def _ssrf_error_hint(url: str) -> str:
+def _ssrf_error_hint(url: str, error: Exception) -> str:
     """Guidance for a blocked MCP URL: only point at the private-network opt-in
     when it would actually unblock the host. Loopback/localhost/link-local are
-    never reachable regardless of the flag, so don't suggest it for them."""
+    never reachable regardless of the flag, so don't suggest it for them; scheme
+    errors (e.g. http for an OAuth endpoint) get no address hint at all."""
+    if "scheme" in str(error).lower():
+        return ""
     host = (urlparse(url).hostname or "").lower()
     never_allowed = host in BLOCKED_HOSTNAMES
     if not never_allowed:
@@ -125,17 +129,25 @@ def _ssrf_error_hint(url: str) -> str:
     return ""
 
 
-def _validate_mcp_server_url(url: str | None, field: str) -> None:
+def _validate_mcp_server_url(
+    url: str | None, field: str, *, require_https: bool
+) -> None:
     """Store-time SSRF guard for a curator-supplied URL; raises ``OnyxError``
-    for a field-level frontend error. Fetch-time guards (mcp_client,
+    for a field-level frontend error. ``require_https`` routes OAuth endpoints
+    through the same validator the token exchange uses at fetch time, so a URL
+    that saves cleanly can't be rejected later. Fetch-time guards (mcp_client,
     oauth_token_manager) still cover SDK-followed redirects and DNS rebinding."""
     if not url:
         return
+    validator = (
+        validate_oauth_endpoint_url if require_https else validate_mcp_outbound_url
+    )
     try:
-        validate_mcp_outbound_url(url)
+        validator(url)
     except (SSRFException, ValueError) as e:
         raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT, f"Invalid {field}: {e}{_ssrf_error_hint(url)}"
+            OnyxErrorCode.INVALID_INPUT,
+            f"Invalid {field}: {e}{_ssrf_error_hint(url, e)}",
         )
 
 
@@ -979,6 +991,13 @@ async def process_oauth_callback(
                 _mcp_oauth_redirect_uri(),
                 code_verifier=state_data.code_verifier,
             )
+        except (SSRFException, ValueError) as e:
+            # Fetch-time SSRF guard (e.g. DNS rebinding, or a pre-existing
+            # internal endpoint) — surface a clean 400, not an unhandled 500.
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Known-provider OAuth token endpoint is not allowed: {e}",
+            )
         except requests.HTTPError as e:
             detail = e.response.text if e.response is not None else str(e)
             upstream_status = e.response.status_code if e.response is not None else None
@@ -1760,11 +1779,15 @@ def _upsert_mcp_server(
     """
     Creates a new or edits an existing MCP server. Returns the DB model
     """
-    _validate_mcp_server_url(request.server_url, "server_url")
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
     _validate_mcp_server_url(
-        request.oauth_authorization_endpoint, "oauth_authorization_endpoint"
+        request.oauth_authorization_endpoint,
+        "oauth_authorization_endpoint",
+        require_https=True,
     )
-    _validate_mcp_server_url(request.oauth_token_endpoint, "oauth_token_endpoint")
+    _validate_mcp_server_url(
+        request.oauth_token_endpoint, "oauth_token_endpoint", require_https=True
+    )
 
     mcp_server = None
     admin_config = None
@@ -2375,7 +2398,7 @@ def create_mcp_server_simple(
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
-    _validate_mcp_server_url(request.server_url, "server_url")
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
 
     mcp_server = create_mcp_server__no_commit(
         owner_email=user.email,
@@ -2428,7 +2451,7 @@ def update_mcp_server_simple(
 
     _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
-    _validate_mcp_server_url(request.server_url, "server_url")
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
 
     # Update only provided fields
     updated_server = update_mcp_server__no_commit(

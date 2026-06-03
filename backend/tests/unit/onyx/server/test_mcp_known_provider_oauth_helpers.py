@@ -121,6 +121,11 @@ def test_known_provider_code_exchange_sends_code_verifier(
         return _Response()
 
     monkeypatch.setattr("onyx.auth.oauth_token_manager.requests.post", _fake_post)
+    # Placeholder host can't resolve; the SSRF guard is exercised in test_mcp_ssrf.
+    monkeypatch.setattr(
+        "onyx.auth.oauth_token_manager.validate_oauth_endpoint_url",
+        lambda url: None,  # noqa: ARG005
+    )
 
     token_payload = exchange_oauth_code_for_token(
         _mcp_known_provider_flow_params(
