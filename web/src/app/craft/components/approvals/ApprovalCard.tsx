@@ -29,6 +29,9 @@ import PayloadView from "@/app/craft/components/approvals/PayloadView";
 import CometEdge from "@/app/craft/components/CometEdge";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
+// Hold the settled edge so the cross-fade is visible before the row unmounts.
+const SETTLE_HOLD_MS = 800;
+
 interface ApprovalCardProps {
   approval: ApprovalView;
   defaultOpen?: boolean;
@@ -100,8 +103,6 @@ export default function ApprovalCard({
 
   const decided = decision !== null;
   const approved = decision === "APPROVED";
-  // Hold the settled edge so the cross-fade is visible before unmount.
-  const SETTLE_HOLD_MS = 800;
 
   async function decide(next: ApprovalSubmitDecision) {
     setSubmitting(true);
@@ -114,11 +115,14 @@ export default function ApprovalCard({
       }, SETTLE_HOLD_MS);
     } catch (e) {
       // 409 = already resolved (by someone else, or expired by the
-      // proxy). Same UX as a successful submit: refetch and unmount.
+      // proxy). Same UX as a successful submit: hold the settle, then refetch.
       if (e instanceof ApprovalConflictError) {
-        void mutate(swrKey);
+        settleTimer.current = setTimeout(() => {
+          void mutate(swrKey);
+        }, SETTLE_HOLD_MS);
         return;
       }
+      console.error("Failed to submit approval decision:", e);
       if (mountedRef.current) {
         setDecision(null);
         setErrorMessage(
@@ -154,11 +158,6 @@ export default function ApprovalCard({
         )}
       >
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          {/*
-           * Two triggers (header + chevron) because action buttons can't
-           * nest inside a trigger (invalid HTML) and shouldn't toggle the
-           * collapse. `data-approval-trigger` scopes the row's hover tint.
-           */}
           <div
             className={cn(
               "flex items-center gap-1 pr-2 transition-colors",
