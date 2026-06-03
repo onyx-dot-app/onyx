@@ -20,7 +20,7 @@ import SkillCard, { type SkillCardItem } from "@/sections/cards/SkillCard";
 
 export default function UserSkillsPage() {
   const { data, error, isLoading } = useUserSkills();
-  const { isAdmin } = useUser();
+  const { isAdmin, isCurator } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -65,14 +65,18 @@ export default function UserSkillsPage() {
         title="Skills"
         description="Capability bundles your Craft agent can reach for. Skills are granted by admins; this page shows what's currently available to you."
         rightChildren={
-          isAdmin ? (
-            <Button
-              href="/admin/skills"
-              prominence="secondary"
-              icon={SvgSettings}
-            >
-              Manage skills
-            </Button>
+          isAdmin || isCurator ? (
+            // Center vertically in the stretched header row (consistent across
+            // the Craft skills/apps pages).
+            <div className="flex items-center gap-2">
+              <Button
+                href="/craft/v1/skills/manage"
+                prominence="secondary"
+                icon={SvgSettings}
+              >
+                Manage skills
+              </Button>
+            </div>
           ) : undefined
         }
       >

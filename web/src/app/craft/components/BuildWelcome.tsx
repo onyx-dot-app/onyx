@@ -54,7 +54,7 @@ export default function BuildWelcome({
               as="p"
               headingH1
               text05
-              className="!text-[2.25rem] !leading-none"
+              className="!text-[2.625rem] !leading-none"
             >
               craft
             </Text>

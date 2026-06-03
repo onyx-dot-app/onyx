@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Button, MessageCard } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { SvgBlocks, SvgPlus, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowLeft, SvgBlocks, SvgPlus, SvgSimpleLoader } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -25,7 +25,14 @@ import type { CustomSkill } from "@/refresh-pages/admin/SkillsPage/interfaces";
 // Page
 // ---------------------------------------------------------------------------
 
-export default function SkillsPage() {
+interface SkillsPageProps {
+  // Renders an inline "Back" action in the header's right slot (not the stacked
+  // Opal back-button row) so the title stays anchored across the personal↔manage
+  // transition.
+  onBack?: () => void;
+}
+
+export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
   const { data, error, isLoading, refresh } = useAdminSkills();
 
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -86,15 +93,28 @@ export default function SkillsPage() {
   }
 
   return (
-    <SettingsLayouts.Root width="lg">
+    <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgBlocks}
         title="Skills"
         description="Capability bundles the Craft agent can reach for. Built-in skills ship with Onyx; custom skills are uploaded zip bundles, gated by group grants."
         rightChildren={
-          <Button icon={SvgPlus} onClick={() => setUploadOpen(true)}>
-            Upload skill
-          </Button>
+          // Center vertically in the stretched header row (consistent across
+          // the Craft skills/apps pages).
+          <div className="flex items-center gap-2">
+            {onBack && (
+              <Button
+                prominence="secondary"
+                icon={SvgArrowLeft}
+                onClick={onBack}
+              >
+                Back
+              </Button>
+            )}
+            <Button icon={SvgPlus} onClick={() => setUploadOpen(true)}>
+              Upload skill
+            </Button>
+          </div>
         }
       />
       <SettingsLayouts.Body>
