@@ -273,7 +273,7 @@ class TestGetLlmConfigFallback:
             [_provider(name="az", provider="azure", models=[_model("gpt-5.5")])]
         ):
             try:
-                self._manager().build_llm_configs(self._user(), None, None)[0]
+                self._manager().build_llm_configs(self._user(), None, None)
             except OnyxError as e:
                 assert e.status_code == 400
             else:
@@ -296,7 +296,7 @@ class TestGetLlmConfigFallback:
     def test_raises_onyx_error_when_no_supported_provider(self) -> None:
         with self._patch_providers([]):
             try:
-                self._manager().build_llm_configs(self._user(), None, None)[0]
+                self._manager().build_llm_configs(self._user(), None, None)
             except OnyxError as e:
                 assert e.status_code == 400
             else:
