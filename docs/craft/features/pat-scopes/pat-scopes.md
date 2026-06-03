@@ -68,6 +68,12 @@ routes guarded by a permission, and `require_permission` then adjudicates covera
 sessions, and API-key auth (token scopes `None`) are untouched; websocket auth has its own path and is
 unaffected.
 
+**Identity endpoints are scope-exempt.** "Who am I" endpoints must be reachable by any valid token
+regardless of authority — the industry-standard treatment of OAuth `/userinfo`. A route marks itself
+with a `scope_exempt` dependency (a sibling `_is_scope_exempt` sentinel the gate honors alongside
+`_is_require_permission`), and `/me` carries it. Without it the fail-closed gate would deny a scoped
+PAT on `/me`, which a token has no business being locked out of.
+
 ## Delivery
 
 Sequenced so enforcement is complete before any scoped token exists:
@@ -80,10 +86,15 @@ Sequenced so enforcement is complete before any scoped token exists:
 3. **Fail-closed gate** — `optional_user` denies a scoped PAT on routes that declare no
    `require_permission`, so enforcement covers non-guarded routes too. *Shipped.*
 4. **Re-guard routes** with the fine permissions (search / chat read+write / admin read vs. write).
-   The `READ_ADMIN` split is a real audit, not a rename.
-5. **Scope the Craft PAT** — `ensure_sandbox_pat` mints `[READ_SEARCH]` (plus whatever onyx-cli needs)
-   instead of unrestricted, retiring the "CRAFT PAT grants full user access" caveat. This is the
-   acceptance test for the effort.
+   `POST /search` — the endpoint the Craft sandbox actually hits (its agent's `company-search` skill
+   runs `onyx-cli search`, which calls `POST /search` and nothing else) — now carries `READ_SEARCH`.
+   *Shipped (the one route the sandbox needs).* The rest of the search surface (web-search, the
+   read-only `/manage` metadata used by the separate MCP server) plus the chat read/write and
+   `READ_ADMIN` splits remain.
+5. **Scope the Craft PAT** — `ensure_sandbox_pat` mints `[READ_SEARCH]` instead of unrestricted,
+   retiring the "CRAFT PAT grants full user access" caveat. *Shipped.* This is the acceptance test for
+   the effort: the search-scoped sandbox PAT reaches `POST /search` (via `onyx-cli search`) and `/me`,
+   and nothing else.
 
 Setting scopes when minting a PAT is currently internal (a `create_pat` argument); a user-facing
 API/UI and surfacing scopes on token listings are follow-ups.

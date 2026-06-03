@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
 from onyx.db.enums import PatType
+from onyx.db.enums import Permission
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import PersonalAccessToken
 from onyx.db.models import Sandbox
@@ -55,6 +56,7 @@ def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str
         name=f"craft-{user.id}",
         expiration_days=_PAT_EXPIRATION_DAYS,
         pat_type=PatType.CRAFT,
+        scopes=[Permission.READ_SEARCH],
     )
 
     sandbox.encrypted_pat = raw_token  # ty: ignore[invalid-assignment]
