@@ -17,7 +17,15 @@ import {
 } from "@tests/e2e/mcp/McpOAuthFlow";
 import { expectMcpToolInvoked } from "@tests/e2e/mcp/mcpToolInvocation";
 
-const oauthConfig: McpOAuthConfig = getMcpOAuthConfig();
+// Resolved lazily, not at import. Playwright loads every spec during collection
+// for all projects, so calling getMcpOAuthConfig() at module scope would throw
+// in jobs that don't set the OAuth env (e.g. the lite project) even though they
+// never run this spec. Memoize on first use inside a test, preserving the
+// fail-loudly behavior for the jobs that do run it.
+let _oauthConfig: McpOAuthConfig | null = null;
+function oauthConfig(): McpOAuthConfig {
+  return (_oauthConfig ??= getMcpOAuthConfig());
+}
 
 const DEFAULT_MCP_SERVER_URL =
   process.env.MCP_TEST_SERVER_URL || "http://127.0.0.1:8004/mcp";
@@ -50,7 +58,7 @@ async function verifySessionUser(
   page: Page,
   expected: { email: string; role: string }
 ): Promise<void> {
-  const response = await page.request.get(`${oauthConfig.appBaseUrl}/api/me`);
+  const response = await page.request.get(`${oauthConfig().appBaseUrl}/api/me`);
   expect(response.ok()).toBeTruthy();
   const data = await response.json();
   expect(data.email).toBe(expected.email);
@@ -101,8 +109,8 @@ async function configureOauthServer(
 
   await adminMcp.selectAuthMethod("OAuth");
   await adminMcp.fillOAuthCredentials(
-    oauthConfig.clientId,
-    oauthConfig.clientSecret
+    oauthConfig().clientId,
+    oauthConfig().clientSecret
   );
   // Wait for the connect click to actually start the OAuth navigation before
   // handing off to completeFlow. Otherwise the page is still on
@@ -297,7 +305,7 @@ test.describe("MCP OAuth flows", () => {
     });
     const adminClient = new OnyxApiClient(page.request);
 
-    const oauthFlow = new McpOAuthFlow(page, oauthConfig);
+    const oauthFlow = new McpOAuthFlow(page, oauthConfig());
     const serverName = `PW MCP Admin ${Date.now()}`;
     const agentName = `PW Admin Assistant ${Date.now()}`;
 
@@ -394,7 +402,7 @@ test.describe("MCP OAuth flows", () => {
     });
     const curatorClient = new OnyxApiClient(page.request);
 
-    const oauthFlow = new McpOAuthFlow(page, oauthConfig);
+    const oauthFlow = new McpOAuthFlow(page, oauthConfig());
     const serverName = `PW MCP Curator ${Date.now()}`;
     const agentName = `PW Curator Assistant ${Date.now()}`;
 
@@ -478,7 +486,7 @@ test.describe("MCP OAuth flows", () => {
       ).not.toHaveCount(0);
 
       const editResponse = await curatorTwoPage.request.get(
-        `${oauthConfig.appBaseUrl}/api/admin/mcp/servers/${serverId}`
+        `${oauthConfig().appBaseUrl}/api/admin/mcp/servers/${serverId}`
       );
       expect(editResponse.status()).toBe(403);
       await curatorTwoContext.close();
@@ -503,7 +511,7 @@ test.describe("MCP OAuth flows", () => {
 
     await page.goto(`/app?agentId=${agentId}`, { waitUntil: "load" });
 
-    const oauthFlow = new McpOAuthFlow(page, oauthConfig);
+    const oauthFlow = new McpOAuthFlow(page, oauthConfig());
     const actions = new ActionsPopover(page);
     await actions.ensureServerVisible(serverName, { agentId });
 
