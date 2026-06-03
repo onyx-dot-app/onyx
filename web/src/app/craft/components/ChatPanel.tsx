@@ -29,6 +29,7 @@ import {
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { toast } from "@/hooks/useToast";
+import Dropzone from "react-dropzone";
 import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";
@@ -119,8 +120,12 @@ export default function BuildChatPanel({
 
   // Disable input when pre-provisioning is in progress or failed (waiting for retry)
   const sandboxNotReady = isPreProvisioning || isPreProvisioningFailed;
-  const { currentMessageFiles, hasUploadingFiles, setActiveSession } =
-    useUploadFilesContext();
+  const {
+    currentMessageFiles,
+    hasUploadingFiles,
+    setActiveSession,
+    uploadFiles,
+  } = useUploadFilesContext();
 
   // Ref to access current file state in async callbacks
   const currentFilesRef = useRef(currentMessageFiles);
@@ -423,151 +428,163 @@ export default function BuildChatPanel({
         onClose={() => setShowUpgradeModal(false)}
         limits={limits}
       />
-      {/* Content wrapper - shrinks when output panel opens */}
-      <div
-        className={cn(
-          "flex flex-col h-full transition-all duration-300 ease-in-out",
-          outputPanelOpen ? "w-1/2 pl-4" : "w-full"
-        )}
+      {/* Content wrapper - shrinks when output panel opens. Wrapped in a
+          dropzone so files can be dropped anywhere in the chat area. */}
+      <Dropzone
+        noClick
+        noKeyboard
+        onDrop={(accepted) => {
+          if (accepted.length > 0) uploadFiles(accepted);
+        }}
       >
-        {/* Chat header */}
-        <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3 relative overflow-visible">
-          <div className="flex min-w-0 flex-row items-center gap-2 max-w-[75%]">
-            {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
-            {isMobile && leftSidebarFolded && (
-              <OpalButton
-                icon={SvgSidebar}
-                onClick={() => setLeftSidebarFolded(false)}
-                prominence="tertiary"
-                size="sm"
-              />
+        {({ getRootProps }) => (
+          <div
+            {...getRootProps()}
+            className={cn(
+              "flex flex-col h-full transition-all duration-300 ease-in-out outline-hidden",
+              outputPanelOpen ? "w-1/2 pl-4" : "w-full"
             )}
-            <AgentSwitcher />
-            <ScheduledRunBanner
-              sessionId={sessionId ?? existingSessionId ?? null}
-            />
-          </div>
-          {/* Right cluster: sandbox status sits left of the panel toggle. The
+          >
+            {/* Chat header */}
+            <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3 relative overflow-visible">
+              <div className="flex min-w-0 flex-row items-center gap-2 max-w-[75%]">
+                {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
+                {isMobile && leftSidebarFolded && (
+                  <OpalButton
+                    icon={SvgSidebar}
+                    onClick={() => setLeftSidebarFolded(false)}
+                    prominence="tertiary"
+                    size="sm"
+                  />
+                )}
+                <AgentSwitcher />
+                <ScheduledRunBanner
+                  sessionId={sessionId ?? existingSessionId ?? null}
+                />
+              </div>
+              {/* Right cluster: sandbox status sits left of the panel toggle. The
               toggle stays pinned to the right edge, so the status chip's width
               changes grow leftward into empty space without shifting anything. */}
-          <div className="flex flex-row items-center gap-2 shrink-0">
-            <SandboxStatusIndicator />
-            {/* Output panel toggle — same icon for open and close */}
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-            <IconButton
-              icon={SvgSidebar}
-              onClick={toggleOutputPanel}
-              tooltip={
-                outputPanelOpen ? "Close output panel" : "Open output panel"
-              }
-              tertiary
-              className={cn(
-                "border rounded-full p-2.5!",
-                outputPanelOpen
-                  ? "bg-background-tint-02!"
-                  : "bg-background-tint-00!"
-              )}
-              iconClassName="stroke-text-04! h-5! w-5!"
-            />
-          </div>
-          {/* Soft fade border at bottom */}
-          <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
-        </div>
-
-        {/* Main content area — cross-fades when switching between the main
-            agent and a subagent (keyed by the viewed agent). */}
-        <div
-          ref={scrollContainerRef}
-          onScroll={handleScroll}
-          className="flex flex-col flex-1 min-h-0 overflow-auto"
-        >
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={viewedSubagentSessionId ?? "main"}
-              initial={reduceMotion ? false : { opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
-              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-              className="flex flex-col flex-1"
-            >
-              {isViewingSubagent && viewedSubagentSessionId ? (
-                <SubagentView subagentSessionId={viewedSubagentSessionId} />
-              ) : !hasSession && !existingSessionId ? (
-                <BuildWelcome
-                  onSubmit={handleSubmit}
-                  isRunning={isRunning}
-                  sandboxInitializing={sandboxNotReady}
-                />
-              ) : (
-                <BuildMessageList
-                  messages={session?.messages ?? []}
-                  streamItems={session?.streamItems ?? []}
-                  isStreaming={isRunning}
-                  autoScrollEnabled={isAtBottom}
-                  scrollContainerRef={scrollContainerRef}
-                  trailingAssistantSlot={
-                    <LiveApprovalsRegion
-                      sessionId={sessionId ?? existingSessionId ?? null}
-                    />
+              <div className="flex flex-row items-center gap-2 shrink-0">
+                <SandboxStatusIndicator />
+                {/* Output panel toggle — same icon for open and close */}
+                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
+                <IconButton
+                  icon={SvgSidebar}
+                  onClick={toggleOutputPanel}
+                  tooltip={
+                    outputPanelOpen ? "Close output panel" : "Open output panel"
                   }
+                  tertiary
+                  className={cn(
+                    "border rounded-full p-2.5!",
+                    outputPanelOpen
+                      ? "bg-background-tint-02!"
+                      : "bg-background-tint-00!"
+                  )}
+                  iconClassName="stroke-text-04! h-5! w-5!"
                 />
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-
-        {/* Input bar at bottom when session exists. */}
-        {(hasSession || existingSessionId) && (
-          <div className="px-4 pb-8 pt-4 relative">
-            {/* Soft fade border at top */}
-            <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
-            <div className="max-w-[720px] mx-auto">
-              {/* Scroll to bottom button - shown when user has scrolled away */}
-              {showScrollButton && (
-                <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
-                  <Tooltip tooltip="Scroll to bottom" delayDuration={200}>
-                    <button
-                      onClick={scrollToBottom}
-                      className={cn(
-                        "flex items-center justify-center",
-                        "w-8 h-8 rounded-full",
-                        "bg-background-neutral-inverted-00 border border-border-01",
-                        "shadow-01 hover:shadow-02",
-                        "transition-all duration-200",
-                        "hover:bg-background-tint-inverted-01"
-                      )}
-                      aria-label="Scroll to bottom"
-                    >
-                      <SvgChevronDown
-                        size={20}
-                        className="stroke-background-neutral-00"
-                      />
-                    </button>
-                  </Tooltip>
-                </div>
-              )}
-              {/* The composer stays in view for subagents (layout consistency)
-                  but is disabled — replying to subagents is not supported. */}
-              <CraftInputBar
-                ref={inputBarRef}
-                onSubmit={handleSubmit}
-                isRunning={isRunning}
-                isInterrupting={isInterrupting}
-                onInterrupt={handleInterrupt}
-                disabled={isViewingSubagent}
-                placeholder={
-                  isViewingSubagent
-                    ? "Switch to the main agent to send a message"
-                    : "Continue the conversation..."
-                }
-                queuedMessages={queuedMessages}
-                onQueueMessage={handleQueueMessage}
-                onRemoveQueuedMessage={handleRemoveQueuedMessage}
-              />
+              </div>
+              {/* Soft fade border at bottom */}
+              <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
             </div>
+
+            {/* Main content area — cross-fades when switching between the main
+            agent and a subagent (keyed by the viewed agent). */}
+            <div
+              ref={scrollContainerRef}
+              onScroll={handleScroll}
+              className="flex flex-col flex-1 min-h-0 overflow-auto"
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={viewedSubagentSessionId ?? "main"}
+                  initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
+                  transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                  className="flex flex-col flex-1"
+                >
+                  {isViewingSubagent && viewedSubagentSessionId ? (
+                    <SubagentView subagentSessionId={viewedSubagentSessionId} />
+                  ) : !hasSession && !existingSessionId ? (
+                    <BuildWelcome
+                      onSubmit={handleSubmit}
+                      isRunning={isRunning}
+                      sandboxInitializing={sandboxNotReady}
+                    />
+                  ) : (
+                    <BuildMessageList
+                      messages={session?.messages ?? []}
+                      streamItems={session?.streamItems ?? []}
+                      isStreaming={isRunning}
+                      autoScrollEnabled={isAtBottom}
+                      scrollContainerRef={scrollContainerRef}
+                      trailingAssistantSlot={
+                        <LiveApprovalsRegion
+                          sessionId={sessionId ?? existingSessionId ?? null}
+                        />
+                      }
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {/* Input bar at bottom when session exists. */}
+            {(hasSession || existingSessionId) && (
+              <div className="px-4 pb-8 pt-4 relative">
+                {/* Soft fade border at top */}
+                <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
+                <div className="max-w-[720px] mx-auto">
+                  {/* Scroll to bottom button - shown when user has scrolled away */}
+                  {showScrollButton && (
+                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
+                      <Tooltip tooltip="Scroll to bottom" delayDuration={200}>
+                        <button
+                          onClick={scrollToBottom}
+                          className={cn(
+                            "flex items-center justify-center",
+                            "w-8 h-8 rounded-full",
+                            "bg-background-neutral-inverted-00 border border-border-01",
+                            "shadow-01 hover:shadow-02",
+                            "transition-all duration-200",
+                            "hover:bg-background-tint-inverted-01"
+                          )}
+                          aria-label="Scroll to bottom"
+                        >
+                          <SvgChevronDown
+                            size={20}
+                            className="stroke-background-neutral-00"
+                          />
+                        </button>
+                      </Tooltip>
+                    </div>
+                  )}
+                  {/* The composer stays in view for subagents (layout consistency)
+                  but is disabled — replying to subagents is not supported. */}
+                  <CraftInputBar
+                    ref={inputBarRef}
+                    onSubmit={handleSubmit}
+                    isRunning={isRunning}
+                    isInterrupting={isInterrupting}
+                    onInterrupt={handleInterrupt}
+                    disabled={isViewingSubagent}
+                    placeholder={
+                      isViewingSubagent
+                        ? "Switch to the main agent to send a message"
+                        : "Continue the conversation..."
+                    }
+                    queuedMessages={queuedMessages}
+                    onQueueMessage={handleQueueMessage}
+                    onRemoveQueuedMessage={handleRemoveQueuedMessage}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
-      </div>
+      </Dropzone>
     </div>
   );
 }
