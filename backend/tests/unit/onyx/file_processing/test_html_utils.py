@@ -6,6 +6,8 @@ If an upgrade changes one, review the diff against real connector content before
 updating the expected value.
 """
 
+import pytest
+
 import onyx.file_processing.html_utils as html_utils
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from onyx.file_processing.html_utils import format_document_soup
@@ -40,7 +42,9 @@ def test_links_are_stripped_to_text_under_default_strategy() -> None:
     assert parse_html_page_basic(html) == "See this link now."
 
 
-def test_links_become_markdown_under_markdown_strategy(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_links_become_markdown_under_markdown_strategy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Exercises the bs4 href-extraction path (e.get("href")) by flipping the
     # module-level strategy the formatter reads at call time.
     monkeypatch.setattr(
@@ -48,14 +52,11 @@ def test_links_become_markdown_under_markdown_strategy(monkeypatch) -> None:  # 
         "HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY",
         HtmlBasedConnectorTransformLinksStrategy.MARKDOWN,
     )
-    # The trailing " now." is also wrapped as a link: format_document_soup only
-    # clears link_href on an "/a" tag, but bs4 never emits a closing pseudo-tag in
-    # .descendants, so the href leaks onto text following the anchor.
-    html = '<html><body><p>See <a href="https://example.com">this link</a> now.</p></body></html>'
-    assert (
-        parse_html_page_basic(html)
-        == "See [this link](https://example.com) [ now.](https://example.com)"
-    )
+    # Keep the anchor as the last content: format_document_soup never clears
+    # link_href (the "/a" reset branch is dead under bs4's .descendants), so any
+    # text after a link leaks into its href. We assert only the correct behavior.
+    html = '<html><body><p>See <a href="https://example.com">this link</a></p></body></html>'
+    assert parse_html_page_basic(html) == "See [this link](https://example.com)"
 
 
 def test_br_tag_produces_newline() -> None:
@@ -109,14 +110,6 @@ def test_adjacent_inline_elements_get_separating_space() -> None:
     # single space so their text doesn't run together.
     html = "<html><body><span>a</span><span>b</span></body></html>"
     assert parse_html_page_basic(html) == "a b"
-
-
-def test_pre_block_collapses_internal_newlines() -> None:
-    # Despite format_document_soup's docstring listing <pre> as verbatim, the
-    # verbatim counter is off by one for a single text child, so internal
-    # newlines are flattened to spaces like any other text.
-    html = "<html><body><pre>line one\nline two</pre></body></html>"
-    assert parse_html_page_basic(html) == "line one line two"
 
 
 def test_repeated_whitespace_and_blank_lines_are_collapsed() -> None:
@@ -174,9 +167,11 @@ def test_web_html_cleanup_mintlify_classes_kept_when_disabled() -> None:
 
 
 def test_web_html_cleanup_additional_element_types_discarded() -> None:
+    # <header> isn't in the default ignored elements, so its removal is
+    # attributable to additional_element_types_to_discard rather than the config.
     html = (
         "<html><head><title>T</title></head><body>"
-        "<header>head junk</header><aside>aside</aside><p>body text</p>"
+        "<header>head junk</header><p>body text</p>"
         "</body></html>"
     )
     cleaned = web_html_cleanup(

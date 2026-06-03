@@ -130,6 +130,11 @@ def format_document_soup(
             # td for data cell, th for header
             elif e.name in ["td", "th"] and in_table:
                 text += table_cell_separator
+            # BUG: dead branch. bs4's .descendants never emits closing-tag
+            # pseudo-elements (no Tag has .name == "/table"), so in_table is never
+            # reset -- every node after the first <table> is treated as a cell
+            # (newlines suppressed, text space-joined). Written for a pre-bs4
+            # closing-tag stream.
             elif e.name == "/table":
                 in_table = False
             elif in_table:
@@ -141,6 +146,9 @@ def format_document_soup(
                 link_href = (
                     href_value[0] if isinstance(href_value, list) else href_value
                 )
+            # BUG: dead branch, same cause as "/table" above. link_href is set on
+            # <a> but never cleared, so under the MARKDOWN link strategy the href
+            # leaks onto every text node after the link until the next <a>.
             elif e.name == "/a":
                 link_href = None
             elif e.name in ["p", "div"]:
@@ -158,6 +166,11 @@ def format_document_soup(
                 text += "\n- "
                 list_element_start = True
             elif e.name == "pre":
+                # BUG: off-by-one. verbatim_output is decremented before the > 0
+                # check each iteration, so a count of N protects N-1 nodes; a <pre>
+                # with one text child (the common case) gets 0 protection and its
+                # newlines are stripped. The trailing strip_excessive pass also
+                # re-collapses whitespace even when verbatim does apply.
                 if verbatim_output <= 0:
                     verbatim_output = len(list(e.childGenerator()))
     return strip_excessive_newlines_and_spaces(text)
