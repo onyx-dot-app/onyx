@@ -5558,8 +5558,6 @@ class ScheduledTask(Base):
         back_populates="task",
         cascade="all, delete-orphan",
     )
-    # Apps whose ASK-gated actions skip the park for this task's runs.
-    # Cleared on prompt change — a grant is tied to a specific intent.
     pre_approved_apps: Mapped[list["ScheduledTaskPreApprovedApp"]] = relationship(
         "ScheduledTaskPreApprovedApp",
         back_populates="task",

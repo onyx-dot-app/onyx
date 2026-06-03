@@ -83,23 +83,14 @@ class _AutoApproval:
     notification_data: dict[str, str | int]
 
 
-# Grants for a RUNNING scheduled run are stable for the run's lifetime, so the
-# lookup is cached per session instead of hitting Postgres on every gated
-# request. The TTL bounds staleness from the RUNNING -> terminal transition
-# (e.g. an interactive follow-up on a finished scheduled session must park
-# again once the entry expires).
+# TTL bounds staleness past a run's RUNNING -> terminal transition.
 _GRANT_CACHE_TTL_S = 60.0
-# Soft cap; expired entries are pruned before a write once the map grows past
-# this, bounding memory under a churn of distinct sessions.
 _GRANT_CACHE_MAX_ENTRIES = 4096
 
 
 class _GrantCache:
-    """Per-session TTL cache of the scheduled-run grant lookup.
-
-    Read from the gate's worker threads (the lookup runs under
-    ``asyncio.to_thread``), so every access is lock-guarded.
-    """
+    """Per-session TTL cache of the scheduled-run grant lookup; lock-guarded
+    because the lookup runs on the gate's worker threads."""
 
     def __init__(
         self,
@@ -114,8 +105,7 @@ class _GrantCache:
         self._entries: dict[UUID, tuple[float, ScheduledRunGrants]] = {}
 
     def get(self, session_id: UUID) -> tuple[bool, ScheduledRunGrants]:
-        """Return ``(hit, value)``. ``hit`` is False on miss/expiry — the
-        value is meaningless then and the caller must do the DB lookup."""
+        """``(hit, value)``; on miss ``hit`` is False and the caller hits the DB."""
         now = self._clock()
         with self._lock:
             entry = self._entries.get(session_id)
@@ -188,7 +178,6 @@ class GateAddon:
         # Tracks running `request()` coroutines so the drain can `asyncio.wait`
         # on real completion instead of sleeping. Self-cleaning.
         self._inflight_tasks: set[asyncio.Task[None]] = set()
-        # Per-session cache of the scheduled-run grant lookup (hot path).
         self._grant_cache = _GrantCache()
 
     # ------------------------------------------------------------------
@@ -504,7 +493,7 @@ class GateAddon:
         self, db: Session, ctx: SessionContext, match: RequestMatch
     ) -> _AutoApproval | None:
         """Grant source: a RUNNING scheduled run whose task pre-approves the
-        matched app. App-level granularity, per scheduled-task semantics."""
+        matched app."""
         hit, grants = self._grant_cache.get(ctx.session_id)
         if not hit:
             grants = get_live_scheduled_run_grants(
