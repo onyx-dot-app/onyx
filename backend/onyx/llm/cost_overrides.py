@@ -49,3 +49,53 @@ def invalidate_override_cache() -> None:
     tenant_id = get_current_tenant_id()
     with _cache_lock:
         _cache.pop(tenant_id, None)
+
+
+def list_overrides(db_session: Session) -> list[ModelCostOverride]:
+    """All override rows for the current tenant, ordered by model name."""
+    return list(
+        db_session.execute(select(ModelCostOverride).order_by(ModelCostOverride.model))
+        .scalars()
+        .all()
+    )
+
+
+def upsert_override(
+    db_session: Session,
+    model: str,
+    input_cost_per_mtok: float,
+    output_cost_per_mtok: float,
+) -> ModelCostOverride:
+    """Set the negotiated rates for `model`, creating or replacing its row.
+
+    Rates are USD per million tokens. Caller invalidates the cache and commits.
+    """
+    row = db_session.execute(
+        select(ModelCostOverride).where(ModelCostOverride.model == model)
+    ).scalar_one_or_none()
+
+    if row is None:
+        row = ModelCostOverride(
+            model=model,
+            input_cost_per_mtok=input_cost_per_mtok,
+            output_cost_per_mtok=output_cost_per_mtok,
+        )
+        db_session.add(row)
+    else:
+        row.input_cost_per_mtok = input_cost_per_mtok
+        row.output_cost_per_mtok = output_cost_per_mtok
+
+    db_session.flush()
+    return row
+
+
+def delete_override(db_session: Session, model: str) -> bool:
+    """Remove the override for `model`; False if there was none."""
+    row = db_session.execute(
+        select(ModelCostOverride).where(ModelCostOverride.model == model)
+    ).scalar_one_or_none()
+    if row is None:
+        return False
+    db_session.delete(row)
+    db_session.flush()
+    return True
