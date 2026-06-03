@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import desc
 from sqlalchemy import exists
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
@@ -81,6 +82,37 @@ def get_build_session(
         )
         .one_or_none()
     )
+
+
+async def get_webapp_access_async(
+    db_session: AsyncSession,
+    session_id: UUID,
+) -> tuple[SharingScope, UUID] | None:
+    """(sharing_scope, owner_user_id) for the proxy access check; None if absent."""
+    row = (
+        await db_session.execute(
+            select(BuildSession.sharing_scope, BuildSession.user_id).where(
+                BuildSession.id == session_id
+            )
+        )
+    ).first()
+    return (row[0], row[1]) if row is not None else None
+
+
+async def get_webapp_target_async(
+    db_session: AsyncSession,
+    session_id: UUID,
+) -> tuple[UUID | None, int | None] | None:
+    """(sandbox_id, nextjs_port) in one round-trip; None if the session is absent."""
+    row = (
+        await db_session.execute(
+            select(Sandbox.id, BuildSession.nextjs_port)
+            .select_from(BuildSession)
+            .outerjoin(Sandbox, Sandbox.user_id == BuildSession.user_id)
+            .where(BuildSession.id == session_id)
+        )
+    ).first()
+    return (row[0], row[1]) if row is not None else None
 
 
 def get_user_build_sessions(
