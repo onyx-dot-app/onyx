@@ -388,12 +388,13 @@ def test_stop_closes_active_stream_to_unblock_watch_loop() -> None:
 
 
 def test_synced_clears_after_watch_loop_returns_cleanly() -> None:
-    """A clean return from ``_watch_loop`` (stream EOF, daemon close, network
+    """
+    A clean return from ``_watch_loop`` (stream EOF, daemon close, network
     hiccup -- all converted to StopIteration by CancellableStream) must clear
-    ``_synced``. Otherwise ``/healthz`` keeps reporting 200 during the
-    reconnect backoff window even though we are not actively watching events;
-    a sandbox starting in that window would 403 with
-    ``gate.unidentified_sandbox`` because the cache never saw its start event.
+    ``_synced``. Otherwise ``/healthz`` keeps reporting 200 during the reconnect
+    backoff window even though we are not actively watching events; a sandbox
+    starting in that window would 403 with ``gate.unidentified_sandbox`` because
+    the cache never saw its start event.
     """
     lookup, client = _make_lookup()
     client.containers.list.return_value = []
@@ -413,8 +414,8 @@ def test_synced_clears_after_watch_loop_returns_cleanly() -> None:
 
     lookup._run()
 
-    # The full iteration ran: _initial_sync_done was set, _synced was set
-    # inside the try, and the finally clause cleared _synced again.
+    # The full iteration ran: _initial_sync_done was set, _synced was set inside
+    # the try, and the finally clause cleared _synced again.
     assert lookup._initial_sync_done.is_set()
     assert not lookup._synced.is_set()
     assert call_count[0] == 1

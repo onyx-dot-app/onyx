@@ -151,13 +151,12 @@ class K8sInformerLookup(SandboxIPLookup):
                     backoff,
                 )
             finally:
-                # Clear after every iteration -- including clean returns
-                # from _watch_loop. The K8s API server closes the watch
-                # cleanly every _WATCH_TIMEOUT_SECONDS, so the watch
-                # iterator returns without raising. Without this clear,
-                # /healthz would lie during the reconnect backoff window:
-                # we are no longer actively watching events but _synced
-                # is still set from the prior iteration.
+                # Clear after every iteration -- including clean returns from
+                # _watch_loop. The K8s API server closes the watch cleanly every
+                # _WATCH_TIMEOUT_SECONDS, so the watch iterator returns without
+                # raising. Without this clear, /healthz would lie during the
+                # reconnect backoff window: we are no longer actively watching
+                # events but _synced is still set from the prior iteration.
                 self._synced.clear()
 
             # Wait on the stop event so shutdown is prompt.

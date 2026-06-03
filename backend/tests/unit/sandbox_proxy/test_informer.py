@@ -125,11 +125,12 @@ def test_initial_list_raises_on_duplicate_ip() -> None:
 
 
 def test_synced_clears_after_watch_loop_returns_cleanly() -> None:
-    """The K8s API server closes the watch stream cleanly every
-    ``_WATCH_TIMEOUT_SECONDS`` (300s), so the watch iterator returns
-    without raising. ``_synced`` must clear on that clean return;
-    otherwise ``/healthz`` reports ready during the reconnect backoff
-    window even though we are not actively watching pods.
+    """
+    The K8s API server closes the watch stream cleanly every
+    ``_WATCH_TIMEOUT_SECONDS`` (300s), so the watch iterator returns without
+    raising. ``_synced`` must clear on that clean return; otherwise ``/healthz``
+    reports ready during the reconnect backoff window even though we are not
+    actively watching pods.
     """
     listing = client.V1PodList(
         metadata=client.V1ListMeta(resource_version="42"),
@@ -140,8 +141,8 @@ def test_synced_clears_after_watch_loop_returns_cleanly() -> None:
     lookup = K8sInformerLookup(core_api=core_api)
 
     # Watch.stream() returns an empty iterator so _watch_loop's for-loop
-    # exhausts immediately, simulating a clean server-side close. Set
-    # stop after the first iteration so _run exits.
+    # exhausts immediately, simulating a clean server-side close. Set stop after
+    # the first iteration so _run exits.
     call_count = [0]
 
     class _StubWatch:
@@ -157,8 +158,8 @@ def test_synced_clears_after_watch_loop_returns_cleanly() -> None:
     with patch("onyx.sandbox_proxy.identity_k8s.watch.Watch", _StubWatch):
         lookup._run()
 
-    # The full iteration ran: _initial_sync_done was set, _synced was
-    # set inside the try, and the finally clause cleared _synced again.
+    # The full iteration ran: _initial_sync_done was set, _synced was set inside
+    # the try, and the finally clause cleared _synced again.
     assert lookup._initial_sync_done.is_set()
     assert not lookup._synced.is_set()
     assert call_count[0] == 1
