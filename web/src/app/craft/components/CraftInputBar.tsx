@@ -16,10 +16,8 @@ import EntryInfoPopover from "@/sections/input/EntryInfoPopover";
 import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import InterruptHint from "@/app/craft/components/InterruptHint";
 import { InputChipStrip } from "@/sections/input/InputChipStrip";
-import {
-  PlusMenuButton,
-  type PlusMenuItem,
-} from "@/sections/input/PlusMenuButton";
+import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
+import { buildEntryMenuItems } from "@/app/craft/components/buildEntryMenuItems";
 import { useDoubleEscapeInterrupt } from "@/hooks/useDoubleEscapeInterrupt";
 import useSlashPicker from "@/hooks/useSlashPicker";
 import {
@@ -33,9 +31,6 @@ import {
   flattenSections,
   type PickerEntry,
 } from "@/lib/skills/picker";
-import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
-import { Text } from "@opal/components";
-import { SvgPaperclip, SvgSparkle } from "@opal/icons";
 import type { QueuedMessage } from "@/app/app/interfaces";
 
 export interface CraftInputBarHandle {
@@ -189,57 +184,14 @@ const CraftInputBar = memo(
           />
         ) : undefined;
 
-      // Map skills/apps onto the generic PlusMenuButton model. The menu itself
-      // is domain-agnostic — it just renders action rows and flyout rows.
-      const plusMenuItems = useMemo<Array<PlusMenuItem | null>>(() => {
-        const items: Array<PlusMenuItem | null> = [
-          {
-            key: "files",
-            icon: SvgPaperclip,
-            label: "Add files or photos",
-            onSelect: () => fileInputRef.current?.click(),
-          },
-        ];
-        if (
-          pickerSections.skills.length > 0 ||
-          pickerSections.apps.length > 0
-        ) {
-          items.push(null);
-        }
-        if (pickerSections.skills.length > 0) {
-          items.push({
-            key: "skills",
-            icon: SvgSparkle,
-            label: "Skills",
-            flyoutItems: pickerSections.skills.map((skill) => ({
-              key: skill.slug,
-              icon: SvgSparkle,
-              label: skill.name,
-              description: skill.description,
-              onSelect: () => addEntry(skill),
-            })),
-          });
-        }
-        if (pickerSections.apps.length > 0) {
-          items.push({
-            key: "apps",
-            icon: getAppTypeLogo("CUSTOM"),
-            label: "Apps",
-            flyoutItems: pickerSections.apps.map((app) => ({
-              key: app.slug,
-              icon: getAppTypeLogo(app.appType),
-              label: app.name,
-              rightContent: app.authenticated ? undefined : (
-                <Text font="secondary-body" color="text-03">
-                  Connect
-                </Text>
-              ),
-              onSelect: () => addEntry(app),
-            })),
-          });
-        }
-        return items;
-      }, [pickerSections, addEntry]);
+      const plusMenuItems = useMemo(
+        () =>
+          buildEntryMenuItems(pickerSections, {
+            onAttachFiles: () => fileInputRef.current?.click(),
+            onSelectEntry: addEntry,
+          }),
+        [pickerSections, addEntry]
+      );
 
       const bottomLeftSlot = (
         <>
