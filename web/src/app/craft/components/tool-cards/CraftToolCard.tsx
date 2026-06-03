@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgChevronDown } from "@opal/icons";
@@ -31,6 +31,71 @@ interface CraftToolCardProps {
   defaultOpen?: boolean;
   /** Compact trigger padding for nested rendering inside a group. */
   dense?: boolean;
+  /** Rendered inside a group — drops the failed-state border (the group has one). */
+  nested?: boolean;
+}
+
+/**
+ * Plain-text fallback for the card's primary content (skill, task, generic…).
+ * The actual detail leads ("List Slack Channels for lookup", "Spawning
+ * subagent: …") — not a bare generic verb.
+ */
+function primaryText(toolCall: ToolCallState): string {
+  return toolCall.description || toolCall.title;
+}
+
+/**
+ * A plain verb, a code-formatted chip (command, pattern, path, skill name…),
+ * and an optional plain suffix ("Using <skill> skill").
+ */
+function verbWithCode(verb: string, code: string, suffix?: string): ReactNode {
+  return (
+    <>
+      <Text font="main-ui-muted" color="text-04" nowrap>
+        {verb}
+      </Text>
+      {/* 12px mono (vs the 14px sans verb): DM Mono renders visually larger
+          than the sans face, so the smaller step matches their apparent size. */}
+      <span className="rounded-sm bg-background-tint-01 px-1">
+        <Text font="secondary-mono" color="text-04" nowrap>
+          {code}
+        </Text>
+      </span>
+      {suffix && (
+        <Text font="main-ui-muted" color="text-04" nowrap>
+          {suffix}
+        </Text>
+      )}
+    </>
+  );
+}
+
+/**
+ * Renders the header's primary content. Bash/execute, search, and read/edit
+ * lead with a verb plus the actual command / pattern / file path in a
+ * code-formatted chip; everything else is plain text from `primaryText`.
+ */
+function renderPrimary(toolCall: ToolCallState): ReactNode {
+  if (toolCall.kind === "execute" && toolCall.command) {
+    return verbWithCode("Running ", toolCall.command);
+  }
+  if (toolCall.kind === "search" && toolCall.description) {
+    return verbWithCode("Searching for ", toolCall.description);
+  }
+  if (toolCall.toolName === "skill" && toolCall.skillName) {
+    return verbWithCode("Using ", toolCall.skillName, " skill");
+  }
+  if (
+    (toolCall.kind === "read" || toolCall.kind === "edit") &&
+    toolCall.description
+  ) {
+    return verbWithCode(`${toolCall.title} `, toolCall.description);
+  }
+  return (
+    <Text font="main-ui-muted" color="text-04" nowrap>
+      {primaryText(toolCall)}
+    </Text>
+  );
 }
 
 function renderBody(toolCall: ToolCallState) {
@@ -49,8 +114,6 @@ function renderBody(toolCall: ToolCallState) {
       return <ReadBody toolCall={toolCall} />;
     case "search":
       return <SearchBody toolCall={toolCall} />;
-    case "task":
-      return <TaskBody toolCall={toolCall} />;
     case "other":
     default:
       return <GenericBody toolCall={toolCall} />;
@@ -113,33 +176,36 @@ export default function CraftToolCard({
   toolCall,
   defaultOpen,
   dense = false,
+  nested = false,
 }: CraftToolCardProps) {
   const failed = toolCall.status === "failed";
-  const expandable = hasBodyContent(toolCall);
-  const [isOpen, setIsOpen] = useState(defaultOpen ?? (failed && expandable));
+  // Failed calls are always expandable so the error is reachable, even when
+  // there's no normal body content.
+  const expandable = hasBodyContent(toolCall) || failed;
+  const [isOpen, setIsOpen] = useState(defaultOpen ?? failed);
+
+  // The task tool is its own clickable "Spawning subagent: …" row (no
+  // collapsible body) — it navigates to the spawned subagent's transcript.
+  if (toolCall.kind === "task") {
+    return <TaskBody toolCall={toolCall} />;
+  }
 
   const headerRow = (
     <div className="flex items-center gap-2 min-w-0 w-full">
       {renderStatusIcon(toolCall)}
-      <Text font="main-ui-muted" color="text-04" nowrap>
-        {toolCall.title}
-      </Text>
-      {toolCall.description && (
-        <span className="truncate min-w-0">
-          <Text font="main-ui-body" color="text-03" nowrap>
-            {toolCall.description}
-          </Text>
-        </span>
+      <span className="truncate min-w-0">{renderPrimary(toolCall)}</span>
+      {toolCall.skillName && toolCall.toolName !== "skill" && (
+        <SkillBadge name={toolCall.skillName} />
       )}
-      {toolCall.skillName && <SkillBadge name={toolCall.skillName} />}
-      {expandable && (
-        <SvgChevronDown
-          className={cn(
-            "size-4 stroke-text-03 transition-transform duration-150 shrink-0 ml-auto",
-            !isOpen && "-rotate-90"
-          )}
-        />
-      )}
+      {/* Chevron always rendered to reserve space so the row doesn't shift. */}
+      <SvgChevronDown
+        aria-hidden={!expandable}
+        className={cn(
+          "size-4 stroke-text-03 transition-transform duration-150 shrink-0 ml-auto",
+          !isOpen && "-rotate-90",
+          !expandable && "invisible"
+        )}
+      />
     </div>
   );
 
@@ -153,7 +219,10 @@ export default function CraftToolCard({
     <div
       className={cn(
         "rounded-08",
-        failed && "border border-status-error-03 bg-status-error-00"
+        failed &&
+          (nested
+            ? "bg-status-error-00"
+            : "border border-status-error-03 bg-status-error-00")
       )}
     >
       {expandable ? (
@@ -161,9 +230,7 @@ export default function CraftToolCard({
           <CollapsibleTrigger asChild>
             <button className={triggerClass}>{headerRow}</button>
           </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="px-3 pb-2 pt-0">{renderBody(toolCall)}</div>
-          </CollapsibleContent>
+          <CollapsibleContent>{renderBody(toolCall)}</CollapsibleContent>
         </Collapsible>
       ) : (
         <div className={triggerClass}>{headerRow}</div>

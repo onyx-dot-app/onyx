@@ -43,7 +43,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.python == 'true'
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-backend-check"]
+    runs-on: [runs-on, runner=4cpu-linux-arm64, "run-id=${{ github.run_id }}-backend-check"]
     timeout-minutes: 45
 
 
@@ -74,4 +74,4 @@ jobs:
 
     - name: Run Tests
       shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
-      run: py.test -o junit_family=xunit2 -xv --ff backend/tests/unit
+      run: py.test -o junit_family=xunit2 -v -n auto backend/tests/unit

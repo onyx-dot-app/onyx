@@ -282,7 +282,9 @@ deliberate split posture between fail-closed and fail-open:
   `OnyxError`):
   `unidentified_sandbox | body_too_large | user_rejected | not_authorized | internal_error`.
   `policy_denied` is reserved for Phase 4. The body is
-  `json.dumps({"error": code})` with `content-type: application/json`.
+  `json.dumps({"error": code, "message": prose})` with
+  `content-type: application/json` — `error` is the stable code tooling matches
+  on, `message` is human-readable prose the sandbox agent acts on.
 
 ### SIGTERM drain
 

@@ -2,7 +2,7 @@
 
 import { Text } from "@opal/components";
 import { IndexAttemptStageMetric } from "@/lib/types";
-import { formatDurationMs } from "@/lib/time";
+import { formatDurationMs } from "@opal/time";
 
 interface BatchTotalHeaderProps {
   batchTotal: IndexAttemptStageMetric | null;

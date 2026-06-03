@@ -1,4 +1,4 @@
-{{- if eq (include "onyx.sandboxProxyEnabled" .) "true" }}
+{{- if eq (include "onyx.craftEnabled" .) "true" }}
 apiVersion: v1
 kind: Service
 metadata:

@@ -59,7 +59,6 @@ export interface ScheduledTaskListItem {
   name: string;
   human_readable_schedule: string;
   cron_expression: string;
-  timezone: string;
   editor_mode: EditorMode;
   status: ScheduledTaskStatus;
   next_run_at: string | null;
@@ -74,7 +73,6 @@ export interface ScheduledTaskDetail {
   prompt: string;
   human_readable_schedule: string;
   cron_expression: string;
-  timezone: string;
   editor_mode: EditorMode;
   status: ScheduledTaskStatus;
   next_run_at: string | null;
@@ -89,7 +87,6 @@ export interface ScheduledTaskCreateBody {
   prompt: string;
   editor_mode: EditorMode;
   editor_payload: EditorPayload;
-  timezone: string;
   status?: ScheduledTaskStatus;
   run_immediately?: boolean;
 }
@@ -99,7 +96,6 @@ export interface ScheduledTaskPatchBody {
   prompt?: string;
   editor_mode?: EditorMode;
   editor_payload?: EditorPayload;
-  timezone?: string;
   status?: ScheduledTaskStatus;
 }
 

@@ -19,6 +19,7 @@ from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.models import AssistantMessage
 from onyx.llm.models import TextContentPart
 from onyx.llm.models import ToolMessage
@@ -720,3 +721,262 @@ class TestImageCap:
         assert len(translated) == 1
         assert isinstance(translated[0], UserMessage)
         assert len(_attached_image_file_ids(translated[0])) == 5
+
+
+class TestEmptyAnswerRecovery:
+    """Tests for the empty-answer recovery in run_llm_step_pkt_generator.
+
+    When the model emits real text that is entirely consumed by content/citation
+    processing (e.g. an answer dominated by bracketed-numeric text that matches
+    the citation pattern but has no mapping), the raw model output is surfaced
+    instead of returning an empty answer (which would otherwise raise
+    EmptyLLMResponseError downstream).
+    """
+
+    @staticmethod
+    def _make_llm() -> Any:
+        from unittest.mock import MagicMock
+
+        from onyx.llm.interfaces import LLMConfig
+
+        llm = MagicMock()
+        llm.config = LLMConfig(
+            model_provider="litellm_proxy",
+            model_name="claude-4.6-opus",
+            temperature=0.0,
+            max_input_tokens=100_000,
+        )
+        return llm
+
+    @staticmethod
+    def _content_stream(chunks: list[str]) -> Any:
+        from onyx.llm.model_response import Delta
+        from onyx.llm.model_response import ModelResponseStream
+        from onyx.llm.model_response import StreamingChoice
+
+        def _gen(*_args: Any, **_kwargs: Any) -> Any:
+            for i, chunk in enumerate(chunks):
+                yield ModelResponseStream(
+                    id="chunk",
+                    created="0",
+                    choice=StreamingChoice(
+                        finish_reason="stop" if i == len(chunks) - 1 else None,
+                        delta=Delta(content=chunk),
+                    ),
+                )
+
+        return _gen
+
+    def _run(
+        self,
+        chunks: list[str],
+        *,
+        with_citation_processor: bool,
+        tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO,
+        state_container: Any = None,
+        pre_answer_processing_time: float | None = None,
+        span_sink: list[Any] | None = None,
+    ) -> tuple[Any, list[Any]]:
+        from contextlib import nullcontext
+        from unittest.mock import patch
+
+        from onyx.chat import llm_step as _llm_step_module
+        from onyx.chat.citation_processor import CitationMode
+        from onyx.chat.citation_processor import DynamicCitationProcessor
+        from onyx.chat.llm_step import run_llm_step_pkt_generator
+
+        llm = self._make_llm()
+        llm.stream = self._content_stream(chunks)
+
+        citation_processor = (
+            DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+            if with_citation_processor
+            else None
+        )
+
+        # Capture the generation span so tests can assert what the trace recorded.
+        real_generation_span = _llm_step_module.generation_span
+
+        def _capturing_span(*args: Any, **kwargs: Any) -> Any:
+            span = real_generation_span(*args, **kwargs)
+            if span_sink is not None:
+                span_sink.append(span)
+            return span
+
+        span_patch = (
+            patch.object(_llm_step_module, "generation_span", _capturing_span)
+            if span_sink is not None
+            else nullcontext()
+        )
+
+        with span_patch:
+            gen = run_llm_step_pkt_generator(
+                history=[],
+                tool_definitions=[],
+                tool_choice=tool_choice,
+                llm=llm,
+                placement=Placement(turn_index=0),
+                state_container=state_container,
+                citation_processor=citation_processor,
+                pre_answer_processing_time=pre_answer_processing_time,
+            )
+
+            packets: list[Any] = []
+            result: Any = None
+            while True:
+                try:
+                    packets.append(next(gen))
+                except StopIteration as stop:
+                    result = stop.value
+                    break
+
+        llm_step_result, _ = result
+        return llm_step_result, packets
+
+    def test_recovers_raw_when_citations_strip_entire_answer(self) -> None:
+        """An answer that is entirely an unmapped bracketed number is stripped to
+        empty by the citation processor; recovery surfaces the raw text."""
+        from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+
+        raw = "[1234567890123456789]"
+        llm_step_result, packets = self._run([raw], with_citation_processor=True)
+
+        # Without recovery this would be None -> EmptyLLMResponseError downstream.
+        assert llm_step_result.answer == raw
+        assert llm_step_result.raw_answer == raw
+        assert llm_step_result.tool_calls is None
+
+        # The recovered text is actually streamed to the client.
+        emitted = "".join(
+            p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
+        )
+        assert emitted == raw
+
+    def test_recovers_raw_for_numeric_list_answer(self) -> None:
+        raw = "[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]"
+        llm_step_result, _ = self._run([raw], with_citation_processor=True)
+        assert llm_step_result.answer == raw
+
+    def test_no_recovery_for_normal_answer(self) -> None:
+        """Normal prose is unaffected — answer is the processed text, not a
+        duplicated raw fallback."""
+        from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+
+        chunks = ["The answer ", "is 42."]
+        llm_step_result, packets = self._run(chunks, with_citation_processor=True)
+        assert llm_step_result.answer == "The answer is 42."
+        emitted = "".join(
+            p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
+        )
+        # Streamed exactly once (no duplicate recovery emission).
+        assert emitted == "The answer is 42."
+
+    def test_no_recovery_when_no_content_emitted(self) -> None:
+        """A genuinely empty stream stays empty (so EmptyLLMResponseError can
+        still fire for real provider failures)."""
+        llm_step_result, _ = self._run([""], with_citation_processor=True)
+        assert llm_step_result.answer is None
+        assert llm_step_result.raw_answer is None
+
+    def test_no_recovery_in_required_tool_choice(self) -> None:
+        """In REQUIRED mode pre-tool content is reasoning and an empty answer is
+        expected; recovery must not fire (fallback tool extraction owns it)."""
+        raw = "[1234567890123456789]"
+        llm_step_result, _ = self._run(
+            [raw],
+            with_citation_processor=True,
+            tool_choice=ToolChoiceOptions.REQUIRED,
+        )
+        assert llm_step_result.answer is None
+        assert llm_step_result.raw_answer == raw
+
+    def test_recovered_answer_is_recorded_in_tracing_span(self) -> None:
+        """The generation span output must reflect the recovered answer, not the
+        empty intermediate state (otherwise the recovered turn is invisible in
+        traces)."""
+        raw = "[1234567890123456789]"
+        span_sink: list[Any] = []
+        llm_step_result, _ = self._run(
+            [raw], with_citation_processor=True, span_sink=span_sink
+        )
+        assert llm_step_result.answer == raw
+
+        assert len(span_sink) == 1
+        output = span_sink[0].span_data.output
+        assert output is not None
+        # output is [AssistantMessage.model_dump()]; the recovered text is recorded.
+        assert any(raw in str(entry.get("content")) for entry in output)
+
+    def test_normal_answer_recorded_in_tracing_span(self) -> None:
+        """Sanity check that the moved span-output assignment still records normal
+        answers."""
+        span_sink: list[Any] = []
+        llm_step_result, _ = self._run(
+            ["Hello ", "world."], with_citation_processor=True, span_sink=span_sink
+        )
+        assert llm_step_result.answer == "Hello world."
+        output = span_sink[0].span_data.output
+        assert output is not None
+        assert any("Hello world." in str(entry.get("content")) for entry in output)
+
+    def test_recovery_sets_pre_answer_time_when_no_prior_answer_start(self) -> None:
+        """When all content is swallowed before reaching _emit_content_chunk (e.g.
+        an XML tool-call block the filter strips), recovery fires the
+        AgentResponseStart branch and must persist pre-answer timing — mirroring
+        the normal path — so the metric is not lost."""
+        from unittest.mock import MagicMock
+
+        # A complete <function_calls> block is stripped by the XML content filter,
+        # so _emit_content_chunk never runs and answer_start stays False, while the
+        # raw answer retains the text. No <invoke>, so it is NOT classified as a
+        # tool-call payload (see tests below) and recovery still fires.
+        raw = "<function_calls>noop</function_calls>"
+        state_container = MagicMock()
+        llm_step_result, _ = self._run(
+            [raw],
+            with_citation_processor=True,
+            state_container=state_container,
+            pre_answer_processing_time=1.5,
+        )
+
+        assert llm_step_result.answer == raw
+        state_container.set_pre_answer_processing_time.assert_called_once_with(1.5)
+        state_container.set_answer_tokens.assert_called_with(raw)
+
+    def test_no_recovery_for_xml_tool_call_payload(self) -> None:
+        """When the raw output is XML tool-call markup (emitted as plain text),
+        recovery must NOT fire — run_llm_loop's fallback extraction parses it into
+        a real tool call, and surfacing the raw markup would leak it to the client
+        and pollute context."""
+        from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+
+        raw = (
+            '<function_calls><invoke name="search">'
+            '<parameter name="query">hi</parameter></invoke></function_calls>'
+        )
+        llm_step_result, packets = self._run([raw], with_citation_processor=True)
+
+        # answer stays None so the loop's fallback tool extraction can handle it.
+        assert llm_step_result.answer is None
+        assert llm_step_result.raw_answer == raw
+        # Nothing leaked to the client.
+        emitted = "".join(
+            p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
+        )
+        assert emitted == ""
+
+    def test_no_recovery_for_zero_arg_xml_tool_call(self) -> None:
+        """A zero-argument <invoke> (no <parameter>) is still valid tool-call
+        markup. Recovery must NOT fire — otherwise the raw markup leaks and the
+        fallback extractor can't parse the call."""
+        from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+
+        raw = '<function_calls><invoke name="get_time"></invoke></function_calls>'
+        llm_step_result, packets = self._run([raw], with_citation_processor=True)
+
+        assert llm_step_result.answer is None
+        assert llm_step_result.raw_answer == raw
+        emitted = "".join(
+            p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
+        )
+        assert emitted == ""

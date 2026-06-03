@@ -12,7 +12,7 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 
 # 4.6+ supports adaptive thinking; older needs enabled+budgetTokens.
 _ADAPTIVE_THINKING_MODELS = frozenset(
-    {"claude-opus-4-6", "claude-opus-4-7", "claude-sonnet-4-6"}
+    {"claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6"}
 )
 
 
@@ -79,7 +79,10 @@ _PERMISSIONS_TEMPLATE: dict[str, Any] = {
     "list": "allow",
     "lsp": "allow",
     "patch": "allow",
-    "skill": "allow",
+    # Deny opencode's built-in customize-opencode skill (edits opencode.json
+    # via the skill tool, bypassing our edit/write denies). "*" must precede
+    # the named deny — opencode evaluates skill rules with findLast().
+    "skill": {"*": "allow", "customize-opencode": "deny"},
     "question": "allow",
     "webfetch": "allow",
 }

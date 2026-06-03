@@ -1158,8 +1158,13 @@ class ConfluenceConnector(
                 expand=restrictions_expand,
                 limit=_SLIM_DOC_BATCH_SIZE,
             ):
-                # If you skip images, you'll skip them in the permission sync
-                attachment["metadata"].get("mediaType", "")
+                # If you skip images in the main indexing pass (allow_images
+                # is False), skip them here too. Otherwise the slim path emits
+                # a SlimDocument for an attachment the main path never produces
+                # a Document for, leaving a permanent chunk_count IS NULL row.
+                media_type = attachment.get("metadata", {}).get("mediaType", "")
+                if not self.allow_images and media_type.startswith("image/"):
+                    continue
                 if not validate_attachment_filetype(
                     attachment,
                 ):

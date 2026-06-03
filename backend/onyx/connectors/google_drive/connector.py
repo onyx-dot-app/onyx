@@ -1261,7 +1261,14 @@ class GoogleDriveConnector(
         checkpoint: GoogleDriveCheckpoint,
         next_stage: DriveRetrievalStage,
     ) -> tuple[list[str], list[str]]:
-        all_drive_ids = self.get_all_drive_ids()
+        needs_all_drive_ids = (
+            bool(self._requested_shared_drive_ids)
+            or bool(self._requested_folder_ids)
+            or self.include_shared_drives
+        )
+        all_drive_ids: set[str] = (
+            self.get_all_drive_ids() if needs_all_drive_ids else set()
+        )
         sorted_drive_ids: list[str] = []
         sorted_folder_ids: list[str] = []
         if checkpoint.completion_stage == DriveRetrievalStage.DRIVE_IDS:

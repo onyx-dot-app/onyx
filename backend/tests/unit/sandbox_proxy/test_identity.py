@@ -4,7 +4,11 @@ from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
+import pytest
+
+from onyx.sandbox_proxy import identity as identity_mod
 from onyx.sandbox_proxy.identity import IdentityResolver
+from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SandboxIdentity
 from tests.unit.sandbox_proxy.conftest import StaticLookup
 
@@ -45,13 +49,14 @@ def _identity(ip: str = "10.0.0.1") -> SandboxIdentity:
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_sandbox_happy_path() -> None:
+def test_resolve_sandbox_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     sandbox_user_id = uuid4()
     stub = _StubSession([sandbox_user_id])
     lookup = StaticLookup({"10.0.0.1": _identity()})
     factory = _factory(stub)
 
-    resolver = IdentityResolver(ip_lookup=lookup, db_session_factory=factory)
+    monkeypatch.setattr(identity_mod, "get_session_with_tenant", factory)
+    resolver = IdentityResolver(ip_lookup=lookup)
     sandbox = resolver.resolve_sandbox("10.0.0.1")
 
     assert sandbox is not None
@@ -65,24 +70,28 @@ def test_resolve_sandbox_happy_path() -> None:
     assert stub.scalar_calls == 1
 
 
-def test_resolve_sandbox_unknown_ip_skips_db() -> None:
+def test_resolve_sandbox_unknown_ip_skips_db(monkeypatch: pytest.MonkeyPatch) -> None:
     stub = _StubSession([])
     lookup = StaticLookup({})
     factory = _factory(stub)
 
-    resolver = IdentityResolver(ip_lookup=lookup, db_session_factory=factory)
+    monkeypatch.setattr(identity_mod, "get_session_with_tenant", factory)
+    resolver = IdentityResolver(ip_lookup=lookup)
 
     assert resolver.resolve_sandbox("203.0.113.10") is None
     assert stub.scalar_calls == 0
     assert factory.last_tenant_id is None
 
 
-def test_resolve_sandbox_missing_sandbox_row_returns_none() -> None:
+def test_resolve_sandbox_missing_sandbox_row_returns_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     stub = _StubSession([None])
     lookup = StaticLookup({"10.0.0.1": _identity()})
     factory = _factory(stub)
 
-    resolver = IdentityResolver(ip_lookup=lookup, db_session_factory=factory)
+    monkeypatch.setattr(identity_mod, "get_session_with_tenant", factory)
+    resolver = IdentityResolver(ip_lookup=lookup)
 
     assert resolver.resolve_sandbox("10.0.0.1") is None
     assert stub.scalar_calls == 1
@@ -93,15 +102,39 @@ def test_resolve_sandbox_missing_sandbox_row_returns_none() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_session_by_id_propagates_scalar() -> None:
+def test_resolve_session_by_id_propagates_scalar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Pin both the verified (id returned) and unverified (None) cases so a
     change like wrapping the scalar in a default would fail here."""
     found_id = uuid4()
     stub = _StubSession([found_id, None])
     factory = _factory(stub)
-    resolver = IdentityResolver(ip_lookup=StaticLookup({}), db_session_factory=factory)
+    monkeypatch.setattr(identity_mod, "get_session_with_tenant", factory)
+    resolver = IdentityResolver(ip_lookup=StaticLookup({}))
 
     assert resolver.resolve_session_by_id(found_id, uuid4(), "public") == found_id
     assert resolver.resolve_session_by_id(uuid4(), uuid4(), "public") is None
     assert factory.last_tenant_id == "public"
     assert stub.scalar_calls == 2
+
+
+# ---------------------------------------------------------------------------
+# `with_session` / `without_session` round-trip (the credential-injection seam
+# unpacks the SessionContext back to a ResolvedSandbox on ASK→APPROVED).
+# ---------------------------------------------------------------------------
+
+
+def test_with_session_then_without_session_round_trips() -> None:
+    """A regression that drops any field would silently break ASK→APPROVED
+    credential injection, where resolvers key off `sandbox_id` and `user_id`."""
+    sandbox = ResolvedSandbox(
+        sandbox_id=uuid4(),
+        user_id=uuid4(),
+        tenant_id="tenant-xyz",
+        sandbox_name="sandbox-1",
+        sandbox_ip="10.0.0.99",
+    )
+    session_id = uuid4()
+
+    assert sandbox.with_session(session_id).without_session() == sandbox

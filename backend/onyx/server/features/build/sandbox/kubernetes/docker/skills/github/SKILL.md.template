@@ -1,0 +1,78 @@
+---
+name: github
+description: Read repositories, issues, and pull requests, open new issues, and add comments in GitHub on the user's behalf via a light REST wrapper.
+---
+
+# GitHub
+
+Call the GitHub REST API as the connected user via the bundled helper.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/github/github_api.py <command> [args]
+
+Read commands auto-paginate and prune empty / `*_url` fields. `create-issue`
+and `comment` are the only writes. Use `--raw` to skip pruning;
+`python github_api.py <command> -h` shows its flags.
+
+### The connected user
+
+```
+python github_api.py me
+```
+
+### Repositories
+
+```
+python github_api.py repos [--limit N]
+python github_api.py repo OWNER REPO
+```
+
+### Issues
+
+```
+python github_api.py issues OWNER REPO [--state open|closed|all] [--limit N]
+python github_api.py issue OWNER REPO 123
+```
+
+### Pull requests
+
+```
+python github_api.py pulls OWNER REPO [--state open|closed|all] [--limit N]
+python github_api.py pull OWNER REPO 123
+```
+
+### Search
+
+```
+python github_api.py search-repos "language:python stars:>500" [--limit N]
+python github_api.py search-issues "repo:owner/repo is:open label:bug" [--limit N]
+```
+
+### Open an issue (write)
+
+```
+python github_api.py create-issue OWNER REPO "Title" [--body "Details"]
+```
+
+### Comment on an issue or PR (write)
+
+```
+python github_api.py comment OWNER REPO 123 "Looking into this"
+```
+
+## Output
+
+JSON on stdout. List commands return `{"ok": true, "<command>": [...], "count":
+N, "truncated": bool}` (`truncated` means more results existed past `--limit`).
+Failures return `{"ok": false, "status": <code>, "error": "<message>"}` and exit
+non-zero — surface the error rather than retrying blindly.
+
+## Notes
+
+- Repos are addressed as `OWNER REPO` (two args), not `owner/repo`.
+- Search uses GitHub's query syntax; pass the whole query as one quoted arg.
+- Scopes were chosen by the admin. You cannot widen them; a 403 / `Resource not
+  accessible` usually means the needed scope wasn't granted — tell the user.

@@ -156,6 +156,7 @@ export { default as SvgSettings } from "@opal/icons/settings";
 export { default as SvgShare } from "@opal/icons/share";
 export { default as SvgShield } from "@opal/icons/shield";
 export { default as SvgSidebar } from "@opal/icons/sidebar";
+export { default as SvgSimpleLoader } from "@opal/icons/simple-loader";
 export { default as SvgSlack } from "@opal/icons/slack";
 export { default as SvgSlash } from "@opal/icons/slash";
 export { default as SvgSliders } from "@opal/icons/sliders";
