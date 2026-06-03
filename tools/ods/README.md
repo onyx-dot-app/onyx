@@ -268,10 +268,6 @@ ods background --all
 ods background docfetching docprocessing --no-reload
 ```
 
-This pairs with `ods compose dev --infra`, `ods backend api`,
-`ods backend model_server`, and `ods web dev` to run the full stack on the host
-with hot-reload — no devcontainer or VS Code launch compound required.
-
 ### `web` - Run Frontend Scripts
 
 Run bun scripts from `web/package.json` without manually changing directories.
