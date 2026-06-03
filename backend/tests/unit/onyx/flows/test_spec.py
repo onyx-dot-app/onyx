@@ -2,7 +2,13 @@
 
 import pytest
 
-from onyx.flows.models import ConditionNode, SpecError, parse_spec
+from onyx.flows.models import (
+    MAX_CODE_LENGTH,
+    MAX_FAN_OUT_ITEMS,
+    ConditionNode,
+    SpecError,
+    parse_spec,
+)
 
 
 def http_node(node_id: str, **overrides: object) -> dict:
@@ -185,3 +191,77 @@ def test_rejects_duplicate_ai_output_fields() -> None:
 def test_rejects_unknown_fields() -> None:
     with pytest.raises(SpecError):
         parse_spec({"start": "a", "nodes": [http_node("a", surprise=1)]})
+
+
+def test_an_approval_reaches_both_of_its_branches() -> None:
+    spec = parse_spec(
+        {
+            "start": "gate",
+            "nodes": [
+                {
+                    "id": "gate",
+                    "kind": "HUMAN",
+                    "question": "send it?",
+                    "on_approve": ["send"],
+                    "on_reject": ["log"],
+                },
+                http_node("send"),
+                {"id": "log", "kind": "TRANSFORM", "fields": {"why": "declined"}},
+            ],
+        }
+    )
+
+    assert spec.nodes[0].successors() == ["send", "log"]
+    assert spec.reachable_ids() == {"gate", "send", "log"}
+
+
+def test_rejects_an_approval_that_fans_out() -> None:
+    with pytest.raises(SpecError, match="ask once, then fan out"):
+        parse_spec(
+            {
+                "start": "gate",
+                "nodes": [
+                    {
+                        "id": "gate",
+                        "kind": "HUMAN",
+                        "question": "send it?",
+                        "for_each": "{{ trigger.rows }}",
+                    }
+                ],
+            }
+        )
+
+
+def test_rejects_an_empty_snippet() -> None:
+    with pytest.raises(SpecError, match="code: must not be empty"):
+        parse_spec(
+            {"start": "run", "nodes": [{"id": "run", "kind": "CODE", "code": ""}]}
+        )
+
+
+def test_rejects_a_snippet_longer_than_the_limit() -> None:
+    long_snippet = "x = 1\n" * MAX_CODE_LENGTH
+    with pytest.raises(SpecError):
+        parse_spec(
+            {
+                "start": "run",
+                "nodes": [{"id": "run", "kind": "CODE", "code": long_snippet}],
+            }
+        )
+
+
+def test_a_loop_batch_must_fit_the_fan_out_limit() -> None:
+    with pytest.raises(SpecError):
+        parse_spec(
+            {
+                "start": "chunk",
+                "nodes": [
+                    {
+                        "id": "chunk",
+                        "kind": "LOOP",
+                        "over": "{{ trigger.rows }}",
+                        "batch_size": MAX_FAN_OUT_ITEMS + 1,
+                    }
+                ],
+            }
+        )

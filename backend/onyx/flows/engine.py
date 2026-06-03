@@ -5,7 +5,7 @@ reports the outcome. Persistence is behind the ``RunRecorder`` protocol so the
 engine can be exercised with nothing but a dict — which is also how the
 dry-run path will work when it lands.
 
-Three behaviours are worth stating up front, because they are the ones that
+Four behaviours are worth stating up front, because they are the ones that
 matter when a run goes wrong at 4am:
 
 **A node is recorded before it runs.** ``begin_node`` writes the row, and the
@@ -19,6 +19,11 @@ whether grey means broken.
 
 **Expression errors are not retried.** A missing key will still be missing in
 two seconds. Only genuinely transient classes get another attempt.
+
+**A run waiting on a person holds nothing.** An approval step parks the run
+and returns; answering it re-queues the run, which walks the graph again from
+the top and reuses every row it already wrote. A parked run therefore survives
+a deploy, a worker crash and a week of nobody looking at it.
 """
 
 from __future__ import annotations
@@ -33,9 +38,11 @@ from onyx.flows.expressions import ExpressionError, RunContext, resolve
 from onyx.flows.models import MAX_FAN_OUT_ITEMS, FlowSpec
 from onyx.flows.nodes import (
     NODE_EXECUTORS,
+    NODE_REPLAYERS,
     NodeExecutionError,
     NodeOutcome,
     NodeRuntime,
+    NodeSuspended,
 )
 from onyx.utils.logger import setup_logger
 
@@ -106,6 +113,12 @@ class RunRecorder(Protocol):
         attempt: int,
     ) -> None: ...
 
+    def park_node(
+        self, *, node_id: str, item_index: int, detail: dict[str, Any]
+    ) -> None:
+        """Note what a node is waiting on, leaving its row open."""
+        ...
+
     def skip_node(self, *, node_id: str, kind: FlowNodeKind) -> None: ...
 
 
@@ -171,6 +184,18 @@ class InMemoryRecorder:
             }
         )
 
+    def park_node(
+        self, *, node_id: str, item_index: int, detail: dict[str, Any]
+    ) -> None:
+        self.entries.append(
+            {
+                "node_id": node_id,
+                "item_index": item_index,
+                "status": FlowNodeRunStatus.RUNNING,
+                "waiting_for": detail,
+            }
+        )
+
     def skip_node(self, *, node_id: str, kind: FlowNodeKind) -> None:
         self.entries.append(
             {"node_id": node_id, "kind": kind, "status": FlowNodeRunStatus.SKIPPED}
@@ -207,8 +232,9 @@ def execute_flow(
     order = _execution_order(spec)
     predecessors = _predecessor_map(spec, order)
 
-    # Successors each executed node handed control to. A condition narrows
-    # this to one branch; everything else passes its whole `next` list.
+    # Successors each executed node handed control to. A condition or an
+    # approval narrows this to one branch; everything else passes its whole
+    # `next` list.
     handed_to: dict[str, set[str]] = {}
     executed: set[str] = set()
     deadline = time.monotonic() + budget_seconds
@@ -238,6 +264,15 @@ def execute_flow(
                 runtime=runtime,
                 recorder=recorder,
                 deadline=deadline,
+            )
+        except NodeSuspended:
+            # Not a failure and not the end: the run keeps its open row at
+            # this node, and answering it re-queues the run to start again
+            # from the top, replaying everything already recorded.
+            logger.info("flow run parked for a decision node=%s", node_id)
+            return RunResult(
+                status=FlowRunStatus.AWAITING_DECISION,
+                outputs=dict(context.steps),
             )
         except RunBudgetExceeded as exc:
             return RunResult(
@@ -352,7 +387,10 @@ def _run_once(
             node.id,
             item_index,
         )
-        return NodeOutcome(output=already.output)
+        replay = NODE_REPLAYERS.get(node.kind)
+        if replay is None:
+            return NodeOutcome(output=already.output)
+        return replay(node, already.output)
 
     executor = NODE_EXECUTORS[node.kind]
     attempts = node.retry.max_attempts
@@ -363,6 +401,11 @@ def _run_once(
             raise RunBudgetExceeded(f"run ran out of time while executing '{node.id}'")
         try:
             outcome = executor(node, context, runtime)
+        except NodeSuspended as exc:
+            recorder.park_node(
+                node_id=node.id, item_index=item_index, detail=exc.detail
+            )
+            raise
         except NodeExecutionError as exc:
             last_error = exc
         except Exception as exc:

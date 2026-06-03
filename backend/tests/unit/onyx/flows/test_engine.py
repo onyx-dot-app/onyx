@@ -368,3 +368,180 @@ def _fail_then_succeed(
 
     monkeypatch.setitem(engine_module.NODE_EXECUTORS, FlowNodeKind.TRANSFORM, flaky)
     return calls
+
+
+# ---------------------------------------------------------------------------
+# Approvals: parking and resuming
+# ---------------------------------------------------------------------------
+
+
+def gated_spec(**gate_overrides: Any) -> Any:
+    gate: dict[str, Any] = {
+        "id": "gate",
+        "kind": "HUMAN",
+        "question": "Ship {{ trigger.tag }}?",
+    }
+    gate.update(gate_overrides)
+    return parse_spec(
+        {
+            "start": "prepare",
+            "nodes": [
+                transform("prepare", "{{ trigger.tag }}", next=["gate"]),
+                gate,
+                transform("ship", "shipped"),
+                transform("tell", "told"),
+            ],
+        }
+    )
+
+
+def approved(comment: str | None = None) -> RecordedNode:
+    return RecordedNode(
+        status=FlowNodeRunStatus.SUCCEEDED,
+        output={"decision": "approve", "comment": comment},
+    )
+
+
+def rejected(comment: str | None = None) -> RecordedNode:
+    return RecordedNode(
+        status=FlowNodeRunStatus.SUCCEEDED,
+        output={"decision": "reject", "comment": comment},
+    )
+
+
+def test_an_approval_parks_the_run_without_touching_what_follows(
+    runtime: NodeRuntime,
+) -> None:
+    spec = gated_spec(on_approve=["ship"], on_reject=["tell"])
+    recorder = InMemoryRecorder()
+
+    result = execute_flow(
+        spec=spec,
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"tag": "v3"},
+    )
+
+    assert result.status == FlowRunStatus.AWAITING_DECISION
+    assert result.error_class is None
+    assert result.outputs["prepare"] == {"value": "v3"}
+
+    parked = [entry for entry in recorder.entries if "waiting_for" in entry]
+    assert parked == [
+        {
+            "node_id": "gate",
+            "item_index": 0,
+            "status": FlowNodeRunStatus.RUNNING,
+            "waiting_for": {"question": "Ship v3?", "assignee": None},
+        }
+    ]
+    assert "ship" not in statuses(recorder), "a parked run must not run ahead"
+    assert "tell" not in statuses(recorder)
+
+
+def test_parking_is_not_swallowed_by_on_error_skip(runtime: NodeRuntime) -> None:
+    """`on_error: skip` covers failures. Waiting is not a failure."""
+    spec = gated_spec(on_approve=["ship"], on_error="skip")
+
+    result = execute_flow(
+        spec=spec,
+        runtime=runtime,
+        recorder=InMemoryRecorder(),
+        trigger_payload={"tag": "v3"},
+    )
+
+    assert result.status == FlowRunStatus.AWAITING_DECISION
+
+
+def test_an_approved_run_resumes_down_the_approve_branch(runtime: NodeRuntime) -> None:
+    spec = gated_spec(on_approve=["ship"], on_reject=["tell"])
+    recorder = InMemoryRecorder()
+    recorder._finished[("gate", 0)] = approved()
+
+    result = execute_flow(
+        spec=spec,
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"tag": "v3"},
+    )
+
+    assert result.status == FlowRunStatus.SUCCEEDED
+    assert result.outputs["ship"] == {"value": "shipped"}
+    assert "tell" not in result.outputs
+    assert statuses(recorder)["tell"] == FlowNodeRunStatus.SKIPPED
+
+
+def test_a_rejected_run_resumes_down_the_reject_branch(runtime: NodeRuntime) -> None:
+    spec = gated_spec(on_approve=["ship"], on_reject=["tell"])
+    recorder = InMemoryRecorder()
+    recorder._finished[("gate", 0)] = rejected("not this week")
+
+    result = execute_flow(
+        spec=spec,
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"tag": "v3"},
+    )
+
+    assert result.status == FlowRunStatus.SUCCEEDED
+    assert result.outputs["tell"] == {"value": "told"}
+    assert statuses(recorder)["ship"] == FlowNodeRunStatus.SKIPPED
+
+
+def test_rejecting_a_gate_with_no_reject_branch_fails_the_run(
+    runtime: NodeRuntime,
+) -> None:
+    spec = gated_spec(on_approve=["ship"])
+    recorder = InMemoryRecorder()
+    recorder._finished[("gate", 0)] = rejected("the numbers are wrong")
+
+    result = execute_flow(
+        spec=spec,
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"tag": "v3"},
+    )
+
+    assert result.status == FlowRunStatus.FAILED
+    assert result.error_class == FlowErrorClass.DECISION_REJECTED
+    assert result.failed_node_id == "gate"
+    assert result.error_detail == "rejected: the numbers are wrong"
+
+
+def test_a_replayed_condition_keeps_the_branch_it_first_took(
+    runtime: NodeRuntime,
+) -> None:
+    """A resumed run reads the branch off the row, and must not lose it.
+
+    The recorded comparison says the true branch was taken. Reusing the output
+    without re-deriving the branch would leave the node handing control to its
+    empty `next` list, and everything downstream would be skipped.
+    """
+    spec = parse_spec(
+        {
+            "start": "check",
+            "nodes": [
+                {
+                    "id": "check",
+                    "kind": "CONDITION",
+                    "left": "{{ trigger.count }}",
+                    "operator": "gt",
+                    "right": "5",
+                    "on_true": ["big"],
+                    "on_false": ["small"],
+                },
+                transform("big", "big"),
+                transform("small", "small"),
+            ],
+        }
+    )
+    recorder = InMemoryRecorder()
+    recorder._finished[("check", 0)] = RecordedNode(
+        status=FlowNodeRunStatus.SUCCEEDED,
+        output={"matched": True, "left": 9, "right": 5},
+    )
+
+    result = execute_flow(spec=spec, runtime=runtime, recorder=recorder)
+
+    assert result.outputs["big"] == {"value": "big"}
+    assert statuses(recorder)["small"] == FlowNodeRunStatus.SKIPPED

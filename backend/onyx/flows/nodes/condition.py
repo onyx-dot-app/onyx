@@ -33,6 +33,18 @@ def execute_condition(
     )
 
 
+def resume_condition(node: ConditionNode, output: Any) -> NodeOutcome:
+    """Rebuild the branch a recorded comparison took.
+
+    A replayed run must not re-evaluate the comparison: the operands came from
+    a step that already ran, and reading them again out of a context rebuilt
+    from rows would be a second chance to disagree with history.
+    """
+    matched = bool(output.get("matched")) if isinstance(output, dict) else False
+    branch = node.on_true if matched else node.on_false
+    return NodeOutcome(output=output, next_ids=list(branch))
+
+
 def _compare(operator: str, left: Any, right: Any) -> bool:
     if operator == "eq":
         return _loosely_equal(left, right)

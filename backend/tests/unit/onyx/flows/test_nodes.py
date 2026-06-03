@@ -1,6 +1,9 @@
 """Node executors, exercised against fakes rather than the network."""
 
 import json
+import subprocess
+import sys
+import time
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -9,13 +12,20 @@ import httpx
 import pytest
 
 from onyx.db.enums import FlowErrorClass
+from onyx.flows.engine import RETRYABLE_ERROR_CLASSES
 from onyx.flows.expressions import RunContext
-from onyx.flows.models import parse_spec
+from onyx.flows.models import MAX_FAN_OUT_ITEMS, parse_spec
 from onyx.flows.nodes import NodeRuntime
 from onyx.flows.nodes.ai import execute_ai
-from onyx.flows.nodes.base import NodeExecutionError
+from onyx.flows.nodes.base import NodeExecutionError, NodeSuspended
+from onyx.flows.nodes.code import MAX_CONTEXT_BYTES, RESULT_MARKER, execute_code
 from onyx.flows.nodes.condition import execute_condition
 from onyx.flows.nodes.http import execute_http
+from onyx.flows.nodes.human import execute_human, resume_human
+from onyx.flows.nodes.loop import execute_loop
+from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    ExecuteResponse,
+)
 
 
 def only_node(raw: dict) -> Any:
@@ -397,3 +407,320 @@ def test_ai_model_failure_is_reported_as_llm_error() -> None:
 
     assert caught.value.error_class == FlowErrorClass.LLM_ERROR
     assert "provider down" in caught.value.detail
+
+
+# ---------------------------------------------------------------------------
+# Loop
+# ---------------------------------------------------------------------------
+
+
+def loop_node(**overrides: Any) -> Any:
+    node: dict[str, Any] = {"id": "chunk", "kind": "LOOP", "over": "{{ trigger.rows }}"}
+    node.update(overrides)
+    return only_node(node)
+
+
+def test_loop_cuts_the_list_into_batches() -> None:
+    context = RunContext(trigger={"rows": [1, 2, 3, 4, 5]})
+
+    outcome = execute_loop(loop_node(batch_size=2), context, MagicMock())
+
+    assert outcome.output == {
+        "batches": [[1, 2], [3, 4], [5]],
+        "batch_count": 3,
+        "total": 5,
+    }
+
+
+def test_loop_over_nothing_is_an_empty_run_not_an_error() -> None:
+    outcome = execute_loop(loop_node(), RunContext(trigger={"rows": None}), MagicMock())
+
+    assert outcome.output == {"batches": [], "batch_count": 0, "total": 0}
+
+
+def test_loop_wraps_a_lone_object() -> None:
+    context = RunContext(trigger={"rows": {"id": 7}})
+
+    outcome = execute_loop(loop_node(), context, MagicMock())
+
+    assert outcome.output["batches"] == [[{"id": 7}]]
+
+
+def test_loop_rejects_a_value_that_is_not_a_list() -> None:
+    context = RunContext(trigger={"rows": "one, two"})
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_loop(loop_node(), context, MagicMock())
+
+    assert caught.value.error_class == FlowErrorClass.EXPRESSION_ERROR
+    assert "got str" in caught.value.detail
+
+
+def test_loop_refuses_more_items_than_the_fan_out_limit() -> None:
+    context = RunContext(trigger={"rows": list(range(MAX_FAN_OUT_ITEMS + 1))})
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_loop(loop_node(batch_size=10), context, MagicMock())
+
+    assert caught.value.error_class == FlowErrorClass.INVALID_SPEC
+
+
+# ---------------------------------------------------------------------------
+# Human
+# ---------------------------------------------------------------------------
+
+
+def human_node(**overrides: Any) -> Any:
+    node: dict[str, Any] = {
+        "id": "gate",
+        "kind": "HUMAN",
+        "question": "Ship {{ trigger.tag }}?",
+    }
+    node.update(overrides)
+    return only_node(node)
+
+
+def test_human_parks_the_run_with_the_question_filled_in() -> None:
+    context = RunContext(trigger={"tag": "v2.1"})
+
+    with pytest.raises(NodeSuspended) as caught:
+        execute_human(human_node(assignee="ada@example.com"), context, MagicMock())
+
+    assert caught.value.node_id == "gate"
+    assert caught.value.detail == {
+        "question": "Ship v2.1?",
+        "assignee": "ada@example.com",
+    }
+
+
+def test_human_reports_an_unresolvable_question_rather_than_parking() -> None:
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_human(human_node(), RunContext(trigger={}), MagicMock())
+
+    assert caught.value.error_class == FlowErrorClass.EXPRESSION_ERROR
+
+
+def branching_human(**overrides: Any) -> Any:
+    """An approval wired to two real nodes, since a branch needs somewhere to go."""
+    gate: dict[str, Any] = {"id": "gate", "kind": "HUMAN", "question": "ok?"}
+    gate.update(overrides)
+    return parse_spec(
+        {
+            "start": "gate",
+            "nodes": [
+                gate,
+                {"id": "ship", "kind": "TRANSFORM", "fields": {"a": "ship"}},
+                {"id": "tell", "kind": "TRANSFORM", "fields": {"a": "tell"}},
+            ],
+        }
+    ).nodes[0]
+
+
+def test_approval_resumes_down_the_approve_branch() -> None:
+    node = branching_human(on_approve=["ship"], on_reject=["tell"])
+
+    outcome = resume_human(node, {"decision": "approve", "comment": None})
+
+    assert outcome.next_ids == ["ship"]
+    assert outcome.output["decision"] == "approve"
+
+
+def test_rejection_takes_the_reject_branch_when_there_is_one() -> None:
+    node = branching_human(on_approve=["ship"], on_reject=["tell"])
+
+    outcome = resume_human(node, {"decision": "reject", "comment": "too risky"})
+
+    assert outcome.next_ids == ["tell"]
+
+
+def test_rejecting_a_bare_gate_fails_the_run_with_the_comment() -> None:
+    """Nothing wired to a rejection means the rejection is the outcome."""
+    with pytest.raises(NodeExecutionError) as caught:
+        resume_human(human_node(), {"decision": "reject", "comment": "not yet"})
+
+    assert caught.value.error_class == FlowErrorClass.DECISION_REJECTED
+    assert caught.value.detail == "rejected: not yet"
+
+
+def test_an_unreadable_decision_is_an_error_not_a_branch() -> None:
+    with pytest.raises(NodeExecutionError) as caught:
+        resume_human(human_node(), {"decision": "maybe"})
+
+    assert caught.value.error_class == FlowErrorClass.NODE_EXCEPTION
+
+
+# ---------------------------------------------------------------------------
+# Code
+# ---------------------------------------------------------------------------
+
+
+class LocalSandbox:
+    """Stands in for the code interpreter by running the program locally.
+
+    Not isolation — isolation is the real service's job — but it does run the
+    exact program the node builds, so the wrapper, the stdin handover and the
+    marked result line are all under test rather than assumed.
+    """
+
+    def __init__(self) -> None:
+        self.last_stdin: str | None = None
+        self.last_files: Any = None
+        self.closed = False
+
+    def execute(
+        self,
+        code: str,
+        stdin: str | None = None,
+        timeout_ms: int = 30000,
+        files: Any = None,
+    ) -> ExecuteResponse:
+        self.last_stdin = stdin
+        self.last_files = files
+        started = time.monotonic()
+        try:
+            finished = subprocess.run(
+                [sys.executable, "-c", code],
+                input=stdin or "",
+                capture_output=True,
+                text=True,
+                timeout=timeout_ms / 1000,
+            )
+        except subprocess.TimeoutExpired:
+            return ExecuteResponse(
+                stdout="",
+                stderr="",
+                exit_code=None,
+                timed_out=True,
+                duration_ms=timeout_ms,
+                files=[],
+            )
+        return ExecuteResponse(
+            stdout=finished.stdout,
+            stderr=finished.stderr,
+            exit_code=finished.returncode,
+            timed_out=False,
+            duration_ms=int((time.monotonic() - started) * 1000),
+            files=[],
+        )
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def code_node(code: str, **overrides: Any) -> Any:
+    node: dict[str, Any] = {"id": "calc", "kind": "CODE", "code": code}
+    node.update(overrides)
+    return only_node(node)
+
+
+def sandbox_runtime(sandbox: Any) -> NodeRuntime:
+    return NodeRuntime(
+        http_client=MagicMock(),
+        llm_provider=MagicMock(),
+        code_runner_provider=lambda: sandbox,
+    )
+
+
+def test_code_reads_the_run_and_returns_its_result() -> None:
+    node = code_node(
+        "rows = steps['fetch']['rows']\n"
+        "result = {'total': sum(rows), 'tag': trigger['tag']}"
+    )
+    context = RunContext(trigger={"tag": "v9"}, steps={"fetch": {"rows": [1, 2, 3]}})
+
+    outcome = execute_code(node, context, sandbox_runtime(LocalSandbox()))
+
+    assert outcome.output == {"result": {"total": 6, "tag": "v9"}, "logs": ""}
+
+
+def test_code_keeps_printed_output_as_logs() -> None:
+    node = code_node("print('halfway')\nprint('done')\nresult = 1")
+
+    outcome = execute_code(node, RunContext(), sandbox_runtime(LocalSandbox()))
+
+    assert outcome.output == {"result": 1, "logs": "halfway\ndone"}
+
+
+def test_code_sees_the_fan_out_item() -> None:
+    node = code_node("result = f'{index}:{item}'")
+    context = RunContext().for_item("beta", 1)
+
+    outcome = execute_code(node, context, sandbox_runtime(LocalSandbox()))
+
+    assert outcome.output["result"] == "1:beta"
+
+
+def test_a_snippet_printing_the_marker_cannot_displace_the_real_result() -> None:
+    node = code_node(f"print('{RESULT_MARKER} 99')\nresult = 'real'")
+
+    outcome = execute_code(node, RunContext(), sandbox_runtime(LocalSandbox()))
+
+    assert outcome.output["result"] == "real"
+
+
+def test_code_failure_reports_the_authors_own_line_number() -> None:
+    node = code_node("rows = [1, 2]\ntotal = rows['nope']")
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_code(node, RunContext(), sandbox_runtime(LocalSandbox()))
+
+    assert caught.value.error_class == FlowErrorClass.CODE_ERROR
+    assert 'File "<flow code step>", line 2' in caught.value.detail
+    assert "exec(compile(" not in caught.value.detail, "wrapper frame leaked"
+
+
+def test_code_that_runs_long_is_reported_as_a_timeout() -> None:
+    node = code_node("import time\ntime.sleep(5)", timeout_seconds=0.3)
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_code(node, RunContext(), sandbox_runtime(LocalSandbox()))
+
+    assert caught.value.error_class == FlowErrorClass.TIMEOUT
+
+
+def test_an_unreachable_sandbox_is_retryable() -> None:
+    sandbox = MagicMock()
+    sandbox.execute.side_effect = ConnectionError("connection refused")
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_code(code_node("result = 1"), RunContext(), sandbox_runtime(sandbox))
+
+    assert caught.value.error_class in RETRYABLE_ERROR_CLASSES
+
+
+def test_an_unconfigured_sandbox_says_so_plainly() -> None:
+    def refuse() -> Any:
+        raise ValueError("CODE_INTERPRETER_BASE_URL not configured")
+
+    runtime = NodeRuntime(
+        http_client=MagicMock(),
+        llm_provider=MagicMock(),
+        code_runner_provider=refuse,
+    )
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_code(code_node("result = 1"), RunContext(), runtime)
+
+    assert caught.value.error_class == FlowErrorClass.CODE_ERROR
+    assert "CODE_INTERPRETER_BASE_URL" in caught.value.detail
+
+
+def test_code_refuses_a_run_too_large_to_hand_over() -> None:
+    node = code_node("result = 1")
+    context = RunContext(steps={"fetch": {"blob": "x" * (MAX_CONTEXT_BYTES + 1)}})
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_code(node, context, sandbox_runtime(LocalSandbox()))
+
+    assert caught.value.error_class == FlowErrorClass.CODE_ERROR
+    assert "narrow the earlier steps" in caught.value.detail
+
+
+def test_the_runtime_closes_the_sandbox_it_opened() -> None:
+    sandbox = LocalSandbox()
+    runtime = sandbox_runtime(sandbox)
+    runtime.code_runner()
+
+    runtime.close()
+
+    assert sandbox.closed is True

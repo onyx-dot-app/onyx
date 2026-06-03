@@ -436,13 +436,21 @@ def has_in_flight_run(*, db_session: Session, flow_id: UUID) -> bool:
     """Whether a previous run is still going.
 
     A schedule that fires faster than the flow completes should queue up
-    behind itself rather than run two copies over the same data.
+    behind itself rather than run two copies over the same data. A run parked
+    on an approval counts: it is unfinished work over the same data, and
+    firing past it would put a second question in front of the same person.
     """
     stmt = (
         select(FlowRun.id)
         .where(
             FlowRun.flow_id == flow_id,
-            FlowRun.status.in_([FlowRunStatus.QUEUED, FlowRunStatus.RUNNING]),
+            FlowRun.status.in_(
+                [
+                    FlowRunStatus.QUEUED,
+                    FlowRunStatus.RUNNING,
+                    FlowRunStatus.AWAITING_DECISION,
+                ]
+            ),
         )
         .limit(1)
     )
@@ -566,7 +574,19 @@ def finish_node_run(
 def record_skipped_node(
     *, db_session: Session, run_id: UUID, node_id: str, kind: FlowNodeKind
 ) -> FlowNodeRun:
-    """Note a node on a branch the run did not take."""
+    """Note a node on a branch the run did not take.
+
+    Idempotent, because a run resumed after an approval walks the whole graph
+    again and reaches the same untaken branches a second time. The unique key
+    on (run, node, item) would otherwise turn a perfectly ordinary resume into
+    an integrity error.
+    """
+    existing = get_node_run(
+        db_session=db_session, run_id=run_id, node_id=node_id, item_index=0
+    )
+    if existing is not None:
+        return existing
+
     node_run = FlowNodeRun(
         run_id=run_id,
         node_id=node_id,
@@ -577,6 +597,92 @@ def record_skipped_node(
     )
     db_session.add(node_run)
     db_session.flush()
+    return node_run
+
+
+def record_node_waiting(
+    *,
+    db_session: Session,
+    run_id: UUID,
+    node_id: str,
+    item_index: int,
+    detail: dict[str, Any],
+) -> FlowNodeRun | None:
+    """Record what an open node is waiting on, without closing it.
+
+    The detail is merged into the row's ``input``, which the run view already
+    shows beside the step — so the rendered question reaches the reviewer
+    without a column of its own.
+    """
+    node_run = get_node_run(
+        db_session=db_session, run_id=run_id, node_id=node_id, item_index=item_index
+    )
+    if node_run is None:
+        return None
+
+    # Reassigned rather than mutated: JSONB is not tracked in place.
+    node_run.input = {**(node_run.input or {}), **detail}
+    db_session.flush()
+    return node_run
+
+
+def apply_human_decision(
+    *,
+    db_session: Session,
+    run: FlowRun,
+    node_id: str,
+    decision: str,
+    comment: str | None,
+    decided_by: str | None,
+) -> FlowNodeRun:
+    """Answer an approval and put the run back in the queue.
+
+    The decision is written onto the node's own row, which is what the engine
+    reads when it replays the run. Nothing else carries it, so there is no
+    second copy to disagree with.
+    """
+    if run.status != FlowRunStatus.AWAITING_DECISION:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This run is not waiting for a decision",
+        )
+
+    node_run = get_node_run(
+        db_session=db_session, run_id=run.id, node_id=node_id, item_index=0
+    )
+    if node_run is None or node_run.kind != FlowNodeKind.HUMAN:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "No approval step by that name")
+    if node_run.status != FlowNodeRunStatus.RUNNING:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "This approval has already been answered"
+        )
+
+    finish_node_run(
+        db_session=db_session,
+        node_run=node_run,
+        status=FlowNodeRunStatus.SUCCEEDED,
+        output={
+            "decision": decision,
+            "comment": comment,
+            "decided_by": decided_by,
+            "decided_at": datetime.now(tz=timezone.utc).isoformat(),
+        },
+    )
+
+    run.status = FlowRunStatus.QUEUED
+    # A resumed run is a fresh attempt: leaving the last failure on the row
+    # would have the run list reporting an error that no longer applies.
+    run.error_class = None
+    run.error_detail = None
+    run.finished_at = None
+    db_session.flush()
+
+    logger.info(
+        "flow approval answered run_id=%s node=%s decision=%s",
+        run.id,
+        node_id,
+        decision,
+    )
     return node_run
 
 

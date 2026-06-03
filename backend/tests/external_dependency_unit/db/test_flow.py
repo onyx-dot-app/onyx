@@ -26,10 +26,12 @@ from onyx.db.enums import (
 )
 from onyx.db.flow import (
     advance_next_run_at,
+    apply_human_decision,
     claim_due_triggers,
     create_flow,
     finish_node_run,
     get_flow,
+    get_run,
     has_in_flight_run,
     insert_run,
     publish_flow,
@@ -41,6 +43,7 @@ from onyx.db.flow import (
 )
 from onyx.db.models import Flow, FlowNodeRun, FlowRun, FlowVersion, User
 from onyx.error_handling.exceptions import OnyxError
+from onyx.flows.runner import run_flow_logic
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -488,3 +491,190 @@ def test_deleting_a_flow_takes_its_history_with_it(
         select(FlowNodeRun).where(FlowNodeRun.run_id == run_id)
     ).scalars()
     assert list(node_rows) == []
+
+
+# ---------------------------------------------------------------------------
+# Approvals
+# ---------------------------------------------------------------------------
+
+
+def gated_spec() -> dict[str, Any]:
+    """A branch, then an approval, with a step on each side of both.
+
+    The untaken branch sits *before* the approval on purpose. A resumed run
+    walks the whole graph again and reaches it a second time, so this is what
+    proves the skip write survives the replay rather than tripping the unique
+    key on (run, node, item).
+    """
+    return {
+        "start": "check",
+        "nodes": [
+            {
+                "id": "check",
+                "kind": "CONDITION",
+                "left": "{{ trigger.tag }}",
+                "operator": "is_not_empty",
+                "on_true": ["prepare"],
+                "on_false": ["untaken"],
+            },
+            {
+                "id": "prepare",
+                "kind": "TRANSFORM",
+                "fields": {"tag": "{{ trigger.tag }}"},
+                "next": ["gate"],
+            },
+            {"id": "untaken", "kind": "TRANSFORM", "fields": {"value": "nope"}},
+            {
+                "id": "gate",
+                "kind": "HUMAN",
+                "question": "Ship {{ trigger.tag }}?",
+                "on_approve": ["ship"],
+            },
+            {"id": "ship", "kind": "TRANSFORM", "fields": {"value": "shipped"}},
+        ],
+    }
+
+
+def gated_run(db_session: Session, owner: User, name: str) -> FlowRun:
+    flow = create_flow(
+        db_session=db_session, user_id=owner.id, name=name, draft_spec=gated_spec()
+    )
+    run = insert_run(
+        db_session=db_session,
+        flow_id=flow.id,
+        trigger_source=FlowTriggerSource.TEST,
+        trigger_payload={"tag": "v4"},
+    )
+    db_session.commit()
+    return run
+
+
+def node_rows(db_session: Session, run_id: UUID, node_id: str) -> list[FlowNodeRun]:
+    rows = db_session.execute(
+        select(FlowNodeRun).where(
+            FlowNodeRun.run_id == run_id, FlowNodeRun.node_id == node_id
+        )
+    ).scalars()
+    return list(rows)
+
+
+def test_a_run_parks_on_an_approval_and_resumes_when_it_is_answered(
+    db_session: Session, owner: User
+) -> None:
+    """The whole approval cycle against real rows.
+
+    Nothing is held between the two halves: the first call ends, and the
+    second reconstructs everything it needs from what the first wrote.
+    """
+    run_id = gated_run(db_session, owner, "gated flow").id
+
+    run_flow_logic(run_id)
+    db_session.expire_all()
+
+    run = get_run(db_session=db_session, run_id=run_id)
+    assert run is not None
+    assert run.status == FlowRunStatus.AWAITING_DECISION
+    assert run.finished_at is None, "a parked run has not finished"
+
+    gate = node_rows(db_session, run_id, "gate")[0]
+    assert gate.status == FlowNodeRunStatus.RUNNING
+    assert gate.input == {"question": "Ship v4?", "assignee": None}
+    assert node_rows(db_session, run_id, "ship") == [], "ran past the approval"
+    assert node_rows(db_session, run_id, "untaken")[0].status == (
+        FlowNodeRunStatus.SKIPPED
+    )
+
+    prepare_finished_at = node_rows(db_session, run_id, "prepare")[0].finished_at
+
+    apply_human_decision(
+        db_session=db_session,
+        run=run,
+        node_id="gate",
+        decision="approve",
+        comment="numbers look right",
+        decided_by="ada@example.test",
+    )
+    db_session.commit()
+    assert run.status == FlowRunStatus.QUEUED
+
+    run_flow_logic(run_id)
+    db_session.expire_all()
+
+    run = get_run(db_session=db_session, run_id=run_id)
+    assert run is not None
+    assert run.status == FlowRunStatus.SUCCEEDED
+    # Output is boxed under "value" on the row so the column keeps one shape.
+    shipped = node_rows(db_session, run_id, "ship")[0].output
+    assert shipped is not None and shipped["value"] == {"value": "shipped"}
+    assert node_rows(db_session, run_id, "gate")[0].output["value"]["decided_by"] == (
+        "ada@example.test"
+    )
+
+    # The replayed nodes were reused, not re-executed.
+    assert node_rows(db_session, run_id, "prepare")[0].finished_at == (
+        prepare_finished_at
+    )
+    assert len(node_rows(db_session, run_id, "untaken")) == 1, (
+        "the untaken branch was recorded twice by the replay"
+    )
+
+
+def test_rejecting_an_approval_with_no_reject_branch_fails_the_run(
+    db_session: Session, owner: User
+) -> None:
+    run_id = gated_run(db_session, owner, "rejected flow").id
+    run_flow_logic(run_id)
+    db_session.expire_all()
+
+    run = get_run(db_session=db_session, run_id=run_id)
+    assert run is not None
+    apply_human_decision(
+        db_session=db_session,
+        run=run,
+        node_id="gate",
+        decision="reject",
+        comment="wrong build",
+        decided_by="ada@example.test",
+    )
+    db_session.commit()
+
+    run_flow_logic(run_id)
+    db_session.expire_all()
+
+    run = get_run(db_session=db_session, run_id=run_id)
+    assert run is not None
+    assert run.status == FlowRunStatus.FAILED
+    assert run.error_class == "decision_rejected"
+    assert run.error_detail == "[gate] rejected: wrong build"
+    assert node_rows(db_session, run_id, "ship") == []
+
+
+def test_an_approval_cannot_be_answered_twice(db_session: Session, owner: User) -> None:
+    run_id = gated_run(db_session, owner, "double answer flow").id
+    run_flow_logic(run_id)
+    db_session.expire_all()
+
+    run = get_run(db_session=db_session, run_id=run_id)
+    assert run is not None
+    answer = {
+        "node_id": "gate",
+        "decision": "approve",
+        "comment": None,
+        "decided_by": "ada@example.test",
+    }
+    apply_human_decision(db_session=db_session, run=run, **answer)
+    db_session.commit()
+
+    with pytest.raises(OnyxError, match="not waiting for a decision"):
+        apply_human_decision(db_session=db_session, run=run, **answer)
+
+
+def test_a_parked_run_still_counts_as_in_flight(
+    db_session: Session, owner: User
+) -> None:
+    """A schedule must queue behind an approval, not ask the same person twice."""
+    run = gated_run(db_session, owner, "in flight flow")
+    run_flow_logic(run.id)
+    db_session.expire_all()
+
+    assert has_in_flight_run(db_session=db_session, flow_id=run.flow_id) is True

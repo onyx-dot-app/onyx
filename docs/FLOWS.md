@@ -129,13 +129,75 @@ with `output_mismatch`.
 
 With no `output_fields`, the node returns `{"text": ...}`.
 
+### HUMAN
+
+Stops and waits for a person, then continues down `on_approve` or `on_reject`.
+See [Approvals](#approvals) for what happens to the run in between.
+
+An empty `on_reject` is the plain approval gate: rejecting stops the run and
+marks it `FAILED` with `decision_rejected`. A rejected deploy reading as a clean
+success is exactly the kind of thing nobody notices until it matters. Wire a
+reject branch when a "no" should do something instead.
+
+`assignee` says who ought to answer. It is informational — the flow's owner can
+always decide, because an access rule here means a run stuck forever behind
+somebody who left.
+
+### CODE
+
+Runs a snippet of Python in the code interpreter sandbox.
+
+Never in the worker. Worker processes hold database credentials, connector
+secrets and the tenant's whole environment, and a flow is authored in a browser
+by anyone who can edit it.
+
+The snippet sees `trigger`, `steps`, `item` and `index` as plain data, and
+whatever it assigns to `result` becomes the node's output. Output is
+`{result, logs}`, where `logs` is whatever the snippet printed — usually how you
+find out what it actually saw.
+
+```python
+rows = steps["fetch"]["body"]["items"]
+overdue = [row for row in rows if row["days"] > 30]
+print(f"{len(overdue)} of {len(rows)} are overdue")
+result = {"overdue": overdue}
+```
+
+Two details of the handover, for when you have to debug it:
+
+- **Context arrives on stdin**, not interpolated into the source. Baking a run's
+  data into a program means escaping it correctly every time forever, and one
+  stray quote in an API response would be a syntax error at best.
+- **The snippet is compiled under its own filename**, so a traceback carries the
+  author's line numbers rather than the wrapper's.
+
+Needs `CODE_INTERPRETER_BASE_URL`. Without it the node fails with `code_error`
+saying so, and the rest of the flow package stays usable.
+
+### LOOP
+
+Cuts a list into batches. Output is `{batches, batch_count, total}`.
+
+A spec is acyclic, so there is no jumping backwards; looping here means handing
+the next node a manageable slice instead of four hundred items at once. Pair it
+with `for_each` on the node that follows:
+
+```
+loop.over       = "{{ steps.fetch.body.rows }}"
+loop.batch_size = 25
+send.for_each   = "{{ steps.loop.batches }}"
+```
+
+`send` then runs once per batch with `{{ item }}` bound to the 25 rows, which is
+the shape most bulk APIs actually want.
+
 ## Execution
 
 `execute_flow` walks the reachable subgraph in topological order (Kahn's
 algorithm, seeded in declaration order so independent branches run the same way
 every time).
 
-Three behaviours matter when a run goes wrong:
+Four behaviours matter when a run goes wrong:
 
 **A node is recorded before it runs.** The unique key on
 `(run_id, node_id, item_index)` is what makes a redelivered message safe: the
@@ -149,6 +211,34 @@ grey means broken.
 **Expression errors are not retried.** A missing key will still be missing in two
 seconds. Only `http_error`, `timeout`, `llm_error` and `node_exception` get
 another attempt.
+
+**A run waiting on a person holds nothing.** See below.
+
+### Approvals
+
+A HUMAN node parks the run: its status becomes `AWAITING_DECISION`, the node
+keeps an open row, and `execute_flow` returns. Nothing is held in memory, so a
+parked run survives a deploy, a worker crash and a week of nobody looking at it.
+
+Answering writes the decision onto that node's row, puts the run back to
+`QUEUED` and enqueues it again. The engine then walks the graph **from the top**
+and reuses every row it already wrote — the same resume machinery a redelivered
+Celery message uses, which is why there is no separate "continue from here" path
+to get wrong.
+
+Two consequences worth knowing:
+
+- A node that picks a branch has to say which way it went when replayed, not
+  just what it produced. That is `NODE_REPLAYERS`; without it a resumed run
+  would fall back to the node's empty `next` list and skip everything below the
+  branch it actually took.
+- Skipping is written idempotently, because the replay reaches the same untaken
+  branches a second time and the unique key on `(run_id, node_id, item_index)`
+  does not care that it is the same answer.
+
+`AWAITING_DECISION` is not terminal, and a parked run counts as in flight — a
+schedule queues behind it rather than putting a second question in front of the
+same person.
 
 ### Fan-out
 
@@ -224,6 +314,7 @@ its recent history and a quiet one does not hoard a year of green ticks.
 | POST | `/flows/{flow_id}/run?test=true` |
 | GET | `/flows/{flow_id}/runs` |
 | GET | `/flows/{flow_id}/runs/{run_id}` |
+| POST | `/flows/{flow_id}/runs/{run_id}/decision` |
 | POST | `/flows/webhooks/{trigger_id}` |
 
 ## Adding a node kind
@@ -234,7 +325,10 @@ its recent history and a quiet one does not hoard a year of green ticks.
 3. Write the handler in `onyx/flows/nodes/`, taking
    `(node, context, runtime)` and returning a `NodeOutcome`.
 4. Register it in `NODE_EXECUTORS`.
-5. Extend the `flownodekind` enum in a migration.
+5. If the kind picks a branch, write a replayer too and register it in
+   `NODE_REPLAYERS`. See [Approvals](#approvals) for why.
+6. Check the name fits `flow_node_run.kind`. The column is a plain `VARCHAR`
+   sized to the longest member, so a longer name needs a widening migration.
 
 Handlers are plain functions so a test can call one with a hand-built context.
 That is most of why the engine stays easy to reason about.

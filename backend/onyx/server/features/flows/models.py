@@ -17,9 +17,12 @@ from onyx.db.enums import (
     FlowTriggerSource,
 )
 from onyx.db.models import Flow, FlowNodeRun, FlowRun, FlowTrigger
+from onyx.flows.models import FlowDecision
 
 MAX_NAME_LENGTH = 200
 MAX_DESCRIPTION_LENGTH = 2000
+MAX_NODE_ID_LENGTH = 64
+MAX_COMMENT_LENGTH = 2000
 
 
 class TriggerDefinition(BaseModel):
@@ -95,6 +98,17 @@ class StartRunRequest(BaseModel):
 
     # Becomes `{{ trigger.* }}`, so a manual run can stand in for a webhook.
     payload: dict[str, Any] | None = None
+
+
+class SubmitDecisionRequest(BaseModel):
+    """An answer to an approval step the run is parked on."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    node_id: str = Field(min_length=1, max_length=MAX_NODE_ID_LENGTH)
+    decision: FlowDecision
+    # Kept on the node's row and shown in the run view. The place to say why.
+    comment: str | None = Field(default=None, max_length=MAX_COMMENT_LENGTH)
 
 
 class FlowSummary(BaseModel):

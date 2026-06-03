@@ -33,6 +33,7 @@ from onyx.db.enums import (
     Permission,
 )
 from onyx.db.flow import (
+    apply_human_decision,
     create_flow,
     get_flow,
     get_flow_version,
@@ -59,6 +60,7 @@ from onyx.server.features.flows.models import (
     RunSummary,
     SetStatusRequest,
     StartRunRequest,
+    SubmitDecisionRequest,
     TriggerView,
     UpdateFlowRequest,
     WebhookAccepted,
@@ -304,6 +306,37 @@ def get_run_route(
     run = get_run_for_user(
         db_session=db_session, run_id=run_id, flow_id=flow_id, user_id=user.id
     )
+    return RunDetail.from_model(run)
+
+
+@router.post("/{flow_id}/runs/{run_id}/decision", response_model=RunDetail)
+def submit_decision_route(
+    flow_id: UUID,
+    run_id: UUID,
+    request: SubmitDecisionRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> RunDetail:
+    """Answer an approval step and let the run carry on.
+
+    The flow's owner decides. A node's ``assignee`` says who ought to look at
+    it, but turning that into an access rule would mean a run stuck forever
+    behind somebody who left.
+    """
+    run = get_run_for_user(
+        db_session=db_session, run_id=run_id, flow_id=flow_id, user_id=user.id
+    )
+    apply_human_decision(
+        db_session=db_session,
+        run=run,
+        node_id=request.node_id,
+        decision=request.decision,
+        comment=request.comment,
+        decided_by=user.email,
+    )
+    db_session.commit()
+
+    _enqueue(run_id=run.id)
     return RunDetail.from_model(run)
 
 

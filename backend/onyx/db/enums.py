@@ -926,6 +926,9 @@ class FlowNodeKind(str, PyEnum):
     TRANSFORM = "TRANSFORM"
     CONDITION = "CONDITION"
     AI = "AI"
+    HUMAN = "HUMAN"
+    CODE = "CODE"
+    LOOP = "LOOP"
 
 
 class FlowRunStatus(str, PyEnum):
@@ -934,6 +937,9 @@ class FlowRunStatus(str, PyEnum):
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
     SKIPPED = "SKIPPED"
+    # Parked on a human step. Not terminal: a decision re-queues the run,
+    # which replays the completed nodes from their rows and carries on.
+    AWAITING_DECISION = "AWAITING_DECISION"
 
     def is_terminal(self) -> bool:
         return self in (
@@ -973,6 +979,8 @@ class FlowErrorClass(str, PyEnum):
     EXPRESSION_ERROR = "expression_error"
     NODE_EXCEPTION = "node_exception"
     HTTP_ERROR = "http_error"
+    CODE_ERROR = "code_error"
+    DECISION_REJECTED = "decision_rejected"
     LLM_ERROR = "llm_error"
     OUTPUT_MISMATCH = "output_mismatch"
     TIMEOUT = "timeout"

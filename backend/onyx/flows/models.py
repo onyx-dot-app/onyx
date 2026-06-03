@@ -7,9 +7,11 @@ once a run has started.
 
 Two conventions are worth knowing before reading the node types:
 
-* **Adjacency lives on the node.** A node names its successors in ``next``
-  (or ``on_true`` / ``on_false`` for a condition). The canvas draws edges from
-  that; keeping one representation avoids the spec and the picture disagreeing.
+* **Adjacency lives on the node.** A node names its successors in ``next``, or
+  in a pair of branch lists when it chooses between two paths — ``on_true`` /
+  ``on_false`` for a condition, ``on_approve`` / ``on_reject`` for an
+  approval. The canvas draws edges from that; keeping one representation
+  avoids the spec and the picture disagreeing.
 * **Fan-out is explicit.** A node with ``for_each`` set runs once per element
   of that list and records the per-item outputs as its own output. The editor
   fills ``for_each`` in automatically when it notices an upstream list, so the
@@ -44,6 +46,16 @@ MAX_FAN_OUT_ITEMS = 200
 MAX_NODE_ATTEMPTS = 4
 MAX_HTTP_TIMEOUT_SECONDS = 120.0
 MAX_AI_OUTPUT_FIELDS = 20
+MAX_CODE_LENGTH = 20_000
+MAX_CODE_TIMEOUT_SECONDS = 120.0
+MAX_QUESTION_LENGTH = 2000
+
+# What a person can answer at a human step. Stored on the node's run row and
+# read back by the engine when the run resumes, so the strings are part of the
+# contract rather than display text.
+DECISION_APPROVE = "approve"
+DECISION_REJECT = "reject"
+FlowDecision = Literal["approve", "reject"]
 
 
 class SpecError(ValueError):
@@ -274,8 +286,107 @@ class AiNode(NodeBase):
         return value
 
 
+class HumanNode(NodeBase):
+    """Stop and wait for a person to approve or reject.
+
+    The run parks here rather than failing: its status becomes
+    AWAITING_DECISION and the node keeps an open row. Answering writes the
+    decision onto that row and re-queues the run, which replays the nodes that
+    already finished and carries on down the chosen branch. Nothing is held in
+    memory in between, so a worker restart costs nothing.
+
+    An empty ``on_reject`` is the plain approval gate: rejecting stops the run
+    and marks it failed, because a rejected deploy reading as a clean success
+    is exactly the kind of thing nobody notices until it matters. Wire a
+    reject branch when a "no" should do something instead.
+    """
+
+    kind: Literal[FlowNodeKind.HUMAN] = FlowNodeKind.HUMAN
+
+    question: str = Field(max_length=MAX_QUESTION_LENGTH)
+    # Who should answer. Informational — the flow's owner can always decide.
+    assignee: str | None = None
+    on_approve: list[str] = Field(default_factory=list)
+    on_reject: list[str] = Field(default_factory=list)
+
+    @field_validator("question")
+    @classmethod
+    def _non_empty_question(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value
+
+    @model_validator(mode="after")
+    def _no_fan_out(self) -> HumanNode:
+        # One question per item would mean one parked run per item, and there
+        # is no sane answer for "which branch" once the answers disagree.
+        if self.for_each is not None:
+            raise ValueError(
+                "an approval cannot use 'for_each' — ask once, then fan out"
+            )
+        return self
+
+    def successors(self) -> list[str]:
+        return [*self.next, *self.on_approve, *self.on_reject]
+
+
+class CodeNode(NodeBase):
+    """Run a snippet of Python against the run's data.
+
+    The snippet executes in the sandboxed code interpreter, never in the
+    worker. That is not a detail: worker processes hold database credentials,
+    connector secrets and the tenant's environment, and a flow is authored in
+    a browser by whoever can edit it.
+
+    The snippet sees ``trigger``, ``steps``, ``item`` and ``index`` as plain
+    data, and whatever it assigns to ``result`` becomes the node's output.
+    ``print`` goes to ``logs`` on the same output, which is usually how you
+    find out what the snippet actually saw.
+    """
+
+    kind: Literal[FlowNodeKind.CODE] = FlowNodeKind.CODE
+
+    code: str = Field(max_length=MAX_CODE_LENGTH)
+    timeout_seconds: float = Field(default=30.0, gt=0.0, le=MAX_CODE_TIMEOUT_SECONDS)
+
+    @field_validator("code")
+    @classmethod
+    def _non_empty_code(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value
+
+
+class LoopNode(NodeBase):
+    """Cut a list into batches.
+
+    A spec is acyclic, so there is no jumping backwards; looping here means
+    handing the next node a manageable slice instead of four hundred items at
+    once. Pair it with ``for_each`` on the node that follows:
+
+        loop.over       = "{{ steps.fetch.rows }}"
+        loop.batch_size = 25
+        send.for_each   = "{{ steps.loop.batches }}"
+
+    ``send`` then runs once per batch with ``{{ item }}`` bound to the 25 rows,
+    which is the shape most bulk APIs actually want.
+    """
+
+    kind: Literal[FlowNodeKind.LOOP] = FlowNodeKind.LOOP
+
+    over: str
+    batch_size: int = Field(default=1, ge=1, le=MAX_FAN_OUT_ITEMS)
+
+    @field_validator("over")
+    @classmethod
+    def _non_empty_over(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value
+
+
 FlowNode = Annotated[
-    HttpNode | TransformNode | ConditionNode | AiNode,
+    HttpNode | TransformNode | ConditionNode | AiNode | HumanNode | CodeNode | LoopNode,
     Field(discriminator="kind"),
 ]
 

@@ -29,6 +29,7 @@ from onyx.db.flow import (
     get_node_run,
     get_run,
     mark_run_status,
+    record_node_waiting,
     record_skipped_node,
     start_node_run,
 )
@@ -162,6 +163,23 @@ class DatabaseRecorder:
             )
             db_session.commit()
 
+    def park_node(
+        self, *, node_id: str, item_index: int, detail: dict[str, Any]
+    ) -> None:
+        with get_session_with_current_tenant() as db_session:
+            parked = record_node_waiting(
+                db_session=db_session,
+                run_id=self.run_id,
+                node_id=node_id,
+                item_index=item_index,
+                detail=detail,
+            )
+            if parked is None:
+                logger.error(
+                    "no node row to park run_id=%s node=%s", self.run_id, node_id
+                )
+            db_session.commit()
+
     def skip_node(self, *, node_id: str, kind: FlowNodeKind) -> None:
         with get_session_with_current_tenant() as db_session:
             record_skipped_node(
@@ -171,7 +189,11 @@ class DatabaseRecorder:
 
 
 def run_flow_logic(run_id: UUID) -> None:
-    """Drive one queued run to a terminal status.
+    """Drive one queued run as far as it can go.
+
+    Usually that is a terminal status. A flow with an approval step instead
+    ends up AWAITING_DECISION, and the same function runs it again — from the
+    top, reusing the recorded rows — once somebody answers.
 
     Never raises for a flow-level problem: the run row is the report, and a
     raised exception would only tell Celery to try the whole thing again.
@@ -238,7 +260,8 @@ def run_flow_logic(run_id: UUID) -> None:
         db_session.commit()
 
     logger.info(
-        "flow run finished run_id=%s status=%s seconds=%.1f",
+        "flow run %s run_id=%s status=%s seconds=%.1f",
+        "parked" if result.status == FlowRunStatus.AWAITING_DECISION else "finished",
         run_id,
         result.status.value,
         time.monotonic() - started,
@@ -247,13 +270,14 @@ def run_flow_logic(run_id: UUID) -> None:
 
 def _execute(*, spec: Any, run_id: UUID, trigger_payload: Any) -> RunResult:
     """Run the graph, converting an unexpected crash into a FAILED result."""
-    http_client = build_http_client(HTTP_CLIENT_TIMEOUT_SECONDS)
+    runtime = NodeRuntime(
+        http_client=build_http_client(HTTP_CLIENT_TIMEOUT_SECONDS),
+        llm_provider=_default_llm_provider,
+    )
     try:
         return execute_flow(
             spec=spec,
-            runtime=NodeRuntime(
-                http_client=http_client, llm_provider=_default_llm_provider
-            ),
+            runtime=runtime,
             recorder=DatabaseRecorder(run_id=run_id),
             trigger_payload=trigger_payload,
             budget_seconds=RUN_BUDGET_SECONDS,
@@ -267,7 +291,7 @@ def _execute(*, spec: Any, run_id: UUID, trigger_payload: Any) -> RunResult:
             error_detail=f"{type(exc).__name__}: {exc}",
         )
     finally:
-        http_client.close()
+        runtime.close()
 
 
 def _default_llm_provider() -> LLM:
