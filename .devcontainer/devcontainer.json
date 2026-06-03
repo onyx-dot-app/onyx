@@ -1,6 +1,6 @@
 {
   "name": "Onyx Dev Sandbox",
-  "image": "onyxdotapp/onyx-devcontainer@sha256:616f411af60ef8e868d3b486c00484d539096e7012bb4ac173ace15979f6950e",
+  "image": "onyxdotapp/onyx-devcontainer@sha256:f8fbf8e1014b0eaa1ba200d9a6a9c7a6c937e0ccfe72644d0d5fcd40618e08e6",
   "runArgs": [
     "--cap-add=NET_ADMIN",
     "--cap-add=NET_RAW",
@@ -9,6 +9,7 @@
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/home/dev/.claude,type=bind",
     "source=${localEnv:HOME}/.claude.json,target=/home/dev/.claude.json,type=bind",
+    "source=${localWorkspaceFolder}/.devcontainer/claude-code,target=/etc/claude-code,type=bind,readonly",
     "source=${localEnv:HOME}/.zshrc,target=/home/dev/.zshrc.host,type=bind,readonly",
     "source=${localEnv:HOME}/.gitconfig,target=/home/dev/.gitconfig,type=bind,readonly",
     "source=${localEnv:HOME}/.config/nvim,target=/home/dev/.config/nvim,type=bind,readonly",

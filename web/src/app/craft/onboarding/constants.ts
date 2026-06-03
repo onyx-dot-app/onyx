@@ -37,8 +37,8 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
     providerName: "anthropic",
     recommended: true,
     models: [
-      { name: "claude-opus-4-7", label: "Claude Opus 4.7", recommended: true },
-      { name: "claude-opus-4-6", label: "Claude Opus 4.6" },
+      { name: "claude-opus-4-8", label: "Claude Opus 4.8", recommended: true },
+      { name: "claude-opus-4-7", label: "Claude Opus 4.7" },
       { name: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
     ],
     apiKeyPlaceholder: "sk-ant-...",
@@ -64,9 +64,13 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
     providerName: "openrouter",
     models: [
       {
+        name: "minimax/minimax-m3",
+        label: "MiniMax M3",
+        recommended: true,
+      },
+      {
         name: "moonshotai/kimi-k2.6",
         label: "Kimi K2.6",
-        recommended: true,
       },
     ],
     apiKeyPlaceholder: "sk-or-...",

@@ -102,6 +102,16 @@ repos:
       - id: check-added-large-files
         name: Check for added large files
         args: ["--maxkb=1500"]
+      - id: check-yaml
+        name: Check YAML
+        # --unsafe relaxes check-yaml to syntax-only, so it accepts the
+        # non-standard YAML this repo uses on purpose: custom tags
+        # (CloudFormation `!Ref`, docker-compose `!reset`) and multi-document
+        # files (e.g. vendored CRDs). Helm chart templates are excluded instead —
+        # their Go templating (`{{ ... }}`) isn't parseable as YAML at all.
+        args: ["--unsafe"]
+        exclude: >-
+          (?x)^deployment/helm/charts/onyx/(templates|templates_disabled)/
 
   - repo: https://github.com/rhysd/actionlint
     rev: a443f344ff32813837fa49f7aa6cbc478d770e62 # frozen: v1.7.9

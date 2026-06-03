@@ -486,8 +486,7 @@ class OnyxConfluence:
                 "Connecting to Confluence with Personal Access Token as user: %s",
                 credentials["confluence_username"],
             )
-            use_basic_auth: bool = self._is_cloud and not self.scoped_token
-            if use_basic_auth:
+            if self._is_cloud:
                 confluence = Confluence(
                     url=self._url,
                     username=credentials["confluence_username"],
