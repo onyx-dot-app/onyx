@@ -5,6 +5,10 @@ description: Write and maintain Playwright end-to-end tests for the Onyx applica
 
 # Playwright E2E Tests
 
+**Spec-authoring rules live in `web/tests/e2e/README.md`** — the Page Object Model, locator
+priority, and auto-retrying matchers. Read it before adding or changing a spec. This skill covers
+the surrounding workflow: layout, environment, running tests, auth, and Onyx-specific utilities.
+
 ## Project Layout
 
 - **Tests**: `web/tests/e2e/` — organized by feature (`auth/`, `admin/`, `chat/`, `assistants/`, `connectors/`, `mcp/`)
@@ -181,60 +185,6 @@ for (const theme of THEMES) {
 - `TOOL_IDS` — centralized `data-testid` selectors for tool options
 - `openActionManagement(page)` — opens the tool management popover
 
-## Locator Strategy
-
-Use locators in this priority order:
-
-1. **`data-testid` / `aria-label`** — preferred for Onyx components
-   ```typescript
-   page.getByTestId("AppSidebar/new-session")
-   page.getByLabel("admin-page-title")
-   ```
-
-2. **Role-based** — for standard HTML elements
-   ```typescript
-   page.getByRole("button", { name: "Create" })
-   page.getByRole("dialog")
-   ```
-
-3. **Text/Label** — for visible text content
-   ```typescript
-   page.getByText("Custom Assistant")
-   page.getByLabel("Email")
-   ```
-
-4. **CSS selectors** — last resort, only when above won't work
-   ```typescript
-   page.locator('input[name="name"]')
-   page.locator("#onyx-chat-input-textarea")
-   ```
-
-**Never use** `page.locator` with complex CSS/XPath when a built-in locator works.
-
-## Assertions
-
-Use web-first assertions — they auto-retry until the condition is met:
-
-```typescript
-// Visibility
-await expect(page.getByTestId("onyx-logo")).toBeVisible({ timeout: 5000 });
-
-// Text content
-await expect(page.getByTestId("assistant-name-display")).toHaveText("My Assistant");
-
-// Count
-await expect(page.locator('[data-testid="onyx-ai-message"]')).toHaveCount(2, { timeout: 30000 });
-
-// URL
-await expect(page).toHaveURL(/chatId=/);
-
-// Element state
-await expect(toggle).toBeChecked();
-await expect(button).toBeEnabled();
-```
-
-**Never use** `assert` statements or hardcoded `page.waitForTimeout()`.
-
 ## Waiting Strategy
 
 ```typescript
@@ -258,7 +208,7 @@ await page.waitForResponse(resp => resp.url().includes("/api/chat") && resp.stat
 2. **API-first setup** — use `OnyxApiClient` for backend state; reserve UI interactions for the behavior under test
 3. **User isolation** — tests that modify visible app state (sidebar, chat history) should run as the worker-specific user via `loginAsWorkerUser(page, testInfo.workerIndex)` (not admin) and clean up resources in `afterAll`. Each parallel worker gets its own user, preventing cross-contamination. Reserve `loginAsRandomUser` for flows that require a brand-new user (e.g. onboarding)
 4. **DRY helpers** — extract reusable logic into `utils/` with JSDoc comments
-5. **No hardcoded waits** — use `waitFor`, `waitForLoadState`, or web-first assertions
+5. **No hardcoded waits** — use the auto-retrying matchers (`web/tests/e2e/README.md`), `waitFor`, or `waitForLoadState`; never `waitForTimeout`
 6. **Parallel-safe** — no shared mutable state between tests. Prefer static, human-readable names (e.g. `"E2E-CMD Chat 1"`) and clean up resources by ID in `afterAll`. This keeps screenshots deterministic and avoids needing to mask/hide dynamic text. Only fall back to timestamps (`\`test-${Date.now()}\``) when resources cannot be reliably cleaned up or when name collisions across parallel workers would cause functional failures
 7. **Error context** — catch and re-throw with useful debug info (page text, URL, etc.)
 8. **Tag slow tests** — mark serial/slow tests with `@exclusive` in the test title
