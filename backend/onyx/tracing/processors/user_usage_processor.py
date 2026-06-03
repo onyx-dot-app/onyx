@@ -175,10 +175,18 @@ class UserUsageTracingProcessor(TracingProcessor):
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(record.tenant_id)
         try:
             with get_session_with_tenant(tenant_id=record.tenant_id) as db_session:
+                # The span's input_tokens is the litellm prompt total, which
+                # already includes cache reads; compute_cost_cents expects the
+                # NON-cached count and adds cache reads back at the cache rate.
+                # Subtract here to avoid pricing cache reads twice. The ledger
+                # column keeps the full input_tokens for token reporting.
+                non_cached_input = max(
+                    record.input_tokens - record.cache_read_tokens, 0
+                )
                 input_cost, output_cost = compute_cost_cents(
                     record.model,
                     record.provider,
-                    record.input_tokens,
+                    non_cached_input,
                     record.output_tokens,
                     cache_read_tokens=record.cache_read_tokens,
                     flow=record.flow,

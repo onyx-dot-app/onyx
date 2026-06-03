@@ -200,7 +200,9 @@ def test_ignores_generation_span_without_usage(
 ) -> None:
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
     try:
-        processor.on_span_end(_fake_span(GenerationSpanData(model="gpt-4o", usage=None)))
+        processor.on_span_end(
+            _fake_span(GenerationSpanData(model="gpt-4o", usage=None))
+        )
     finally:
         CURRENT_USER_ID_CONTEXTVAR.reset(token)
     processor.force_flush()
@@ -227,6 +229,59 @@ def test_on_span_end_never_raises_on_internal_error(
 
     processor.force_flush()
     assert _read_rows(sqlite_engine) == []
+
+
+def test_real_pricing_excludes_cache_reads_from_input(
+    monkeypatch: pytest.MonkeyPatch, sqlite_engine: Engine
+) -> None:
+    # Real compute_cost_cents (NOT stubbed): the span carries the litellm prompt
+    # total (input_tokens already includes cache reads). The processor must
+    # price the non-cached remainder as input and the cache reads at the cache
+    # rate — mirrors test_cost.py::test_cache_read_tokens_priced_as_input.
+    # gpt-4o: 1000 non-cached @ $2.50/Mtok + 2000 cache-read @ $1.25/Mtok =
+    # 0.25c + 0.25c = 0.5c input; 500 output tok @ $10/Mtok = 0.5c.
+    SessionLocal = sessionmaker(bind=sqlite_engine)
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _fake_session(*, tenant_id: str) -> Generator[Any, None, None]:  # noqa: ARG001
+        session = SessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    monkeypatch.setattr(proc_mod, "get_session_with_tenant", _fake_session)
+
+    p = UserUsageTracingProcessor(flush_interval_seconds=0.05)
+    try:
+        token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
+        try:
+            p.on_span_end(
+                _generation_span(
+                    usage={
+                        # input_tokens is the cache-inclusive prompt total.
+                        "input_tokens": 3000,
+                        "output_tokens": 500,
+                        "cache_read_input_tokens": 2000,
+                    }
+                )
+            )
+        finally:
+            CURRENT_USER_ID_CONTEXTVAR.reset(token)
+        p.force_flush()
+    finally:
+        p.shutdown()
+
+    rows = _read_rows(sqlite_engine)
+    assert len(rows) == 1
+    row = rows[0]
+    # Ledger keeps the full (cache-inclusive) input token count.
+    assert row.input_tokens == 3000
+    assert row.cache_read_tokens == 2000
+    # Cost must NOT double-charge the 2000 cache reads at the full input rate.
+    assert row.cost_cents == pytest.approx(1.0)
 
 
 def test_flush_swallows_record_errors(
