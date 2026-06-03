@@ -1405,10 +1405,10 @@ AUTO_PROVISION_DEFAULT_LLM_PROVIDERS = (
 )
 
 # Auto-create Onyx-managed built-in external app rows (disabled, Onyx-owned creds)
-# per tenant. Default True so cloud tenants can enable built-ins without their own
-# OAuth app; set False to skip provisioning entirely.
+# per tenant. Default False; set True on cloud so tenants can enable built-ins
+# without registering their own OAuth app.
 AUTO_PROVISION_DEFAULT_EXTERNAL_APPS = (
-    os.environ.get("AUTO_PROVISION_DEFAULT_EXTERNAL_APPS", "true").lower() == "true"
+    os.environ.get("AUTO_PROVISION_DEFAULT_EXTERNAL_APPS", "false").lower() == "true"
 )
 
 # Onyx-owned OAuth credentials for built-in external apps (managed cloud)

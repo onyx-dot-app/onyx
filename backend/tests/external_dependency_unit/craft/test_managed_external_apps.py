@@ -58,6 +58,13 @@ def _clean_built_ins(db_session: Session) -> Generator[None, None, None]:
     _cleanup(db_session)
 
 
+@pytest.fixture(autouse=True)
+def _enable_auto_provision(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Provisioning defaults off; this module exercises it, so enable it. The
+    disabled-path test flips it back to False."""
+    monkeypatch.setattr(prov, "AUTO_PROVISION_DEFAULT_EXTERNAL_APPS", True)
+
+
 def _set_managed_creds(
     monkeypatch: pytest.MonkeyPatch,
     creds: dict[ExternalAppType, dict[str, str]],

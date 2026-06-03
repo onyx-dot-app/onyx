@@ -64,8 +64,8 @@ until then).
 `provision_built_in_external_apps(db_session)`
 (`ee/onyx/server/tenants/provisioning.py`) runs from `setup_tenant`, alongside
 `configure_default_api_keys`, when a tenant is created. It is gated by
-`AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` (default `true`). For each managed
-built-in it:
+`AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` (default `false`; set `true` on cloud).
+For each managed built-in it:
 
 - creates the app disabled, with the operator's credentials (or empty if none
   are configured), or
