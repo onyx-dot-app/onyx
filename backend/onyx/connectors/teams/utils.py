@@ -131,6 +131,10 @@ def _retry(
                 retry_after=response.headers.get("Retry-After"),
             )
             retry_number += 1
+            # On the final permitted attempt there's nothing left to retry, so
+            # don't sleep just to raise — surface the failure immediately.
+            if retry_number >= MAX_RETRIES:
+                break
             logger.warning(
                 "Retryable Graph error %s on %s (attempt %s/%s); "
                 "sleeping %.1fs before retry.",

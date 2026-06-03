@@ -103,5 +103,7 @@ def test_raises_runtime_error_after_exhausting_retries() -> None:
         with pytest.raises(RuntimeError, match="Max number of retries"):
             _retry(graph_client=graph_client, request_url="teams")
 
+    # 10 attempts are made, but the final (exhausted) attempt raises immediately
+    # instead of sleeping, so there are only 9 backoff sleeps.
     assert graph_client.execute_request_direct.call_count == 10
-    assert mock_sleep.call_count == 10
+    assert mock_sleep.call_count == 9
