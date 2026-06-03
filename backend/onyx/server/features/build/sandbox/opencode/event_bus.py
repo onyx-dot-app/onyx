@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field
 from queue import Empty
@@ -56,9 +57,12 @@ class PodEventBus:
         directory: str | None = None,
         connect_timeout: float = 10.0,
         event_read_timeout: float | None = None,
+        reload_auth: Callable[[], httpx.Auth | None] | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._auth = auth
+        # Re-fetch auth on a /event 401 — a peer pod rotated the password.
+        self._reload_auth = reload_auth
         # Opencode-serve's Instance.provide middleware scopes /event per
         # ?directory= query param. Without it, the SSE stream only sees the
         # default Instance (server.connected, server.heartbeat) — session
@@ -232,6 +236,8 @@ class PodEventBus:
             params=params,
             timeout=timeout,
         ) as response:
+            if response.status_code == 401:
+                self._refresh_auth_on_401()
             response.raise_for_status()
             self.stream_ready.set()
             logger.info(
@@ -251,6 +257,19 @@ class PodEventBus:
                     if evt is None:
                         continue
                     self._dispatch(evt)
+
+    def _refresh_auth_on_401(self) -> None:
+        """Reload auth so the ensuing reconnect uses the rotated password.
+        Best-effort: a failed reload leaves auth unchanged."""
+        if self._reload_auth is None:
+            return
+        try:
+            new_auth = self._reload_auth()
+        except Exception as e:
+            logger.warning("PodEventBus reload_auth failed after 401: %s", e)
+            return
+        self._auth = new_auth
+        logger.info("PodEventBus reloaded auth after 401 on %s/event", self._base_url)
 
     def _dispatch(self, evt: dict[str, Any]) -> None:
         etype = evt.get("type")

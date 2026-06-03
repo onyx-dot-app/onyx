@@ -137,6 +137,13 @@ class _ServeMixin:
         with self._serve_conn_info_lock:
             self._serve_conn_info.pop(sandbox_id, None)
 
+    def _reload_serve_connection_info(self, sandbox_id: UUID) -> ServeConnectionInfo:
+        """Drop the local cache and reload from the source of truth. The 401
+        self-heal path: a peer api_server pod re-provisioned the sandbox and
+        rotated the password, so local invalidation alone never reaches us."""
+        self._invalidate_serve_connection_info(sandbox_id)
+        return self._serve_connection_info(sandbox_id)
+
     def _serve_health_check_base_url(self, sandbox_id: UUID) -> str | None:  # noqa: ARG002
         """Override to probe a different URL during the readiness wait than the
         persistent ``base_url``. Default ``None`` → use ``base_url``."""
@@ -295,6 +302,10 @@ class _ServeMixin:
                 auth=info.auth(),
                 directory=directory,
                 event_read_timeout=OPENCODE_SERVE_EVENT_READ_TIMEOUT,
+                # Self-heal a 401 mid-stream (peer pod rotated the password).
+                reload_auth=lambda: self._reload_serve_connection_info(
+                    sandbox_id
+                ).auth(),
             )
             self._event_buses[key] = bus
             logger.info(
@@ -313,6 +324,10 @@ class _ServeMixin:
             base_url=info.base_url,
             password=info.password,
             event_bus=bus,
+            # Self-heal a 401 on any unary call (peer pod rotated the password).
+            reload_password=lambda: self._reload_serve_connection_info(
+                sandbox_id
+            ).password,
         )
 
     def _close_session_buses(self, sandbox_id: UUID, session_id: UUID) -> None:
