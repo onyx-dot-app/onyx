@@ -17,7 +17,6 @@ from onyx.db.external_app import get_external_apps
 from onyx.db.external_app import get_policies
 from onyx.db.external_app import get_user_credentials_by_app_id
 from onyx.db.external_app import required_user_credential_keys
-from onyx.db.external_app import set_external_app_enablement_and_policies
 from onyx.db.external_app import update_external_app
 from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.external_app import validate_auth_template
@@ -217,40 +216,40 @@ def update_external_app_admin(
 
 
 @router.patch("/admin/apps/{external_app_id}")
-def set_external_app_enablement(
+def update_external_app_admin(
     external_app_id: int,
-    request: SetExternalAppEnablementRequest,
+    request: UpdateExternalAppRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ExternalAppAdminResponse:
-    """Toggle a built-in app's enablement and set its per-action policies,
-    keyed solely by ``external_app_id``. Credentials + gateway config are never
-    touched — this is the only mutation path for Onyx-managed built-ins (cloud),
-    whose config is Onyx-owned. 404 if the app doesn't exist.
+    """Partial update of any app (404 if absent). ``None`` fields are left
+    untouched. For Onyx-managed built-ins (cloud) the gateway-config fields
+    are Onyx-owned and ignored — only ``enabled`` + ``action_policies`` apply.
+    A custom app's bundle bytes are swapped via ``PUT /admin/apps/{id}/bundle``.
     """
-    app = get_external_app_by_id(db_session, external_app_id)
-    if app is None:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            f"External app with id {external_app_id} not found.",
-        )
+    app = _get_app_or_404(db_session, external_app_id)
+    managed = MULTI_TENANT and is_onyx_managed_app_type(app.app_type)
 
-    # Resolve the full policy set up front (validates unknown ids before any
-    # mutation). A None map leaves stored policies untouched — every action just
-    # resolves back to its existing/default value.
+    # Full policy set; None map leaves stored policies untouched.
     action_policies = build_action_policies(
         app.app_type,
         request.action_policies,
         get_policies(db_session, external_app_id),
     )
-    app = set_external_app_enablement_and_policies(
+    app, _old = update_external_app(
         db_session=db_session,
         external_app_id=external_app_id,
+        app_type=app.app_type,
+        name=request.name,
+        description=request.description,
         enabled=request.enabled,
+        # Gateway config is Onyx-owned for managed built-ins; drop it.
+        upstream_url_patterns=None if managed else request.upstream_url_patterns,
+        auth_template=None if managed else request.auth_template,
+        organization_credentials=None if managed else request.organization_credentials,
         action_policies=action_policies,
     )
-    # Commit after the push so a push failure rolls back the enablement/policy
-    # change rather than leaving the DB committed and the runtime stale.
+    # Push before commit so a push failure rolls back the change.
     push_skill_to_affected_sandboxes(app.skill, db_session)
     db_session.commit()
     return _to_admin_response(app)
