@@ -104,12 +104,11 @@ repos:
         args: ["--maxkb=1500"]
       - id: check-yaml
         name: Check YAML
-        # --unsafe checks syntax only (no construction), which tolerates the
-        # custom tags this repo relies on intentionally — CloudFormation
-        # (`!Ref`, `!GetAtt`) and docker-compose (`!reset`) — and implies
-        # --allow-multiple-documents so multi-doc files (e.g. vendored CRDs)
-        # pass too. Helm chart templates are still excluded: their Go
-        # templating (`{{ ... }}`) is not parseable as YAML at all.
+        # --unsafe relaxes check-yaml to syntax-only, so it accepts the
+        # non-standard YAML this repo uses on purpose: custom tags
+        # (CloudFormation `!Ref`, docker-compose `!reset`) and multi-document
+        # files (e.g. vendored CRDs). Helm chart templates are excluded instead —
+        # their Go templating (`{{ ... }}`) isn't parseable as YAML at all.
         args: ["--unsafe"]
         exclude: >-
           (?x)^deployment/helm/charts/onyx/(templates|templates_disabled)/
