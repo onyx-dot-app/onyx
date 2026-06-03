@@ -4156,6 +4156,18 @@ class UserGroup(Base):
     # whether this is a default group (e.g. "Basic", "Admins") that cannot be deleted
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # LTI 1.3 (Canvas) course this group mirrors, keyed by the launch `context.id`.
+    # A non-null value marks the group as "Canvas-managed": membership and name are
+    # overwritten on each roster sync, so admins should not hand-edit it.
+    lti_context_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, unique=True, index=True, default=None
+    )
+    # NRPS (Names and Role Provisioning Service) endpoint URL for the course,
+    # captured from the launch JWT on first launch. Used by the periodic roster sync.
+    lti_nrps_url: Mapped[str | None] = mapped_column(
+        String, nullable=True, default=None
+    )
+
     # Last time a user updated this user group
     time_last_modified_by_user: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

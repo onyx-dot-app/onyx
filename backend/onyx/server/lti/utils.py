@@ -404,6 +404,21 @@ def extract_lti_context(claims: dict) -> dict[str, str | None]:
     }
 
 
+def extract_nrps_url(claims: dict) -> str | None:
+    """Extract the NRPS (roster) endpoint URL from an LTI launch JWT.
+
+    Canvas delivers it inside the `namesroleservice` claim. Returns None if the
+    platform did not include it (e.g. the Developer Key lacks the NRPS scope).
+    """
+    nrps_claim = claims.get(
+        "https://purl.imsglobal.org/spec/lti-nrps/claim/namesroleservice"
+    )
+    if not isinstance(nrps_claim, dict):
+        return None
+    membership_url = nrps_claim.get("context_memberships_url")
+    return str(membership_url) if membership_url else None
+
+
 async def get_or_create_lti_course_project(
     user_id: UUID,
     course_id: str,

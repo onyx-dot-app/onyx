@@ -21,6 +21,7 @@ from fastapi import Form
 from fastapi import Path
 from fastapi import Query
 from fastapi import Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 from fastapi_users.authentication import Strategy
@@ -42,6 +43,7 @@ from onyx.configs.lti_configs import LTI_AUTH_TOKEN_URL
 from onyx.configs.lti_configs import LTI_CANVAS_BASE_URL
 from onyx.configs.lti_configs import LTI_CLIENT_ID
 from onyx.configs.lti_configs import LTI_DEPLOYMENT_ID
+from onyx.configs.lti_configs import lti_group_sync_enabled
 from onyx.configs.lti_configs import LTI_ISSUER
 from onyx.configs.lti_configs import LTI_JWKS_URL
 from onyx.connectors.canvas.client import CanvasApiClient
@@ -55,6 +57,7 @@ from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.credentials import create_credential
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import IndexingMode
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
@@ -71,6 +74,7 @@ from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.lti.jwks import get_public_jwks
 from onyx.server.lti.utils import _extract_email_from_claims
 from onyx.server.lti.utils import extract_lti_context
+from onyx.server.lti.utils import extract_nrps_url
 from onyx.server.lti.utils import find_canvas_course_node_id
 from onyx.server.lti.utils import find_tutor_personas_for_course
 from onyx.server.lti.utils import get_lti_launch_context
@@ -83,6 +87,7 @@ from onyx.server.lti.utils import upsert_lti_user
 from onyx.server.lti.utils import validate_and_consume_state
 from onyx.server.lti.utils import validate_lti_jwt
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -183,6 +188,37 @@ def _get_launch_context_for_course_or_raise(
             "LTI course context does not match this request",
         )
     return launch_context
+
+
+def _add_lti_launch_user_to_group(
+    lti_context_id: str,
+    course_title: str | None,
+    nrps_url: str | None,
+    user_email: str,
+) -> None:
+    """Ensure the course's Canvas-managed UserGroup exists and add the launching
+    user to it, so a student lands in their class group on the first request.
+
+    Runs synchronously inside a worker thread (see lti_launch). Best-effort: any
+    failure is logged and swallowed so it never breaks the launch.
+    """
+    add_user_to_lti_group_by_email = fetch_ee_implementation_or_noop(
+        "onyx.db.user_group", "add_user_to_lti_group_by_email", None
+    )
+    try:
+        with get_session_with_current_tenant() as db_session:
+            add_user_to_lti_group_by_email(
+                db_session=db_session,
+                lti_context_id=lti_context_id,
+                course_title=course_title,
+                nrps_url=nrps_url,
+                user_email=user_email,
+            )
+    except Exception:
+        logger.exception(
+            "Failed to add LTI launch user to course group (context %s)",
+            lti_context_id,
+        )
 
 
 def _canvas_base_url_from_issuer(issuer: str | None) -> str:
@@ -757,6 +793,17 @@ async def lti_launch(
                 canvas_course_id=canvas_course_id,
             ),
         )
+
+        # Mirror the Canvas course into an Onyx UserGroup and add this user now,
+        # so they're in their class group before the periodic roster sync runs.
+        if lti_group_sync_enabled():
+            await run_in_threadpool(
+                _add_lti_launch_user_to_group,
+                lti_context_id=course_id,
+                course_title=course_title,
+                nrps_url=extract_nrps_url(claims),
+                user_email=email,
+            )
 
     # Try to resolve the Canvas course's indexed hierarchy node so the editor
     # can scope its knowledge picker to just this course's contents. Optional:
