@@ -3,7 +3,7 @@
 import { Formik, useFormikContext } from "formik";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
-import { SvgArrowExchange } from "@opal/icons";
+import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
@@ -25,7 +25,6 @@ import {
   modelSpecSchemaShape,
 } from "@/refresh-pages/admin/IndexSettingsPage/shared";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 // ---------------------------------------------------------------------------
 // Shared modal shell — reads `isValid`, `isSubmitting`, `submitForm` from the
@@ -73,7 +72,7 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
           <Button
             disabled={!isValid || !dirty || isSubmitting}
             onClick={submitForm}
-            icon={isSubmitting ? SimpleLoader : undefined}
+            icon={isSubmitting ? SvgSimpleLoader : undefined}
           >
             {isEditing ? "Update" : "Connect"}
           </Button>

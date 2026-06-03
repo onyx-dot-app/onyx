@@ -4,12 +4,11 @@ import { useMemo, useRef, useState } from "react";
 import { MessageCard } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { SvgBlocks } from "@opal/icons";
+import { SvgBlocks, SvgSimpleLoader } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import { InputTypeIn } from "@opal/components";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
 import SkillCard, { type SkillCardItem } from "@/sections/cards/SkillCard";
@@ -74,7 +73,7 @@ export default function UserSkillsPage() {
       </SettingsLayouts.Header>
 
       <SettingsLayouts.Body>
-        {isLoading && <SimpleLoader />}
+        {isLoading && <SvgSimpleLoader />}
 
         {error && !isLoading && (
           <MessageCard
