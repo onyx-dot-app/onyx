@@ -61,11 +61,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 # Install prek (https://github.com/j178/prek) — a fast Rust reimplementation of
 # pre-commit and a drop-in replacement for it. Symlinked to `pre-commit` so the
 # repo's `.pre-commit-config.yaml` plus any `pre-commit ...` muscle memory and CI
-# invocations work unchanged. Fetched from the pinned GitHub release and verified
-# against the per-arch SHA256 the project publishes alongside each asset, matching
-# the supply-chain posture of the digest-pinned binaries elsewhere in this file.
-# Bumping PREK_VERSION requires updating BOTH checksums below (from the release's
-# *.tar.gz.sha256 assets); a mismatch fails the build closed.
+# invocations work unchanged.
 ARG PREK_VERSION=0.4.3
 RUN set -eux; \
   case "$(dpkg --print-architecture)" in \
