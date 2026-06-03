@@ -95,6 +95,7 @@ def generate_session_name(db_session: DBSession, session_id: UUID) -> str:
                 )
             ),
         ]
+        generated = ""
         with ensure_trace(
             "build_session_naming",
             group_id=str(session_id),
