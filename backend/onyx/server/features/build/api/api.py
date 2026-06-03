@@ -280,7 +280,8 @@ REWRITABLE_CONTENT_TYPES = {
 async def _get_sandbox_url(session_id: UUID) -> str:
     """Resolve a session's Next.js server URL; cache hits open no DB connection."""
     cache = get_cache_backend()
-    cached = cache.get(_sandbox_url_cache_key(session_id))
+    key = _sandbox_url_cache_key(session_id)
+    cached = cache.get(key)
     if cached is not None:
         return cached.decode()
 
@@ -296,7 +297,7 @@ async def _get_sandbox_url(session_id: UUID) -> str:
         raise HTTPException(status_code=404, detail="Sandbox not found")
 
     url = get_sandbox_manager().get_webapp_url(sandbox_id, nextjs_port)
-    cache.set(_sandbox_url_cache_key(session_id), url, ex=_SANDBOX_URL_TTL)
+    cache.set(key, url, ex=_SANDBOX_URL_TTL)
     return url
 
 
@@ -313,9 +314,11 @@ async def _proxy_request(
     path: str, request: Request, session_id: UUID
 ) -> StreamingResponse | Response:
     """Proxy a request to the sandbox's Next.js server."""
+    session_str = str(session_id)
+    rel_path = path.lstrip("/")
     base_url = await _get_sandbox_url(session_id)
 
-    target_url = f"{base_url}/{path.lstrip('/')}"
+    target_url = f"{base_url}/{rel_path}"
     if request.query_params:
         target_url = f"{target_url}?{request.query_params}"
 
@@ -351,12 +354,12 @@ async def _proxy_request(
             if key.lower() not in EXCLUDED_HEADERS
         }
         response_headers = _rewrite_proxy_response_headers(
-            response_headers, str(session_id)
+            response_headers, session_str
         )
 
         # Only /_next/static/media/* is content-hashed (safe forever). Dev chunk/CSS
         # URLs are stable but mutable, so immutable would serve stale code after edits.
-        if path.lstrip("/").startswith("_next/static/media/"):
+        if rel_path.startswith("_next/static/media/"):
             response_headers["cache-control"] = "public, max-age=31536000, immutable"
             response_headers.pop("pragma", None)
             response_headers.pop("expires", None)
@@ -371,9 +374,9 @@ async def _proxy_request(
                 # Surface as 502 so the caller falls back to the offline page.
                 logger.error("Error reading proxied body from %s: %s", target_url, e)
                 raise HTTPException(status_code=502, detail="Bad gateway")
-            content = _rewrite_asset_paths(raw, str(session_id))
+            content = _rewrite_asset_paths(raw, session_str)
             if "text/html" in content_type:
-                content = _inject_hmr_fixer(content, str(session_id))
+                content = _inject_hmr_fixer(content, session_str)
             return Response(
                 content=content,
                 status_code=response.status_code,
