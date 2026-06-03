@@ -178,7 +178,9 @@ saying so, and the rest of the flow package stays usable.
 
 ### LOOP
 
-Cuts a list into batches. Output is `{batches, batch_count, total}`.
+Cuts a list into batches. Output is `{batches, batch_count, total}`. The editor
+calls it **Loop (batches)**: batching is what it does, and "loop" on its own
+suggests repeating steps, which an acyclic spec cannot do.
 
 A spec is acyclic, so there is no jumping backwards; looping here means handing
 the next node a manageable slice instead of four hundred items at once. Pair it

@@ -24,8 +24,12 @@ test.describe("Flows pause between batches", () => {
     await flows.gotoList();
     await flows.createFlow();
     await flows.selectNode("http");
-    await flows.addStep("Loop");
+    // Named for what it does, so someone looking for "batch" finds it — in
+    // the palette, on the card and at the top of its settings alike.
+    await flows.addStep("Loop (batches)");
+    await flows.expectStepKind("loop", "Loop (batches)");
     await flows.selectNode("loop");
+    await flows.expectInspectorContains("Loop (batches)");
     await flows.fillField("Split this list", "{{ steps.http.body }}");
     await flows.expectInspectorContains("To wait between batches");
 

@@ -38,7 +38,7 @@ export type StepKind =
   | "Code"
   | "Transform"
   | "Condition"
-  | "Loop"
+  | "Loop (batches)"
   | "Retry"
   | "Webhook"
   | "Delay"
@@ -281,6 +281,11 @@ export class FlowsPage {
     await expect(
       this.edges.filter({ has: this.page.locator(`text=${branch}`) })
     ).toHaveCount(1);
+  }
+
+  /** The kind a step's card says it is, under its name. */
+  async expectStepKind(nodeId: string, kind: StepKind): Promise<void> {
+    await expect(this.node(nodeId)).toContainText(kind);
   }
 
   /** A note on a step's card, such as how it fans out. */

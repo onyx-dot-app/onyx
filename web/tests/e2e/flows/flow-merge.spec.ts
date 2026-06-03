@@ -44,7 +44,7 @@ test.describe("Flows merge and schedule steps", () => {
     // from passing on a locator that never matches.
     await flows.expectNoField("Run once per item in");
     await flows.selectNode("transform");
-    await flows.addStep("Loop");
+    await flows.addStep("Loop (batches)");
     await flows.selectNode("loop");
     await flows.expectField("Run once per item in");
   });

@@ -89,7 +89,7 @@ test.describe("Flows approvals", () => {
     await flows.createFlow();
 
     await flows.selectNode("http");
-    await flows.addStep("Loop");
+    await flows.addStep("Loop (batches)");
     await flows.selectNode("loop");
     await flows.fillField("Split this list", "{{ steps.http.body.rows }}");
     await flows.expectField("Run once per item in");
