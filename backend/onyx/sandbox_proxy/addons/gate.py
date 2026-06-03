@@ -17,9 +17,11 @@ from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.db.notification import create_notification
+from onyx.db.scheduled_task import get_live_scheduled_run_grants
 from onyx.external_apps.matching.engine import RequestMatch
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.action_matcher import ActionMatcher
@@ -222,6 +224,30 @@ class GateAddon:
             return
         ctx, match = gate_target
 
+        # Pre-approval short-circuit: a RUNNING scheduled run granting this
+        # app skips the park. Off-thread to keep sync DB work off the event
+        # loop; failure falls through to the normal park flow.
+        try:
+            pre_approved = await asyncio.to_thread(self._try_pre_approve, ctx, match)
+        except Exception:
+            logger.exception(
+                "gate.pre_approval_check_error session_id=%s tenant_id=%s "
+                "action_type=%s",
+                ctx.session_id,
+                ctx.tenant_id,
+                match.decisive.action_type,
+            )
+            pre_approved = False
+        if pre_approved:
+            # Same off-thread rationale as the ALWAYS / post-approval paths.
+            await asyncio.to_thread(
+                self._dispatch_injection_or_block,
+                flow,
+                sandbox=ctx.without_session(),
+                match=match,
+            )
+            return
+
         # mitmproxy forwards the original request on unhandled addon
         # exceptions, silently bypassing the gate. Fail closed instead.
         approval_id: UUID | None = None
@@ -380,6 +406,55 @@ class GateAddon:
         )
         return ctx, match
 
+    def _try_pre_approve(self, ctx: SessionContext, match: RequestMatch) -> bool:
+        """Insert a pre-decided APPROVED row for a RUNNING scheduled run that
+        grants the matched app; False otherwise (falls through to the park).
+
+        Bypassing ``try_record_decision``'s arbiter is safe: nothing parks
+        on a pre-decided row.
+        """
+        with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
+            grants = get_live_scheduled_run_grants(
+                db_session=db, session_id=ctx.session_id
+            )
+            if grants is None:
+                return False
+            run_id, granted_app_ids = grants
+            if match.external_app_id not in granted_app_ids:
+                return False
+            row = action_approval.insert_action_approval(
+                db,
+                session_id=ctx.session_id,
+                actions=[a.model_dump(mode="json") for a in match.actions],
+                app_name=match.app_name,
+                payload=match.payload,
+                external_app_id=match.external_app_id,
+                decision=ApprovalDecision.APPROVED,
+                decided_via=ApprovalDecidedVia.PRE_APPROVAL,
+            )
+            approval_id = row.approval_id
+            db.commit()
+
+        logger.info(
+            "gate.pre_approved approval_id=%s session_id=%s tenant_id=%s "
+            "run_id=%s external_app_id=%s action_type=%s",
+            approval_id,
+            ctx.session_id,
+            ctx.tenant_id,
+            run_id,
+            match.external_app_id,
+            match.decisive.action_type,
+        )
+        try:
+            self._notify_pre_approved(run_id, ctx, match)
+        except Exception as e:
+            logger.warning(
+                "gate.pre_approve_notify_failed approval_id=%s error=%s",
+                approval_id,
+                str(e),
+            )
+        return True
+
     def _persist_approval_row(self, ctx: SessionContext, match: RequestMatch) -> UUID:
         """Commit the row, register it for the drain, announce to the chat.
 
@@ -394,6 +469,7 @@ class GateAddon:
                 actions=actions_payload,
                 app_name=match.app_name,
                 payload=match.payload,
+                external_app_id=match.external_app_id,
             )
             approval_id = row.approval_id
             db.commit()
@@ -626,6 +702,28 @@ class GateAddon:
     # ------------------------------------------------------------------
     # Notification dispatch
     # ------------------------------------------------------------------
+
+    def _notify_pre_approved(
+        self, run_id: UUID, ctx: SessionContext, match: RequestMatch
+    ) -> None:
+        """Best-effort notification, one per (run, app).
+
+        ``create_notification`` dedups on (user, type, additional_data), so
+        the payload must stay exactly this pair — anything per-request would
+        defeat the dedup.
+        """
+        with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
+            create_notification(
+                user_id=ctx.user_id,
+                notif_type=NotificationType.SCHEDULED_TASK_PRE_APPROVED_ACTION,
+                db_session=db,
+                title=f"Scheduled task used {match.app_name} (pre-approved)",
+                additional_data={
+                    "run_id": str(run_id),
+                    "external_app_id": match.external_app_id,
+                },
+                autocommit=True,
+            )
 
     def _notify_approval_requested(
         self, approval_id: UUID, ctx: SessionContext, match: RequestMatch

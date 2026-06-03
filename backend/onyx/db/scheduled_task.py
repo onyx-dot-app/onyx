@@ -54,6 +54,7 @@ def create_scheduled_task(
     cron_expression: str,
     editor_mode: EditorMode,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
+    pre_approved_app_ids: list[int] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Insert a new ``ScheduledTask``.
@@ -77,6 +78,7 @@ def create_scheduled_task(
         editor_mode=editor_mode,
         status=status,
         next_run_at=next_run_at,
+        pre_approved_app_ids=pre_approved_app_ids or [],
     )
     db_session.add(task)
     db_session.flush()
@@ -135,6 +137,7 @@ def update_scheduled_task(
     cron_expression: str | None = None,
     editor_mode: EditorMode | None = None,
     status: ScheduledTaskStatus | None = None,
+    pre_approved_app_ids: list[int] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Apply a partial update to a scheduled task.
@@ -144,6 +147,9 @@ def update_scheduled_task(
         ``next_run_at`` is recomputed from ``now``.
       - If ``status`` transitions to PAUSED, ``next_run_at`` is set to NULL.
       - If ``status`` transitions to ACTIVE, ``next_run_at`` is recomputed.
+      - If ``prompt`` changes value, ``pre_approved_app_ids`` resets to []
+        (a grant is tied to a specific intent). Grants in the same patch
+        still win.
 
     Raises:
         OnyxError(NOT_FOUND): the task does not exist or is not owned by
@@ -156,8 +162,11 @@ def update_scheduled_task(
     schedule_changed = False
     if name is not None:
         task.name = name
-    if prompt is not None:
+    if prompt is not None and prompt != task.prompt:
         task.prompt = prompt
+        task.pre_approved_app_ids = []
+    if pre_approved_app_ids is not None:
+        task.pre_approved_app_ids = pre_approved_app_ids
     if editor_mode is not None:
         task.editor_mode = editor_mode
     if cron_expression is not None and cron_expression != task.cron_expression:
@@ -459,6 +468,37 @@ def find_stuck_runs(
         )
     )
     return list(db_session.execute(stmt).scalars())
+
+
+# ---------------------------------------------------------------------------
+# Egress-gate pre-approval lookup
+# ---------------------------------------------------------------------------
+
+
+def get_live_scheduled_run_grants(
+    *,
+    db_session: Session,
+    session_id: UUID,
+) -> tuple[UUID, list[int]] | None:
+    """``(run_id, pre_approved_app_ids)`` when ``session_id`` is a currently
+    RUNNING scheduled run; ``None`` otherwise.
+
+    The join to ``scheduled_task_run`` subsumes the session-origin check
+    (only SCHEDULED-origin sessions have run rows); the RUNNING filter means
+    interactive follow-ups on a finished scheduled session park as usual.
+    """
+    row = db_session.execute(
+        select(ScheduledTaskRun.id, ScheduledTask.pre_approved_app_ids)
+        .join(ScheduledTask, ScheduledTaskRun.task_id == ScheduledTask.id)
+        .where(
+            ScheduledTaskRun.session_id == session_id,
+            ScheduledTaskRun.status == ScheduledTaskRunStatus.RUNNING,
+        )
+    ).first()
+    if row is None:
+        return None
+    run_id, app_ids = row
+    return run_id, list(app_ids or [])
 
 
 # ---------------------------------------------------------------------------

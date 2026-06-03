@@ -38,6 +38,7 @@ from onyx.db.enums import Permission
 from onyx.db.enums import ScheduledTaskRunStatus
 from onyx.db.enums import ScheduledTaskStatus
 from onyx.db.enums import ScheduledTaskTriggerSource
+from onyx.db.external_app import get_external_apps
 from onyx.db.models import ScheduledTask
 from onyx.db.models import ScheduledTaskRun
 from onyx.db.models import User
@@ -130,6 +131,7 @@ class ScheduledTaskCreate(_Forbid):
     editor_payload: EditorPayload
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE
     run_immediately: bool = False
+    pre_approved_app_ids: list[int] = Field(default_factory=list)
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -146,6 +148,7 @@ class ScheduledTaskPatch(_Forbid):
     editor_mode: EditorMode | None = None
     editor_payload: EditorPayload | None = None
     status: ScheduledTaskStatus | None = None
+    pre_approved_app_ids: list[int] | None = None
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -216,6 +219,7 @@ class ScheduledTaskDetail(BaseModel):
     next_run_at: datetime | None
     next_runs: list[datetime]
     last_run: RunSummary | None
+    pre_approved_app_ids: list[int]
     created_at: datetime
     updated_at: datetime
 
@@ -303,9 +307,29 @@ def _detail(
         next_run_at=task.next_run_at,
         next_runs=next_runs,
         last_run=RunSummary.from_model(last_run) if last_run is not None else None,
+        pre_approved_app_ids=task.pre_approved_app_ids,
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
+
+
+def _validated_app_ids(db_session: Session, app_ids: list[int]) -> list[int]:
+    """Dedupe (order-preserving) and verify each id is a configured app.
+
+    Existence-only: a grant on an app that never produces an ASK match is
+    inert, so credential / has-ASK-action filtering stays editor-side.
+    """
+    deduped = list(dict.fromkeys(app_ids))
+    if not deduped:
+        return []
+    known_ids = {app.id for app in get_external_apps(db_session)}
+    unknown = [app_id for app_id in deduped if app_id not in known_ids]
+    if unknown:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Unknown external app id(s): {unknown}",
+        )
+    return deduped
 
 
 def _enqueue_executor(run_id: UUID) -> None:
@@ -389,6 +413,9 @@ def create_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
+        pre_approved_app_ids=_validated_app_ids(
+            db_session, request.pre_approved_app_ids
+        ),
     )
 
     if request.run_immediately:
@@ -449,6 +476,11 @@ def patch_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
+        pre_approved_app_ids=(
+            _validated_app_ids(db_session, request.pre_approved_app_ids)
+            if request.pre_approved_app_ids is not None
+            else None
+        ),
     )
     db_session.commit()
     db_session.refresh(task)

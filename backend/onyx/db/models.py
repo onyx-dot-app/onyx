@@ -59,6 +59,7 @@ from onyx.configs.constants import TokenRateLimitScope
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import AccountType
+from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
@@ -5483,6 +5484,17 @@ class ActionApproval(Base):
     decided_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    decided_via: Mapped[ApprovalDecidedVia | None] = mapped_column(
+        Enum(ApprovalDecidedVia, native_enum=False, name="approvaldecidedvia"),
+        nullable=True,
+    )
+    # Lookups key off this id, not ``app_name``: the latter isn't unique
+    # across instances (self-hosted GitLab/Jira share an app_type).
+    external_app_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
 
 class ScheduledTask(Base):
@@ -5506,6 +5518,15 @@ class ScheduledTask(Base):
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Apps whose ASK-gated actions skip the park for this task's runs.
+    # Reset to [] on prompt change — a grant is tied to a specific intent.
+    pre_approved_app_ids: Mapped[list[int]] = mapped_column(
+        PGJSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
 
     # Canonical 5-field cron expression. The three UI editor modes (interval,
     # daily/weekly, advanced) all compile to this string on save.
