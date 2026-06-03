@@ -9,8 +9,9 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
-// DeployEdgeConfig holds the persisted settings for `ods deploy edge`.
-type DeployEdgeConfig struct {
+// DeployTarget holds a persisted deploy workflow target (the repo hosting the
+// workflow and the workflow filename). Shared by the `ods deploy` subcommands.
+type DeployTarget struct {
 	TargetRepo     string `json:"target_repo,omitempty"`
 	TargetWorkflow string `json:"target_workflow,omitempty"`
 }
@@ -18,7 +19,8 @@ type DeployEdgeConfig struct {
 // Config is the top-level on-disk schema for ~/.config/onyx-dev/config.json.
 // New per-command sections should be added as additional fields.
 type Config struct {
-	DeployEdge DeployEdgeConfig `json:"deploy_edge,omitempty"`
+	DeployEdge DeployTarget `json:"deploy_edge,omitempty"`
+	DeployWiki DeployTarget `json:"deploy_wiki,omitempty"`
 }
 
 // Load reads the config file. Returns a zero-valued Config if the file does
