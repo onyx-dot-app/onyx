@@ -1106,6 +1106,15 @@ LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
 LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or ""  # For self-hosted Langfuse
 
+#####
+# Per-user usage/cost tracking
+#####
+# Records every priced generation span into the per-user usage ledger. On by
+# default; set to "false" to drop the recording processor entirely.
+USER_USAGE_TRACKING_ENABLED = (
+    os.environ.get("USER_USAGE_TRACKING_ENABLED", "true").lower() != "false"
+)
+
 # Defined custom query/answer conditions to validate the query and the LLM answer.
 # Format: list of strings
 CUSTOM_ANSWER_VALIDITY_CONDITIONS = json.loads(

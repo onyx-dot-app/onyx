@@ -5,6 +5,7 @@ from onyx.configs.app_configs import BRAINTRUST_PROJECT
 from onyx.configs.app_configs import LANGFUSE_HOST
 from onyx.configs.app_configs import LANGFUSE_PUBLIC_KEY
 from onyx.configs.app_configs import LANGFUSE_SECRET_KEY
+from onyx.configs.app_configs import USER_USAGE_TRACKING_ENABLED
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -48,6 +49,16 @@ def setup_tracing() -> list[str]:
             logger.error("Failed to initialize Langfuse tracing: %s", e)
     else:
         logger.info("Langfuse credentials not provided, skipping Langfuse setup")
+
+    # Per-user usage recorder — independent of external tracing backends.
+    if USER_USAGE_TRACKING_ENABLED:
+        try:
+            _setup_user_usage_tracking()
+            initialized_providers.append("user_usage")
+        except Exception as e:
+            logger.error("Failed to initialize user usage tracking: %s", e)
+    else:
+        logger.info("User usage tracking disabled, skipping")
 
     _initialized = True
 
@@ -100,3 +111,11 @@ def _setup_langfuse() -> None:
     )
 
     add_trace_processor(LangfuseTracingProcessor(client=client))
+
+
+def _setup_user_usage_tracking() -> None:
+    """Register the per-user usage recording processor."""
+    from onyx.tracing.framework import add_trace_processor
+    from onyx.tracing.processors.user_usage_processor import UserUsageTracingProcessor
+
+    add_trace_processor(UserUsageTracingProcessor())
