@@ -3,12 +3,13 @@
 import { useState, type ReactNode } from "react";
 import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgChevronDown } from "@opal/icons";
+import { SvgChevronDown, SvgSparkle } from "@opal/icons";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
+import CometEdge from "@/app/craft/components/CometEdge";
 import SkillBadge from "@/app/craft/components/tool-cards/SkillBadge";
 import BashBody from "@/app/craft/components/tool-cards/BashBody";
 import DiffBody from "@/app/craft/components/tool-cards/DiffBody";
@@ -21,6 +22,8 @@ import GenericBody from "@/app/craft/components/tool-cards/GenericBody";
 import {
   getStatusDisplay,
   getToolIcon,
+  isSkillCall,
+  isSkillInvocation,
   SvgLoader,
 } from "@/app/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
@@ -159,6 +162,14 @@ function renderStatusIcon(toolCall: ToolCallState) {
       />
     );
   }
+  // Finished skill leads with its sparkle, not the generic completion check.
+  if (isSkillInvocation(toolCall) && toolCall.status === "completed") {
+    return (
+      <SvgSparkle
+        className={cn(baseClass, "stroke-status-info-05 fill-status-info-05")}
+      />
+    );
+  }
   const StatusIcon = statusDisplay.icon;
   if (StatusIcon) {
     return <StatusIcon className={cn(baseClass, statusDisplay.iconClass)} />;
@@ -194,18 +205,21 @@ export default function CraftToolCard({
     <div className="flex items-center gap-2 min-w-0 w-full">
       {renderStatusIcon(toolCall)}
       <span className="truncate min-w-0">{renderPrimary(toolCall)}</span>
-      {toolCall.skillName && toolCall.toolName !== "skill" && (
-        <SkillBadge name={toolCall.skillName} />
-      )}
-      {/* Chevron always rendered to reserve space so the row doesn't shift. */}
-      <SvgChevronDown
-        aria-hidden={!expandable}
-        className={cn(
-          "size-4 stroke-text-03 transition-transform duration-150 shrink-0 ml-auto",
-          !isOpen && "-rotate-90",
-          !expandable && "invisible"
+      {/* Pinned right so the skill badge aligns across rows. */}
+      <span className="ml-auto flex items-center gap-2 shrink-0">
+        {toolCall.skillName && toolCall.toolName !== "skill" && (
+          <SkillBadge name={toolCall.skillName} />
         )}
-      />
+        {/* Chevron always rendered to reserve space so the row doesn't shift. */}
+        <SvgChevronDown
+          aria-hidden={!expandable}
+          className={cn(
+            "size-4 stroke-text-03 transition-transform duration-150 shrink-0",
+            !isOpen && "-rotate-90",
+            !expandable && "invisible"
+          )}
+        />
+      </span>
     </div>
   );
 
@@ -215,10 +229,20 @@ export default function CraftToolCard({
     expandable && "transition-colors hover:bg-background-tint-02"
   );
 
-  return (
+  // Comet only on standalone skill work; nested rows defer to the group's comet.
+  const isSkillInFlight =
+    !nested &&
+    isSkillCall(toolCall) &&
+    (toolCall.status === "pending" || toolCall.status === "in_progress");
+
+  // Thin border keeps a standalone skill distinct once the comet stops.
+  const skillCard = !nested && isSkillInvocation(toolCall);
+
+  const card = (
     <div
       className={cn(
         "rounded-08",
+        skillCard && !failed && "border-[0.5px] border-border-01",
         failed &&
           (nested
             ? "bg-status-error-00"
@@ -237,4 +261,13 @@ export default function CraftToolCard({
       )}
     </div>
   );
+
+  if (isSkillInFlight) {
+    return (
+      <CometEdge active tone="info" speedSeconds={2.6}>
+        {card}
+      </CometEdge>
+    );
+  }
+  return card;
 }
