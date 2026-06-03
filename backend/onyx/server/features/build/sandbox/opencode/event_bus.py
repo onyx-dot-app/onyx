@@ -260,13 +260,18 @@ class PodEventBus:
 
     def _refresh_auth_on_401(self) -> None:
         """Reload auth so the ensuing reconnect uses the rotated password.
-        Best-effort: a failed reload leaves auth unchanged."""
+        No-op when the reloaded credential is unchanged (a genuine auth
+        failure, not a rotation) so we don't log a misleading "reloaded" on
+        every reconnect before the bus self-closes. Best-effort: a failed
+        reload leaves auth unchanged."""
         if self._reload_auth is None:
             return
         try:
             new_auth = self._reload_auth()
         except Exception as e:
             logger.warning("PodEventBus reload_auth failed after 401: %s", e)
+            return
+        if _auth_token(new_auth) == _auth_token(self._auth):
             return
         self._auth = new_auth
         logger.info("PodEventBus reloaded auth after 401 on %s/event", self._base_url)
@@ -333,6 +338,20 @@ class PodEventBus:
                         sid,
                         sub.dropped_count,
                     )
+
+
+def _auth_token(auth: httpx.Auth | None) -> str | None:
+    """Render an ``httpx.Auth`` to its Authorization header for value
+    comparison. ``httpx.Auth`` has no ``__eq__``, so we drive its public
+    ``auth_flow`` over a throwaway request — scheme-agnostic and not tied to
+    any private attribute. ``None`` if there's no auth or it sets no header."""
+    if auth is None:
+        return None
+    try:
+        signed = next(auth.auth_flow(httpx.Request("GET", "http://x")))
+        return signed.headers.get("authorization")
+    except Exception:
+        return None
 
 
 def _extract_session_id(evt: dict[str, Any]) -> str | None:

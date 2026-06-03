@@ -795,13 +795,16 @@ class OpencodeServeClient:
         # transport is for tests (httpx.MockTransport); stored so
         # _apply_password can rebuild the client without losing it.
         self._transport = transport
-        self._auth: httpx.BasicAuth | None = None
-        self._http = self._make_http_client(password)
+        self._auth = self._basic_auth(password)
+        self._http = self._make_http_client()
 
-    def _make_http_client(self, password: str | None) -> httpx.Client:
-        self._auth = (
-            httpx.BasicAuth(OPENCODE_SERVER_USERNAME, password) if password else None
-        )
+    @staticmethod
+    def _basic_auth(password: str | None) -> httpx.BasicAuth | None:
+        return httpx.BasicAuth(OPENCODE_SERVER_USERNAME, password) if password else None
+
+    def _make_http_client(self) -> httpx.Client:
+        """Build a client bound to the current ``self._auth``. Pure — callers
+        set ``self._auth`` first."""
         return httpx.Client(
             base_url=self._base_url,
             auth=self._auth,
@@ -819,7 +822,8 @@ class OpencodeServeClient:
         construction); close the old one to avoid a pool leak."""
         old = self._http
         self._password = password
-        self._http = self._make_http_client(password)
+        self._auth = self._basic_auth(password)
+        self._http = self._make_http_client()
         old.close()
 
     # ----- session lifecycle ----------------------------------------

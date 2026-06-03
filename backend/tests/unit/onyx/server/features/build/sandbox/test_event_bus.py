@@ -593,3 +593,26 @@ def test_read_one_stream_401_without_reload_auth_just_raises(
             bus._read_one_stream()
     finally:
         bus.close()
+
+
+def test_read_one_stream_401_no_op_when_credential_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A genuine auth failure (reload returns the same credential) must not
+    swap auth — otherwise every reconnect logs a misleading "reloaded"."""
+    monkeypatch.setattr(event_bus_mod.httpx, "stream", _Status401Stream)
+    current = httpx.BasicAuth("opencode", "same-pw")
+
+    bus = PodEventBus(
+        base_url="http://test.invalid:4096",
+        auth=current,
+        # Distinct object, same credential — the 401 is genuine, not a rotation.
+        reload_auth=lambda: httpx.BasicAuth("opencode", "same-pw"),
+    )
+    try:
+        with pytest.raises(httpx.HTTPStatusError):
+            bus._read_one_stream()
+    finally:
+        bus.close()
+
+    assert bus._auth is current
