@@ -5829,7 +5829,9 @@
       "panel": {
         "description": "{start} – {end} · O uso do sistema é a atividade de LLM que o Onyx executa em segundo plano, e não para um usuário específico. Alguns exemplos são resumos de imagens, processamento RAG contextual e extração do grafo de conhecimento.",
         "emptyDescription": "O uso do sistema é a atividade de LLM que o Onyx executa em segundo plano, e não para um usuário específico. Alguns exemplos são resumos de imagens, processamento RAG contextual e extração do grafo de conhecimento.",
-        "error": { "title": "Falha ao carregar o uso do sistema neste período." },
+        "error": {
+          "title": "Falha ao carregar o uso do sistema neste período."
+        },
         "title": "Uso do sistema"
       },
       "summary": {
@@ -12488,6 +12490,152 @@
       "input": {
         "placeholder": "Analise meus dados e crie um painel..."
       }
+    }
+  },
+  "flows": {
+    "canvas": {
+      "kind": {
+        "HTTP": "Requisição HTTP",
+        "TRANSFORM": "Transformar",
+        "CONDITION": "Condição",
+        "AI": "IA"
+      },
+      "startBadge": "início",
+      "fanOutBadge": "por item",
+      "unreachableBadge": "não conectado",
+      "branch": {
+        "true": "verdadeiro",
+        "false": "falso"
+      },
+      "controls": {
+        "zoomIn": "Aproximar",
+        "zoomOut": "Afastar",
+        "fit": "Ajustar à tela"
+      }
+    },
+    "palette": {
+      "addAfterSelected": "Adicionar após a etapa selecionada:",
+      "addStandalone": "Adicionar uma etapa:",
+      "kind": {
+        "HTTP": "Requisição HTTP",
+        "TRANSFORM": "Transformar",
+        "CONDITION": "Condição",
+        "AI": "IA"
+      }
+    },
+    "status": {
+      "active": "Ativo",
+      "paused": "Pausado"
+    },
+    "runStatus": {
+      "QUEUED": "Na fila",
+      "RUNNING": "Em execução",
+      "SUCCEEDED": "Concluído",
+      "FAILED": "Falhou",
+      "SKIPPED": "Ignorado"
+    },
+    "inspector": {
+      "kind": {
+        "HTTP": "Requisição HTTP",
+        "TRANSFORM": "Transformar",
+        "CONDITION": "Condição",
+        "AI": "IA"
+      },
+      "fields": {
+        "name": "Nome",
+        "forEach": "Executar uma vez por item em",
+        "forEachHelp": "Uma expressão que resulta numa lista. Cada item fica disponível como '{item}'.",
+        "onError": "Se esta etapa falhar",
+        "retries": "Tentativas",
+        "retriesHelp": "Quantas vezes tentar antes de falhar. Só erros transitórios são repetidos.",
+        "method": "Método",
+        "url": "URL",
+        "urlHelp": "As expressões são resolvidas antes do envio.",
+        "headers": "Cabeçalhos",
+        "resultPath": "Usar esta parte da resposta",
+        "resultPathHelp": "Um caminho com pontos no corpo. Deixe vazio para manter a resposta inteira.",
+        "transformFields": "Campos",
+        "transformFieldsHelp": "Cada campo é uma expressão.",
+        "left": "Comparar",
+        "operator": "Operador",
+        "right": "Com",
+        "prompt": "Prompt",
+        "promptHelp": "As expressões são resolvidas antes de o modelo as ver.",
+        "outputFields": "Campos de saída",
+        "outputFieldsHelp": "Nomeie e tipe cada campo que o modelo deve devolver. Tipos: text, number, boolean, list.",
+        "fieldName": "Campo",
+        "fieldExpression": "Expressão",
+        "fieldType": "Tipo"
+      },
+      "onError": {
+        "stop": "Parar a execução",
+        "skip": "Ignorar e continuar"
+      },
+      "operator": {
+        "eq": "é igual a",
+        "ne": "não é igual a",
+        "gt": "é maior que",
+        "gte": "é no mínimo",
+        "lt": "é menor que",
+        "lte": "é no máximo",
+        "contains": "contém",
+        "not_contains": "não contém",
+        "is_empty": "está vazio",
+        "is_not_empty": "não está vazio"
+      },
+      "actions": {
+        "delete": "Excluir etapa"
+      },
+      "placeholder": {
+        "forEach": "'{{' steps.fetch.items '}}'",
+        "resultPath": "data.items",
+        "left": "'{{' steps.fetch.status '}}'",
+        "fieldExpression": "'{{' steps.fetch.body.title '}}'",
+        "fieldType": "text"
+      }
+    },
+    "editor": {
+      "actions": {
+        "test": "Execução de teste",
+        "save": "Salvar",
+        "saved": "Salvo",
+        "publish": "Publicar",
+        "publishFirst": "Publique o fluxo antes de ativá-lo",
+        "pause": "Pausar",
+        "activate": "Ativar"
+      },
+      "selectPrompt": "Selecione uma etapa para configurá-la.",
+      "loadFailed": "Não foi possível carregar este fluxo.",
+      "genericError": "Algo deu errado.",
+      "toast": {
+        "saved": "Fluxo salvo.",
+        "published": "Fluxo publicado.",
+        "activated": "Fluxo ativado.",
+        "paused": "Fluxo pausado."
+      }
+    },
+    "list": {
+      "title": "Fluxos",
+      "description": "Automações que rodam por agendamento, webhook ou sob demanda.",
+      "defaultName": "Fluxo sem título",
+      "createFailed": "Não foi possível criar o fluxo.",
+      "loadFailed": "Não foi possível carregar os fluxos.",
+      "nodeCount": "{count, plural, one {# etapa} other {# etapas}}",
+      "actions": {
+        "create": "Novo fluxo"
+      },
+      "empty": {
+        "title": "Ainda não há fluxos",
+        "description": "Crie um para automatizar um trabalho que roda sem você."
+      }
+    },
+    "run": {
+      "title": "Execução de {flow}",
+      "selectPrompt": "Selecione uma etapa para ver o que ela fez.",
+      "notRun": "Esta etapa não foi executada.",
+      "item": "Item {index}",
+      "input": "Entrada",
+      "output": "Saída"
     }
   },
   "knowledge": {

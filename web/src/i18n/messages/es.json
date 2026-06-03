@@ -5829,7 +5829,9 @@
       "panel": {
         "description": "{start} – {end} · El uso del sistema es actividad del LLM que Onyx ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes, el procesamiento RAG contextual y la extracción del grafo de conocimiento.",
         "emptyDescription": "El uso del sistema es actividad del LLM que Onyx ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes, el procesamiento RAG contextual y la extracción del grafo de conocimiento.",
-        "error": { "title": "No se pudo cargar el uso del sistema de este periodo." },
+        "error": {
+          "title": "No se pudo cargar el uso del sistema de este periodo."
+        },
         "title": "Uso del sistema"
       },
       "summary": {
@@ -12488,6 +12490,152 @@
       "input": {
         "placeholder": "Analiza mis datos y crea un panel..."
       }
+    }
+  },
+  "flows": {
+    "canvas": {
+      "kind": {
+        "HTTP": "Solicitud HTTP",
+        "TRANSFORM": "Transformar",
+        "CONDITION": "Condición",
+        "AI": "IA"
+      },
+      "startBadge": "inicio",
+      "fanOutBadge": "por elemento",
+      "unreachableBadge": "sin conectar",
+      "branch": {
+        "true": "verdadero",
+        "false": "falso"
+      },
+      "controls": {
+        "zoomIn": "Acercar",
+        "zoomOut": "Alejar",
+        "fit": "Ajustar a la vista"
+      }
+    },
+    "palette": {
+      "addAfterSelected": "Añadir después del paso seleccionado:",
+      "addStandalone": "Añadir un paso:",
+      "kind": {
+        "HTTP": "Solicitud HTTP",
+        "TRANSFORM": "Transformar",
+        "CONDITION": "Condición",
+        "AI": "IA"
+      }
+    },
+    "status": {
+      "active": "Activo",
+      "paused": "Pausado"
+    },
+    "runStatus": {
+      "QUEUED": "En cola",
+      "RUNNING": "En ejecución",
+      "SUCCEEDED": "Correcto",
+      "FAILED": "Fallido",
+      "SKIPPED": "Omitido"
+    },
+    "inspector": {
+      "kind": {
+        "HTTP": "Solicitud HTTP",
+        "TRANSFORM": "Transformar",
+        "CONDITION": "Condición",
+        "AI": "IA"
+      },
+      "fields": {
+        "name": "Nombre",
+        "forEach": "Ejecutar una vez por elemento en",
+        "forEachHelp": "Una expresión que da una lista. Cada elemento está disponible como '{item}'.",
+        "onError": "Si este paso falla",
+        "retries": "Intentos",
+        "retriesHelp": "Cuántas veces intentarlo antes de fallar. Solo se reintentan los errores transitorios.",
+        "method": "Método",
+        "url": "URL",
+        "urlHelp": "Las expresiones se resuelven antes de enviar la solicitud.",
+        "headers": "Cabeceras",
+        "resultPath": "Tomar esta parte de la respuesta",
+        "resultPathHelp": "Una ruta con puntos dentro del cuerpo. Déjalo vacío para conservar toda la respuesta.",
+        "transformFields": "Campos",
+        "transformFieldsHelp": "Cada campo es una expresión.",
+        "left": "Comparar",
+        "operator": "Operador",
+        "right": "Con",
+        "prompt": "Prompt",
+        "promptHelp": "Las expresiones se resuelven antes de que el modelo las vea.",
+        "outputFields": "Campos de salida",
+        "outputFieldsHelp": "Nombra y tipa cada campo que el modelo debe devolver. Tipos: text, number, boolean, list.",
+        "fieldName": "Campo",
+        "fieldExpression": "Expresión",
+        "fieldType": "Tipo"
+      },
+      "onError": {
+        "stop": "Detener la ejecución",
+        "skip": "Omitirlo y continuar"
+      },
+      "operator": {
+        "eq": "es igual a",
+        "ne": "no es igual a",
+        "gt": "es mayor que",
+        "gte": "es al menos",
+        "lt": "es menor que",
+        "lte": "es como máximo",
+        "contains": "contiene",
+        "not_contains": "no contiene",
+        "is_empty": "está vacío",
+        "is_not_empty": "no está vacío"
+      },
+      "actions": {
+        "delete": "Eliminar paso"
+      },
+      "placeholder": {
+        "forEach": "'{{' steps.fetch.items '}}'",
+        "resultPath": "data.items",
+        "left": "'{{' steps.fetch.status '}}'",
+        "fieldExpression": "'{{' steps.fetch.body.title '}}'",
+        "fieldType": "text"
+      }
+    },
+    "editor": {
+      "actions": {
+        "test": "Ejecución de prueba",
+        "save": "Guardar",
+        "saved": "Guardado",
+        "publish": "Publicar",
+        "publishFirst": "Publica el flujo antes de activarlo",
+        "pause": "Pausar",
+        "activate": "Activar"
+      },
+      "selectPrompt": "Selecciona un paso para configurarlo.",
+      "loadFailed": "No se pudo cargar este flujo.",
+      "genericError": "Algo salió mal.",
+      "toast": {
+        "saved": "Flujo guardado.",
+        "published": "Flujo publicado.",
+        "activated": "Flujo activado.",
+        "paused": "Flujo pausado."
+      }
+    },
+    "list": {
+      "title": "Flujos",
+      "description": "Automatizaciones que se ejecutan por horario, webhook o a demanda.",
+      "defaultName": "Flujo sin título",
+      "createFailed": "No se pudo crear el flujo.",
+      "loadFailed": "No se pudieron cargar los flujos.",
+      "nodeCount": "{count, plural, one {# paso} other {# pasos}}",
+      "actions": {
+        "create": "Nuevo flujo"
+      },
+      "empty": {
+        "title": "Aún no hay flujos",
+        "description": "Crea uno para automatizar un trabajo que se ejecuta sin ti."
+      }
+    },
+    "run": {
+      "title": "Ejecución de {flow}",
+      "selectPrompt": "Selecciona un paso para ver qué hizo.",
+      "notRun": "Este paso no se ejecutó.",
+      "item": "Elemento {index}",
+      "input": "Entrada",
+      "output": "Salida"
     }
   },
   "knowledge": {

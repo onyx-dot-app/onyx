@@ -12520,6 +12520,152 @@
       }
     }
   },
+  "flows": {
+    "canvas": {
+      "kind": {
+        "HTTP": "HTTP request",
+        "TRANSFORM": "Transform",
+        "CONDITION": "Condition",
+        "AI": "AI"
+      },
+      "startBadge": "start",
+      "fanOutBadge": "per item",
+      "unreachableBadge": "not connected",
+      "branch": {
+        "true": "true",
+        "false": "false"
+      },
+      "controls": {
+        "zoomIn": "Zoom in",
+        "zoomOut": "Zoom out",
+        "fit": "Fit to view"
+      }
+    },
+    "palette": {
+      "addAfterSelected": "Add after the selected step:",
+      "addStandalone": "Add a step:",
+      "kind": {
+        "HTTP": "HTTP request",
+        "TRANSFORM": "Transform",
+        "CONDITION": "Condition",
+        "AI": "AI"
+      }
+    },
+    "status": {
+      "active": "Active",
+      "paused": "Paused"
+    },
+    "runStatus": {
+      "QUEUED": "Queued",
+      "RUNNING": "Running",
+      "SUCCEEDED": "Succeeded",
+      "FAILED": "Failed",
+      "SKIPPED": "Skipped"
+    },
+    "inspector": {
+      "kind": {
+        "HTTP": "HTTP request",
+        "TRANSFORM": "Transform",
+        "CONDITION": "Condition",
+        "AI": "AI"
+      },
+      "fields": {
+        "name": "Name",
+        "forEach": "Run once per item in",
+        "forEachHelp": "An expression that resolves to a list. Each item is available as '{item}'.",
+        "onError": "If this step fails",
+        "retries": "Attempts",
+        "retriesHelp": "How many times to try before the step fails. Only transient errors are retried.",
+        "method": "Method",
+        "url": "URL",
+        "urlHelp": "Expressions are resolved before the request is sent.",
+        "headers": "Headers",
+        "resultPath": "Take this part of the response",
+        "resultPathHelp": "A dotted path into the response body. Leave empty to keep the whole response.",
+        "transformFields": "Fields",
+        "transformFieldsHelp": "Each field is one expression.",
+        "left": "Compare",
+        "operator": "Operator",
+        "right": "To",
+        "prompt": "Prompt",
+        "promptHelp": "Expressions are resolved before the model sees it.",
+        "outputFields": "Output fields",
+        "outputFieldsHelp": "Name and type each field the model must return. Types: text, number, boolean, list.",
+        "fieldName": "Field",
+        "fieldExpression": "Expression",
+        "fieldType": "Type"
+      },
+      "onError": {
+        "stop": "Stop the run",
+        "skip": "Skip it and carry on"
+      },
+      "operator": {
+        "eq": "equals",
+        "ne": "does not equal",
+        "gt": "is greater than",
+        "gte": "is at least",
+        "lt": "is less than",
+        "lte": "is at most",
+        "contains": "contains",
+        "not_contains": "does not contain",
+        "is_empty": "is empty",
+        "is_not_empty": "is not empty"
+      },
+      "actions": {
+        "delete": "Delete step"
+      },
+      "placeholder": {
+        "forEach": "'{{' steps.fetch.items '}}'",
+        "resultPath": "data.items",
+        "left": "'{{' steps.fetch.status '}}'",
+        "fieldExpression": "'{{' steps.fetch.body.title '}}'",
+        "fieldType": "text"
+      }
+    },
+    "editor": {
+      "actions": {
+        "test": "Test run",
+        "save": "Save",
+        "saved": "Saved",
+        "publish": "Publish",
+        "publishFirst": "Publish the flow before activating it",
+        "pause": "Pause",
+        "activate": "Activate"
+      },
+      "selectPrompt": "Select a step to configure it.",
+      "loadFailed": "This flow could not be loaded.",
+      "genericError": "Something went wrong.",
+      "toast": {
+        "saved": "Flow saved.",
+        "published": "Flow published.",
+        "activated": "Flow activated.",
+        "paused": "Flow paused."
+      }
+    },
+    "list": {
+      "title": "Flows",
+      "description": "Automations that run on a schedule, a webhook, or on demand.",
+      "defaultName": "Untitled flow",
+      "createFailed": "The flow could not be created.",
+      "loadFailed": "Flows could not be loaded.",
+      "nodeCount": "{count, plural, one {# step} other {# steps}}",
+      "actions": {
+        "create": "New flow"
+      },
+      "empty": {
+        "title": "No flows yet",
+        "description": "Create one to automate a job that runs without you."
+      }
+    },
+    "run": {
+      "title": "Run of {flow}",
+      "selectPrompt": "Select a step to see what it did.",
+      "notRun": "This step did not run.",
+      "item": "Item {index}",
+      "input": "Input",
+      "output": "Output"
+    }
+  },
   "knowledge": {
     "addView": {
       "connectedSources": {

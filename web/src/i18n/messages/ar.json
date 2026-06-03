@@ -12490,6 +12490,152 @@
       }
     }
   },
+  "flows": {
+    "canvas": {
+      "kind": {
+        "HTTP": "طلب HTTP",
+        "TRANSFORM": "تحويل",
+        "CONDITION": "شرط",
+        "AI": "ذكاء اصطناعي"
+      },
+      "startBadge": "البداية",
+      "fanOutBadge": "لكل عنصر",
+      "unreachableBadge": "غير متصل",
+      "branch": {
+        "true": "صحيح",
+        "false": "خطأ"
+      },
+      "controls": {
+        "zoomIn": "تكبير",
+        "zoomOut": "تصغير",
+        "fit": "ملاءمة العرض"
+      }
+    },
+    "palette": {
+      "addAfterSelected": "إضافة بعد الخطوة المحددة:",
+      "addStandalone": "إضافة خطوة:",
+      "kind": {
+        "HTTP": "طلب HTTP",
+        "TRANSFORM": "تحويل",
+        "CONDITION": "شرط",
+        "AI": "ذكاء اصطناعي"
+      }
+    },
+    "status": {
+      "active": "نشط",
+      "paused": "متوقف مؤقتًا"
+    },
+    "runStatus": {
+      "QUEUED": "في الانتظار",
+      "RUNNING": "قيد التشغيل",
+      "SUCCEEDED": "نجح",
+      "FAILED": "فشل",
+      "SKIPPED": "تم تخطيه"
+    },
+    "inspector": {
+      "kind": {
+        "HTTP": "طلب HTTP",
+        "TRANSFORM": "تحويل",
+        "CONDITION": "شرط",
+        "AI": "ذكاء اصطناعي"
+      },
+      "fields": {
+        "name": "الاسم",
+        "forEach": "التنفيذ مرة لكل عنصر في",
+        "forEachHelp": "تعبير ينتج قائمة. كل عنصر متاح باسم '{item}'.",
+        "onError": "إذا فشلت هذه الخطوة",
+        "retries": "عدد المحاولات",
+        "retriesHelp": "عدد المحاولات قبل اعتبار الخطوة فاشلة. تتم إعادة المحاولة للأخطاء المؤقتة فقط.",
+        "method": "الطريقة",
+        "url": "الرابط",
+        "urlHelp": "تُحل التعبيرات قبل إرسال الطلب.",
+        "headers": "الترويسات",
+        "resultPath": "خذ هذا الجزء من الاستجابة",
+        "resultPathHelp": "مسار بالنقاط داخل جسم الاستجابة. اتركه فارغًا للاحتفاظ بالاستجابة كاملة.",
+        "transformFields": "الحقول",
+        "transformFieldsHelp": "كل حقل هو تعبير واحد.",
+        "left": "قارن",
+        "operator": "المعامل",
+        "right": "بـ",
+        "prompt": "الموجّه",
+        "promptHelp": "تُحل التعبيرات قبل أن يراها النموذج.",
+        "outputFields": "حقول المخرجات",
+        "outputFieldsHelp": "سمِّ كل حقل يجب أن يعيده النموذج وحدد نوعه. الأنواع: text، number، boolean، list.",
+        "fieldName": "الحقل",
+        "fieldExpression": "التعبير",
+        "fieldType": "النوع"
+      },
+      "onError": {
+        "stop": "إيقاف التشغيل",
+        "skip": "تخطّيها والمتابعة"
+      },
+      "operator": {
+        "eq": "يساوي",
+        "ne": "لا يساوي",
+        "gt": "أكبر من",
+        "gte": "لا يقل عن",
+        "lt": "أصغر من",
+        "lte": "لا يزيد عن",
+        "contains": "يحتوي على",
+        "not_contains": "لا يحتوي على",
+        "is_empty": "فارغ",
+        "is_not_empty": "غير فارغ"
+      },
+      "actions": {
+        "delete": "حذف الخطوة"
+      },
+      "placeholder": {
+        "forEach": "'{{' steps.fetch.items '}}'",
+        "resultPath": "data.items",
+        "left": "'{{' steps.fetch.status '}}'",
+        "fieldExpression": "'{{' steps.fetch.body.title '}}'",
+        "fieldType": "text"
+      }
+    },
+    "editor": {
+      "actions": {
+        "test": "تشغيل تجريبي",
+        "save": "حفظ",
+        "saved": "تم الحفظ",
+        "publish": "نشر",
+        "publishFirst": "انشر التدفق قبل تفعيله",
+        "pause": "إيقاف مؤقت",
+        "activate": "تفعيل"
+      },
+      "selectPrompt": "اختر خطوة لإعدادها.",
+      "loadFailed": "تعذر تحميل هذا التدفق.",
+      "genericError": "حدث خطأ ما.",
+      "toast": {
+        "saved": "تم حفظ التدفق.",
+        "published": "تم نشر التدفق.",
+        "activated": "تم تفعيل التدفق.",
+        "paused": "تم إيقاف التدفق مؤقتًا."
+      }
+    },
+    "list": {
+      "title": "التدفقات",
+      "description": "أتمتة تعمل حسب جدول زمني أو عبر Webhook أو عند الطلب.",
+      "defaultName": "تدفق بلا عنوان",
+      "createFailed": "تعذر إنشاء التدفق.",
+      "loadFailed": "تعذر تحميل التدفقات.",
+      "nodeCount": "{count, plural, one {# خطوة} other {# خطوة}}",
+      "actions": {
+        "create": "تدفق جديد"
+      },
+      "empty": {
+        "title": "لا توجد تدفقات بعد",
+        "description": "أنشئ واحدًا لأتمتة عمل يجري دون تدخلك."
+      }
+    },
+    "run": {
+      "title": "تشغيل {flow}",
+      "selectPrompt": "اختر خطوة لمعرفة ما فعلته.",
+      "notRun": "لم تُنفَّذ هذه الخطوة.",
+      "item": "العنصر {index}",
+      "input": "المدخلات",
+      "output": "المخرجات"
+    }
+  },
   "knowledge": {
     "addView": {
       "connectedSources": {

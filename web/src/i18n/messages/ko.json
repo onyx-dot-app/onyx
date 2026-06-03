@@ -12490,6 +12490,152 @@
       }
     }
   },
+  "flows": {
+    "canvas": {
+      "kind": {
+        "HTTP": "HTTP 요청",
+        "TRANSFORM": "변환",
+        "CONDITION": "조건",
+        "AI": "AI"
+      },
+      "startBadge": "시작",
+      "fanOutBadge": "항목별",
+      "unreachableBadge": "연결 안 됨",
+      "branch": {
+        "true": "true",
+        "false": "false"
+      },
+      "controls": {
+        "zoomIn": "확대",
+        "zoomOut": "축소",
+        "fit": "화면에 맞추기"
+      }
+    },
+    "palette": {
+      "addAfterSelected": "선택한 단계 뒤에 추가:",
+      "addStandalone": "단계 추가:",
+      "kind": {
+        "HTTP": "HTTP 요청",
+        "TRANSFORM": "변환",
+        "CONDITION": "조건",
+        "AI": "AI"
+      }
+    },
+    "status": {
+      "active": "활성",
+      "paused": "일시중지"
+    },
+    "runStatus": {
+      "QUEUED": "대기 중",
+      "RUNNING": "실행 중",
+      "SUCCEEDED": "성공",
+      "FAILED": "실패",
+      "SKIPPED": "건너뜀"
+    },
+    "inspector": {
+      "kind": {
+        "HTTP": "HTTP 요청",
+        "TRANSFORM": "변환",
+        "CONDITION": "조건",
+        "AI": "AI"
+      },
+      "fields": {
+        "name": "이름",
+        "forEach": "이 목록의 항목마다 실행",
+        "forEachHelp": "목록을 반환하는 식입니다. 각 항목은 '{item}' 으로 사용할 수 있습니다.",
+        "onError": "이 단계가 실패하면",
+        "retries": "시도 횟수",
+        "retriesHelp": "실패로 처리하기 전 시도 횟수입니다. 일시적인 오류만 재시도합니다.",
+        "method": "메서드",
+        "url": "URL",
+        "urlHelp": "식은 요청을 보내기 전에 해석됩니다.",
+        "headers": "헤더",
+        "resultPath": "응답의 이 부분만 사용",
+        "resultPathHelp": "응답 본문의 점 경로입니다. 비워 두면 전체 응답을 유지합니다.",
+        "transformFields": "필드",
+        "transformFieldsHelp": "각 필드는 하나의 식입니다.",
+        "left": "비교 대상",
+        "operator": "연산자",
+        "right": "비교 값",
+        "prompt": "프롬프트",
+        "promptHelp": "식은 모델이 보기 전에 해석됩니다.",
+        "outputFields": "출력 필드",
+        "outputFieldsHelp": "모델이 반환할 각 필드의 이름과 형식을 지정하세요. 형식: text, number, boolean, list.",
+        "fieldName": "필드",
+        "fieldExpression": "식",
+        "fieldType": "형식"
+      },
+      "onError": {
+        "stop": "실행 중단",
+        "skip": "건너뛰고 계속"
+      },
+      "operator": {
+        "eq": "같음",
+        "ne": "같지 않음",
+        "gt": "보다 큼",
+        "gte": "이상",
+        "lt": "보다 작음",
+        "lte": "이하",
+        "contains": "포함",
+        "not_contains": "포함하지 않음",
+        "is_empty": "비어 있음",
+        "is_not_empty": "비어 있지 않음"
+      },
+      "actions": {
+        "delete": "단계 삭제"
+      },
+      "placeholder": {
+        "forEach": "'{{' steps.fetch.items '}}'",
+        "resultPath": "data.items",
+        "left": "'{{' steps.fetch.status '}}'",
+        "fieldExpression": "'{{' steps.fetch.body.title '}}'",
+        "fieldType": "text"
+      }
+    },
+    "editor": {
+      "actions": {
+        "test": "테스트 실행",
+        "save": "저장",
+        "saved": "저장됨",
+        "publish": "게시",
+        "publishFirst": "활성화하기 전에 플로우를 게시하세요",
+        "pause": "일시중지",
+        "activate": "활성화"
+      },
+      "selectPrompt": "구성할 단계를 선택하세요.",
+      "loadFailed": "이 플로우를 불러오지 못했습니다.",
+      "genericError": "문제가 발생했습니다.",
+      "toast": {
+        "saved": "플로우를 저장했습니다.",
+        "published": "플로우를 게시했습니다.",
+        "activated": "플로우를 활성화했습니다.",
+        "paused": "플로우를 일시중지했습니다."
+      }
+    },
+    "list": {
+      "title": "플로우",
+      "description": "일정, 웹훅 또는 수동으로 실행되는 자동화입니다.",
+      "defaultName": "제목 없는 플로우",
+      "createFailed": "플로우를 만들지 못했습니다.",
+      "loadFailed": "플로우를 불러오지 못했습니다.",
+      "nodeCount": "{count, plural, one {# 단계} other {# 단계}}",
+      "actions": {
+        "create": "새 플로우"
+      },
+      "empty": {
+        "title": "아직 플로우가 없습니다",
+        "description": "사용자 없이도 실행되는 작업을 자동화하려면 하나 만드세요."
+      }
+    },
+    "run": {
+      "title": "{flow} 실행",
+      "selectPrompt": "단계를 선택하면 결과를 볼 수 있습니다.",
+      "notRun": "이 단계는 실행되지 않았습니다.",
+      "item": "항목 {index}",
+      "input": "입력",
+      "output": "출력"
+    }
+  },
   "knowledge": {
     "addView": {
       "connectedSources": {

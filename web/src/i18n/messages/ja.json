@@ -5829,7 +5829,9 @@
       "panel": {
         "description": "{start} – {end} · システム使用状況とは、特定のユーザー向けではなく、Onyx がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
         "emptyDescription": "システム使用状況とは、特定のユーザー向けではなく、Onyx がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
-        "error": { "title": "この期間のシステム使用状況を読み込めませんでした。" },
+        "error": {
+          "title": "この期間のシステム使用状況を読み込めませんでした。"
+        },
         "title": "システム使用状況"
       },
       "summary": {
@@ -12488,6 +12490,152 @@
       "input": {
         "placeholder": "データを分析してダッシュボードを作成..."
       }
+    }
+  },
+  "flows": {
+    "canvas": {
+      "kind": {
+        "HTTP": "HTTP リクエスト",
+        "TRANSFORM": "変換",
+        "CONDITION": "条件",
+        "AI": "AI"
+      },
+      "startBadge": "開始",
+      "fanOutBadge": "項目ごと",
+      "unreachableBadge": "未接続",
+      "branch": {
+        "true": "true",
+        "false": "false"
+      },
+      "controls": {
+        "zoomIn": "拡大",
+        "zoomOut": "縮小",
+        "fit": "全体表示"
+      }
+    },
+    "palette": {
+      "addAfterSelected": "選択したステップの後に追加:",
+      "addStandalone": "ステップを追加:",
+      "kind": {
+        "HTTP": "HTTP リクエスト",
+        "TRANSFORM": "変換",
+        "CONDITION": "条件",
+        "AI": "AI"
+      }
+    },
+    "status": {
+      "active": "有効",
+      "paused": "一時停止"
+    },
+    "runStatus": {
+      "QUEUED": "待機中",
+      "RUNNING": "実行中",
+      "SUCCEEDED": "成功",
+      "FAILED": "失敗",
+      "SKIPPED": "スキップ"
+    },
+    "inspector": {
+      "kind": {
+        "HTTP": "HTTP リクエスト",
+        "TRANSFORM": "変換",
+        "CONDITION": "条件",
+        "AI": "AI"
+      },
+      "fields": {
+        "name": "名前",
+        "forEach": "この一覧の項目ごとに実行",
+        "forEachHelp": "一覧を返す式です。各項目は '{item}' で参照できます。",
+        "onError": "このステップが失敗したとき",
+        "retries": "試行回数",
+        "retriesHelp": "失敗と判定するまでの試行回数です。一時的なエラーのみ再試行します。",
+        "method": "メソッド",
+        "url": "URL",
+        "urlHelp": "式は送信前に解決されます。",
+        "headers": "ヘッダー",
+        "resultPath": "レスポンスのこの部分を使う",
+        "resultPathHelp": "レスポンス本文へのドット区切りパスです。空にすると全体を保持します。",
+        "transformFields": "フィールド",
+        "transformFieldsHelp": "各フィールドは 1 つの式です。",
+        "left": "比較対象",
+        "operator": "演算子",
+        "right": "比較値",
+        "prompt": "プロンプト",
+        "promptHelp": "式はモデルに渡す前に解決されます。",
+        "outputFields": "出力フィールド",
+        "outputFieldsHelp": "モデルが返すフィールドの名前と型を指定します。型: text、number、boolean、list。",
+        "fieldName": "フィールド",
+        "fieldExpression": "式",
+        "fieldType": "型"
+      },
+      "onError": {
+        "stop": "実行を停止",
+        "skip": "スキップして続行"
+      },
+      "operator": {
+        "eq": "等しい",
+        "ne": "等しくない",
+        "gt": "より大きい",
+        "gte": "以上",
+        "lt": "より小さい",
+        "lte": "以下",
+        "contains": "含む",
+        "not_contains": "含まない",
+        "is_empty": "空である",
+        "is_not_empty": "空でない"
+      },
+      "actions": {
+        "delete": "ステップを削除"
+      },
+      "placeholder": {
+        "forEach": "'{{' steps.fetch.items '}}'",
+        "resultPath": "data.items",
+        "left": "'{{' steps.fetch.status '}}'",
+        "fieldExpression": "'{{' steps.fetch.body.title '}}'",
+        "fieldType": "text"
+      }
+    },
+    "editor": {
+      "actions": {
+        "test": "テスト実行",
+        "save": "保存",
+        "saved": "保存済み",
+        "publish": "公開",
+        "publishFirst": "有効にする前にフローを公開してください",
+        "pause": "一時停止",
+        "activate": "有効にする"
+      },
+      "selectPrompt": "設定するステップを選択してください。",
+      "loadFailed": "このフローを読み込めませんでした。",
+      "genericError": "問題が発生しました。",
+      "toast": {
+        "saved": "フローを保存しました。",
+        "published": "フローを公開しました。",
+        "activated": "フローを有効にしました。",
+        "paused": "フローを一時停止しました。"
+      }
+    },
+    "list": {
+      "title": "フロー",
+      "description": "スケジュール、Webhook、手動で実行される自動化です。",
+      "defaultName": "名称未設定のフロー",
+      "createFailed": "フローを作成できませんでした。",
+      "loadFailed": "フローを読み込めませんでした。",
+      "nodeCount": "{count, plural, one {# ステップ} other {# ステップ}}",
+      "actions": {
+        "create": "新しいフロー"
+      },
+      "empty": {
+        "title": "フローがまだありません",
+        "description": "自分がいなくても動く作業を自動化するために作成しましょう。"
+      }
+    },
+    "run": {
+      "title": "{flow} の実行",
+      "selectPrompt": "ステップを選択すると結果が表示されます。",
+      "notRun": "このステップは実行されませんでした。",
+      "item": "項目 {index}",
+      "input": "入力",
+      "output": "出力"
     }
   },
   "knowledge": {

@@ -5829,7 +5829,9 @@
       "panel": {
         "description": "{start} – {end} · Systemnutzung ist LLM-Aktivität, die Onyx im Hintergrund statt für einen bestimmten Benutzer ausführt. Beispiele sind Bildzusammenfassungen, kontextbezogene RAG-Verarbeitung und Knowledge-Graph-Extraktion.",
         "emptyDescription": "Systemnutzung ist LLM-Aktivität, die Onyx im Hintergrund statt für einen bestimmten Benutzer ausführt. Beispiele sind Bildzusammenfassungen, kontextbezogene RAG-Verarbeitung und Knowledge-Graph-Extraktion.",
-        "error": { "title": "Die Systemnutzung für diesen Zeitraum konnte nicht geladen werden." },
+        "error": {
+          "title": "Die Systemnutzung für diesen Zeitraum konnte nicht geladen werden."
+        },
         "title": "Systemnutzung"
       },
       "summary": {
@@ -12488,6 +12490,152 @@
       "input": {
         "placeholder": "Analysiere meine Daten und erstelle ein Dashboard..."
       }
+    }
+  },
+  "flows": {
+    "canvas": {
+      "kind": {
+        "HTTP": "HTTP-Anfrage",
+        "TRANSFORM": "Umwandeln",
+        "CONDITION": "Bedingung",
+        "AI": "KI"
+      },
+      "startBadge": "Start",
+      "fanOutBadge": "pro Element",
+      "unreachableBadge": "nicht verbunden",
+      "branch": {
+        "true": "wahr",
+        "false": "falsch"
+      },
+      "controls": {
+        "zoomIn": "Vergrößern",
+        "zoomOut": "Verkleinern",
+        "fit": "Einpassen"
+      }
+    },
+    "palette": {
+      "addAfterSelected": "Nach dem gewählten Schritt hinzufügen:",
+      "addStandalone": "Schritt hinzufügen:",
+      "kind": {
+        "HTTP": "HTTP-Anfrage",
+        "TRANSFORM": "Umwandeln",
+        "CONDITION": "Bedingung",
+        "AI": "KI"
+      }
+    },
+    "status": {
+      "active": "Aktiv",
+      "paused": "Pausiert"
+    },
+    "runStatus": {
+      "QUEUED": "In Warteschlange",
+      "RUNNING": "Läuft",
+      "SUCCEEDED": "Erfolgreich",
+      "FAILED": "Fehlgeschlagen",
+      "SKIPPED": "Übersprungen"
+    },
+    "inspector": {
+      "kind": {
+        "HTTP": "HTTP-Anfrage",
+        "TRANSFORM": "Umwandeln",
+        "CONDITION": "Bedingung",
+        "AI": "KI"
+      },
+      "fields": {
+        "name": "Name",
+        "forEach": "Einmal pro Element ausführen in",
+        "forEachHelp": "Ein Ausdruck, der eine Liste ergibt. Jedes Element steht als '{item}' bereit.",
+        "onError": "Wenn dieser Schritt fehlschlägt",
+        "retries": "Versuche",
+        "retriesHelp": "Wie oft versucht wird, bevor der Schritt fehlschlägt. Nur vorübergehende Fehler werden wiederholt.",
+        "method": "Methode",
+        "url": "URL",
+        "urlHelp": "Ausdrücke werden vor dem Senden aufgelöst.",
+        "headers": "Header",
+        "resultPath": "Diesen Teil der Antwort übernehmen",
+        "resultPathHelp": "Ein Punktpfad in den Antworttext. Leer lassen, um die ganze Antwort zu behalten.",
+        "transformFields": "Felder",
+        "transformFieldsHelp": "Jedes Feld ist ein Ausdruck.",
+        "left": "Vergleiche",
+        "operator": "Operator",
+        "right": "Mit",
+        "prompt": "Prompt",
+        "promptHelp": "Ausdrücke werden aufgelöst, bevor das Modell sie sieht.",
+        "outputFields": "Ausgabefelder",
+        "outputFieldsHelp": "Benennen Sie jedes Feld, das das Modell liefern muss. Typen: text, number, boolean, list.",
+        "fieldName": "Feld",
+        "fieldExpression": "Ausdruck",
+        "fieldType": "Typ"
+      },
+      "onError": {
+        "stop": "Lauf anhalten",
+        "skip": "Überspringen und fortfahren"
+      },
+      "operator": {
+        "eq": "ist gleich",
+        "ne": "ist ungleich",
+        "gt": "ist größer als",
+        "gte": "ist mindestens",
+        "lt": "ist kleiner als",
+        "lte": "ist höchstens",
+        "contains": "enthält",
+        "not_contains": "enthält nicht",
+        "is_empty": "ist leer",
+        "is_not_empty": "ist nicht leer"
+      },
+      "actions": {
+        "delete": "Schritt löschen"
+      },
+      "placeholder": {
+        "forEach": "'{{' steps.fetch.items '}}'",
+        "resultPath": "data.items",
+        "left": "'{{' steps.fetch.status '}}'",
+        "fieldExpression": "'{{' steps.fetch.body.title '}}'",
+        "fieldType": "text"
+      }
+    },
+    "editor": {
+      "actions": {
+        "test": "Testlauf",
+        "save": "Speichern",
+        "saved": "Gespeichert",
+        "publish": "Veröffentlichen",
+        "publishFirst": "Veröffentlichen Sie den Flow, bevor Sie ihn aktivieren",
+        "pause": "Pausieren",
+        "activate": "Aktivieren"
+      },
+      "selectPrompt": "Wählen Sie einen Schritt, um ihn zu konfigurieren.",
+      "loadFailed": "Dieser Flow konnte nicht geladen werden.",
+      "genericError": "Etwas ist schiefgelaufen.",
+      "toast": {
+        "saved": "Flow gespeichert.",
+        "published": "Flow veröffentlicht.",
+        "activated": "Flow aktiviert.",
+        "paused": "Flow pausiert."
+      }
+    },
+    "list": {
+      "title": "Flows",
+      "description": "Automatisierungen nach Zeitplan, per Webhook oder auf Abruf.",
+      "defaultName": "Unbenannter Flow",
+      "createFailed": "Der Flow konnte nicht erstellt werden.",
+      "loadFailed": "Flows konnten nicht geladen werden.",
+      "nodeCount": "{count, plural, one {# Schritt} other {# Schritte}}",
+      "actions": {
+        "create": "Neuer Flow"
+      },
+      "empty": {
+        "title": "Noch keine Flows",
+        "description": "Erstellen Sie einen, um eine Aufgabe ohne Sie laufen zu lassen."
+      }
+    },
+    "run": {
+      "title": "Lauf von {flow}",
+      "selectPrompt": "Wählen Sie einen Schritt, um sein Ergebnis zu sehen.",
+      "notRun": "Dieser Schritt wurde nicht ausgeführt.",
+      "item": "Element {index}",
+      "input": "Eingabe",
+      "output": "Ausgabe"
     }
   },
   "knowledge": {
