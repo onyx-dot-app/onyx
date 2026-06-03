@@ -29,9 +29,12 @@ export default function ExternalAppsPage() {
   const { isAdmin, isCurator } = useUser();
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // A `?connect` deep-link focuses the targeted card's Connect button, so don't
+  // steal that focus by autofocusing the search.
+  const hasConnectDeepLink = useSearchParams().has("connect");
 
   useOnMount(() => {
-    searchInputRef.current?.focus();
+    if (!hasConnectDeepLink) searchInputRef.current?.focus();
   });
 
   return (
