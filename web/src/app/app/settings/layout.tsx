@@ -65,6 +65,12 @@ export default function Layout({ children }: LayoutProps) {
               >
                 Connectors
               </SidebarTab>
+              <SidebarTab
+                href="/app/settings/usage"
+                selected={pathname === "/app/settings/usage"}
+              >
+                Usage
+              </SidebarTab>
             </div>
 
             {/* Right: Tab Content */}
