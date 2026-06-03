@@ -33,7 +33,3 @@ In dev mode the frontend proxies `/api/*` straight to the backend (the dev-only 
 handler at `web/src/app/api/[...path]/route.ts`), so **`localhost:3000` serves both the UI and
 `/api`** — no reverse proxy needed. You can also hit the backend directly at `localhost:8080` (note:
 **no** `/api` prefix there — e.g. `/health`, `/auth/type`).
-
-`nginx` (sibling container, port 80) is only needed when running against the **prebuilt/production
-compose containers** instead of the dev servers: a production `next start` build disables that
-in-app `/api` proxy (returns 404), so nginx fronts `/` → web and `/api/*` → backend.

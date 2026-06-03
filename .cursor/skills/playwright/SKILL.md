@@ -28,17 +28,14 @@ All new files should be `.ts`, not `.js`.
 
 ## Environment
 
-`playwright.config.ts` honors a `BASE_URL` override (default `http://localhost:3000`). Global setup
-registers/logs in users over `/api/auth/*`, so `BASE_URL` must point at a server that proxies `/api`
-to the backend. Pick it based on how the app is running:
+Run Playwright against your **local dev servers** so the tests exercise your working-tree changes:
+start `ods web dev` (frontend, `:3000`) and `ods backend api` (backend, `:8080`), then use the
+config default `BASE_URL=http://localhost:3000` — no override needed. In dev, `next dev` proxies
+`/api/*` to the backend itself (the route handler `web/src/app/api/[...path]/route.ts`), so the UI
+and `/api` both live on `:3000`; global setup needs the backend up too, since it registers/logs in
+users over `/api/auth/*`.
 
-- **Dev servers (`ods web dev` + `ods backend api`):** use the default `http://localhost:3000` — no
-  override needed. In dev, `next dev` proxies `/api/*` to the backend itself (the dev-only route
-  handler `web/src/app/api/[...path]/route.ts`), so both the UI and `/api` live on `:3000`.
-- **Prebuilt / production compose stack:** production builds disable that in-app `/api` proxy, so
-  `/api` is fronted by the `nginx` sibling container — run with `BASE_URL=http://nginx`.
-
-Readiness check: `curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/auth/type` → `200` (swap in `http://nginx` when targeting the compose stack).
+Readiness check: `curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/auth/type` → `200`.
 
 Other bootstrap notes:
 - The devcontainer image bakes in Playwright's OS deps + Node, but **not** the Chromium browser binary. If a run fails with a missing-browser error, install it once: `bunx playwright install chromium`.
@@ -51,20 +48,11 @@ Other bootstrap notes:
 cd web   # from the repo root
 
 # Run a specific test file
-# (default BASE_URL=http://localhost:3000 works with the dev servers)
 bunx playwright test tests/e2e/chat/default_assistant.spec.ts
 
 # Narrow to a single test by title (fast smoke check)
 bunx playwright test tests/e2e/chat/welcome_page.spec.ts \
   -g "chat input is visible and focusable" --project admin
-
-# Run a specific project
-bunx playwright test --project admin
-bunx playwright test --project exclusive
-
-# Against the prebuilt compose stack (prod build) instead of the dev servers,
-# front /api via nginx:
-BASE_URL=http://nginx bunx playwright test --project admin
 ```
 
 ## Test Projects
