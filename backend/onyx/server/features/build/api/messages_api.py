@@ -22,12 +22,19 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.session.manager import RateLimitError
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.utils import set_current_user_id_dependency
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
 router = APIRouter()
+
+# Shared single callable so FastAPI caches it across the auth + user-context
+# dependencies on the same endpoint (require_permission(...) builds a new
+# function each call, which would otherwise run auth twice).
+_require_basic_access = require_permission(Permission.BASIC_ACCESS)
+_set_user_id_ctx = set_current_user_id_dependency(_require_basic_access)
 
 
 def check_build_rate_limits(
@@ -74,8 +81,11 @@ def list_messages(
 def send_message(
     session_id: UUID,
     request: MessageRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(_require_basic_access),
     _rate_limit_check: None = Depends(check_build_rate_limits),
+    # Pins CURRENT_USER_ID_CONTEXTVAR in the event-loop context so it propagates
+    # into the streaming generator for usage attribution.
+    _user_ctx: None = Depends(_set_user_id_ctx),
 ) -> StreamingResponse:
     """
     Send a message to the CLI agent and stream the response.
@@ -149,8 +159,11 @@ def send_subagent_message(
     session_id: UUID,
     subagent_session_id: str,
     request: MessageRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(_require_basic_access),
     _rate_limit_check: None = Depends(check_build_rate_limits),
+    # Pins CURRENT_USER_ID_CONTEXTVAR in the event-loop context so it propagates
+    # into the streaming generator for usage attribution.
+    _user_ctx: None = Depends(_set_user_id_ctx),
 ) -> StreamingResponse:
     """
     Send a follow-up message to a subagent's child opencode session and

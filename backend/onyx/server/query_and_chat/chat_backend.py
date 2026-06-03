@@ -99,6 +99,7 @@ from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.usage_limits import check_usage_and_raise
 from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
+from onyx.server.utils import set_current_user_id_dependency
 from onyx.tracing.framework.create import ensure_trace
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
@@ -553,6 +554,11 @@ def handle_send_chat_message(
     user: User = Depends(current_chat_accessible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
     _api_key_usage_check: None = Depends(check_api_key_usage),
+    # Pins CURRENT_USER_ID_CONTEXTVAR in the event-loop context so it propagates
+    # into the streaming generator (all branches) for usage attribution.
+    _user_ctx: None = Depends(
+        set_current_user_id_dependency(current_chat_accessible_user)
+    ),
 ) -> StreamingResponse | ChatFullResponse:
     """
     This endpoint is used to send a new chat message.
