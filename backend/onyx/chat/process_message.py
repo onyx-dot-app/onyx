@@ -31,10 +31,12 @@ from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.chat.chat_utils import get_custom_agent_prompt
 from onyx.chat.chat_utils import is_last_assistant_message_clarification
 from onyx.chat.chat_utils import load_all_chat_files
+from onyx.chat.compression import calculate_effective_history_tokens
 from onyx.chat.compression import calculate_total_history_tokens
 from onyx.chat.compression import compress_chat_history
 from onyx.chat.compression import find_summary_for_branch
 from onyx.chat.compression import get_compression_params
+from onyx.chat.compression import trim_history_to_token_budget
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import EmptyLLMResponseError
 from onyx.chat.llm_loop import run_llm_loop
@@ -57,6 +59,7 @@ from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
+from onyx.configs.chat_configs import COMPRESSION_TRIGGER_RATIO
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
@@ -873,6 +876,45 @@ def build_chat_turn(
         and forced_tool_id == search_tool_id
     ):
         forced_tool_id = None
+
+    # Fallback guard: if no summary applies to this branch (compression hasn't
+    # run yet, is in flight, or has repeatedly failed) and the history alone
+    # already exceeds the compression trigger, hard-trim to a recent suffix.
+    # Without this, every agent-loop iteration ships the entire raw history to
+    # the LLM — unbounded prompt cost and latency for the rest of the session.
+    if summary_message is None:
+        history_tokens = calculate_total_history_tokens(chat_history)
+        trim_budget = int(
+            (llm_max_context_window - reserved_token_count) * COMPRESSION_TRIGGER_RATIO
+        )
+        if trim_budget > 0 and history_tokens > trim_budget:
+            chat_history, dropped_messages = trim_history_to_token_budget(
+                chat_history, trim_budget
+            )
+            for msg in dropped_messages:
+                if not msg.files:
+                    continue
+                for fd in msg.files:
+                    file_id = fd.get("id")
+                    if not file_id:
+                        continue
+                    summarized_file_metadata.setdefault(
+                        file_id,
+                        FileToolMetadata(
+                            file_id=file_id,
+                            filename=fd.get("name") or "unknown",
+                            approx_char_count=0,
+                        ),
+                    )
+            logger.warning(
+                "No applicable summary for session %s with %s history tokens; "
+                "hard-trimmed %s of %s messages to fit %s token budget",
+                chat_session.id,
+                history_tokens,
+                len(dropped_messages),
+                len(dropped_messages) + len(chat_history),
+                trim_budget,
+            )
 
     # TODO(nmgarza5): Once summarization is done, we don't need to load all files from the beginning.
     # Load all files needed for this chat chain into memory.
@@ -1709,11 +1751,18 @@ def llm_loop_completion_handle(
             chat_session_id=chat_session_id,
             db_session=db_session,
         )
-        total_tokens = calculate_total_history_tokens(updated_chat_history)
+        # Trigger on what the next prompt would actually contain (summary +
+        # post-cutoff messages), not the raw chain total. The raw total keeps
+        # counting already-summarized messages, which would re-trigger
+        # compression at the end of every turn for the rest of the session.
+        existing_summary = find_summary_for_branch(db_session, updated_chat_history)
+        effective_tokens = calculate_effective_history_tokens(
+            updated_chat_history, existing_summary
+        )
 
     compression_params = get_compression_params(
         max_input_tokens=llm.config.max_input_tokens,
-        current_history_tokens=total_tokens,
+        current_history_tokens=effective_tokens,
         reserved_tokens=reserved_tokens,
     )
     if compression_params.should_compress:

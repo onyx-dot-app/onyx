@@ -9,10 +9,12 @@ message when compression triggered, making it part of the tree structure.
 """
 
 from typing import NamedTuple
+from uuid import UUID
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.chat_configs import COMPRESSION_TRIGGER_RATIO
 from onyx.configs.constants import MessageType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -40,6 +42,16 @@ logger = setup_logger()
 
 # Ratio of available context to allocate for recent messages after compression
 RECENT_MESSAGES_RATIO = 0.2
+
+# Skip compression when the messages to summarize total fewer tokens than this.
+# Each compression is a full LLM round-trip with fixed overhead (system prompt +
+# recent-context messages), so summarizing a trivial tail is pure waste.
+MIN_TOKENS_TO_COMPRESS = 1000
+
+# Auto-release window for the per-session compression lock. Generous enough for
+# a slow summarization LLM call; prevents a crashed holder from blocking the
+# session's compression forever.
+COMPRESSION_LOCK_TIMEOUT_SECONDS = 300
 
 
 class CompressionResult(BaseModel):
@@ -116,17 +128,31 @@ def find_summary_for_branch(
     chat_history: list[ChatMessage],
 ) -> ChatMessage | None:
     """
-    Find the most recent summary that applies to the current branch.
+    Find the best summary that applies to the current branch.
 
-    A summary applies if its parent_message_id is in the current chat history,
-    meaning it was created on this branch.
+    A summary applies if its cutoff (``last_summarized_message_id``) is in the
+    current chat history. Every message has exactly one parent, so the path from
+    the root to the cutoff is unique — any branch containing the cutoff shares
+    the entire summarized prefix, and the summary stays valid even if the tree
+    forked after it was created (regenerate, edit, retry, concurrent sends).
+
+    Matching on the summary's ``parent_message_id`` (previous behavior) was
+    fragile: ``latest_child_message_id`` is rewritten whenever a sibling is
+    created, so any fork after the summary's parent silently orphaned every
+    existing summary. Affected sessions then re-summarized their full history
+    at the end of every turn and their prompts were never truncated.
+
+    Note: the summarization prompt shows post-cutoff messages "for context
+    only", so a summary reused across a fork may carry faint context from a
+    sibling branch. Accepted trade-off versus losing compression entirely.
 
     Args:
         db_session: Database session
         chat_history: Branch-aware list of messages
 
     Returns:
-        The applicable summary message, or None if no summary exists for this branch
+        The applicable summary with the highest cutoff (most summarization
+        progress, ties broken by recency), or None if none applies.
     """
     if not chat_history:
         return None
@@ -134,23 +160,88 @@ def find_summary_for_branch(
     history_ids = {m.id for m in chat_history}
     chat_session_id = chat_history[0].chat_session_id
 
-    # Query all summaries for this session (typically few), then filter in Python.
-    # Order by time_sent descending to get the most recent summary first.
+    # Query all summaries for this session (typically few), then filter in
+    # Python to avoid an IN clause over large histories. Highest cutoff first
+    # so the first applicable summary is the one with the most progress.
     summaries = (
         db_session.query(ChatMessage)
         .filter(
             ChatMessage.chat_session_id == chat_session_id,
             ChatMessage.last_summarized_message_id.isnot(None),
         )
-        .order_by(ChatMessage.time_sent.desc())
+        .order_by(
+            ChatMessage.last_summarized_message_id.desc(),
+            ChatMessage.time_sent.desc(),
+        )
         .all()
     )
-    # Optimization to avoid using IN clause for large histories
     for summary in summaries:
-        if summary.parent_message_id in history_ids:
+        if summary.last_summarized_message_id in history_ids:
             return summary
 
     return None
+
+
+def calculate_effective_history_tokens(
+    chat_history: list[ChatMessage],
+    existing_summary: ChatMessage | None,
+) -> int:
+    """
+    Token count of what the next prompt will actually contain: the applicable
+    summary (if any) plus the messages after its cutoff.
+
+    Using the raw chain total instead (previous behavior) meant that once a
+    session ever crossed the compression threshold, compression re-triggered at
+    the end of every subsequent turn — already-summarized messages still count
+    toward the raw total even though they never reach the prompt.
+    """
+    if not existing_summary or not existing_summary.last_summarized_message_id:
+        return calculate_total_history_tokens(chat_history)
+
+    cutoff_id = existing_summary.last_summarized_message_id
+    post_cutoff_tokens = sum(
+        m.token_count or 0 for m in chat_history if m.id > cutoff_id
+    )
+    return post_cutoff_tokens + (existing_summary.token_count or 0)
+
+
+def trim_history_to_token_budget(
+    chat_history: list[ChatMessage],
+    token_budget: int,
+) -> tuple[list[ChatMessage], list[ChatMessage]]:
+    """
+    Keep the longest suffix of ``chat_history`` that fits in ``token_budget``,
+    aligned to start at a USER message (mirroring the compression cutoff rule).
+    The most recent message is always kept, even if over budget.
+
+    This is the emergency fallback for when no summary applies to the branch:
+    it bounds prompt size instead of shipping the entire raw history to the LLM
+    on every agent-loop iteration.
+
+    Returns:
+        (kept_messages, dropped_messages) — both in original order.
+    """
+    kept: list[ChatMessage] = []
+    tokens_used = 0
+
+    for msg in reversed(chat_history):
+        msg_tokens = msg.token_count or 0
+        if tokens_used + msg_tokens > token_budget and kept:
+            break
+        kept.insert(0, msg)
+        tokens_used += msg_tokens
+
+    # Align the cut to right before a user message so the LLM never sees a
+    # conversation that opens mid-exchange (e.g. with a dangling tool response).
+    while kept and kept[0].message_type != MessageType.USER:
+        kept.pop(0)
+
+    if not kept:
+        kept = chat_history[-1:]
+
+    kept_ids = {m.id for m in kept}
+    dropped = [m for m in chat_history if m.id not in kept_ids]
+    return kept, dropped
 
 
 def get_messages_to_summarize(
@@ -375,6 +466,43 @@ def compress_chat_history(
 
     chat_session_id = chat_history[0].chat_session_id
 
+    # Only one compression per session at a time. Concurrent turns on the same
+    # session (rapid-fire sends, regenerates, retries) would otherwise each run
+    # their own expensive summarization LLM call over largely the same messages.
+    lock = get_cache_backend().lock(
+        f"chat_compression_lock:{chat_session_id}",
+        timeout=COMPRESSION_LOCK_TIMEOUT_SECONDS,
+    )
+    if not lock.acquire(blocking=False):
+        logger.info(
+            "Skipping compression for session %s: another compression is in flight",
+            chat_session_id,
+        )
+        return CompressionResult(summary_created=False, messages_summarized=0)
+
+    try:
+        return _compress_chat_history_locked(
+            chat_history=chat_history,
+            llm=llm,
+            compression_params=compression_params,
+            chat_session_id=chat_session_id,
+        )
+    finally:
+        try:
+            lock.release()
+        except Exception:
+            logger.warning(
+                "Failed to release compression lock for session %s", chat_session_id
+            )
+
+
+def _compress_chat_history_locked(
+    chat_history: list[ChatMessage],
+    llm: LLM,
+    compression_params: CompressionParams,
+    chat_session_id: UUID | None,
+) -> CompressionResult:
+    """Body of compress_chat_history; caller holds the per-session lock."""
     logger.info(
         "Starting compression for session %s, history_len=%s, tokens_for_recent=%s",
         chat_session_id,
@@ -410,6 +538,23 @@ def compress_chat_history(
 
             if not summary_content.older_messages:
                 logger.debug("No messages to summarize, skipping compression")
+                return CompressionResult(summary_created=False, messages_summarized=0)
+
+            # Not worth a full LLM round-trip to summarize a trivial tail. Also
+            # serves as the double-check after acquiring the lock: if a
+            # concurrent compression just finished, the re-found summary leaves
+            # only the newest messages here.
+            older_tokens = calculate_total_history_tokens(
+                summary_content.older_messages
+            )
+            if older_tokens < MIN_TOKENS_TO_COMPRESS:
+                logger.info(
+                    "Skipping compression for session %s: only %s tokens to "
+                    "summarize (min %s)",
+                    chat_session_id,
+                    older_tokens,
+                    MIN_TOKENS_TO_COMPRESS,
+                )
                 return CompressionResult(summary_created=False, messages_summarized=0)
 
             # LLM call runs with no DB connection held.

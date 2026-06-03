@@ -7,11 +7,13 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from onyx.chat.compression import _build_llm_messages_for_summarization
+from onyx.chat.compression import calculate_effective_history_tokens
 from onyx.chat.compression import find_summary_for_branch
 from onyx.chat.compression import generate_summary
 from onyx.chat.compression import get_compression_params
 from onyx.chat.compression import get_messages_to_summarize
 from onyx.chat.compression import SummaryContent
+from onyx.chat.compression import trim_history_to_token_budget
 from onyx.configs.constants import MessageType
 from onyx.llm.models import AssistantMessage
 from onyx.llm.models import SystemMessage
@@ -505,3 +507,162 @@ def test_generate_summary_messages_are_separate() -> None:
     # 3 older user messages + 1 cutoff + 1 recent + 1 reminder = at least 3 user messages
     assert user_count >= 3
     assert assistant_count >= 1  # At least one assistant message from older_messages
+
+
+def test_find_summary_survives_fork_after_summary_parent() -> None:
+    """A summary must stay applicable when the branch forks after its parent.
+
+    Regression test: summaries used to be matched on parent_message_id, which
+    falls off the mainline whenever a sibling is created (regenerate, retry,
+    concurrent send). The summarized prefix (root -> cutoff) is unique, so
+    cutoff membership is the correct applicability test.
+    """
+    # Summary was created when the branch tip was message 5; the user then
+    # regenerated, so the live branch is 1, 2, 3, 4, 8, 9 (fork after 4).
+    forked_branch_history = [
+        create_mock_message(1, "msg1", 100),
+        create_mock_message(2, "msg2", 100),
+        create_mock_message(3, "msg3", 100),
+        create_mock_message(4, "msg4", 100),
+        create_mock_message(8, "regenerated", 100),
+        create_mock_message(9, "reply", 100),
+    ]
+
+    summary = create_mock_message(
+        id=100,
+        message="Summary of msgs 1-2",
+        token_count=50,
+        parent_message_id=5,  # dead branch tip — NOT in current history
+        last_summarized_message_id=2,  # cutoff IS in current history
+    )
+
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
+        summary
+    ]
+
+    result = find_summary_for_branch(
+        mock_db,
+        forked_branch_history,  # ty: ignore[invalid-argument-type]
+    )
+
+    assert result == summary
+
+
+def test_find_summary_prefers_highest_applicable_cutoff() -> None:
+    """Among applicable summaries, the one with the most progress wins."""
+    branch_history = [create_mock_message(i, f"msg{i}", 100) for i in range(1, 7)]
+
+    early_summary = create_mock_message(
+        id=100,
+        message="Summary up to 2",
+        token_count=50,
+        parent_message_id=3,
+        last_summarized_message_id=2,
+    )
+    later_summary = create_mock_message(
+        id=101,
+        message="Summary up to 4",
+        token_count=50,
+        parent_message_id=5,
+        last_summarized_message_id=4,
+    )
+    off_branch_summary = create_mock_message(
+        id=102,
+        message="Summary from another branch",
+        token_count=50,
+        parent_message_id=50,
+        last_summarized_message_id=40,  # not in current history
+    )
+
+    # Query orders by cutoff desc; first applicable should be returned.
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
+        off_branch_summary,
+        later_summary,
+        early_summary,
+    ]
+
+    result = find_summary_for_branch(
+        mock_db,
+        branch_history,  # ty: ignore[invalid-argument-type]
+    )
+
+    assert result == later_summary
+
+
+def test_effective_history_tokens_without_summary() -> None:
+    history = [create_mock_message(i, f"msg{i}", 100) for i in range(1, 5)]
+    assert (
+        calculate_effective_history_tokens(history, None)  # ty: ignore[invalid-argument-type]
+        == 400
+    )
+
+
+def test_effective_history_tokens_with_summary() -> None:
+    """Only the summary + post-cutoff messages should count toward the trigger."""
+    history = [create_mock_message(i, f"msg{i}", 100) for i in range(1, 11)]
+    summary = create_mock_message(
+        id=100,
+        message="Summary up to 8",
+        token_count=30,
+        parent_message_id=10,
+        last_summarized_message_id=8,
+    )
+
+    # Messages 9, 10 (200 tokens) + summary (30 tokens)
+    assert (
+        calculate_effective_history_tokens(history, summary)  # ty: ignore[invalid-argument-type]
+        == 230
+    )
+
+
+def test_trim_history_keeps_recent_suffix_within_budget() -> None:
+    history = [
+        create_mock_message(1, "u1", 100, MessageType.USER),
+        create_mock_message(2, "a1", 100, MessageType.ASSISTANT),
+        create_mock_message(3, "u2", 100, MessageType.USER),
+        create_mock_message(4, "a2", 100, MessageType.ASSISTANT),
+        create_mock_message(5, "u3", 100, MessageType.USER),
+        create_mock_message(6, "a3", 100, MessageType.ASSISTANT),
+    ]
+
+    kept, dropped = trim_history_to_token_budget(
+        history,  # ty: ignore[invalid-argument-type]
+        token_budget=350,
+    )
+
+    # 350-token budget fits 3 messages; alignment to a USER start keeps 5, 6.
+    assert [m.id for m in kept] == [5, 6]
+    assert [m.id for m in dropped] == [1, 2, 3, 4]
+
+
+def test_trim_history_never_returns_empty() -> None:
+    """Even a single over-budget message must be kept."""
+    history = [
+        create_mock_message(1, "a", 100, MessageType.ASSISTANT),
+        create_mock_message(2, "huge", 100000, MessageType.USER),
+    ]
+
+    kept, dropped = trim_history_to_token_budget(
+        history,  # ty: ignore[invalid-argument-type]
+        token_budget=50,
+    )
+
+    assert [m.id for m in kept] == [2]
+    assert [m.id for m in dropped] == [1]
+
+
+def test_trim_history_noop_when_under_budget() -> None:
+    history = [
+        create_mock_message(1, "u1", 100, MessageType.USER),
+        create_mock_message(2, "a1", 100, MessageType.ASSISTANT),
+    ]
+
+    kept, dropped = trim_history_to_token_budget(
+        history,  # ty: ignore[invalid-argument-type]
+        token_budget=500,
+    )
+
+    assert [m.id for m in kept] == [1, 2]
+    assert dropped == []
