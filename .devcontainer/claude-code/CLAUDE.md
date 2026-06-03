@@ -36,17 +36,10 @@ handler at `web/src/app/api/[...path]/route.ts`), so **`localhost:3000` serves b
 
 ## Validating YAML
 
-`pyyaml` is **not installed** in this environment, so `python3 -c 'import yaml'` fails with
-`ModuleNotFoundError`. To validate YAML, use the `check-yaml` pre-commit hook instead — it
-runs in its own isolated env (the `pre-commit` command here is [prek](https://github.com/j178/prek),
-which installs `pyyaml` for the hook):
+`pyyaml` is **not installed** here, so `python3 -c 'import yaml'` fails. To validate YAML, use the
+`check-yaml` pre-commit hook instead — it runs in its own env with `pyyaml` available:
 
 ```bash
 pre-commit run check-yaml --all-files        # all tracked YAML
 pre-commit run check-yaml --files path/to/file.yaml
 ```
-
-It runs with `--unsafe` (syntax-only) so it tolerates the repo's intentional custom tags
-(CloudFormation `!Ref`, docker-compose `!reset`) and multi-document files; Helm chart templates
-under `deployment/helm/charts/onyx/templates*` are excluded since their Go templating isn't
-parseable as YAML.
