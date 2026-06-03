@@ -20,7 +20,7 @@
   align-items: baseline;
   gap: 0.25rem;
   padding: 0.125rem 0.375rem;
-  border-radius: var(--border-radius-08);
+  border-radius: var(--radius-08);
   border: 1px solid transparent;
   font-size: 0.8125rem;
   line-height: 1.25rem;
@@ -67,7 +67,7 @@
   justify-content: center;
   width: 1rem;
   height: 1rem;
-  border-radius: var(--border-radius-04);
+  border-radius: var(--radius-04);
 }
 
 .rich-input-tile-remove:hover {

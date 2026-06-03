@@ -5,7 +5,7 @@ Tests for chunk accumulation and finalize semantics — no DB required.
 
 from __future__ import annotations
 
-from onyx.server.features.build.session.manager import BuildStreamingState
+from onyx.server.features.build.session.streaming import BuildStreamingState
 
 
 class TestBuildStreamingState:

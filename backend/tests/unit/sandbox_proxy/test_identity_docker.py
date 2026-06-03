@@ -287,7 +287,7 @@ def test_initial_sync_raises_on_duplicate_ip() -> None:
     c2 = _make_container(container_id="cid-2", sandbox_id=other_uuid, ip="172.18.0.5")
     client.containers.list.return_value = [c1, c2]
 
-    with pytest.raises(RuntimeError, match="duplicate sandbox IP"):
+    with pytest.raises(RuntimeError, match="Duplicate sandbox IP"):
         lookup._initial_sync()
 
 
