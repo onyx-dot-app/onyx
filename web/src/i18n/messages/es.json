@@ -12505,7 +12505,9 @@
         "RETRY": "Reintentar",
         "WEBHOOK": "Webhook",
         "DELAY": "Esperar",
-        "FILTER": "Filtrar"
+        "FILTER": "Filtrar",
+        "SCHEDULE": "Programar",
+        "MERGE": "Combinar"
       },
       "startBadge": "inicio",
       "fanOutBadge": "por elemento",
@@ -12536,7 +12538,9 @@
         "RETRY": "Reintentar",
         "WEBHOOK": "Webhook",
         "DELAY": "Esperar",
-        "FILTER": "Filtrar"
+        "FILTER": "Filtrar",
+        "SCHEDULE": "Programar",
+        "MERGE": "Combinar"
       }
     },
     "status": {
@@ -12564,7 +12568,9 @@
         "RETRY": "Reintentar",
         "WEBHOOK": "Webhook",
         "DELAY": "Esperar",
-        "FILTER": "Filtrar"
+        "FILTER": "Filtrar",
+        "SCHEDULE": "Programar",
+        "MERGE": "Combinar"
       },
       "fields": {
         "name": "Nombre",
@@ -12622,7 +12628,15 @@
         "filterOverHelp": "Una expresión que da una lista.",
         "filterLeft": "Para cada elemento, comparar",
         "filterLeftHelp": "Se evalúa una vez por elemento, con '{item}' e '{index}' disponibles.",
-        "filterRight": "Valor que debe coincidir"
+        "filterRight": "Valor que debe coincidir",
+        "cron": "Expresión cron",
+        "cronHelp": "Cuándo continuar, en UTC. Cinco campos: minuto, hora, día, mes, día de la semana.",
+        "mergeSources": "Pasos a combinar",
+        "mergeSourcesHelp": "Solo se pueden combinar pasos que lleven a este.",
+        "mergeNoCandidates": "Conecta un paso con este antes de elegir qué combinar.",
+        "mergeNeedsTwo": "Elige al menos dos pasos.",
+        "mergeMode": "Cómo combinarlos",
+        "mergeModeHelp": "Un paso que no se ejecutó no aporta nada en ningún caso."
       },
       "onError": {
         "stop": "Detener la ejecución",
@@ -12654,7 +12668,12 @@
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
         "payload": "'{' \"text\": \"un resumen\" '}'",
-        "filterLeft": "'{{' item.state '}}'"
+        "filterLeft": "'{{' item.state '}}'",
+        "cron": "0 9 * * 1-5"
+      },
+      "mergeMode": {
+        "combine": "Guardar la salida de cada paso con su propio nombre",
+        "append": "Unir sus listas en una sola"
       }
     },
     "editor": {

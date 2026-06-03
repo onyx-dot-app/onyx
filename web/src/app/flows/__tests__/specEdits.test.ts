@@ -117,6 +117,13 @@ describe("blankNode", () => {
     // The longest wait that still costs nothing to set up.
     expect(blankNode("x", "DELAY")).toMatchObject({ seconds: 60 });
     expect(blankNode("x", "FILTER")).toMatchObject({ operator: "eq" });
+    expect(blankNode("x", "SCHEDULE")).toMatchObject({ cron: "0 9 * * 1-5" });
+    // Empty on purpose: the server needs two, which is what stops a
+    // half-built merge being saved.
+    expect(blankNode("x", "MERGE")).toMatchObject({
+      sources: [],
+      mode: "combine",
+    });
   });
 
   it("keeps a retry inside the server's wait budget", () => {

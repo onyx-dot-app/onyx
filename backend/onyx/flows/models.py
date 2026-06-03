@@ -62,6 +62,7 @@ MAX_RETRY_WINDOW_SECONDS = 600.0
 # tick, and a five-second delay should not take half a minute.
 INLINE_DELAY_SECONDS = 60.0
 MAX_DELAY_SECONDS = 30 * 24 * 60 * 60.0
+MAX_MERGE_SOURCES = 10
 
 # What a person can answer at a human step. Stored on the node's run row and
 # read back by the engine when the run resumes, so the strings are part of the
@@ -506,6 +507,86 @@ class DelayNode(NodeBase):
         return self.seconds > INLINE_DELAY_SECONDS
 
 
+class ScheduleNode(NodeBase):
+    """Wait until the next time a cron expression comes round.
+
+    The sibling of a delay: that one waits for a duration, this one waits for
+    a moment. "Finish the work now, send the digest at nine tomorrow" is the
+    shape, and a duration cannot express it without the author doing the
+    arithmetic themselves every time.
+
+    It parks the run exactly as a delay does, and for the same reason. A next
+    occurrence inside a minute sleeps instead, so the two kinds behave the
+    same way at the same threshold.
+
+    Cron is read in UTC, matching the schedule triggers.
+    """
+
+    kind: Literal[FlowNodeKind.SCHEDULE] = FlowNodeKind.SCHEDULE
+
+    # 5-field cron, the same grammar a schedule trigger takes.
+    cron: str
+
+    @field_validator("cron")
+    @classmethod
+    def _non_empty_cron(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be empty")
+        return value
+
+    @model_validator(mode="after")
+    def _no_fan_out(self) -> ScheduleNode:
+        # One moment arrives once, however many items are in flight.
+        if self.for_each is not None:
+            raise ValueError(
+                "a schedule cannot use 'for_each' — wait once, then fan out"
+            )
+        return self
+
+
+class MergeNode(NodeBase):
+    """Bring the output of several earlier steps back together.
+
+    A graph can already fan out and join — a node runs as soon as any
+    predecessor hands control to it. What it could not do is see what the
+    other branch produced, and that is what this is for: two calls in
+    parallel, one step that uses both.
+
+    ``sources`` names which earlier steps to combine. It is not adjacency —
+    those steps already name this one in their ``next`` — it is a choice among
+    what has run, so a node with three inputs can merge two of them.
+
+    A source that did not run contributes nothing rather than failing. That is
+    the normal case after a condition: one branch ran, the other was skipped,
+    and the merge is exactly where you find out which.
+    """
+
+    kind: Literal[FlowNodeKind.MERGE] = FlowNodeKind.MERGE
+
+    sources: list[str] = Field(min_length=2, max_length=MAX_MERGE_SOURCES)
+    # ``combine`` keys each source's output by its id; ``append`` joins the
+    # sources' lists into one.
+    mode: Literal["combine", "append"] = "combine"
+
+    @field_validator("sources")
+    @classmethod
+    def _unique_sources(cls, value: list[str]) -> list[str]:
+        duplicates = {name for name in value if value.count(name) > 1}
+        if duplicates:
+            raise ValueError("duplicate sources: " + ", ".join(sorted(duplicates)))
+        return value
+
+    @model_validator(mode="after")
+    def _no_fan_out(self) -> MergeNode:
+        # The sources each produced one output, so there is nothing to fan
+        # this over. Merge first, then fan out over the result.
+        if self.for_each is not None:
+            raise ValueError(
+                "a merge cannot use 'for_each' — merge first, then fan out"
+            )
+        return self
+
+
 class FilterNode(NodeBase):
     """Keep the items of a list that match a comparison.
 
@@ -553,7 +634,9 @@ FlowNode = Annotated[
     | RetryNode
     | WebhookNode
     | DelayNode
-    | FilterNode,
+    | FilterNode
+    | ScheduleNode
+    | MergeNode,
     Field(discriminator="kind"),
 ]
 
@@ -600,6 +683,7 @@ class FlowSpec(BaseModel):
                     raise ValueError(f"node '{node.id}' points at itself")
 
         _reject_cycles(by_id)
+        _check_merge_sources(by_id)
         return self
 
     def node_map(self) -> dict[str, Any]:
@@ -618,6 +702,43 @@ class FlowSpec(BaseModel):
             seen.add(current)
             stack.extend(by_id[current].successors())
         return seen
+
+
+def _check_merge_sources(by_id: dict[str, Any]) -> None:
+    """Every merge source must be a step that leads to the merge.
+
+    Checking ancestry rather than mere existence is what makes the node
+    honest: a source that does not lead here has either not run yet or never
+    will, so combining it would be reading a step's output before it has one.
+    It also catches the common slip of naming the sources and forgetting to
+    wire them.
+    """
+    for node in by_id.values():
+        if node.kind is not FlowNodeKind.MERGE:
+            continue
+        for source in node.sources:
+            if source not in by_id:
+                raise ValueError(f"node '{node.id}' merges undefined node '{source}'")
+            if source == node.id:
+                raise ValueError(f"node '{node.id}' merges itself")
+            if node.id not in _descendants(source, by_id):
+                raise ValueError(
+                    f"node '{node.id}' merges '{source}', which does not lead "
+                    "to it — connect them, or merge something that does"
+                )
+
+
+def _descendants(start: str, by_id: dict[str, Any]) -> set[str]:
+    """Every node reachable by following successors from ``start``."""
+    seen: set[str] = set()
+    stack = list(by_id[start].successors())
+    while stack:
+        current = stack.pop()
+        if current in seen or current not in by_id:
+            continue
+        seen.add(current)
+        stack.extend(by_id[current].successors())
+    return seen
 
 
 def _reject_cycles(by_id: dict[str, Any]) -> None:

@@ -12,11 +12,13 @@
 
 import {
   SvgBranch,
+  SvgCalendar,
   SvgClock,
   SvgCode,
   SvgFilter,
   SvgGlobe,
   SvgHourglass,
+  SvgLinkedDots,
   SvgRefreshCw,
   SvgShareWebhook,
   SvgSparkle,
@@ -99,6 +101,18 @@ const VISUALS = {
     chipClassName: "bg-background-tint-02",
     iconClassName: "text-text-03",
     accentBorderClassName: "border-text-03",
+  },
+  SCHEDULE: {
+    icon: SvgCalendar,
+    chipClassName: "bg-background-tint-02",
+    iconClassName: "text-text-03",
+    accentBorderClassName: "border-text-03",
+  },
+  MERGE: {
+    icon: SvgLinkedDots,
+    chipClassName: "bg-status-success-01",
+    iconClassName: "text-status-success-05",
+    accentBorderClassName: "border-status-success-05",
   },
   FILTER: {
     icon: SvgFilter,

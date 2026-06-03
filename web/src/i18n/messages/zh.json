@@ -12503,7 +12503,9 @@
         "RETRY": "重试",
         "WEBHOOK": "Webhook",
         "DELAY": "等待",
-        "FILTER": "筛选"
+        "FILTER": "筛选",
+        "SCHEDULE": "定时",
+        "MERGE": "合并"
       },
       "startBadge": "起点",
       "fanOutBadge": "逐项",
@@ -12534,7 +12536,9 @@
         "RETRY": "重试",
         "WEBHOOK": "Webhook",
         "DELAY": "等待",
-        "FILTER": "筛选"
+        "FILTER": "筛选",
+        "SCHEDULE": "定时",
+        "MERGE": "合并"
       }
     },
     "status": {
@@ -12562,7 +12566,9 @@
         "RETRY": "重试",
         "WEBHOOK": "Webhook",
         "DELAY": "等待",
-        "FILTER": "筛选"
+        "FILTER": "筛选",
+        "SCHEDULE": "定时",
+        "MERGE": "合并"
       },
       "fields": {
         "name": "名称",
@@ -12620,7 +12626,15 @@
         "filterOverHelp": "一个返回列表的表达式。",
         "filterLeft": "对每一项比较",
         "filterLeftHelp": "对每一项求值，可使用 '{item}' 和 '{index}'。",
-        "filterRight": "匹配的值"
+        "filterRight": "匹配的值",
+        "cron": "cron 表达式",
+        "cronHelp": "何时继续（UTC）。五个字段：分、时、日、月、星期。",
+        "mergeSources": "要合并的步骤",
+        "mergeSourcesHelp": "只能合并通向此步骤的步骤。",
+        "mergeNoCandidates": "请先把某个步骤连到这一步。",
+        "mergeNeedsTwo": "请至少选择两个步骤。",
+        "mergeMode": "合并方式",
+        "mergeModeHelp": "未运行的步骤在两种方式下都不会贡献内容。"
       },
       "onError": {
         "stop": "停止运行",
@@ -12652,7 +12666,12 @@
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
         "payload": "'{' \"text\": \"一段摘要\" '}'",
-        "filterLeft": "'{{' item.state '}}'"
+        "filterLeft": "'{{' item.state '}}'",
+        "cron": "0 9 * * 1-5"
+      },
+      "mergeMode": {
+        "combine": "按各步骤的名称分别保留其输出",
+        "append": "把它们的列表连成一个"
       }
     },
     "editor": {

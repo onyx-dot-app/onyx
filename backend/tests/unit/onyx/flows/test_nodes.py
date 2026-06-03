@@ -15,7 +15,7 @@ import pytest
 from onyx.db.enums import FlowErrorClass, FlowRunStatus
 from onyx.flows.engine import RETRYABLE_ERROR_CLASSES
 from onyx.flows.expressions import RunContext
-from onyx.flows.models import MAX_FAN_OUT_ITEMS, parse_spec
+from onyx.flows.models import INLINE_DELAY_SECONDS, MAX_FAN_OUT_ITEMS, parse_spec
 from onyx.flows.nodes import NodeRuntime
 from onyx.flows.nodes.ai import execute_ai
 from onyx.flows.nodes.base import NodeExecutionError, NodeSuspended
@@ -26,7 +26,9 @@ from onyx.flows.nodes.filter import execute_filter
 from onyx.flows.nodes.http import execute_http
 from onyx.flows.nodes.human import execute_human, resume_human
 from onyx.flows.nodes.loop import execute_loop
+from onyx.flows.nodes.merge import execute_merge
 from onyx.flows.nodes.retry import execute_retry
+from onyx.flows.nodes.schedule import execute_schedule
 from onyx.flows.nodes.webhook import (
     SIGNATURE_HEADER,
     TIMESTAMP_HEADER,
@@ -1094,3 +1096,150 @@ def test_filter_rejects_a_value_that_is_not_a_list() -> None:
         )
 
     assert caught.value.error_class == FlowErrorClass.EXPRESSION_ERROR
+
+
+# ---------------------------------------------------------------------------
+# Schedule
+# ---------------------------------------------------------------------------
+
+
+def schedule_node(cron: str, **overrides: Any) -> Any:
+    node: dict[str, Any] = {"id": "at_nine", "kind": "SCHEDULE", "cron": cron}
+    node.update(overrides)
+    return only_node(node)
+
+
+def test_a_schedule_parks_until_the_next_occurrence() -> None:
+    """Nine tomorrow is hours away, so nothing should hold a worker for it."""
+    before = datetime.now(tz=timezone.utc)
+
+    with patch("onyx.flows.nodes.schedule.time.sleep") as slept:
+        with pytest.raises(NodeSuspended) as caught:
+            execute_schedule(schedule_node("0 9 * * *"), RunContext(), MagicMock())
+
+    slept.assert_not_called()
+    assert caught.value.status == FlowRunStatus.AWAITING_DELAY
+    assert caught.value.resume_at is not None
+    assert caught.value.resume_at > before
+    assert caught.value.resume_at.hour == 9
+    assert caught.value.detail["cron"] == "0 9 * * *"
+
+
+def test_a_schedule_about_to_fire_waits_where_it_stands() -> None:
+    """Same threshold a delay uses, so the two kinds behave alike."""
+    with patch("onyx.flows.nodes.schedule.time.sleep") as slept:
+        outcome = execute_schedule(
+            schedule_node("* * * * *"), RunContext(), MagicMock()
+        )
+
+    slept.assert_called_once()
+    assert slept.call_args[0][0] <= INLINE_DELAY_SECONDS
+    assert outcome.output["parked"] is False
+
+
+def test_a_schedule_records_how_long_it_parked_for() -> None:
+    """The sweep reads `seconds` back off the row when it closes it."""
+    with pytest.raises(NodeSuspended) as caught:
+        execute_schedule(schedule_node("0 9 * * *"), RunContext(), MagicMock())
+
+    assert caught.value.detail["seconds"] > INLINE_DELAY_SECONDS
+
+
+# ---------------------------------------------------------------------------
+# Merge
+# ---------------------------------------------------------------------------
+
+
+def merge_node(**overrides: Any) -> Any:
+    gate: dict[str, Any] = {"id": "both", "kind": "MERGE", "sources": ["left", "right"]}
+    gate.update(overrides)
+    return parse_spec(
+        {
+            "start": "left",
+            "nodes": [
+                {
+                    "id": "left",
+                    "kind": "TRANSFORM",
+                    "fields": {"a": "1"},
+                    "next": ["right"],
+                },
+                {
+                    "id": "right",
+                    "kind": "TRANSFORM",
+                    "fields": {"b": "2"},
+                    "next": ["both"],
+                },
+                gate,
+            ],
+        }
+    ).node_map()["both"]
+
+
+def test_merge_keys_each_source_by_its_own_id() -> None:
+    context = RunContext(steps={"left": {"a": 1}, "right": {"b": 2}})
+
+    outcome = execute_merge(merge_node(), context, MagicMock())
+
+    assert outcome.output == {
+        "values": {"left": {"a": 1}, "right": {"b": 2}},
+        "present": ["left", "right"],
+        "missing": [],
+    }
+
+
+def test_a_source_that_did_not_run_is_reported_not_guessed() -> None:
+    """After a condition this is the whole question: which branch got here."""
+    context = RunContext(steps={"left": {"a": 1}})
+
+    outcome = execute_merge(merge_node(), context, MagicMock())
+
+    assert outcome.output["present"] == ["left"]
+    assert outcome.output["missing"] == ["right"]
+    assert outcome.output["values"]["right"] is None
+
+
+def test_a_source_that_ran_and_returned_null_is_not_called_missing() -> None:
+    """A skipped branch and a step that produced nothing are different."""
+    context = RunContext(steps={"left": None, "right": {"b": 2}})
+
+    outcome = execute_merge(merge_node(), context, MagicMock())
+
+    assert outcome.output["missing"] == []
+    assert outcome.output["present"] == ["left", "right"]
+
+
+def test_merge_in_append_mode_joins_the_lists() -> None:
+    context = RunContext(steps={"left": [1, 2], "right": [3]})
+
+    outcome = execute_merge(merge_node(mode="append"), context, MagicMock())
+
+    assert outcome.output["items"] == [1, 2, 3]
+    assert outcome.output["total"] == 3
+
+
+def test_appending_wraps_a_source_that_produced_one_value() -> None:
+    context = RunContext(steps={"left": {"id": 1}, "right": [{"id": 2}]})
+
+    outcome = execute_merge(merge_node(mode="append"), context, MagicMock())
+
+    assert outcome.output["items"] == [{"id": 1}, {"id": 2}]
+
+
+def test_appending_skips_a_branch_that_did_not_run() -> None:
+    context = RunContext(steps={"left": [1, 2]})
+
+    outcome = execute_merge(merge_node(mode="append"), context, MagicMock())
+
+    assert outcome.output["items"] == [1, 2]
+    assert outcome.output["missing"] == ["right"]
+
+
+def test_appending_refuses_more_items_than_the_fan_out_limit() -> None:
+    context = RunContext(
+        steps={"left": list(range(MAX_FAN_OUT_ITEMS)), "right": [1, 2]}
+    )
+
+    with pytest.raises(NodeExecutionError) as caught:
+        execute_merge(merge_node(mode="append"), context, MagicMock())
+
+    assert caught.value.error_class == FlowErrorClass.INVALID_SPEC

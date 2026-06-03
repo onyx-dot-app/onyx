@@ -933,6 +933,8 @@ class FlowNodeKind(str, PyEnum):
     WEBHOOK = "WEBHOOK"
     DELAY = "DELAY"
     FILTER = "FILTER"
+    SCHEDULE = "SCHEDULE"
+    MERGE = "MERGE"
 
 
 class FlowRunStatus(str, PyEnum):

@@ -12,6 +12,7 @@ concurrent beat tick claim the same rows and fire twice.
 from __future__ import annotations
 
 import secrets
+from collections.abc import Collection
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -44,6 +45,10 @@ WEBHOOK_SECRET_BYTES = 32
 # The key a flow signs its outbound deliveries with. Same size, different job:
 # this one goes into the receiving system rather than coming from it.
 SIGNING_SECRET_BYTES = 32
+
+# Node kinds that park a run on `resume_at`. Both wait for a moment to
+# arrive; only how that moment is worked out differs.
+WAITS_ON_THE_CLOCK = (FlowNodeKind.DELAY, FlowNodeKind.SCHEDULE)
 
 
 # ---------------------------------------------------------------------------
@@ -538,18 +543,18 @@ def find_due_delayed_runs(
 
 
 def resume_delayed_run(*, db_session: Session, run: FlowRun) -> FlowNodeRun | None:
-    """Close the delay the run is parked on and put it back in the queue.
+    """Close the step the run is waiting on and put it back in the queue.
 
     Mirrors ``apply_human_decision``: the waiting is recorded as finished on
     the node's own row, which is what stops the replay walking into the same
-    delay and parking again. A run with no open delay row is left alone and
+    wait and parking again. A run with no open waiting row is left alone and
     reported, because re-queueing it would do exactly that.
     """
     node_run = _open_node_run(
-        db_session=db_session, run_id=run.id, kind=FlowNodeKind.DELAY
+        db_session=db_session, run_id=run.id, kinds=WAITS_ON_THE_CLOCK
     )
     if node_run is None:
-        logger.error("delayed run has no open delay step run_id=%s", run.id)
+        logger.error("delayed run has no open waiting step run_id=%s", run.id)
         return None
 
     finish_node_run(
@@ -567,17 +572,22 @@ def resume_delayed_run(*, db_session: Session, run: FlowRun) -> FlowNodeRun | No
     run.resume_at = None
     db_session.flush()
 
-    logger.info("resuming delayed flow run run_id=%s node=%s", run.id, node_run.node_id)
+    logger.info(
+        "resuming delayed flow run run_id=%s node=%s kind=%s",
+        run.id,
+        node_run.node_id,
+        node_run.kind.value,
+    )
     return node_run
 
 
 def _open_node_run(
-    *, db_session: Session, run_id: UUID, kind: FlowNodeKind
+    *, db_session: Session, run_id: UUID, kinds: Collection[FlowNodeKind]
 ) -> FlowNodeRun | None:
-    """The one unfinished row of this kind, if there is one."""
+    """The one unfinished row of these kinds, if there is one."""
     stmt = select(FlowNodeRun).where(
         FlowNodeRun.run_id == run_id,
-        FlowNodeRun.kind == kind,
+        FlowNodeRun.kind.in_(list(kinds)),
         FlowNodeRun.status == FlowNodeRunStatus.RUNNING,
     )
     return db_session.execute(stmt).scalars().first()
@@ -823,6 +833,29 @@ def purge_old_runs(
 
 def _validate_spec(raw: dict[str, Any]) -> Any:
     try:
-        return parse_spec(raw)
+        spec = parse_spec(raw)
     except SpecError as exc:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(exc)) from exc
+
+    _validate_schedule_crons(spec)
+    return spec
+
+
+def _validate_schedule_crons(spec: Any) -> None:
+    """Reject a schedule step whose cron cannot fire.
+
+    Checked here rather than in the spec model so the pure spec module keeps
+    its light imports, and checked on save rather than only at run time so a
+    typo comes back while the author is still looking at the field.
+    """
+    now = datetime.now(tz=timezone.utc)
+    for node in spec.nodes:
+        if node.kind is not FlowNodeKind.SCHEDULE:
+            continue
+        try:
+            compute_next_run_at(node.cron, now)
+        except (ValueError, OnyxError) as exc:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"step '{node.id}' has an unusable schedule: {exc}",
+            ) from exc

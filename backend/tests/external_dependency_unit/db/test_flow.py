@@ -70,6 +70,13 @@ def simple_spec(value: str = "1") -> dict[str, Any]:
     }
 
 
+# Claim queries are global and this database is shared across the file and
+# across runs, so a batch sized like production quietly becomes an assertion
+# about how much other tests left behind. Big enough that the limit never
+# binds, which is the only size that tests the claim rather than the leftovers.
+CLAIM_EVERYTHING = 10_000
+
+
 def _run_count(db_session: Session, flow_id: UUID) -> int:
     """Runs belonging to one flow. `purge_old_runs` sweeps every flow, and
     this database is shared across the file, so a global tally would depend on
@@ -200,7 +207,9 @@ def test_due_schedule_triggers_are_claimed(db_session: Session, owner: User) -> 
     db_session.commit()
 
     later = datetime.now(tz=timezone.utc) + timedelta(hours=1)
-    claimed = claim_due_triggers(db_session=db_session, now=later, batch_size=50)
+    claimed = claim_due_triggers(
+        db_session=db_session, now=later, batch_size=CLAIM_EVERYTHING
+    )
 
     assert flow.triggers[0].id in {trigger.id for trigger in claimed}
 
@@ -219,7 +228,9 @@ def test_a_webhook_trigger_is_never_claimed(db_session: Session, owner: User) ->
     assert flow.triggers[0].next_run_at is None
 
     later = datetime.now(tz=timezone.utc) + timedelta(hours=1)
-    claimed = claim_due_triggers(db_session=db_session, now=later, batch_size=50)
+    claimed = claim_due_triggers(
+        db_session=db_session, now=later, batch_size=CLAIM_EVERYTHING
+    )
     assert flow.triggers[0].id not in {trigger.id for trigger in claimed}
 
 
@@ -246,7 +257,9 @@ def test_two_dispatchers_cannot_claim_the_same_trigger(
         with get_session_with_current_tenant() as session:
             # Line both threads up on the claim so the locks genuinely race.
             started.wait(timeout=10)
-            claimed = claim_due_triggers(db_session=session, now=later, batch_size=50)
+            claimed = claim_due_triggers(
+                db_session=session, now=later, batch_size=CLAIM_EVERYTHING
+            )
             ids = [trigger.id for trigger in claimed]
             for trigger in claimed:
                 insert_run(
@@ -762,7 +775,9 @@ def delayed_spec(seconds: float) -> dict[str, Any]:
 
 def _due_run_ids(db_session: Session, now: datetime) -> set[UUID]:
     """Ids the delay sweep would claim at ``now``."""
-    due = find_due_delayed_runs(db_session=db_session, now=now, batch_size=200)
+    due = find_due_delayed_runs(
+        db_session=db_session, now=now, batch_size=CLAIM_EVERYTHING
+    )
     return {run.id for run in due}
 
 
@@ -859,7 +874,9 @@ def test_the_sweep_ignores_runs_that_are_not_waiting_on_a_delay(
     db_session.commit()
 
     later = datetime.now(tz=timezone.utc) + timedelta(days=1)
-    found = find_due_delayed_runs(db_session=db_session, now=later, batch_size=10)
+    found = find_due_delayed_runs(
+        db_session=db_session, now=later, batch_size=CLAIM_EVERYTHING
+    )
 
     assert run.id not in {row.id for row in found}
 
@@ -887,3 +904,86 @@ def test_leaving_the_parked_state_clears_the_resume_time(
     db_session.commit()
 
     assert run.resume_at is None
+
+
+def test_the_sweep_closes_a_parked_schedule_the_same_way_it_closes_a_delay(
+    db_session: Session, owner: User
+) -> None:
+    """Two kinds park on the clock, and one sweep has to pick up both.
+
+    Looking only for an open DELAY row would leave a schedule parked forever,
+    with the run re-queued into the same wait it was already in.
+    """
+    flow = create_flow(
+        db_session=db_session,
+        user_id=owner.id,
+        name="scheduled flow",
+        draft_spec={
+            "start": "at_nine",
+            "nodes": [
+                {
+                    "id": "at_nine",
+                    "kind": "SCHEDULE",
+                    "cron": "0 9 * * *",
+                    "next": ["after"],
+                },
+                {
+                    "id": "after",
+                    "kind": "TRANSFORM",
+                    "fields": {"value": "morning"},
+                },
+            ],
+        },
+    )
+    run = insert_run(
+        db_session=db_session,
+        flow_id=flow.id,
+        trigger_source=FlowTriggerSource.TEST,
+    )
+    db_session.commit()
+    run_id = run.id
+
+    run_flow_logic(run_id)
+    db_session.expire_all()
+
+    run = get_run(db_session=db_session, run_id=run_id)
+    assert run is not None
+    assert run.status == FlowRunStatus.AWAITING_DELAY
+    assert run.resume_at is not None
+    assert run.resume_at.hour == 9
+
+    parked = node_rows(db_session, run_id, "at_nine")[0]
+    assert parked.status == FlowNodeRunStatus.RUNNING
+    assert parked.input is not None and parked.input["cron"] == "0 9 * * *"
+
+    closed = resume_delayed_run(db_session=db_session, run=run)
+    db_session.commit()
+
+    assert closed is not None and closed.node_id == "at_nine"
+    assert run.status == FlowRunStatus.QUEUED
+    assert run.resume_at is None
+
+    run_flow_logic(run_id)
+    db_session.expire_all()
+
+    run = get_run(db_session=db_session, run_id=run_id)
+    assert run is not None
+    assert run.status == FlowRunStatus.SUCCEEDED
+    after = node_rows(db_session, run_id, "after")[0].output
+    assert after is not None and after["value"] == {"value": "morning"}
+
+
+def test_a_flow_with_an_unusable_schedule_is_refused_on_save(
+    db_session: Session, owner: User
+) -> None:
+    """A typo should come back while the author is still looking at the field."""
+    with pytest.raises(OnyxError, match="unusable schedule"):
+        create_flow(
+            db_session=db_session,
+            user_id=owner.id,
+            name="bad cron flow",
+            draft_spec={
+                "start": "at_nine",
+                "nodes": [{"id": "at_nine", "kind": "SCHEDULE", "cron": "not a cron"}],
+            },
+        )

@@ -1,6 +1,6 @@
 """Spec validation: what the editor is allowed to save."""
 
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import pytest
 
@@ -13,7 +13,9 @@ from onyx.flows.models import (
     DelayNode,
     FilterNode,
     FlowSpec,
+    MergeNode,
     RetryNode,
+    ScheduleNode,
     SpecError,
     WebhookNode,
     parse_spec,
@@ -444,3 +446,87 @@ def test_a_filter_testing_for_presence_needs_no_comparison_value() -> None:
     )
 
     assert only(spec, FilterNode).right is None
+
+
+def merged_spec(*extra: dict[str, Any], **merge_overrides: Any) -> dict[str, Any]:
+    """Two steps in a chain and a merge below them, plus anything else given."""
+    merge: dict[str, Any] = {
+        "id": "both",
+        "kind": "MERGE",
+        "sources": ["left", "right"],
+    }
+    merge.update(merge_overrides)
+    return {
+        "start": "left",
+        "nodes": [
+            {
+                "id": "left",
+                "kind": "TRANSFORM",
+                "fields": {"a": "1"},
+                "next": ["right"],
+            },
+            {
+                "id": "right",
+                "kind": "TRANSFORM",
+                "fields": {"b": "2"},
+                "next": ["both"],
+            },
+            merge,
+            *extra,
+        ],
+    }
+
+
+def test_a_merge_accepts_any_ancestor_not_only_the_step_before_it() -> None:
+    """`left` reaches the merge through `right`, which is still an ancestor."""
+    spec = parse_spec(merged_spec())
+
+    merge = spec.node_map()["both"]
+    assert isinstance(merge, MergeNode)
+    assert merge.sources == ["left", "right"]
+
+
+def test_rejects_a_merge_of_a_step_that_does_not_lead_to_it() -> None:
+    """The common slip: naming the sources and forgetting to wire them."""
+    stray = {"id": "stray", "kind": "TRANSFORM", "fields": {"c": "3"}}
+
+    with pytest.raises(SpecError, match="does not lead to it"):
+        parse_spec(merged_spec(stray, sources=["left", "stray"]))
+
+
+def test_rejects_a_merge_of_an_undefined_step() -> None:
+    with pytest.raises(SpecError, match="merges undefined node 'ghost'"):
+        parse_spec(merged_spec(sources=["left", "ghost"]))
+
+
+def test_rejects_a_merge_that_fans_out() -> None:
+    with pytest.raises(SpecError, match="merge first, then fan out"):
+        parse_spec(merged_spec(for_each="{{ trigger.rows }}"))
+
+
+def test_rejects_a_schedule_that_fans_out() -> None:
+    with pytest.raises(SpecError, match="wait once, then fan out"):
+        parse_spec(
+            {
+                "start": "at_nine",
+                "nodes": [
+                    {
+                        "id": "at_nine",
+                        "kind": "SCHEDULE",
+                        "cron": "0 9 * * *",
+                        "for_each": "{{ trigger.rows }}",
+                    }
+                ],
+            }
+        )
+
+
+def test_a_schedule_keeps_the_cron_it_was_given() -> None:
+    spec = parse_spec(
+        {
+            "start": "at_nine",
+            "nodes": [{"id": "at_nine", "kind": "SCHEDULE", "cron": "0 9 * * 1-5"}],
+        }
+    )
+
+    assert only(spec, ScheduleNode).cron == "0 9 * * 1-5"

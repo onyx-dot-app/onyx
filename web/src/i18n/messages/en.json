@@ -12533,7 +12533,9 @@
         "RETRY": "Retry",
         "WEBHOOK": "Webhook",
         "DELAY": "Delay",
-        "FILTER": "Filter"
+        "FILTER": "Filter",
+        "SCHEDULE": "Schedule",
+        "MERGE": "Merge"
       },
       "startBadge": "start",
       "fanOutBadge": "per item",
@@ -12564,7 +12566,9 @@
         "RETRY": "Retry",
         "WEBHOOK": "Webhook",
         "DELAY": "Delay",
-        "FILTER": "Filter"
+        "FILTER": "Filter",
+        "SCHEDULE": "Schedule",
+        "MERGE": "Merge"
       }
     },
     "status": {
@@ -12592,7 +12596,9 @@
         "RETRY": "Retry",
         "WEBHOOK": "Webhook",
         "DELAY": "Delay",
-        "FILTER": "Filter"
+        "FILTER": "Filter",
+        "SCHEDULE": "Schedule",
+        "MERGE": "Merge"
       },
       "fields": {
         "name": "Name",
@@ -12650,7 +12656,15 @@
         "filterOverHelp": "An expression that resolves to a list.",
         "filterLeft": "For each item, compare",
         "filterLeftHelp": "Evaluated once per item, with '{item}' and '{index}' available.",
-        "filterRight": "Matching value"
+        "filterRight": "Matching value",
+        "cron": "Cron expression",
+        "cronHelp": "When to carry on, in UTC. Five fields: minute, hour, day, month, weekday.",
+        "mergeSources": "Steps to combine",
+        "mergeSourcesHelp": "Only steps that lead to this one can be combined.",
+        "mergeNoCandidates": "Connect a step to this one before choosing what to combine.",
+        "mergeNeedsTwo": "Pick at least two steps.",
+        "mergeMode": "How to combine them",
+        "mergeModeHelp": "A step that did not run contributes nothing either way."
       },
       "onError": {
         "stop": "Stop the run",
@@ -12682,7 +12696,12 @@
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
         "payload": "'{' \"text\": \"a summary\" '}'",
-        "filterLeft": "'{{' item.state '}}'"
+        "filterLeft": "'{{' item.state '}}'",
+        "cron": "0 9 * * 1-5"
+      },
+      "mergeMode": {
+        "combine": "Keep each step's output under its own name",
+        "append": "Join their lists into one"
       }
     },
     "editor": {

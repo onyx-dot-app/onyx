@@ -94,6 +94,36 @@ function branchOf(node: FlowNode, target: string): EdgeBranch {
   return null;
 }
 
+/**
+ * Steps that lead to ``nodeId``, in the order the spec declares them.
+ *
+ * What a merge is allowed to name as a source: the server rejects anything
+ * else, so the editor offers exactly this rather than letting somebody pick a
+ * step that has not run and finding out on save.
+ */
+export function ancestorsOf(spec: FlowSpec, nodeId: string): string[] {
+  const byId = new Map(spec.nodes.map((node) => [node.id, node]));
+
+  const leadsTo = (from: string): boolean => {
+    const seen = new Set<string>();
+    const start = byId.get(from);
+    const stack = start === undefined ? [] : successorsOf(start);
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (current === undefined || seen.has(current)) continue;
+      seen.add(current);
+      if (current === nodeId) return true;
+      const node = byId.get(current);
+      if (node !== undefined) stack.push(...successorsOf(node));
+    }
+    return false;
+  };
+
+  return spec.nodes
+    .filter((node) => node.id !== nodeId && leadsTo(node.id))
+    .map((node) => node.id);
+}
+
 export function reachableFrom(spec: FlowSpec): Set<string> {
   const byId = new Map(spec.nodes.map((node) => [node.id, node]));
   const seen = new Set<string>();

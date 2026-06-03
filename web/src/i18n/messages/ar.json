@@ -12503,7 +12503,9 @@
         "RETRY": "إعادة المحاولة",
         "WEBHOOK": "Webhook",
         "DELAY": "انتظار",
-        "FILTER": "تصفية"
+        "FILTER": "تصفية",
+        "SCHEDULE": "جدولة",
+        "MERGE": "دمج"
       },
       "startBadge": "البداية",
       "fanOutBadge": "لكل عنصر",
@@ -12534,7 +12536,9 @@
         "RETRY": "إعادة المحاولة",
         "WEBHOOK": "Webhook",
         "DELAY": "انتظار",
-        "FILTER": "تصفية"
+        "FILTER": "تصفية",
+        "SCHEDULE": "جدولة",
+        "MERGE": "دمج"
       }
     },
     "status": {
@@ -12562,7 +12566,9 @@
         "RETRY": "إعادة المحاولة",
         "WEBHOOK": "Webhook",
         "DELAY": "انتظار",
-        "FILTER": "تصفية"
+        "FILTER": "تصفية",
+        "SCHEDULE": "جدولة",
+        "MERGE": "دمج"
       },
       "fields": {
         "name": "الاسم",
@@ -12620,7 +12626,15 @@
         "filterOverHelp": "تعبير ينتج قائمة.",
         "filterLeft": "لكل عنصر، قارن",
         "filterLeftHelp": "يُقيَّم لكل عنصر، مع توفر '{item}' و '{index}'.",
-        "filterRight": "القيمة المطابِقة"
+        "filterRight": "القيمة المطابِقة",
+        "cron": "تعبير cron",
+        "cronHelp": "متى يُستأنف، بتوقيت UTC. خمسة حقول: الدقيقة والساعة واليوم والشهر ويوم الأسبوع.",
+        "mergeSources": "الخطوات المراد دمجها",
+        "mergeSourcesHelp": "يمكن دمج الخطوات التي تؤدي إلى هذه الخطوة فقط.",
+        "mergeNoCandidates": "اربط خطوة بهذه الخطوة أولًا.",
+        "mergeNeedsTwo": "اختر خطوتين على الأقل.",
+        "mergeMode": "طريقة الدمج",
+        "mergeModeHelp": "الخطوة التي لم تُنفَّذ لا تضيف شيئًا في الحالتين."
       },
       "onError": {
         "stop": "إيقاف التشغيل",
@@ -12652,7 +12666,12 @@
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
         "payload": "'{' \"text\": \"ملخّص\" '}'",
-        "filterLeft": "'{{' item.state '}}'"
+        "filterLeft": "'{{' item.state '}}'",
+        "cron": "0 9 * * 1-5"
+      },
+      "mergeMode": {
+        "combine": "الاحتفاظ بمخرجات كل خطوة باسمها",
+        "append": "ضم قوائمها في قائمة واحدة"
       }
     },
     "editor": {

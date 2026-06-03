@@ -12503,7 +12503,9 @@
         "RETRY": "재시도",
         "WEBHOOK": "웹훅",
         "DELAY": "대기",
-        "FILTER": "필터"
+        "FILTER": "필터",
+        "SCHEDULE": "일정",
+        "MERGE": "병합"
       },
       "startBadge": "시작",
       "fanOutBadge": "항목별",
@@ -12534,7 +12536,9 @@
         "RETRY": "재시도",
         "WEBHOOK": "웹훅",
         "DELAY": "대기",
-        "FILTER": "필터"
+        "FILTER": "필터",
+        "SCHEDULE": "일정",
+        "MERGE": "병합"
       }
     },
     "status": {
@@ -12562,7 +12566,9 @@
         "RETRY": "재시도",
         "WEBHOOK": "웹훅",
         "DELAY": "대기",
-        "FILTER": "필터"
+        "FILTER": "필터",
+        "SCHEDULE": "일정",
+        "MERGE": "병합"
       },
       "fields": {
         "name": "이름",
@@ -12620,7 +12626,15 @@
         "filterOverHelp": "목록을 반환하는 식입니다.",
         "filterLeft": "각 항목에서 비교할 값",
         "filterLeftHelp": "항목마다 평가되며 '{item}' 과 '{index}' 를 쓸 수 있습니다.",
-        "filterRight": "일치시킬 값"
+        "filterRight": "일치시킬 값",
+        "cron": "cron 식",
+        "cronHelp": "다시 진행할 시각입니다(UTC). 분, 시, 일, 월, 요일 다섯 항목입니다.",
+        "mergeSources": "병합할 단계",
+        "mergeSourcesHelp": "이 단계로 이어지는 단계만 병합할 수 있습니다.",
+        "mergeNoCandidates": "먼저 이 단계로 이어지는 단계를 연결하세요.",
+        "mergeNeedsTwo": "단계를 두 개 이상 선택하세요.",
+        "mergeMode": "병합 방식",
+        "mergeModeHelp": "실행되지 않은 단계는 어느 방식에서도 아무것도 더하지 않습니다."
       },
       "onError": {
         "stop": "실행 중단",
@@ -12652,7 +12666,12 @@
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
         "payload": "'{' \"text\": \"요약\" '}'",
-        "filterLeft": "'{{' item.state '}}'"
+        "filterLeft": "'{{' item.state '}}'",
+        "cron": "0 9 * * 1-5"
+      },
+      "mergeMode": {
+        "combine": "각 단계의 출력을 이름 그대로 두기",
+        "append": "각 목록을 하나로 잇기"
       }
     },
     "editor": {

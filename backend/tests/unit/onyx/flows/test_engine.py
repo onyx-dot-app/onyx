@@ -619,3 +619,74 @@ def test_parking_on_a_delay_is_not_swallowed_by_on_error_skip(
     result = execute_flow(spec=spec, runtime=runtime, recorder=InMemoryRecorder())
 
     assert result.status == FlowRunStatus.AWAITING_DELAY
+
+
+# ---------------------------------------------------------------------------
+# Merging branches back together
+# ---------------------------------------------------------------------------
+
+
+def branching_merge_spec() -> Any:
+    """A condition, a step on each side, and a merge below both."""
+    return parse_spec(
+        {
+            "start": "check",
+            "nodes": [
+                {
+                    "id": "check",
+                    "kind": "CONDITION",
+                    "left": "{{ trigger.count }}",
+                    "operator": "gt",
+                    "right": "5",
+                    "on_true": ["big"],
+                    "on_false": ["small"],
+                },
+                transform("big", "big", next=["both"]),
+                transform("small", "small", next=["both"]),
+                {"id": "both", "kind": "MERGE", "sources": ["big", "small"]},
+            ],
+        }
+    )
+
+
+def test_a_merge_below_a_condition_reports_which_branch_arrived(
+    runtime: NodeRuntime,
+) -> None:
+    """The join already worked; seeing what the other side did is the new part."""
+    recorder = InMemoryRecorder()
+
+    result = execute_flow(
+        spec=branching_merge_spec(),
+        runtime=runtime,
+        recorder=recorder,
+        trigger_payload={"count": 9},
+    )
+
+    assert result.status == FlowRunStatus.SUCCEEDED
+    assert result.outputs["both"]["values"]["big"] == {"value": "big"}
+    assert result.outputs["both"]["present"] == ["big"]
+    assert result.outputs["both"]["missing"] == ["small"]
+    assert statuses(recorder)["small"] == FlowNodeRunStatus.SKIPPED
+
+
+def test_a_merge_runs_once_even_though_two_branches_reach_it(
+    runtime: NodeRuntime,
+) -> None:
+    spec = parse_spec(
+        {
+            "start": "split",
+            "nodes": [
+                transform("split", "start", next=["left", "right"]),
+                transform("left", "L", next=["both"]),
+                transform("right", "R", next=["both"]),
+                {"id": "both", "kind": "MERGE", "sources": ["left", "right"]},
+            ],
+        }
+    )
+    recorder = InMemoryRecorder()
+
+    result = execute_flow(spec=spec, runtime=runtime, recorder=recorder)
+
+    merged = [entry for entry in recorder.entries if entry["node_id"] == "both"]
+    assert len(merged) == 1, "a join must not run once per incoming branch"
+    assert result.outputs["both"]["present"] == ["left", "right"]

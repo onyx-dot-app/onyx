@@ -29,7 +29,9 @@ export type FlowNodeKind =
   | "RETRY"
   | "WEBHOOK"
   | "DELAY"
-  | "FILTER";
+  | "FILTER"
+  | "SCHEDULE"
+  | "MERGE";
 export type FlowTriggerKind = "SCHEDULE" | "WEBHOOK" | "MANUAL";
 export type FlowTriggerSource = "SCHEDULE" | "WEBHOOK" | "MANUAL" | "TEST";
 
@@ -174,6 +176,21 @@ export interface FilterNode extends NodeBase {
   right: string | null;
 }
 
+export interface ScheduleNode extends NodeBase {
+  kind: "SCHEDULE";
+  /** 5-field cron, read in UTC. */
+  cron: string;
+}
+
+export type MergeMode = "combine" | "append";
+
+export interface MergeNode extends NodeBase {
+  kind: "MERGE";
+  /** Earlier steps to combine. Not adjacency — they name this one in `next`. */
+  sources: string[];
+  mode: MergeMode;
+}
+
 export type FlowNode =
   | HttpNode
   | TransformNode
@@ -185,7 +202,9 @@ export type FlowNode =
   | RetryNode
   | WebhookNode
   | DelayNode
-  | FilterNode;
+  | FilterNode
+  | ScheduleNode
+  | MergeNode;
 
 export interface FlowSpec {
   spec_version: 1;

@@ -12505,7 +12505,9 @@
         "RETRY": "再試行",
         "WEBHOOK": "Webhook",
         "DELAY": "待機",
-        "FILTER": "絞り込み"
+        "FILTER": "絞り込み",
+        "SCHEDULE": "スケジュール",
+        "MERGE": "結合"
       },
       "startBadge": "開始",
       "fanOutBadge": "項目ごと",
@@ -12536,7 +12538,9 @@
         "RETRY": "再試行",
         "WEBHOOK": "Webhook",
         "DELAY": "待機",
-        "FILTER": "絞り込み"
+        "FILTER": "絞り込み",
+        "SCHEDULE": "スケジュール",
+        "MERGE": "結合"
       }
     },
     "status": {
@@ -12564,7 +12568,9 @@
         "RETRY": "再試行",
         "WEBHOOK": "Webhook",
         "DELAY": "待機",
-        "FILTER": "絞り込み"
+        "FILTER": "絞り込み",
+        "SCHEDULE": "スケジュール",
+        "MERGE": "結合"
       },
       "fields": {
         "name": "名前",
@@ -12622,7 +12628,15 @@
         "filterOverHelp": "一覧を返す式です。",
         "filterLeft": "各項目で比較する値",
         "filterLeftHelp": "項目ごとに評価されます。'{item}' と '{index}' が使えます。",
-        "filterRight": "一致させる値"
+        "filterRight": "一致させる値",
+        "cron": "cron 式",
+        "cronHelp": "再開する時刻です（UTC）。分・時・日・月・曜日の 5 項目です。",
+        "mergeSources": "結合するステップ",
+        "mergeSourcesHelp": "このステップにつながるステップだけを結合できます。",
+        "mergeNoCandidates": "先にこのステップへつながるステップを接続してください。",
+        "mergeNeedsTwo": "ステップを 2 つ以上選んでください。",
+        "mergeMode": "結合の方法",
+        "mergeModeHelp": "実行されなかったステップは、どちらの方法でも何も加えません。"
       },
       "onError": {
         "stop": "実行を停止",
@@ -12654,7 +12668,12 @@
         "over": "'{{' steps.fetch.body.rows '}}'",
         "untilPath": "state",
         "payload": "'{' \"text\": \"要約\" '}'",
-        "filterLeft": "'{{' item.state '}}'"
+        "filterLeft": "'{{' item.state '}}'",
+        "cron": "0 9 * * 1-5"
+      },
+      "mergeMode": {
+        "combine": "各ステップの出力をその名前のまま残す",
+        "append": "それぞれの一覧を 1 つにつなげる"
       }
     },
     "editor": {

@@ -43,6 +43,8 @@ export type StepKind =
   | "Webhook"
   | "Delay"
   | "Filter"
+  | "Schedule"
+  | "Merge"
   | "Approval";
 
 export class FlowsPage {
@@ -70,6 +72,7 @@ export class FlowsPage {
   readonly rejectButton: Locator;
   readonly signingSecret: Locator;
   readonly resumesAt: Locator;
+  readonly mergeSources: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -96,6 +99,7 @@ export class FlowsPage {
     this.rejectButton = page.getByTestId("decision-reject");
     this.signingSecret = page.getByTestId("webhook-signing-secret");
     this.resumesAt = page.getByTestId("run-resumes-at");
+    this.mergeSources = page.getByTestId("merge-sources");
   }
 
   // ---------------------------------------------------------------------------
@@ -187,6 +191,10 @@ export class FlowsPage {
   /** Text the inspector shows that is not a field, such as a note. */
   async expectInspectorContains(text: string): Promise<void> {
     await expect(this.inspector).toContainText(text);
+  }
+
+  async expectInspectorNotContains(text: string): Promise<void> {
+    await expect(this.inspector).not.toContainText(text);
   }
 
   /**
@@ -408,6 +416,26 @@ export class FlowsPage {
 
   async expectRunPanelContains(text: string): Promise<void> {
     await expect(this.runPanel).toContainText(text);
+  }
+
+  /**
+   * The steps a merge is offering to combine.
+   *
+   * Returned rather than asserted so a spec can say what must be there *and*
+   * what must not — the exclusion is the part worth testing, since the server
+   * rejects a source that does not lead to the merge.
+   */
+  async readMergeCandidates(): Promise<string[]> {
+    await expect(this.mergeSources).toBeVisible();
+    return this.mergeSources.locator("label").allInnerTexts();
+  }
+
+  async chooseMergeSource(stepId: string): Promise<void> {
+    await this.mergeSources
+      .locator("label")
+      .filter({ hasText: stepId })
+      .getByRole("checkbox")
+      .check();
   }
 
   /** When a run parked on a delay will carry on. */

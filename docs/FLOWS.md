@@ -309,6 +309,60 @@ produced rather than only against a constant.
 "everything was filtered out" look identical downstream otherwise, and those
 are very different bugs.
 
+### SCHEDULE
+
+Waits until the next time a cron expression comes round. Output is
+`{waited_seconds, parked}`, the same shape a delay produces.
+
+The sibling of [DELAY](#delay): that one waits for a duration, this one waits
+for a moment. "Finish the work now, send the digest at nine tomorrow" is the
+shape, and a duration cannot express it without the author redoing the
+arithmetic every time.
+
+It parks on exactly the same machinery, at the same 60 s threshold — a next
+occurrence inside a minute sleeps instead — so the two kinds behave alike.
+Cron is read in **UTC**, matching the schedule triggers, so there is one
+answer to "what does 9 mean" across the product.
+
+An unusable expression is refused when the flow is saved, not when it runs,
+so a typo comes back while the author is still looking at the field.
+
+### MERGE
+
+Brings the output of several earlier steps back together. Output is
+`{values, present, missing}`, or `{items, total, present, missing}` in
+`append` mode.
+
+A graph could already fan out and join — a node runs as soon as any
+predecessor hands control to it. What it could not do is see what the *other*
+branch produced, and that is what this is for: two calls in parallel, one step
+that uses both.
+
+```
+left.next     = ["both"]
+right.next    = ["both"]
+both.sources  = ["left", "right"]
+both.mode     = "combine"       # -> {{ steps.both.values.left.body }}
+```
+
+`sources` is **not** adjacency — those steps already name this one in their
+`next`. It is a choice among what has run, so a node with three inputs can
+merge two of them. Each source must be an ancestor of the merge, which is
+checked when the spec is parsed: a source that does not lead here has either
+not run yet or never will, and naming sources while forgetting to wire them is
+the easy slip.
+
+A source that did not run contributes nothing rather than failing, which is
+the normal case after a condition — one branch ran, the other was skipped.
+`present` and `missing` say which, because that is the whole question a merge
+below a branch exists to answer, and reading it off the shape of the values
+would mean guessing. A source that ran and returned `null` counts as present:
+"the branch was skipped" and "the step returned nothing" are different
+answers.
+
+`append` joins the sources' lists into one, wrapping a source that produced a
+single value rather than rejecting it, and is capped at the fan-out limit.
+
 ## Execution
 
 `execute_flow` walks the reachable subgraph in topological order (Kahn's
@@ -361,16 +415,20 @@ same person.
 
 ### Delays
 
-A DELAY node longer than 60 s parks the run the same way, with one difference:
-nobody has to do anything. The status becomes `AWAITING_DELAY` and the due time
+A DELAY or SCHEDULE node waiting more than 60 s parks the run the same way,
+with one difference: nobody has to do anything. The status becomes `AWAITING_DELAY` and the due time
 goes on `flow_run.resume_at`, behind a partial index that only covers parked
 runs.
 
 `resume_delayed_flow_runs` (primary, every 30 s) claims due runs with
-`FOR UPDATE SKIP LOCKED`, closes the open delay row, puts the run back to
+`FOR UPDATE SKIP LOCKED`, closes the open waiting row, puts the run back to
 `QUEUED` and enqueues it — the exact counterpart of the decision endpoint.
 Closing that row is what matters: without it the replay would walk into the
-same delay and park again.
+same wait and park again.
+
+Both [DELAY](#delay) and [SCHEDULE](#schedule) park this way, so the sweep
+looks for an open row of either kind. A due run with no open waiting row is
+failed rather than re-queued, because re-queueing it would loop.
 
 So a delay costs no worker while it waits, and "follow up tomorrow" survives a
 deploy in the middle of it. A run that comes back finds no `resume_at` on its

@@ -14,6 +14,7 @@ import type {
   ConditionNode,
   DelayNode,
   FilterNode,
+  MergeNode,
   FlowNode,
   FlowNodeKind,
   FlowSpec,
@@ -21,6 +22,7 @@ import type {
   HumanNode,
   LoopNode,
   RetryNode,
+  ScheduleNode,
   TransformNode,
   WebhookNode,
 } from "@/app/flows/types";
@@ -183,6 +185,27 @@ export function blankNode(id: string, kind: FlowNodeKind): FlowNode {
         left: "",
         operator: "eq",
         right: "",
+      };
+      return node;
+    }
+    case "SCHEDULE": {
+      const node: ScheduleNode = {
+        ...base,
+        kind: "SCHEDULE",
+        // Nine on weekday mornings: the shape almost every schedule takes,
+        // and obviously wrong if it is not what you meant.
+        cron: "0 9 * * 1-5",
+      };
+      return node;
+    }
+    case "MERGE": {
+      const node: MergeNode = {
+        ...base,
+        kind: "MERGE",
+        // Empty until the author picks them. The server needs two, which is
+        // what stops a half-built merge being saved.
+        sources: [],
+        mode: "combine",
       };
       return node;
     }

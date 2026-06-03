@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import {
   Button,
+  InputCheckbox,
   InputKeyValue,
   type KeyValue,
   InputSingleSelect,
@@ -19,16 +20,20 @@ import type { JsonValue } from "@/app/flows/types";
 import type {
   AiNode,
   CodeNode,
+  FlowNodeKind,
   ConditionNode,
   ConditionOperator,
   DelayNode,
   FilterNode,
+  MergeMode,
+  MergeNode,
   FlowNode,
   HttpNode,
   HttpMethod,
   HumanNode,
   LoopNode,
   RetryNode,
+  ScheduleNode,
   TransformNode,
   WebhookNode,
 } from "@/app/flows/types";
@@ -68,6 +73,8 @@ export interface NodeInspectorProps {
   /** The flow's key, shown on a webhook step so it can be copied into the
    *  receiving system. Null while the flow is still loading. */
   webhookSigningSecret?: string | null;
+  /** Steps that lead to this one, which a merge may name as sources. */
+  mergeCandidates?: readonly string[];
   onChange: (node: FlowNode) => void;
   onDelete: (nodeId: string) => void;
   className?: string;
@@ -86,6 +93,7 @@ export function NodeInspector({
   isStart,
   canDelete,
   webhookSigningSecret,
+  mergeCandidates,
   onChange,
   onDelete,
   className,
@@ -145,6 +153,16 @@ export function NodeInspector({
       ) : null}
       {node.kind === "RETRY" ? (
         <RetryFields node={node} onChange={onChange} />
+      ) : null}
+      {node.kind === "SCHEDULE" ? (
+        <ScheduleFields node={node} onChange={onChange} />
+      ) : null}
+      {node.kind === "MERGE" ? (
+        <MergeFields
+          node={node}
+          candidates={mergeCandidates ?? []}
+          onChange={onChange}
+        />
       ) : null}
       {node.kind === "DELAY" ? (
         <DelayFields node={node} onChange={onChange} />
@@ -236,14 +254,25 @@ export function NodeInspector({
 }
 
 /**
- * Whether this kind may fan out.
+ * Kinds the server refuses `for_each` on.
  *
- * The server rejects `for_each` on a branching node — per-item branching has
- * no answer once the items disagree — so the field is not offered rather than
- * offered and then refused on save.
+ * Each has its own reason — a branch has no answer once the items disagree,
+ * a wait would be the same wall clock spent N times over, a merge has one
+ * output per source already — but the rule for the editor is the same: do
+ * not offer a field that only gets refused on save.
+ *
+ * Mirrors the `_no_fan_out` validators in `backend/onyx/flows/models.py`.
  */
+const NEVER_FANS_OUT: readonly FlowNodeKind[] = [
+  "CONDITION",
+  "HUMAN",
+  "DELAY",
+  "SCHEDULE",
+  "MERGE",
+];
+
 function canFanOut(node: FlowNode): boolean {
-  return node.kind !== "CONDITION" && node.kind !== "HUMAN";
+  return !NEVER_FANS_OUT.includes(node.kind);
 }
 
 /** Keep the attempt count inside what the server will accept. */
@@ -575,6 +604,111 @@ function clampBatchSize(raw: string): number {
   const parsed = Number.parseInt(raw, 10);
   if (Number.isNaN(parsed)) return 1;
   return Math.min(200, Math.max(1, parsed));
+}
+
+function ScheduleFields({ node, onChange }: FieldProps<ScheduleNode>) {
+  const t = useTranslations("flows.inspector");
+
+  return (
+    <InputVertical
+      withLabel
+      title={t("fields.cron")}
+      description={t("fields.cronHelp")}
+    >
+      <InputTypeIn
+        value={node.cron}
+        placeholder={t("placeholder.cron")}
+        onChange={(event) => onChange({ ...node, cron: event.target.value })}
+      />
+    </InputVertical>
+  );
+}
+
+function MergeFields({
+  node,
+  candidates,
+  onChange,
+}: FieldProps<MergeNode> & { candidates: readonly string[] }) {
+  const t = useTranslations("flows.inspector");
+
+  function toggle(source: string, checked: boolean): void {
+    // Kept in candidate order rather than click order, so the output reads
+    // the same way the graph does however it was assembled.
+    const chosen = new Set(node.sources);
+    if (checked) chosen.add(source);
+    else chosen.delete(source);
+    onChange({
+      ...node,
+      sources: candidates.filter((id) => chosen.has(id)),
+    });
+  }
+
+  return (
+    <>
+      <InputVertical
+        withLabel
+        title={t("fields.mergeSources")}
+        description={t("fields.mergeSourcesHelp")}
+      >
+        {candidates.length === 0 ? (
+          <Text font="main-ui-muted" color="text-03">
+            {t("fields.mergeNoCandidates")}
+          </Text>
+        ) : (
+          <div
+            data-testid="merge-sources"
+            className="flex flex-col gap-2 w-full"
+          >
+            {candidates.map((source) => (
+              <label
+                key={source}
+                className="flex flex-row items-center gap-2 cursor-pointer"
+              >
+                <InputCheckbox
+                  checked={node.sources.includes(source)}
+                  onCheckedChange={(checked) => toggle(source, checked)}
+                />
+                <Text font="main-ui-body" color="text-04">
+                  {source}
+                </Text>
+              </label>
+            ))}
+          </div>
+        )}
+      </InputVertical>
+
+      {node.sources.length < 2 ? (
+        <Text font="main-ui-muted" color="text-03">
+          {t("fields.mergeNeedsTwo")}
+        </Text>
+      ) : null}
+
+      <InputVertical
+        withLabel
+        title={t("fields.mergeMode")}
+        description={t("fields.mergeModeHelp")}
+      >
+        <InputSingleSelect
+          value={node.mode}
+          onValueChange={(raw) => onChange({ ...node, mode: asMergeMode(raw) })}
+        >
+          <InputSingleSelect.Trigger />
+          <InputSingleSelect.Content>
+            <InputSingleSelect.Item value="combine">
+              {t("mergeMode.combine")}
+            </InputSingleSelect.Item>
+            <InputSingleSelect.Item value="append">
+              {t("mergeMode.append")}
+            </InputSingleSelect.Item>
+          </InputSingleSelect.Content>
+        </InputSingleSelect>
+      </InputVertical>
+    </>
+  );
+}
+
+function asMergeMode(value: string): MergeMode {
+  return value === "append" ? "append" : "combine";
 }
 
 function DelayFields({ node, onChange }: FieldProps<DelayNode>) {

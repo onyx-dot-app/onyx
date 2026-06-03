@@ -7,6 +7,7 @@
 import {
   COLUMN_GAP,
   NODE_WIDTH,
+  ancestorsOf,
   layoutFlow,
   reachableFrom,
   successorsOf,
@@ -90,6 +91,45 @@ describe("successorsOf", () => {
 
   it("is just next for every other kind", () => {
     expect(successorsOf(transform("t", ["a", "b"]))).toEqual(["a", "b"]);
+  });
+});
+
+describe("ancestorsOf", () => {
+  it("finds a step two hops back, not just the one before", () => {
+    const flow = spec("a", [
+      transform("a", ["b"]),
+      transform("b", ["c"]),
+      transform("c"),
+    ]);
+
+    expect(ancestorsOf(flow, "c")).toEqual(["a", "b"]);
+  });
+
+  it("follows both sides of a branch", () => {
+    const flow = spec("check", [
+      condition("check", ["yes"], ["no"]),
+      transform("yes", ["join"]),
+      transform("no", ["join"]),
+      transform("join"),
+    ]);
+
+    expect(ancestorsOf(flow, "join")).toEqual(["check", "yes", "no"]);
+  });
+
+  it("leaves out a step that does not lead to this one", () => {
+    const flow = spec("a", [
+      transform("a", ["b"]),
+      transform("b"),
+      transform("stray"),
+    ]);
+
+    expect(ancestorsOf(flow, "b")).toEqual(["a"]);
+  });
+
+  it("never offers the step itself", () => {
+    const flow = spec("a", [transform("a", ["b"]), transform("b", ["a2"])]);
+
+    expect(ancestorsOf(flow, "a")).not.toContain("a");
   });
 });
 
