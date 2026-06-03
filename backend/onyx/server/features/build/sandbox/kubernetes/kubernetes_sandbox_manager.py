@@ -1263,6 +1263,12 @@ class KubernetesSandboxManager(SandboxManager):
                     f"Timeout waiting for existing sandbox pod {pod_name} to become ready"
                 )
 
+            # Reusing a live pod: clear any stale tombstone so event-bus
+            # creation can attach. A stale password heals via the 401 path in
+            # the readiness probe below.
+            with self._event_buses_lock:
+                self._terminated_sandboxes.discard(sandbox_id)
+
             if not self._wait_for_opencode_serve_ready(sandbox_id):
                 raise RuntimeError(
                     f"opencode-serve never became ready in existing sandbox pod {pod_name}"
