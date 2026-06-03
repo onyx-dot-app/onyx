@@ -1,32 +1,8 @@
-/**
- * App Page Layout Components
- *
- * Provides the root layout, header, and footer for app pages.
- * AppRoot renders AppHeader and Footer by default (both can be disabled via props).
- *
- * @example
- * ```tsx
- * import * as AppLayouts from "@/layouts/app-layouts";
- *
- * export default function ChatPage() {
- *   return (
- *     <AppLayouts.Root>
- *       <ChatInterface />
- *     </AppLayouts.Root>
- *   );
- * }
- * ```
- */
-
 "use client";
 
-import { ensureHrefProtocol, INTERACTIVE_SELECTOR, noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { useAppBackground } from "@/providers/AppBackgroundProvider";
-import { useTheme } from "next-themes";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { useProjectsContext } from "@/providers/ProjectsContext";
@@ -57,31 +33,23 @@ import {
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
-import useBrowserInfo from "@/hooks/useBrowserInfo";
-import { APP_SLOGAN } from "@/lib/constants";
+import { noProp } from "@/lib/utils";
 
-/**
- * App Header Component
- *
- * Renders the header for chat sessions with share, move, and delete actions.
- * Designed to be rendered inside ChatScrollContainer with sticky positioning.
- *
- * Features:
- * - Share chat functionality
- * - Move chat to project (with confirmation for custom agents)
- * - Delete chat with confirmation
- * - Mobile-responsive sidebar toggle
- * - Custom header content from enterprise settings
- * - App-Mode toggle (EE gated)
- */
-function Header() {
+export default function AppHeader() {
+  const appFocus = useAppFocus();
+
+  if (appFocus.isSharedChat()) return null;
+
+  return <AppHeaderInner />;
+}
+
+function AppHeaderInner() {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
@@ -112,9 +80,6 @@ function Header() {
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
-  // Some pages don't want the custom header content, namely every page except Chat, Search, and
-  // NewSession. The header provides features such as the open sidebar button on mobile which pages
-  // without this content still use.
   const pageWithHeaderContent = appFocus.isChat() || appFocus.isNewSession();
 
   const effectiveMode: AppMode =
@@ -433,222 +398,3 @@ function Header() {
     </>
   );
 }
-
-const footerMarkdownComponents = {
-  p: ({ children }) => (
-    //dont remove the my-0! class, it's important for the markdown to render without any alignment issues
-    <Text as="p" text03 secondaryAction className="my-0! text-center">
-      {children}
-    </Text>
-  ),
-  a: ({ node, href, className, children, ...rest }) => {
-    const fullHref = ensureHrefProtocol(href);
-    return (
-      <a
-        href={fullHref}
-        target="_blank"
-        rel="noopener noreferrer"
-        {...rest}
-        className={cn(className, "underline underline-offset-2")}
-      >
-        <Text text03 secondaryAction>
-          {children}
-        </Text>
-      </a>
-    );
-  },
-} satisfies Partial<Components>;
-
-function Footer() {
-  const settings = useSettingsContext();
-  const appFocus = useAppFocus();
-
-  const customFooterContent =
-    settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
-    `[Onyx ${
-      settings?.webVersion || "dev"
-    }](https://www.onyx.app/) - ${APP_SLOGAN}`;
-
-  return (
-    <footer
-      className={cn(
-        "relative w-full flex flex-row justify-center items-center gap-2 px-2 mt-auto",
-        // # Note (from @raunakab):
-        //
-        // The conditional rendering of vertical padding based on the current page is intentional.
-        // The `AppInputBar` has `shadow-01` applied, which extends ~14px below it.
-        // Because the content area in `Root` uses `overflow-auto`, the shadow would be
-        // clipped at the container boundary — causing a visible rendering artefact.
-        //
-        // To fix this, `AppPage.tsx` uses animated spacer divs around `AppInputBar` to
-        // give the shadow breathing room. However, that extra space adds visible gap
-        // between the input and the Footer. To compensate, we remove the Footer's top
-        // padding when `appFocus.isChat()`.
-        //
-        // There is a corresponding note inside `AppInputBar.tsx` and `AppPage.tsx`
-        // explaining this. Please refer to those notes as well.
-        appFocus.isChat() ? "pb-2" : "py-2"
-      )}
-    >
-      <MinimalMarkdown
-        content={customFooterContent}
-        className={cn("max-w-full text-center")}
-        components={footerMarkdownComponents}
-      />
-    </footer>
-  );
-}
-
-/**
- * App Root Component
- *
- * Wraps app pages with header (AppHeader) and footer chrome.
- *
- * Layout Structure:
- * ```
- * ┌──────────────────────────────────┐
- * │ AppHeader                        │
- * ├──────────────────────────────────┤
- * │                                  │
- * │ Content Area (children)          │
- * │                                  │
- * ├──────────────────────────────────┤
- * │ Footer (custom disclaimer)       │
- * └──────────────────────────────────┘
- * ```
- *
- * @example
- * ```tsx
- * <AppLayouts.Root>
- *   <ChatInterface />
- * </AppLayouts.Root>
- * ```
- */
-export interface AppRootProps {
-  /** Opt-in to render the user's custom background image */
-  enableBackground?: boolean;
-  children?: React.ReactNode;
-}
-
-function Root({ children, enableBackground }: AppRootProps) {
-  const { hasBackground, appBackgroundUrl } = useAppBackground();
-  const { resolvedTheme } = useTheme();
-  const appFocus = useAppFocus();
-  const { isSafari } = useBrowserInfo();
-  const isLightMode = resolvedTheme === "light";
-  const showBackground = hasBackground && enableBackground;
-
-  // Track whether the chat input was focused before a mousedown, so we can
-  // restore focus on mouseup if no text was selected. This preserves
-  // click-drag text selection while keeping the input focused on plain clicks.
-  const inputWasFocused = useRef(false);
-
-  const handleMouseDown = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      const activeEl = document.activeElement;
-      const isFocused =
-        activeEl instanceof HTMLElement &&
-        activeEl.id === "onyx-chat-input-textbox";
-      const target = event.target;
-      const isInteractive =
-        target instanceof HTMLElement && !!target.closest(INTERACTIVE_SELECTOR);
-      inputWasFocused.current = isFocused && !isInteractive;
-    },
-    []
-  );
-
-  const handleMouseUp = useCallback(() => {
-    if (!inputWasFocused.current) return;
-    inputWasFocused.current = false;
-    const sel = window.getSelection();
-    if (sel && !sel.isCollapsed) return;
-    const textarea = document.getElementById("onyx-chat-input-textbox");
-    // Only restore focus if no other element has grabbed it since mousedown.
-    if (textarea && document.activeElement !== textarea) {
-      textarea.focus();
-    }
-  }, []);
-  const horizontalBlurMask = `linear-gradient(
-    to right,
-    transparent 0%,
-    black max(0%, calc(50% - 25rem)),
-    black min(100%, calc(50% + 25rem)),
-    transparent 100%
-  )`;
-
-  return (
-    /* NOTE: Some elements, markdown tables in particular, refer to this `@container` in order to
-      breakout of their immediate containers using cqw units.
-      The `data-main-container` attribute is used by portaled elements (e.g. CommandMenu) to
-      render inside this container so they can be centered relative to the main content area
-      rather than the full viewport (which would include the sidebar).
-    */
-    <div
-      data-main-container
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      className={cn(
-        "@container flex flex-col h-full w-full relative overflow-hidden",
-        showBackground && "bg-cover bg-center bg-fixed"
-      )}
-      style={
-        showBackground
-          ? { backgroundImage: `url(${appBackgroundUrl})` }
-          : undefined
-      }
-    >
-      {/* Effect 1 */}
-      {/* Vignette overlay for custom backgrounds (disabled in light mode) */}
-      {showBackground && !isLightMode && (
-        <div
-          className="absolute z-0 inset-0 pointer-events-none"
-          style={{
-            background: `
-              linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 4rem),
-              linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 4rem)
-            `,
-          }}
-        />
-      )}
-
-      {/* Effect 2 */}
-      {/* Semi-transparent overlay for readability when background is set */}
-      {showBackground && appFocus.isChat() && (
-        <>
-          <div className="absolute inset-0 backdrop-blur-[1px] pointer-events-none" />
-          {isSafari ? (
-            <div
-              className="absolute z-0 inset-0 bg-cover bg-center bg-fixed pointer-events-none"
-              style={{
-                backgroundImage: `url(${appBackgroundUrl})`,
-                filter: "blur(16px)",
-                maskImage: horizontalBlurMask,
-                WebkitMaskImage: horizontalBlurMask,
-              }}
-            />
-          ) : (
-            <div
-              className="absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
-              style={{
-                maskImage: horizontalBlurMask,
-                WebkitMaskImage: horizontalBlurMask,
-              }}
-            />
-          )}
-        </>
-      )}
-
-      <div className="z-app-layout">
-        {!appFocus.isSharedChat() && <Header />}
-      </div>
-      <div className="z-app-layout flex-1 overflow-auto h-full w-full">
-        {children}
-      </div>
-      <div className="z-app-layout">
-        <Footer />
-      </div>
-    </div>
-  );
-}
-
-export { Root };
