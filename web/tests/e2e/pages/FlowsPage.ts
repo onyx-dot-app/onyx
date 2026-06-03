@@ -1,0 +1,209 @@
+/**
+ * Page Object Model for the Flows surface (/flows and /flows/[id]).
+ *
+ * The canvas derives node positions from the spec rather than storing them,
+ * so everything here is expressed against the graph the user can see — node
+ * cards, edges, the zoom readout — never against the transform matrix.
+ */
+
+import { type Locator, type Page, expect } from "@playwright/test";
+
+const LIST_PATH = "/flows";
+const EDITOR_PATH_REGEX = /\/flows\/[0-9a-f-]{36}$/;
+
+/** The step kinds the palette offers, by their button label. */
+export type StepKind = "HTTP request" | "AI" | "Condition" | "Transform";
+
+export class FlowsPage {
+  readonly page: Page;
+
+  readonly newFlowButton: Locator;
+  readonly canvas: Locator;
+  readonly nodes: Locator;
+  readonly edges: Locator;
+  readonly zoomLevel: Locator;
+  readonly zoomInButton: Locator;
+  readonly zoomOutButton: Locator;
+  readonly fitButton: Locator;
+  readonly inspector: Locator;
+  readonly inspectorNameInput: Locator;
+  readonly deleteStepButton: Locator;
+  readonly saveButton: Locator;
+  readonly publishButton: Locator;
+  readonly activateButton: Locator;
+
+  constructor(page: Page) {
+    this.page = page;
+
+    this.newFlowButton = page.getByRole("button", { name: "New flow" });
+    this.canvas = page.getByTestId("flow-canvas");
+    this.nodes = page.locator("[data-flow-node]");
+    this.edges = page.getByTestId("flow-edge");
+    this.zoomLevel = page.getByTestId("canvas-zoom-level");
+    this.zoomInButton = page.getByRole("button", { name: "Zoom in" });
+    this.zoomOutButton = page.getByRole("button", { name: "Zoom out" });
+    this.fitButton = page.getByRole("button", { name: "Fit to view" });
+    this.inspector = page.getByTestId("node-inspector");
+    this.inspectorNameInput = this.inspector.getByRole("textbox").first();
+    this.deleteStepButton = page.getByRole("button", { name: "Delete step" });
+    this.saveButton = page.getByRole("button", { name: "Save", exact: true });
+    this.publishButton = page.getByRole("button", { name: "Publish" });
+    this.activateButton = page.getByRole("button", { name: "Activate" });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Navigation
+  // ---------------------------------------------------------------------------
+
+  async gotoList(): Promise<void> {
+    await this.page.goto(LIST_PATH);
+    await expect(this.newFlowButton).toBeVisible();
+  }
+
+  /**
+   * Create a flow and land on its editor.
+   *
+   * The list page creates the flow through the API and redirects, so the
+   * canvas being visible is what proves the round trip worked.
+   */
+  async createFlow(): Promise<void> {
+    await this.newFlowButton.click();
+    await expect(this.page).toHaveURL(EDITOR_PATH_REGEX);
+    await expect(this.canvas).toBeVisible();
+    // A new flow opens on one HTTP step, so wait for the graph to settle
+    // before a caller starts adding to it.
+    await expect(this.nodes).toHaveCount(1);
+  }
+
+  async reload(): Promise<void> {
+    await this.page.reload();
+    await expect(this.canvas).toBeVisible();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Building the graph
+  // ---------------------------------------------------------------------------
+
+  /** Add a step, wired after whatever is selected. */
+  async addStep(kind: StepKind): Promise<void> {
+    const before = await this.nodes.count();
+    await this.page.getByRole("button", { name: kind, exact: true }).click();
+    await expect(this.nodes).toHaveCount(before + 1);
+  }
+
+  node(nodeId: string): Locator {
+    return this.page.locator(`[data-flow-node="${nodeId}"]`);
+  }
+
+  async selectNode(nodeId: string): Promise<void> {
+    await this.node(nodeId).click();
+    await expect(this.inspector).toBeVisible();
+  }
+
+  /**
+   * Click empty canvas, which clears the selection.
+   *
+   * Aimed at the top-left corner: the layout centres the graph, so that
+   * corner is reliably background even on a wide flow.
+   */
+  async clickEmptyCanvas(): Promise<void> {
+    await this.canvas.click({ position: { x: 12, y: 12 } });
+  }
+
+  async renameSelectedStep(name: string): Promise<void> {
+    await this.inspectorNameInput.fill(name);
+  }
+
+  async deleteSelectedStep(): Promise<void> {
+    const before = await this.nodes.count();
+    await this.deleteStepButton.click();
+    await expect(this.nodes).toHaveCount(before - 1);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Saving
+  // ---------------------------------------------------------------------------
+
+  async save(): Promise<void> {
+    await this.saveButton.click();
+    // The button reads "Saved" and disables once the draft matches the server.
+    await expect(
+      this.page.getByRole("button", { name: "Saved", exact: true })
+    ).toBeVisible();
+  }
+
+  async publish(): Promise<void> {
+    await this.publishButton.click();
+    await expect(this.activateButton).toBeEnabled();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Viewport
+  // ---------------------------------------------------------------------------
+
+  /** Current zoom as a number, for control flow rather than assertions. */
+  async currentZoomPercent(): Promise<number> {
+    const text = (await this.zoomLevel.innerText()).trim();
+    return Number.parseInt(text.replace("%", ""), 10);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Assertions
+  // ---------------------------------------------------------------------------
+
+  async expectStepCount(count: number): Promise<void> {
+    await expect(this.nodes).toHaveCount(count);
+  }
+
+  async expectEdgeCount(count: number): Promise<void> {
+    await expect(this.edges).toHaveCount(count);
+  }
+
+  /** A condition's branches are drawn and labelled. */
+  async expectBranchEdge(branch: "true" | "false"): Promise<void> {
+    await expect(
+      this.edges.filter({ has: this.page.locator(`text=${branch}`) })
+    ).toHaveCount(1);
+  }
+
+  async expectStepLabelled(nodeId: string, name: string): Promise<void> {
+    await expect(this.node(nodeId)).toContainText(name);
+  }
+
+  /** A step nothing reaches is outlined rather than hidden. */
+  async expectStepUnreachable(nodeId: string): Promise<void> {
+    await expect(this.node(nodeId)).toHaveClass(/border-dashed/);
+  }
+
+  async expectStepConnected(nodeId: string): Promise<void> {
+    await expect(this.node(nodeId)).not.toHaveClass(/border-dashed/);
+  }
+
+  async expectInspectorOpen(): Promise<void> {
+    await expect(this.inspector).toBeVisible();
+  }
+
+  async expectInspectorClosed(): Promise<void> {
+    await expect(this.inspector).toBeHidden();
+  }
+
+  async expectSelectedStepNamed(name: string): Promise<void> {
+    await expect(this.inspectorNameInput).toHaveValue(name);
+  }
+
+  async expectZoomAbove(percent: number): Promise<void> {
+    await expect
+      .poll(() => this.currentZoomPercent(), {
+        message: `zoom should rise above ${percent}%`,
+      })
+      .toBeGreaterThan(percent);
+  }
+
+  async expectZoomBelow(percent: number): Promise<void> {
+    await expect
+      .poll(() => this.currentZoomPercent(), {
+        message: `zoom should fall below ${percent}%`,
+      })
+      .toBeLessThan(percent);
+  }
+}

@@ -202,6 +202,8 @@ export function FlowCanvas({
             {layout.edges.map((edge) => (
               <g
                 key={edge.id}
+                data-testid="flow-edge"
+                data-branch={edge.branch ?? "none"}
                 className={
                   edge.branch === "true"
                     ? "text-status-success-05"
@@ -266,9 +268,11 @@ export function FlowCanvas({
           aria-label={t("controls.zoomOut")}
           onClick={() => zoomBy(1 - ZOOM_STEP)}
         />
-        <Text font="figure-small-value" color="text-03">
-          {`${Math.round(viewport.zoom * 100)}%`}
-        </Text>
+        <span data-testid="canvas-zoom-level">
+          <Text font="figure-small-value" color="text-03">
+            {`${Math.round(viewport.zoom * 100)}%`}
+          </Text>
+        </span>
         <Button
           variant="default"
           prominence="secondary"

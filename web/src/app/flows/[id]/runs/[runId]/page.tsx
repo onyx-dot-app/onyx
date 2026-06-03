@@ -137,7 +137,10 @@ function NodeRunDetails({
   const t = useTranslations("flows.run");
 
   return (
-    <div className="flex flex-col gap-2 pb-3 border-b border-border-01">
+    <div
+      data-testid="node-run-item"
+      className="flex flex-col gap-2 pb-3 border-b border-border-01"
+    >
       {showItemIndex ? (
         <Text font="figure-small-label" color="text-03">
           {t("item", { index: nodeRun.item_index })}

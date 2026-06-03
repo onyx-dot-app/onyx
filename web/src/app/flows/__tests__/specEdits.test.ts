@@ -10,6 +10,7 @@ import {
   isLastNode,
   nextNodeId,
   removeNode,
+  sameSpec,
   updateNode,
 } from "@/app/flows/specEdits";
 import type {
@@ -218,5 +219,64 @@ describe("isLastNode", () => {
   it("is true only when one node remains", () => {
     expect(isLastNode(spec("a", [transform("a")]))).toBe(true);
     expect(isLastNode(spec("a", [transform("a"), transform("b")]))).toBe(false);
+  });
+});
+
+describe("sameSpec", () => {
+  it("ignores key order", () => {
+    // The server returns each node's fields in its model's declared order,
+    // which is not the order a node built in the editor carries.
+    const asSent = spec("a", [transform("a")]);
+    const asReturned: FlowSpec = {
+      nodes: [
+        {
+          retry: { backoff_seconds: 1, max_attempts: 1 },
+          on_error: "stop",
+          for_each: null,
+          next: [],
+          kind: "TRANSFORM",
+          name: "a",
+          id: "a",
+          fields: { value: "1" },
+        },
+      ],
+      start: "a",
+      spec_version: 1,
+    };
+
+    expect(JSON.stringify(asSent)).not.toEqual(JSON.stringify(asReturned));
+    expect(sameSpec(asSent, asReturned)).toBe(true);
+  });
+
+  it("still sees a real change", () => {
+    const before = spec("a", [transform("a")]);
+    const after = updateNode(before, "a", {
+      ...transform("a"),
+      name: "Renamed",
+    });
+
+    expect(sameSpec(before, after)).toBe(false);
+  });
+
+  it("distinguishes list order, which is meaningful", () => {
+    const one = spec("a", [
+      transform("a", ["b", "c"]),
+      transform("b"),
+      transform("c"),
+    ]);
+    const other = spec("a", [
+      transform("a", ["c", "b"]),
+      transform("b"),
+      transform("c"),
+    ]);
+
+    expect(sameSpec(one, other)).toBe(false);
+  });
+
+  it("treats a missing field and an explicit null as different", () => {
+    const withNull = spec("a", [transform("a")]);
+    const withoutForEach = spec("a", [{ ...transform("a"), for_each: null }]);
+
+    expect(sameSpec(withNull, withoutForEach)).toBe(true);
   });
 });

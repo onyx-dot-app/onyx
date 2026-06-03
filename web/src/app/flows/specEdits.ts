@@ -188,3 +188,33 @@ export function removeNode(spec: FlowSpec, nodeId: string): FlowSpec {
 export function isLastNode(spec: FlowSpec): boolean {
   return spec.nodes.length <= 1;
 }
+
+/**
+ * Whether two specs describe the same graph.
+ *
+ * Not `JSON.stringify` equality: the server returns each node's fields in the
+ * order its Pydantic model declares them, while a node built here carries the
+ * order the object literal used. The two are the same graph, so comparing raw
+ * JSON reports a freshly-saved flow as still dirty and the Save button never
+ * settles.
+ */
+export function sameSpec(left: FlowSpec, right: FlowSpec): boolean {
+  return canonical(left) === canonical(right);
+}
+
+/**
+ * A spec serialised with its object keys in a fixed order.
+ *
+ * `JSON.stringify`'s array replacer both filters and orders keys, so
+ * collecting every key first and then passing them sorted gives a stable
+ * spelling without dropping anything. Array order is left alone, because in a
+ * spec it carries meaning — `next: ["a", "b"]` is not `next: ["b", "a"]`.
+ */
+function canonical(spec: FlowSpec): string {
+  const keys = new Set<string>();
+  JSON.stringify(spec, (key, value) => {
+    keys.add(key);
+    return value;
+  });
+  return JSON.stringify(spec, [...keys].sort());
+}

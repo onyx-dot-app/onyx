@@ -22,6 +22,7 @@ import {
   addNode,
   isLastNode,
   removeNode,
+  sameSpec,
   updateNode,
 } from "@/app/flows/specEdits";
 import type {
@@ -65,10 +66,7 @@ export default function FlowEditorPage() {
   }, [flow, draft]);
 
   const dirty = useMemo(
-    () =>
-      flow !== undefined &&
-      draft !== null &&
-      JSON.stringify(flow.spec) !== JSON.stringify(draft),
+    () => flow !== undefined && draft !== null && !sameSpec(flow.spec, draft),
     [flow, draft]
   );
 
