@@ -283,30 +283,33 @@ class DockerEventsLookup(SandboxIPLookup):
                 if stale_ip is not None and stale_ip != identity.sandbox_ip:
                     self._cache.pop(stale_ip, None)
 
-                # Evict any stale ``_by_id`` entries that still point to
-                # the IP we are about to claim. Two containers cannot
-                # legitimately share a bridge IP at the same instant; if
-                # our state says they do, we missed a die event for the
-                # prior owner. Leaving the orphan in ``_by_id`` means its
+                # Evict any stale ``_by_id`` entries (different
+                # container_id) that still point to the IP we are about
+                # to claim. Two distinct containers cannot legitimately
+                # share a bridge IP at the same instant; if our state
+                # says they do, we missed a die event for the prior
+                # container. Leaving the orphan in ``_by_id`` means its
                 # eventual die event would pop *this* IP from the cache
-                # via line ``_cache.pop(stale_ip)`` in the die branch,
-                # silently un-identifying the new container.
-                existing = self._cache.get(identity.sandbox_ip)
-                if existing is not None and existing.sandbox_id != identity.sandbox_id:
-                    orphans = [
-                        cid
-                        for cid, ip in self._by_id.items()
-                        if ip == identity.sandbox_ip and cid != container_id
-                    ]
+                # via the die branch's ``_cache.pop(stale_ip)``,
+                # silently un-identifying the new container. Don't gate
+                # on sandbox_id -- a sandbox restart keeps the
+                # sandbox_id label but gets a fresh container_id, and
+                # that case is what trips this most often.
+                orphans = [
+                    cid
+                    for cid, ip in self._by_id.items()
+                    if ip == identity.sandbox_ip and cid != container_id
+                ]
+                if orphans:
                     for cid in orphans:
                         self._by_id.pop(cid, None)
                     logger.warning(
-                        "ip %s reclaimed by container %s; evicted stale "
-                        "by_id entries for %s (prior sandbox_id=%s)",
+                        "ip %s reclaimed; evicted stale by_id entries "
+                        "for %s (new container=%s, sandbox_id=%s)",
                         identity.sandbox_ip,
-                        container_id,
                         orphans,
-                        existing.sandbox_id,
+                        container_id,
+                        identity.sandbox_id,
                     )
 
                 self._cache[identity.sandbox_ip] = identity

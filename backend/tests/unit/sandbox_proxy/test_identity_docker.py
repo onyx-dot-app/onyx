@@ -243,6 +243,37 @@ def test_apply_event_start_evicts_stale_by_id_on_ip_reclaim() -> None:
     assert str(identity_after.sandbox_id) == other_uuid
 
 
+def test_apply_event_start_evicts_stale_by_id_on_same_sandbox_id_restart() -> None:
+    """Sandbox restart keeps the same ``sandbox_id`` label but gets a
+    fresh ``container_id`` from docker. The orphan-eviction must not
+    be gated on sandbox_id mismatch -- the stale ``_by_id`` entry from
+    the old container_id is still poison regardless of whether the new
+    container_id has the same sandbox_id. Without this, the prior
+    container's belated die event would wipe the restarted container's
+    cache entry.
+    """
+    lookup, client = _make_lookup()
+    # Both containers carry the SAME sandbox_id (default in _make_container).
+    # Different container_ids though -- that's the sandbox-restart shape.
+    client.containers.get.return_value = _make_container(
+        container_id="cid-a", ip="172.18.0.5"
+    )
+    lookup._apply_event({"Action": "start", "Actor": {"ID": "cid-a"}})
+
+    # Same sandbox_id, new container_id, same IP (we missed the die for A).
+    client.containers.get.return_value = _make_container(
+        container_id="cid-b", ip="172.18.0.5"
+    )
+    lookup._apply_event({"Action": "start", "Actor": {"ID": "cid-b"}})
+
+    assert "cid-a" not in lookup._by_id
+    assert lookup._by_id["cid-b"] == "172.18.0.5"
+
+    # A's belated die must not wipe B.
+    lookup._apply_event({"Action": "die", "Actor": {"ID": "cid-a"}})
+    assert lookup.lookup("172.18.0.5") is not None
+
+
 # ---------------------------------------------------------------------------
 # Initial sync
 # ---------------------------------------------------------------------------
