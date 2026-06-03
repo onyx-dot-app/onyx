@@ -11,6 +11,8 @@ from __future__ import annotations
 from typing import Callable
 
 import pytest
+from sqlalchemy import delete
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecidedVia
@@ -19,7 +21,9 @@ from onyx.db.enums import ScheduledTaskRunStatus
 from onyx.db.enums import ScheduledTaskStatus
 from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.models import BuildSession
+from onyx.db.models import ExternalApp
 from onyx.db.models import ScheduledTask
+from onyx.db.models import ScheduledTaskPreApprovedApp
 from onyx.db.models import User
 from onyx.db.scheduled_task import create_scheduled_task
 from onyx.db.scheduled_task import get_live_scheduled_run_grants
@@ -279,12 +283,74 @@ def test_create_persists_grants(
 ) -> None:
     user = make_user(db_session)
     app_a, app_b = _make_app(db_session), _make_app(db_session)
+    assert app_a < app_b  # ids autoincrement, so the higher id is created last
     # Insertion order is preserved (not sorted): pass the higher id first.
     task = _seed_task(db_session, user, pre_approved_app_ids=[app_b, app_a])
     assert task.pre_approved_app_ids == [app_b, app_a]
 
     bare = _seed_task(db_session, user)
     assert bare.pre_approved_app_ids == []
+
+
+# ---------------------------------------------------------------------------
+# FK referential actions (deliberate, documented ondelete choices)
+# ---------------------------------------------------------------------------
+
+
+def test_deleting_app_drops_grants(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """``external_app_id`` is ``ON DELETE CASCADE``: removing an app drops its
+    grant rows — a grant on a removed app is meaningless."""
+    user = make_user(db_session)
+    app_id = _make_app(db_session)
+    task = _seed_task(db_session, user, pre_approved_app_ids=[app_id])
+    assert task.pre_approved_app_ids == [app_id]
+
+    db_session.execute(delete(ExternalApp).where(ExternalApp.id == app_id))
+    db_session.commit()
+
+    remaining = (
+        db_session.execute(
+            select(ScheduledTaskPreApprovedApp).where(
+                ScheduledTaskPreApprovedApp.scheduled_task_id == task.id
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert remaining == []
+
+
+def test_deleting_app_nulls_action_approval_fk(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    """``action_approval.external_app_id`` is ``ON DELETE SET NULL``: an audit
+    row survives app deletion with the FK cleared, not cascaded away."""
+    user = make_user(db_session)
+    bs = build_session_with_user(user=user)
+    app_id = _make_app(db_session)
+    row = insert_action_approval(
+        db_session,
+        session_id=bs.id,
+        actions=default_action_entries(),
+        app_name="Slack",
+        payload={},
+        external_app_id=app_id,
+        decision=ApprovalDecision.APPROVED,
+        decided_via=ApprovalDecidedVia.PRE_APPROVAL,
+    )
+    db_session.commit()
+    assert row.external_app_id == app_id
+
+    db_session.execute(delete(ExternalApp).where(ExternalApp.id == app_id))
+    db_session.commit()
+    db_session.refresh(row)
+
+    assert row.external_app_id is None
 
 
 # ---------------------------------------------------------------------------

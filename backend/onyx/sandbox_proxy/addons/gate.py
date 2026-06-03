@@ -26,6 +26,7 @@ from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.db.notification import create_notification
 from onyx.db.scheduled_task import get_live_scheduled_run_grants
+from onyx.db.scheduled_task import ScheduledRunGrants
 from onyx.external_apps.matching.engine import RequestMatch
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.action_matcher import ActionMatcher
@@ -82,10 +83,6 @@ class _AutoApproval:
     notification_data: dict[str, str | int]
 
 
-# Result of the scheduled-run grant lookup: (run_id, granted_app_ids) for a
-# RUNNING scheduled run, or None.
-_GrantLookup = tuple[UUID, list[int]] | None
-
 # Grants for a RUNNING scheduled run are stable for the run's lifetime, so the
 # lookup is cached per session instead of hitting Postgres on every gated
 # request. The TTL bounds staleness from the RUNNING -> terminal transition
@@ -107,14 +104,16 @@ class _GrantCache:
     def __init__(
         self,
         ttl_s: float = _GRANT_CACHE_TTL_S,
+        max_entries: int = _GRANT_CACHE_MAX_ENTRIES,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._ttl_s = ttl_s
+        self._max_entries = max_entries
         self._clock = clock
         self._lock = threading.Lock()
-        self._entries: dict[UUID, tuple[float, _GrantLookup]] = {}
+        self._entries: dict[UUID, tuple[float, ScheduledRunGrants]] = {}
 
-    def get(self, session_id: UUID) -> tuple[bool, _GrantLookup]:
+    def get(self, session_id: UUID) -> tuple[bool, ScheduledRunGrants]:
         """Return ``(hit, value)``. ``hit`` is False on miss/expiry — the
         value is meaningless then and the caller must do the DB lookup."""
         now = self._clock()
@@ -124,10 +123,10 @@ class _GrantCache:
                 return False, None
             return True, entry[1]
 
-    def put(self, session_id: UUID, value: _GrantLookup) -> None:
+    def put(self, session_id: UUID, value: ScheduledRunGrants) -> None:
         now = self._clock()
         with self._lock:
-            if len(self._entries) >= _GRANT_CACHE_MAX_ENTRIES:
+            if len(self._entries) >= self._max_entries:
                 self._entries = {
                     sid: e for sid, e in self._entries.items() if e[0] > now
                 }

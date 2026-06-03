@@ -485,12 +485,15 @@ def find_stuck_runs(
 # Egress-gate pre-approval lookup
 # ---------------------------------------------------------------------------
 
+# (run_id, granted external-app ids) for a RUNNING scheduled run, else None.
+ScheduledRunGrants = tuple[UUID, list[int]] | None
+
 
 def get_live_scheduled_run_grants(
     *,
     db_session: Session,
     session_id: UUID,
-) -> tuple[UUID, list[int]] | None:
+) -> ScheduledRunGrants:
     """``(run_id, pre_approved_app_ids)`` when ``session_id`` is a currently
     RUNNING scheduled run; ``None`` otherwise.
 

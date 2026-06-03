@@ -689,6 +689,35 @@ def test_grant_cache_caches_none() -> None:
     assert cache.get(session_id) == (True, None)
 
 
+def test_grant_cache_keyed_per_session() -> None:
+    """One session's grants are never served for another session."""
+    cache = gate_mod._GrantCache(ttl_s=60.0, clock=lambda: 0.0)
+    granted, other = uuid4(), uuid4()
+
+    cache.put(granted, (_RUN_ID, [7]))
+
+    assert cache.get(granted) == (True, (_RUN_ID, [7]))
+    assert cache.get(other) == (False, None)  # miss — not the granted session
+
+
+def test_grant_cache_prunes_expired_over_soft_cap() -> None:
+    """Once the map exceeds the cap, a write prunes expired entries so memory
+    stays bounded; still-live entries survive."""
+    now = [0.0]
+    cache = gate_mod._GrantCache(ttl_s=60.0, max_entries=2, clock=lambda: now[0])
+
+    expired_a, expired_b = uuid4(), uuid4()
+    cache.put(expired_a, None)
+    cache.put(expired_b, None)
+
+    now[0] = 61.0  # both above expire
+    live = uuid4()
+    cache.put(live, (_RUN_ID, [7]))  # at cap (2) -> prune runs before insert
+
+    assert cache.get(live) == (True, (_RUN_ID, [7]))
+    assert cache._entries.keys() == {live}  # the two expired entries were dropped
+
+
 # ---------------------------------------------------------------------------
 # _resolve_and_match — happy path
 # ---------------------------------------------------------------------------

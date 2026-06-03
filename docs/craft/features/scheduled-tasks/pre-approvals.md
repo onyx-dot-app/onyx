@@ -137,7 +137,8 @@ grant:
   is the ORM collection; `pre_approved_app_ids` is a read-only accessor
   over it, so the API contract (`list[int]`) is unchanged. The write
   path replaces the whole set (`set_pre_approved_apps`), validated
-  against the tenant's apps and deduped order-preserving.
+  against the configured apps (via the tenant-scoped session) and
+  deduped order-preserving.
 - `action_approval.decided_via` — nullable (`user | pre_approval`,
   NULL for legacy/expired rows): the audit marker distinguishing a
   human click from a pre-approval. Kept separate from `decision` so
