@@ -18,14 +18,18 @@ from onyx.db.models import ChatSession
 from onyx.db.models import TokenRateLimit
 from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
-from onyx.db.user_usage import get_total_cost_cents_in_window
-from onyx.db.user_usage import get_window_start
+from onyx.db.user_usage import get_total_cost_cents_since
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
+from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
 logger = setup_logger()
+
+# The cost ledger buckets at this fixed grid; the cost cutoff is relaxed by one
+# grid to capture partially-overlapping buckets (see _first_triggered_cost_limit).
+_LEDGER_GRID = timedelta(seconds=USAGE_LIMIT_WINDOW_SECONDS)
 
 
 def check_token_rate_limits(
@@ -67,9 +71,7 @@ def _user_is_rate_limited_by_global() -> None:
 
             cost_triggered = _first_triggered_cost_limit(
                 global_rate_limits,
-                lambda window_start: get_total_cost_cents_in_window(
-                    db_session, window_start
-                ),
+                lambda cutoff: get_total_cost_cents_since(db_session, cutoff),
             )
             if cost_triggered is not None:
                 raise_rate_limited("organization", cost_triggered.period_hours)
@@ -127,14 +129,17 @@ def _first_triggered_limit(
 
 def _first_triggered_cost_limit(
     rate_limits: Sequence[TokenRateLimit],
-    cost_in_window: Callable[[datetime], float],
+    cost_since: Callable[[datetime], float],
 ) -> TokenRateLimit | None:
     """First row whose cost_budget_cents is set and exceeded, or None.
 
-    Cost is sourced from the UserUsage ledger (not ChatMessage.token_count):
-    each row's window is aligned via get_window_start so the accumulated cost
-    compared is exactly the cents recorded in that fixed window. Rows without a
-    cost_budget_cents are cost-exempt (token-only).
+    Cost comes from the UserUsage ledger (not ChatMessage.token_count), which
+    buckets spend at a coarse fixed grid (_LEDGER_GRID). A bucket has no sub-grid
+    timing, so to mirror the token sliding window over [now - period_hours, now]
+    we count every bucket that *overlaps* it: window_start >= now - period_hours
+    - grid. This is conservative (a budget period finer than the grid can pull in
+    one adjacent bucket) — fail-CLOSED, the safe direction for a budget gate.
+    Rows without a cost_budget_cents are cost-exempt (token-only).
     """
     now = datetime.now(tz=timezone.utc)
     for rate_limit in rate_limits:
@@ -142,8 +147,8 @@ def _first_triggered_cost_limit(
         if budget is None:
             continue
 
-        window_start = get_window_start(now, rate_limit.period_hours)
-        if cost_in_window(window_start) >= budget:
+        cutoff = now - timedelta(hours=rate_limit.period_hours) - _LEDGER_GRID
+        if cost_since(cutoff) >= budget:
             return rate_limit
 
     return None

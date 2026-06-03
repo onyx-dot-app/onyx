@@ -21,8 +21,8 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
-from onyx.db.user_usage import get_group_cost_cents_in_window
-from onyx.db.user_usage import get_user_cost_cents_in_window
+from onyx.db.user_usage import get_group_cost_cents_since
+from onyx.db.user_usage import get_user_cost_cents_since
 from onyx.server.query_and_chat.token_limit import _first_triggered_cost_limit
 from onyx.server.query_and_chat.token_limit import _first_triggered_limit
 from onyx.server.query_and_chat.token_limit import _get_cutoff_time
@@ -71,8 +71,8 @@ def _user_is_rate_limited(user_id: UUID) -> None:
 
             cost_triggered = _first_triggered_cost_limit(
                 user_rate_limits,
-                lambda window_start: get_user_cost_cents_in_window(
-                    db_session, str(user_id), window_start
+                lambda cutoff: get_user_cost_cents_since(
+                    db_session, str(user_id), cutoff
                 ),
             )
             if cost_triggered is not None:
@@ -140,8 +140,8 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
         for user_group_id, rate_limits in group_rate_limits.items():
             cost_triggered = _first_triggered_cost_limit(
                 rate_limits,
-                lambda window_start, gid=user_group_id: get_group_cost_cents_in_window(
-                    db_session, gid, window_start
+                lambda cutoff, gid=user_group_id: get_group_cost_cents_since(
+                    db_session, gid, cutoff
                 ),
             )
             if cost_triggered is None:

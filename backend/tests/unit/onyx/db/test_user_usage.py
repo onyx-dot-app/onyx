@@ -17,9 +17,10 @@ from sqlalchemy.orm import sessionmaker
 
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserUsage
-from onyx.db.user_usage import get_group_cost_cents_in_window
-from onyx.db.user_usage import get_total_cost_cents_in_window
+from onyx.db.user_usage import get_group_cost_cents_since
+from onyx.db.user_usage import get_total_cost_cents_since
 from onyx.db.user_usage import get_user_cost_cents_in_window
+from onyx.db.user_usage import get_user_cost_cents_since
 from onyx.db.user_usage import get_user_usage_by_day_and_model
 from onyx.db.user_usage import get_window_start
 from onyx.db.user_usage import record_user_usage
@@ -296,23 +297,53 @@ class TestCostInWindow:
         assert total == 0.0
 
 
-class TestTotalCostInWindow:
+class TestUserCostSince:
+    """Range-scan read used by enforcement: sums ledger rows with
+    window_start >= cutoff. The cutoff is grid-relaxed by the caller
+    (_first_triggered_cost_limit), so this helper is a plain range scan."""
+
+    def test_includes_rows_at_or_after_cutoff(self, db_session: Session) -> None:
+        user_id = str(uuid4())
+        w = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        record_user_usage(db_session, user_id, "m", "CHAT", None, 1, 1, 0, 42.0, w)
+        assert get_user_cost_cents_since(db_session, user_id, w) == pytest.approx(42.0)
+
+    def test_rows_before_cutoff_excluded(self, db_session: Session) -> None:
+        user_id = str(uuid4())
+        older = datetime.datetime(2026, 5, 25, tzinfo=datetime.timezone.utc)
+        newer = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        record_user_usage(db_session, user_id, "m", "CHAT", None, 1, 1, 0, 5.0, older)
+        record_user_usage(db_session, user_id, "m", "CHAT", None, 1, 1, 0, 8.0, newer)
+        assert get_user_cost_cents_since(db_session, user_id, newer) == pytest.approx(
+            8.0
+        )
+
+    def test_excludes_other_users(self, db_session: Session) -> None:
+        u1, u2 = str(uuid4()), str(uuid4())
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        record_user_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 3.0, window)
+        record_user_usage(db_session, u2, "m", "CHAT", None, 1, 1, 0, 9.0, window)
+        assert get_user_cost_cents_since(db_session, u1, window) == pytest.approx(3.0)
+
+
+class TestTotalCostSince:
     def test_sums_across_users(self, db_session: Session) -> None:
         u1, u2 = str(uuid4()), str(uuid4())
         window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
         record_user_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 3.0, window)
         record_user_usage(db_session, u2, "m", "CHAT", None, 1, 1, 0, 4.0, window)
 
-        assert get_total_cost_cents_in_window(db_session, window) == pytest.approx(7.0)
+        assert get_total_cost_cents_since(db_session, window) == pytest.approx(7.0)
 
-    def test_other_window_excluded(self, db_session: Session) -> None:
+    def test_older_window_excluded(self, db_session: Session) -> None:
         u1 = str(uuid4())
         w1 = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
-        w2 = datetime.datetime(2026, 6, 2, tzinfo=datetime.timezone.utc)
+        w2 = datetime.datetime(2026, 6, 8, tzinfo=datetime.timezone.utc)
         record_user_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 3.0, w1)
         record_user_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 9.0, w2)
 
-        assert get_total_cost_cents_in_window(db_session, w1) == pytest.approx(3.0)
+        # cutoff at w2 excludes the earlier w1 row
+        assert get_total_cost_cents_since(db_session, w2) == pytest.approx(9.0)
 
 
 @pytest.fixture
@@ -329,7 +360,7 @@ def db_session_with_groups() -> Generator[Session, None, None]:
         session.close()
 
 
-class TestGroupCostInWindow:
+class TestGroupCostSince:
     def test_sums_members_of_group(self, db_session_with_groups: Session) -> None:
         s = db_session_with_groups
         u1, u2, outsider = str(uuid4()), str(uuid4()), str(uuid4())
@@ -346,4 +377,4 @@ class TestGroupCostInWindow:
         record_user_usage(s, u2, "m", "CHAT", None, 1, 1, 0, 5.0, window)
         record_user_usage(s, outsider, "m", "CHAT", None, 1, 1, 0, 99.0, window)
 
-        assert get_group_cost_cents_in_window(s, 10, window) == pytest.approx(7.0)
+        assert get_group_cost_cents_since(s, 10, window) == pytest.approx(7.0)

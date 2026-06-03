@@ -234,7 +234,11 @@ def get_user_cost_cents_in_window(
     user_id: str,
     window_start: datetime,
 ) -> float:
-    """Total cost (cents) a user has accrued in a single window — for budget checks."""
+    """Total cost (cents) a user accrued in one exact ledger window — for display.
+
+    Exact-match read against the ledger's own grid. Budget enforcement must use
+    the sliding `*_since` helpers instead (see their docstrings).
+    """
     total = db_session.execute(
         select(func.coalesce(func.sum(UserUsage.cost_cents), 0.0)).where(
             UserUsage.user_id == user_id,
@@ -244,31 +248,52 @@ def get_user_cost_cents_in_window(
     return float(total)
 
 
-def get_total_cost_cents_in_window(
+def get_user_cost_cents_since(
     db_session: Session,
-    window_start: datetime,
+    user_id: str,
+    cutoff: datetime,
 ) -> float:
-    """Tenant-wide cost (cents) in a single window — for global cost-budget checks."""
+    """Cost (cents) a user accrued in ledger windows starting at/after `cutoff`.
+
+    Sliding-window mirror of the token check: sums every ledger row whose
+    window_start >= cutoff, period-agnostic. The ledger buckets on a single
+    fixed grid (USAGE_LIMIT_WINDOW_SECONDS), so a range scan — not an
+    exact-window match — is the only way a sub-grid budget period reads any cost.
+    """
     total = db_session.execute(
         select(func.coalesce(func.sum(UserUsage.cost_cents), 0.0)).where(
-            UserUsage.window_start == window_start,
+            UserUsage.user_id == user_id,
+            UserUsage.window_start >= cutoff,
         )
     ).scalar_one()
     return float(total)
 
 
-def get_group_cost_cents_in_window(
+def get_total_cost_cents_since(
+    db_session: Session,
+    cutoff: datetime,
+) -> float:
+    """Tenant-wide cost (cents) in ledger windows >= `cutoff` — global cost budgets."""
+    total = db_session.execute(
+        select(func.coalesce(func.sum(UserUsage.cost_cents), 0.0)).where(
+            UserUsage.window_start >= cutoff,
+        )
+    ).scalar_one()
+    return float(total)
+
+
+def get_group_cost_cents_since(
     db_session: Session,
     user_group_id: int,
-    window_start: datetime,
+    cutoff: datetime,
 ) -> float:
-    """Total cost (cents) accrued by all members of a group in a window — group budgets."""
+    """Cost (cents) accrued by a group's members in ledger windows >= `cutoff`."""
     total = db_session.execute(
         select(func.coalesce(func.sum(UserUsage.cost_cents), 0.0))
         .join(User__UserGroup, User__UserGroup.user_id == UserUsage.user_id)
         .where(
             User__UserGroup.user_group_id == user_group_id,
-            UserUsage.window_start == window_start,
+            UserUsage.window_start >= cutoff,
         )
     ).scalar_one()
     return float(total)

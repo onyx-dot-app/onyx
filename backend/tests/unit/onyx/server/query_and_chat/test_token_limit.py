@@ -11,7 +11,10 @@ from typing import cast
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy import Table
+from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Engine
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
@@ -19,9 +22,24 @@ import ee.onyx.server.query_and_chat.token_limit as ee_token_limit
 import onyx.server.query_and_chat.token_limit as token_limit
 from onyx.db.models import TokenRateLimit
 from onyx.db.models import TokenRateLimitScope
+from onyx.db.models import UserUsage
+from onyx.db.user_usage import get_window_start
+from onyx.db.user_usage import record_user_usage
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.query_and_chat.token_limit import _is_rate_limited
+
+
+# Postgres-only column types -> SQLite equivalents so the real UserUsage table
+# can back the real cost-source query path.
+@compiles(PGUUID, "sqlite")
+def _compile_pguuid_sqlite(_e: object, _c: object, **_kw: object) -> str:
+    return "CHAR(36)"
+
+
+@compiles(PGJSONB, "sqlite")
+def _compile_jsonb_sqlite(_e: object, _c: object, **_kw: object) -> str:
+    return "JSON"
 
 
 @pytest.fixture
@@ -267,7 +285,7 @@ class TestFirstTriggeredCostLimit:
     def test_over_cost_budget_returns_row(self) -> None:
         limit = _cost_limit(100.0, TokenRateLimitScope.USER)
         triggered = token_limit._first_triggered_cost_limit(
-            [limit], cost_in_window=lambda _ws: 150.0
+            [limit], cost_since=lambda _cutoff: 150.0
         )
         assert triggered is limit
 
@@ -275,7 +293,7 @@ class TestFirstTriggeredCostLimit:
         limit = _cost_limit(100.0, TokenRateLimitScope.USER)
         assert (
             token_limit._first_triggered_cost_limit(
-                [limit], cost_in_window=lambda _ws: 99.99
+                [limit], cost_since=lambda _cutoff: 99.99
             )
             is None
         )
@@ -284,7 +302,7 @@ class TestFirstTriggeredCostLimit:
         limit = _cost_limit(100.0, TokenRateLimitScope.USER)
         assert (
             token_limit._first_triggered_cost_limit(
-                [limit], cost_in_window=lambda _ws: 100.0
+                [limit], cost_since=lambda _cutoff: 100.0
             )
             is limit
         )
@@ -294,7 +312,7 @@ class TestFirstTriggeredCostLimit:
         limit = _cost_limit(None, TokenRateLimitScope.USER)
         assert (
             token_limit._first_triggered_cost_limit(
-                [limit], cost_in_window=lambda _ws: 10**9
+                [limit], cost_since=lambda _cutoff: 10**9
             )
             is None
         )
@@ -313,9 +331,7 @@ class TestGlobalCostRejectionPath:
         )
         # under token budget so only cost can trigger
         monkeypatch.setattr(token_limit, "_fetch_global_usage", lambda *_: _usage(1))
-        monkeypatch.setattr(
-            token_limit, "get_total_cost_cents_in_window", lambda *_: 600.0
-        )
+        monkeypatch.setattr(token_limit, "get_total_cost_cents_since", lambda *_: 600.0)
 
         with pytest.raises(OnyxError) as ei:
             token_limit._user_is_rate_limited_by_global()
@@ -332,9 +348,7 @@ class TestGlobalCostRejectionPath:
             token_limit, "fetch_all_global_token_rate_limits", lambda **_: [limit]
         )
         monkeypatch.setattr(token_limit, "_fetch_global_usage", lambda *_: _usage(1))
-        monkeypatch.setattr(
-            token_limit, "get_total_cost_cents_in_window", lambda *_: 100.0
-        )
+        monkeypatch.setattr(token_limit, "get_total_cost_cents_since", lambda *_: 100.0)
 
         token_limit._user_is_rate_limited_by_global()  # no raise
 
@@ -350,7 +364,7 @@ class TestEEUserCostRejectionPath:
         )
         monkeypatch.setattr(ee_token_limit, "_fetch_user_usage", lambda *_: _usage(1))
         monkeypatch.setattr(
-            ee_token_limit, "get_user_cost_cents_in_window", lambda *_: 250.0
+            ee_token_limit, "get_user_cost_cents_since", lambda *_: 250.0
         )
 
         import uuid
@@ -371,7 +385,7 @@ class TestEEUserCostRejectionPath:
         )
         monkeypatch.setattr(ee_token_limit, "_fetch_user_usage", lambda *_: _usage(1))
         monkeypatch.setattr(
-            ee_token_limit, "get_user_cost_cents_in_window", lambda *_: 50.0
+            ee_token_limit, "get_user_cost_cents_since", lambda *_: 50.0
         )
 
         import uuid
@@ -402,7 +416,7 @@ class TestEEGroupCostRejectionPath:
         self._patch_common(monkeypatch, {10: [g1], 20: [g2]})
         # both group windows over their 100c budget
         monkeypatch.setattr(
-            ee_token_limit, "get_group_cost_cents_in_window", lambda *_: 200.0
+            ee_token_limit, "get_group_cost_cents_since", lambda *_: 200.0
         )
 
         import uuid
@@ -424,8 +438,103 @@ class TestEEGroupCostRejectionPath:
         def _cost(_session: object, gid: int, _ws: object) -> float:
             return 200.0 if gid == 10 else 50.0
 
-        monkeypatch.setattr(ee_token_limit, "get_group_cost_cents_in_window", _cost)
+        monkeypatch.setattr(ee_token_limit, "get_group_cost_cents_since", _cost)
 
         import uuid
 
         ee_token_limit._user_is_rate_limited_by_group(uuid.uuid4())  # no raise
+
+
+class _RealLedgerSessionCtx:
+    """Yields a real SQLite session backing the actual UserUsage cost query."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def __enter__(self) -> Session:
+        return self._session
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+
+@pytest.fixture
+def ledger_session() -> Generator[Session, None, None]:
+    engine: Engine = create_engine("sqlite://")
+    cast(Table, UserUsage.__table__).create(bind=engine)
+    session = sessionmaker(bind=engine)()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+class TestCostEnforcementRealLedgerPath:
+    """End-to-end through the real cost source — the regression that the prior
+    exact-window read fail-opened on a sub-grid budget period."""
+
+    def test_sub_grid_period_blocks_against_real_ledger(
+        self, monkeypatch: pytest.MonkeyPatch, ledger_session: Session
+    ) -> None:
+        # Ledger row written at the weekly grid (as the real processor does),
+        # but the admin's budget period is 24h. The sliding cutoff still reads it.
+        import uuid
+
+        user_id = uuid.uuid4()
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        ledger_window = get_window_start(now, period_hours=168)
+        record_user_usage(
+            ledger_session,
+            str(user_id),
+            "m",
+            "CHAT",
+            None,
+            1,
+            1,
+            0,
+            500.0,
+            ledger_window,
+        )
+
+        limit = _cost_limit(100.0, TokenRateLimitScope.USER, period_hours=24)
+        monkeypatch.setattr(
+            ee_token_limit,
+            "get_session_with_current_tenant",
+            lambda: _RealLedgerSessionCtx(ledger_session),
+        )
+        monkeypatch.setattr(
+            ee_token_limit, "fetch_all_user_token_rate_limits", lambda **_: [limit]
+        )
+        monkeypatch.setattr(ee_token_limit, "_fetch_user_usage", lambda *_: _usage(1))
+
+        with pytest.raises(OnyxError) as ei:
+            ee_token_limit._user_is_rate_limited(user_id)
+        _assert_structured_429(ei.value, "user", 24)
+
+    def test_window_rollover_does_not_count(
+        self, monkeypatch: pytest.MonkeyPatch, ledger_session: Session
+    ) -> None:
+        import uuid
+
+        user_id = uuid.uuid4()
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        current = get_window_start(now, period_hours=168)
+        # Two grids back: always before the (period + one-grid) relaxed cutoff,
+        # regardless of weekday. A 24h budget must not see last-period spend.
+        prior = current - datetime.timedelta(days=14)
+        record_user_usage(
+            ledger_session, str(user_id), "m", "CHAT", None, 1, 1, 0, 9999.0, prior
+        )
+
+        limit = _cost_limit(100.0, TokenRateLimitScope.USER, period_hours=24)
+        monkeypatch.setattr(
+            ee_token_limit,
+            "get_session_with_current_tenant",
+            lambda: _RealLedgerSessionCtx(ledger_session),
+        )
+        monkeypatch.setattr(
+            ee_token_limit, "fetch_all_user_token_rate_limits", lambda **_: [limit]
+        )
+        monkeypatch.setattr(ee_token_limit, "_fetch_user_usage", lambda *_: _usage(1))
+
+        ee_token_limit._user_is_rate_limited(user_id)  # no raise
