@@ -88,10 +88,8 @@ export default function CreateCustomAppModal({
     setFile(event.target.files?.[0] ?? null);
   }
 
-  // Headers and organization credentials are both optional: an app may inject
-  // no credentials at all and simply allowlist its upstream patterns. Name and
-  // at least one upstream pattern are always required; a bundle is required
-  // only when creating (the bundle can't be replaced through this edit path).
+  // Headers and org credentials are optional; name + at least one upstream
+  // pattern are required. A bundle is required only on create (optional on edit).
   const canSave =
     name.trim().length > 0 &&
     upstreamPatterns.length > 0 &&
@@ -101,11 +99,19 @@ export default function CreateCustomAppModal({
   async function save() {
     setIsSaving(true);
     setError(null);
+    // Edit is two calls (bundle + fields); track the bundle step to message
+    // partial success accurately.
+    let bundleSaved = false;
     try {
       if (existingApp) {
-        // Edit: field changes go through the JSON PATCH; enabled is toggled
-        // separately on the card, so it's left untouched here. A newly-chosen
-        // bundle is swapped via its own multipart endpoint.
+        // Bundle first (the failure-prone step): a failure here leaves fields
+        // unsent. Clear the file so a retry doesn't re-upload it.
+        if (file) {
+          await replaceCustomAppBundle(existingApp.id, file);
+          setFile(null);
+          bundleSaved = true;
+        }
+        // enabled is toggled separately on the card.
         await updateExternalApp(existingApp.id, {
           name: name.trim(),
           description: description.trim(),
@@ -113,9 +119,6 @@ export default function CreateCustomAppModal({
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
         });
-        if (file) {
-          await replaceCustomAppBundle(existingApp.id, file);
-        }
       } else {
         // Create: bundle is required (enforced by `canSave`).
         await createCustomExternalApp({
@@ -131,7 +134,14 @@ export default function CreateCustomAppModal({
       onSaved();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // A step may have committed; refresh the list to reflect what persisted.
+      onSaved();
+      const detail = e instanceof Error ? e.message : String(e);
+      setError(
+        bundleSaved
+          ? `The new bundle was saved, but updating the other fields failed — retry to finish: ${detail}`
+          : detail
+      );
     } finally {
       setIsSaving(false);
     }
