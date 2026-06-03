@@ -22,8 +22,8 @@ die() { log "FATAL: $*"; exit 1; }
 CA_SRC="${SANDBOX_PROXY_CA_BUNDLE_SRC:-/sandbox-ca/ca.crt}"
 CA_DST="${SANDBOX_PROXY_CA_BUNDLE_DST:-/etc/ssl/sandbox/ca-bundle.crt}"
 
-# Resolved once in step_apply_iptables before the lockdown closes DNS,
-# then reused in step_self_verify.
+# Resolved once in step_apply_iptables before the lockdown closes DNS, then
+# reused in step_self_verify.
 PROXY_IP=""
 
 case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
@@ -35,8 +35,8 @@ for bin in iptables ip6tables update-ca-certificates getent; do
     command -v "$bin" >/dev/null 2>&1 || die "required binary '$bin' missing"
 done
 if [[ "$SANDBOX_PROXY_BOOTSTRAP_MODE" == "entrypoint" ]] \
-        && ! command -v gosu >/dev/null 2>&1; then
-    die "entrypoint mode requires gosu; not found"
+        && ! command -v capsh >/dev/null 2>&1; then
+    die "entrypoint mode requires capsh (libcap2-bin); not found"
 fi
 
 log "mode=$SANDBOX_PROXY_BOOTSTRAP_MODE proxy=$SANDBOX_PROXY_HOST:$SANDBOX_PROXY_PORT"
@@ -85,14 +85,14 @@ step_apply_iptables() {
 }
 
 
-# `sandbox-proxy` resolution after the lockdown comes from outside this
-# script: pod hostAliases under K8s (kubelet won't propagate /etc/hosts
-# writes across containers), Docker's embedded DNS under compose.
+# `sandbox-proxy` resolution after the lockdown comes from outside this script:
+# pod hostAliases under K8s (kubelet won't propagate /etc/hosts writes across
+# containers), Docker's embedded DNS under compose.
 
 
 step_self_verify() {
-    # Inspecting the chain (not probing the network): a network probe
-    # can't distinguish "lockdown working" from "no internet" — fail-open.
+    # Inspecting the chain (not probing the network): a network probe can't
+    # distinguish "lockdown working" from "no internet" — fail-open.
     log "self-verify: inspecting iptables OUTPUT chain"
     local rules
     rules="$(iptables -S OUTPUT)"
@@ -123,10 +123,21 @@ case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
         exit 0
         ;;
     entrypoint)
-        # gosu setuid()s directly (no execve), so post-drop caps remain
-        # the bounded set from cap_add/cap_drop.
+        # Compose-only privilege transition. The case dispatch above is the
+        # gate: the K8s initcontainer branch above is the only other reachable
+        # path and exits before this point, so the K8s sandbox container never
+        # runs as root in its main lifecycle and never hits capsh.
+        #
+        # The docker manager grants cap_add=[NET_ADMIN, SETPCAP] for this init
+        # step. NET_ADMIN runs iptables; SETPCAP authorises PR_CAPBSET_DROP.
+        # capsh applies --drop *before* --user, so we still have SETPCAP in
+        # effective when the bounding-set drop runs. --user then setuid()s,
+        # clearing permitted/effective/ambient. The subsequent execve has no
+        # file capabilities, so the agent process ends up with zero caps in any
+        # set and an empty bounding set -- matching the K8s posture (cap exists
+        # only during init, never on the running container).
         [[ "$#" -ge 1 ]] || die "entrypoint mode requires the real entrypoint as args"
-        log "entrypoint mode: dropping to UID 1000 and exec'ing: $*"
-        exec gosu 1000:1000 "$@"
+        log "entrypoint mode: clearing bounding set, dropping to UID 1000, exec'ing: $*"
+        exec capsh --drop=all --user=sandbox -- "$@"
         ;;
 esac
