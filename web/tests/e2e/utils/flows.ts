@@ -13,6 +13,9 @@ import { type APIRequestContext, expect } from "@playwright/test";
 /** Statuses a run settles on. */
 const TERMINAL_STATUS = /^(SUCCEEDED|FAILED|SKIPPED)$/;
 
+/** The question a seeded parked run asks, once its expressions are resolved. */
+export const PARKED_QUESTION = "Send 4 rows in 2 batches?";
+
 /** How long to let the Celery worker pick the run up and finish it. */
 const RUN_TIMEOUT_MS = 60_000;
 
@@ -24,7 +27,7 @@ export interface SeededRun {
 interface FlowNodeSeed {
   id: string;
   name: string;
-  kind: "HTTP" | "TRANSFORM" | "CONDITION" | "AI";
+  kind: "HTTP" | "TRANSFORM" | "CONDITION" | "AI" | "HUMAN" | "LOOP";
   next: string[];
   for_each: string | null;
   on_error: "stop" | "skip";
@@ -63,9 +66,14 @@ function inspectableFlowSpec() {
     spec_version: 1,
     start: "seed",
     nodes: [
-      transform("seed", "Collect rows", { rows: "{{ trigger.rows }}" }, {
-        next: ["check"],
-      }),
+      transform(
+        "seed",
+        "Collect rows",
+        { rows: "{{ trigger.rows }}" },
+        {
+          next: ["check"],
+        }
+      ),
       {
         id: "check",
         name: "Any rows?",
@@ -92,14 +100,128 @@ function inspectableFlowSpec() {
   };
 }
 
+/**
+ * A flow that stops on an approval.
+ *
+ * The loop in front of it is there to give the question something to
+ * interpolate: a run parked on "Send 4 rows in 2 batches?" proves the
+ * question was rendered against the run rather than copied out of the spec.
+ */
+function gatedFlowSpec() {
+  return {
+    spec_version: 1,
+    start: "seed",
+    nodes: [
+      transform(
+        "seed",
+        "Collect rows",
+        { rows: "{{ trigger.rows }}" },
+        {
+          next: ["chunk"],
+        }
+      ),
+      {
+        id: "chunk",
+        name: "Batch them",
+        kind: "LOOP" as const,
+        next: ["gate"],
+        for_each: null,
+        on_error: "stop" as const,
+        retry: { max_attempts: 1, backoff_seconds: 1 },
+        over: "{{ steps.seed.rows }}",
+        batch_size: 2,
+      },
+      {
+        id: "gate",
+        name: "Ask first",
+        kind: "HUMAN" as const,
+        next: [],
+        for_each: null,
+        on_error: "stop" as const,
+        retry: { max_attempts: 1, backoff_seconds: 1 },
+        question:
+          "Send {{ steps.chunk.total }} rows in {{ steps.chunk.batch_count }} batches?",
+        assignee: null,
+        on_approve: ["send"],
+        on_reject: [],
+      },
+      transform(
+        "send",
+        "Send each batch",
+        { batch: "{{ item }}" },
+        {
+          forEach: "{{ steps.chunk.batches }}",
+        }
+      ),
+    ],
+  };
+}
+
 async function expectOk(
   label: string,
-  send: () => Promise<{ ok: () => boolean; status: () => number; text: () => Promise<string> }>
+  send: () => Promise<{
+    ok: () => boolean;
+    status: () => number;
+    text: () => Promise<string>;
+  }>
 ): Promise<void> {
   const res = await send();
   if (!res.ok()) {
     throw new Error(`${label} failed: ${res.status()} ${await res.text()}`);
   }
+}
+
+/**
+ * Create and fire a flow that parks on an approval, then wait for it to park.
+ *
+ * Returns once the run is genuinely AWAITING_DECISION, so a spec can open the
+ * run view and find the decision panel there rather than racing it.
+ */
+export async function seedParkedRun(
+  request: APIRequestContext,
+  name: string
+): Promise<SeededRun> {
+  const createRes = await request.post("/api/flows", {
+    data: {
+      name,
+      description: "Seeded for the approval view",
+      spec: gatedFlowSpec(),
+    },
+  });
+  if (!createRes.ok()) {
+    throw new Error(
+      `creating the flow failed: ${createRes.status()} ${await createRes.text()}`
+    );
+  }
+  const flow: { id: string } = await createRes.json();
+
+  const runRes = await request.post(`/api/flows/${flow.id}/run?test=true`, {
+    data: { payload: { rows: [1, 2, 3, 4] } },
+  });
+  if (!runRes.ok()) {
+    throw new Error(
+      `starting the run failed: ${runRes.status()} ${await runRes.text()}`
+    );
+  }
+  const run: { id: string } = await runRes.json();
+
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(`/api/flows/${flow.id}/runs/${run.id}`);
+        if (!res.ok()) return `HTTP ${res.status()}`;
+        const body: { status: string } = await res.json();
+        return body.status;
+      },
+      {
+        timeout: RUN_TIMEOUT_MS,
+        message:
+          "the run never parked on its approval — is a worker consuming the scheduled_tasks queue?",
+      }
+    )
+    .toBe("AWAITING_DECISION");
+
+  return { flowId: flow.id, runId: run.id };
 }
 
 /**
@@ -112,7 +234,11 @@ export async function seedFinishedRun(
   name: string
 ): Promise<SeededRun> {
   const createRes = await request.post("/api/flows", {
-    data: { name, description: "Seeded for the run view", spec: inspectableFlowSpec() },
+    data: {
+      name,
+      description: "Seeded for the run view",
+      spec: inspectableFlowSpec(),
+    },
   });
   if (!createRes.ok()) {
     throw new Error(
@@ -129,7 +255,9 @@ export async function seedFinishedRun(
     data: { payload: { rows: [{ id: 101 }, { id: 102 }, { id: 103 }] } },
   });
   if (!runRes.ok()) {
-    throw new Error(`starting the run failed: ${runRes.status()} ${await runRes.text()}`);
+    throw new Error(
+      `starting the run failed: ${runRes.status()} ${await runRes.text()}`
+    );
   }
   const run: { id: string } = await runRes.json();
 

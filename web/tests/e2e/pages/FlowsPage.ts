@@ -23,8 +23,23 @@ const OUTCOME_BORDER: Record<StepOutcome, RegExp> = {
 };
 const EDITOR_PATH_REGEX = /\/flows\/[0-9a-f-]{36}$/;
 
+/**
+ * How long a resumed run may take to leave AWAITING_DECISION.
+ *
+ * Answering re-queues the run, so this is a worker round trip rather than a
+ * render — the page's own poll interval is only part of it.
+ */
+const RESUME_TIMEOUT_MS = 60_000;
+
 /** The step kinds the palette offers, by their button label. */
-export type StepKind = "HTTP request" | "AI" | "Condition" | "Transform";
+export type StepKind =
+  | "HTTP request"
+  | "AI"
+  | "Code"
+  | "Transform"
+  | "Condition"
+  | "Loop"
+  | "Approval";
 
 export class FlowsPage {
   readonly page: Page;
@@ -46,6 +61,9 @@ export class FlowsPage {
   readonly testRunButton: Locator;
   readonly runPanel: Locator;
   readonly runItems: Locator;
+  readonly decisionPanel: Locator;
+  readonly approveButton: Locator;
+  readonly rejectButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -67,6 +85,9 @@ export class FlowsPage {
     this.testRunButton = page.getByRole("button", { name: "Test run" });
     this.runPanel = page.locator("aside").last();
     this.runItems = page.getByTestId("node-run-item");
+    this.decisionPanel = page.getByTestId("decision-panel");
+    this.approveButton = page.getByTestId("decision-approve");
+    this.rejectButton = page.getByTestId("decision-reject");
   }
 
   // ---------------------------------------------------------------------------
@@ -130,6 +151,30 @@ export class FlowsPage {
 
   async renameSelectedStep(name: string): Promise<void> {
     await this.inspectorNameInput.fill(name);
+  }
+
+  /**
+   * One field of the inspector, by the title above it.
+   *
+   * Opal's `InputVertical` wraps its title and its control in one `<label>`,
+   * so the title is the field's accessible name and `getByLabel` finds the
+   * control under it.
+   */
+  field(title: string): Locator {
+    return this.inspector.getByLabel(title);
+  }
+
+  async fillField(title: string, value: string): Promise<void> {
+    await this.field(title).fill(value);
+  }
+
+  async expectField(title: string): Promise<void> {
+    await expect(this.field(title)).toBeVisible();
+  }
+
+  /** A field the selected kind does not have. */
+  async expectNoField(title: string): Promise<void> {
+    await expect(this.field(title)).toHaveCount(0);
   }
 
   async deleteSelectedStep(): Promise<void> {
@@ -248,14 +293,56 @@ export class FlowsPage {
   /** Start a test run from the editor; the page follows the new run. */
   async startTestRun(): Promise<void> {
     await this.testRunButton.click();
-    await expect(this.page).toHaveURL(/\/flows\/[0-9a-f-]{36}\/runs\/[0-9a-f-]{36}$/);
+    await expect(this.page).toHaveURL(
+      /\/flows\/[0-9a-f-]{36}\/runs\/[0-9a-f-]{36}$/
+    );
     await expect(this.canvas).toBeVisible();
   }
 
-  async expectRunStatus(label: string): Promise<void> {
-    await expect(
-      this.page.getByTestId(`run-status-${label}`)
-    ).toBeVisible();
+  async expectRunStatus(label: string, timeout?: number): Promise<void> {
+    await expect(this.page.getByTestId(`run-status-${label}`)).toBeVisible({
+      timeout,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Approvals
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Answer the approval the run is parked on.
+   *
+   * The panel disappears as soon as the run leaves AWAITING_DECISION, so
+   * waiting for that is what proves the answer reached the server rather
+   * than just that a button was clickable.
+   */
+  async decide(
+    decision: "approve" | "reject",
+    comment?: string
+  ): Promise<void> {
+    await expect(this.decisionPanel).toBeVisible();
+    if (comment !== undefined) {
+      await this.decisionPanel.getByRole("textbox").fill(comment);
+    }
+    await (
+      decision === "approve" ? this.approveButton : this.rejectButton
+    ).click();
+    await expect(this.decisionPanel).toBeHidden({ timeout: RESUME_TIMEOUT_MS });
+  }
+
+  async expectAwaitingDecision(question: string): Promise<void> {
+    await expect(this.decisionPanel).toBeVisible();
+    await expect(this.decisionPanel).toContainText(question);
+  }
+
+  async expectNoDecisionPanel(): Promise<void> {
+    await expect(this.decisionPanel).toBeHidden();
+  }
+
+  /** A step the run never reached has no row to show. */
+  async expectStepNotRun(nodeId: string): Promise<void> {
+    await this.selectStepInRun(nodeId);
+    await expect(this.runItems).toHaveCount(0);
   }
 
   /** Each step wears the outcome it had, so the graph reads as the run. */
@@ -278,5 +365,10 @@ export class FlowsPage {
 
   async expectRunPanelContains(text: string): Promise<void> {
     await expect(this.runPanel).toContainText(text);
+  }
+
+  /** Something the run page says outside the step panel, such as why it failed. */
+  async expectRunPageContains(text: string): Promise<void> {
+    await expect(this.page.getByText(text).first()).toBeVisible();
   }
 }
