@@ -1359,6 +1359,17 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
       },
       {
         type: "text",
+        query: "Enter the AWS region:",
+        label: "AWS Region",
+        name: "region_name",
+        description:
+          "The AWS region of the bucket (e.g. us-east-1). Required for buckets in " +
+          "non-default partitions such as GovCloud (us-gov-west-1); otherwise the " +
+          "default region resolution is used.",
+        optional: true,
+      },
+      {
+        type: "text",
         label: "Bucket Type",
         name: "bucket_type",
         optional: false,
