@@ -27,7 +27,7 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import Skill
 from onyx.db.models import User
-from onyx.server.features.build.api.models import UpsertBuiltInExternalAppRequest
+from onyx.server.features.build.api.models import CreateBuiltInExternalAppRequest
 from onyx.server.features.build.api.models import UpsertUserCredentialsRequest
 from tests.external_dependency_unit.craft._test_helpers import make_external_app
 from tests.external_dependency_unit.craft._test_helpers import make_user
@@ -97,9 +97,8 @@ def test_create_pushes_to_affected_sandboxes(
         lambda skill, _db: pushed.append(skill),
     )
 
-    api.upsert_built_in_external_app(
-        request=UpsertBuiltInExternalAppRequest(
-            id=None,
+    api.create_built_in_external_app(
+        request=CreateBuiltInExternalAppRequest(
             name="Slack",
             description="Slack",
             enabled=True,

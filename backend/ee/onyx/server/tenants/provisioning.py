@@ -601,6 +601,8 @@ def provision_built_in_external_apps(db_session: Session) -> None:
                 is_public=True,
                 action_policies=build_action_policies(app_type, None, {}),
             )
+            # create_external_app flushes only; commit the seeded row.
+            db_session.commit()
             logger.info(
                 "Provisioned built-in app '%s' (disabled%s).",
                 app_type.value,

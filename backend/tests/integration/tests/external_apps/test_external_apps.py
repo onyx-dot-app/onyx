@@ -532,10 +532,10 @@ def test_app_type_defaults_to_custom_and_is_immutable_on_update(
     """`app_type` is the discriminator the OAuth dispatch layer keys off and
     what the backing skill's definition source is bound to, so it's fixed at
     creation. The default flow (the manager's `create()` with no override)
-    produces a CUSTOM app, an explicit built-in value (SLACK) round-trips on
-    create, and an update that re-sends the *same* type succeeds — but an
-    update that tries to *change* the type is rejected with 400 rather than
-    silently rebinding the skill and orphaning credentials."""
+    produces a CUSTOM app, and an explicit built-in value (SLACK) round-trips on
+    create. The update endpoint (PATCH) carries no `app_type` field at all, so
+    the type is immutable by construction — an update mutates other fields while
+    leaving the type fixed, and there's no way to rebind it."""
     default_app = _create_test_app(admin_user, name="Default-type App")
     assert default_app.app_type == ExternalAppType.CUSTOM
 
@@ -544,8 +544,8 @@ def test_app_type_defaults_to_custom_and_is_immutable_on_update(
     )
     assert slack_app.app_type == ExternalAppType.SLACK
 
-    # Re-sending the unchanged app_type is a valid update (validation passes
-    # because old == new), and other fields still mutate.
+    # An update mutates other fields; the type is untouched (PATCH has no
+    # app_type field to send, so it can't be changed).
     unchanged = ExternalAppManager.update(
         user_performing_action=admin_user,
         app_id=slack_app.id,
@@ -560,22 +560,7 @@ def test_app_type_defaults_to_custom_and_is_immutable_on_update(
     assert unchanged.app_type == ExternalAppType.SLACK
     assert unchanged.name == "Slack App (renamed)"
 
-    # Changing app_type is forbidden.
-    with pytest.raises(httpx.HTTPStatusError) as exc:
-        ExternalAppManager.update(
-            user_performing_action=admin_user,
-            app_id=slack_app.id,
-            name=slack_app.name,
-            description=slack_app.description,
-            upstream_url_patterns=slack_app.upstream_url_patterns,
-            auth_template=slack_app.auth_template,
-            organization_credentials=slack_app.organization_credentials,
-            enabled=slack_app.enabled,
-            app_type=ExternalAppType.LINEAR,
-        )
-    assert exc.value.response.status_code == 400
-
-    # The stored type is unchanged after the rejected update.
+    # The stored type is still SLACK.
     apps = ExternalAppManager.list_admin(admin_user)
     persisted = next(a for a in apps if a.id == slack_app.id)
     assert persisted.app_type == ExternalAppType.SLACK

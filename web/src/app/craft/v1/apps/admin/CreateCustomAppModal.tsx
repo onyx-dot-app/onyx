@@ -9,7 +9,11 @@ import InputKeyValue, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
 import { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
-import { upsertCustomExternalApp } from "@/app/craft/services/externalAppsService";
+import {
+  createCustomExternalApp,
+  replaceCustomAppBundle,
+  updateExternalApp,
+} from "@/app/craft/services/externalAppsService";
 
 interface CreateCustomAppModalProps {
   open: boolean;
@@ -98,19 +102,32 @@ export default function CreateCustomAppModal({
     setIsSaving(true);
     setError(null);
     try {
-      // Custom apps always go through the custom endpoint. On edit a bundle is
-      // optional (replaces the existing one when present); enabled is toggled
-      // separately on the card, so preserve the existing value here.
-      await upsertCustomExternalApp({
-        id: existingApp?.id,
-        name: name.trim(),
-        description: description.trim(),
-        upstream_url_patterns: upstreamPatterns,
-        auth_template: toRecord(headers),
-        organization_credentials: toRecord(orgCredentials),
-        enabled: existingApp?.enabled ?? true,
-        bundle: file ?? undefined,
-      });
+      if (existingApp) {
+        // Edit: field changes go through the JSON PATCH; enabled is toggled
+        // separately on the card, so it's left untouched here. A newly-chosen
+        // bundle is swapped via its own multipart endpoint.
+        await updateExternalApp(existingApp.id, {
+          name: name.trim(),
+          description: description.trim(),
+          upstream_url_patterns: upstreamPatterns,
+          auth_template: toRecord(headers),
+          organization_credentials: toRecord(orgCredentials),
+        });
+        if (file) {
+          await replaceCustomAppBundle(existingApp.id, file);
+        }
+      } else {
+        // Create: bundle is required (enforced by `canSave`).
+        await createCustomExternalApp({
+          name: name.trim(),
+          description: description.trim(),
+          upstream_url_patterns: upstreamPatterns,
+          auth_template: toRecord(headers),
+          organization_credentials: toRecord(orgCredentials),
+          enabled: true,
+          bundle: file!,
+        });
+      }
       onSaved();
       onClose();
     } catch (e) {

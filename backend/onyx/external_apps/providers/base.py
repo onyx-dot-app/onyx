@@ -181,12 +181,7 @@ class OnyxManagedProvider(ExternalAppProvider, abstract=True):
             )
 
     def configured_managed_credentials(self) -> dict[str, str] | None:
-        """This provider's Onyx-owned credentials if fully configured, else None.
-
-        Reads the per-field values declared in ``managed_org_credentials``.
-        Returns None when nothing is set; logs a warning and returns None when
-        only some fields are set, since partial credentials can't work.
-        """
+        """This provider's Onyx-owned credentials if fully configured, else None."""
         present = {
             field_key: stripped
             for field_key, raw in self.managed_org_credentials.items()

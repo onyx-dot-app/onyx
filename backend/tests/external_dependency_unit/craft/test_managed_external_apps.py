@@ -30,8 +30,8 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OnyxManagedProvider
 from onyx.external_apps.providers.registry import fetch_onyx_managed_built_in_apps
 from onyx.external_apps.providers.registry import PROVIDERS
-from onyx.server.features.build.api.models import SetExternalAppEnablementRequest
-from onyx.server.features.build.api.models import UpsertBuiltInExternalAppRequest
+from onyx.server.features.build.api.models import CreateBuiltInExternalAppRequest
+from onyx.server.features.build.api.models import UpdateExternalAppRequest
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 
 _BUILT_IN_SLUGS = list(EXTERNAL_APP_BUILT_IN_SKILL_IDS.values())
@@ -72,19 +72,17 @@ def _set_managed_creds(
         )
 
 
-def _request(
+def _create_request(
     *,
-    app_id: int | None = None,
     name: str = "Gmail",
     description: str = "",
     enabled: bool = True,
     upstream_url_patterns: list[str] | None = None,
     auth_template: dict[str, Any] | None = None,
     organization_credentials: dict[str, str] | None = None,
-) -> UpsertBuiltInExternalAppRequest:
-    """A GMAIL upsert request with sensible defaults for the cloud-guard tests."""
-    return UpsertBuiltInExternalAppRequest(
-        id=app_id,
+) -> CreateBuiltInExternalAppRequest:
+    """A GMAIL create request with sensible defaults for the cloud-guard tests."""
+    return CreateBuiltInExternalAppRequest(
         name=name,
         description=description,
         enabled=enabled,
@@ -223,8 +221,8 @@ def test_cloud_blocks_built_in_create(
     monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
 
     with pytest.raises(OnyxError) as exc:
-        api.upsert_built_in_external_app(
-            request=_request(app_id=None),
+        api.create_built_in_external_app(
+            request=_create_request(),
             _=test_user,
             db_session=db_session,
         )
@@ -233,38 +231,14 @@ def test_cloud_blocks_built_in_create(
     assert get_built_in_external_app(db_session, ExternalAppType.GMAIL) is None
 
 
-def test_cloud_blocks_built_in_update(
-    db_session: Session,
-    test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """On cloud the upsert endpoint rejects built-in updates too (not just
-    creates) — enablement/policies go through PATCH instead."""
-    _set_managed_creds(monkeypatch, {ExternalAppType.GMAIL: _GMAIL_CREDS})
-    prov.provision_built_in_external_apps(db_session)
-    gmail = get_built_in_external_app(db_session, ExternalAppType.GMAIL)
-    assert gmail is not None
-
-    monkeypatch.setattr(api, "MULTI_TENANT", True)
-    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
-
-    with pytest.raises(OnyxError) as exc:
-        api.upsert_built_in_external_app(
-            request=_request(app_id=gmail.id, enabled=True),
-            _=test_user,
-            db_session=db_session,
-        )
-    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
-
-
 def test_cloud_patch_toggles_enablement_and_protects_creds_and_config(
     db_session: Session,
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The PATCH path flips enablement for a managed built-in; credentials +
-    gateway config are Onyx-owned, never carried by the request, and the
-    response blanks them."""
+    gateway config are Onyx-owned and ignored even when the request carries them,
+    and the response blanks them."""
     _set_managed_creds(monkeypatch, {ExternalAppType.GMAIL: _GMAIL_CREDS})
     prov.provision_built_in_external_apps(db_session)
     gmail = get_built_in_external_app(db_session, ExternalAppType.GMAIL)
@@ -275,9 +249,16 @@ def test_cloud_patch_toggles_enablement_and_protects_creds_and_config(
     monkeypatch.setattr(api, "MULTI_TENANT", True)
     monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
 
-    resp = api.set_external_app_enablement(
+    # The request supplies config fields too; for a managed app they must be
+    # silently ignored (Onyx-owned), with only enablement applied.
+    resp = api.update_external_app_admin(
         external_app_id=app_id,
-        request=SetExternalAppEnablementRequest(enabled=True),
+        request=UpdateExternalAppRequest(
+            enabled=True,
+            upstream_url_patterns=["https://evil.example.com/.*"],
+            auth_template={"client_id": "attacker"},
+            organization_credentials={"client_secret": "attacker"},
+        ),
         _=test_user,
         db_session=db_session,
     )
@@ -288,7 +269,8 @@ def test_cloud_patch_toggles_enablement_and_protects_creds_and_config(
     assert resp.upstream_url_patterns == []
     assert resp.enabled is True
 
-    # Stored state: enablement flipped; credentials + config untouched.
+    # Stored state: enablement flipped; credentials + config untouched by the
+    # admin-supplied values.
     db_session.expire_all()
     gmail = get_built_in_external_app(db_session, ExternalAppType.GMAIL)
     assert gmail is not None

@@ -229,9 +229,9 @@ def create_external_app(
     slug: str | None = None,
     action_policies: dict[str, EndpointPolicy] | None = None,
 ) -> ExternalApp:
-    """Create the backing Skill row and the ExternalApp that references it,
-    committing atomically. The skill owns display metadata + lifecycle; the
-    external_app owns gateway state.
+    """Create the backing Skill row and the ExternalApp that references it (flush
+    only — the caller commits after pushing, so a push failure rolls back). The
+    skill owns display metadata + lifecycle; the external_app owns gateway state.
 
     Built-in providers (``EXTERNAL_APP_BUILT_IN_SKILL_IDS``) get a built-in
     skill row whose slug is the provider id, so slug uniqueness means one
@@ -286,38 +286,36 @@ def create_external_app(
     db_session.add(app)
     if action_policies is not None:
         _write_policies__no_commit(app, action_policies)
-    db_session.commit()
+    db_session.flush()
     return app
 
 
 def update_external_app(
     db_session: Session,
     external_app_id: int,
-    name: str,
-    description: str,
-    enabled: bool,
     app_type: ExternalAppType,
-    upstream_url_patterns: list[str],
-    auth_template: dict[str, Any],
-    organization_credentials: dict[str, str],
+    name: str | None = None,
+    description: str | None = None,
+    enabled: bool | None = None,
+    upstream_url_patterns: list[str] | None = None,
+    auth_template: dict[str, Any] | None = None,
+    organization_credentials: dict[str, str] | None = None,
     new_bundle_file_id: str | None = None,
     new_bundle_sha256: str | None = None,
     action_policies: dict[str, EndpointPolicy] | None = None,
 ) -> tuple[ExternalApp, str | None]:
-    """Replace mutable fields on the external app and its linked skill,
-    committing atomically. Returns ``(app, old_bundle_file_id)``.
+    """Partial-update the external app and its linked skill (flush only — the
+    caller commits after pushing, so a push failure rolls back). Returns
+    ``(app, old_bundle_file_id)``.
 
-    ``app_type`` is immutable (it's the dispatch discriminator); passing a value
-    differing from the stored one raises, which also blocks cross-editing
-    built-in vs custom apps.
+    Every field is optional; ``None`` leaves the stored value untouched.
+    ``app_type`` is required and immutable — a mismatch raises, blocking
+    cross-editing built-in vs custom. Passing ``new_bundle_file_id`` swaps the
+    bundle (slug unchanged) and returns the previous blob id for post-commit
+    cleanup, else ``None``.
 
-    For custom apps, passing ``new_bundle_file_id``/``new_bundle_sha256`` swaps
-    the bundle (slug unchanged) and returns the previous ``bundle_file_id`` so
-    the caller can delete that blob after commit; otherwise the old id is
-    ``None``.
-
-    Raises ``OnyxError(NOT_FOUND)`` if the app doesn't exist, or
-    ``INVALID_INPUT`` if ``app_type`` differs from the stored value.
+    Raises ``OnyxError(NOT_FOUND)`` if absent, or ``INVALID_INPUT`` on app_type
+    mismatch.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -335,9 +333,12 @@ def update_external_app(
             f"'{app.app_type.value}' to '{app_type.value}'.",
         )
 
-    app.skill.name = name
-    app.skill.description = description
-    app.skill.enabled = enabled
+    if name is not None:
+        app.skill.name = name
+    if description is not None:
+        app.skill.description = description
+    if enabled is not None:
+        app.skill.enabled = enabled
 
     old_bundle_file_id: str | None = None
     if new_bundle_file_id is not None:
@@ -346,18 +347,21 @@ def update_external_app(
         app.skill.bundle_file_id = new_bundle_file_id
         app.skill.bundle_sha256 = new_bundle_sha256
 
-    app.upstream_url_patterns = upstream_url_patterns
-    app.auth_template = auth_template
-    # Admin responses mask org credentials; restore any masked value the form
-    # echoed back so an unchanged secret isn't overwritten with its mask.
-    app.organization_credentials = resolve_masked_credentials(  # ty: ignore[invalid-assignment]
-        organization_credentials, app.organization_credentials
-    )
+    if upstream_url_patterns is not None:
+        app.upstream_url_patterns = upstream_url_patterns
+    if auth_template is not None:
+        app.auth_template = auth_template
+    if organization_credentials is not None:
+        # Admin responses mask org credentials; restore any masked value the form
+        # echoed back so an unchanged secret isn't overwritten with its mask.
+        app.organization_credentials = resolve_masked_credentials(  # ty: ignore[invalid-assignment]
+            organization_credentials, app.organization_credentials
+        )
 
     if action_policies is not None:
         _write_policies__no_commit(app, action_policies)
 
-    db_session.commit()
+    db_session.flush()
     return app, old_bundle_file_id
 
 
@@ -374,32 +378,6 @@ def set_external_app_organization_credentials(
     # assignment shape as update_external_app's masked-credential restore).
     app.organization_credentials = organization_credentials  # ty: ignore[invalid-assignment]
     db_session.flush()
-
-
-def set_external_app_enablement_and_policies(
-    db_session: Session,
-    external_app_id: int,
-    enabled: bool,
-    action_policies: dict[str, EndpointPolicy] | None,
-) -> ExternalApp:
-    """Update only the enabled flag and per-action policies of an app (flush
-    only — the caller commits, after pushing to sandboxes, so a push failure
-    doesn't leave the DB committed and the runtime stale). This is the cloud
-    admin path for Onyx-managed built-in apps, which may toggle enablement + set
-    policies but never edit credentials or config.
-    """
-    app = get_external_app_by_id(db_session, external_app_id)
-    if app is None:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            f"External app with id {external_app_id} not found.",
-        )
-
-    app.skill.enabled = enabled
-    if action_policies is not None:
-        _write_policies__no_commit(app, action_policies)
-    db_session.flush()
-    return app
 
 
 def get_policies(
@@ -450,9 +428,9 @@ def delete_external_app(
     external_app_id: int,
 ) -> str | None:
     """Delete the linked Skill (cascade removes the external_app row and user
-    credentials) and commit. Returns the skill's ``bundle_file_id`` so the
-    caller can clean up FileStore after the commit. Raises
-    ``OnyxError(NOT_FOUND)`` if the app doesn't exist.
+    credentials). Flush only — the caller commits after pushing, so a push
+    failure rolls back. Returns the skill's ``bundle_file_id`` for post-commit
+    FileStore cleanup. Raises ``OnyxError(NOT_FOUND)`` if absent.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -463,7 +441,7 @@ def delete_external_app(
 
     bundle_file_id = app.skill.bundle_file_id
     db_session.delete(app.skill)
-    db_session.commit()
+    db_session.flush()
     return bundle_file_id
 
 

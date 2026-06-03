@@ -307,24 +307,22 @@ class PptxPreviewResponse(BaseModel):
 
 
 # ===== External App Models =====
-class UpsertBuiltInExternalAppRequest(BaseModel):
-    """Create or update a built-in external app (``POST /admin/apps/built-in``).
+class CreateBuiltInExternalAppRequest(BaseModel):
+    """Create a built-in external app (``POST /admin/apps/built-in``).
 
     Built-in providers only — ``app_type=CUSTOM`` is rejected (custom apps use
-    ``POST /admin/apps/custom``).
+    ``POST /admin/apps/custom``). Updates go through ``PATCH /admin/apps/{id}``.
 
-    If `id` is provided, the row with that id is updated; otherwise a
-    new row is inserted (and a backing ``Skill`` row is created in the
-    same transaction). ``upstream_url_patterns`` is a list of regex
-    patterns matched by the egress proxy against outbound request URLs.
-    ``enabled`` (stored on the linked skill) is the kill switch the
-    proxy checks before injecting credentials.
+    A new row is inserted (and a backing ``Skill`` row is created in the same
+    transaction). ``upstream_url_patterns`` is a list of regex patterns matched
+    by the egress proxy against outbound request URLs. ``enabled`` (stored on
+    the linked skill) is the kill switch the proxy checks before injecting
+    credentials.
 
-    Skill identity (slug, bundle bytes, sharing scope) is derived
-    server-side from ``app_type``; admins don't supply it.
+    Skill identity (slug, bundle bytes, sharing scope) is derived server-side
+    from ``app_type``; admins don't supply it.
     """
 
-    id: int | None = None
     name: str
     description: str
     enabled: bool
@@ -333,17 +331,31 @@ class UpsertBuiltInExternalAppRequest(BaseModel):
     auth_template: dict[str, Any]
     organization_credentials: dict[str, str]
     # Per-action overrides by catalog action id (built-in apps); validated on
-    # upsert. A map full-replaces stored overrides (empty clears); None leaves
-    # them untouched, so a partial update can't wipe the admin's choices.
+    # create. A map full-replaces stored overrides (empty clears); None leaves
+    # every action at its default.
     action_policies: dict[str, EndpointPolicy] | None = None
 
 
-class SetExternalAppEnablementRequest(BaseModel):
-    """Narrow update of a built-in app's enablement + per-action policies,
-    keyed solely by the path ``id``.
+class UpdateExternalAppRequest(BaseModel):
+    """Partial update of an existing app, keyed solely by the path ``id``
+    (``PATCH /admin/apps/{id}``). Every field is optional; ``None`` means "leave
+    untouched", so a narrow request (e.g. just ``enabled``) won't blank the rest.
+
+    This is the single update path for built-in apps. For Onyx-managed built-ins
+    (cloud) the gateway-config fields (``upstream_url_patterns``,
+    ``auth_template``, ``organization_credentials``) are Onyx-owned and ignored —
+    only ``enabled`` + ``action_policies`` take effect. Custom-app field edits
+    (and bundle replacement) go through ``POST /admin/apps/custom`` instead, since
+    that path is multipart.
     """
 
-    enabled: bool
+    enabled: bool | None = None
+    name: str | None = None
+    description: str | None = None
+    upstream_url_patterns: list[str] | None = None
+    auth_template: dict[str, Any] | None = None
+    organization_credentials: dict[str, str] | None = None
+    # Full-replace stored overrides when present (empty clears); None leaves them.
     action_policies: dict[str, EndpointPolicy] | None = None
 
 
