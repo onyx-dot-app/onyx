@@ -118,11 +118,16 @@ export default function UserSkillsPage() {
               />
             ) : (
               <>
-                <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {visibleItems.map((item) => (
-                    <SkillCard key={item.id} item={item} />
-                  ))}
-                </div>
+                <section className="flex flex-col gap-2">
+                  <Text as="p" secondaryBody text03>
+                    Browse skills
+                  </Text>
+                  <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {visibleItems.map((item) => (
+                      <SkillCard key={item.id} item={item} />
+                    ))}
+                  </div>
+                </section>
                 <TextSeparator
                   count={visibleItems.length}
                   text={visibleItems.length === 1 ? "Skill" : "Skills"}
