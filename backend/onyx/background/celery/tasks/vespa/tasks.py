@@ -489,6 +489,25 @@ def document_index_metadata_sync_task(
                     f"doc={document_id} action=no_operation elapsed={elapsed:.2f}"
                 )
                 completion_status = OnyxCeleryTaskCompletionStatus.SKIPPED
+            elif doc.chunk_count is None and not doc.semantic_id:
+                # Skeleton row created by an older version's permission sync
+                # for a doc that was never indexed (empty semantic_id, no
+                # chunk_count). There is nothing in the document index to
+                # update, and attempting to do so raises
+                # ChunkCountNotFoundError on the OpenSearch backend. Mark it
+                # synced so it stops being re-enqueued every sync cycle. This
+                # is safe: if the doc is ever actually indexed, its chunks are
+                # written with fresh metadata from Postgres at index time, and
+                # any later metadata change (perm sync, doc set update, boost/
+                # hide) bumps last_modified and re-marks the doc as dirty.
+                mark_document_as_synced(document_id, db_session)
+
+                elapsed = time.monotonic() - start
+                task_logger.info(
+                    f"doc={document_id} action=skip_unindexed_skeleton_row "
+                    f"elapsed={elapsed:.2f}"
+                )
+                completion_status = OnyxCeleryTaskCompletionStatus.SKIPPED
             else:
                 # document set sync
                 doc_sets = fetch_document_sets_for_document(document_id, db_session)

@@ -8,46 +8,9 @@ from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import Document as DbDocument
+from onyx.utils.logger import setup_logger
 
-
-def upsert_document_external_perms__no_commit(
-    db_session: Session,
-    doc_id: str,
-    external_access: ExternalAccess,
-    source_type: DocumentSource,
-) -> None:
-    """
-    This sets the permissions for a document in postgres.
-    NOTE: this will replace any existing external access, it will not do a union
-    """
-    document = db_session.scalars(
-        select(DbDocument).where(DbDocument.id == doc_id)
-    ).first()
-
-    prefixed_external_groups = [
-        build_ext_group_name_for_onyx(
-            ext_group_name=group_id,
-            source=source_type,
-        )
-        for group_id in external_access.external_user_group_ids
-    ]
-
-    if not document:
-        # If the document does not exist, still store the external access
-        # So that if the document is added later, the external access is already stored
-        document = DbDocument(
-            id=doc_id,
-            semantic_id="",
-            external_user_emails=external_access.external_user_emails,
-            external_user_group_ids=prefixed_external_groups,
-            is_public=external_access.is_public,
-        )
-        db_session.add(document)
-        return
-
-    document.external_user_emails = list(external_access.external_user_emails)
-    document.external_user_group_ids = prefixed_external_groups
-    document.is_public = external_access.is_public
+logger = setup_logger()
 
 
 def upsert_document_external_perms(
@@ -55,10 +18,10 @@ def upsert_document_external_perms(
     doc_id: str,
     external_access: ExternalAccess,
     source_type: DocumentSource,
-) -> bool:
+) -> None:
     """
-    This sets the permissions for a document in postgres. Returns True if the
-    a new document was created, False otherwise.
+    This sets the permissions for an existing document in postgres. If the
+    document has not been indexed yet, this is a no-op.
     NOTE: this will replace any existing external access, it will not do a union
     """
     document = db_session.scalars(
@@ -74,19 +37,21 @@ def upsert_document_external_perms(
     }
 
     if not document:
-        # If the document does not exist, still store the external access
-        # So that if the document is added later, the external access is already stored
-        # The upsert function in the indexing pipeline does not overwrite the permissions fields
-        document = DbDocument(
-            id=doc_id,
-            semantic_id="",
-            external_user_emails=external_access.external_user_emails,
-            external_user_group_ids=prefixed_external_groups,
-            is_public=external_access.is_public,
+        # Do NOT pre-create a skeleton row here. The old behavior inserted
+        # DbDocument(id=doc_id, semantic_id="") to "stage" permissions for a
+        # doc that indexing would later populate. That row has no chunk_count,
+        # which is an invalid state for the OpenSearch backend and floods
+        # document_index_metadata_sync_task with ChunkCountNotFoundError. The
+        # indexing pipeline's upsert is already permission-aware (it populates
+        # the external access fields from Document.external_access on insert),
+        # so permissions land the moment the doc itself does. Worst case, the
+        # doc is picked up by the next permission sync run after indexing.
+        logger.info(
+            f"Skipping permission upsert for doc_id={doc_id} since it has not "
+            "been indexed yet. Permissions will be set when the document is "
+            "indexed or on the next permission sync run."
         )
-        db_session.add(document)
-        db_session.commit()
-        return True
+        return
 
     # If the document exists, we need to check if the external access has changed
     if (
@@ -99,5 +64,3 @@ def upsert_document_external_perms(
         document.is_public = external_access.is_public
         document.last_modified = datetime.now(timezone.utc)
         db_session.commit()
-
-    return False
