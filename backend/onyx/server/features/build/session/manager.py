@@ -50,7 +50,6 @@ from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
-from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
@@ -64,9 +63,6 @@ from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.build_session import upsert_agent_plan
-from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
-from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
-from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import get_snapshots_for_session
@@ -87,6 +83,7 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
+from onyx.server.features.build.session import sandbox_lifecycle as _sandbox
 from onyx.server.features.build.session.errors import RateLimitError
 from onyx.server.features.build.session.errors import SandboxProvisioningError
 from onyx.server.features.build.session.errors import UploadLimitExceededError
@@ -375,30 +372,6 @@ class SessionManager:
                 "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
             )
 
-    def _provision_sandbox(
-        self,
-        sandbox: Sandbox,
-        user: User,
-        user_id: UUID,
-        tenant_id: str,
-        all_llm_configs: list[LLMProviderConfig],
-    ) -> None:
-        """Ensure PAT, then provision the pod with every configured provider
-        pre-loaded so per-prompt model overrides can cross providers without a
-        pod restart. ``all_llm_configs[0]`` is the default model."""
-        onyx_pat = ensure_sandbox_pat(self._db_session, sandbox, user)
-        sandbox_info = self._sandbox_manager.provision(
-            sandbox_id=sandbox.id,
-            user_id=user_id,
-            tenant_id=tenant_id,
-            llm_config=all_llm_configs[0],
-            onyx_pat=onyx_pat,
-            all_llm_configs=all_llm_configs,
-        )
-        update_sandbox_status__no_commit(
-            self._db_session, sandbox.id, sandbox_info.status
-        )
-
     def ensure_sandbox_running(
         self,
         user_id: UUID,
@@ -436,113 +409,19 @@ class SessionManager:
             ValueError: Max concurrent sandboxes reached, or user missing.
             RuntimeError: Sandbox manager failed to provision the pod.
         """
-        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-
-        # If a concurrent caller is mid-provision, wait for them rather
-        # than race. We re-enter the state machine below with whatever
-        # status the row ends up in.
-        if sandbox is not None and sandbox.status == SandboxStatus.PROVISIONING:
-            sandbox = self._wait_for_provisioning_to_complete(
-                sandbox, provisioning_wait_seconds
-            )
-
-        # RUNNING + healthy is the hot path — return immediately.
-        if sandbox is not None and sandbox.status == SandboxStatus.RUNNING:
-            if self._sandbox_manager.health_check(sandbox.id, timeout=5.0):
-                return sandbox
-            # DB says RUNNING but the pod is gone; fall through to
-            # terminate + re-provision below.
-            logger.warning(
-                "Sandbox %s marked RUNNING but pod is unhealthy/missing; recovering.",
-                sandbox.id,
-            )
-            self._sandbox_manager.terminate(sandbox.id)
-            update_sandbox_status__no_commit(
-                self._db_session, sandbox.id, SandboxStatus.TERMINATED
-            )
-
-        # All remaining branches will (re-)provision a pod, so honor
-        # per-tenant concurrency limits up front. We skip this check for
-        # the RUNNING+healthy path above because it doesn't add to the
-        # running count.
-        tenant_id = get_current_tenant_id()
-        if MULTI_TENANT:
-            running_count = get_running_sandbox_count_by_tenant(
-                self._db_session, tenant_id
-            )
-            if running_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
-                raise ValueError(
-                    f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) reached"
-                )
-
         user = fetch_user_by_id(self._db_session, user_id)
         if user is None:
             raise ValueError(f"User {user_id} not found")
-
         _, all_llm_configs = self.build_llm_configs(user)
-
-        if sandbox is None:
-            sandbox = create_sandbox__no_commit(
-                db_session=self._db_session,
-                user_id=user_id,
-            )
-            logger.info(
-                "Created sandbox %s for user %s (headless provisioning)",
-                sandbox.id,
-                user_id,
-            )
-        else:
-            logger.info(
-                "Waking sandbox %s (status=%s) for user %s",
-                sandbox.id,
-                sandbox.status.value,
-                user_id,
-            )
-
-        self._provision_sandbox(sandbox, user, user_id, tenant_id, all_llm_configs)
-        return sandbox
-
-    def _wait_for_provisioning_to_complete(
-        self,
-        sandbox: Sandbox,
-        wait_seconds: float,
-        *,
-        poll_interval_seconds: float = 1.0,
-    ) -> Sandbox:
-        """Poll a PROVISIONING sandbox until it transitions or we time out.
-
-        Returns the same ``Sandbox`` object with refreshed attributes once
-        ``status`` is no longer ``PROVISIONING``. We rely on Postgres'
-        default READ COMMITTED isolation: ``session.refresh()`` issues a
-        fresh SELECT each iteration, so commits from the concurrent
-        provisioner become visible.
-
-        Raises:
-            SandboxProvisioningError: Status was still ``PROVISIONING``
-                when the deadline elapsed.
-        """
-        deadline = time.monotonic() + wait_seconds
-        started = time.monotonic()
-        logger.info(
-            "Waiting up to %.1fs for sandbox %s to finish provisioning",
-            wait_seconds,
-            sandbox.id,
+        return _sandbox.ensure_sandbox_ready(
+            self._db_session,
+            self._sandbox_manager,
+            user_id,
+            all_llm_configs,
+            policy=_sandbox.ProvisioningPolicy.POLL,
+            provisioning_wait_seconds=provisioning_wait_seconds,
+            user=user,
         )
-        while True:
-            self._db_session.refresh(sandbox)
-            if sandbox.status != SandboxStatus.PROVISIONING:
-                logger.info(
-                    "Sandbox %s left PROVISIONING after %.1fs (now=%s)",
-                    sandbox.id,
-                    time.monotonic() - started,
-                    sandbox.status.value,
-                )
-                return sandbox
-            if time.monotonic() >= deadline:
-                raise SandboxProvisioningError(
-                    f"Sandbox {sandbox.id} still PROVISIONING after {wait_seconds}s"
-                )
-            time.sleep(poll_interval_seconds)
 
     def create_session__no_commit(
         self,
@@ -576,18 +455,6 @@ class SessionManager:
             ValueError: If max concurrent sandboxes reached or no LLM provider
             RuntimeError: If sandbox provisioning fails
         """
-        tenant_id = get_current_tenant_id()
-
-        # Check sandbox limits for multi-tenant deployments
-        if MULTI_TENANT:
-            running_count = get_running_sandbox_count_by_tenant(
-                self._db_session, tenant_id
-            )
-            if running_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
-                raise ValueError(
-                    f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) reached"
-                )
-
         # Fetch user early — needed for provider access checks, PAT, AGENTS.md.
         user = fetch_user_by_id(self._db_session, user_id)
         if not user:
@@ -628,79 +495,18 @@ class SessionManager:
             nextjs_port,
         )
 
-        # Check if user already has a sandbox (one sandbox per user model)
-        existing_sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-
-        if existing_sandbox:
-            # User already has a sandbox - check if it needs re-provisioning
-            sandbox = existing_sandbox
-            sandbox_id = sandbox.id
-
-            if sandbox.status in (
-                SandboxStatus.TERMINATED,
-                SandboxStatus.SLEEPING,
-                SandboxStatus.FAILED,
-            ):
-                # Re-provision sandbox (pod doesn't exist or failed)
-                logger.info(
-                    "Re-provisioning %s sandbox %s for user %s",
-                    sandbox.status.value,
-                    sandbox_id,
-                    user_id,
-                )
-                self._provision_sandbox(
-                    sandbox, user, user_id, tenant_id, all_llm_configs
-                )
-            elif sandbox.status.is_active():
-                # Verify pod is healthy before reusing (use short timeout for quick check)
-                if not self._sandbox_manager.health_check(sandbox_id, timeout=5.0):
-                    logger.warning(
-                        "Sandbox %s marked as %s but pod is unhealthy/missing. Entering recovery mode.",
-                        sandbox_id,
-                        sandbox.status,
-                    )
-                    # Terminate to clean up any lingering K8s resources
-                    self._sandbox_manager.terminate(sandbox_id)
-
-                    # Mark as terminated and re-provision
-                    update_sandbox_status__no_commit(
-                        self._db_session, sandbox_id, SandboxStatus.TERMINATED
-                    )
-
-                    logger.info(
-                        "Re-provisioning sandbox %s for user %s", sandbox_id, user_id
-                    )
-                    self._provision_sandbox(
-                        sandbox, user, user_id, tenant_id, all_llm_configs
-                    )
-                else:
-                    logger.info(
-                        "Reusing existing sandbox %s (status: %s) for new session %s",
-                        sandbox_id,
-                        sandbox.status,
-                        session_id,
-                    )
-            else:
-                # PROVISIONING status - sandbox is being created by another request
-                # Just fail this request
-                msg = (
-                    f"Sandbox {sandbox_id} has status {sandbox.status.value} and is being "
-                    f"created by another request for new session {session_id}"
-                )
-                logger.error(msg)
-                raise RuntimeError(msg)
-        else:
-            # Create new Sandbox record for the user (uses flush, caller commits)
-            sandbox = create_sandbox__no_commit(
-                db_session=self._db_session,
-                user_id=user_id,
-            )
-            sandbox_id = sandbox.id
-            logger.info(
-                "Created sandbox record %s for session %s", sandbox_id, session_id
-            )
-
-            self._provision_sandbox(sandbox, user, user_id, tenant_id, all_llm_configs)
+        # Ensure the user's sandbox is RUNNING. Interactive callers can't
+        # afford to wait through a concurrent provisioner, so we use the
+        # FAIL policy (raise RuntimeError if another request is mid-
+        # provision).
+        sandbox = _sandbox.ensure_sandbox_ready(
+            self._db_session,
+            self._sandbox_manager,
+            user_id,
+            all_llm_configs,
+            policy=_sandbox.ProvisioningPolicy.FAIL,
+            user=user,
+        )
 
         # Set up session workspace within the sandbox
         logger.info(
@@ -722,7 +528,6 @@ class SessionManager:
         self._hydrate_skills(sandbox.id, user, files=skills_files)
         self._hydrate_user_library(sandbox.id, user_id)
 
-        sandbox_id = sandbox.id
         logger.info(
             "Successfully created session %s with workspace in sandbox %s",
             session_id,

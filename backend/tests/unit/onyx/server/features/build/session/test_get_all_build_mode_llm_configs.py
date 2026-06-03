@@ -339,14 +339,18 @@ class TestGetLlmConfigFallback:
         )
 
 
-class TestSessionManagerProvisionForwardsAllLlmConfigs:
-    """``SessionManager._provision_sandbox`` must forward the full
+class TestProvisionSandboxForwardsAllLlmConfigs:
+    """``sandbox_lifecycle.provision_sandbox`` must forward the full
     multi-provider list to ``sandbox_manager.provision()`` — passing only
     the default collapses ``opencode.json`` and per-prompt model
     overrides start failing with "Model not found" until pod restart.
     """
 
     def test_provision_passes_all_llm_configs(self) -> None:
+        from onyx.server.features.build.session.sandbox_lifecycle import (
+            provision_sandbox,
+        )
+
         sandbox_id = uuid4()
         user_id = uuid4()
         tenant_id = "tenant-x"
@@ -363,10 +367,6 @@ class TestSessionManagerProvisionForwardsAllLlmConfigs:
             last_heartbeat=datetime.now(),
         )
 
-        manager = SessionManager.__new__(SessionManager)
-        manager._db_session = cast(Session, MagicMock())  # type: ignore[attr-defined]
-        manager._sandbox_manager = sandbox_manager  # type: ignore[attr-defined]
-
         all_configs = [
             _OPENAI_DEFAULT,
             LLMProviderConfig(
@@ -379,14 +379,18 @@ class TestSessionManagerProvisionForwardsAllLlmConfigs:
 
         with (
             patch(
-                "onyx.server.features.build.session.manager.ensure_sandbox_pat",
+                "onyx.server.features.build.session.sandbox_lifecycle."
+                "ensure_sandbox_pat",
                 return_value="pat-token",
             ),
             patch(
-                "onyx.server.features.build.session.manager.update_sandbox_status__no_commit"
+                "onyx.server.features.build.session.sandbox_lifecycle."
+                "update_sandbox_status__no_commit"
             ),
         ):
-            manager._provision_sandbox(
+            provision_sandbox(
+                db_session=cast(Session, MagicMock()),
+                sandbox_manager=sandbox_manager,
                 sandbox=sandbox,
                 user=user,
                 user_id=user_id,
