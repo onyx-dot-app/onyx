@@ -833,12 +833,16 @@ export default function SourceHierarchyBrowser({
         onScroll={handleScroll}
         className="overflow-y-auto max-h-80"
       >
-        {filteredItems.length === 0 && !isLoadingDocuments ? (
+        {filteredItems.length === 0 &&
+        !isLoadingDocuments &&
+        !isLoadingNodes ? (
           <GeneralLayouts.Section height="auto" padding={1}>
             <Text text03 secondaryBody>
-              {path.length === 0
-                ? "Select a folder to browse documents."
-                : "No items in this folder."}
+              {allNodes.length === 0
+                ? "No browsable folders here. Some sources (e.g. uploaded files) can't be browsed by folder — add this source to a Document Set to use its documents."
+                : path.length === 0
+                  ? "Select a folder to browse documents."
+                  : "No items in this folder."}
             </Text>
           </GeneralLayouts.Section>
         ) : (

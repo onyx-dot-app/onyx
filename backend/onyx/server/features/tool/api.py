@@ -259,11 +259,15 @@ def list_tools(
         if not should_expose_tool_to_fe(tool):
             continue
 
-        # Check if it's a built-in tool and if it's available
+        # Check if it's a built-in tool and if it can be configured on an agent.
+        # Note: this uses ``is_available_for_configuration`` (not ``is_available``)
+        # so that e.g. internal search remains selectable while its first source
+        # is still indexing. Whether the tool actually runs is re-checked at chat
+        # time via ``is_available``.
         if tool.in_code_tool_id:
             try:
                 tool_cls = get_built_in_tool_by_id(tool.in_code_tool_id)
-                if not tool_cls.is_available(db_session):
+                if not tool_cls.is_available_for_configuration(db_session):
                     continue
             except KeyError:
                 # If tool ID not found in registry, include it by default

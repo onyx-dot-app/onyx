@@ -62,6 +62,24 @@ class Tool(abc.ABC, Generic[TOverride]):
         """
         return True
 
+    @classmethod
+    def is_available_for_configuration(cls, db_session: "Session") -> bool:
+        """
+        Whether this tool can be attached to / configured on an agent given
+        the state of the system. This is distinct from ``is_available``, which
+        gates whether the tool can actually *run* on a given chat turn.
+
+        A tool may be configurable before it is runnable. For example, internal
+        search should be selectable on an agent whenever the vector DB is
+        enabled, even if no content has been indexed yet — it starts working
+        automatically once documents exist. Defaults to ``is_available`` so most
+        tools treat "configurable" and "runnable" identically.
+
+        Args:
+            db_session: Database session for tools that need DB access
+        """
+        return cls.is_available(db_session)
+
     @abc.abstractmethod
     def tool_definition(self) -> dict:
         """

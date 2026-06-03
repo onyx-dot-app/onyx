@@ -490,6 +490,24 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             or check_user_files_exist(db_session)
         )
 
+    @classmethod
+    def is_available_for_configuration(
+        cls,
+        db_session: Session,  # noqa: ARG003
+    ) -> bool:
+        """Internal search is configurable on an agent whenever the vector DB
+        is enabled, even before any content is indexed.
+
+        Runtime execution is still gated by ``is_available`` (which requires
+        connectors / federated connectors / user files to exist), so an agent
+        configured with knowledge before its first source finishes indexing
+        starts searching automatically once documents are available — instead
+        of being silently saved without the search tool.
+        """
+        from onyx.configs.app_configs import DISABLE_VECTOR_DB
+
+        return not DISABLE_VECTOR_DB
+
     @property
     def id(self) -> int:
         return self._id
