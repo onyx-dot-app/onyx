@@ -2,6 +2,7 @@ import asyncio
 import base64
 import datetime
 import hashlib
+import ipaddress
 import json
 from enum import Enum
 from secrets import token_urlsafe
@@ -30,6 +31,7 @@ from onyx.auth.oauth_token_manager import OAuthFlowParams
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
+from onyx.configs.app_configs import MCP_SERVER_ALLOW_PRIVATE_NETWORK
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -86,12 +88,55 @@ from onyx.server.features.tool.models import ToolSnapshot
 from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_tools
 from onyx.tools.tool_implementations.mcp.mcp_client import initialize_mcp_client
 from onyx.tools.tool_implementations.mcp.mcp_client import log_exception_group
+from onyx.tools.tool_implementations.mcp.mcp_ssrf import validate_mcp_outbound_url
 from onyx.utils.encryption import mask_string
 from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import BLOCKED_HOSTNAMES
+from onyx.utils.url import SSRFException
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def _ssrf_error_hint(url: str) -> str:
+    """Guidance for a blocked MCP URL: only point at the private-network opt-in
+    when it would actually unblock the host. Loopback/localhost/link-local are
+    never reachable regardless of the flag, so don't suggest it for them."""
+    host = (urlparse(url).hostname or "").lower()
+    never_allowed = host in BLOCKED_HOSTNAMES
+    if not never_allowed:
+        try:
+            ip = ipaddress.ip_address(host)
+            never_allowed = ip.is_loopback or ip.is_unspecified or ip.is_link_local
+        except ValueError:
+            pass
+    if never_allowed:
+        return (
+            " Loopback, localhost, and link-local/cloud-metadata addresses are "
+            "never permitted; bind the MCP server to a private-network IP instead."
+        )
+    if not MCP_SERVER_ALLOW_PRIVATE_NETWORK:
+        return (
+            " To allow an MCP server on a private network, set "
+            "MCP_SERVER_ALLOW_PRIVATE_NETWORK=true (loopback and cloud-metadata "
+            "addresses remain blocked)."
+        )
+    return ""
+
+
+def _validate_mcp_server_url(url: str | None, field: str) -> None:
+    """Store-time SSRF guard for a curator-supplied URL; raises ``OnyxError``
+    for a field-level frontend error. Fetch-time guards (mcp_client,
+    oauth_token_manager) still cover SDK-followed redirects and DNS rebinding."""
+    if not url:
+        return
+    try:
+        validate_mcp_outbound_url(url)
+    except (SSRFException, ValueError) as e:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, f"Invalid {field}: {e}{_ssrf_error_hint(url)}"
+        )
 
 
 def _truncate_description(description: str | None, max_length: int = 500) -> str:
@@ -1715,6 +1760,12 @@ def _upsert_mcp_server(
     """
     Creates a new or edits an existing MCP server. Returns the DB model
     """
+    _validate_mcp_server_url(request.server_url, "server_url")
+    _validate_mcp_server_url(
+        request.oauth_authorization_endpoint, "oauth_authorization_endpoint"
+    )
+    _validate_mcp_server_url(request.oauth_token_endpoint, "oauth_token_endpoint")
+
     mcp_server = None
     admin_config = None
 
@@ -2324,6 +2375,8 @@ def create_mcp_server_simple(
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
+    _validate_mcp_server_url(request.server_url, "server_url")
+
     mcp_server = create_mcp_server__no_commit(
         owner_email=user.email,
         name=request.name,
@@ -2374,6 +2427,8 @@ def update_mcp_server_simple(
         raise HTTPException(status_code=404, detail="MCP server not found")
 
     _ensure_mcp_server_owner_or_admin(mcp_server, user)
+
+    _validate_mcp_server_url(request.server_url, "server_url")
 
     # Update only provided fields
     updated_server = update_mcp_server__no_commit(
