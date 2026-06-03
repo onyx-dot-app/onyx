@@ -4,6 +4,42 @@ import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { Button } from "@opal/components";
 import { CopyButton } from "@opal/components";
 import { getErrorIcon, getErrorTitle } from "./errorHelpers";
+import {
+  RateLimitDetails,
+  RATE_LIMITED_ERROR_CODE,
+} from "@/app/app/interfaces";
+
+// Turn a 429's reset_at / retry_after_seconds into a human-friendly sentence.
+// Returns null if neither field is present (banner falls back to the detail).
+function formatRateLimitReset(details: RateLimitDetails): string | null {
+  const resetMs = resolveResetMs(details);
+  if (resetMs === null) return null;
+
+  const remainingMs = resetMs - Date.now();
+  if (remainingMs <= 0) return "You can try again now.";
+
+  const minutes = Math.ceil(remainingMs / 60_000);
+  const relative =
+    minutes < 60
+      ? `${minutes} minute${minutes === 1 ? "" : "s"}`
+      : `${Math.ceil(minutes / 60)} hour${Math.ceil(minutes / 60) === 1 ? "" : "s"}`;
+  const localTime = new Date(resetMs).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `Resets in ${relative} (at ${localTime}).`;
+}
+
+function resolveResetMs(details: RateLimitDetails): number | null {
+  if (details.reset_at) {
+    const parsed = Date.parse(details.reset_at);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  if (typeof details.retry_after_seconds === "number") {
+    return Date.now() + details.retry_after_seconds * 1000;
+  }
+  return null;
+}
 
 interface ResubmitProps {
   resubmit: () => void;
@@ -36,6 +72,26 @@ export const ErrorBanner = ({
   resubmit?: () => void;
 }) => {
   const [isStackTraceExpanded, setIsStackTraceExpanded] = useState(false);
+
+  // Usage rate-limit (429): a focused banner with a reset time and no
+  // Regenerate affordance — retrying would just re-trip the same limit.
+  if (errorCode === RATE_LIMITED_ERROR_CODE) {
+    const resetLine = formatRateLimitReset((details as RateLimitDetails) ?? {});
+    return (
+      <div className="text-red-700 mt-4 text-sm my-auto">
+        <Alert variant="broken">
+          {getErrorIcon(errorCode)}
+          <AlertTitle>{getErrorTitle(errorCode)}</AlertTitle>
+          <AlertDescription className="flex flex-col gap-y-1">
+            <span>{error || "You've reached your usage limit."}</span>
+            {resetLine && (
+              <span className="text-xs text-muted-foreground">{resetLine}</span>
+            )}
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="text-red-700 mt-4 text-sm my-auto">
