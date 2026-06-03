@@ -321,35 +321,11 @@ class _ServeMixin:
         self-closed buses so callers don't wedge on BUS_CLOSED_SENTINEL until
         restart."""
         key = (sandbox_id, directory)
-
-        # Fast path: a live cached bus needs no I/O — return it under the lock.
-        # The local tombstone short-circuits the terminating pod's own racing
-        # subscribes without a DB hit.
         with self._event_buses_lock:
             bus = self._event_buses.get(key)
             if bus is not None and not bus.closed:
                 return bus
-            if sandbox_id in self._terminated_sandboxes:
-                raise RuntimeError(
-                    f"Sandbox {sandbox_id} has been terminated; refusing to "
-                    "create a new event bus against its (deleted) backend"
-                )
-
-        # Cache miss: do the authoritative gone-check + connection-info load
-        # WITHOUT holding the lock, so a slow DB / control-plane round-trip
-        # doesn't block bus creation for other sandboxes. The tombstone above is
-        # only a local fast-path; this DB check makes the refusal fire on every
-        # replica, not just the terminating one. The double-checked insert below
-        # handles the race where two threads both miss the cache.
-        self._assert_sandbox_backend_live(sandbox_id)
-        info = self._serve_connection_info(sandbox_id)
-
-        with self._event_buses_lock:
-            existing = self._event_buses.get(key)
-            if existing is not None and not existing.closed:
-                # Another thread won the race while we were loading — use theirs.
-                return existing
-            if existing is not None and existing.closed:
+            if bus is not None and bus.closed:
                 logger.warning(
                     "[SANDBOX-SERVE] Replacing self-closed PodEventBus for "
                     "sandbox %s dir=%s (prior bus exhausted its reconnect budget)",
@@ -357,6 +333,18 @@ class _ServeMixin:
                     directory,
                 )
                 self._event_buses.pop(key, None)
+            if sandbox_id in self._terminated_sandboxes:
+                raise RuntimeError(
+                    f"Sandbox {sandbox_id} has been terminated; refusing to "
+                    "create a new event bus against its (deleted) backend"
+                )
+            # The local tombstone above only covers the replica that ran
+            # terminate. Consult the authoritative DB status so the refusal
+            # fires on every replica, not just the terminating one. The status
+            # read is a cheap indexed lookup, so holding the lock across it is
+            # fine.
+            self._assert_sandbox_backend_live(sandbox_id)
+            info = self._serve_connection_info(sandbox_id)
             bus = PodEventBus(
                 base_url=info.base_url,
                 auth=info.auth(),
