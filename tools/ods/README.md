@@ -220,6 +220,57 @@ ods backend model_server
 ods backend model_server --port 9001
 ```
 
+### `celery` - Run Celery Workers
+
+Run Onyx celery workers with environment loaded from `.vscode/.env` (same env
+handling and EE defaults as `backend`). With no arguments, starts every worker
+in the "Run All Onyx Services" debug compound; pass worker names to run a
+subset, or `--all` to also include the `monitoring` worker.
+
+Each worker runs through `backend/scripts/dev_celery_reload.py` for hot-reload
+on changes under `backend/onyx` and `backend/ee`. All workers stream to one
+terminal with a per-worker prefix, and a single `Ctrl-C` stops them all.
+
+```shell
+ods celery [worker...]
+```
+
+**Available workers:**
+
+`primary`, `light`, `heavy`, `docfetching`, `docprocessing`,
+`user_file_processing`, `scheduled_tasks`, `beat`, `monitoring`
+
+(`monitoring` is excluded from the default set, matching the launch compound.)
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--all` | `false` | Run every worker, including `monitoring` |
+| `--no-reload` | `false` | Disable hot-reload (run celery directly) |
+| `--no-ee` | `false` | Disable Enterprise Edition features (enabled by default) |
+| `--loglevel` | `INFO` | Celery log level |
+
+**Examples:**
+
+```shell
+# Start the full dev worker set
+ods celery
+
+# Start only specific workers
+ods celery primary beat
+
+# Include the monitoring worker
+ods celery --all
+
+# Run without hot-reload
+ods celery docfetching docprocessing --no-reload
+```
+
+This pairs with `ods compose dev --infra`, `ods backend api`,
+`ods backend model_server`, and `ods web dev` to run the full stack on the host
+with hot-reload — no devcontainer or VS Code launch compound required.
+
 ### `web` - Run Frontend Scripts
 
 Run bun scripts from `web/package.json` without manually changing directories.
