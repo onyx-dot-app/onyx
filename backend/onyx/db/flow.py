@@ -231,11 +231,17 @@ def replace_triggers(
 
     Webhook secrets are re-minted on replace. That is a deliberate cost: it
     keeps this function simple and means a rotated secret is one edit away.
+
+    Works through ``flow.triggers`` rather than adding rows to the session
+    directly. Sessions here are built with ``expire_on_commit=False``, so a
+    collection this function bypassed would stay stale for the rest of the
+    request — and ``set_flow_status`` walks that collection to decide what the
+    dispatcher sees. Going through the relationship keeps the two in step.
     """
     now = now or datetime.now(tz=timezone.utc)
 
-    for existing in list(flow.triggers):
-        db_session.delete(existing)
+    # delete-orphan on the relationship turns this into the DELETEs.
+    flow.triggers.clear()
     db_session.flush()
 
     created: list[FlowTrigger] = []
@@ -256,7 +262,6 @@ def replace_triggers(
                 raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(exc)) from exc
 
         trigger = FlowTrigger(
-            flow_id=flow.id,
             kind=kind,
             config=config,
             enabled=definition.get("enabled", True),
@@ -268,7 +273,7 @@ def replace_triggers(
             )
 
         trigger.next_run_at = _next_run_for(trigger, flow_status=flow.status, now=now)
-        db_session.add(trigger)
+        flow.triggers.append(trigger)
         created.append(trigger)
 
     db_session.flush()
