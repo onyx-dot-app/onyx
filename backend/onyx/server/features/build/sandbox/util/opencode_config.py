@@ -123,6 +123,7 @@ def build_opencode_config(
     api_base: str | None = None,
     disabled_tools: list[str] | None = None,
     dev_mode: bool = False,
+    plugins: list[str] | None = None,
 ) -> dict[str, Any]:
     """Single-provider wrapper around :func:`build_multi_provider_opencode_config`."""
     return build_multi_provider_opencode_config(
@@ -138,6 +139,7 @@ def build_opencode_config(
         default_model=model_name,
         disabled_tools=disabled_tools,
         dev_mode=dev_mode,
+        plugins=plugins,
     )
 
 

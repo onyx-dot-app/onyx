@@ -6,6 +6,7 @@ import signal
 import sys
 import threading
 import uuid
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler
 from http.server import HTTPServer
 
@@ -13,16 +14,18 @@ from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.sandbox_proxy.action_matcher import ExternalAppActionMatcher
 from onyx.sandbox_proxy.addons.gate import GateAddon
+from onyx.sandbox_proxy.backend import build_ca_store
+from onyx.sandbox_proxy.backend import build_ip_lookup
 from onyx.sandbox_proxy.ca import CABootstrap
-from onyx.sandbox_proxy.ca_k8s import K8sSecretCAStore
+from onyx.sandbox_proxy.ca import MaterializedCA
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIPLookup
-from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
 from onyx.sandbox_proxy.resolvers.llm_provider_key import LLMProviderKeyResolver
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
@@ -40,8 +43,8 @@ _DB_APP_NAME = "sandbox_proxy"
 # Cap on the SIGTERM drain; only fires if `GateAddon.drain_inflight` hangs.
 _DRAIN_TIMEOUT_S = 10.0
 
-# Startup sync deadline; past it the proxy exits rather than serve traffic
-# with unbacked identity.
+# Startup sync deadline; past it the proxy exits rather than serve traffic with
+# unbacked identity.
 _LOOKUP_INITIAL_SYNC_TIMEOUT_S = 60.0
 
 # Must be the parent of ca._DEFAULT_CA_PEM_PATH.
@@ -112,8 +115,53 @@ def _start_healthz_server(readiness: _Readiness, lookup: SandboxIPLookup) -> HTT
     return server
 
 
+def _bootstrap_ca() -> MaterializedCA:
+    return CABootstrap(store=build_ca_store()).ensure_ca()
+
+
+def _build_lookup() -> SandboxIPLookup:
+    lookup = build_ip_lookup()
+    lookup.start()
+    synced = lookup.wait_for_initial_sync(
+        timeout_seconds=_LOOKUP_INITIAL_SYNC_TIMEOUT_S
+    )
+    if not synced:
+        raise RuntimeError(
+            "Sandbox IP lookup did not complete initial sync within "
+            f"{_LOOKUP_INITIAL_SYNC_TIMEOUT_S:.1f}s; refusing to serve traffic with unbacked "
+            "identity."
+        )
+    return lookup
+
+
+def _build_cache_factory() -> Callable[[str], CacheBackend]:
+    """
+    tenant_id -> CacheBackend; Must match the API side's namespace to share
+    keys.
+    """
+
+    def _factory(tenant_id: str) -> CacheBackend:
+        return get_cache_backend(tenant_id=tenant_id)
+
+    return _factory
+
+
+def _build_mitm_options() -> Options:
+    return Options(
+        listen_host="0.0.0.0",  # noqa: S104 — container scope; pod network only
+        listen_port=SANDBOX_PROXY_LISTEN_PORT,
+        confdir=_MITM_CONFDIR,
+        mode=["regular"],
+        ssl_insecure=False,
+    )
+
+
+async def _run_master(master: DumpMaster) -> None:
+    await master.run()
+
+
 def build_resolvers() -> list[CredentialResolver]:
-    """The registered credential resolvers, in first-claim-wins order.
+    """Builds the registered credential resolvers, in first-claim-wins order.
 
     Host-claim sets are designed to be disjoint (external-app requests are
     attributed by the matcher; host-only resolvers added later claim their own
@@ -135,17 +183,17 @@ def _install_signal_handlers(
             await asyncio.wait_for(gate.drain_inflight(), timeout=_DRAIN_TIMEOUT_S)
         except asyncio.TimeoutError:
             logger.warning(
-                "gate drain exceeded %.1fs; exiting anyway",
+                "Gate drain exceeded %.1fs; Exiting anyway.",
                 _DRAIN_TIMEOUT_S,
             )
         except Exception:
-            logger.exception("gate drain raised; exiting anyway")
+            logger.exception("Gate drain raised; Exiting anyway.")
         master.shutdown()
 
     def _on_signal() -> None:
         if readiness.shutting_down:
             return
-        logger.info("SIGTERM received; flipping readiness and draining")
+        logger.info("SIGTERM received; Flipping readiness and draining.")
         readiness.shutting_down = True
         lookup.stop()
         loop.create_task(_drain_and_shutdown())
@@ -158,7 +206,7 @@ def main() -> int:
     set_is_ee_based_on_env_variable()
 
     logger.info(
-        "starting sandbox proxy listen=%d healthz=%d namespace=%s",
+        "Starting sandbox proxy listen=%d healthz=%d namespace=%s",
         SANDBOX_PROXY_LISTEN_PORT,
         SANDBOX_PROXY_HEALTHZ_PORT,
         SANDBOX_NAMESPACE,
@@ -169,22 +217,15 @@ def main() -> int:
     SqlEngine.set_app_name(_DB_APP_NAME)
     SqlEngine.init_engine(pool_size=_DB_POOL_SIZE, max_overflow=_DB_MAX_OVERFLOW)
 
-    materialized_ca = CABootstrap(store=K8sSecretCAStore()).ensure_ca()
+    materialized_ca = _bootstrap_ca()
     readiness.ca_ready = True
     logger.info("CA bootstrapped at %s", materialized_ca.pem_path)
 
-    lookup = K8sInformerLookup()
-    lookup.start()
-    if not lookup.wait_for_initial_sync(timeout_seconds=_LOOKUP_INITIAL_SYNC_TIMEOUT_S):
-        raise RuntimeError(
-            "Sandbox IP lookup did not complete initial sync within "
-            f"{_LOOKUP_INITIAL_SYNC_TIMEOUT_S:.1f}s; refusing to "
-            "serve traffic with unbacked identity"
-        )
+    lookup = _build_lookup()
     healthz_server: HTTPServer | None = None
     try:
         readiness.lookup_ready = True
-        logger.info("informer initial sync complete")
+        logger.info("Informer initial sync complete.")
 
         healthz_server = _start_healthz_server(readiness, lookup)
 
@@ -193,19 +234,19 @@ def main() -> int:
         snapshot_policy = SnapshotEgressPolicy.from_env()
         if snapshot_policy is not None:
             logger.info(
-                "snapshot egress streaming enabled bucket=%s endpoint_host=%s",
+                "Snapshot egress streaming enabled bucket=%s endpoint_host=%s",
                 snapshot_policy.bucket,
                 snapshot_policy.endpoint_host,
             )
         resolvers = build_resolvers()
         logger.info(
-            "credential resolvers registered: %s",
+            "Credential resolvers registered: %s",
             [type(r).__name__ for r in resolvers],
         )
         gate = GateAddon(
             identity=identity,
             action_matcher=ExternalAppActionMatcher(),
-            cache_factory=lambda tid: get_cache_backend(tenant_id=tid),
+            cache_factory=_build_cache_factory(),
             proxy_instance_id=proxy_instance_id,
             credential_dispatcher=CredentialInjectionDispatcher(resolvers),
             snapshot_policy=snapshot_policy,
@@ -213,13 +254,7 @@ def main() -> int:
 
         # DumpMaster binds to the running event loop in its constructor.
         async def _async_main() -> None:
-            options = Options(
-                listen_host="0.0.0.0",  # noqa: S104 — container scope; pod network only
-                listen_port=SANDBOX_PROXY_LISTEN_PORT,
-                confdir=_MITM_CONFDIR,
-                mode=["regular"],
-                ssl_insecure=False,
-            )
+            options = _build_mitm_options()
             master = DumpMaster(options=options, with_termlog=True, with_dumper=False)
             master.addons.add(gate)
             _install_signal_handlers(
@@ -229,7 +264,7 @@ def main() -> int:
                 lookup,
                 gate,
             )
-            await master.run()
+            await _run_master(master)
 
         asyncio.run(_async_main())
     finally:
@@ -238,7 +273,7 @@ def main() -> int:
             healthz_server.shutdown()
             healthz_server.server_close()
 
-    logger.info("sandbox proxy exiting cleanly")
+    logger.info("Sandbox proxy exiting cleanly.")
     return 0
 
 
