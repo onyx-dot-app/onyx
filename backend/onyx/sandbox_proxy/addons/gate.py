@@ -7,6 +7,8 @@ Fail-open: `ActionMatcher` exceptions and non-matching action types.
 import asyncio
 import base64
 import binascii
+import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -80,6 +82,58 @@ class _AutoApproval:
     notification_data: dict[str, str | int]
 
 
+# Result of the scheduled-run grant lookup: (run_id, granted_app_ids) for a
+# RUNNING scheduled run, or None.
+_GrantLookup = tuple[UUID, list[int]] | None
+
+# Grants for a RUNNING scheduled run are stable for the run's lifetime, so the
+# lookup is cached per session instead of hitting Postgres on every gated
+# request. The TTL bounds staleness from the RUNNING -> terminal transition
+# (e.g. an interactive follow-up on a finished scheduled session must park
+# again once the entry expires).
+_GRANT_CACHE_TTL_S = 60.0
+# Soft cap; expired entries are pruned before a write once the map grows past
+# this, bounding memory under a churn of distinct sessions.
+_GRANT_CACHE_MAX_ENTRIES = 4096
+
+
+class _GrantCache:
+    """Per-session TTL cache of the scheduled-run grant lookup.
+
+    Read from the gate's worker threads (the lookup runs under
+    ``asyncio.to_thread``), so every access is lock-guarded.
+    """
+
+    def __init__(
+        self,
+        ttl_s: float = _GRANT_CACHE_TTL_S,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._ttl_s = ttl_s
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._entries: dict[UUID, tuple[float, _GrantLookup]] = {}
+
+    def get(self, session_id: UUID) -> tuple[bool, _GrantLookup]:
+        """Return ``(hit, value)``. ``hit`` is False on miss/expiry — the
+        value is meaningless then and the caller must do the DB lookup."""
+        now = self._clock()
+        with self._lock:
+            entry = self._entries.get(session_id)
+            if entry is None or entry[0] <= now:
+                return False, None
+            return True, entry[1]
+
+    def put(self, session_id: UUID, value: _GrantLookup) -> None:
+        now = self._clock()
+        with self._lock:
+            if len(self._entries) >= _GRANT_CACHE_MAX_ENTRIES:
+                self._entries = {
+                    sid: e for sid, e in self._entries.items() if e[0] > now
+                }
+            self._entries[session_id] = (now + self._ttl_s, value)
+
+
 class ParkedApprovals:
     """Approvals the proxy is currently parked on, grouped by tenant.
 
@@ -135,6 +189,8 @@ class GateAddon:
         # Tracks running `request()` coroutines so the drain can `asyncio.wait`
         # on real completion instead of sleeping. Self-cleaning.
         self._inflight_tasks: set[asyncio.Task[None]] = set()
+        # Per-session cache of the scheduled-run grant lookup (hot path).
+        self._grant_cache = _GrantCache()
 
     # ------------------------------------------------------------------
     # mitmproxy hooks
@@ -450,7 +506,12 @@ class GateAddon:
     ) -> _AutoApproval | None:
         """Grant source: a RUNNING scheduled run whose task pre-approves the
         matched app. App-level granularity, per scheduled-task semantics."""
-        grants = get_live_scheduled_run_grants(db_session=db, session_id=ctx.session_id)
+        hit, grants = self._grant_cache.get(ctx.session_id)
+        if not hit:
+            grants = get_live_scheduled_run_grants(
+                db_session=db, session_id=ctx.session_id
+            )
+            self._grant_cache.put(ctx.session_id, grants)
         if grants is None:
             return None
         run_id, granted_app_ids = grants

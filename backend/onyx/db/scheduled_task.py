@@ -30,6 +30,7 @@ from onyx.db.enums import ScheduledTaskSkipReason
 from onyx.db.enums import ScheduledTaskStatus
 from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.models import ScheduledTask
+from onyx.db.models import ScheduledTaskPreApprovedApp
 from onyx.db.models import ScheduledTaskRun
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -78,11 +79,21 @@ def create_scheduled_task(
         editor_mode=editor_mode,
         status=status,
         next_run_at=next_run_at,
-        pre_approved_app_ids=pre_approved_app_ids or [],
     )
+    set_pre_approved_apps(task, pre_approved_app_ids or [])
     db_session.add(task)
     db_session.flush()
     return task
+
+
+def set_pre_approved_apps(task: ScheduledTask, app_ids: list[int]) -> None:
+    """Replace a task's pre-approval grants with ``app_ids`` (order-preserving,
+    deduped). Removed grants are deleted via the ``delete-orphan`` cascade.
+    """
+    deduped = list(dict.fromkeys(app_ids))
+    task.pre_approved_apps = [
+        ScheduledTaskPreApprovedApp(external_app_id=app_id) for app_id in deduped
+    ]
 
 
 def get_scheduled_task(
@@ -164,9 +175,9 @@ def update_scheduled_task(
         task.name = name
     if prompt is not None and prompt != task.prompt:
         task.prompt = prompt
-        task.pre_approved_app_ids = []
+        set_pre_approved_apps(task, [])
     if pre_approved_app_ids is not None:
-        task.pre_approved_app_ids = pre_approved_app_ids
+        set_pre_approved_apps(task, pre_approved_app_ids)
     if editor_mode is not None:
         task.editor_mode = editor_mode
     if cron_expression is not None and cron_expression != task.cron_expression:
@@ -483,22 +494,27 @@ def get_live_scheduled_run_grants(
     """``(run_id, pre_approved_app_ids)`` when ``session_id`` is a currently
     RUNNING scheduled run; ``None`` otherwise.
 
-    The join to ``scheduled_task_run`` subsumes the session-origin check
+    The ``scheduled_task_run`` lookup subsumes the session-origin check
     (only SCHEDULED-origin sessions have run rows); the RUNNING filter means
     interactive follow-ups on a finished scheduled session park as usual.
     """
-    row = db_session.execute(
-        select(ScheduledTaskRun.id, ScheduledTask.pre_approved_app_ids)
-        .join(ScheduledTask, ScheduledTaskRun.task_id == ScheduledTask.id)
-        .where(
+    run = db_session.execute(
+        select(ScheduledTaskRun.id, ScheduledTaskRun.task_id).where(
             ScheduledTaskRun.session_id == session_id,
             ScheduledTaskRun.status == ScheduledTaskRunStatus.RUNNING,
         )
     ).first()
-    if row is None:
+    if run is None:
         return None
-    run_id, app_ids = row
-    return run_id, list(app_ids or [])
+    run_id, task_id = run
+    app_ids = list(
+        db_session.execute(
+            select(ScheduledTaskPreApprovedApp.external_app_id)
+            .where(ScheduledTaskPreApprovedApp.scheduled_task_id == task_id)
+            .order_by(ScheduledTaskPreApprovedApp.id)
+        ).scalars()
+    )
+    return run_id, app_ids
 
 
 # ---------------------------------------------------------------------------

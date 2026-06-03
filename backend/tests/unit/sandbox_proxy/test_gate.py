@@ -557,6 +557,30 @@ async def test_pre_approved_scheduled_run_skips_park(
 
 
 @pytest.mark.asyncio
+async def test_grant_lookup_cached_across_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The per-session grant cache is consulted before Postgres: two gated
+    requests on the same session hit the DB lookup only once."""
+    sandbox = _sandbox()
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    _spy_pipeline(addon, monkeypatch)
+    lookup_calls = _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    _spy_pre_approve_insert(monkeypatch)
+    monkeypatch.setattr(
+        gate_mod,
+        "create_notification",
+        lambda **kw: None,  # noqa: ARG005
+    )
+
+    await addon.request(_flow(proxy_auth=_basic_auth(_TAG_UUID)))
+    await addon.request(_flow(proxy_auth=_basic_auth(_TAG_UUID)))
+
+    assert lookup_calls == [UUID(_TAG_UUID)]  # second request served from cache
+
+
+@pytest.mark.asyncio
 async def test_pre_approval_dispatch_failure_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -631,6 +655,38 @@ async def test_deny_wins_over_pre_approval_grant(
     assert lookup_calls == []  # DENY fires before the short-circuit
     assert not spy.approval_ran
     assert spy.dispatched == []
+
+
+# ---------------------------------------------------------------------------
+# _GrantCache — TTL behavior
+# ---------------------------------------------------------------------------
+
+
+def test_grant_cache_hit_miss_and_expiry() -> None:
+    now = [100.0]
+    cache = gate_mod._GrantCache(ttl_s=60.0, clock=lambda: now[0])
+    session_id = uuid4()
+
+    assert cache.get(session_id) == (False, None)  # miss before any put
+
+    cache.put(session_id, (_RUN_ID, [7]))
+    assert cache.get(session_id) == (True, (_RUN_ID, [7]))
+
+    now[0] += 59.0  # still inside the TTL window
+    assert cache.get(session_id) == (True, (_RUN_ID, [7]))
+
+    now[0] += 2.0  # now past expiry
+    assert cache.get(session_id) == (False, None)
+
+
+def test_grant_cache_caches_none() -> None:
+    """A negative lookup is cached too, so interactive sessions don't re-hit
+    Postgres on every gated request."""
+    cache = gate_mod._GrantCache(ttl_s=60.0, clock=lambda: 0.0)
+    session_id = uuid4()
+
+    cache.put(session_id, None)
+    assert cache.get(session_id) == (True, None)
 
 
 # ---------------------------------------------------------------------------

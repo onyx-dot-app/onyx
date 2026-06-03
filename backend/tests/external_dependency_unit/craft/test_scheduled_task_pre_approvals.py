@@ -31,7 +31,16 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.db.action_approval import insert_action_approval
 from onyx.server.features.build.scheduled_tasks import api as scheduled_tasks_api
 from tests.external_dependency_unit.craft._test_helpers import default_action_entries
+from tests.external_dependency_unit.craft._test_helpers import make_external_app
+from tests.external_dependency_unit.craft._test_helpers import make_skill
 from tests.external_dependency_unit.craft._test_helpers import make_user
+
+
+def _make_app(db_session: Session) -> int:
+    """Create a real ``ExternalApp`` and return its id. Grants now FK to
+    ``external_app``, so tests can't use arbitrary ints."""
+    app = make_external_app(db_session, skill=make_skill(db_session), auth_template={})
+    return app.id
 
 
 def _seed_task(
@@ -68,7 +77,8 @@ def test_grants_returned_for_running_run(
 ) -> None:
     user = make_user(db_session)
     bs = build_session_with_user(user=user)
-    task = _seed_task(db_session, user, pre_approved_app_ids=[7, 9])
+    app_a, app_b = _make_app(db_session), _make_app(db_session)
+    task = _seed_task(db_session, user, pre_approved_app_ids=[app_a, app_b])
     run = insert_run(
         db_session=db_session,
         task_id=task.id,
@@ -87,7 +97,7 @@ def test_grants_returned_for_running_run(
     assert grants is not None
     run_id, app_ids = grants
     assert run_id == run.id
-    assert app_ids == [7, 9]
+    assert app_ids == [app_a, app_b]
 
 
 @pytest.mark.parametrize(
@@ -108,7 +118,7 @@ def test_no_grants_for_non_running_run(
     usual — the RUNNING filter is the load-bearing scope guard."""
     user = make_user(db_session)
     bs = build_session_with_user(user=user)
-    task = _seed_task(db_session, user, pre_approved_app_ids=[7])
+    task = _seed_task(db_session, user, pre_approved_app_ids=[_make_app(db_session)])
     run = insert_run(
         db_session=db_session,
         task_id=task.id,
@@ -206,7 +216,7 @@ def test_prompt_value_change_resets_grants(
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     user = make_user(db_session)
-    task = _seed_task(db_session, user, pre_approved_app_ids=[7])
+    task = _seed_task(db_session, user, pre_approved_app_ids=[_make_app(db_session)])
 
     updated = update_scheduled_task(
         db_session=db_session,
@@ -226,7 +236,8 @@ def test_identical_prompt_resubmit_keeps_grants(
     """The editor round-trips the prompt on every save; an unchanged value
     must not wipe grants."""
     user = make_user(db_session)
-    task = _seed_task(db_session, user, pre_approved_app_ids=[7], prompt="same")
+    app = _make_app(db_session)
+    task = _seed_task(db_session, user, pre_approved_app_ids=[app], prompt="same")
 
     updated = update_scheduled_task(
         db_session=db_session,
@@ -237,7 +248,7 @@ def test_identical_prompt_resubmit_keeps_grants(
     )
     db_session.commit()
 
-    assert updated.pre_approved_app_ids == [7]
+    assert updated.pre_approved_app_ids == [app]
 
 
 def test_grants_in_same_patch_win_over_prompt_reset(
@@ -247,18 +258,19 @@ def test_grants_in_same_patch_win_over_prompt_reset(
     """The editor's re-enable-in-the-same-submit flow: a prompt change plus
     explicit grants in one patch keeps the supplied grants."""
     user = make_user(db_session)
-    task = _seed_task(db_session, user, pre_approved_app_ids=[7])
+    app_a, app_b = _make_app(db_session), _make_app(db_session)
+    task = _seed_task(db_session, user, pre_approved_app_ids=[app_a])
 
     updated = update_scheduled_task(
         db_session=db_session,
         task_id=task.id,
         user_id=user.id,
         prompt="a different prompt",
-        pre_approved_app_ids=[9],
+        pre_approved_app_ids=[app_b],
     )
     db_session.commit()
 
-    assert updated.pre_approved_app_ids == [9]
+    assert updated.pre_approved_app_ids == [app_b]
 
 
 def test_create_persists_grants(
@@ -266,8 +278,10 @@ def test_create_persists_grants(
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     user = make_user(db_session)
-    task = _seed_task(db_session, user, pre_approved_app_ids=[3, 1])
-    assert task.pre_approved_app_ids == [3, 1]
+    app_a, app_b = _make_app(db_session), _make_app(db_session)
+    # Insertion order is preserved (not sorted): pass the higher id first.
+    task = _seed_task(db_session, user, pre_approved_app_ids=[app_b, app_a])
+    assert task.pre_approved_app_ids == [app_b, app_a]
 
     bare = _seed_task(db_session, user)
     assert bare.pre_approved_app_ids == []

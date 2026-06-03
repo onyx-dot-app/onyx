@@ -5519,15 +5519,6 @@ class ScheduledTask(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Apps whose ASK-gated actions skip the park for this task's runs.
-    # Reset to [] on prompt change — a grant is tied to a specific intent.
-    pre_approved_app_ids: Mapped[list[int]] = mapped_column(
-        PGJSONB,
-        nullable=False,
-        default=list,
-        server_default=text("'[]'::jsonb"),
-    )
-
     # Canonical 5-field cron expression. The three UI editor modes (interval,
     # daily/weekly, advanced) all compile to this string on save.
     cron_expression: Mapped[str] = mapped_column(String, nullable=False)
@@ -5567,6 +5558,20 @@ class ScheduledTask(Base):
         back_populates="task",
         cascade="all, delete-orphan",
     )
+    # Apps whose ASK-gated actions skip the park for this task's runs.
+    # Cleared on prompt change — a grant is tied to a specific intent.
+    pre_approved_apps: Mapped[list["ScheduledTaskPreApprovedApp"]] = relationship(
+        "ScheduledTaskPreApprovedApp",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="ScheduledTaskPreApprovedApp.id",
+    )
+
+    @property
+    def pre_approved_app_ids(self) -> list[int]:
+        """Granted external-app ids in grant order. Set via
+        ``onyx.db.scheduled_task.set_pre_approved_apps``."""
+        return [grant.external_app_id for grant in self.pre_approved_apps]
 
     __table_args__ = (
         # Dispatcher hot path: WHERE status='active' AND deleted=false
@@ -5655,6 +5660,45 @@ class ScheduledTaskRun(Base):
         # Session-view banner lookup: get_scheduled_run_context filters by
         # session_id on every session open.
         Index("ix_scheduled_task_run_session", "session_id"),
+    )
+
+
+class ScheduledTaskPreApprovedApp(Base):
+    """One (task, app) pre-approval grant: the matched app's ASK-gated
+    actions skip the approval park for the task's RUNNING runs.
+
+    Deleting the task (CASCADE) or the app (CASCADE) drops the grant; a
+    stale grant on a removed app is meaningless. The unique constraint
+    keeps grants idempotent and its index serves the per-task lookup.
+    """
+
+    __tablename__ = "scheduled_task_pre_approved_app"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scheduled_task_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    external_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    task: Mapped[ScheduledTask] = relationship(
+        "ScheduledTask", back_populates="pre_approved_apps"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "scheduled_task_id",
+            "external_app_id",
+            name="uq_scheduled_task_pre_approved_app",
+        ),
     )
 
 
