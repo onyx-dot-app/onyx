@@ -1,18 +1,38 @@
 import { Text } from "@opal/components";
-import { SvgPaperclip, SvgPlug, SvgSparkle } from "@opal/icons";
+import {
+  SvgFileText,
+  SvgFolder,
+  SvgPaperclip,
+  SvgPlug,
+  SvgSparkle,
+} from "@opal/icons";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import type { PickerEntry, PickerSections } from "@/lib/skills/picker";
 import type { PlusMenuItem } from "@/sections/input/PlusMenuButton";
 
+interface LibraryFile {
+  id: string;
+  name: string;
+}
+
 interface EntryMenuHandlers {
   onAttachFiles: () => void;
   onSelectEntry: (entry: PickerEntry) => void;
+  /** Top-level files in the user's library, shown in the Library flyout. */
+  libraryFiles?: LibraryFile[];
+  /** Opens the library management modal. When set, a Library flyout is added. */
+  onManageLibrary?: () => void;
 }
 
 /** Maps picker sections onto the generic PlusMenuButton model. */
 export function buildEntryMenuItems(
   sections: PickerSections,
-  { onAttachFiles, onSelectEntry }: EntryMenuHandlers
+  {
+    onAttachFiles,
+    onSelectEntry,
+    libraryFiles = [],
+    onManageLibrary,
+  }: EntryMenuHandlers
 ): Array<PlusMenuItem | null> {
   const items: Array<PlusMenuItem | null> = [
     {
@@ -23,7 +43,11 @@ export function buildEntryMenuItems(
     },
   ];
 
-  if (sections.skills.length > 0 || sections.apps.length > 0) {
+  if (
+    sections.skills.length > 0 ||
+    sections.apps.length > 0 ||
+    onManageLibrary
+  ) {
     items.push(null);
   }
 
@@ -58,6 +82,28 @@ export function buildEntryMenuItems(
         ),
         onSelect: () => onSelectEntry(app),
       })),
+    });
+  }
+
+  if (onManageLibrary) {
+    items.push({
+      key: "library",
+      icon: SvgFolder,
+      label: "Library",
+      flyoutItems: [
+        ...libraryFiles.map((file) => ({
+          key: file.id,
+          icon: SvgFileText,
+          label: file.name,
+          onSelect: onManageLibrary,
+        })),
+        {
+          key: "manage",
+          icon: SvgFolder,
+          label: "Manage library…",
+          onSelect: onManageLibrary,
+        },
+      ],
     });
   }
 

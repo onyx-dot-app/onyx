@@ -108,6 +108,8 @@ class SessionResponse(BaseModel):
     sandbox: SandboxResponse | None
     artifacts: list[ArtifactResponse]
     sharing_scope: SharingScope
+    agent_provider: str | None
+    agent_model: str | None
 
     @classmethod
     def from_model(
@@ -131,6 +133,8 @@ class SessionResponse(BaseModel):
             sandbox=(SandboxResponse.from_model(sandbox) if sandbox else None),
             artifacts=[ArtifactResponse.from_model(a) for a in session.artifacts],
             sharing_scope=session.sharing_scope,
+            agent_provider=session.agent_provider,
+            agent_model=session.agent_model,
         )
 
 
@@ -179,6 +183,9 @@ class MessageRequest(BaseModel):
     """Request to send a message to the CLI agent."""
 
     content: str
+    # Per-message model override from the composer; both set together.
+    provider: str | None = None
+    model: str | None = None
 
 
 class MessageInterruptResponse(BaseModel):

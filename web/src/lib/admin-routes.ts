@@ -19,6 +19,7 @@ import {
   SvgImage,
   SvgMcp,
   SvgOnyxOctagon,
+  SvgPlug,
   SvgPaintBrush,
   SvgProgressBars,
   SvgSearchMenu,
@@ -89,6 +90,12 @@ export const ADMIN_ROUTES = {
     icon: SvgBlocks,
     title: "Skills",
     sidebarLabel: "Skills",
+  },
+  EXTERNAL_APPS: {
+    path: "/admin/external-apps",
+    icon: SvgPlug,
+    title: "External Apps",
+    sidebarLabel: "External Apps",
   },
   SLACK_BOTS: {
     path: "/admin/bots",

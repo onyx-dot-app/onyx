@@ -29,13 +29,11 @@ import {
   SvgArrowLeft,
   SvgBlocks,
   SvgClock,
-  SvgSettings,
   SvgMoreHorizontal,
   SvgEdit,
   SvgTrash,
   SvgCheckCircle,
   SvgPlug,
-  SvgLink,
   SvgSimpleLoader,
 } from "@opal/icons";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -48,13 +46,10 @@ import {
 } from "@/app/craft/constants";
 import {
   CRAFT_PATH,
-  CRAFT_CONFIGURE_PATH,
   CRAFT_SKILLS_PATH,
   CRAFT_APPS_PATH,
-  CRAFT_APPS_ADMIN_PATH,
   CRAFT_TASKS_PATH,
 } from "@/app/craft/v1/constants";
-import { useUser } from "@/providers/UserProvider";
 
 // ============================================================================
 // Fun Deleting Messages
@@ -335,7 +330,6 @@ const MemoizedBuildSidebarInner = memo(
     const router = useRouter();
     const pathname = usePathname();
     const session = useSession();
-    const { isAdmin } = useUser();
     const sessionHistory = useSessionHistory();
     // Access actions directly like chat does - these don't cause re-renders
     const renameBuildSession = useBuildSessionStore(
@@ -392,20 +386,6 @@ const MemoizedBuildSidebarInner = memo(
       [folded, handleNewBuild]
     );
 
-    const buildConfigurePanel = useMemo(
-      () => (
-        <SidebarTab
-          icon={SvgSettings}
-          folded={folded}
-          href={CRAFT_CONFIGURE_PATH}
-          selected={pathname.startsWith(CRAFT_CONFIGURE_PATH)}
-        >
-          Configure
-        </SidebarTab>
-      ),
-      [folded, pathname]
-    );
-
     const scheduledTasksPanel = useMemo(
       () => (
         <SidebarTab
@@ -420,19 +400,15 @@ const MemoizedBuildSidebarInner = memo(
       [folded, pathname]
     );
 
-    const myAppsTab = useMemo(
+    const appsTab = useMemo(
       () => (
         <SidebarTab
           icon={SvgPlug}
           folded={folded}
           href={CRAFT_APPS_PATH}
-          // Match exactly so the admin sub-route doesn't also light up this tab.
-          selected={
-            pathname === CRAFT_APPS_PATH ||
-            pathname.startsWith(`${CRAFT_APPS_PATH}/oauth`)
-          }
+          selected={pathname.startsWith(CRAFT_APPS_PATH)}
         >
-          My Apps
+          Apps
         </SidebarTab>
       ),
       [folded, pathname]
@@ -450,21 +426,6 @@ const MemoizedBuildSidebarInner = memo(
         </SidebarTab>
       ),
       [folded, pathname]
-    );
-
-    const manageAppsTab = useMemo(
-      () =>
-        isAdmin ? (
-          <SidebarTab
-            icon={SvgLink}
-            folded={folded}
-            href={CRAFT_APPS_ADMIN_PATH}
-            selected={pathname.startsWith(CRAFT_APPS_ADMIN_PATH)}
-          >
-            Manage Apps
-          </SidebarTab>
-        ) : null,
-      [folded, pathname, isAdmin]
     );
 
     const backToChatButton = useMemo(
@@ -493,11 +454,9 @@ const MemoizedBuildSidebarInner = memo(
           pinnedContent={
             <div className="flex flex-col gap-0.5">
               {newBuildButton}
-              {buildConfigurePanel}
               {scheduledTasksPanel}
               {skillsPanel}
-              {myAppsTab}
-              {manageAppsTab}
+              {appsTab}
             </div>
           }
           footer={footer}
@@ -517,9 +476,9 @@ const MemoizedBuildSidebarInner = memo(
                     key={historyItem.id}
                     historyItem={historyItem}
                     isActive={
-                      !pathname.startsWith(CRAFT_CONFIGURE_PATH) &&
                       !pathname.startsWith(CRAFT_TASKS_PATH) &&
                       !pathname.startsWith(CRAFT_SKILLS_PATH) &&
+                      !pathname.startsWith(CRAFT_APPS_PATH) &&
                       session?.id === historyItem.id
                     }
                     onLoad={() => handleLoadSession(historyItem.id)}

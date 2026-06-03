@@ -192,7 +192,7 @@ export default function ScheduledTasksListPage() {
   );
 
   return (
-    <SettingsLayouts.Root width="lg">
+    <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgClock}
         title="Scheduled Tasks"

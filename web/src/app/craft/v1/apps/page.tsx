@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
-import { SettingsLayouts } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { cn } from "@opal/utils";
-import { Button, Text } from "@opal/components";
+import { Button, InputTypeIn, Text } from "@opal/components";
+import { SettingsLayouts } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
-import { SvgPlug, SvgCheckCircle } from "@opal/icons";
+import { SvgCheckCircle, SvgPlug, SvgSettings } from "@opal/icons";
 import {
   ExternalAppUserResponse,
   getAppTypeLogo,
@@ -20,74 +20,153 @@ import {
 } from "@/app/craft/services/externalAppsService";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { toast } from "@/hooks/useToast";
+import { useUser } from "@/providers/UserProvider";
 
-export default function ExternalAppsUserPage() {
-  // keepPreviousData so revalidations don't blank the cards.
+// The user's own app connections. Org-wide configuration lives in the admin
+// panel (/admin/external-apps); admins get a shortcut button to it here.
+export default function ExternalAppsPage() {
+  const { isAdmin } = useUser();
+
+  return (
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgPlug}
+        title="Apps"
+        description="Connect the tools Onyx Craft can use as context while it works."
+        rightChildren={
+          isAdmin ? (
+            <Button
+              href="/admin/external-apps"
+              prominence="secondary"
+              icon={SvgSettings}
+            >
+              Manage apps
+            </Button>
+          ) : undefined
+        }
+      />
+      <SettingsLayouts.Body>
+        <AppConnections />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
+  );
+}
+
+// Connected apps lead as a list; the rest are browsable as a grid.
+function AppConnections() {
   const { data, mutate } = useSWR<ExternalAppUserResponse[]>(
     SWR_KEYS.buildExternalApps,
     errorHandlingFetcher,
     { keepPreviousData: true }
   );
   const connectSlug = useSearchParams().get("connect");
+  const [query, setQuery] = useState("");
+
+  const { connected, browse } = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = (data ?? []).filter((app) =>
+      q ? app.name.toLowerCase().includes(q) : true
+    );
+    return {
+      connected: filtered.filter((app) => app.authenticated),
+      browse: filtered.filter((app) => !app.authenticated),
+    };
+  }, [data, query]);
+
+  if (data === undefined) {
+    return (
+      <Card variant="tertiary">
+        <Text font="main-content-body">Loading…</Text>
+      </Card>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <Card variant="tertiary">
+        <Text font="main-content-body" color="text-03">
+          No external apps are enabled for your org yet. Ask an admin to enable
+          one.
+        </Text>
+      </Card>
+    );
+  }
 
   return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgPlug}
-        title="My Apps"
-        description="Connect your accounts so Onyx Craft can use them as context."
+    <div className="flex flex-col gap-6">
+      <InputTypeIn
+        placeholder="Search apps..."
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        searchIcon
       />
-      <SettingsLayouts.Body>
-        {data === undefined ? (
-          <Card variant="tertiary">
-            <Text font="main-content-body">Loading…</Text>
-          </Card>
-        ) : data.length === 0 ? (
-          <Card variant="tertiary">
-            <Text font="main-content-body" color="text-03">
-              No external apps are enabled for your org yet. Ask an admin to
-              enable one.
-            </Text>
-          </Card>
-        ) : (
+
+      {connected.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <Text font="secondary-body" color="text-03">
+            Connected
+          </Text>
           <div className="flex flex-col gap-2">
-            {data.map((userApp) => (
-              <ProviderConnectRow
+            {connected.map((userApp) => (
+              <ProviderConnectCard
                 key={userApp.id}
+                variant="row"
                 userApp={userApp}
-                highlight={
-                  connectSlug === userApp.slug && !userApp.authenticated
-                }
+                onChange={() => mutate()}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="flex flex-col gap-2">
+        <Text font="secondary-body" color="text-03">
+          Browse apps
+        </Text>
+        {browse.length === 0 ? (
+          <Text font="secondary-body" color="text-03">
+            {query ? "No apps match your search." : "Everything is connected."}
+          </Text>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {browse.map((userApp) => (
+              <ProviderConnectCard
+                key={userApp.id}
+                variant="tile"
+                userApp={userApp}
+                highlight={connectSlug === userApp.slug}
                 onChange={() => mutate()}
               />
             ))}
           </div>
         )}
-      </SettingsLayouts.Body>
-    </SettingsLayouts.Root>
+      </section>
+    </div>
   );
 }
 
-interface ProviderConnectRowProps {
+interface ProviderConnectCardProps {
   userApp: ExternalAppUserResponse;
+  variant: "row" | "tile";
   highlight?: boolean;
   onChange: () => void;
 }
 
-function ProviderConnectRow({
+function ProviderConnectCard({
   userApp,
+  variant,
   highlight,
   onChange,
-}: ProviderConnectRowProps) {
+}: ProviderConnectCardProps) {
   const [isStarting, setIsStarting] = useState(false);
   const [credModalOpen, setCredModalOpen] = useState(false);
-  const rowRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
-  // Deep-link landing: scroll the targeted row into view and focus its
+  // Deep-link landing: scroll the targeted card into view and focus its
   // Connect button so Enter immediately triggers the flow.
   useEffect(() => {
     if (!highlight) return;
-    const el = rowRef.current;
+    const el = rootRef.current;
     if (!el) return;
     el.scrollIntoView({ block: "center" });
     el.querySelector<HTMLButtonElement>("button")?.focus();
@@ -127,36 +206,29 @@ function ProviderConnectRow({
   }
 
   const Logo = getAppTypeLogo(userApp.app_type);
-  const connectLabel =
-    userApp.app_type === "CUSTOM"
-      ? "Connect"
-      : isStarting
-        ? "Redirecting…"
-        : "Connect";
+
   return (
     <>
       <div
-        ref={rowRef}
+        ref={rootRef}
         className={cn(
           "rounded-12 transition-shadow",
           highlight && "ring-2 ring-action-link-04"
         )}
       >
         <Card>
-          <div className="flex items-center gap-3 w-full">
-            <Logo className="w-8 h-8" />
-            <div className="flex-1 flex flex-col gap-0.5">
-              <div className="flex items-center gap-2">
-                <Text font="main-ui-action">{userApp.name}</Text>
-                {userApp.authenticated && (
+          {variant === "row" ? (
+            <div className="flex items-center gap-3 w-full">
+              <Logo className="w-8 h-8" />
+              <div className="flex-1 flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <Text font="main-ui-action">{userApp.name}</Text>
                   <SvgCheckCircle className="w-4 h-4 text-status-success-05" />
-                )}
+                </div>
+                <Text font="secondary-body" color="text-03">
+                  Connected
+                </Text>
               </div>
-              <Text font="secondary-body" color="text-03">
-                {userApp.authenticated ? "Connected" : userApp.description}
-              </Text>
-            </div>
-            {userApp.authenticated ? (
               <Button
                 prominence="secondary"
                 disabled={isStarting}
@@ -164,12 +236,21 @@ function ProviderConnectRow({
               >
                 {isStarting ? "…" : "Disconnect"}
               </Button>
-            ) : (
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 w-full">
+              <div className="flex items-center gap-3">
+                <Logo className="w-8 h-8" />
+                <Text font="main-ui-action">{userApp.name}</Text>
+              </div>
+              <Text font="secondary-body" color="text-03">
+                {userApp.description}
+              </Text>
               <Button disabled={isStarting} onClick={connect}>
-                {connectLabel}
+                {isStarting ? "Redirecting…" : "Connect"}
               </Button>
-            )}
-          </div>
+            </div>
+          )}
         </Card>
       </div>
 

@@ -1,16 +1,17 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { MessageCard } from "@opal/components";
+import { Button, MessageCard } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { SvgBlocks, SvgSimpleLoader } from "@opal/icons";
+import { SvgBlocks, SvgSettings, SvgSimpleLoader } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import { InputTypeIn } from "@opal/components";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
+import { useUser } from "@/providers/UserProvider";
 import SkillCard, { type SkillCardItem } from "@/sections/cards/SkillCard";
 
 // ---------------------------------------------------------------------------
@@ -19,6 +20,7 @@ import SkillCard, { type SkillCardItem } from "@/sections/cards/SkillCard";
 
 export default function UserSkillsPage() {
   const { data, error, isLoading } = useUserSkills();
+  const { isAdmin } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,6 +64,17 @@ export default function UserSkillsPage() {
         icon={SvgBlocks}
         title="Skills"
         description="Capability bundles your Craft agent can reach for. Skills are granted by admins; this page shows what's currently available to you."
+        rightChildren={
+          isAdmin ? (
+            <Button
+              href="/admin/skills"
+              prominence="secondary"
+              icon={SvgSettings}
+            >
+              Manage skills
+            </Button>
+          ) : undefined
+        }
       >
         <InputTypeIn
           ref={searchInputRef}
