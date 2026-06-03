@@ -189,10 +189,7 @@ class JiraServiceManagementConnector(
             )
 
         # Validate via the inner connector as well (checks project access + credentials)
-        try:
-            self._connector.validate_connector_settings()
-        except Exception:
-            raise
+        self._connector.validate_connector_settings()
 
     # ------------------------------------------------------------------
     # Checkpoint helpers
