@@ -38,7 +38,7 @@ to the backend. Pick it based on how the app is running:
 - **Prebuilt / production compose stack:** production builds disable that in-app `/api` proxy, so
   `/api` is fronted by the `nginx` sibling container — run with `BASE_URL=http://nginx`.
 
-Readiness check (whichever you use): `curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/api/auth/type"` → `200`.
+Readiness check: `curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/auth/type` → `200` (swap in `http://nginx` when targeting the compose stack).
 
 Other bootstrap notes:
 - The devcontainer image bakes in Playwright's OS deps + Node, but **not** the Chromium browser binary. If a run fails with a missing-browser error, install it once: `bunx playwright install chromium`.
