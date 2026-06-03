@@ -218,8 +218,10 @@ func runCelery(workers []celeryWorker, opts *CeleryOptions) {
 		svcCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 		prefix := celeryPrefix(w.name, i, colorize)
-		svcCmd.Stdout = &linePrefixWriter{w: os.Stdout, prefix: prefix, mu: &writeMu}
-		svcCmd.Stderr = &linePrefixWriter{w: os.Stderr, prefix: prefix, mu: &writeMu}
+		stdout := &linePrefixWriter{w: os.Stdout, prefix: prefix, mu: &writeMu}
+		stderr := &linePrefixWriter{w: os.Stderr, prefix: prefix, mu: &writeMu}
+		svcCmd.Stdout = stdout
+		svcCmd.Stderr = stderr
 
 		log.Debugf("[%s] uv %s", w.name, strings.Join(runArgs, " "))
 		if err := svcCmd.Start(); err != nil {
@@ -233,12 +235,14 @@ func runCelery(workers []celeryWorker, opts *CeleryOptions) {
 
 		cmds = append(cmds, svcCmd)
 		wg.Add(1)
-		go func(c *exec.Cmd, name string) {
+		go func(c *exec.Cmd, name string, out, errw *linePrefixWriter) {
 			defer wg.Done()
+			defer out.Flush()
+			defer errw.Flush()
 			if err := c.Wait(); err != nil {
 				log.Debugf("celery %s exited: %v", name, err)
 			}
-		}(svcCmd, w.name)
+		}(svcCmd, w.name, stdout, stderr)
 	}
 
 	// Forward the first interrupt to every worker's process group, then wait
@@ -286,6 +290,18 @@ func (p *linePrefixWriter) Write(b []byte) (int, error) {
 		p.buf = p.buf[:0]
 	}
 	return len(b), nil
+}
+
+// Flush emits any buffered partial line (output not terminated by a newline,
+// e.g. a final crash message) so it isn't lost when the worker exits.
+func (p *linePrefixWriter) Flush() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.buf) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintf(p.w, "%s%s\n", p.prefix, p.buf)
+	p.buf = p.buf[:0]
 }
 
 var celeryPrefixColors = []string{
