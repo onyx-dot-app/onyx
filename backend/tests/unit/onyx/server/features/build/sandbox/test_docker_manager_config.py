@@ -1,9 +1,9 @@
 """Unit tests for ``DockerSandboxManager`` config helpers.
 
-These tests exercise the pure naming / label / container-kwargs logic
-without touching Docker. The kwargs builder is the load-bearing piece for
-the sandbox's security posture (cap-drop, no-new-privileges, non-root
-user, no socket mount, env allowlist), so we lock it down here.
+These tests exercise the pure naming / label / container-kwargs logic without
+touching Docker. The kwargs builder is the load-bearing piece for the sandbox's
+security posture (cap-drop, no-new-privileges, non-root user, no socket mount,
+env allowlist), so we lock it down here.
 """
 
 from __future__ import annotations
@@ -58,14 +58,19 @@ TENANT_ID = "tenant-abc"
 
 
 def test_container_name_matches_k8s_pattern() -> None:
-    """K8s uses ``sandbox-<id8>``; Docker must match so dashboards/queries don't drift."""
+    """
+    K8s uses ``sandbox-<id8>``; Docker must match so dashboards/queries don't
+    drift.
+    """
     name = _sandbox_container_name(SANDBOX_ID)
     assert name == "sandbox-12345678"
     assert re.match(r"^sandbox-[a-f0-9]{8}$", name)
 
 
 def test_volume_name_is_per_sandbox_and_short() -> None:
-    """Volume name includes the sandbox prefix so cleanup queries can target it."""
+    """
+    Volume name includes the sandbox prefix so cleanup queries can target it.
+    """
     vol = _sandbox_volume_name(SANDBOX_ID)
     assert vol.endswith("12345678")
     assert vol.startswith("onyx-craft-sandbox-")
@@ -81,7 +86,10 @@ def test_labels_include_required_fields() -> None:
 
 
 def test_labels_omit_user_id_when_none() -> None:
-    """Volumes are created during ``_ensure_sandbox_volume`` before user resolution."""
+    """
+    Volumes are created during ``_ensure_sandbox_volume`` before user
+    resolution.
+    """
     labels = build_sandbox_labels(SANDBOX_ID, TENANT_ID, None)
     assert LABEL_USER_ID not in labels
     assert labels[LABEL_SANDBOX_ID] == str(SANDBOX_ID)
@@ -93,7 +101,9 @@ _OPENCODE_CONFIG_JSON = '{"providers": {"openai": {"models": {"gpt-4": {}}}}}'
 
 @pytest.fixture
 def kwargs() -> ContainerCreateKwargs:
-    """Legacy (no-proxy) posture. Default for tests/dev without the proxy stack."""
+    """
+    Legacy (no-proxy) posture. Default for tests/dev without the proxy stack.
+    """
     return build_container_create_kwargs(
         sandbox_id=SANDBOX_ID,
         user_id=USER_ID,
@@ -112,8 +122,10 @@ def kwargs() -> ContainerCreateKwargs:
 
 @pytest.fixture
 def proxy_kwargs() -> ContainerCreateKwargs:
-    """Proxy-enabled posture. Mirrors what production self-host compose
-    deployments with ``--include-craft`` produce."""
+    """
+    Proxy-enabled posture. Mirrors what production self-host compose deployments
+    with ``--include-craft`` produce.
+    """
     return build_container_create_kwargs(
         sandbox_id=SANDBOX_ID,
         user_id=USER_ID,
@@ -161,8 +173,8 @@ def test_container_kwargs_env_allowlist_excludes_storage_credentials(
     # opencode-serve transport wiring
     assert env["OPENCODE_SERVER_PASSWORD"] == _OPENCODE_PASSWORD
     assert env["OPENCODE_CONFIG_CONTENT"] == _OPENCODE_CONFIG_JSON
-    # Forbidden env - any storage credential leaking into the sandbox would
-    # let the agent read every snapshot/file in the deployment.
+    # Forbidden env - any storage credential leaking into the sandbox would let
+    # the agent read every snapshot/file in the deployment.
     forbidden = {
         "S3_AWS_ACCESS_KEY_ID",
         "S3_AWS_SECRET_ACCESS_KEY",
@@ -195,9 +207,9 @@ def test_container_kwargs_uses_sandbox_network(kwargs: ContainerCreateKwargs) ->
     assert kwargs["network"] == "onyx_craft_sandbox"
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Path validators
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -242,9 +254,9 @@ def test_validate_strict_path_accepts(good: str) -> None:
     _validate_strict_path(good)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Network / data isolation invariants
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 
 def test_container_kwargs_env_is_a_minimal_allowlist(
@@ -252,9 +264,9 @@ def test_container_kwargs_env_is_a_minimal_allowlist(
 ) -> None:
     """Lock the env schema. Adding any new key needs an explicit test update.
 
-    This is the single point where any future contributor could leak a
-    bucket name, host, or credential into the sandbox by accident — so we
-    pin the full key set.
+    This is the single point where any future contributor could leak a bucket
+    name, host, or credential into the sandbox by accident — so we pin the full
+    key set.
     """
     env = kwargs["environment"]
     assert isinstance(env, dict)
@@ -269,7 +281,10 @@ def test_container_kwargs_env_is_a_minimal_allowlist(
 def test_container_kwargs_mounts_only_workspace_sessions(
     kwargs: ContainerCreateKwargs,
 ) -> None:
-    """The only host-side resource exposed to the agent is its own workspace volume."""
+    """
+    The only host-side resource exposed to the agent is its own workspace
+    volume.
+    """
     volumes = kwargs["volumes"]
     assert len(volumes) == 1
     only_volume = next(iter(volumes.values()))
@@ -335,20 +350,22 @@ def test_container_kwargs_no_warning_for_public_url(
     )
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Proxy-enabled posture (SANDBOX_PROXY_HOST set)
 #
-# The proxy posture layers on top of the legacy posture. These tests pin
-# the additions so a future refactor can't loosen the bounding-set drop /
-# CA-mount / env-allowlist semantics without an explicit test update.
-# ---------------------------------------------------------------------------
+# The proxy posture layers on top of the legacy posture. These tests pin the
+# additions so a future refactor can't loosen the bounding-set drop / CA-mount /
+# env-allowlist semantics without an explicit test update.
+# ------------------------------------------------------------------------------
 
 
 def test_proxy_kwargs_swap_command_to_firewall_init(
     proxy_kwargs: ContainerCreateKwargs,
 ) -> None:
-    """firewall-init.sh wraps the real entrypoint so iptables + CA install +
-    capsh-bounded setuid all happen before the agent ever runs."""
+    """
+    firewall-init.sh wraps the real entrypoint so iptables + CA install +
+    capsh-bounded setuid all happen before the agent ever runs.
+    """
     assert proxy_kwargs["command"] == [
         "/workspace/firewall-init.sh",
         "/workspace/entrypoint.sh",
@@ -358,9 +375,11 @@ def test_proxy_kwargs_swap_command_to_firewall_init(
 def test_proxy_kwargs_runs_init_as_root_with_net_admin_and_setpcap(
     proxy_kwargs: ContainerCreateKwargs,
 ) -> None:
-    """NET_ADMIN runs iptables; SETPCAP authorises ``capsh --drop=all``.
-    capsh drops both from the bounding set + setuid()s to UID 1000 before
-    the agent exec; the running container ends up with zero caps."""
+    """
+    NET_ADMIN runs iptables; SETPCAP authorises ``capsh --drop=all``. capsh
+    drops both from the bounding set + setuid()s to UID 1000 before the agent
+    exec; the running container ends up with zero caps.
+    """
     assert proxy_kwargs["user"] == "0:0"
     assert proxy_kwargs["cap_drop"] == ["ALL"]
     assert proxy_kwargs["cap_add"] == ["NET_ADMIN", "SETPCAP"]
@@ -372,9 +391,11 @@ def test_proxy_kwargs_runs_init_as_root_with_net_admin_and_setpcap(
 def test_proxy_kwargs_mounts_ca_volume_read_only(
     proxy_kwargs: ContainerCreateKwargs,
 ) -> None:
-    """firewall-init.sh's ``CA_SRC`` defaults to ``/sandbox-ca/ca.crt``;
-    the shared compose CA volume must mount there RO so the script can
-    install the proxy CA into the trust store."""
+    """
+    firewall-init.sh's ``CA_SRC`` defaults to ``/sandbox-ca/ca.crt``; the shared
+    compose CA volume must mount there RO so the script can install the proxy CA
+    into the trust store.
+    """
     volumes = proxy_kwargs["volumes"]
     assert "sandbox_proxy_ca" in volumes
     assert volumes["sandbox_proxy_ca"]["bind"] == "/sandbox-ca"
@@ -386,28 +407,30 @@ def test_proxy_kwargs_mounts_ca_volume_read_only(
 def test_proxy_kwargs_env_contains_proxy_and_ca_keys(
     proxy_kwargs: ContainerCreateKwargs,
 ) -> None:
-    """Env must wire HTTPS_PROXY + the SDK CA envs + firewall-init.sh's
-    own contract vars (bootstrap mode + CA paths)."""
+    """
+    Env must wire HTTPS_PROXY + the SDK CA envs + firewall-init.sh's own
+    contract vars (bootstrap mode + CA paths).
+    """
     env = proxy_kwargs["environment"]
     # The legacy 4-key core is preserved.
     assert env["ONYX_PAT"] == "pat-redacted"
     assert env["ONYX_SERVER_URL"] == "https://onyx.example.com"
     assert env["OPENCODE_SERVER_PASSWORD"] == _OPENCODE_PASSWORD
     assert env["OPENCODE_CONFIG_CONTENT"] == _OPENCODE_CONFIG_JSON
-    # firewall-init.sh contract
+    # firewall-init.sh contract.
     assert env["SANDBOX_PROXY_HOST"] == "sandbox-proxy"
     assert env["SANDBOX_PROXY_PORT"] == "8080"
     assert env["SANDBOX_PROXY_BOOTSTRAP_MODE"] == "entrypoint"
     assert env["SANDBOX_PROXY_CA_BUNDLE_SRC"] == "/sandbox-ca/ca.crt"
     assert env["SANDBOX_PROXY_CA_BUNDLE_DST"] == "/etc/ssl/sandbox/ca-bundle.crt"
-    # Proxy wiring (case-doubled — HTTP libs split on which they read)
+    # Proxy wiring (case-doubled — HTTP libs split on which they read).
     assert env["HTTPS_PROXY"] == "http://sandbox-proxy:8080"
     assert env["https_proxy"] == "http://sandbox-proxy:8080"
     assert env["HTTP_PROXY"] == "http://sandbox-proxy:8080"
     assert env["http_proxy"] == "http://sandbox-proxy:8080"
-    # NO_PROXY must include the api server hostname so onyx-cli bypasses
-    # the proxy when calling back; otherwise the agent would gate its
-    # own snapshot upload / status calls.
+    # NO_PROXY must include the api server hostname so onyx-cli bypasses the
+    # proxy when calling back; otherwise the agent would gate its own snapshot
+    # upload / status calls.
     assert "onyx.example.com" in env["NO_PROXY"]
     assert "127.0.0.1" in env["NO_PROXY"]
     # SDK CA envs all point at the bundle the init script writes.
@@ -431,8 +454,9 @@ def test_proxy_kwargs_env_still_excludes_storage_credentials(
 ) -> None:
     """Layering proxy keys must not loosen the credential-leak prohibition.
 
-    Adding the proxy env is the kind of change that could accidentally
-    drag in S3/MinIO env from the surrounding api_server. Lock it down."""
+    Adding the proxy env is the kind of change that could accidentally drag in
+    S3/MinIO env from the surrounding api_server. Lock it down.
+    """
     env = proxy_kwargs["environment"]
     forbidden = {
         "S3_AWS_ACCESS_KEY_ID",
@@ -451,8 +475,10 @@ def test_proxy_kwargs_env_still_excludes_storage_credentials(
 def test_proxy_kwargs_env_is_a_locked_allowlist(
     proxy_kwargs: ContainerCreateKwargs,
 ) -> None:
-    """Pin the full proxy-posture env key set. Adding a new key needs an
-    explicit test update."""
+    """
+    Pin the full proxy-posture env key set. Adding a new key needs an explicit
+    test update.
+    """
     env = proxy_kwargs["environment"]
     assert set(env.keys()) == {
         # Legacy core
@@ -483,8 +509,10 @@ def test_proxy_kwargs_env_is_a_locked_allowlist(
 
 
 def test_no_proxy_kwargs_omit_cap_add(kwargs: ContainerCreateKwargs) -> None:
-    """The no-proxy posture must NOT carry cap_add; NET_ADMIN out of
-    nowhere would be a real escalation."""
+    """
+    The no-proxy posture must NOT carry cap_add; NET_ADMIN out of nowhere would
+    be a real escalation.
+    """
     assert kwargs.get("cap_add", []) == []
 
 
@@ -494,8 +522,10 @@ def test_no_proxy_kwargs_keep_legacy_command(kwargs: ContainerCreateKwargs) -> N
 
 
 def test_proxy_kwargs_requires_port_and_ca_volume() -> None:
-    """All-or-nothing: setting just the proxy host without port + CA volume
-    is a misconfiguration and must raise loudly at build time."""
+    """
+    All-or-nothing: setting just the proxy host without port + CA volume is a
+    misconfiguration and must raise loudly at build time.
+    """
     with pytest.raises(ValueError, match="proxy posture requires all three"):
         build_container_create_kwargs(
             sandbox_id=SANDBOX_ID,
