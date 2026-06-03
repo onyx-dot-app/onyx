@@ -99,10 +99,10 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
         title="Skills"
         description="Capability bundles the Craft agent can reach for. Built-in skills ship with Onyx; custom skills are uploaded zip bundles, gated by group grants."
         rightChildren={
-          // Center vertically in the stretched header row (consistent across
-          // the Craft skills/apps pages).
-          <div className="flex items-center gap-2">
-            {onBack && (
+          onBack ? (
+            // Center vertically in the stretched header row (consistent across
+            // the Craft skills/apps pages).
+            <div className="flex items-center gap-2">
               <Button
                 prominence="secondary"
                 icon={SvgArrowLeft}
@@ -110,11 +110,8 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
               >
                 Back
               </Button>
-            )}
-            <Button icon={SvgPlus} onClick={() => setUploadOpen(true)}>
-              Upload skill
-            </Button>
-          </div>
+            </div>
+          ) : undefined
         }
       />
       <SettingsLayouts.Body>
@@ -148,9 +145,14 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
 
             {/* Customs */}
             <Section gap={0.5} alignItems="stretch">
-              <Text as="p" headingH3 text05>
-                Custom skills
-              </Text>
+              <div className="flex items-center justify-between gap-2">
+                <Text as="p" headingH3 text05>
+                  Custom skills
+                </Text>
+                <Button icon={SvgPlus} onClick={() => setUploadOpen(true)}>
+                  Upload skill
+                </Button>
+              </div>
               <CustomSkillsTable
                 skills={data.customs}
                 onShareSkill={setShareTarget}
