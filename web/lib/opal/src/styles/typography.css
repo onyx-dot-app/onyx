@@ -42,25 +42,25 @@
 
 @utility font-heading-h2 {
   font-family: var(--font-hanken-grotesk);
-  font-size: 24px;
+  font-size: var(--height-font-h1-headline);
   font-weight: 600;
-  line-height: 36px;
+  line-height: var(--height-line-h1-headline);
   letter-spacing: -0.24px;
 }
 
 @utility font-heading-h3 {
   font-family: var(--font-hanken-grotesk);
-  font-size: 18px;
+  font-size: var(--height-font-h3-section);
   font-weight: 600;
-  line-height: 28px;
+  line-height: var(--height-line-h3-section);
   letter-spacing: -0.18px;
 }
 
 @utility font-heading-h3-muted {
   font-family: var(--font-hanken-grotesk);
-  font-size: 18px;
+  font-size: var(--height-font-h3-section);
   font-weight: 500;
-  line-height: 28px;
+  line-height: var(--height-line-h3-section);
   letter-spacing: -0.18px;
 }
 
@@ -68,9 +68,9 @@
 
 @utility font-main-content-body {
   font-family: var(--font-hanken-grotesk);
-  font-size: 16px;
+  font-size: var(--height-font-label);
   font-weight: 450;
-  line-height: 24px;
+  line-height: var(--height-line-label);
   letter-spacing: 0px;
 }
 
@@ -80,23 +80,23 @@
 
 @utility font-main-content-emphasis {
   font-family: var(--font-hanken-grotesk);
-  font-size: 16px;
+  font-size: var(--height-font-label);
   font-weight: 700;
-  line-height: 24px;
+  line-height: var(--height-line-label);
   letter-spacing: 0px;
 }
 
 @utility font-main-content-muted {
   font-family: var(--font-hanken-grotesk);
-  font-size: 16px;
+  font-size: var(--height-font-label);
   font-weight: 400;
-  line-height: 24px;
+  line-height: var(--height-line-label);
   letter-spacing: 0px;
 }
 
 @utility font-main-content-mono {
   font-family: var(--font-dm-mono);
-  font-size: 16px;
+  font-size: var(--height-font-label);
   font-weight: 400;
   line-height: 23px;
   letter-spacing: 0px;
@@ -106,33 +106,33 @@
 
 @utility font-main-ui-body {
   font-family: var(--font-hanken-grotesk);
-  font-size: 14px;
+  font-size: var(--height-font-main);
   font-weight: 500;
-  line-height: 20px;
+  line-height: var(--height-line-main);
   letter-spacing: 0px;
 }
 
 @utility font-main-ui-muted {
   font-family: var(--font-hanken-grotesk);
-  font-size: 14px;
+  font-size: var(--height-font-main);
   font-weight: 400;
-  line-height: 20px;
+  line-height: var(--height-line-main);
   letter-spacing: 0px;
 }
 
 @utility font-main-ui-action {
   font-family: var(--font-hanken-grotesk);
-  font-size: 14px;
+  font-size: var(--height-font-main);
   font-weight: 600;
-  line-height: 20px;
+  line-height: var(--height-line-main);
   letter-spacing: 0px;
 }
 
 @utility font-main-ui-mono {
   font-family: var(--font-dm-mono);
-  font-size: 14px;
+  font-size: var(--height-font-main);
   font-weight: 400;
-  line-height: 20px;
+  line-height: var(--height-line-main);
   letter-spacing: 0px;
 }
 
@@ -140,33 +140,33 @@
 
 @utility font-secondary-body {
   font-family: var(--font-hanken-grotesk);
-  font-size: 12px;
+  font-size: var(--height-font-secondary);
   font-weight: 400;
-  line-height: 16px;
+  line-height: var(--height-line-secondary);
   letter-spacing: 0px;
 }
 
 @utility font-secondary-action {
   font-family: var(--font-hanken-grotesk);
-  font-size: 12px;
+  font-size: var(--height-font-secondary);
   font-weight: 600;
-  line-height: 16px;
+  line-height: var(--height-line-secondary);
   letter-spacing: 0px;
 }
 
 @utility font-secondary-mono {
   font-family: var(--font-dm-mono);
-  font-size: 12px;
+  font-size: var(--height-font-secondary);
   font-weight: 400;
-  line-height: 16px;
+  line-height: var(--height-line-secondary);
   letter-spacing: 0px;
 }
 
 @utility font-secondary-mono-label {
   font-family: var(--font-dm-mono);
-  font-size: 12px;
+  font-size: var(--height-font-secondary);
   font-weight: 500;
-  line-height: 16px;
+  line-height: var(--height-line-secondary);
   letter-spacing: 0px;
 }
 
@@ -174,24 +174,24 @@
 
 @utility font-figure-small-label {
   font-family: var(--font-hanken-grotesk);
-  font-size: 10px;
+  font-size: var(--height-font-small);
   font-weight: 700;
-  line-height: 12px;
+  line-height: var(--height-line-small);
   letter-spacing: 0px;
 }
 
 @utility font-figure-small-value {
   font-family: var(--font-hanken-grotesk);
-  font-size: 10px;
+  font-size: var(--height-font-small);
   font-weight: 400;
-  line-height: 12px;
+  line-height: var(--height-line-small);
   letter-spacing: 0px;
 }
 
 @utility font-figure-keystroke {
   font-family: var(--font-hanken-grotesk);
-  font-size: 12px;
+  font-size: var(--height-font-secondary);
   font-weight: 400;
-  line-height: 16px;
+  line-height: var(--height-line-secondary);
   letter-spacing: -0.6px;
 }

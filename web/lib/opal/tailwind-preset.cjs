@@ -224,12 +224,12 @@ module.exports = {
         text: "var(--text-04)",
       },
       borderRadius: {
-        "02": "var(--border-radius-02)",
-        "04": "var(--border-radius-04)",
-        "08": "var(--border-radius-08)",
-        12: "var(--border-radius-12)",
-        16: "var(--border-radius-16)",
-        full: "var(--border-radius-full)",
+        "02": "var(--radius-02)",
+        "04": "var(--radius-04)",
+        "08": "var(--radius-08)",
+        12: "var(--radius-12)",
+        16: "var(--radius-16)",
+        full: "var(--radius-round)",
       },
       fontSize: {
         "2xs": "0.625rem",
