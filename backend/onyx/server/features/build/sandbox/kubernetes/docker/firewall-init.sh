@@ -3,8 +3,8 @@
 #
 # SANDBOX_PROXY_BOOTSTRAP_MODE:
 #   initcontainer — K8s initContainer; runs steps then exits 0.
-#   entrypoint    — docker-compose entrypoint; runs steps then execs the
-#                   real entrypoint as UID 1000 via gosu.
+#   entrypoint    — docker-compose entrypoint; runs steps then execs the real
+#                   entrypoint as UID 1000 via setpriv.
 #
 # Required env: SANDBOX_PROXY_HOST, SANDBOX_PROXY_PORT, SANDBOX_PROXY_BOOTSTRAP_MODE.
 # Optional env: SANDBOX_PROXY_CA_BUNDLE_SRC (default /sandbox-ca/ca.crt),
@@ -22,8 +22,8 @@ die() { log "FATAL: $*"; exit 1; }
 CA_SRC="${SANDBOX_PROXY_CA_BUNDLE_SRC:-/sandbox-ca/ca.crt}"
 CA_DST="${SANDBOX_PROXY_CA_BUNDLE_DST:-/etc/ssl/sandbox/ca-bundle.crt}"
 
-# Resolved once in step_apply_iptables before the lockdown closes DNS,
-# then reused in step_self_verify.
+# Resolved once in step_apply_iptables before the lockdown closes DNS, then
+# reused in step_self_verify.
 PROXY_IP=""
 
 case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
@@ -90,14 +90,14 @@ step_apply_iptables() {
 }
 
 
-# `sandbox-proxy` resolution after the lockdown comes from outside this
-# script: pod hostAliases under K8s (kubelet won't propagate /etc/hosts
-# writes across containers), Docker's embedded DNS under compose.
+# `sandbox-proxy` resolution after the lockdown comes from outside this script:
+# pod hostAliases under K8s (kubelet won't propagate /etc/hosts writes across
+# containers), Docker's embedded DNS under compose.
 
 
 step_self_verify() {
-    # Inspecting the chain (not probing the network): a network probe
-    # can't distinguish "lockdown working" from "no internet" — fail-open.
+    # Inspecting the chain (not probing the network): a network probe can't
+    # distinguish "lockdown working" from "no internet" — fail-open.
     log "self-verify: inspecting iptables OUTPUT chain"
     local rules
     rules="$(iptables -S OUTPUT)"
@@ -128,27 +128,12 @@ case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
         exit 0
         ;;
     entrypoint)
-        # Compose-only privilege transition. The case dispatch above is the
-        # gate: the K8s initcontainer branch above is the only other reachable
-        # path and exits before this point, so the K8s sandbox container never
-        # runs as root in its main lifecycle and never hits setpriv.
-        #
-        # The docker manager grants cap_add=[NET_ADMIN, SETPCAP, SETUID,
-        # SETGID] for this init step. NET_ADMIN runs iptables; SETPCAP
-        # authorises PR_CAPBSET_DROP for `--bounding-set=-all`; SETUID +
-        # SETGID gate setpriv's --reuid / --regid / --init-groups under
-        # cap_drop=ALL (even root needs them when the wider cap set is
-        # dropped). setpriv applies the bounding-set drop, the uid/gid
-        # switch, and the init-groups call in order, then execve's the
-        # target program. The subsequent execve has no file capabilities,
-        # so the agent process ends up with zero caps in any set and an
-        # empty bounding set -- matching the K8s posture (cap exists only
-        # during init, never on the running container).
-        #
-        # setpriv (not capsh): capsh's `-- args` form actually invokes
-        # /bin/bash and treats the rest as script + script-args, which
-        # silently breaks any non-script target. setpriv's `--` just
-        # execve's the target directly, no shell-wrapper foot-gun.
+        # Compose-only: K8s initcontainer mode exits earlier, never reaches
+        # here. Docker manager grants cap_add=[NET_ADMIN, SETPCAP, SETUID,
+        # SETGID]: NET_ADMIN for iptables, SETPCAP for the bounding-set drop,
+        # SETUID/SETGID for setpriv's --reuid/--regid under cap_drop=ALL.
+        # setpriv (not capsh): capsh's `-- args` form invokes /bin/bash and
+        # mangles non-script targets; setpriv execve's directly.
         [[ "$#" -ge 1 ]] || die "entrypoint mode requires the real entrypoint as args"
         log "entrypoint mode: clearing bounding set, dropping to UID 1000, exec'ing: $*"
         exec setpriv --reuid=1000 --regid=1000 --init-groups \
