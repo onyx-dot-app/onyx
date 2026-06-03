@@ -97,7 +97,6 @@ def generate_agent_instructions(
     nextjs_port: int | None = None,
     disabled_tools: list[str] | None = None,
     user_name: str | None = None,
-    user_role: str | None = None,
 ) -> str:
     """Generate AGENTS.md content by populating the template with dynamic values.
 
@@ -109,7 +108,6 @@ def generate_agent_instructions(
         nextjs_port: Port for Next.js development server
         disabled_tools: List of disabled tools
         user_name: User's name for personalization
-        user_role: User's role/title for personalization
 
     Returns:
         Generated AGENTS.md content with placeholders replaced
@@ -122,10 +120,6 @@ def generate_agent_instructions(
 
     if not user_name:
         user_context = ""
-    elif user_role:
-        user_context = (
-            f"You are assisting **{user_name}**, {user_role}, with their work."
-        )
     else:
         user_context = f"You are assisting **{user_name}** with their work."
 
