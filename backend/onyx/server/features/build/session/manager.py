@@ -48,8 +48,6 @@ from onyx.server.features.build.api.packets import ApprovalRequestedPacket
 from onyx.server.features.build.api.packets import BuildPacket
 from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
-from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
-from onyx.server.features.build.configs import BUILD_MODE_RECOMMENDED_MODEL_BY_TYPE
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
@@ -95,9 +93,10 @@ from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.interrupt_signal import clear_interrupt
 from onyx.server.features.build.session.interrupt_signal import is_interrupt_requested
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
+from onyx.server.features.build.session.llm_config import get_all_build_mode_llm_configs
+from onyx.server.features.build.session.llm_config import select_default_llm_config
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 from onyx.server.features.build.session.naming import generate_session_name
-from onyx.server.manage.llm.models import LLMProviderView
 from onyx.skills.push import build_user_skills_payload
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
@@ -107,46 +106,16 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-def _model_for_provider(provider: LLMProviderView) -> str | None:
-    """The Craft model to register for ``provider``: the type's recommended
-    model when defined, else the first visible model. None if the provider has
-    no usable (visible) model."""
-    visible_models = [m for m in provider.model_configurations if m.is_visible]
-    if not visible_models:
-        return None
-    return BUILD_MODE_RECOMMENDED_MODEL_BY_TYPE.get(
-        provider.provider, visible_models[0].name
-    )
-
-
-def get_all_build_mode_llm_configs(
-    providers: list[LLMProviderView],
-    default: LLMProviderConfig,
-) -> list[LLMProviderConfig]:
-    """``default`` first, then one config per other supported provider type
-    from ``providers`` (an already-fetched, access-filtered list). Used at
-    sandbox provision time so every configured provider is pre-registered in
-    opencode.json and per-prompt model overrides can cross providers without a
-    pod restart.
-    """
-    configs: list[LLMProviderConfig] = [default]
-    seen_providers: set[str] = {default.provider}
-    for provider in providers:
-        if provider.provider in seen_providers:
-            continue
-        model_name = _model_for_provider(provider)
-        if model_name is None:
-            continue
-        seen_providers.add(provider.provider)
-        configs.append(
-            LLMProviderConfig(
-                provider=provider.provider,
-                model_name=model_name,
-                api_key=provider.api_key,
-                api_base=provider.api_base,
-            )
-        )
-    return configs
+# Re-exports kept for backward compatibility — these used to live in this
+# module before the split into focused submodules.
+__all__ = [
+    "BuildStreamingState",
+    "RateLimitError",
+    "SandboxProvisioningError",
+    "SessionManager",
+    "UploadLimitExceededError",
+    "get_all_build_mode_llm_configs",
+]
 
 
 class BuildStreamingState:
@@ -365,59 +334,10 @@ class SessionManager:
             OnyxError: If no accessible supported provider is configured.
         """
         providers = fetch_all_supported_build_llm_providers(self._db_session, user)
-        default = self._select_default_llm_config(
+        default = select_default_llm_config(
             providers, requested_provider_type, requested_model_name
         )
         return default, get_all_build_mode_llm_configs(providers, default)
-
-    @staticmethod
-    def _select_default_llm_config(
-        providers: list[LLMProviderView],
-        requested_provider_type: str | None,
-        requested_model_name: str | None,
-    ) -> LLMProviderConfig:
-        """Resolution priority over an already-fetched accessible list:
-        1. The user's requested provider/model (cookie), if the type is present.
-           The model is used verbatim — the provider's API rejects invalid
-           models, so this also allows models not marked "visible".
-        2. Highest-priority supported provider with its recommended model.
-
-        Raises:
-            OnyxError: If no accessible supported provider is configured.
-        """
-        if requested_provider_type and requested_model_name:
-            for provider in providers:
-                if provider.provider == requested_provider_type:
-                    return LLMProviderConfig(
-                        provider=provider.provider,
-                        model_name=requested_model_name,
-                        api_key=provider.api_key,
-                        api_base=provider.api_base,
-                    )
-            logger.warning(
-                "Requested provider type %s not accessible, falling back",
-                requested_provider_type,
-            )
-
-        for provider_type in BUILD_MODE_ALLOWED_PROVIDER_TYPES:
-            for provider in providers:
-                if provider.provider != provider_type:
-                    continue
-                model_name = _model_for_provider(provider)
-                if model_name is None:
-                    continue
-                return LLMProviderConfig(
-                    provider=provider.provider,
-                    model_name=model_name,
-                    api_key=provider.api_key,
-                    api_base=provider.api_base,
-                )
-
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "No accessible LLM provider of a supported type "
-            f"({', '.join(BUILD_MODE_ALLOWED_PROVIDER_TYPES)}) is configured.",
-        )
 
     # =========================================================================
     # Session CRUD Operations
