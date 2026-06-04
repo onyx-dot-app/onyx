@@ -1,4 +1,7 @@
-"""Per-user LLM usage ledger — the source of truth for cost/token attribution."""
+"""Per-user LLM usage rollup — the source of truth for cost/token attribution.
+
+A window-rollup like TenantUsage: rows accumulate in place per (user, window,
+model, flow, provider), not an append-only per-call ledger."""
 
 from datetime import datetime
 from datetime import timedelta

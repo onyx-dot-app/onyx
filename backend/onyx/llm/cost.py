@@ -3,6 +3,8 @@
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DEFAULT_IMAGE_COST_CENTS
+from onyx.configs.app_configs import DEFAULT_LLM_INPUT_COST_PER_MTOK
+from onyx.configs.app_configs import DEFAULT_LLM_OUTPUT_COST_PER_MTOK
 from onyx.llm import cost_overrides
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
@@ -127,8 +129,8 @@ def compute_cost_cents(
     """Return (input_cost_cents, output_cost_cents) for an LLM call.
 
     Resolution order: admin override (negotiated rates win) → image pricing for
-    image flows → litellm token pricing. Unknown/unpriced models yield (0, 0)
-    plus a warning; this function never raises (it runs in the usage hot path).
+    image flows → litellm token pricing → the configurable default fallback
+    rates (0 unless set). Never raises (it runs in the usage hot path).
     """
     # Admin override beats everything, including image pricing.
     if db_session is not None:
@@ -164,9 +166,17 @@ def compute_cost_cents(
         )
         return prompt_cost_usd * 100, completion_cost_usd * 100
     except Exception:
-        logger.warning(
-            "No price for model %s (provider %s); recording 0 cost.",
-            model,
-            provider,
+        # litellm has no price for this model — fall back to the configurable
+        # default rates so unpriced/BYO models still accrue cost (0 by default).
+        billed_input = input_tokens + cache_read_tokens
+        input_cents = billed_input / 1_000_000 * DEFAULT_LLM_INPUT_COST_PER_MTOK * 100
+        output_cents = (
+            output_tokens / 1_000_000 * DEFAULT_LLM_OUTPUT_COST_PER_MTOK * 100
         )
-        return 0.0, 0.0
+        if not (DEFAULT_LLM_INPUT_COST_PER_MTOK or DEFAULT_LLM_OUTPUT_COST_PER_MTOK):
+            logger.warning(
+                "No price for model %s (provider %s); recording 0 cost.",
+                model,
+                provider,
+            )
+        return input_cents, output_cents

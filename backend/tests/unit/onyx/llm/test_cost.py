@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
 from onyx.db.models import ModelCostOverride
+from onyx.llm import cost as cost_mod
 from onyx.llm import cost_overrides
 from onyx.llm.cost import compute_cost_cents
 from onyx.tracing.flows import LLMFlow
@@ -70,6 +71,22 @@ class TestComputeCostCents:
             output_tokens=1000,
         )
         assert result == (0.0, 0.0)
+
+    def test_unknown_model_uses_configurable_fallback_rates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # With a fallback configured, an unpriced model accrues cost instead of $0.
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
+        monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
+        in_cents, out_cents = compute_cost_cents(
+            model="totally-made-up-model-xyz",
+            provider="nobody",
+            input_tokens=1_000_000,
+            output_tokens=1_000_000,
+            cache_read_tokens=0,
+        )
+        assert in_cents == pytest.approx(200.0)  # 1M * $2/Mtok = $2.00 = 200c
+        assert out_cents == pytest.approx(600.0)  # 1M * $6/Mtok = $6.00 = 600c
 
     def test_cache_read_tokens_priced_as_input(self) -> None:
         # gpt-4o: $2.50/Mtok input, $1.25/Mtok cache-read. 1000 non-cached +

@@ -1018,6 +1018,16 @@ RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
 # Flat per-image cost (cents) when litellm has no price for an image model.
 DEFAULT_IMAGE_COST_CENTS = float(os.environ.get("DEFAULT_IMAGE_COST_CENTS") or 4.0)
 
+# Fallback per-million-token rates (USD) for models litellm can't price, so
+# unknown/BYO models still accrue cost instead of being silently free. Default 0
+# preserves prior behavior; operators set these to give unpriced models a rate.
+DEFAULT_LLM_INPUT_COST_PER_MTOK = float(
+    os.environ.get("DEFAULT_LLM_INPUT_COST_PER_MTOK") or 0.0
+)
+DEFAULT_LLM_OUTPUT_COST_PER_MTOK = float(
+    os.environ.get("DEFAULT_LLM_OUTPUT_COST_PER_MTOK") or 0.0
+)
+
 
 #####
 # Tool Configs

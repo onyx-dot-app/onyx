@@ -1,5 +1,5 @@
 """Universal per-user usage recorder — buffers priced generation spans and
-drains them to the per-user ledger off the LLM hot path."""
+drains them to the per-user usage rollup off the LLM hot path."""
 
 from __future__ import annotations
 
