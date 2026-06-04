@@ -428,11 +428,8 @@ def test_proxy_kwargs_env_contains_proxy_and_ca_keys(
     assert env["https_proxy"] == "http://sandbox-proxy:8080"
     assert env["HTTP_PROXY"] == "http://sandbox-proxy:8080"
     assert env["http_proxy"] == "http://sandbox-proxy:8080"
-    # NO_PROXY must include the api server hostname so onyx-cli bypasses the
-    # proxy when calling back; otherwise the agent would gate its own snapshot
-    # upload / status calls.
-    assert "onyx.example.com" in env["NO_PROXY"]
-    assert "127.0.0.1" in env["NO_PROXY"]
+    # NO_PROXY is loopback only; api-server traffic goes through the proxy too.
+    assert env["NO_PROXY"] == "127.0.0.1,localhost"
     # Case-doubled like the other proxy vars; HTTP libs split on which they
     # read.
     assert env["no_proxy"] == env["NO_PROXY"]

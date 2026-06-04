@@ -120,19 +120,12 @@ SANDBOX_PROXY_CA_CONFIGMAP = os.environ.get(
     "SANDBOX_PROXY_CA_CONFIGMAP", "sandbox-proxy-ca-bundle"
 )
 
-# Filesystem path the docker FileCAStore reads/writes the proxy CA at. Both the
-# proxy (RW) and every sandbox container (RO) mount the same named compose
-# volume here. Not env-tunable: the source of truth for this path is the compose
-# volume mount declaration, and an operator changing one must change the other
-# in lockstep. Ignored when SANDBOX_BACKEND=kubernetes.
+# Proxy-side bind path for the CA volume. Hardcoded because the compose
+# `volumes:` mount target is the source of truth; an env override would silently
+# desync.
 SANDBOX_PROXY_CA_VOLUME_PATH = "/var/lib/sandbox-proxy/ca"
 
-# Docker named-volume name for the proxy CA. The docker_sandbox_manager mounts
-# it read-only into each sandbox container so firewall-init.sh can install
-# ca.crt into the system trust store. The proxy's compose service mounts the
-# same volume read-write. Not env-tunable: the source of truth for this name is
-# the compose `volumes:` declaration, and an operator changing one must change
-# the other in lockstep. Ignored when SANDBOX_BACKEND=kubernetes.
+# Docker named-volume for the proxy CA. Hardcoded for the same reason as above.
 SANDBOX_PROXY_CA_VOLUME_NAME = "sandbox_proxy_ca"
 
 # ==============================================================================
