@@ -173,13 +173,12 @@ pre-decided inserts go through `insert_action_approval` in
 
 ## Lifecycle & Security
 
-- **Prompt edits clear grants.** A `PATCH` whose `prompt` value differs
-  from the stored one resets `pre_approved_app_ids` to `[]` — the grant
-  was made against a specific intent, and a rewritten prompt must not
-  inherit it. Resubmitting an identical prompt does not reset, and grants
-  supplied in the same patch win over the reset (so the planned editor can
-  warn and re-enable in one submit). Schedule changes do not reset grants;
-  cadence doesn't change intent.
+- **Grants are explicit and visible.** They are managed as checkboxes in
+  the task editor and follow normal `PATCH` semantics — supplying
+  `pre_approved_app_ids` replaces the set, omitting it leaves grants
+  unchanged. Editing the prompt does not alter grants: the granted apps
+  are shown alongside the prompt, so the author keeps or clears them as a
+  deliberate, in-view choice rather than relying on an automatic reset.
 - **The grant boundary is the app.** There is no cross-app
   "auto-approve everything" toggle — that would convert any prompt
   injection into write capability across every connected app.
@@ -191,8 +190,8 @@ pre-decided inserts go through `insert_action_approval` in
 - **Prompt injection against pre-approved writes is inherent.** A
   poisoned context can drive a granted app's write with no human
   checkpoint. Mitigations: per-app (not global) grants, `DENY`
-  supremacy, prompt-edit reset, and the unattended-forward
-  notifications.
+  supremacy, grants shown in-editor next to the prompt, and the
+  unattended-forward notifications.
 - **An app grant covers actions the user never enumerated**, including
   catalog actions added in later releases. Mitigated today by admin
   per-action `DENY`; the planned grant-time covered-actions expander will
@@ -252,9 +251,9 @@ The grant-source seam means future modes drop in as new
     `(run_id, grants)`; non-RUNNING (SUCCEEDED / FAILED /
     AWAITING_APPROVAL) → `None`; interactive / no-run session → `None`.
   - `insert_action_approval`: pre-decided `APPROVED` vs default-pending.
-  - Prompt-edit reset: a differing prompt resets grants, an identical
-    prompt keeps them, grants supplied in the same patch win over the
-    reset.
+  - Grant patch semantics: a prompt edit preserves grants, supplied
+    `pre_approved_app_ids` replaces the set, and re-submitting an existing
+    grant is idempotent (no unique-key collision).
   - Create persistence + `_validated_app_ids` dedupe and unknown-id
     rejection.
 - **Unit** (gate, stubbed DB):

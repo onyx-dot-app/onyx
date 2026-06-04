@@ -197,8 +197,6 @@ export default function ScheduleTaskForm({
             prompt: trimmedPrompt,
             editor_mode: mode,
             editor_payload: storagePayload,
-            // Always sent: the backend clears grants on a prompt change unless
-            // this same patch re-supplies them.
             pre_approved_app_ids: preApprovedAppIds,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
