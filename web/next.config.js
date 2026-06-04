@@ -8,6 +8,7 @@ const cspHeader = `
     object-src 'none';
     base-uri 'self';
     form-action 'self';
+    frame-ancestors 'self' chrome-extension:;
     ${
       process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true" &&
       process.env.NODE_ENV !== "development"
@@ -62,6 +63,14 @@ const nextConfig = {
           {
             key: "X-Content-Type-Options",
             value: "nosniff",
+          },
+          {
+            // Legacy fallback for browsers without CSP frame-ancestors
+            // support. Modern browsers ignore this header when
+            // frame-ancestors is present, so the chrome-extension:
+            // allowance above still applies (e.g. for the /nrf pages).
+            key: "X-Frame-Options",
+            value: "SAMEORIGIN",
           },
           {
             key: "Permissions-Policy",
