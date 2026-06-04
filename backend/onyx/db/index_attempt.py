@@ -45,7 +45,13 @@ def get_last_attempt_for_cc_pair(
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
-    return query.order_by(IndexAttempt.time_updated.desc()).first()
+    # Order by time_created, not time_updated: background maintenance tasks
+    # (e.g. checkpoint / index-attempt cleanup) mutate time_updated on old
+    # attempts. Ordering by time_updated would let such a freshly-touched old
+    # attempt masquerade as the most recent one, which breaks the "is this
+    # connector due for indexing?" check in should_index() and can silently
+    # stop a connector from ever re-indexing.
+    return query.order_by(IndexAttempt.time_created.desc()).first()
 
 
 def get_recent_completed_attempts_for_cc_pair(
