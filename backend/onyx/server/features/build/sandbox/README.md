@@ -231,7 +231,7 @@ SANDBOX_SERVICE_ACCOUNT_NAME=sandbox-file-sync  # Has S3 access via IRSA for sna
 
 ```bash
 # Container image (defaults to a pinned tag in docker-compose.yml)
-SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:v0.1.50
+SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:v0.1.51
 
 # Public URL the sandbox agent uses to reach Onyx (HTTPS, externally resolvable —
 # compose hostnames like http://api_server:8080 will not resolve from inside the
