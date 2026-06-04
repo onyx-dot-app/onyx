@@ -8,7 +8,6 @@ import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { getModelIcon } from "@/lib/languageModels";
 import {
   BuildLlmSelection,
-  BUILD_MODE_PROVIDERS,
   getDefaultLlmSelection,
 } from "@/app/craft/onboarding/constants";
 
@@ -35,17 +34,11 @@ export default function ModelPickerButton({
 
   const displayName = useMemo(() => {
     if (!effective) return "Select model";
-    if (llmProviders) {
-      for (const provider of llmProviders) {
-        const config = provider.model_configurations.find(
-          (m) => m.name === effective.modelName
-        );
-        if (config) return config.display_name || config.name;
-      }
-    }
-    for (const provider of BUILD_MODE_PROVIDERS) {
-      const model = provider.models.find((m) => m.name === effective.modelName);
-      if (model) return model.label;
+    for (const provider of llmProviders ?? []) {
+      const config = provider.model_configurations.find(
+        (m) => m.name === effective.modelName
+      );
+      if (config) return config.display_name || config.name;
     }
     return effective.modelName;
   }, [effective, llmProviders]);
