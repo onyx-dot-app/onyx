@@ -99,5 +99,6 @@ function toFormInitial(detail: ScheduledTaskDetail): ScheduleTaskFormInitial {
     prompt: detail.prompt,
     mode,
     payload,
+    preApprovedAppIds: detail.pre_approved_app_ids,
   };
 }
