@@ -18,7 +18,9 @@ interface LibraryFile {
 interface EntryMenuHandlers {
   onAttachFiles: () => void;
   onSelectEntry: (entry: PickerEntry) => void;
-  /** Top-level files in the user's library, shown in the Library flyout. */
+  // Navigate to the Skills / Apps pages (used by the empty-state prompts).
+  onBrowseSkills: () => void;
+  onBrowseApps: () => void;
   libraryFiles?: LibraryFile[];
   /** Opens the library management modal. When set, a Library flyout is added. */
   onManageLibrary?: () => void;
@@ -30,10 +32,13 @@ export function buildEntryMenuItems(
   {
     onAttachFiles,
     onSelectEntry,
+    onBrowseSkills,
+    onBrowseApps,
     libraryFiles = [],
     onManageLibrary,
   }: EntryMenuHandlers
 ): Array<PlusMenuItem | null> {
+  // Skills and Apps always show; when empty they prompt the user to browse/connect.
   const items: Array<PlusMenuItem | null> = [
     {
       key: "files",
@@ -41,49 +46,56 @@ export function buildEntryMenuItems(
       label: "Add files or photos",
       onSelect: onAttachFiles,
     },
-  ];
-
-  if (
-    sections.skills.length > 0 ||
-    sections.apps.length > 0 ||
-    onManageLibrary
-  ) {
-    items.push(null);
-  }
-
-  if (sections.skills.length > 0) {
-    items.push({
+    null,
+    {
       key: "skills",
       icon: SvgSparkle,
       label: "Skills",
-      flyoutItems: sections.skills.map((skill) => ({
-        key: skill.slug,
-        icon: SvgSparkle,
-        label: skill.name,
-        description: skill.description,
-        onSelect: () => onSelectEntry(skill),
-      })),
-    });
-  }
-
-  if (sections.apps.length > 0) {
-    items.push({
+      flyoutItems:
+        sections.skills.length > 0
+          ? sections.skills.map((skill) => ({
+              key: skill.slug,
+              icon: SvgSparkle,
+              label: skill.name,
+              description: skill.description,
+              onSelect: () => onSelectEntry(skill),
+            }))
+          : [
+              {
+                key: "skills-empty",
+                icon: SvgSparkle,
+                label: "Browse skills",
+                onSelect: onBrowseSkills,
+              },
+            ],
+    },
+    {
       key: "apps",
       icon: SvgPlug,
       label: "Apps",
-      flyoutItems: sections.apps.map((app) => ({
-        key: app.slug,
-        icon: getAppTypeLogo(app.appType),
-        label: app.name,
-        rightContent: app.authenticated ? undefined : (
-          <Text font="secondary-body" color="text-03">
-            Connect
-          </Text>
-        ),
-        onSelect: () => onSelectEntry(app),
-      })),
-    });
-  }
+      flyoutItems:
+        sections.apps.length > 0
+          ? sections.apps.map((app) => ({
+              key: app.slug,
+              icon: getAppTypeLogo(app.appType),
+              label: app.name,
+              rightContent: app.authenticated ? undefined : (
+                <Text font="secondary-body" color="text-03">
+                  Connect
+                </Text>
+              ),
+              onSelect: () => onSelectEntry(app),
+            }))
+          : [
+              {
+                key: "apps-empty",
+                icon: SvgPlug,
+                label: "Connect an app",
+                onSelect: onBrowseApps,
+              },
+            ],
+    },
+  ];
 
   if (onManageLibrary) {
     items.push({
@@ -91,8 +103,7 @@ export function buildEntryMenuItems(
       icon: SvgFolder,
       label: "Library",
       flyoutItems: [
-        // TODO(craft-library): clicking a file should attach it to the message;
-        // until per-file attach is wired, every file row opens the manage modal.
+        // TODO(craft-library): file rows open the manage modal until per-file attach is wired.
         ...libraryFiles.map((file) => ({
           key: file.id,
           icon: SvgFileText,

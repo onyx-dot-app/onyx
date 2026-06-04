@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import BaseInputBar, {
   type BaseInputBarHandle,
@@ -197,18 +198,20 @@ const CraftInputBar = memo(
         />
       );
 
+      const router = useRouter();
       const plusMenuItems = useMemo(
         () =>
           buildEntryMenuItems(pickerSections, {
             onAttachFiles: () => fileInputRef.current?.click(),
             onSelectEntry: addEntry,
+            onBrowseSkills: () => router.push("/craft/v1/skills"),
+            onBrowseApps: () => router.push("/craft/v1/apps"),
             libraryFiles,
-            // Let the + menu finish its close animation before the modal
-            // mounts, otherwise the closing popover paints over it.
+            // Defer the modal until the + popover finishes closing, else it paints over it.
             onManageLibrary: () =>
               window.setTimeout(() => setLibraryModalOpen(true), 200),
           }),
-        [pickerSections, addEntry, libraryFiles]
+        [pickerSections, addEntry, libraryFiles, router]
       );
 
       const bottomLeftSlot = (
