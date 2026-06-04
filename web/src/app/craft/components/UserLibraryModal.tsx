@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -118,6 +118,15 @@ export default function UserLibraryModal({
     return buildTreeFromFlatList(tree);
   }, [tree]);
 
+  // Clear any in-progress drag state when the modal closes, so a drag that
+  // was interrupted by a close doesn't leave the overlay stuck on reopen.
+  useEffect(() => {
+    if (!open) {
+      dragDepth.current = 0;
+      setIsDragging(false);
+    }
+  }, [open]);
+
   const toggleFolder = useCallback((path: string) => {
     setExpandedPaths((prev) => {
       const newSet = new Set(prev);
@@ -203,10 +212,11 @@ export default function UserLibraryModal({
       e.preventDefault();
       dragDepth.current = 0;
       setIsDragging(false);
+      if (isUploading) return;
       const files = Array.from(e.dataTransfer.files);
       if (files.length > 0) void uploadFiles(files, "/");
     },
-    [uploadFiles]
+    [uploadFiles, isUploading]
   );
 
   const handleToggleSync = useCallback(
