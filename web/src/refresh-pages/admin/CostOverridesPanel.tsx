@@ -71,7 +71,9 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
         names.add(mc.name);
       }
     }
-    return [...names].sort().map((name) => ({ value: name, label: name }));
+    return Array.from(names)
+      .sort()
+      .map((name) => ({ value: name, label: name }));
   }, [llmProviders]);
 
   const isEdit = existing !== undefined;
