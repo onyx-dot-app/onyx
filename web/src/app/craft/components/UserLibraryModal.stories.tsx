@@ -83,7 +83,7 @@ export const Empty: Story = {
   decorators: [withLibrary([])],
 };
 
-// Populated — file/folder rows with the "Sync to agent" toggle column.
+// Populated — file/folder rows with sizes and hover-revealed actions.
 export const WithFiles: Story = {
   decorators: [withLibrary(libraryTree)],
 };

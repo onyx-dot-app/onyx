@@ -8,7 +8,6 @@ import {
   uploadLibraryFiles,
   uploadLibraryZip,
   createLibraryDirectory,
-  toggleLibraryFileSync,
   deleteLibraryFile,
 } from "@/app/craft/services/apiServices";
 import { LibraryEntry } from "@/app/craft/types/user-library";
@@ -24,14 +23,7 @@ import {
   SvgFileText,
   SvgFolderPlus,
 } from "@opal/icons";
-import {
-  Button,
-  InputTypeIn,
-  ShadowDiv,
-  Switch,
-  Text,
-  Tooltip,
-} from "@opal/components";
+import { Button, InputTypeIn, ShadowDiv, Text } from "@opal/components";
 
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
@@ -81,7 +73,7 @@ function formatFileSize(bytes: number | null): string {
 interface UserLibraryModalProps {
   open: boolean;
   onClose: () => void;
-  onChanges?: () => void; // Called when files are uploaded, deleted, or sync toggled
+  onChanges?: () => void; // Called when files are uploaded or deleted
 }
 
 export default function UserLibraryModal({
@@ -219,19 +211,6 @@ export default function UserLibraryModal({
     [uploadFiles, isUploading]
   );
 
-  const handleToggleSync = useCallback(
-    async (entry: LibraryEntry, enabled: boolean) => {
-      try {
-        await toggleLibraryFileSync(entry.id, enabled);
-        mutate();
-        onChanges?.();
-      } catch (err) {
-        console.error("Failed to toggle sync:", err);
-      }
-    },
-    [mutate, onChanges]
-  );
-
   const handleDeleteConfirm = useCallback(async () => {
     if (!entryToDelete) return;
 
@@ -339,34 +318,17 @@ export default function UserLibraryModal({
                     active={isDragging}
                   />
                 ) : (
-                  <div className="flex flex-col gap-1.5">
-                    {/* Column header — sits in the same fixed-width column as
-                        the toggles below so the label reads as their heading */}
-                    <div className="flex items-center px-2">
-                      <div className="min-w-0 flex-1" />
-                      <div className="flex w-24 shrink-0 justify-center">
-                        <Text
-                          font="secondary-mono-label"
-                          color="text-03"
-                          nowrap
-                        >
-                          Sync to agent
-                        </Text>
-                      </div>
+                  <ShadowDiv className="max-h-[360px]">
+                    <div className="flex flex-col gap-0.5">
+                      <LibraryTreeView
+                        entries={hierarchicalTree}
+                        expandedPaths={expandedPaths}
+                        onToggleFolder={toggleFolder}
+                        onDelete={setEntryToDelete}
+                        onUploadToFolder={handleUploadToFolder}
+                      />
                     </div>
-                    <ShadowDiv className="max-h-[360px]">
-                      <div className="flex flex-col gap-0.5">
-                        <LibraryTreeView
-                          entries={hierarchicalTree}
-                          expandedPaths={expandedPaths}
-                          onToggleFolder={toggleFolder}
-                          onToggleSync={handleToggleSync}
-                          onDelete={setEntryToDelete}
-                          onUploadToFolder={handleUploadToFolder}
-                        />
-                      </div>
-                    </ShadowDiv>
-                  </div>
+                  </ShadowDiv>
                 )}
 
                 {/* Drag overlay — consistent feedback regardless of state */}
@@ -505,7 +467,6 @@ interface LibraryTreeViewProps {
   entries: LibraryEntry[];
   expandedPaths: Set<string>;
   onToggleFolder: (path: string) => void;
-  onToggleSync: (entry: LibraryEntry, enabled: boolean) => void;
   onDelete: (entry: LibraryEntry) => void;
   onUploadToFolder: (folderPath: string) => void;
   depth?: number;
@@ -515,7 +476,6 @@ function LibraryTreeView({
   entries,
   expandedPaths,
   onToggleFolder,
-  onToggleSync,
   onDelete,
   onUploadToFolder,
   depth = 0,
@@ -610,22 +570,6 @@ function LibraryTreeView({
                   tooltip="Delete"
                 />
               </div>
-
-              {/* Sync toggle — fixed-width column aligned under the header */}
-              <div className="flex w-24 shrink-0 justify-center">
-                <Tooltip
-                  tooltip={
-                    entry.sync_enabled
-                      ? "Synced to agent — click to disable"
-                      : "Not synced — click to enable"
-                  }
-                >
-                  <Switch
-                    checked={entry.sync_enabled}
-                    onCheckedChange={(checked) => onToggleSync(entry, checked)}
-                  />
-                </Tooltip>
-              </div>
             </div>
 
             {/* Children */}
@@ -634,7 +578,6 @@ function LibraryTreeView({
                 entries={entry.children}
                 expandedPaths={expandedPaths}
                 onToggleFolder={onToggleFolder}
-                onToggleSync={onToggleSync}
                 onDelete={onDelete}
                 onUploadToFolder={onUploadToFolder}
                 depth={depth + 1}
