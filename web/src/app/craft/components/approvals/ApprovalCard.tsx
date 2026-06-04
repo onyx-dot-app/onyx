@@ -232,7 +232,7 @@ export default function ApprovalCard({
           <CollapsibleContent>
             <div className="p-2 flex flex-col gap-3">
               <ActionList actions={approval.actions} />
-              <PayloadView payload={approval.payload} />
+              <PayloadView payload={approval.display_payload} />
               {errorMessage && (
                 <div className="text-status-error-05">
                   <Text font="secondary-body" color="inherit">
