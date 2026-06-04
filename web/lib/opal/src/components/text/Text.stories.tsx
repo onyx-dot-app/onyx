@@ -116,6 +116,8 @@ const STATUS_COLORS: TextColor[] = [
   "status-error-01",
   "status-error-02",
   "status-error-05",
+  "status-success-01",
+  "status-success-02",
   "status-success-05",
 ];
 

@@ -47,6 +47,8 @@ type TextColor =
   | "status-error-01"
   | "status-error-02"
   | "status-error-05"
+  | "status-success-01"
+  | "status-success-02"
   | "status-success-05";
 
 interface TextProps extends WithoutStyles<
@@ -116,6 +118,8 @@ const COLOR_CONFIG: Record<TextColor, string | null> = {
   "status-error-01": "text-status-error-01",
   "status-error-02": "text-status-error-02",
   "status-error-05": "text-status-error-05",
+  "status-success-01": "text-status-success-01",
+  "status-success-02": "text-status-success-02",
   "status-success-05": "text-status-success-05",
 };
 
