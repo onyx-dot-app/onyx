@@ -63,7 +63,7 @@ class ApprovalView(BaseModel):
     decision: ApprovalDecision | None
     decided_at: datetime | None
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def display_payload(self) -> dict[str, Any]:
         """`payload` decoded for the reviewer (e.g. Gmail base64url MIME →
@@ -71,7 +71,7 @@ class ApprovalView(BaseModel):
         action_type = self.actions[0].action_type if self.actions else ""
         return decode_payload(action_type, self.payload)
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def is_live(self) -> bool:
         if self.decision is not None:

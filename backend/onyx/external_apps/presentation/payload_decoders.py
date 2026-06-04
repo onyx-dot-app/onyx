@@ -20,7 +20,7 @@ class PayloadDecoder(Protocol):
         ...
 
 
-class GmailRawMimeDecoder:
+class GmailRawMimeDecoder(PayloadDecoder):
     """Decode the base64url RFC-822 message in a Gmail body into reviewable fields.
 
     ``messages.send`` carries it directly (``{"raw": …}``); draft create/update
@@ -72,12 +72,17 @@ def _b64url_decode(data: str) -> bytes:
     return base64.urlsafe_b64decode(data + padding)
 
 
+# Recipient headers surfaced on the card; the lower-cased name is the payload
+# key ("To" -> "to").
+_RECIPIENT_HEADERS = ("To", "Cc", "Bcc")
+
+
 def _summarize_message(message: EmailMessage) -> dict[str, Any]:
     """The reviewable fields of a parsed message; absent fields are omitted."""
     summary: dict[str, Any] = {}
-    for field, header in (("to", "To"), ("cc", "Cc"), ("bcc", "Bcc")):
+    for header in _RECIPIENT_HEADERS:
         if recipients := _addresses(message.get_all(header)):
-            summary[field] = recipients
+            summary[header.lower()] = recipients
     if subject := message["Subject"]:
         summary["subject"] = str(subject)
     if body := _plain_body(message):
