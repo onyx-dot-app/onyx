@@ -178,7 +178,7 @@ def batch_create_notifications(
     result = db_session.execute(stmt)
     inserted_ids = set(result.scalars())
     db_session.commit()
-    return inserted_ids
+    return inserted_ids  # ty: ignore[invalid-return-type]
 
 
 def update_notification_last_shown(

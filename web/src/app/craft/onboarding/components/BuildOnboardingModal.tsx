@@ -8,16 +8,11 @@ import {
 } from "@/lib/analytics";
 import { SvgArrowRight, SvgArrowLeft, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
   OnboardingModalMode,
   OnboardingStep,
 } from "@/app/craft/onboarding/types";
-import {
-  setBuildLlmSelection,
-  getBuildLlmSelection,
-  getDefaultLlmSelection,
-} from "@/app/craft/onboarding/constants";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { testApiKeyHelper } from "@/sections/modals/languageModels/svc";
@@ -26,22 +21,6 @@ import OnboardingLlmSetup, {
   PROVIDERS,
   type ProviderKey,
 } from "@/app/craft/onboarding/components/OnboardingLlmSetup";
-
-/**
- * Auto-select the best available LLM based on priority order.
- * Used when user completes onboarding without going through LLM setup step.
- */
-function autoSelectBestLlm(
-  llmProviders: LLMProviderDescriptor[] | undefined
-): void {
-  // Don't override if user already has a selection
-  if (getBuildLlmSelection()) return;
-
-  const selection = getDefaultLlmSelection(llmProviders);
-  if (selection) {
-    setBuildLlmSelection(selection);
-  }
-}
 
 interface BuildOnboardingModalProps {
   mode: OnboardingModalMode;
@@ -246,12 +225,6 @@ export default function BuildOnboardingModal({
         }
       }
 
-      setBuildLlmSelection({
-        providerName: providerName,
-        provider: currentProviderConfig.providerName,
-        modelName: selectedModel,
-      });
-
       track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
         provider: currentProviderConfig.providerName,
         is_creation: true,
@@ -294,10 +267,6 @@ export default function BuildOnboardingModal({
       if (steps.includes("llm-setup") && connectionStatus === "success") {
         await onLlmComplete();
       }
-
-      // Auto-select best available LLM if user didn't go through LLM setup
-      // (e.g., non-admin users or when all providers already configured)
-      autoSelectBestLlm(llmProviders);
 
       await onComplete();
 
@@ -369,7 +338,9 @@ export default function BuildOnboardingModal({
                   className="flex items-center gap-1.5 px-4 py-2 rounded-12 border border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-02 transition-colors"
                 >
                   <SvgArrowLeft className="w-4 h-4" />
-                  <Text mainUiAction>Back</Text>
+                  <Text font="main-ui-action" color="text-05">
+                    Back
+                  </Text>
                 </button>
               )}
             </div>
@@ -407,12 +378,8 @@ export default function BuildOnboardingModal({
                 )}
               >
                 <Text
-                  mainUiAction
-                  className={cn(
-                    !isSubmitting
-                      ? "text-white dark:text-black"
-                      : "text-text-02"
-                  )}
+                  font="main-ui-action"
+                  color={!isSubmitting ? "text-inverted-05" : "text-02"}
                 >
                   {isLastStep
                     ? isSubmitting
@@ -436,7 +403,9 @@ export default function BuildOnboardingModal({
                     disabled={isConnecting}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-12 border border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-02 transition-colors"
                   >
-                    <Text mainUiAction>Skip</Text>
+                    <Text font="main-ui-action" color="text-05">
+                      Skip
+                    </Text>
                     <SvgArrowRight className="w-4 h-4" />
                   </button>
                 )}
@@ -453,12 +422,12 @@ export default function BuildOnboardingModal({
                   )}
                 >
                   <Text
-                    mainUiAction
-                    className={cn(
+                    font="main-ui-action"
+                    color={
                       canTestConnection && !isConnecting
-                        ? "text-white dark:text-black"
-                        : "text-text-02"
-                    )}
+                        ? "text-inverted-05"
+                        : "text-02"
+                    }
                   >
                     {isConnecting ? "Connecting..." : "Connect"}
                   </Text>
@@ -472,7 +441,7 @@ export default function BuildOnboardingModal({
                 onClick={isLastStep ? handleSubmit : handleNext}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-12 bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-colors"
               >
-                <Text mainUiAction className="text-white dark:text-black">
+                <Text font="main-ui-action" color="text-inverted-05">
                   {isLastStep ? "Done" : "Continue"}
                 </Text>
                 {!isLastStep && (

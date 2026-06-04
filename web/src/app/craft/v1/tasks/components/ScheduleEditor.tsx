@@ -1,10 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import Text from "@/refresh-components/texts/Text";
-import { InputTypeIn } from "@opal/components";
+import { InputTypeIn, Tabs, Text } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import SimpleTabs from "@/refresh-components/SimpleTabs";
 import { Section } from "@/layouts/general-layouts";
 import { cn } from "@opal/utils";
 import type {
@@ -81,10 +79,11 @@ export default function ScheduleEditor({
     [mode, payload, onPayloadChange]
   );
 
+  const tabEntries = Object.entries(tabContent);
+
   return (
     <Section gap={0.5}>
-      <SimpleTabs
-        tabs={tabContent}
+      <Tabs
         value={mode}
         onValueChange={(value) => {
           const next = value as EditorMode;
@@ -100,9 +99,22 @@ export default function ScheduleEditor({
             onPayloadChange(DEFAULT_DAILY_WEEKLY);
           }
         }}
-      />
+      >
+        <Tabs.List>
+          {tabEntries.map(([key, tab]) => (
+            <Tabs.Trigger key={key} value={key}>
+              {tab.name}
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+        {tabEntries.map(([key, tab]) => (
+          <Tabs.Content key={key} value={key}>
+            {tab.content}
+          </Tabs.Content>
+        ))}
+      </Tabs>
       {error && (
-        <Text mainUiBody text03 className="text-status-error-05">
+        <Text font="main-ui-body" color="status-error-05">
           {error}
         </Text>
       )}
@@ -144,7 +156,7 @@ function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
   return (
     <Section gap={0.5}>
       <div className="flex items-center gap-2 flex-wrap">
-        <Text mainUiBody text05>
+        <Text font="main-ui-body" color="text-05">
           Every
         </Text>
         <div className="w-28">
@@ -201,7 +213,7 @@ function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
   return (
     <Section gap={0.5}>
       <div className="flex items-center gap-2">
-        <Text mainUiBody text05>
+        <Text font="main-ui-body" color="text-05">
           At
         </Text>
         <div className="w-44">
@@ -216,7 +228,7 @@ function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
         </div>
       </div>
       <div className="flex flex-col gap-1">
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           On these days
         </Text>
         <div className="flex items-center gap-1 flex-wrap">
@@ -249,7 +261,7 @@ function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
             );
           })}
         </div>
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {scheduleNote}
         </Text>
       </div>

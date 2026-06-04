@@ -23,7 +23,7 @@ import {
 } from "@/app/craft/services/apiServices";
 import { getFileIcon } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgGlobe, SvgHardDrive, SvgFiles, SvgX } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import CraftingLoader from "@/app/craft/components/CraftingLoader";
@@ -438,9 +438,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                           : "stroke-text-03"
                     )}
                   />
-                  <Text
-                    className={cn("truncate", isDisabled && "text-text-02")}
-                  >
+                  <Text color={isDisabled ? "text-02" : "text-05"} maxLines={1}>
                     {tab.label}
                   </Text>
                   {/* Right curved joint */}
@@ -502,7 +500,9 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                           isActive ? "stroke-text-04" : "stroke-text-03"
                         )}
                       />
-                      <Text className="truncate text-sm">{tab.fileName}</Text>
+                      <Text font="secondary-body" color="text-05" maxLines={1}>
+                        {tab.fileName}
+                      </Text>
                       {/* Close button */}
                       <button
                         onClick={(e) => handlePanelTabClose(e, tab)}

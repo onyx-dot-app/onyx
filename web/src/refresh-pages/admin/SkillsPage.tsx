@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Button, MessageCard } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { SvgBlocks, SvgPlus, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowLeft, SvgBlocks, SvgPlus, SvgSimpleLoader } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -25,7 +25,11 @@ import type { CustomSkill } from "@/refresh-pages/admin/SkillsPage/interfaces";
 // Page
 // ---------------------------------------------------------------------------
 
-export default function SkillsPage() {
+interface SkillsPageProps {
+  onBack?: () => void;
+}
+
+export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
   const { data, error, isLoading, refresh } = useAdminSkills();
 
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -86,15 +90,23 @@ export default function SkillsPage() {
   }
 
   return (
-    <SettingsLayouts.Root width="lg">
+    <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgBlocks}
         title="Skills"
         description="Capability bundles the Craft agent can reach for. Built-in skills ship with Onyx; custom skills are uploaded zip bundles, gated by group grants."
         rightChildren={
-          <Button icon={SvgPlus} onClick={() => setUploadOpen(true)}>
-            Upload skill
-          </Button>
+          onBack ? (
+            <div className="flex items-center gap-2">
+              <Button
+                prominence="secondary"
+                icon={SvgArrowLeft}
+                onClick={onBack}
+              >
+                Back
+              </Button>
+            </div>
+          ) : undefined
         }
       />
       <SettingsLayouts.Body>
@@ -128,9 +140,14 @@ export default function SkillsPage() {
 
             {/* Customs */}
             <Section gap={0.5} alignItems="stretch">
-              <Text as="p" headingH3 text05>
-                Custom skills
-              </Text>
+              <div className="flex items-center justify-between gap-2">
+                <Text as="p" headingH3 text05>
+                  Custom skills
+                </Text>
+                <Button icon={SvgPlus} onClick={() => setUploadOpen(true)}>
+                  Upload skill
+                </Button>
+              </div>
               <CustomSkillsTable
                 skills={data.customs}
                 onShareSkill={setShareTarget}

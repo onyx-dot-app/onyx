@@ -58,9 +58,9 @@ in it:
 - `backend/onyx/server/features/build/db/action_approval.py`
 - `backend/onyx/server/features/build/approvals/api.py`
 - `backend/onyx/server/features/build/session/manager.py::_merge_acp_with_announces`
-- `backend/onyx/server/features/build/sandbox/kubernetes/docker/firewall-init.sh`
+- `backend/onyx/server/features/build/sandbox/image/firewall-init.sh`
   (the `entrypoint` mode is already plumbed)
-- `backend/onyx/server/features/build/sandbox/kubernetes/docker/opencode-plugins/session-proxy-tag.ts`
+- `backend/onyx/server/features/build/sandbox/image/opencode-plugins/session-proxy-tag.ts`
 - Frontend: `web/src/app/craft/hooks/useBuildStreaming.ts`,
   `parsePacket.ts`, `packetTypes.ts`, SWR keys.
 
@@ -76,7 +76,7 @@ backend/onyx/sandbox_proxy/
 backend/onyx/server/features/build/sandbox/docker/
 +-- docker_sandbox_manager.py       # MODIFIED: proxy plumbing, security ctx, command
 
-backend/onyx/server/features/build/sandbox/kubernetes/docker/
+backend/onyx/server/features/build/sandbox/image/
 +-- firewall-init.sh                # MODIFIED: drop CAP_NET_ADMIN before exec
 +-- Dockerfile                      # MODIFIED: install libcap2-bin
 

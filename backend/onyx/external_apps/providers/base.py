@@ -9,6 +9,9 @@ from pydantic import ConfigDict
 
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.providers.actions import EndpointSpec
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class TokenRefreshError(Exception):
@@ -141,6 +144,62 @@ class ExternalAppProvider(ABC):
                 f"{cls.__name__} must define `spec` as a "
                 f"{cls._spec_type.__name__} instance."
             )
+
+
+class OnyxManagedExtApp(ExternalAppProvider, abstract=True):
+    """Interface for a built-in provider whose OAuth client credentials Onyx
+    owns. On managed cloud these are seeded per tenant and locked down (admins
+    may only enable/disable + set policies — never edit credentials/config or
+    delete). A non-managed built-in (admin/user-configurable) simply doesn't
+    inherit this, so it carries no Onyx-owned credentials and stays editable.
+
+    A concrete managed provider declares its operator-supplied credentials in
+    ``managed_org_credentials``, keyed by the same fields as its
+    ``required_org_credential_fields`` (validated in ``__init_subclass__``).
+    """
+
+    # Onyx-owned credential values, sourced from the ``EXT_APP_<APP_TYPE>_<FIELD>``
+    # constants in ``app_configs``. Keys must match the spec's required fields.
+    managed_org_credentials: ClassVar[dict[str, str]] = {}
+
+    def __init_subclass__(cls, *, abstract: bool = False, **kwargs: Any) -> None:
+        # Forward ``abstract`` so the base still validates ``spec`` first (and
+        # skips abstract tiers); only then check our credential mapping.
+        super().__init_subclass__(abstract=abstract, **kwargs)
+        if abstract:
+            return
+        # A managed provider must map exactly its required credential fields, so
+        # provisioning seeds the right keys (values may be blank when the
+        # deployment hasn't configured them yet).
+        required = {f.key for f in cls.spec.descriptor.required_org_credential_fields}
+        configured = set(cls.managed_org_credentials)
+        if configured != required:
+            raise TypeError(
+                f"{cls.__name__} is an OnyxManagedExtApp but its "
+                f"managed_org_credentials keys {sorted(configured)} do not "
+                f"match its required credential fields {sorted(required)}."
+            )
+
+    def configured_managed_credentials(self) -> dict[str, str] | None:
+        """This provider's Onyx-owned credentials if fully configured, else None."""
+        creds = {k: v.strip() for k, v in self.managed_org_credentials.items()}
+        if not any(creds.values()):
+            return None  # nothing configured
+        if all(creds.values()):
+            return creds
+        # partially set — almost always a config mistake worth surfacing
+        missing = ", ".join(
+            f"EXT_APP_{self.spec.app_type.value}_{k.upper()}"
+            for k, v in creds.items()
+            if not v
+        )
+        logger.warning(
+            "Incomplete managed credentials for built-in app '%s'; missing %s. "
+            "Treating as unconfigured.",
+            self.spec.app_type.value,
+            missing,
+        )
+        return None
 
 
 class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):

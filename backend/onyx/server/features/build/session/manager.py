@@ -48,6 +48,7 @@ from onyx.server.features.build.db.build_session import get_empty_session_for_us
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.build_session import update_session_activity
+from onyx.server.features.build.db.build_session import update_session_agent_selection
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
@@ -684,9 +685,30 @@ class SessionManager:
         session_id: UUID,
         user_id: UUID,
         content: str,
+        agent_provider: str | None = None,
+        agent_model: str | None = None,
     ) -> Generator[str, None, None]:
-        """Send a message to the CLI agent and stream its response as
-        SSE frames."""
+        """
+        Send a message to the CLI agent and stream the response as SSE events.
+
+        Validates session, saves user message, streams agent response,
+        and saves assistant response to database.
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID
+            content: The message content
+            agent_provider: Optional per-message model provider override
+            agent_model: Optional per-message model name override
+
+        Yields:
+            SSE formatted event strings
+        """
+        # Persist the per-message model override; the turn reads it off the session row.
+        if agent_provider and agent_model:
+            update_session_agent_selection(
+                session_id, agent_provider, agent_model, self._db_session
+            )
         yield from _streaming.stream_cli_agent_turn(
             self._db_session,
             self._sandbox_manager,

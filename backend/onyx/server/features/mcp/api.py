@@ -2,6 +2,7 @@ import asyncio
 import base64
 import datetime
 import hashlib
+import ipaddress
 import json
 from enum import Enum
 from secrets import token_urlsafe
@@ -27,9 +28,12 @@ from sqlalchemy.orm import Session
 from onyx.auth.oauth_token_manager import build_oauth_authorization_url
 from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
 from onyx.auth.oauth_token_manager import OAuthFlowParams
+from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
+from onyx.configs.app_configs import MCP_SERVER_ALLOW_LOOPBACK
+from onyx.configs.app_configs import MCP_SERVER_ALLOW_PRIVATE_NETWORK
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -86,12 +90,88 @@ from onyx.server.features.tool.models import ToolSnapshot
 from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_tools
 from onyx.tools.tool_implementations.mcp.mcp_client import initialize_mcp_client
 from onyx.tools.tool_implementations.mcp.mcp_client import log_exception_group
+from onyx.tools.tool_implementations.mcp.mcp_ssrf import validate_mcp_outbound_url
 from onyx.utils.encryption import mask_string
 from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import BLOCKED_HOSTNAMES
+from onyx.utils.url import SSRFException
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+_SSRF_HINT_NEVER_ALLOWED = (
+    " localhost, unspecified, and link-local/cloud-metadata addresses are never "
+    "permitted; use a loopback or private-network address instead."
+)
+
+
+def _ssrf_error_hint(url: str, error: Exception) -> str:
+    """Suffix steering the operator to the right opt-in for a blocked host:
+    loopback → MCP_SERVER_ALLOW_LOOPBACK, other private → ALLOW_PRIVATE_NETWORK.
+    Link-local/metadata, unspecified, and BLOCKED_HOSTNAMES (e.g. localhost) are
+    never reachable, so suggest a different address; scheme errors get no hint.
+    Only literal IPs are classified — store-time validation doesn't resolve
+    hostnames, so a bare name can't reach the address-specific branches."""
+    if "scheme" in str(error).lower():
+        return ""
+    host = (urlparse(url).hostname or "").lower()
+    if host in BLOCKED_HOSTNAMES:
+        return _SSRF_HINT_NEVER_ALLOWED
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return ""
+    if ip.is_unspecified or ip.is_link_local:
+        return _SSRF_HINT_NEVER_ALLOWED
+    if ip.is_loopback:
+        # Loopback needs both gates, so name whichever is still missing.
+        missing = [
+            f"{var}=true"
+            for var, enabled in (
+                ("MCP_SERVER_ALLOW_LOOPBACK", MCP_SERVER_ALLOW_LOOPBACK),
+                ("MCP_SERVER_ALLOW_PRIVATE_NETWORK", MCP_SERVER_ALLOW_PRIVATE_NETWORK),
+            )
+            if not enabled
+        ]
+        if missing:
+            return (
+                f" To allow a loopback MCP server, set {' and '.join(missing)} "
+                "(cloud-metadata stays blocked)."
+            )
+        return ""
+    if not MCP_SERVER_ALLOW_PRIVATE_NETWORK:
+        return (
+            " To allow an MCP server on a private network, set "
+            "MCP_SERVER_ALLOW_PRIVATE_NETWORK=true (loopback needs "
+            "MCP_SERVER_ALLOW_LOOPBACK; cloud-metadata stays blocked)."
+        )
+    return ""
+
+
+def _validate_mcp_server_url(
+    url: str | None, field: str, *, require_https: bool
+) -> None:
+    """Store-time SSRF guard for a curator-supplied URL; raises ``OnyxError`` as
+    a field-level frontend error. ``require_https`` routes OAuth endpoints through
+    the same validator the token exchange uses, so a URL that saves can't be
+    rejected later. Structural-only (``resolve_dns=False``): rejects bad
+    scheme/credentials/blocked hosts and literal internal IPs but doesn't resolve
+    hostnames, so a transient/internal-DNS host doesn't block a save; fetch-time
+    guards resolve DNS and cover SDK redirects/rebinding."""
+    if not url:
+        return
+    validator = (
+        validate_oauth_endpoint_url if require_https else validate_mcp_outbound_url
+    )
+    try:
+        validator(url, resolve_dns=False)
+    except (SSRFException, ValueError) as e:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Invalid {field}: {e}{_ssrf_error_hint(url, e)}",
+        )
 
 
 def _truncate_description(description: str | None, max_length: int = 500) -> str:
@@ -934,6 +1014,13 @@ async def process_oauth_callback(
                 _mcp_oauth_redirect_uri(),
                 code_verifier=state_data.code_verifier,
             )
+        except (SSRFException, ValueError) as e:
+            # Fetch-time SSRF guard (e.g. DNS rebinding, or a pre-existing
+            # internal endpoint) — surface a clean 400, not an unhandled 500.
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Known-provider OAuth token endpoint is not allowed: {e}",
+            )
         except requests.HTTPError as e:
             detail = e.response.text if e.response is not None else str(e)
             upstream_status = e.response.status_code if e.response is not None else None
@@ -1715,6 +1802,16 @@ def _upsert_mcp_server(
     """
     Creates a new or edits an existing MCP server. Returns the DB model
     """
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
+    _validate_mcp_server_url(
+        request.oauth_authorization_endpoint,
+        "oauth_authorization_endpoint",
+        require_https=True,
+    )
+    _validate_mcp_server_url(
+        request.oauth_token_endpoint, "oauth_token_endpoint", require_https=True
+    )
+
     mcp_server = None
     admin_config = None
 
@@ -2324,6 +2421,8 @@ def create_mcp_server_simple(
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
+
     mcp_server = create_mcp_server__no_commit(
         owner_email=user.email,
         name=request.name,
@@ -2374,6 +2473,8 @@ def update_mcp_server_simple(
         raise HTTPException(status_code=404, detail="MCP server not found")
 
     _ensure_mcp_server_owner_or_admin(mcp_server, user)
+
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
 
     # Update only provided fields
     updated_server = update_mcp_server__no_commit(

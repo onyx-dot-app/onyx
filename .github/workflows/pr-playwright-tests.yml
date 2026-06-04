@@ -100,7 +100,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # ratchet:dorny/paths-filter@v3
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
@@ -165,7 +165,7 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Build and push Web Docker image
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
           context: ./web
           file: ./web/Dockerfile
@@ -227,7 +227,7 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Build and push Backend Docker image
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -289,7 +289,7 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Build and push Model Server Docker image
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
@@ -392,6 +392,10 @@ jobs:
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
+          # MCP E2E tests register mock servers on host.docker.internal (a private
+          # host-gateway address); opt in so the SSRF guard allows it. Cloud-
+          # metadata/link-local stays blocked regardless.
+          MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
           ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
@@ -569,6 +573,10 @@ jobs:
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
+          # MCP E2E tests register mock servers on host.docker.internal (a private
+          # host-gateway address); opt in so the SSRF guard allows it. Cloud-
+          # metadata/link-local stays blocked regardless.
+          MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
           ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
@@ -721,6 +729,10 @@ jobs:
           MOCK_LLM_RESPONSE=true
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
+          # MCP E2E tests register mock servers on host.docker.internal (a private
+          # host-gateway address); opt in so the SSRF guard allows it. Cloud-
+          # metadata/link-local stays blocked regardless.
+          MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
           ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
           EOF

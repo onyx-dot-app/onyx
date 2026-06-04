@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.13"
 # dependencies = [
 #   "fastapi>=0.110",
 #   "uvicorn>=0.29",

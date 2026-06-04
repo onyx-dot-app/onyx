@@ -74,6 +74,12 @@ with a `scope_exempt` dependency (a sibling `_is_scope_exempt` sentinel the gate
 `_is_require_permission`), and `/me` carries it. Without it the fail-closed gate would deny a scoped
 PAT on `/me`, which a token has no business being locked out of.
 
+**Anonymous-capable routes (chat).** The core chat endpoints (send-message, create-session,
+view-session) admit anonymous users, so they are guarded with `require_permission(perm,
+allow_anonymous=True)`, which resolves the anonymous user (when the tenant allows it) instead of
+rejecting it, while still capping scoped PATs to `perm`. Anonymous, session, and unrestricted callers
+are unaffected; a scoped token is held to `read:chat` / `write:chat`.
+
 ## Delivery
 
 Sequenced so enforcement is complete before any scoped token exists:
@@ -86,11 +92,12 @@ Sequenced so enforcement is complete before any scoped token exists:
 3. **Fail-closed gate** — `optional_user` denies a scoped PAT on routes that declare no
    `require_permission`, so enforcement covers non-guarded routes too. *Shipped.*
 4. **Re-guard routes** with the fine permissions (search / chat read+write / admin read vs. write).
-   `POST /search` — the endpoint the Craft sandbox actually hits (its agent's `company-search` skill
-   runs `onyx-cli search`, which calls `POST /search` and nothing else) — now carries `READ_SEARCH`.
-   *Shipped (the one route the sandbox needs).* The rest of the search surface (web-search, the
-   read-only `/manage` metadata used by the separate MCP server) plus the chat read/write and
-   `READ_ADMIN` splits remain.
+   `POST /search` carries `READ_SEARCH` (the route the Craft sandbox's `onyx-cli search` hits).
+   *Shipped.* On the chat surface, `read:chat` guards listing/viewing one's own sessions and
+   chat-history search; `write:chat` guards create-session, send-message, and stop (it excludes delete
+   and session-config). The remaining chat endpoints (delete, rename, share, config toggles, feedback,
+   file download, token-count helpers) keep their existing guards and are not fine-scoped. *Shipped.*
+   The web-search / `/manage` search surface and the `READ_ADMIN` admin split remain.
 5. **Scope the Craft PAT** — `ensure_sandbox_pat` mints `[READ_SEARCH]` instead of unrestricted,
    retiring the "CRAFT PAT grants full user access" caveat. *Shipped.* This is the acceptance test for
    the effort: the search-scoped sandbox PAT reaches `POST /search` (via `onyx-cli search`) and `/me`,

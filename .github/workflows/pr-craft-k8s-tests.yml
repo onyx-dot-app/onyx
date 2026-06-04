@@ -15,6 +15,7 @@ on:
     branches: [main]
     paths:
       - "backend/onyx/server/features/build/sandbox/**"
+      - "backend/onyx/skills/**"
       - "backend/onyx/sandbox_proxy/**"
       - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py"
       - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox_file_ops.py"
@@ -139,10 +140,10 @@ jobs:
             "${BASE_IMAGE_REGISTRY:-docker.io}/library/registry:2"
 
       - name: Build and push sandbox image
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
-          context: ./backend/onyx/server/features/build/sandbox/kubernetes/docker
-          file: ./backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile
+          context: ./backend/onyx/server/features/build/sandbox/image
+          file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
           platforms: linux/amd64
           # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
           # so skip LibreOffice et al. to keep the CI image lean.
@@ -156,7 +157,7 @@ jobs:
 
       # Backend image runs the sandbox-proxy via `python -m onyx.sandbox_proxy.server`.
       - name: Build and push backend image
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
           context: ./backend
           file: ./backend/Dockerfile

@@ -332,14 +332,18 @@ export class RateLimitError extends Error {
 export async function sendMessageStream(
   sessionId: string,
   content: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  model?: { provider: string; modelName: string } | null
 ): Promise<Response> {
   const res = await fetch(
     `${BUILD_API_BASE}/sessions/${sessionId}/send-message`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({
+        content,
+        ...(model ? { provider: model.provider, model: model.modelName } : {}),
+      }),
       signal,
     }
   );

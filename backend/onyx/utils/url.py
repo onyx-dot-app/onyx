@@ -57,38 +57,33 @@ def _is_ip_private_or_reserved(ip_str: str) -> bool:
         return True
 
 
-def _is_always_blocked_ip(
+def _is_targeted_blocked_ip(
     ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address,
+    *,
+    block_loopback: bool,
+    block_link_local: bool,
 ) -> bool:
-    """True if ``ip_obj`` falls into a class that must be blocked even when
-    private networks are otherwise allowed.
+    """IP classes to reject even when private networks are allowed. Unspecified
+    (0.0.0.0, ::) always — the kernel aliases it to loopback. Loopback and
+    link-local (169.254.0.0/16, the cloud-metadata range) per flag, so MCP
+    opt-ins can permit loopback while IMDS stays unreachable."""
+    if ip_obj.is_unspecified:
+        return True
+    if block_loopback and ip_obj.is_loopback:
+        return True
+    if block_link_local and ip_obj.is_link_local:
+        return True
+    return False
 
-    - Loopback (127.0.0.0/8, ::1): the application host's own loopback.
-      Reaching it exposes admin APIs, sidecars, etc.
-    - Unspecified (0.0.0.0, ::): commonly aliased to loopback by the kernel.
-    - Link-local (169.254.0.0/16, fe80::/10): cloud-metadata endpoints
-      (169.254.169.254 on AWS/GCP/Azure) live here. Opting into RFC1918
-      should NEVER open up IMDS — that's a credential exfiltration path.
-    """
-    return ip_obj.is_loopback or ip_obj.is_unspecified or ip_obj.is_link_local
 
-
-def _hostname_resolves_to_always_blocked_ip(hostname: str) -> str | None:
-    """Resolve ``hostname`` via DNS and return the first address in an
-    always-blocked class (loopback / unspecified / link-local), or None.
-
-    Used on the ``allow_private_network=True`` path to maintain the
-    always-blocked floor for DNS names — e.g. an attacker-controlled
-    record like ``loopback.attacker.com`` → 127.0.0.1, or
-    ``imds.attacker.com`` → 169.254.169.254, must not be reachable just
-    because private networks are otherwise allowed. RFC1918 results are
-    *not* flagged here; opting into those is the whole point of the flag.
-
-    Returns None on DNS failure — the actual request will fail naturally
-    if the name is unresolvable, and an internal-only name that's
-    legitimately reachable from the runtime but not from the validation
-    context shouldn't get spuriously rejected here.
-    """
+def _hostname_resolves_to_targeted_blocked_ip(
+    hostname: str, *, block_loopback: bool, block_link_local: bool
+) -> str | None:
+    """Resolve ``hostname`` and return the first targeted-blocked address (see
+    ``_is_targeted_blocked_ip``), keeping the floor for DNS names like
+    ``imds.attacker.com`` → 169.254.169.254. None on DNS failure — the real
+    request fails on its own, and a name reachable from the runtime but not the
+    validation context shouldn't be spuriously rejected."""
     try:
         addr_info = socket.getaddrinfo(hostname, None)
     except socket.gaierror:
@@ -100,7 +95,9 @@ def _hostname_resolves_to_always_blocked_ip(hostname: str) -> str | None:
             ip_obj = ipaddress.ip_address(ip_str)
         except ValueError:
             continue
-        if _is_always_blocked_ip(ip_obj):
+        if _is_targeted_blocked_ip(
+            ip_obj, block_loopback=block_loopback, block_link_local=block_link_local
+        ):
             return ip_str
     return None
 
@@ -188,40 +185,68 @@ def _validate_and_resolve_url(url: str) -> tuple[str, str, int]:
     return validated_ip, hostname, port  # ty: ignore[invalid-return-type]
 
 
+def _enforce_targeted_block(
+    display_host: str,
+    hostname: str,
+    *,
+    block_loopback: bool,
+    block_link_local: bool,
+    resolve_dns: bool,
+) -> None:
+    """Reject ``hostname`` if it (or its DNS resolution) lands in a targeted-
+    blocked class, used on the ``allow_private_network=True`` path. Literal IPs
+    are classified directly; DNS names are resolved only when ``resolve_dns``."""
+    try:
+        ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address | None = (
+            ipaddress.ip_address(hostname)
+        )
+    except ValueError:
+        ip_obj = None
+
+    if ip_obj is not None:
+        if _is_targeted_blocked_ip(
+            ip_obj, block_loopback=block_loopback, block_link_local=block_link_local
+        ):
+            raise SSRFException(
+                f"Access to loopback/unspecified/link-local IP "
+                f"'{display_host}' is not allowed."
+            )
+        return
+
+    if not resolve_dns:
+        return
+
+    blocked_ip = _hostname_resolves_to_targeted_blocked_ip(
+        hostname, block_loopback=block_loopback, block_link_local=block_link_local
+    )
+    if blocked_ip is not None:
+        raise SSRFException(
+            f"Hostname '{display_host}' resolves to loopback/"
+            f"unspecified/link-local IP '{blocked_ip}'. Access is not allowed."
+        )
+
+
 def validate_outbound_http_url(
     url: str,
     *,
     allow_private_network: bool = False,
     https_only: bool = False,
     block_loopback_and_link_local: bool = False,
+    block_link_local_only: bool = False,
+    resolve_dns: bool = True,
 ) -> str:
-    """
-    Validate a URL that will be used by backend outbound HTTP calls.
+    """Validate a URL for backend outbound HTTP calls; returns the whitespace-
+    stripped URL or raises ``SSRFException``/``ValueError``.
 
-    Args:
-        url: The URL to validate.
-        allow_private_network: If True, skip private/reserved IP checks.
-        https_only: If True, reject http:// URLs (only https:// is allowed).
-        block_loopback_and_link_local: When ``allow_private_network=True``,
-            additionally reject URLs whose host (or DNS resolution) is in the
-            always-dangerous IP classes — loopback (127.0.0.0/8, ::1),
-            unspecified (0.0.0.0, ::), and link-local (169.254.0.0/16,
-            fe80::/10, which contains cloud-metadata endpoints). Default
-            False to preserve behavior for admin-configured callers (voice
-            API, sharepoint, hooks) where the operator typed the URL
-            themselves and reaching a local container at 127.0.0.1 is a
-            feature. Pass True for LLM-controlled paths like ``open_url``
-            where prompt-supplied URLs need a stricter floor regardless of
-            the network opt-out. No-op when ``allow_private_network=False``,
-            since the standard private-IP guard already covers these.
-
-    Returns:
-        A normalized URL string with surrounding whitespace removed.
-
-    Raises:
-        ValueError: If URL is malformed.
-        SSRFException: If URL fails SSRF checks.
-    """
+    ``allow_private_network`` skips the private/reserved-IP guard for trusted
+    networks. When it's on, ``block_loopback_and_link_local`` keeps the strict
+    floor (loopback + unspecified + link-local) for LLM-controlled paths like
+    ``open_url``, while ``block_link_local_only`` permits loopback but still
+    blocks cloud-metadata — for MCP opt-ins where a local/sidecar server is
+    legitimate. ``https_only`` rejects http://. ``resolve_dns=False`` skips the
+    DNS lookup (structural + literal-IP checks only), for config-save time where
+    a placeholder/transient host shouldn't block a save; fetch time still
+    resolves."""
     normalized_url = url.strip()
     if not normalized_url:
         raise ValueError("URL cannot be empty")
@@ -248,29 +273,36 @@ def validate_outbound_http_url(
     if hostname in BLOCKED_HOSTNAMES:
         raise SSRFException(f"Access to hostname '{parsed.hostname}' is not allowed.")
 
-    if allow_private_network and block_loopback_and_link_local:
-        # Loopback / unspecified / link-local addresses are always rejected
-        # on this path even when private networks are otherwise allowed.
-        # Applies to both IP literals and DNS names — closes the cloud-
-        # metadata SSRF surface and the "DNS rebinding to loopback" surface.
-        try:
-            ip_obj = ipaddress.ip_address(hostname)
-        except ValueError:
-            blocked_ip = _hostname_resolves_to_always_blocked_ip(hostname)
-            if blocked_ip is not None:
-                raise SSRFException(
-                    f"Hostname '{parsed.hostname}' resolves to loopback/"
-                    f"unspecified/link-local IP '{blocked_ip}'. Access is "
-                    f"not allowed."
-                )
-        else:
-            if _is_always_blocked_ip(ip_obj):
-                raise SSRFException(
-                    f"Access to loopback/unspecified/link-local IP "
-                    f"'{parsed.hostname}' is not allowed."
-                )
+    block_loopback = block_loopback_and_link_local
+    block_link_local = block_loopback_and_link_local or block_link_local_only
 
-    if not allow_private_network:
+    if allow_private_network:
+        if block_loopback or block_link_local:
+            _enforce_targeted_block(
+                parsed.hostname,
+                hostname,
+                block_loopback=block_loopback,
+                block_link_local=block_link_local,
+                resolve_dns=resolve_dns,
+            )
+        return normalized_url
+
+    # allow_private_network is False: reject all private/reserved targets.
+    try:
+        ip_obj = ipaddress.ip_address(hostname)
+    except ValueError:
+        ip_obj = None
+
+    if ip_obj is not None:
+        if _is_ip_private_or_reserved(str(ip_obj)):
+            raise SSRFException(
+                f"Access to internal/private IP address '{parsed.hostname}' "
+                "is not allowed."
+            )
+        return normalized_url
+
+    # Hostname (not a literal IP); skip the DNS-resolving guard at save time.
+    if resolve_dns:
         _validate_and_resolve_url(normalized_url)
 
     return normalized_url

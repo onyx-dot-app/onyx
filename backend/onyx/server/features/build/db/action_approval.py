@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import POLICY_SEVERITY
@@ -29,10 +30,18 @@ def insert_action_approval(
     actions: list[dict[str, Any]],
     app_name: str,
     payload: dict[str, Any],
+    external_app_id: int | None = None,
+    decision: ApprovalDecision | None = None,
+    decided_via: ApprovalDecidedVia | None = None,
 ) -> ActionApproval:
-    """Commit a pending approval. ``actions`` is the JSONB list of
+    """Commit an approval row. ``actions`` is the JSONB list of
     ``ActionMatch``-shaped dicts; must be non-empty. Re-sorted
-    strictest-policy-first so every reader can rely on ``actions[0]``."""
+    strictest-policy-first so every reader can rely on ``actions[0]``.
+
+    Defaults to a pending row (``decision IS NULL``). Passing ``decision``
+    inserts it pre-decided — safe to bypass ``try_record_decision``'s
+    arbiter because nothing parks on a pre-decided row.
+    """
     if not actions:
         raise ValueError("actions must be non-empty")
     sorted_actions = sorted(
@@ -45,6 +54,10 @@ def insert_action_approval(
         actions=sorted_actions,
         app_name=app_name,
         payload=payload,
+        external_app_id=external_app_id,
+        decision=decision,
+        decided_at=datetime.now(timezone.utc) if decision is not None else None,
+        decided_via=decided_via,
     )
     db_session.add(row)
     db_session.flush()
@@ -56,6 +69,7 @@ def try_record_decision(
     *,
     approval_id: UUID,
     decision: ApprovalDecision,
+    decided_via: ApprovalDecidedVia | None = None,
 ) -> ActionApproval | None:
     """Conditional UPDATE that succeeds only while `decision IS NULL`.
 
@@ -65,7 +79,11 @@ def try_record_decision(
         update(ActionApproval)
         .where(ActionApproval.approval_id == approval_id)
         .where(ActionApproval.decision.is_(None))
-        .values(decision=decision, decided_at=datetime.now(timezone.utc))
+        .values(
+            decision=decision,
+            decided_at=datetime.now(timezone.utc),
+            decided_via=decided_via,
+        )
         .returning(ActionApproval)
         .execution_options(synchronize_session=False)
     )

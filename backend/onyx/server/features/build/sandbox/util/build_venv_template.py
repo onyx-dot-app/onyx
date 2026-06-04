@@ -84,13 +84,7 @@ def main() -> None:
     else:
         # Try to find requirements file relative to script location
         script_dir = Path(__file__).parent
-        requirements_file = (
-            script_dir.parent.parent
-            / "sandbox"
-            / "kubernetes"
-            / "docker"
-            / "initial-requirements.txt"
-        )
+        requirements_file = script_dir.parent / "image" / "initial-requirements.txt"
         if not requirements_file.exists():
             raise FileNotFoundError(
                 f"Could not find requirements file. Expected at {requirements_file} or specify with --requirements"

@@ -425,11 +425,11 @@ def test_proxy_kwargs_env_contains_proxy_and_ca_keys(
     assert env["https_proxy"] == "http://sandbox-proxy:8080"
     assert env["HTTP_PROXY"] == "http://sandbox-proxy:8080"
     assert env["http_proxy"] == "http://sandbox-proxy:8080"
-    # NO_PROXY must include the api server hostname so onyx-cli bypasses the
-    # proxy when calling back; otherwise the agent would gate its own snapshot
-    # upload / status calls.
-    assert "onyx.example.com" in env["NO_PROXY"]
-    assert "127.0.0.1" in env["NO_PROXY"]
+    # NO_PROXY is loopback only; api-server traffic goes through the proxy too.
+    assert env["NO_PROXY"] == "127.0.0.1,localhost"
+    # Case-doubled like the other proxy vars; HTTP libs split on which they
+    # read.
+    assert env["no_proxy"] == env["NO_PROXY"]
     # SDK CA envs all point at the bundle the init script writes.
     for key in (
         "NODE_EXTRA_CA_CERTS",
@@ -518,10 +518,20 @@ def test_no_proxy_kwargs_keep_legacy_command(kwargs: ContainerCreateKwargs) -> N
     assert kwargs["command"] == ["/workspace/entrypoint.sh"]
 
 
-def test_proxy_kwargs_requires_port_and_ca_volume() -> None:
+@pytest.mark.parametrize(
+    "port, ca_volume",
+    [
+        (None, "sandbox_proxy_ca"),
+        (8080, None),
+    ],
+)
+def test_proxy_kwargs_requires_port_and_ca_volume(
+    port: int | None, ca_volume: str | None
+) -> None:
     """
-    All-or-nothing: setting just the proxy host without port + CA volume is a
-    misconfiguration and must raise loudly at build time.
+    All-or-nothing: setting the proxy host without BOTH port and CA volume is a
+    misconfiguration and must raise loudly. Cover each missing piece separately
+    so a short-circuiting guard can't pass.
     """
     with pytest.raises(ValueError, match="Proxy posture requires all three"):
         build_container_create_kwargs(
@@ -538,6 +548,6 @@ def test_proxy_kwargs_requires_port_and_ca_volume() -> None:
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
             sandbox_proxy_host="sandbox-proxy",
-            sandbox_proxy_port=None,
-            proxy_ca_volume_name="sandbox_proxy_ca",
+            sandbox_proxy_port=port,
+            proxy_ca_volume_name=ca_volume,
         )

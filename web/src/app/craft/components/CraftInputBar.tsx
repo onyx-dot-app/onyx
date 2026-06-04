@@ -9,6 +9,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
+import useSWR from "swr";
 import BaseInputBar, {
   type BaseInputBarHandle,
 } from "@/sections/input/BaseInputBar";
@@ -18,6 +20,7 @@ import InterruptHint from "@/app/craft/components/InterruptHint";
 import { InputChipStrip } from "@/sections/input/InputChipStrip";
 import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
 import { buildEntryMenuItems } from "@/app/craft/components/buildEntryMenuItems";
+import UserLibraryModal from "@/app/craft/components/UserLibraryModal";
 import { useDoubleEscapeInterrupt } from "@/hooks/useDoubleEscapeInterrupt";
 import useSlashPicker from "@/hooks/useSlashPicker";
 import {
@@ -31,6 +34,8 @@ import {
   flattenSections,
   type PickerEntry,
 } from "@/lib/skills/picker";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { fetchLibraryTree } from "@/app/craft/services/apiServices";
 import type { QueuedMessage } from "@/app/app/interfaces";
 
 export interface CraftInputBarHandle {
@@ -91,6 +96,19 @@ const CraftInputBar = memo(
         () => toPickerSections(skillsData, appsData),
         [skillsData, appsData]
       );
+
+      const { data: libraryTree, mutate: mutateLibrary } = useSWR(
+        SWR_KEYS.buildUserLibraryTree,
+        fetchLibraryTree
+      );
+      const libraryFiles = useMemo(
+        () =>
+          (libraryTree ?? [])
+            .filter((entry) => !entry.is_directory)
+            .map((entry) => ({ id: entry.id, name: entry.name })),
+        [libraryTree]
+      );
+      const [libraryModalOpen, setLibraryModalOpen] = useState(false);
 
       const [activeEntries, setActiveEntries] = useState<PickerEntry[]>(
         initialEntries ?? []
@@ -180,13 +198,20 @@ const CraftInputBar = memo(
         />
       );
 
+      const router = useRouter();
       const plusMenuItems = useMemo(
         () =>
           buildEntryMenuItems(pickerSections, {
             onAttachFiles: () => fileInputRef.current?.click(),
             onSelectEntry: addEntry,
+            onBrowseSkills: () => router.push("/craft/v1/skills"),
+            onBrowseApps: () => router.push("/craft/v1/apps"),
+            libraryFiles,
+            // Defer the modal until the + popover finishes closing, else it paints over it.
+            onManageLibrary: () =>
+              window.setTimeout(() => setLibraryModalOpen(true), 200),
           }),
-        [pickerSections, addEntry]
+        [pickerSections, addEntry, libraryFiles, router]
       );
 
       const bottomLeftSlot = (
@@ -254,6 +279,11 @@ const CraftInputBar = memo(
               onDismiss={dismissEntryInfo}
             />
           )}
+          <UserLibraryModal
+            open={libraryModalOpen}
+            onClose={() => setLibraryModalOpen(false)}
+            onChanges={() => mutateLibrary()}
+          />
         </>
       );
     }

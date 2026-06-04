@@ -1,7 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { getBuildLlmSelection } from "@/app/craft/onboarding/constants";
 import { DELETE_SUCCESS_DISPLAY_DURATION_MS } from "@/app/craft/constants";
 
 import {
@@ -482,6 +481,9 @@ export interface BuildSessionData {
   webappUrl: string | null;
   /** Sandbox info from backend */
   sandbox: ApiSandboxResponse | null;
+  /** Model this session runs on (from the row); seeds the composer picker. */
+  agentProvider: string | null;
+  agentModel: string | null;
   abortController: AbortController;
   lastAccessed: Date;
   isLoaded: boolean;
@@ -726,6 +728,8 @@ const createInitialSessionData = (
   error: null,
   webappUrl: null,
   sandbox: null,
+  agentProvider: null,
+  agentModel: null,
   abortController: new AbortController(),
   lastAccessed: new Date(),
   isLoaded: false,
@@ -1419,11 +1423,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     updateSessionData(tempId, { status: "creating" });
 
     try {
-      const llmSelection = getBuildLlmSelection();
+      // Provision with the backend default; the per-message override sets it later.
       const sessionData = await apiCreateSession({
         name: prompt.slice(0, 50),
-        llmProviderType: llmSelection?.provider || null,
-        llmModelName: llmSelection?.modelName || null,
       });
       const realSessionId = sessionData.id;
 
@@ -1558,6 +1560,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         artifacts,
         webappUrl,
         sandbox,
+        agentProvider: sessionData.agent_provider,
+        agentModel: sessionData.agent_model,
         error: null,
         isLoaded: true,
       });
@@ -1745,12 +1749,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     const promise = (async (): Promise<string | null> => {
       try {
-        const llmSelection = getBuildLlmSelection();
-
-        const sessionData = await apiCreateSession({
-          llmProviderType: llmSelection?.provider || null,
-          llmModelName: llmSelection?.modelName || null,
-        });
+        // Default model at provision time; per-message override sets it later.
+        const sessionData = await apiCreateSession({});
 
         provisioningPromise = null;
         set({
