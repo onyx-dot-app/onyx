@@ -34,12 +34,14 @@ def sanitize_csv_cell(value: str) -> str:
     return value
 
 
+def sanitize_csv_cell_or_none(value: str | None) -> str | None:
+    """sanitize_csv_cell that passes None through."""
+    return sanitize_csv_cell(value) if value is not None else None
+
+
 def sanitize_csv_row(row: Mapping[str, str | None]) -> dict[str, str | None]:
     """Apply sanitize_csv_cell to every non-None value of a CSV row dict."""
-    return {
-        key: sanitize_csv_cell(value) if value is not None else None
-        for key, value in row.items()
-    }
+    return {key: sanitize_csv_cell_or_none(value) for key, value in row.items()}
 
 
 class ParsedRow(BaseModel):

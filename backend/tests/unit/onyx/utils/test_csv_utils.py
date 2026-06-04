@@ -1,6 +1,7 @@
 import pytest
 
 from onyx.utils.csv_utils import sanitize_csv_cell
+from onyx.utils.csv_utils import sanitize_csv_cell_or_none
 from onyx.utils.csv_utils import sanitize_csv_row
 
 
@@ -29,6 +30,12 @@ from onyx.utils.csv_utils import sanitize_csv_row
 )
 def test_sanitize_csv_cell(value: str, expected: str) -> None:
     assert sanitize_csv_cell(value) == expected
+
+
+def test_sanitize_csv_cell_or_none() -> None:
+    assert sanitize_csv_cell_or_none(None) is None
+    assert sanitize_csv_cell_or_none("=SUM(A1)") == "'=SUM(A1)"
+    assert sanitize_csv_cell_or_none("safe") == "safe"
 
 
 def test_sanitize_csv_row_sanitizes_values_and_preserves_none() -> None:
