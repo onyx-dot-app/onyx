@@ -13,7 +13,7 @@ need a sandbox.
 
 ## Prerequisites
 
-Builds on the CONTRIBUTING.md prereqs (Python 3.11, uv, Node.js 22, the venv,
+Builds on the CONTRIBUTING.md prereqs (Python 3.13, uv, Node.js 22, the venv,
 `.vscode/.env`). Docker Desktop must be running with at least 8 CPU / 16 GB
 allocated.
 

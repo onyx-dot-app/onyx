@@ -165,9 +165,9 @@ def get_used_seats(tenant_id: str | None = None) -> int:
                 select(func.count())
                 .select_from(User)
                 .where(
-                    User.is_active == True,  # noqa: E712
+                    User.is_active == True,  # noqa: E712  # ty: ignore[invalid-argument-type]
                     User.role != UserRole.EXT_PERM_USER,
-                    User.email != ANONYMOUS_USER_EMAIL,
+                    User.email != ANONYMOUS_USER_EMAIL,  # ty: ignore[invalid-argument-type]
                     User.account_type != AccountType.SERVICE_ACCOUNT,
                 )
             )

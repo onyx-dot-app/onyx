@@ -68,10 +68,7 @@ def is_fk_violation(exc: IntegrityError) -> bool:
 
 
 def model_to_dict(model: Base) -> dict[str, Any]:
-    return {
-        c.key: getattr(model, c.key)
-        for c in inspect(model).mapper.column_attrs  # ty: ignore[unresolved-attribute]
-    }
+    return {c.key: getattr(model, c.key) for c in inspect(model).mapper.column_attrs}
 
 
 RETRYABLE_PG_CODES = {
