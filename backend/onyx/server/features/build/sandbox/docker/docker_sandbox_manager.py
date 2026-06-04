@@ -28,10 +28,11 @@ Sandbox containers run with:
 - ``user=1000:1000``
 - no Docker socket mount
 - no S3 / MinIO / Postgres / Redis / FileStore credentials in env
-- a fixed env allowlist (``ONYX_PAT`` + ``ONYX_SERVER_URL`` only)
-- only the dedicated sandbox bridge network — never compose's default network.
-  As a result api_server / postgres / redis / minio / model_server are NOT
-  reachable by service name from inside the sandbox.
+- a fixed env allowlist (``ONYX_PAT``, ``ONYX_SERVER_URL``,
+  opencode auth/config only)
+- only the dedicated sandbox bridge network — never compose's default
+  network. As a result api_server / postgres / redis / minio /
+  model_server are NOT reachable by service name from inside the sandbox.
 
 Threat model — Docker vs Kubernetes parity gap
 ----------------------------------------------
@@ -49,8 +50,9 @@ Outbound communication is intentionally limited to:
 2. The Onyx API via ``ONYX_SERVER_URL`` — which must be the *public* HTTPS URL
    the agent reaches just like any other onyx-cli client.
 
-All control-plane traffic from api_server → sandbox uses the Docker Engine API
-(``docker exec``), never network sockets to the sandbox.
+Most control-plane traffic from api_server → sandbox uses the Docker
+Engine API (``docker exec``). Prompt/event transport uses opencode-serve over
+the sandbox bridge; host-run dev-mode connectivity lives in ``dev_mode_serve``.
 """
 
 from __future__ import annotations
@@ -76,6 +78,7 @@ from docker.errors import APIError
 from docker.errors import NotFound
 from docker.models.containers import Container
 
+from onyx.configs.app_configs import DEV_MODE
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import ATTACHMENTS_DIRECTORY
@@ -95,6 +98,12 @@ from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
+    opencode_serve_port_bindings,
+)
+from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
+    published_opencode_serve_base_url,
+)
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import ExecError
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     run_in_container,
@@ -360,6 +369,7 @@ class _ContainerCreateKwargsRequired(TypedDict):
     privileged: bool
     read_only: bool
     network: str
+    ports: dict[str, tuple[str, int | None]]
     environment: dict[str, str]
     volumes: dict[str, dict[str, str]]
     mem_limit: str
@@ -402,9 +412,9 @@ def build_container_create_kwargs(
     Legacy (proxy disabled, default in tests/dev without proxy stack):
 
     - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL, plus
-      ``OPENCODE_SERVER_PASSWORD`` and ``OPENCODE_CONFIG_CONTENT``. No caller
-      can inject anything else. No S3/MinIO/Postgres/Redis credentials. No
-      compose service hostnames.
+      ``OPENCODE_SERVER_PASSWORD`` and ``OPENCODE_CONFIG_CONTENT``.
+      No caller can inject anything else. No S3/MinIO/Postgres/Redis
+      credentials. No compose service hostnames.
     - **No host mounts**: only the per-sandbox named volume mounted at
       ``/workspace/sessions``. No Docker socket. No FileStore root.
     - **Cap-dropped non-root**: ``user=1000:1000``, ``cap_drop=ALL``,
@@ -466,6 +476,12 @@ def build_container_create_kwargs(
     }
 
     security_opts = ["no-new-privileges:true"]
+    ports: dict[str, tuple[str, int | None]] = {}
+    if DEV_MODE:
+        # Host-run dev workers are outside Docker's bridge DNS namespace, so
+        # they cannot reach http://sandbox-<id>:4096 directly. Publish only in
+        # dev mode, bound to localhost, while full compose uses bridge DNS.
+        ports = opencode_serve_port_bindings()
     volumes: dict[str, dict[str, str]] = {
         volume_name: {"bind": SESSIONS_ROOT, "mode": "rw"},
     }
@@ -509,6 +525,7 @@ def build_container_create_kwargs(
         "privileged": False,
         "read_only": False,
         "network": network,
+        "ports": ports,
         "environment": env,
         "volumes": volumes,
         "mem_limit": memory_limit,
@@ -1201,15 +1218,19 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
     def _load_serve_connection_info(
         self, sandbox_id: UUID
     ) -> ServeConnectionInfo | None:
-        """
-        One ``docker inspect`` to extract URL (container name) + password (env,
-        set at create time). Cached by the mixin.
+        """One ``docker inspect`` to extract URL + password.
+
+        Compose deployments use container-name DNS on the sandbox bridge
+        network. Host-run dev mode may override this with a localhost-published
+        URL from ``dev_mode_serve``.
         """
         container = self._get_container(sandbox_id)
         if container is None:
             return None
         try:
-            env_list = ((container.attrs or {}).get("Config") or {}).get("Env") or []
+            container.reload()
+            attrs = container.attrs or {}
+            env_list = (attrs.get("Config") or {}).get("Env") or []
         except (APIError, NotFound):
             return None
         password: str | None = None
@@ -1218,10 +1239,14 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
             if entry.startswith(prefix):
                 password = entry[len(prefix) :]
                 break
+        base_url = f"http://{_sandbox_container_name(sandbox_id)}:{OPENCODE_SERVE_PORT}"
+        if DEV_MODE:
+            # Match the dev-only port publishing above: host-run workers need
+            # the Docker-assigned localhost port, while compose should keep the
+            # stable sandbox bridge URL.
+            base_url = published_opencode_serve_base_url(attrs) or base_url
         return ServeConnectionInfo(
-            base_url=(
-                f"http://{_sandbox_container_name(sandbox_id)}:{OPENCODE_SERVE_PORT}"
-            ),
+            base_url=base_url,
             password=password,
         )
 
