@@ -12,6 +12,7 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
+import PreApprovalPicker from "@/app/craft/v1/tasks/components/PreApprovalPicker";
 import {
   compileLocalPayloadToUtcCron,
   localPayloadToUtcPayload,
@@ -44,6 +45,7 @@ export interface ScheduleTaskFormInitial {
   prompt: string;
   mode: EditorMode;
   payload: EditorPayload;
+  preApprovedAppIds: number[];
 }
 
 interface ScheduleTaskFormProps {
@@ -70,6 +72,9 @@ export default function ScheduleTaskForm({
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
   const [payload, setPayload] = useState<EditorPayload>(initial.payload);
+  const [preApprovedAppIds, setPreApprovedAppIds] = useState<number[]>(
+    initial.preApprovedAppIds
+  );
   const [saving, setSaving] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [promptTouched, setPromptTouched] = useState(false);
@@ -192,6 +197,7 @@ export default function ScheduleTaskForm({
             prompt: trimmedPrompt,
             editor_mode: mode,
             editor_payload: storagePayload,
+            pre_approved_app_ids: preApprovedAppIds,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
@@ -206,6 +212,7 @@ export default function ScheduleTaskForm({
             editor_mode: mode,
             editor_payload: storagePayload,
             run_immediately: runImmediately,
+            pre_approved_app_ids: preApprovedAppIds,
           };
           await createScheduledTask(body);
           toast.success(
@@ -229,6 +236,7 @@ export default function ScheduleTaskForm({
       initial.taskId,
       mode,
       payload,
+      preApprovedAppIds,
       router,
       trimmedName,
       trimmedPrompt,
@@ -358,6 +366,20 @@ export default function ScheduleTaskForm({
             />
           </InputVertical>
         </GeneralLayouts.Section>
+
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+
+        <GeneralLayouts.Section>
+          <InputVertical
+            title="Pre-approved apps"
+            description="Selected apps can act without pausing for approval while this task runs on its own. Note: an app you don't pre-approve will pause mid-run to ask for your approval. The run may stall or fail if you do not approve an action request."
+          >
+            <PreApprovalPicker
+              selectedIds={preApprovedAppIds}
+              onChange={setPreApprovedAppIds}
+            />
+          </InputVertical>
+        </GeneralLayouts.Section>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
@@ -370,5 +392,6 @@ export function defaultFormInitial(): ScheduleTaskFormInitial {
     prompt: "",
     mode: "interval",
     payload: { unit: "hours", every: 1 },
+    preApprovedAppIds: [],
   };
 }

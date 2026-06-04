@@ -161,9 +161,8 @@ def update_scheduled_task(
         ``next_run_at`` is recomputed from ``now``.
       - If ``status`` transitions to PAUSED, ``next_run_at`` is set to NULL.
       - If ``status`` transitions to ACTIVE, ``next_run_at`` is recomputed.
-      - If ``prompt`` changes value, ``pre_approved_app_ids`` resets to []
-        (a grant is tied to a specific intent). Grants in the same patch
-        still win.
+      - ``pre_approved_app_ids`` follows normal patch semantics: supplied
+        replaces the set, omitted leaves it unchanged.
 
     Raises:
         OnyxError(NOT_FOUND): the task does not exist or is not owned by
@@ -176,11 +175,8 @@ def update_scheduled_task(
     schedule_changed = False
     if name is not None:
         task.name = name
-    if prompt is not None and prompt != task.prompt:
+    if prompt is not None:
         task.prompt = prompt
-        # Prompt change resets grants unless this same patch supplies new ones.
-        if pre_approved_app_ids is None:
-            pre_approved_app_ids = []
     if pre_approved_app_ids is not None:
         set_pre_approved_apps(task, pre_approved_app_ids)
     if editor_mode is not None:

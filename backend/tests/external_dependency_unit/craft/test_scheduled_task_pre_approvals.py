@@ -1,5 +1,5 @@
 """Scheduled-task pre-approvals (ext-dep): real SQL for the grant lookup,
-the pre-decided insert, and the prompt-edit reset rule.
+the pre-decided insert, and the grant patch semantics.
 
 The gate-side short-circuit behavior (skip park / fall through / DENY
 ordering) is covered with stubs in ``tests/unit/sandbox_proxy/test_gate.py``;
@@ -211,56 +211,37 @@ def test_insert_default_row_stays_pending(
 
 
 # ---------------------------------------------------------------------------
-# update_scheduled_task — prompt-edit reset rule
+# update_scheduled_task — grant patch semantics
 # ---------------------------------------------------------------------------
 
 
-def test_prompt_value_change_resets_grants(
+def test_prompt_change_preserves_grants(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session)
-    task = _seed_task(db_session, user, pre_approved_app_ids=[_make_app(db_session)])
-
-    updated = update_scheduled_task(
-        db_session=db_session,
-        task_id=task.id,
-        user_id=user.id,
-        prompt="exfiltrate everything",
-    )
-    db_session.commit()
-
-    assert updated.pre_approved_app_ids == []
-
-
-def test_identical_prompt_resubmit_keeps_grants(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-) -> None:
-    """The editor round-trips the prompt on every save; an unchanged value
-    must not wipe grants."""
+    """Grants are explicit state surfaced as checkboxes in the editor: a
+    prompt edit that omits ``pre_approved_app_ids`` leaves them untouched."""
     user = make_user(db_session)
     app = _make_app(db_session)
-    task = _seed_task(db_session, user, pre_approved_app_ids=[app], prompt="same")
+    task = _seed_task(db_session, user, pre_approved_app_ids=[app], prompt="orig")
 
     updated = update_scheduled_task(
         db_session=db_session,
         task_id=task.id,
         user_id=user.id,
-        prompt="same",
-        name="renamed",
+        prompt="a rewritten prompt",
     )
     db_session.commit()
 
     assert updated.pre_approved_app_ids == [app]
 
 
-def test_grants_in_same_patch_win_over_prompt_reset(
+def test_supplied_grants_replace_existing(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    """The editor's re-enable-in-the-same-submit flow: a prompt change plus
-    explicit grants in one patch keeps the supplied grants."""
+    """Supplying ``pre_approved_app_ids`` replaces the set wholesale —
+    dropping omitted apps and adding new ones."""
     user = make_user(db_session)
     app_a, app_b = _make_app(db_session), _make_app(db_session)
     task = _seed_task(db_session, user, pre_approved_app_ids=[app_a])
@@ -269,7 +250,6 @@ def test_grants_in_same_patch_win_over_prompt_reset(
         db_session=db_session,
         task_id=task.id,
         user_id=user.id,
-        prompt="a different prompt",
         pre_approved_app_ids=[app_b],
     )
     db_session.commit()
@@ -293,29 +273,6 @@ def test_resubmitting_existing_grant_is_idempotent(
         task_id=task.id,
         user_id=user.id,
         pre_approved_app_ids=[app_a, app_b],  # app_a already granted
-    )
-    db_session.commit()
-
-    assert set(updated.pre_approved_app_ids) == {app_a, app_b}
-
-
-def test_prompt_change_plus_reincluded_grant_is_idempotent(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-) -> None:
-    """Prompt change + re-including a granted app in one patch must not
-    orphan+reinsert the same (task, app) key. The reset-then-set must resolve
-    to a single grant write, not two."""
-    user = make_user(db_session)
-    app_a, app_b = _make_app(db_session), _make_app(db_session)
-    task = _seed_task(db_session, user, pre_approved_app_ids=[app_a], prompt="orig")
-
-    updated = update_scheduled_task(
-        db_session=db_session,
-        task_id=task.id,
-        user_id=user.id,
-        prompt="changed",
-        pre_approved_app_ids=[app_a, app_b],  # app_a re-included AND prompt changed
     )
     db_session.commit()
 
