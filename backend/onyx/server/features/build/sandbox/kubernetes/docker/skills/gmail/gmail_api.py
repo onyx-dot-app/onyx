@@ -231,7 +231,10 @@ def _message_detail(msg: dict[str, Any]) -> dict[str, Any]:
 
 def _draft_summary(draft: dict[str, Any]) -> dict[str, Any]:
     """Fetch the underlying message metadata for one listed draft."""
-    return {"draftId": draft.get("id"), **_message_summary(draft.get("message", {}))}
+    msg_ref = draft.get("message") or {}
+    if not msg_ref.get("id"):
+        return {"draftId": draft.get("id")}
+    return {"draftId": draft.get("id"), **_message_summary(msg_ref)}
 
 
 def _cmd_messages(a: argparse.Namespace) -> dict[str, Any]:
@@ -323,8 +326,11 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
             # Binary bytes don't belong on stdout; require --out to materialise
             # them and otherwise just report what's available.
             return {"ok": True, "size": size, "saved": False, "out": None}
-        pad = "=" * (-len(data or "") % 4)
-        raw_bytes = base64.urlsafe_b64decode((data or "") + pad)
+        if not data:
+            # No bytes to write — don't leave a zero-byte file looking like success.
+            return {"ok": False, "error": "no_attachment_data", "size": size}
+        pad = "=" * (-len(data) % 4)
+        raw_bytes = base64.urlsafe_b64decode(data + pad)
         with open(a.out, "wb") as fh:
             fh.write(raw_bytes)
         return {"ok": True, "size": size, "saved": True, "out": a.out}
