@@ -1149,9 +1149,9 @@ if [ "$INCLUDE_CRAFT" = true ]; then
         fi
     fi
 
-    # Same pattern for the proxy CA volume — compose overlay references it
-    # as external so the name stays unprefixed; the sandbox manager mounts
-    # the same name when provisioning sandbox containers.
+    # Same pattern for the proxy CA volume — compose overlay references it as
+    # external so the name stays unprefixed; the sandbox manager mounts the same
+    # name when provisioning sandbox containers.
     SANDBOX_PROXY_CA_VOL="${SANDBOX_PROXY_CA_VOLUME_NAME:-sandbox_proxy_ca}"
     if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker volume inspect "$SANDBOX_PROXY_CA_VOL" >/dev/null 2>&1; then
         if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker volume create "$SANDBOX_PROXY_CA_VOL" >/dev/null 2>&1; then

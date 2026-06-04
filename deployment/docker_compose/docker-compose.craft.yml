@@ -2,24 +2,24 @@
 # install.sh --include-craft wires this in automatically.
 #
 # Trust boundary: api_server, background, and sandbox-proxy all bind-mount
-# /var/run/docker.sock (root-equivalent on host). Only run on hosts you
-# fully control.
+# /var/run/docker.sock (root-equivalent on host). Only run on hosts you fully
+# control.
 services:
   api_server:
     environment:
       - SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}
-      # Public Onyx URL — internal compose hostnames don't resolve from
-      # the sandbox bridge.
+      # Public Onyx URL — internal compose hostnames don't resolve from the
+      # sandbox bridge.
       - SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-}
       - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:v0.1.50}
       - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
       - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
       - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
       - ENABLE_OPENCODE_DEBUGGING=${ENABLE_OPENCODE_DEBUGGING:-false}
-      # Egress proxy wiring. Setting SANDBOX_PROXY_HOST="" disables the
-      # proxy posture (sandbox containers fall back to the legacy
-      # 4-key-env / cap_drop=ALL / user=1000:1000 posture); leaving the
-      # default routes through the in-cluster proxy.
+      # Egress proxy wiring. Setting SANDBOX_PROXY_HOST="" disables the proxy
+      # posture (sandbox containers fall back to the legacy 4-key-env /
+      # cap_drop=ALL / user=1000:1000 posture); leaving the default routes
+      # through the in-cluster proxy.
       - SANDBOX_PROXY_HOST=${SANDBOX_PROXY_HOST-sandbox-proxy}
       - SANDBOX_PROXY_PORT=${SANDBOX_PROXY_PORT:-8080}
       - SANDBOX_PROXY_CA_VOLUME_NAME=${SANDBOX_PROXY_CA_VOLUME_NAME:-sandbox_proxy_ca}
@@ -32,8 +32,8 @@ services:
 
   background:
     environment:
-      # Must match api_server so the idle-cleanup celery task uses the
-      # same backend to snapshot + terminate sandboxes.
+      # Must match api_server so the idle-cleanup celery task uses the same
+      # backend to snapshot + terminate sandboxes.
       - SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}
       - SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-}
       - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:v0.1.50}
@@ -51,11 +51,11 @@ services:
       - onyx_craft_sandbox
 
   # Egress proxy that MITMs sandbox HTTPS traffic and gates action approvals.
-  # Reuses the onyx-backend image; just a different entrypoint. The proxy
-  # speaks to Postgres and Redis directly (same code path as api_server) and
-  # to the Docker socket (RO, events watcher only). Cross-process state with
-  # api_server lives in `action_approval` rows + Redis announce/wake lists,
-  # never in HTTP between the two.
+  # Reuses the onyx-backend image; just a different entrypoint. The proxy speaks
+  # to Postgres and Redis directly (same code path as api_server) and to the
+  # Docker socket (RO, events watcher only). Cross-process state with api_server
+  # lives in `action_approval` rows + Redis announce/wake lists, never in HTTP
+  # between the two.
   sandbox-proxy:
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
     command: ["python", "-m", "onyx.sandbox_proxy.server"]
@@ -66,8 +66,8 @@ services:
       - SANDBOX_BACKEND=docker
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - REDIS_HOST=${REDIS_HOST:-cache}
-      # Internal mount path the FileCAStore writes the CA to. Sandbox
-      # containers mount the same named volume read-only at /sandbox-ca.
+      # Internal mount path the FileCAStore writes the CA to. Sandbox containers
+      # mount the same named volume read-only at /sandbox-ca.
       - SANDBOX_PROXY_CA_VOLUME_PATH=/var/lib/sandbox-proxy/ca
       - SANDBOX_DOCKER_SOCKET=${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}
       - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
@@ -83,15 +83,15 @@ services:
       cache:
         condition: service_started
     networks:
-      # `default` reaches relational_db + cache by compose-DNS; the
-      # sandbox bridge join makes the service resolvable as `sandbox-proxy`
-      # from inside each sandbox container.
+      # `default` reaches relational_db + cache by compose-DNS; the sandbox
+      # bridge join makes the service resolvable as `sandbox-proxy` from inside
+      # each sandbox container.
       - default
       - onyx_craft_sandbox
     restart: unless-stopped
-    # >= _DRAIN_TIMEOUT_S (10s in server.py) plus margin so the SIGTERM
-    # drain can terminalise parked approvals before docker tears the
-    # container down. Matches K8s terminationGracePeriodSeconds.
+    # >= _DRAIN_TIMEOUT_S (10s in server.py) plus margin so the SIGTERM drain
+    # can terminalise parked approvals before docker tears the container down.
+    # Matches K8s terminationGracePeriodSeconds.
     stop_grace_period: 20s
     healthcheck:
       test:
@@ -118,10 +118,9 @@ networks:
     external: true
 
 volumes:
-  # Pre-created by install.sh --include-craft. external+name avoids the
-  # compose project prefix so DockerSandboxManager can mount the same
-  # name when it provisions sandbox containers from outside compose's
-  # project scope.
+  # Pre-created by install.sh --include-craft. external+name avoids the compose
+  # project prefix so DockerSandboxManager can mount the same name when it
+  # provisions sandbox containers from outside compose's project scope.
   sandbox_proxy_ca:
     name: sandbox_proxy_ca
     external: true
