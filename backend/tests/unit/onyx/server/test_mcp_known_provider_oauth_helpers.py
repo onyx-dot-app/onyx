@@ -163,8 +163,8 @@ def test_known_provider_oauth_metadata_uses_configured_token_endpoint() -> None:
         _make_mcp_server_stub(provider_mode=MCPOAuthProviderMode.KNOWN_PROVIDER)
     )
     assert metadata is not None
-    # The whole point: refresh must hit the configured endpoint, not the SDK's
-    # `<server-origin>/token` fallback (which would be mcp.example.com/token).
+    # Refresh must hit the configured endpoint, not the SDK's
+    # `<server-origin>/token` fallback (mcp.example.com/token).
     assert str(metadata.token_endpoint) == "https://accounts.example.com/oauth/token"
     assert (
         str(metadata.authorization_endpoint)

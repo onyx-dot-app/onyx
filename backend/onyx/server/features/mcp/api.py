@@ -365,9 +365,8 @@ def _token_dict_with_preserved_refresh(
     tokens: OAuthToken, existing_tokens_raw: dict[str, Any] | None
 ) -> dict[str, Any]:
     """Dump `tokens` for storage, carrying over a previously stored refresh
-    token when the new payload omits one. Providers like Google only issue a
-    refresh token on the first authorization, so persisting a refresh response
-    verbatim would wipe it and break every subsequent refresh."""
+    token when the new payload omits one (providers like Google only issue a
+    refresh token on the first authorization)."""
     token_dict = tokens.model_dump(mode="json")
     if token_dict.get("refresh_token") or not existing_tokens_raw:
         return token_dict
@@ -386,14 +385,12 @@ def _absolute_token_expiry(tokens: OAuthToken) -> float | None:
 
 
 def _known_provider_oauth_metadata(mcp_server: DbMCPServer) -> OAuthMetadata | None:
-    """Expose a KNOWN_PROVIDER server's admin-configured endpoints as SDK OAuth
-    metadata. Hydrated into the provider context before tool calls so the SDK
-    refreshes against the real token endpoint instead of its default
+    """Expose a KNOWN_PROVIDER server's configured endpoints as SDK OAuth
+    metadata so refresh targets the real token endpoint, not the SDK's
     `<server-origin>/token` fallback."""
-    if mcp_server.oauth_provider_mode != MCPOAuthProviderMode.KNOWN_PROVIDER:
-        return None
     if (
-        not mcp_server.oauth_authorization_endpoint
+        mcp_server.oauth_provider_mode != MCPOAuthProviderMode.KNOWN_PROVIDER
+        or not mcp_server.oauth_authorization_endpoint
         or not mcp_server.oauth_token_endpoint
     ):
         return None
@@ -413,10 +410,8 @@ class OnyxTokenStorage(TokenStorage):
     def __init__(self, connection_config_id: int, alt_config_id: int | None = None):
         self.alt_config_id = alt_config_id
         self.connection_config_id = connection_config_id
-        # Optional SDK context, bound by `make_oauth_provider`. When set,
-        # `get_tokens` hydrates its `token_expiry_time` from the same config
-        # read it already performs, so we never issue a separate query just to
-        # learn the token expiry.
+        # When bound, `get_tokens` hydrates its `token_expiry_time` from the
+        # config read it already does — no separate query for the expiry.
         self._oauth_context: OAuthContext | None = None
 
     def bind_oauth_context(self, context: OAuthContext) -> None:
@@ -432,9 +427,8 @@ class OnyxTokenStorage(TokenStorage):
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
             config_data = extract_connection_data(config)
-            # The SDK never derives expiry from stored tokens, so hydrate it
-            # here (while we hold the config) to drive its proactive-refresh
-            # decision. None clears any prior value (token has no known expiry).
+            # The SDK never derives expiry from stored tokens; hydrate it here
+            # to drive its refresh decision (None = no known expiry).
             if self._oauth_context is not None:
                 expires_at = config_data.get(MCPOAuthKeys.TOKEN_EXPIRES_AT.value)
                 self._oauth_context.token_expiry_time = (
@@ -457,9 +451,8 @@ class OnyxTokenStorage(TokenStorage):
             if expires_at is not None:
                 config_data[MCPOAuthKeys.TOKEN_EXPIRES_AT.value] = expires_at
             else:
-                # Refresh response omitted expires_in; clear the stale absolute
-                # expiry so the next tool call does not treat the just-refreshed
-                # token as expired and trigger another needless refresh.
+                # No expires_in: drop any stale expiry so the next tool call
+                # doesn't see the just-refreshed token as expired.
                 config_data.pop(MCPOAuthKeys.TOKEN_EXPIRES_AT.value, None)
             config_data["headers"] = {
                 "Authorization": f"{tokens.token_type} {tokens.access_token}"
@@ -607,17 +600,12 @@ def make_oauth_provider(
         callback_handler=callback_handler,
     )
 
-    # A fresh provider is built per tool call, so its in-memory context starts
-    # empty. Hydrate the two fields the SDK needs for a silent refresh:
-    #   1. Absolute token expiry — without it `is_token_valid()` defaults to True
-    #      (the SDK never sets expiry from stored tokens), so the proactive
-    #      refresh branch never fires and an expired token only fails on a 401,
-    #      which routes to full re-auth ("Please Reconnect") rather than refresh.
-    #      Bound to the storage so it is filled from the config read `get_tokens`
-    #      already does, rather than an extra query.
-    #   2. KNOWN_PROVIDER OAuth metadata — without it the refresh request falls
-    #      back to `<server-origin>/token`, which is wrong whenever the auth
-    #      server lives on a different host (e.g. GCP).
+    # A fresh provider per tool call starts with an empty context, so the SDK
+    # can't silently refresh without two hydrated fields: an absolute token
+    # expiry (else `is_token_valid()` stays True and refresh never fires) and,
+    # for known providers, the real OAuth metadata (else refresh hits the wrong
+    # `<server-origin>/token`). Expiry is bound through storage so it rides the
+    # config read `get_tokens` already does.
     storage.bind_oauth_context(provider.context)
     known_metadata = _known_provider_oauth_metadata(mcp_server)
     if known_metadata is not None:
@@ -1123,9 +1111,8 @@ async def process_oauth_callback(
         user_config_data[MCPOAuthKeys.TOKENS.value] = oauth_token.model_dump(
             mode="json"
         )
-        # `exchange_oauth_code_for_token` computes an absolute `expires_at` that
-        # `OAuthToken` drops on validation; persist it so later tool calls can
-        # tell when the token is stale and refresh proactively.
+        # `OAuthToken` drops the absolute `expires_at` from the payload on
+        # validation; persist it so later tool calls know when to refresh.
         expires_at = token_payload.get("expires_at") or _absolute_token_expiry(
             oauth_token
         )
