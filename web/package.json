@@ -80,7 +80,7 @@
     "next": "16.2.6",
     "next-themes": "^0.4.4",
     "postcss": "^8.5.10",
-    "posthog-js": "^1.176.0",
+    "posthog-js": "^1.376.3",
     "pptxgenjs": "^4.0.1",
     "react": "19.2.4",
     "react-datepicker": "^7.6.0",
