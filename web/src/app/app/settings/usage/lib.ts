@@ -1,5 +1,6 @@
 import useSWR from "swr";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export interface UsagePerDayByModel {
   day: string; // "YYYY-MM-DD"
@@ -26,12 +27,8 @@ export interface UserUsageResponse {
   selected_model_price: SelectedModelPrice | null;
 }
 
-export function usageKey(days: number): string {
-  return `/api/user/usage?days=${days}`;
-}
-
 export function useUserUsage(days: number) {
-  return useSWR<UserUsageResponse>(usageKey(days), errorHandlingFetcher, {
+  return useSWR<UserUsageResponse>(SWR_KEYS.userUsage(days), errorHandlingFetcher, {
     revalidateOnFocus: false,
     onErrorRetry: skipRetryOnAuthError,
   });

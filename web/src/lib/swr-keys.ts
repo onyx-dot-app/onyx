@@ -6,6 +6,8 @@
  *
  * For dynamic keys (e.g. per-ID endpoints), use the builder functions.
  */
+import { buildApiPath } from "@/lib/urlBuilder";
+
 export const SWR_KEYS = {
   // ── User ──────────────────────────────────────────────────────────────────
   me: "/api/me",
@@ -41,6 +43,9 @@ export const SWR_KEYS = {
     `/api/admin/llm/built-in/options/${providerEndpoint}`,
   llmContextualCost: "/api/admin/llm/provider-contextual-cost",
   costOverrides: "/api/admin/cost-overrides",
+  userUsage: (days: number) => `/api/user/usage?days=${days}`,
+  adminUsageExport: (params: { start?: string; end?: string }) =>
+    buildApiPath("/api/admin/usage/export", params),
 
   // ── Image Generation ──────────────────────────────────────────────────────
   imageGenConfig: "/api/admin/image-generation/config",

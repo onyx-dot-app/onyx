@@ -27,7 +27,14 @@ from onyx.db.user_usage import get_window_start
 from onyx.db.user_usage import record_user_usage
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.query_and_chat.token_limit import _is_rate_limited
+from onyx.server.query_and_chat.token_limit import _first_triggered_limit
+
+
+def _is_rate_limited(
+    rate_limits: list[TokenRateLimit],
+    usage: list[tuple[datetime.datetime, int]],
+) -> bool:
+    return _first_triggered_limit(rate_limits, usage) is not None
 
 
 # Postgres-only column types -> SQLite equivalents so the real UserUsage table

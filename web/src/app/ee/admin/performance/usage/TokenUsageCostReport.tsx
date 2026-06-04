@@ -20,7 +20,7 @@ import {
   TableFooter,
 } from "@/components/ui/table";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { buildApiPath } from "@/lib/urlBuilder";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 interface UsageExportRecord {
   model: string;
@@ -77,7 +77,7 @@ export function TokenUsageCostReport({ timeRange }: TokenUsageCostReportProps) {
   const [expandedEmail, setExpandedEmail] = useState<string | null>(null);
 
   // start/end are inclusive bare dates; the endpoint covers the full `end` day.
-  const url = buildApiPath("/api/admin/usage/export", {
+  const url = SWR_KEYS.adminUsageExport({
     start: timeRange.from ? toDateParam(timeRange.from) : undefined,
     end: timeRange.to ? toDateParam(timeRange.to) : undefined,
   });

@@ -165,15 +165,6 @@ def _first_triggered_cost_limit(
     return None
 
 
-def _is_rate_limited(
-    rate_limits: Sequence[TokenRateLimit], usage: Sequence[tuple[datetime, int]]
-) -> bool:
-    """
-    If at least one rate limit is exceeded, return True
-    """
-    return _first_triggered_limit(rate_limits, usage) is not None
-
-
 def raise_rate_limited(scope: str, period_hours: int) -> None:
     """Raise a structured 429 carrying the offending scope + when its window rolls over.
 
