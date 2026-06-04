@@ -8,7 +8,7 @@ Parameters:
     Description: "Comma-delimited list of at least two subnet IDs in different Availability Zones"
   VpcID:
     Type: String
-    Default: vpc-098cfa79d637dabff
+    Description: "The ID of the VPC to deploy into"
   ServiceName:
     Type: String
     Default: onyx-vespaengine
