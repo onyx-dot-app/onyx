@@ -17,6 +17,7 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
+from onyx.server.query_and_chat.context_usage import ContextUsage
 from onyx.server.query_and_chat.streaming_models import Packet
 
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
@@ -230,6 +231,7 @@ class ChatMessageDetail(BaseModel):
     processing_duration_seconds: float | None = None
     preferred_response_id: int | None = None
     model_display_name: str | None = None
+    prompt_tokens: int | None = None
 
     def model_dump(  # ty: ignore[invalid-method-override]
         self, *args: list, **kwargs: dict[str, Any]
@@ -262,6 +264,7 @@ class ChatSessionDetailResponse(BaseModel):
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
+    context_usage: ContextUsage | None = None
 
 
 class AdminSearchRequest(BaseModel):

@@ -1,5 +1,6 @@
 import datetime
 import json
+from collections.abc import Callable
 from collections.abc import Generator
 from datetime import timedelta
 from uuid import UUID
@@ -71,8 +72,10 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
+from onyx.llm.interfaces import LLM
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
+from onyx.server.query_and_chat.context_usage import compute_context_usage
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -109,6 +112,26 @@ logger = setup_logger()
 
 router = APIRouter(prefix="/chat")
 
+# Tokens reserved per persona tool when estimating remaining context window.
+_TOKENS_RESERVED_PER_TOOL = 256
+
+
+def _combined_system_prompt_tokens(
+    persona: Persona,
+    db_session: Session,
+    token_counter: Callable[[str], int],
+) -> int:
+    """Tokens of the persona's effective system prompt (replaced, or custom
+    prepended to the base prompt). Reads the base prompt from the DB only when
+    not replaced — so callers should invoke this only when actually needed."""
+    if persona.replace_base_system_prompt and persona.system_prompt:
+        # User has opted to replace the base system prompt entirely
+        return token_counter(persona.system_prompt)
+    # Default behavior: prepend custom prompt to base system prompt
+    system_prompt = get_default_base_system_prompt(db_session)
+    agent_prompt = persona.system_prompt + " " if persona.system_prompt else ""
+    return token_counter(agent_prompt + system_prompt)
+
 
 def _get_available_tokens_for_persona(
     persona: Persona,
@@ -119,7 +142,7 @@ def _get_available_tokens_for_persona(
         model_max_input_tokens: int,
         system_and_agent_prompt_tokens: int,
         num_tools: int,
-        token_reserved_per_tool: int = 256,
+        token_reserved_per_tool: int = _TOKENS_RESERVED_PER_TOOL,
         # Estimating for a long user input message, hard to know ahead of time
         default_reserved_tokens: int = 2000,
     ) -> int:
@@ -132,21 +155,24 @@ def _get_available_tokens_for_persona(
 
     llm = get_llm_for_persona(persona=persona, user=user)
     token_counter = get_llm_token_counter(llm)
-
-    if persona.replace_base_system_prompt and persona.system_prompt:
-        # User has opted to replace the base system prompt entirely
-        combined_prompt_tokens = token_counter(persona.system_prompt)
-    else:
-        # Default behavior: prepend custom prompt to base system prompt
-        system_prompt = get_default_base_system_prompt(db_session)
-        agent_prompt = persona.system_prompt + " " if persona.system_prompt else ""
-        combined_prompt_tokens = token_counter(agent_prompt + system_prompt)
+    combined_prompt_tokens = _combined_system_prompt_tokens(
+        persona, db_session, token_counter
+    )
 
     return _get_non_reserved_input_tokens(
         model_max_input_tokens=llm.config.max_input_tokens,
         system_and_agent_prompt_tokens=combined_prompt_tokens,
         num_tools=len(persona.tools),
     )
+
+
+def _baseline_used_tokens(persona: Persona, db_session: Session, llm: LLM) -> int:
+    """Baseline used-tokens for an empty chat: system + persona prompt + a
+    per-tool reservation. Tokenizes the system prompt, so call only when the
+    chat has no answered turn. Reuses the already-resolved persona LLM."""
+    token_counter = get_llm_token_counter(llm)
+    base = _combined_system_prompt_tokens(persona, db_session, token_counter)
+    return base + len(persona.tools) * _TOKENS_RESERVED_PER_TOOL
 
 
 @router.get("/get-user-chat-sessions", tags=PUBLIC_API_TAGS)
@@ -360,6 +386,21 @@ def get_chat_session(
             )
             # msg_packet_list.append(Packet(ind=end_step_nr, obj=OverallStop()))
 
+    # Resolve the persona LLM once for the context window. The baseline (which
+    # tokenizes the system prompt + reads the default base prompt from the DB) is
+    # deferred behind baseline_fn so it runs only for empty/never-answered chats.
+    context_usage = None
+    if chat_session.persona:
+        persona = chat_session.persona
+        llm = get_llm_for_persona(persona=persona, user=user)
+        max_input_tokens = llm.config.max_input_tokens
+        if max_input_tokens > 0:
+            context_usage = compute_context_usage(
+                chat_message_details,
+                max_input_tokens,
+                baseline_fn=lambda: _baseline_used_tokens(persona, db_session, llm),
+            )
+
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
         description=chat_session.description,
@@ -375,6 +416,7 @@ def get_chat_session(
         owner_name=chat_session.user.personal_name if chat_session.user else None,
         # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
+        context_usage=context_usage,
     )
 
 
