@@ -16,7 +16,7 @@ export type { ProviderKey };
 interface SelectableButtonProps {
   selected: boolean;
   onClick: () => void;
-  children: React.ReactNode;
+  children: string;
   subtext?: string;
   disabled?: boolean;
   tooltip?: string;
@@ -45,7 +45,7 @@ function SelectableButton({
           )}
         >
           <Text font="main-ui-action" color="text-05">
-            {String(children)}
+            {children}
           </Text>
         </button>
       </Disabled>

@@ -92,11 +92,11 @@ function DeletingMessage() {
   }, []);
 
   return (
-    <span className="animate-subtle-pulse">
+    <div className="animate-subtle-pulse">
       <Text as="p" color="text-03">
         {DELETING_MESSAGES[messageIndex]}
       </Text>
-    </span>
+    </div>
   );
 }
 
