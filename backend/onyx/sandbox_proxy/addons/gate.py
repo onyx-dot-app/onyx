@@ -344,8 +344,8 @@ class GateAddon:
         src_ip = self._extract_src_ip(flow)
         if src_ip is None:
             # mitmproxy peername returned no usable IP -- should never happen
-            # over real TCP. Log loudly so a stuck NAT or transport-mode
-            # mishap doesn't read as "everything just 403's silently".
+            # over real TCP. Log loudly so a stuck NAT or transport-mode mishap
+            # doesn't read as "everything just 403's silently".
             logger.warning(
                 "gate.no_src_ip host=%s peername=%s",
                 flow.request.host,
@@ -367,11 +367,9 @@ class GateAddon:
             return None
         if sandbox is None:
             # Source IP isn't in the lookup cache. Two common causes:
-            # (1) the sandbox container died and was evicted from the cache
-            # before its last request drained; (2) deployment-shape SNAT
-            # masks the sandbox's real bridge IP (e.g. proxy outside the
-            # sandbox bridge). Log so the admin has signal beyond a bare
-            # 403.
+            # (1) Container died + evicted before its last request drained.
+            # (2) Deployment-shape SNAT masks the sandbox's real bridge IP (e.g.
+            # proxy outside the sandbox bridge).
             logger.warning(
                 "gate.unidentified_sandbox src_ip=%s host=%s",
                 src_ip,

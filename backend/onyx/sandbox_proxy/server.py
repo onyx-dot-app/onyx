@@ -47,10 +47,8 @@ _DRAIN_TIMEOUT_S = 10.0
 # unbacked identity.
 _LOOKUP_INITIAL_SYNC_TIMEOUT_S = 60.0
 
-# Directory mitmproxy reads its keypair + assorted state from. Default is
-# /var/run/... so prod containers (which run as root) get the K8s-standard
-# tmpfs-mounted location; env-tunable so local-dev runs (proxy under
-# user's venv, no root) can point at /tmp.
+# Default suits prod (root in /var/run/ tmpfs, K8s-standard); env-tunable so
+# local-dev runs without root can point at /tmp.
 _MITM_CONFDIR = os.environ.get(
     "SANDBOX_PROXY_MITM_CONFDIR",
     "/var/run/sandbox-proxy/mitmproxy-confdir",

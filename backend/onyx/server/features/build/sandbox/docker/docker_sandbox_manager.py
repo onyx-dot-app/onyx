@@ -91,6 +91,7 @@ from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
 from onyx.server.features.build.configs import SANDBOX_DOCKER_VOLUME_PREFIX
 from onyx.server.features.build.configs import SANDBOX_PROXY_CA_VOLUME_NAME
 from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
+from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
@@ -370,10 +371,13 @@ class _ContainerCreateKwargsRequired(TypedDict):
 class ContainerCreateKwargs(_ContainerCreateKwargsRequired, total=False):
     """
     Kwargs we pass to ``DockerClient.containers.run``. Proxy-mode adds
-    ``cap_add``; legacy posture omits it.
+    ``cap_add`` and ``entrypoint`` (the image bakes ENTRYPOINT, which Docker
+    would otherwise prepend to ``command``, silently breaking the
+    firewall-init.sh handoff).
     """
 
     cap_add: list[str]
+    entrypoint: list[str]
 
 
 def build_container_create_kwargs(
@@ -421,14 +425,21 @@ def build_container_create_kwargs(
       contract vars (``SANDBOX_PROXY_BOOTSTRAP_MODE= entrypoint``,
       ``CA_BUNDLE_SRC``/``DST``). The legacy 4-key core is preserved; proxy keys
       are layered on top.
-    - Command swapped to ``["/workspace/firewall-init.sh",
-      "/workspace/entrypoint.sh"]`` so the init script runs first; ``capsh``
-      drops caps + setuid's to UID 1000 + exec's the agent entrypoint.
-    - ``cap_add=["NET_ADMIN", "SETPCAP"]`` (NET_ADMIN runs iptables; SETPCAP
-      authorises ``capsh --drop=all``). Both are dropped from the bounding set
-      by capsh before the agent execve, so the running container ends up with no
-      caps at all.
-    - ``user="0:0"`` so the init starts as root for iptables. capsh then drops
+    - ``ONYX_PAT`` and the opencode ``api_key`` are replaced with
+      ``SANDBOX_PROXY_INJECTED_PLACEHOLDER``; the proxy reads the real values
+      from Postgres and injects them on the wire (OnyxPatResolver,
+      LLMProviderKeyResolver). The sandbox never sees the raw credentials.
+    - ``entrypoint=["/workspace/firewall-init.sh"]`` overrides the image's baked
+      ENTRYPOINT (which Docker would otherwise prepend to ``command``, silently
+      bypassing the init); ``command=["/workspace/entrypoint.sh"]`` becomes the
+      arg firewall-init.sh exec's after setpriv drops caps + switches to UID
+      1000.
+    - ``cap_add=["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]`` (NET_ADMIN runs
+      iptables; SETPCAP authorises ``setpriv --bounding-set=-all``;
+      SETUID/SETGID gate setpriv's ``--reuid``/``--regid`` under
+      ``cap_drop=ALL``). All four leave the bounding set before the agent
+      execve, so the running container ends up with no caps at all.
+    - ``user="0:0"`` so the init starts as root for iptables. setpriv then drops
       to UID 1000. The root+NET_ADMIN window is bounded by ``firewall-init.sh``
       runtime (~seconds); ``set -euo pipefail`` + ``die`` short-circuit on any
       step failure, so a broken init exits non-zero before the agent ever
@@ -487,15 +498,20 @@ def build_container_create_kwargs(
             "bind": _PROXY_CA_SOURCE_DIR,
             "mode": "ro",
         }
-        command = ["/workspace/firewall-init.sh", "/workspace/entrypoint.sh"]
+        # Override the image's ENTRYPOINT (set to entrypoint.sh in #11748);
+        # without this, Docker prepends entrypoint.sh and our firewall-init
+        # never runs -- the proxy lockdown + setpriv drop are silently skipped.
+        entrypoint = ["/workspace/firewall-init.sh"]
+        command = ["/workspace/entrypoint.sh"]
         user = "0:0"
-        # NET_ADMIN: iptables. SETPCAP: prctl(PR_CAPBSET_DROP) in
-        # capsh --drop. SETUID/SETGID: capsh --user calls setuid() +
-        # setgroups() which are gated on these caps even for UID 0
-        # under cap_drop=ALL. All four are dropped by capsh before the
-        # agent execve so the running container ends up with no caps.
+        # NET_ADMIN: iptables. SETPCAP: prctl(PR_CAPBSET_DROP) for `setpriv
+        # --bounding-set=-all`. SETUID/SETGID: setpriv's --reuid/--regid call
+        # setuid()/setgroups(), which are gated on these caps even for UID 0
+        # under cap_drop=ALL. All four leave the bounding set before the agent
+        # execve, so the running container ends up with no caps.
         cap_add = ["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]
     else:
+        entrypoint = None
         command = ["/workspace/entrypoint.sh"]
         user = "1000:1000"
         cap_add = []
@@ -523,6 +539,8 @@ def build_container_create_kwargs(
     }
     if cap_add:
         kwargs["cap_add"] = cap_add
+    if entrypoint is not None:
+        kwargs["entrypoint"] = entrypoint
     return kwargs
 
 
@@ -700,11 +718,23 @@ class DockerSandboxManager(SandboxManager):
             session_tag_plugins = (
                 [_OPENCODE_SESSION_TAG_PLUGIN_PATH] if SANDBOX_PROXY_HOST else None
             )
+            # Proxy posture: Real PAT + LLM api_key never enter the sandbox. The
+            # proxy reads `Sandbox.encrypted_pat` and the per-provider key from
+            # Postgres, swaps the placeholder for the real bearer on the wire
+            # (OnyxPatResolver, LLMProviderKeyResolver).
+            container_onyx_pat = (
+                SANDBOX_PROXY_INJECTED_PLACEHOLDER if SANDBOX_PROXY_HOST else onyx_pat
+            )
+            container_llm_api_key = (
+                SANDBOX_PROXY_INJECTED_PLACEHOLDER
+                if SANDBOX_PROXY_HOST
+                else (llm_config.api_key or None)
+            )
             opencode_config_json = json.dumps(
                 build_opencode_config(
                     provider=llm_config.provider,
                     model_name=llm_config.model_name,
-                    api_key=llm_config.api_key or None,
+                    api_key=container_llm_api_key,
                     api_base=llm_config.api_base,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
                     plugins=session_tag_plugins,
@@ -716,7 +746,7 @@ class DockerSandboxManager(SandboxManager):
                 sandbox_id=sandbox_id,
                 user_id=user_id,
                 tenant_id=tenant_id,
-                onyx_pat=onyx_pat,
+                onyx_pat=container_onyx_pat,
                 volume_name=volume_name,
                 opencode_password=opencode_password,
                 opencode_config_json=opencode_config_json,

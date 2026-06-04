@@ -62,11 +62,11 @@ step_apply_iptables() {
     if [[ "$SANDBOX_PROXY_HOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         PROXY_IP="$SANDBOX_PROXY_HOST"
     else
-        # `ahostsv4` (not `hosts`) so we only get AF_INET answers. The
-        # iptables rule below is IPv4-only -- a dual-stack resolver that
-        # returns the AAAA first (e.g. Docker Desktop's host.docker.internal)
-        # would make the `iptables -d <ipv6>` call fail with
-        # "host/network not found" and the init would die mid-bootstrap.
+        # `ahostsv4` (not `hosts`) so we only get AF_INET answers. The iptables
+        # rule below is IPv4-only -- a dual-stack resolver that returns the AAAA
+        # first (e.g. Docker Desktop's host.docker.internal) would make the
+        # `iptables -d <ipv6>` call fail with "host/network not found" and the
+        # init would die mid-bootstrap.
         PROXY_IP="$(getent ahostsv4 "$SANDBOX_PROXY_HOST" | awk '{print $1; exit}')"
         [[ -n "$PROXY_IP" ]] || die "could not resolve proxy host $SANDBOX_PROXY_HOST to an IPv4 address"
     fi
@@ -136,7 +136,12 @@ case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
         # mangles non-script targets; setpriv execve's directly.
         [[ "$#" -ge 1 ]] || die "entrypoint mode requires the real entrypoint as args"
         log "entrypoint mode: clearing bounding set, dropping to UID 1000, exec'ing: $*"
-        exec setpriv --reuid=1000 --regid=1000 --init-groups \
+        # HOME/USER must be set explicitly: setpriv switches uid/gid but does
+        # not refresh env vars. Inheriting HOME=/root from the root parent
+        # leaves the dropped-to-1000 agent unable to write its caches
+        # (opencode-serve dies at startup on EACCES /root/.cache).
+        HOME=/home/sandbox USER=sandbox \
+            exec setpriv --reuid=1000 --regid=1000 --init-groups \
             --bounding-set=-all -- "$@"
         ;;
 esac

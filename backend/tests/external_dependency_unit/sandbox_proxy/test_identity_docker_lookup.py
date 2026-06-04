@@ -1,6 +1,6 @@
 """External-dependency-unit tests for ``DockerEventsLookup``.
 
-Unit tests stub the docker SDK; This file spins up real labelled containers on
+Unit tests stub the docker SDK; This file spins up real labeled containers on
 the host docker daemon and exercises the cache from the initial-sync + events
 paths. Skipped automatically when the docker socket is absent so local
 contributors without docker running aren't blocked.
@@ -61,7 +61,7 @@ def test_network(docker_client: DockerClient) -> Generator[str, None, None]:
         pass
 
 
-def _run_sandbox_labelled(
+def _run_sandbox_labeled(
     docker_client: DockerClient,
     *,
     network: str,
@@ -138,7 +138,7 @@ def test_lookup_finds_running_container_via_initial_sync(
     against the docker daemon, not just by the events stream.
     """
     sandbox_id = uuid4()
-    container = _run_sandbox_labelled(
+    container = _run_sandbox_labeled(
         docker_client, network=test_network, sandbox_id=sandbox_id
     )
     cleanup_test_containers.append(container)
@@ -169,7 +169,7 @@ def test_lookup_discovers_container_started_after_via_events(
     events watcher (start event -> inspect -> upsert).
     """
     sandbox_id = uuid4()
-    container = _run_sandbox_labelled(
+    container = _run_sandbox_labeled(
         docker_client, network=test_network, sandbox_id=sandbox_id
     )
     cleanup_test_containers.append(container)
@@ -200,7 +200,7 @@ def test_lookup_evicts_container_on_destroy(
     resolving traffic against a dead container's identity.
     """
     sandbox_id = uuid4()
-    container = _run_sandbox_labelled(
+    container = _run_sandbox_labeled(
         docker_client, network=test_network, sandbox_id=sandbox_id
     )
     ip = container.attrs["NetworkSettings"]["Networks"][test_network]["IPAddress"]
