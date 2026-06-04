@@ -5271,9 +5271,7 @@ class ModelCostOverride(Base):
     input_cost_per_mtok: Mapped[float] = mapped_column(Float, nullable=False)
     output_cost_per_mtok: Mapped[float] = mapped_column(Float, nullable=False)
     # Cache-read rate; null bills cache reads at the input rate (litellm default).
-    cache_read_cost_per_mtok: Mapped[float | None] = mapped_column(
-        Float, nullable=True
-    )
+    cache_read_cost_per_mtok: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
