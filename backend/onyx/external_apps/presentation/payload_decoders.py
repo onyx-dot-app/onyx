@@ -21,50 +21,49 @@ class PayloadDecoder(Protocol):
 
 
 class GmailRawMimeDecoder:
-    """Decode a base64url RFC-822 message at ``raw_path`` into reviewable fields.
+    """Decode the base64url RFC-822 message in a Gmail body into reviewable fields.
 
-    ``messages.send`` holds it top-level (``{"raw": …}``); draft create/update
-    nest it (``{"message": {"raw": …}}``). Surfaces all recipients and attachment
-    metadata (never contents), replacing the blob in place. Falls back to the raw
-    payload if the field is absent or unparseable.
+    ``messages.send`` carries it directly (``{"raw": …}``); draft create/update
+    wrap it under ``message`` (``{"message": {"raw": …}}``). ``wrapper_key`` names
+    that wrapper, or ``None`` when ``raw`` is top-level.
+
+    The opaque blob is replaced in place with To/Cc/Bcc/Subject/Body and
+    attachment metadata (never attachment contents); all other keys are kept.
+    Falls back to the raw payload if ``raw`` is missing or won't parse.
     """
 
-    def __init__(self, raw_path: tuple[str, ...]) -> None:
-        self._raw_path = raw_path
+    def __init__(self, wrapper_key: str | None = None) -> None:
+        self._wrapper_key = wrapper_key
 
     def decode(self, payload: dict[str, Any]) -> dict[str, Any]:
-        raw = _dig(payload, self._raw_path)
-        if not isinstance(raw, str):
+        container = self._container(payload)
+        if container is None or not isinstance(container.get("raw"), str):
             return payload
-        try:
-            message = message_from_bytes(_b64url_decode(raw), policy=policy.default)
-        except (binascii.Error, ValueError):
+        message = _parse_mime(container["raw"])
+        if message is None:
             return payload
-        return _replace_raw(payload, self._raw_path, _summarize_message(message))
+
+        decoded = {key: value for key, value in container.items() if key != "raw"}
+        decoded.update(_summarize_message(message))
+        if self._wrapper_key is None:
+            return decoded
+        return {**payload, self._wrapper_key: decoded}
+
+    def _container(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """The dict that directly holds ``raw`` — ``payload`` itself, or its
+        ``wrapper_key`` sub-dict — or ``None`` when that isn't a dict."""
+        if self._wrapper_key is None:
+            return payload
+        nested = payload.get(self._wrapper_key)
+        return nested if isinstance(nested, dict) else None
 
 
-def _dig(payload: dict[str, Any], path: tuple[str, ...]) -> Any:
-    """The value at ``path`` within nested dicts, or ``None`` if absent."""
-    current: Any = payload
-    for key in path:
-        if not isinstance(current, dict):
-            return None
-        current = current.get(key)
-    return current
-
-
-def _replace_raw(
-    payload: dict[str, Any], path: tuple[str, ...], summary: dict[str, Any]
-) -> dict[str, Any]:
-    """``payload`` with the ``raw`` key at ``path`` swapped for ``summary``; all
-    other keys kept."""
-    head, *tail = path
-    if not tail:
-        return {**{k: v for k, v in payload.items() if k != head}, **summary}
-    nested = payload.get(head)
-    if not isinstance(nested, dict):
-        return payload
-    return {**payload, head: _replace_raw(nested, tuple(tail), summary)}
+def _parse_mime(raw_b64: str) -> EmailMessage | None:
+    """Parse a base64url-encoded RFC-822 message, or ``None`` if it won't decode."""
+    try:
+        return message_from_bytes(_b64url_decode(raw_b64), policy=policy.default)
+    except (binascii.Error, ValueError):
+        return None
 
 
 def _b64url_decode(data: str) -> bytes:
@@ -74,19 +73,16 @@ def _b64url_decode(data: str) -> bytes:
 
 
 def _summarize_message(message: EmailMessage) -> dict[str, Any]:
+    """The reviewable fields of a parsed message; absent fields are omitted."""
     summary: dict[str, Any] = {}
     for field, header in (("to", "To"), ("cc", "Cc"), ("bcc", "Bcc")):
-        recipients = _addresses(message.get_all(header))
-        if recipients:
+        if recipients := _addresses(message.get_all(header)):
             summary[field] = recipients
-    subject = message["Subject"]
-    if subject:
+    if subject := message["Subject"]:
         summary["subject"] = str(subject)
-    body = _plain_body(message)
-    if body:
+    if body := _plain_body(message):
         summary["body"] = body
-    attachments = _attachments(message)
-    if attachments:
+    if attachments := _attachments(message):
         summary["attachments"] = attachments
     return summary
 

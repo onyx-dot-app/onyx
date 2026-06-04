@@ -171,9 +171,9 @@ class GmailProvider(GoogleOAuthProvider, OnyxManagedExtApp):
     # base64url MIME bodies decoded for the approval card. `messages.send` holds
     # `raw` top-level; draft create/update nest it under `message`.
     _PAYLOAD_DECODERS: Mapping[str, PayloadDecoder] = {
-        GmailAction.MESSAGES_SEND: GmailRawMimeDecoder(("raw",)),
-        GmailAction.DRAFTS_CREATE: GmailRawMimeDecoder(("message", "raw")),
-        GmailAction.DRAFTS_UPDATE: GmailRawMimeDecoder(("message", "raw")),
+        GmailAction.MESSAGES_SEND: GmailRawMimeDecoder(),
+        GmailAction.DRAFTS_CREATE: GmailRawMimeDecoder(wrapper_key="message"),
+        GmailAction.DRAFTS_UPDATE: GmailRawMimeDecoder(wrapper_key="message"),
     }
 
     def payload_decoders(self) -> Mapping[str, PayloadDecoder]:

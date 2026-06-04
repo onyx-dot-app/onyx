@@ -9,8 +9,8 @@ from onyx.external_apps.presentation.payload_decoders import GmailRawMimeDecoder
 from onyx.external_apps.providers.gmail import GmailAction
 from onyx.external_apps.providers.gmail import GmailProvider
 
-# The `messages.send` decoder; draft create/update use the nested `message.raw`.
-_SEND_DECODER = GmailRawMimeDecoder(("raw",))
+# The `messages.send` decoder; draft create/update wrap the MIME under `message`.
+_SEND_DECODER = GmailRawMimeDecoder()
 
 
 def _b64(message: EmailMessage) -> str:
@@ -116,10 +116,10 @@ def test_malformed_base64_fails_open_to_raw() -> None:
 
 
 def test_decodes_nested_draft_message() -> None:
-    # Draft create/update nest the MIME under `message`.
+    # Draft create/update wrap the MIME under `message`.
     payload = {"message": _raw(_message(to="alice@example.com", subject="Draft"))}
 
-    decoded = GmailRawMimeDecoder(("message", "raw")).decode(payload)
+    decoded = GmailRawMimeDecoder(wrapper_key="message").decode(payload)
 
     assert decoded["message"]["to"] == ["alice@example.com"]
     assert decoded["message"]["subject"] == "Draft"
@@ -128,7 +128,7 @@ def test_decodes_nested_draft_message() -> None:
 
 def test_nested_decoder_fails_open_when_message_absent() -> None:
     payload = {"id": "draft-123"}  # e.g. a body without the nested message
-    assert GmailRawMimeDecoder(("message", "raw")).decode(payload) == payload
+    assert GmailRawMimeDecoder(wrapper_key="message").decode(payload) == payload
 
 
 def test_provider_registers_encoded_body_decoders() -> None:
