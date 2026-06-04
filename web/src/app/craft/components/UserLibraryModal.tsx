@@ -269,7 +269,7 @@ export default function UserLibraryModal({
   return (
     <>
       <Modal open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-        <Modal.Content width="xl" height="fit">
+        <Modal.Content width="lg" height="fit">
           <Modal.Header
             icon={SvgFileText}
             title="Your Files"
