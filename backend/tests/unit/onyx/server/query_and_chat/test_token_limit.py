@@ -97,6 +97,18 @@ class TestIsRateLimitedUnit:
         )
         assert _is_rate_limited([cost_only], _usage(10_000_000)) is False
 
+    def test_zero_token_budget_does_not_block(self) -> None:
+        # A legacy/edge token_budget of 0 must be treated as no token limit, not
+        # "block at 0 tokens" (which would reject every request).
+        zero = TokenRateLimit(
+            enabled=True,
+            token_budget=0,
+            cost_budget_cents=500.0,
+            period_hours=1,
+            scope=TokenRateLimitScope.GLOBAL,
+        )
+        assert _is_rate_limited([zero], _usage(10_000_000)) is False
+
 
 def _assert_structured_429(exc: OnyxError, scope: str, period_hours: int) -> None:
     """The 429 the FE banner binds to: RATE_LIMITED + scope + reset fields + header."""

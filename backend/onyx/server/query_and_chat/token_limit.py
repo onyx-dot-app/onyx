@@ -113,8 +113,10 @@ def _first_triggered_limit(
 ) -> TokenRateLimit | None:
     """Return the first exceeded limit, or None. Carries period_hours for the reset time."""
     for rate_limit in rate_limits:
-        # A null token_budget means cost-only (token-exempt) — skip the token check.
-        if rate_limit.token_budget is None:
+        # A null (cost-only) or non-positive token_budget is token-exempt — skip
+        # the token check. Guarding <= 0 means a 0 (new cost-only rows store null,
+        # but legacy/edge rows may hold 0) can never block every request.
+        if rate_limit.token_budget is None or rate_limit.token_budget <= 0:
             continue
 
         tokens_used = sum(
