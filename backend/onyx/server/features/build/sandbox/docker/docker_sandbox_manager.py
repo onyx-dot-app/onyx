@@ -69,7 +69,6 @@ import time
 from collections.abc import Generator
 from pathlib import Path
 from typing import TypedDict
-from urllib.parse import urlparse
 from uuid import UUID
 
 from docker import DockerClient
@@ -301,26 +300,15 @@ def build_sandbox_labels(
     return labels
 
 
-def _compute_no_proxy_list(api_server_url: str) -> str:
-    """Hostnames the sandbox should reach directly, bypassing the proxy.
-
-    Mirrors ``kubernetes_sandbox_manager._compute_no_proxy_list``. The api
-    server is in the list because onyx-cli inside the sandbox uses the PAT to
-    call back -- no need (or value) to gate that hop.
-    """
-    entries = ["127.0.0.1", "localhost"]
-    if api_server_url:
-        hostname = urlparse(api_server_url).hostname
-        if hostname:
-            entries.append(hostname)
-    return ",".join(entries)
+# Sandbox should reach loopback directly; everything else (api server included)
+# goes through the proxy.
+_NO_PROXY_LIST = "127.0.0.1,localhost"
 
 
 def _proxy_env_vars(
     *,
     sandbox_proxy_host: str,
     sandbox_proxy_port: int,
-    api_server_url: str,
 ) -> dict[str, str]:
     """Proxy-enabled env additions for the sandbox container.
 
@@ -331,7 +319,6 @@ def _proxy_env_vars(
     entrypoint wrapper and reads them from its own environment.
     """
     proxy_url = f"http://{sandbox_proxy_host}:{sandbox_proxy_port}"
-    no_proxy = _compute_no_proxy_list(api_server_url)
     return {
         # firewall-init.sh contract.
         "SANDBOX_PROXY_HOST": sandbox_proxy_host,
@@ -344,8 +331,8 @@ def _proxy_env_vars(
         "HTTP_PROXY": proxy_url,
         "https_proxy": proxy_url,
         "http_proxy": proxy_url,
-        "NO_PROXY": no_proxy,
-        "no_proxy": no_proxy,
+        "NO_PROXY": _NO_PROXY_LIST,
+        "no_proxy": _NO_PROXY_LIST,
         # SDK-specific CA env vars for libs that bypass /etc/ssl/certs.
         "NODE_EXTRA_CA_CERTS": _PROXY_CA_BUNDLE_FILE,
         "REQUESTS_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
@@ -494,7 +481,6 @@ def build_container_create_kwargs(
             _proxy_env_vars(
                 sandbox_proxy_host=sandbox_proxy_host,
                 sandbox_proxy_port=sandbox_proxy_port,
-                api_server_url=api_server_url,
             )
         )
         volumes[proxy_ca_volume_name] = {
@@ -553,6 +539,15 @@ class DockerSandboxManager(SandboxManager):
         return cls._instance
 
     def _initialize(self) -> None:
+        # Mirrors the K8s posture from #11604: the proxy is mandatory whenever
+        # craft is enabled.
+        if not SANDBOX_PROXY_HOST:
+            raise RuntimeError(
+                "DockerSandboxManager requires SANDBOX_PROXY_HOST. The sandbox egress proxy is "
+                "mandatory when craft is enabled; wire it in docker-compose.craft.yml or unset "
+                "SANDBOX_BACKEND."
+            )
+
         self._docker = DockerClient(base_url=f"unix://{SANDBOX_DOCKER_SOCKET}")
         self._image = SANDBOX_CONTAINER_IMAGE
         self._network_name = SANDBOX_DOCKER_NETWORK
