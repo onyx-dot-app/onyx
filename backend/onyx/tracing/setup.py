@@ -113,9 +113,27 @@ def _setup_langfuse() -> None:
     add_trace_processor(LangfuseTracingProcessor(client=client))
 
 
+_user_usage_processor: object | None = None
+
+
 def _setup_user_usage_tracking() -> None:
     """Register the per-user usage recording processor."""
+    global _user_usage_processor
     from onyx.tracing.framework import add_trace_processor
     from onyx.tracing.processors.user_usage_processor import UserUsageTracingProcessor
 
-    add_trace_processor(UserUsageTracingProcessor())
+    processor = UserUsageTracingProcessor()
+    _user_usage_processor = processor
+    add_trace_processor(processor)
+
+
+def shutdown_tracing() -> None:
+    """Flush buffered usage to the DB on shutdown. Call before disposing the DB
+    engines (the drain thread writes through them) so queued records aren't lost."""
+    from onyx.tracing.processors.user_usage_processor import UserUsageTracingProcessor
+
+    if isinstance(_user_usage_processor, UserUsageTracingProcessor):
+        try:
+            _user_usage_processor.shutdown()
+        except Exception:
+            logger.exception("Failed to flush user usage on shutdown")

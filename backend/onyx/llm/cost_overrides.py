@@ -1,6 +1,7 @@
 """Admin per-model cost overrides — negotiated enterprise rates that win over litellm."""
 
 import threading
+import time
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,9 +18,12 @@ _OverrideRates = tuple[float, float]
 # Per-tenant snapshot of the override table, keyed by tenant_id. Onyx is
 # multi-tenant (one process serves many per-tenant schemas), so the cache MUST
 # be tenant-scoped or one tenant's negotiated rates would be billed to all
-# others. Mutations invalidate the writing tenant's entry only.
+# others. A write only invalidates the WRITER's process cache, so a TTL bounds
+# how long sibling workers can serve stale rates after an admin edit.
+_CACHE_TTL_SECONDS = 60.0
 _cache_lock = threading.Lock()
-_cache: dict[str, dict[str, _OverrideRates]] = {}
+# tenant_id -> (loaded_at_monotonic, {model: rates})
+_cache: dict[str, tuple[float, dict[str, _OverrideRates]]] = {}
 
 
 def _load_cache(db_session: Session) -> dict[str, _OverrideRates]:
@@ -32,16 +36,17 @@ def get_override(db_session: Session, model: str) -> _OverrideRates | None:
     tenant, or None if unset."""
     tenant_id = get_current_tenant_id()
     with _cache_lock:
-        tenant_cache = _cache.get(tenant_id)
-        if tenant_cache is None:
+        entry = _cache.get(tenant_id)
+        if entry is None or (time.monotonic() - entry[0]) >= _CACHE_TTL_SECONDS:
             try:
-                tenant_cache = _load_cache(db_session)
+                snapshot = _load_cache(db_session)
             except Exception:
                 # Cost computation must never raise; treat as no overrides.
                 logger.exception("Failed to load model cost overrides")
                 return None
-            _cache[tenant_id] = tenant_cache
-        return tenant_cache.get(model)
+            entry = (time.monotonic(), snapshot)
+            _cache[tenant_id] = entry
+        return entry[1].get(model)
 
 
 def invalidate_override_cache() -> None:

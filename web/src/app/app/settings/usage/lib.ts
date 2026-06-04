@@ -11,8 +11,8 @@ export interface UsagePerDayByModel {
 }
 
 export interface SelectedModelPrice {
-  input_per_mtok: number; // $/1M tokens
-  output_per_mtok: number;
+  input_per_mtok: number | null; // $/1M tokens; null if the model is unpriced
+  output_per_mtok: number | null;
 }
 
 export interface UserUsageResponse {

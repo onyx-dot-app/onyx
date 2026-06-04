@@ -90,12 +90,15 @@ def get_my_usage(
         input_per_mtok, output_per_mtok = get_model_price_per_million(
             default_model.name, provider, db_session
         )
-        selected_model_price = ModelPrice(
-            model=default_model.name,
-            provider=provider,
-            input_per_mtok=input_per_mtok,
-            output_per_mtok=output_per_mtok,
-        )
+        # Only surface a price block when both sides are known; an unpriced model
+        # stays None so the UI shows "price unavailable" rather than $null.
+        if input_per_mtok is not None and output_per_mtok is not None:
+            selected_model_price = ModelPrice(
+                model=default_model.name,
+                provider=provider,
+                input_per_mtok=input_per_mtok,
+                output_per_mtok=output_per_mtok,
+            )
 
     return UserUsageResponse(
         per_day_by_model=per_day,
@@ -185,7 +188,9 @@ def upsert_cost_override(
     return CostOverride.from_db(row)
 
 
-@router.delete("/{model}")
+# {model:path} so slash-containing model ids (e.g. "bedrock/anthropic.claude")
+# match instead of 404-ing on the first path segment.
+@router.delete("/{model:path}")
 def delete_cost_override(
     model: str,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),

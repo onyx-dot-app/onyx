@@ -26,8 +26,10 @@ from shared_configs.contextvars import get_current_user_id
 
 logger = setup_logger()
 
-# Per-user windows must coincide with tenant-usage windows.
-_PERIOD_HOURS = USAGE_LIMIT_WINDOW_SECONDS // 3600
+# Per-user windows must coincide with tenant-usage windows. Floor at 1h so a
+# sub-hour USAGE_LIMIT_WINDOW_SECONDS can't truncate to a 0-hour (div-by-zero)
+# window; finer-than-hourly cost windows aren't supported.
+_PERIOD_HOURS = max(USAGE_LIMIT_WINDOW_SECONDS // 3600, 1)
 
 _DEFAULT_FLUSH_INTERVAL_SECONDS = 2.0
 # Drain early once this many records have queued up, regardless of interval.

@@ -168,10 +168,10 @@ def test_selected_model_price_unknown_model_nulls(
     )
 
     client = TestClient(_make_app(db_session, _StubUser(caller)))
+    # An unpriced model surfaces no price block (None), so the UI shows
+    # "price unavailable" rather than a $null that would crash .toFixed().
     price = client.get("/user/usage").json()["selected_model_price"]
-    assert price["model"] == "totally-unknown-model-xyz"
-    assert price["input_per_mtok"] is None
-    assert price["output_per_mtok"] is None
+    assert price is None
 
 
 class TestGetModelPricePerMillion:

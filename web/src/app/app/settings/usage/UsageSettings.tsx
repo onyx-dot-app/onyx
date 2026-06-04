@@ -33,7 +33,10 @@ interface WindowCostSectionProps {
 
 function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
   // Drives the relative bar widths in the breakdown.
-  const maxRowCost = rows.reduce((max, row) => Math.max(max, row.cost_cents), 0);
+  const maxRowCost = rows.reduce(
+    (max, row) => Math.max(max, row.cost_cents),
+    0
+  );
   const hasCache = rows.some((row) => row.cache_read_tokens > 0);
 
   return (
@@ -125,7 +128,9 @@ function ModelPriceSection({ price }: ModelPriceSectionProps) {
         width="full"
       />
       <Card>
-        {price ? (
+        {price &&
+        price.input_per_mtok !== null &&
+        price.output_per_mtok !== null ? (
           <Section
             flexDirection="row"
             justifyContent="between"
@@ -228,11 +233,7 @@ export default function UsageSettings() {
           width="full"
           gap={1}
         >
-          <Content
-            title="Usage"
-            sizePreset="main-content"
-            variant="section"
-          />
+          <Content title="Usage" sizePreset="main-content" variant="section" />
           <div className="min-w-32">
             <InputSelect value={days} onValueChange={setDays}>
               <InputSelect.Trigger placeholder="Period" />

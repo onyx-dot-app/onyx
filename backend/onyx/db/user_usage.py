@@ -36,7 +36,8 @@ def get_window_start(dt: datetime, period_hours: int) -> datetime:
     else:
         dt = dt.astimezone(timezone.utc)
 
-    period_seconds = period_hours * 3600
+    # Guard against a 0/negative period producing a div-by-zero below.
+    period_seconds = max(period_hours, 1) * 3600
 
     if period_seconds == 604800:  # 1 week — align to Monday 00:00 UTC
         midnight = dt.replace(hour=0, minute=0, second=0, microsecond=0)

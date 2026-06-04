@@ -399,11 +399,17 @@ def create_new_chat_session(
     return CreateChatSessionID(chat_session_id=new_chat_session.id)
 
 
+# Shared callable so FastAPI runs auth once across the user + contextvar deps.
+_rename_basic_access = require_permission(Permission.BASIC_ACCESS)
+
+
 @router.put("/rename-chat-session")
 def rename_chat_session(
     rename_req: ChatRenameRequest,
     request: Request,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(_rename_basic_access),
+    # Attribute the LLM-generated title to the user (this endpoint can call an LLM).
+    _user_ctx: None = Depends(set_current_user_id_dependency(_rename_basic_access)),
 ) -> RenameChatSessionResponse:
     # 3000 tokens is more than enough for a pair of messages which is enough to provide the required context for generating a
     # good name for the chat session. It's also small enough to fit on even the worst context window LLMs.

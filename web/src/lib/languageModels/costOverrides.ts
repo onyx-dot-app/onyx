@@ -70,10 +70,15 @@ export async function upsertCostOverride(
  * @throws Error with the API detail message on non-404 failures.
  */
 export async function deleteCostOverride(model: string): Promise<void> {
-  const response = await fetch(
-    `${SWR_KEYS.costOverrides}/${encodeURIComponent(model)}`,
-    { method: "DELETE" }
-  );
+  // Keep "/" as real path separators (backend route is {model:path}) but encode
+  // each segment, so slash-containing model ids (e.g. "bedrock/...") delete.
+  const encodedModel = model
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  const response = await fetch(`${SWR_KEYS.costOverrides}/${encodedModel}`, {
+    method: "DELETE",
+  });
 
   if (response.ok || response.status === 404) {
     return;

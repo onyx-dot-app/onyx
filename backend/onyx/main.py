@@ -401,6 +401,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
     yield
 
+    # Flush buffered per-user usage before disposing the DB engines its drain
+    # thread writes through.
+    from onyx.tracing.setup import shutdown_tracing
+
+    shutdown_tracing()
+
     if DISABLE_VECTOR_DB:
         from onyx.background.periodic_poller import stop_periodic_poller
 
