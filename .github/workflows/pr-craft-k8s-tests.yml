@@ -139,7 +139,7 @@ jobs:
             "${BASE_IMAGE_REGISTRY:-docker.io}/library/registry:2"
 
       - name: Build and push sandbox image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
           context: ./backend/onyx/server/features/build/sandbox/kubernetes/docker
           file: ./backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile
@@ -156,7 +156,7 @@ jobs:
 
       # Backend image runs the sandbox-proxy via `python -m onyx.sandbox_proxy.server`.
       - name: Build and push backend image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
           context: ./backend
           file: ./backend/Dockerfile
