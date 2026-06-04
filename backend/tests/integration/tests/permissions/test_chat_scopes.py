@@ -5,6 +5,7 @@ import pytest
 from onyx.db.enums import Permission
 from tests.integration.common_utils.http_client import request_status
 from tests.integration.common_utils.managers.pat import PATManager
+from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
 
 _SESSION_ID = "00000000-0000-0000-0000-000000000000"
@@ -71,3 +72,15 @@ def test_non_chat_scope_denied_on_chat_dep_route(
     read_search_headers: dict[str, str],
 ) -> None:
     assert request_status(read_search_headers, CHAT_DEP_ROUTE) == 403
+
+
+def test_limited_service_account_reaches_chat(
+    limited_service_account: DATestAPIKey,
+) -> None:
+    """LIMITED service-account keys (e.g. the Discord bot) hold write:chat
+    (implies read:chat), so they reach the chat surface but not basic-only routes."""
+    headers = limited_service_account.headers
+    assert request_status(headers, READ_CHAT_ROUTE) < 400
+    # bogus id -> 4xx, never 403
+    assert request_status(headers, WRITE_CHAT_ROUTE) != 403
+    assert request_status(headers, BASIC_ONLY_ROUTE) == 403

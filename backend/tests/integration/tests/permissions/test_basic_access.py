@@ -16,8 +16,9 @@ from tests.integration.common_utils.test_models import DATestUser
 
 # Representative endpoints that use require_permission(Permission.BASIC_ACCESS).
 # One per major router file to cover breadth without redundancy.
+# Chat endpoints are gated by READ_CHAT/WRITE_CHAT (not BASIC_ACCESS) and are
+# covered by test_chat_scopes.py.
 BASIC_ACCESS_ENDPOINTS: list[tuple[str, str]] = [
-    ("GET", "/chat/get-user-chat-sessions"),
     ("GET", "/manage/credential"),
     ("GET", "/manage/connector"),
     ("GET", "/users"),
