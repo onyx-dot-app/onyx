@@ -13,7 +13,13 @@ from uuid import UUID
 
 import pytest
 
-import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
+import onyx.server.features.build.sandbox.docker.dev_mode_serve as dev_mode_serve
+from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
+    OPENCODE_SERVE_CONTAINER_PORT,
+)
+from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
+    OPENCODE_SERVE_HOST_BIND_IP,
+)
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     _sandbox_container_name,
 )
@@ -49,12 +55,6 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
 )
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     LABEL_USER_ID,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
-    OPENCODE_SERVE_CONTAINER_PORT,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
-    OPENCODE_SERVE_HOST_BIND_IP,
 )
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
@@ -190,7 +190,7 @@ def test_container_kwargs_publishes_serve_on_localhost_in_dev(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Host-run dev workers reach opencode-serve through a local ephemeral port."""
-    monkeypatch.setattr(dsm, "DEV_MODE", True)
+    monkeypatch.setattr(dev_mode_serve, "DEV_MODE", True)
     kwargs = build_container_create_kwargs(
         sandbox_id=SANDBOX_ID,
         user_id=USER_ID,
