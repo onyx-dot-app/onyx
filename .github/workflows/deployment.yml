@@ -1502,9 +1502,6 @@ jobs:
             $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
 
-  # For cloud tags only: once all cloud images are built and pushed, notify the
-  # cloud-deployment-yamls repo (via repository_dispatch) so it can roll out the
-  # new image version.
   dispatch-cloud-deployment:
     needs:
       - determine-builds
@@ -1517,15 +1514,27 @@ jobs:
     timeout-minutes: 10
     permissions: {}
     steps:
+      - name: Resolve dispatch target
+        id: target
+        env:
+          CLOUD_DEPLOYMENT_REPO: ${{ vars.CLOUD_DEPLOYMENT_REPO }}
+        run: |
+          if [ -z "$CLOUD_DEPLOYMENT_REPO" ]; then
+            echo "::error::CLOUD_DEPLOYMENT_REPO is not set"
+            exit 1
+          fi
+          echo "owner=${CLOUD_DEPLOYMENT_REPO%%/*}" >> "$GITHUB_OUTPUT"
+          echo "repo=${CLOUD_DEPLOYMENT_REPO#*/}" >> "$GITHUB_OUTPUT"
+
       - name: Mint GitHub App installation token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
         with:
           client-id: ${{ vars.CLOUD_DEPLOYMENT_APP_ID }}
           private-key: ${{ secrets.CLOUD_DEPLOYMENT_APP_PRIVATE_KEY }}
-          # Scope the token to the dispatch target. Keep these in sync with CLOUD_DEPLOYMENT_REPO.
-          owner: onyx-dot-app
-          repositories: cloud-deployment-yamls
+          # Scope the token to the same repo the dispatch targets, derived from CLOUD_DEPLOYMENT_REPO.
+          owner: ${{ steps.target.outputs.owner }}
+          repositories: ${{ steps.target.outputs.repo }}
           permission-contents: write
 
       - name: Trigger new-cloud-image dispatch
