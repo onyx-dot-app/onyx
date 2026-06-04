@@ -15,11 +15,10 @@ logger = setup_logger()
 # (input, output, cache_read | None) per-Mtok USD; null cache => bill at input.
 _OverrideRates = tuple[float, float, float | None]
 
-# Per-tenant snapshot of the override table, keyed by tenant_id. Onyx is
-# multi-tenant (one process serves many per-tenant schemas), so the cache MUST
-# be tenant-scoped or one tenant's negotiated rates would be billed to all
-# others. A write only invalidates the WRITER's process cache, so a TTL bounds
-# how long sibling workers can serve stale rates after an admin edit.
+# Per-tenant snapshot of the override table, keyed by tenant_id: a shared
+# process serves many tenants, so an unkeyed cache would bill one tenant's
+# negotiated rates to all. A write invalidates only the writer's process, so
+# the TTL bounds how long sibling workers serve stale rates after an admin edit.
 _CACHE_TTL_SECONDS = 60.0
 _cache_lock = threading.Lock()
 # tenant_id -> (loaded_at_monotonic, {model: rates})
