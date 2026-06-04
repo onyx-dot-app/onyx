@@ -153,7 +153,11 @@ export const TokenRateLimitTable = ({
                     " hour" +
                     (tokenRateLimit.period_hours > 1 ? "s" : "")}
                 </TableCell>
-                <TableCell>{tokenRateLimit.token_budget + " tokens"}</TableCell>
+                <TableCell>
+                  {tokenRateLimit.token_budget != null
+                    ? tokenRateLimit.token_budget + " tokens"
+                    : "—"}
+                </TableCell>
                 <TableCell>
                   {tokenRateLimit.cost_budget_cents != null
                     ? "$" + (tokenRateLimit.cost_budget_cents / 100).toFixed(2)

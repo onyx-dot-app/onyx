@@ -85,6 +85,18 @@ class TestIsRateLimitedUnit:
         limit = _make_limit(token_budget=1000)
         assert _is_rate_limited([limit], _usage(1000)) is True
 
+    def test_cost_only_limit_is_token_exempt(self) -> None:
+        # A cost-only limit (token_budget=None) must NOT block on tokens — a 0
+        # would make tokens_used >= 0 always true and block every request.
+        cost_only = TokenRateLimit(
+            enabled=True,
+            token_budget=None,
+            cost_budget_cents=500.0,
+            period_hours=1,
+            scope=TokenRateLimitScope.GLOBAL,
+        )
+        assert _is_rate_limited([cost_only], _usage(10_000_000)) is False
+
 
 def _assert_structured_429(exc: OnyxError, scope: str, period_hours: int) -> None:
     """The 429 the FE banner binds to: RATE_LIMITED + scope + reset fields + header."""
@@ -538,3 +550,27 @@ class TestCostEnforcementRealLedgerPath:
         monkeypatch.setattr(ee_token_limit, "_fetch_user_usage", lambda *_: _usage(1))
 
         ee_token_limit._user_is_rate_limited(user_id)  # no raise
+
+
+class TestTokenRateLimitArgsValidation:
+    """A limit must carry a token budget, a cost budget, or both — never neither."""
+
+    def test_neither_budget_rejected(self) -> None:
+        from onyx.server.token_rate_limits.models import TokenRateLimitArgs
+
+        with pytest.raises(ValueError):
+            TokenRateLimitArgs(enabled=True, token_budget=None, period_hours=24)
+
+    def test_cost_only_accepted(self) -> None:
+        from onyx.server.token_rate_limits.models import TokenRateLimitArgs
+
+        args = TokenRateLimitArgs(
+            enabled=True, token_budget=None, period_hours=24, cost_budget_cents=500.0
+        )
+        assert args.token_budget is None and args.cost_budget_cents == 500.0
+
+    def test_token_only_accepted(self) -> None:
+        from onyx.server.token_rate_limits.models import TokenRateLimitArgs
+
+        args = TokenRateLimitArgs(enabled=True, token_budget=1000, period_hours=24)
+        assert args.token_budget == 1000 and args.cost_budget_cents is None

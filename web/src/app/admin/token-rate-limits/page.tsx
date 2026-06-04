@@ -41,7 +41,7 @@ const USER_GROUP_DESCRIPTION =
 const handleCreateTokenRateLimit = async (
   target_scope: Scope,
   period_hours: number,
-  token_budget: number,
+  token_budget: number | null,
   cost_budget_cents: number | null,
   group_id: number = -1
 ) => {
@@ -85,7 +85,7 @@ function Main() {
   const handleSubmit = (
     target_scope: Scope,
     period_hours: number,
-    token_budget: number,
+    token_budget: number | null,
     cost_budget_cents: number | null,
     group_id: number = -1
   ) => {

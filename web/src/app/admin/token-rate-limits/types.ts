@@ -6,7 +6,7 @@ export enum Scope {
 
 export interface TokenRateLimitArgs {
   enabled: boolean;
-  token_budget: number;
+  token_budget: number | null;
   period_hours: number;
   // Cents at the API boundary; the UI collects dollars and converts.
   cost_budget_cents?: number | null;
@@ -15,7 +15,7 @@ export interface TokenRateLimitArgs {
 export interface TokenRateLimit {
   token_id: number;
   enabled: boolean;
-  token_budget: number;
+  token_budget: number | null;
   period_hours: number;
   cost_budget_cents: number | null;
 }

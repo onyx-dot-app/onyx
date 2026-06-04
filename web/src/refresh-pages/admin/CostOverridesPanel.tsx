@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useState } from "react";
+import { ChangeEvent, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -9,6 +9,8 @@ import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgCheck, SvgEdit, SvgPlus, SvgTrash, SvgX } from "@opal/icons";
 import { markdown } from "@opal/utils";
+import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import { useAdminLLMProviders } from "@/hooks/useLanguageModels";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
   CostOverride,
@@ -53,6 +55,20 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
   );
   const [submitting, setSubmitting] = useState(false);
 
+  // Offer the org's configured models as options so the override key matches the
+  // model id actually recorded in usage (free-text still allowed for a model not
+  // yet configured, e.g. an embedding/rerank id).
+  const { llmProviders } = useAdminLLMProviders();
+  const modelOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const provider of llmProviders ?? []) {
+      for (const mc of provider.model_configurations) {
+        names.add(mc.name);
+      }
+    }
+    return [...names].sort().map((name) => ({ value: name, label: name }));
+  }, [llmProviders]);
+
   const isEdit = existing !== undefined;
   const parsedInput = parseRate(inputRate);
   const parsedOutput = parseRate(outputRate);
@@ -91,14 +107,20 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
           <Text font="secondary-action" color="text-03">
             Model
           </Text>
-          <InputTypeIn
-            value={model}
-            variant={isEdit ? "readOnly" : "primary"}
-            placeholder="e.g. anthropic/claude-sonnet-4"
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setModel(e.target.value)
-            }
-          />
+          {isEdit ? (
+            <InputTypeIn value={model} variant="readOnly" />
+          ) : (
+            <InputComboBox
+              value={model}
+              options={modelOptions}
+              strict={false}
+              placeholder="Select a configured model, or type a model id"
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                setModel(e.target.value)
+              }
+              onValueChange={(value: string) => setModel(value)}
+            />
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-2">

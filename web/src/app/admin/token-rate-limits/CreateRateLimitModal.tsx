@@ -16,7 +16,7 @@ interface CreateRateLimitModalProps {
   onSubmit: (
     target_scope: Scope,
     period_hours: number,
-    token_budget: number,
+    token_budget: number | null,
     cost_budget_cents: number | null,
     group_id: number
   ) => void;
@@ -107,9 +107,10 @@ export default function CreateRateLimitModal({
           })}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
-            // token_budget is NOT NULL on the backend; a cost-only limit sends 0.
+            // Empty token field → null (cost-only); the gate skips a null budget.
+            // Sending 0 would mean "0-token limit" and block every request.
             const tokenBudget =
-              values.token_budget === "" ? 0 : Number(values.token_budget);
+              values.token_budget === "" ? null : Number(values.token_budget);
             const costBudgetCents =
               values.cost_budget_dollars === ""
                 ? null
