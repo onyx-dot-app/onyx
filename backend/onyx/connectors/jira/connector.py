@@ -389,6 +389,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source: DocumentSource = DocumentSource.JIRA,
 ) -> Document | None:
     if labels_to_skip:
         if any(label in issue.fields.labels for label in labels_to_skip):
@@ -485,7 +486,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source,
         semantic_identifier=f"{issue.key}: {issue.fields.summary}",
         title=f"{issue.key} {issue.fields.summary}",
         doc_updated_at=time_str_to_utc(issue.fields.updated),
@@ -524,6 +525,10 @@ class JiraConnector(
         # Custom JQL query to filter Jira issues
         jql_query: str | None = None,
         scoped_token: bool = False,
+        # Allows subclasses (e.g. JiraServiceManagementConnector) to stamp a
+        # different DocumentSource onto indexed documents without duplicating the
+        # full processing logic.
+        document_source: DocumentSource = DocumentSource.JIRA,
     ) -> None:
         self.batch_size = batch_size
 
@@ -537,6 +542,7 @@ class JiraConnector(
         self.labels_to_skip = set(labels_to_skip)
         self.jql_query = jql_query
         self.scoped_token = scoped_token
+        self.document_source = document_source
         self._jira_client: JIRA | None = None
         # Cache project permissions to avoid fetching them repeatedly across runs
         self._project_permissions_cache: dict[str, Any] = {}
@@ -834,6 +840,7 @@ class JiraConnector(
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    source=self.document_source,
                 ):
                     # Add permission information to the document if requested
                     if include_permissions:

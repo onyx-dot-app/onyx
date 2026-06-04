@@ -19,6 +19,7 @@ from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
@@ -112,13 +113,17 @@ class JiraServiceManagementConnector(
             credentials=credentials,
             jira_base=self.jira_base,
         )
-        # Build the inner JiraConnector and inject the same authenticated client
+        # Build the inner JiraConnector and inject the same authenticated client.
+        # Pass JIRA_SERVICE_MANAGEMENT as the document source so that all
+        # indexed documents are correctly tagged and filterable separately from
+        # plain Jira tickets.
         self._jira_connector = JiraConnector(
             jira_base_url=self.jira_base,
             project_key=self.project_key,
             comment_email_blacklist=self._comment_email_blacklist,
             batch_size=self.batch_size,
             labels_to_skip=list(self.labels_to_skip),
+            document_source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
         )
         self._jira_connector._jira_client = self._jira_client
         return None

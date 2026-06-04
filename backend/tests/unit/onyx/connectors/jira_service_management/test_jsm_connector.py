@@ -46,6 +46,10 @@ def mock_jira_client() -> MagicMock:
     mock.projects = MagicMock(return_value=[])
     mock.server_url = "https://example.atlassian.net"
     mock._options = {"rest_api_version": JIRA_SERVER_API_VERSION}
+    # _session is a private attribute used internally by the JIRA client.
+    # MagicMock(spec=JIRA) does not expose it (it's not in dir(JIRA)), so we
+    # must set it explicitly so tests that stub the HTTP session work correctly.
+    mock._session = MagicMock()
     return mock
 
 
