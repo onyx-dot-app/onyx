@@ -537,7 +537,6 @@ export function useBuildStreaming() {
     ): Promise<void> => {
       updateSessionData(sessionId, { status: "running" });
       clearStreamItems(sessionId);
-      let streamFailed = false;
       let settledFromPromptResponse = false;
 
       try {
@@ -557,14 +556,20 @@ export function useBuildStreaming() {
         }
 
         console.error("[Streaming] Scheduled run stream error:", err);
-        streamFailed = true;
         updateSessionData(sessionId, {
           status: "failed",
           error: (err as Error).message,
         });
       } finally {
         if (!signal.aborted) {
-          if (!streamFailed) {
+          // Only settle to "active" if the stream is still in-flight. An
+          // in-band "error" packet (or a thrown error) already moved the status
+          // to "failed", and a "prompt_response" packet already moved it to
+          // "active" — overwriting either here would mask the real outcome.
+          const currentStatus = useBuildSessionStore
+            .getState()
+            .sessions.get(sessionId)?.status;
+          if (currentStatus === "running") {
             updateSessionData(sessionId, { status: "active" });
           }
           if (!settledFromPromptResponse) {
