@@ -118,20 +118,6 @@ def _run_migrations() -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _setup_craft_templates(_run_migrations: None) -> None:  # noqa: ARG001
-    # The api_server's build session manager reads OUTPUTS_TEMPLATE_PATH /
-    # VENV_TEMPLATE_PATH at runtime; the templates have to exist on disk
-    # before any /build/sessions test runs. Gated on ENABLE_CRAFT to keep
-    # onyx-lite / multitenant suites fast.
-    if os.getenv("ENABLE_CRAFT", "false").lower() != "true":
-        return
-    subprocess.run(
-        ["bash", os.path.join(BACKEND_DIR, "scripts/setup_craft_templates.sh")],
-        check=True,
-    )
-
-
-@pytest.fixture(scope="session", autouse=True)
 def _install_playwright(_run_migrations: None) -> None:  # noqa: ARG001
     # web_search tests exercise OnyxWebCrawler's Playwright fallback. The
     # devcontainer ships the apt deps; download the chromium binary here so
@@ -302,7 +288,6 @@ def _start_celery_workers(
 def _test_client(
     initialize_db: None,  # noqa: ARG001
     _start_celery_workers: None,  # noqa: ARG001
-    _setup_craft_templates: None,  # noqa: ARG001
     _install_playwright: None,  # noqa: ARG001
 ) -> Generator[TestClient, None, None]:
     # In-process api_server. Use the versioned dispatcher so MT / EE
