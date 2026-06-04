@@ -353,28 +353,9 @@ OPENSEARCH_EXPLAIN_ENABLED = (
 # existing indices need reindexing after a change.
 OPENSEARCH_TEXT_ANALYZER = os.environ.get("OPENSEARCH_TEXT_ANALYZER") or "english"
 
-# This is the "base" config for now, the idea is that at least for our dev
-# environments we always want to be dual indexing into both OpenSearch and Vespa
-# to stress test the new codepaths. Only enable this if there is some instance
-# of OpenSearch running for the relevant Onyx instance.
-# NOTE: Now enabled on by default, unless the env indicates otherwise.
-ENABLE_OPENSEARCH_INDEXING_FOR_ONYX = (
-    os.environ.get("ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", "true").lower() == "true"
-)
-# NOTE: This effectively does nothing anymore, admins can now toggle whether
-# retrieval is through OpenSearch. This value is only used as a final fallback
-# in case that doesn't work for whatever reason.
-# Given that the "base" config above is true, this enables whether we want to
-# retrieve from OpenSearch or Vespa. We want to be able to quickly toggle this
-# in the event we see issues with OpenSearch retrieval in our dev environments.
-ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
-    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
-    and os.environ.get("ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX", "").lower() == "true"
-)
 DISABLE_OPENSEARCH_MIGRATION_TASK = (
     os.environ.get("DISABLE_OPENSEARCH_MIGRATION_TASK", "").lower() == "true"
 )
-ONYX_DISABLE_VESPA = os.environ.get("ONYX_DISABLE_VESPA", "true").lower() == "true"
 # Whether we should check for and create an index if necessary every time we
 # instantiate an OpenSearchDocumentIndex on multitenant cloud. Defaults to True.
 VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (

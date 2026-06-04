@@ -71,9 +71,6 @@ export interface Settings {
   seat_count?: number | null;
   used_seats?: number | null;
 
-  // OpenSearch migration
-  opensearch_indexing_enabled?: boolean;
-
   // Vector DB availability flag - false when DISABLE_VECTOR_DB is set.
   // When false, connectors, RAG search, document sets, and related features
   // are unavailable.

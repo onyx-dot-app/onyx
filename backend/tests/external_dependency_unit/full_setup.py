@@ -66,9 +66,6 @@ def ensure_full_deployment_setup(
         with get_session_with_current_tenant() as db_session:
             active = get_active_search_settings(db_session)
             if opensearch_available:
-                # We use this special bool here instead of just relying on
-                # ENABLE_OPENSEARCH_INDEXING_FOR_ONYX because not all testing
-                # infra is configured for OpenSearch.
                 document_indices = get_all_document_indices(
                     active.primary, active.secondary
                 )

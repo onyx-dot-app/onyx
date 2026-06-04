@@ -4,13 +4,9 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
-from onyx.configs.app_configs import MANAGED_VESPA
-from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
 from onyx.configs.constants import KV_REINDEX_KEY
-from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
 from onyx.configs.embedding_configs import SupportedEmbeddingModel
 from onyx.configs.model_configs import GEN_AI_API_KEY
 from onyx.configs.model_configs import GEN_AI_MODEL_VERSION
@@ -312,19 +308,15 @@ def update_default_multipass_indexing(db_session: Session) -> None:
 
 def setup_multitenant_onyx() -> None:
     if DISABLE_VECTOR_DB:
-        logger.notice("DISABLE_VECTOR_DB is set — skipping multitenant Vespa setup.")
+        logger.notice(
+            "DISABLE_VECTOR_DB is set — skipping multitenant OpenSearch setup."
+        )
         return
 
-    if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
-        opensearch_client = OpenSearchClient()
-        if not wait_for_opensearch_with_timeout(client=opensearch_client):
-            raise RuntimeError("Failed to connect to OpenSearch.")
-        set_cluster_state(opensearch_client)
-
-    # For Managed Vespa, the schema is sent over via the Vespa Console manually.
-    # NOTE: Pretty sure this code is never hit in any production environment.
-    if not MANAGED_VESPA and not ONYX_DISABLE_VESPA:
-        setup_vespa_multitenant(SUPPORTED_EMBEDDING_MODELS)
+    opensearch_client = OpenSearchClient()
+    if not wait_for_opensearch_with_timeout(client=opensearch_client):
+        raise RuntimeError("Failed to connect to OpenSearch.")
+    set_cluster_state(opensearch_client)
 
 
 def setup_vespa_multitenant(supported_indices: list[SupportedEmbeddingModel]) -> bool:

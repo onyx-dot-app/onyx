@@ -6,11 +6,8 @@ from celery.schedules import crontab
 
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
-from onyx.configs.app_configs import DISABLE_OPENSEARCH_MIGRATION_TASK
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
-from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
@@ -268,28 +265,6 @@ if SCHEDULED_EVAL_DATASET_NAMES:
             },
         }
     )
-
-# Add OpenSearch migration task if enabled.
-if (
-    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
-    and not DISABLE_OPENSEARCH_MIGRATION_TASK
-    and not ONYX_DISABLE_VESPA
-):
-    beat_task_templates.append(
-        {
-            "name": "migrate-chunks-from-vespa-to-opensearch",
-            "task": OnyxCeleryTask.MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK,
-            # Try to enqueue an invocation of this task with this frequency.
-            "schedule": timedelta(seconds=120),  # 2 minutes
-            "options": {
-                "priority": OnyxCeleryPriority.LOW,
-                # If the task was not dequeued in this time, revoke it.
-                "expires": BEAT_EXPIRES_DEFAULT,
-                "queue": OnyxCeleryQueues.OPENSEARCH_MIGRATION,
-            },
-        }
-    )
-
 
 # Beat task names that require a vector DB. Filtered out when DISABLE_VECTOR_DB.
 _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {

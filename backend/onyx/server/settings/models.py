@@ -113,9 +113,6 @@ class Settings(BaseModel):
     seat_count: int | None = None
     used_seats: int | None = None
 
-    # OpenSearch migration
-    opensearch_indexing_enabled: bool = False
-
 
 class UserSettings(Settings):
     notifications: list[Notification]
