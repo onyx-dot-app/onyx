@@ -11,8 +11,8 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
-import { SidebarTab } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { SidebarTab, Text } from "@opal/components";
+import RefreshText from "@/refresh-components/texts/Text";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
@@ -92,9 +92,11 @@ function DeletingMessage() {
   }, []);
 
   return (
-    <Text as="p" text03 className="animate-subtle-pulse">
-      {DELETING_MESSAGES[messageIndex]}
-    </Text>
+    <span className="animate-subtle-pulse">
+      <Text as="p" color="text-03">
+        {DELETING_MESSAGES[messageIndex]}
+      </Text>
+    </span>
   );
 }
 
@@ -244,7 +246,8 @@ function BuildSessionButton({
                 onClose={() => setRenaming(false)}
               />
             ) : shouldAnimate ? (
-              <Text
+              // Opal Text takes string children only; this wraps <TypewriterText>.
+              <RefreshText
                 as="p"
                 data-state={isActive ? "active" : "inactive"}
                 className="line-clamp-1 break-all text-left"
@@ -256,7 +259,7 @@ function BuildSessionButton({
                   animateOnMount={true}
                   onAnimationComplete={() => setShouldAnimate(false)}
                 />
-              </Text>
+              </RefreshText>
             ) : (
               historyItem.title
             )}
@@ -298,11 +301,11 @@ function BuildSessionButton({
           }
         >
           {deleteSuccess ? (
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               Build deleted successfully.
             </Text>
           ) : deleteError ? (
-            <Text as="p" text03 className="text-status-error-02">
+            <Text as="p" color="status-error-02">
               {deleteError}
             </Text>
           ) : isDeleting ? (
@@ -466,7 +469,7 @@ const MemoizedBuildSidebarInner = memo(
             <SidebarSection title={sessionsTitle}>
               {sessionHistory.length === 0 ? (
                 <div className="pl-2 pr-1.5 py-1">
-                  <Text text01>
+                  <Text color="text-01">
                     Start building! Session history will appear here.
                   </Text>
                 </div>

@@ -43,7 +43,11 @@ type TextColor =
   | "text-light-03"
   | "text-light-05"
   | "text-dark-03"
-  | "text-dark-05";
+  | "text-dark-05"
+  | "status-error-01"
+  | "status-error-02"
+  | "status-error-05"
+  | "status-success-05";
 
 interface TextProps extends WithoutStyles<
   Omit<HTMLAttributes<HTMLElement>, "color" | "children">
@@ -109,6 +113,10 @@ const COLOR_CONFIG: Record<TextColor, string | null> = {
   "text-light-05": "text-text-light-05",
   "text-dark-03": "text-text-dark-03",
   "text-dark-05": "text-text-dark-05",
+  "status-error-01": "text-status-error-01",
+  "status-error-02": "text-status-error-02",
+  "status-error-05": "text-status-error-05",
+  "status-success-05": "text-status-success-05",
 };
 
 // ---------------------------------------------------------------------------

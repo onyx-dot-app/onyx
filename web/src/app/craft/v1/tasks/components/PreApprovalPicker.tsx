@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback } from "react";
-import { Checkbox, Text } from "@opal/components";
+import { Card, Checkbox, Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import Card from "@/refresh-components/cards/Card";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import {
   getAppTypeLogo,
@@ -34,7 +33,7 @@ export default function PreApprovalPicker({
 
   if (isLoading) {
     return (
-      <Card variant="tertiary">
+      <Card background="none" border="dashed" rounding="lg">
         <Text font="secondary-body" color="text-03">
           Loading apps…
         </Text>
@@ -44,7 +43,7 @@ export default function PreApprovalPicker({
 
   if (error) {
     return (
-      <Card variant="tertiary">
+      <Card background="none" border="dashed" rounding="lg">
         <Text font="secondary-body" color="text-03">
           Couldn’t load your apps. Refresh to try again.
         </Text>
@@ -54,7 +53,7 @@ export default function PreApprovalPicker({
 
   if (!data || data.length === 0) {
     return (
-      <Card variant="tertiary">
+      <Card background="none" border="dashed" rounding="lg">
         <Text font="secondary-body" color="text-03">
           No external apps are enabled for your org yet. Ask an admin to enable
           one.
@@ -104,7 +103,7 @@ function PreApprovalRow({ app, checked, onToggle }: PreApprovalRowProps) {
       )}
       data-testid={`pre-approval-app-${app.id}`}
     >
-      <Card>
+      <Card background="light" border="solid" rounding="lg">
         <div className="flex items-center gap-3 w-full">
           <Logo className="w-8 h-8" />
           <div className="flex-1 flex flex-col gap-0.5 min-w-0">

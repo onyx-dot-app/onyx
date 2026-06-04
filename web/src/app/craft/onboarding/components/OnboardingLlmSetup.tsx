@@ -3,8 +3,7 @@
 import { SvgCheckCircle } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
-import Text from "@/refresh-components/texts/Text";
-import { Tooltip } from "@opal/components";
+import { Text, Tooltip } from "@opal/components";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import {
   BUILD_MODE_PROVIDERS as PROVIDERS,
@@ -45,11 +44,13 @@ function SelectableButton({
               : "border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-01"
           )}
         >
-          <Text mainUiAction>{children}</Text>
+          <Text font="main-ui-action" color="text-05">
+            {String(children)}
+          </Text>
         </button>
       </Disabled>
       {subtext && (
-        <Text figureSmallLabel text02>
+        <Text font="figure-small-label" color="text-02">
           {subtext}
         </Text>
       )}
@@ -92,11 +93,13 @@ function ModelSelectButton({
               : "border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-01"
           )}
         >
-          <Text mainUiAction>{label}</Text>
+          <Text font="main-ui-action" color="text-05">
+            {label}
+          </Text>
         </button>
       </Disabled>
       {recommended && (
-        <Text figureSmallLabel text02>
+        <Text font="figure-small-label" color="text-02">
           Recommended
         </Text>
       )}
@@ -168,14 +171,14 @@ export default function OnboardingLlmSetup({
     <div className="flex-1 flex flex-col gap-6 justify-between">
       {/* Header */}
       <div className="flex items-center justify-center">
-        <Text headingH2 text05>
+        <Text font="heading-h2" color="text-05">
           Connect your LLM
         </Text>
       </div>
 
       {/* Provider selection */}
       <div className="flex flex-col gap-3 items-center">
-        <Text mainUiBody text04>
+        <Text font="main-ui-body" color="text-04">
           Provider
         </Text>
         <div className="flex justify-center gap-3 w-full max-w-md">
@@ -210,7 +213,7 @@ export default function OnboardingLlmSetup({
 
       {/* Model selection */}
       <div className="flex flex-col gap-3 items-center">
-        <Text mainUiBody text04>
+        <Text font="main-ui-body" color="text-04">
           Default Model
         </Text>
         <div className="flex justify-center gap-3 flex-wrap w-full max-w-md">
@@ -230,7 +233,7 @@ export default function OnboardingLlmSetup({
 
       {/* API Key input */}
       <div className="flex flex-col gap-3 items-center">
-        <Text mainUiBody text04>
+        <Text font="main-ui-body" color="text-04">
           API Key
         </Text>
         <div className="w-full max-w-md">
@@ -247,7 +250,7 @@ export default function OnboardingLlmSetup({
           {/* Message area */}
           <div className="min-h-8 flex justify-center pt-4">
             {connectionStatus === "error" && (
-              <Text secondaryBody className="text-red-500">
+              <Text font="secondary-body" color="status-error-05">
                 {errorMessage}
               </Text>
             )}
@@ -258,7 +261,7 @@ export default function OnboardingLlmSetup({
               )}
             >
               <SvgCheckCircle className="w-4 h-4 stroke-status-success-05 shrink-0" />
-              <Text secondaryBody className="text-status-success-05">
+              <Text font="secondary-body" color="status-success-05">
                 Success!
               </Text>
             </div>

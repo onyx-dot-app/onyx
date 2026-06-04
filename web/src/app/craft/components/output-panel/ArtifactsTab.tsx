@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Text, Button } from "@opal/components";
 import {
   SvgGlobe,
   SvgDownloadCloud,
@@ -127,10 +126,10 @@ export default function ArtifactsTab({
         padding={2}
       >
         <SvgFiles size={48} className="stroke-text-02" />
-        <Text headingH3 text03>
+        <Text font="heading-h3" color="text-03">
           No artifacts yet
         </Text>
-        <Text secondaryBody text02>
+        <Text font="secondary-body" color="text-02">
           Output files and web apps will appear here
         </Text>
       </Section>
@@ -150,10 +149,10 @@ export default function ArtifactsTab({
               <SvgGlobe size={24} className="stroke-text-02 shrink-0" />
 
               <div className="flex-1 min-w-0 flex items-center gap-2">
-                <Text secondaryBody text04 className="truncate">
+                <Text font="secondary-body" color="text-04" maxLines={1}>
                   {artifact.name}
                 </Text>
-                <Text secondaryBody text02>
+                <Text font="secondary-body" color="text-02">
                   Next.js Application
                 </Text>
               </div>
@@ -243,11 +242,11 @@ function OutputEntryRow({
         <FileIcon size={20} className="stroke-text-02 shrink-0" />
 
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <Text secondaryBody text04 className="truncate">
+          <Text font="secondary-body" color="text-04" maxLines={1}>
             {entry.name}
           </Text>
           {!entry.is_directory && entry.size !== null ? (
-            <Text secondaryBody text02>
+            <Text font="secondary-body" color="text-02">
               {formatFileSize(entry.size)}
             </Text>
           ) : null}
