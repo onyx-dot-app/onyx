@@ -7,9 +7,8 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import useOnMount from "@/hooks/useOnMount";
 import { cn } from "@opal/utils";
-import { Button, InputTypeIn, Text } from "@opal/components";
+import { Button, Card, InputTypeIn, Text } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
-import Card from "@/refresh-components/cards/Card";
 import { SvgCheckCircle, SvgPlug, SvgSettings } from "@opal/icons";
 import {
   ExternalAppUserResponse,
@@ -97,7 +96,7 @@ function AppConnections({ query }: AppConnectionsProps) {
 
   if (data === undefined) {
     return (
-      <Card variant="tertiary">
+      <Card background="none" border="dashed" rounding="lg">
         <Text font="main-content-body">Loading…</Text>
       </Card>
     );
@@ -105,7 +104,7 @@ function AppConnections({ query }: AppConnectionsProps) {
 
   if (data.length === 0) {
     return (
-      <Card variant="tertiary">
+      <Card background="none" border="dashed" rounding="lg">
         <Text font="main-content-body" color="text-03">
           No external apps are enabled for your org yet. Ask an admin to enable
           one.
@@ -231,7 +230,7 @@ function ProviderConnectCard({
           highlight && "ring-2 ring-action-link-04"
         )}
       >
-        <Card>
+        <Card background="light" border="solid" rounding="lg">
           {variant === "row" ? (
             <div className="flex items-center gap-3 w-full">
               <Logo className="w-8 h-8" />

@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
   SvgConfluence,
   SvgGithub,
@@ -78,7 +78,7 @@ export default function ConnectDataBanner({
         </div>
 
         <div className="flex items-center justify-center gap-1">
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             Connect your data
           </Text>
           <SvgChevronRight className="h-4 w-4 text-text-03" />

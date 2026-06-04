@@ -4,8 +4,7 @@ import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { SettingsLayouts } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import {
@@ -116,7 +115,7 @@ export default function ScheduledTaskDetailPage() {
           backButton={handleBack}
         />
         <SettingsLayouts.Body>
-          <Text mainUiBody text03>
+          <Text font="main-ui-body" color="text-03">
             Missing task id.
           </Text>
         </SettingsLayouts.Body>
@@ -184,7 +183,7 @@ export default function ScheduledTaskDetailPage() {
             <SvgSimpleLoader className="h-6 w-6" />
           </div>
         ) : error || !data ? (
-          <Text mainUiBody text03>
+          <Text font="main-ui-body" color="text-03">
             Failed to load scheduled task.
           </Text>
         ) : (

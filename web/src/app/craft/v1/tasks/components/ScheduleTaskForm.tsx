@@ -2,10 +2,8 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Text from "@/refresh-components/texts/Text";
-import { InputTypeIn } from "@opal/components";
+import { Button, Divider, InputTypeIn, Text } from "@opal/components";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import { Button, Divider } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { SettingsLayouts, InputVertical } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
@@ -312,7 +310,7 @@ export default function ScheduleTaskForm({
               variant={shownNameError ? "error" : undefined}
             />
             {shownNameError && (
-              <Text secondaryBody text03 className="text-status-error-05">
+              <Text font="secondary-body" color="status-error-05">
                 {shownNameError}
               </Text>
             )}
@@ -346,7 +344,7 @@ export default function ScheduleTaskForm({
               onClose={closeSkillPicker}
             />
             {shownPromptError && (
-              <Text secondaryBody text03 className="text-status-error-05">
+              <Text font="secondary-body" color="status-error-05">
                 {shownPromptError}
               </Text>
             )}
