@@ -704,9 +704,7 @@ class SessionManager:
         Yields:
             SSE formatted event strings
         """
-        # Persist the picker's override up front; the turn reads it back from
-        # the session row (session.agent_provider/agent_model). opencode-serve
-        # resolves it against the pre-registered providers, so no re-provision.
+        # Persist the per-message model override; the turn reads it off the session row.
         if agent_provider and agent_model:
             update_session_agent_selection(
                 session_id, agent_provider, agent_model, self._db_session

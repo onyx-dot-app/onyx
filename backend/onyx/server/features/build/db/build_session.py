@@ -204,15 +204,10 @@ def update_session_agent_selection(
 ) -> None:
     """Persist the agent provider/model on the session row so a composer
     model override sticks across reloads."""
-    session = (
-        db_session.query(BuildSession)
-        .filter(BuildSession.id == session_id)
-        .one_or_none()
-    )
-    if session:
-        session.agent_provider = agent_provider
-        session.agent_model = agent_model
-        db_session.commit()
+    session = db_session.query(BuildSession).filter(BuildSession.id == session_id).one()
+    session.agent_provider = agent_provider
+    session.agent_model = agent_model
+    db_session.commit()
 
 
 def set_build_session_sharing_scope(
