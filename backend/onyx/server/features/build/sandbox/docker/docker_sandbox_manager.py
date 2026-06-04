@@ -381,6 +381,12 @@ def build_container_create_kwargs(
     }
 
     security_opts = ["no-new-privileges:true"]
+    ports: dict[str, tuple[str, int | None]] = {}
+    if DEV_MODE:
+        # Host-run dev workers are outside Docker's bridge DNS namespace, so
+        # they cannot reach http://sandbox-<id>:4096 directly. Publish only in
+        # dev mode, bound to localhost, while full compose uses bridge DNS.
+        ports = opencode_serve_port_bindings()
 
     return ContainerCreateKwargs(
         name=_sandbox_container_name(sandbox_id),
@@ -396,7 +402,7 @@ def build_container_create_kwargs(
         privileged=False,
         read_only=False,
         network=network,
-        ports=opencode_serve_port_bindings() if DEV_MODE else {},
+        ports=ports,
         environment=env,
         volumes={
             volume_name: {"bind": SESSIONS_ROOT, "mode": "rw"},
@@ -1084,6 +1090,9 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
                 break
         base_url = f"http://{_sandbox_container_name(sandbox_id)}:{OPENCODE_SERVE_PORT}"
         if DEV_MODE:
+            # Match the dev-only port publishing above: host-run workers need
+            # the Docker-assigned localhost port, while compose should keep the
+            # stable sandbox bridge URL.
             base_url = published_opencode_serve_base_url(attrs) or base_url
         return ServeConnectionInfo(
             base_url=base_url,
