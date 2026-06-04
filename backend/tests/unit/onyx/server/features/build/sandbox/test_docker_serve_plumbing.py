@@ -58,8 +58,11 @@ def test_load_serve_connection_info_uses_container_name_and_port() -> None:
     assert info.base_url == f"http://sandbox-12345678:{OPENCODE_SERVE_PORT}"
 
 
-def test_load_serve_connection_info_prefers_localhost_published_port() -> None:
+def test_load_serve_connection_info_prefers_localhost_published_port_in_dev(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Host-run workers cannot resolve Docker bridge DNS; use the published port."""
+    monkeypatch.setattr(dsm, "DEV_MODE", True)
     mgr = _bare_manager()
     fake_container = MagicMock()
     fake_container.attrs = {
@@ -80,8 +83,33 @@ def test_load_serve_connection_info_prefers_localhost_published_port() -> None:
     assert info.base_url == "http://127.0.0.1:49153"
 
 
-def test_load_serve_connection_info_normalizes_wildcard_host_ip() -> None:
+def test_load_serve_connection_info_ignores_published_port_outside_dev() -> None:
+    """Compose workers use sandbox bridge DNS, not host localhost."""
+    mgr = _bare_manager()
+    fake_container = MagicMock()
+    fake_container.attrs = {
+        "Config": {"Env": []},
+        "NetworkSettings": {
+            "Ports": {
+                dsm.OPENCODE_SERVE_CONTAINER_PORT: [
+                    {"HostIp": "127.0.0.1", "HostPort": "49153"},
+                ],
+            },
+        },
+    }
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker.containers.get.return_value = fake_container
+
+    info = mgr._load_serve_connection_info(_SBX)
+    assert info is not None
+    assert info.base_url == f"http://sandbox-12345678:{OPENCODE_SERVE_PORT}"
+
+
+def test_load_serve_connection_info_normalizes_wildcard_host_ip_in_dev(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Docker may report wildcard binds; clients should connect via localhost."""
+    monkeypatch.setattr(dsm, "DEV_MODE", True)
     mgr = _bare_manager()
     fake_container = MagicMock()
     fake_container.attrs = {
@@ -229,6 +257,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     """``provision()`` must mint a per-call HTTP Basic password and
     thread it through ``build_container_create_kwargs`` into the
     container env — otherwise every later request 401s."""
+    monkeypatch.setattr(dsm, "DEV_MODE", True)
     monkeypatch.setattr(dsm, "SANDBOX_API_SERVER_URL", "https://onyx.example.com")
     # Skip the actual readiness HTTP probe — that needs a real container.
     monkeypatch.setattr(

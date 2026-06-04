@@ -13,6 +13,7 @@ from uuid import UUID
 
 import pytest
 
+import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     _sandbox_container_name,
 )
@@ -178,10 +179,32 @@ def test_container_kwargs_uses_sandbox_network(kwargs: ContainerCreateKwargs) ->
     assert kwargs["network"] == "onyx_craft_sandbox"
 
 
-def test_container_kwargs_publishes_serve_on_localhost(
+def test_container_kwargs_does_not_publish_serve_outside_dev(
     kwargs: ContainerCreateKwargs,
 ) -> None:
-    """Host-run workers reach opencode-serve through a local ephemeral port."""
+    """Compose deployments reach opencode-serve through sandbox bridge DNS."""
+    assert kwargs["ports"] == {}
+
+
+def test_container_kwargs_publishes_serve_on_localhost_in_dev(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Host-run dev workers reach opencode-serve through a local ephemeral port."""
+    monkeypatch.setattr(dsm, "DEV_MODE", True)
+    kwargs = build_container_create_kwargs(
+        sandbox_id=SANDBOX_ID,
+        user_id=USER_ID,
+        tenant_id=TENANT_ID,
+        image="onyxdotapp/sandbox:test",
+        onyx_pat="pat-redacted",
+        api_server_url="http://api_server:8080",
+        network="onyx_craft_sandbox",
+        volume_name="onyx-craft-sandbox-12345678",
+        memory_limit="2g",
+        cpu_limit=1.0,
+        opencode_password=_OPENCODE_PASSWORD,
+        opencode_config_json=_OPENCODE_CONFIG_JSON,
+    )
     assert kwargs["ports"] == {
         OPENCODE_SERVE_CONTAINER_PORT: (OPENCODE_SERVE_HOST_BIND_IP, None),
     }

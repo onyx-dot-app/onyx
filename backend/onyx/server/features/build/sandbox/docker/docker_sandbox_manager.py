@@ -31,7 +31,8 @@ Sandbox containers run with:
 - no S3 / MinIO / Postgres / Redis / FileStore credentials in env
 - a fixed env allowlist (``ONYX_PAT``, ``ONYX_SERVER_URL``,
   ``AGENT_TRANSPORT``, opencode auth/config only)
-- opencode-serve published only on a random localhost-bound host port
+- in dev mode, opencode-serve published only on a random localhost-bound
+  host port
 - only the dedicated sandbox bridge network — never compose's default
   network. As a result api_server / postgres / redis / minio /
   model_server are NOT reachable by service name from inside the sandbox.
@@ -54,8 +55,9 @@ Outbound communication is intentionally limited to:
    HTTPS URL the agent reaches just like any other onyx-cli client.
 
 Most control-plane traffic from api_server → sandbox uses the Docker
-Engine API (``docker exec``). Prompt/event transport uses opencode-serve
-over the localhost-bound published port described above.
+Engine API (``docker exec``). Prompt/event transport uses opencode-serve:
+compose deployments reach sandbox container DNS directly, while dev mode uses
+the localhost-bound published port described above.
 """
 
 from __future__ import annotations
@@ -82,6 +84,7 @@ from docker.errors import APIError
 from docker.errors import NotFound
 from docker.models.containers import Container
 
+from onyx.configs.app_configs import DEV_MODE
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import ATTACHMENTS_DIRECTORY
@@ -282,8 +285,8 @@ def _published_opencode_serve_base_url(
 
     Docker reports published ports under
     ``NetworkSettings.Ports["4096/tcp"]``. The sandbox binds the host side to
-    127.0.0.1 with a random port, because local dev workers run on the host and
-    cannot resolve sandbox container DNS names.
+    127.0.0.1 with a random port in dev mode, because local dev workers run on
+    the host and cannot resolve sandbox container DNS names.
     """
     network_settings = container_attrs.get("NetworkSettings")
     if not isinstance(network_settings, dict):
@@ -398,9 +401,10 @@ def build_container_create_kwargs(
       dedicated ``onyx_craft_sandbox`` bridge). Does NOT join compose's
       default network; api_server / postgres / redis / minio are
       unreachable by service name.
-    - **Serve port is host-local only**: publishes opencode-serve on a
-      random host port bound to 127.0.0.1 so host-run workers can reach it
-      without exposing it on the LAN.
+    - **Serve port is host-local only in dev mode**: publishes opencode-serve
+      on a random host port bound to 127.0.0.1 so host-run workers can reach it
+      without exposing it on the LAN. Non-dev compose deployments use sandbox
+      container DNS on the dedicated bridge instead.
 
     ``ONYX_SERVER_URL`` must be the *public* Onyx URL (the one onyx-cli
     inside the sandbox will hit over HTTPS) — not an internal compose DNS
@@ -448,7 +452,11 @@ def build_container_create_kwargs(
         privileged=False,
         read_only=False,
         network=network,
-        ports={OPENCODE_SERVE_CONTAINER_PORT: (OPENCODE_SERVE_HOST_BIND_IP, None)},
+        ports=(
+            {OPENCODE_SERVE_CONTAINER_PORT: (OPENCODE_SERVE_HOST_BIND_IP, None)}
+            if DEV_MODE
+            else {}
+        ),
         environment=env,
         volumes={
             volume_name: {"bind": SESSIONS_ROOT, "mode": "rw"},
@@ -1115,9 +1123,10 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
     ) -> ServeConnectionInfo | None:
         """One ``docker inspect`` to extract URL + password.
 
-        The preferred URL is Docker's localhost-published host port. Fall back
-        to container-name DNS for older containers or deployments where the
-        backend also runs inside the sandbox bridge network.
+        Dev-mode host-run workers use Docker's localhost-published host port.
+        Non-dev compose deployments use container-name DNS on the sandbox
+        bridge network. Older dev containers without published ports also fall
+        back to container-name DNS.
         """
         container = self._get_container(sandbox_id)
         if container is None:
@@ -1134,9 +1143,9 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
             if entry.startswith(prefix):
                 password = entry[len(prefix) :]
                 break
-        base_url = _published_opencode_serve_base_url(attrs) or (
-            f"http://{_sandbox_container_name(sandbox_id)}:{OPENCODE_SERVE_PORT}"
-        )
+        base_url = f"http://{_sandbox_container_name(sandbox_id)}:{OPENCODE_SERVE_PORT}"
+        if DEV_MODE:
+            base_url = _published_opencode_serve_base_url(attrs) or base_url
         return ServeConnectionInfo(
             base_url=base_url,
             password=password,
