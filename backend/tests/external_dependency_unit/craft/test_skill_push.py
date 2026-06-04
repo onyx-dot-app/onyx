@@ -568,9 +568,9 @@ class TestSkillPush:
         pycache.mkdir()
         (pycache / "foo.pyc").write_bytes(b"\x00\x01")
 
-        # source_dir is computed as SKILLS_TEMPLATE_PATH/<id>; redirect the root
+        # source_dir is computed as BUILTIN_SKILLS_PATH/<id>; redirect the root
         # at our synthetic tree so the definition resolves to source_dir.
-        monkeypatch.setattr(built_in_module, "SKILLS_TEMPLATE_PATH", str(skills_root))
+        monkeypatch.setattr(built_in_module, "BUILTIN_SKILLS_PATH", skills_root)
         monkeypatch.setitem(
             built_in_module.BUILT_IN_SKILLS,
             slug,

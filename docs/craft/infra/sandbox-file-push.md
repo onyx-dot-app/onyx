@@ -324,7 +324,7 @@ Rotation: update the Secret and roll api_server + sandbox pods. v1 does not hot-
 
 ### 9.3 Safe extract (load-bearing security boundary)
 
-`safe_extract_then_atomic_swap` is the only thing standing between a credentialed attacker (or a buggy feature) and arbitrary filesystem writes inside the pod. Lives in `backend/onyx/server/features/build/sandbox/kubernetes/docker/daemon/extract.py` and must reject:
+`safe_extract_then_atomic_swap` is the only thing standing between a credentialed attacker (or a buggy feature) and arbitrary filesystem writes inside the pod. Lives in `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/extract.py` and must reject:
 
 - **Path traversal**: any entry whose normalized path escapes the bundle root, including `..` components and absolute paths.
 - **Symlinks and hard links**: bundles ship regular files only (reject `TarInfo.issym() or TarInfo.islnk()`).
@@ -333,7 +333,7 @@ Rotation: update the Secret and roll api_server + sandbox pods. v1 does not hot-
 - **Per-entry size > `MAX_FILE_BYTES` (25 MiB)** and **total uncompressed size > `MAX_BUNDLE_BYTES` (100 MiB)**.
 - **Non-UTF-8 path names** (defensive; avoids surprises with shell tooling that reads the dir).
 
-`backend/onyx/skills/bundle.py` is currently an empty stub (no shared helper to reuse). The safe-extract logic ships fresh in `kubernetes/docker/daemon/extract.py`; if validation needs surface elsewhere later, factor out then.
+`backend/onyx/skills/bundle.py` is currently an empty stub (no shared helper to reuse). The safe-extract logic ships fresh in `image/sandbox_daemon/extract.py`; if validation needs surface elsewhere later, factor out then.
 
 ### 9.4 Why not per-pod JWTs in v1
 
@@ -402,7 +402,7 @@ backend/onyx/server/features/build/sandbox/
 └── local/local_sandbox_manager.py     # write+find via shutil
 ```
 
-No `pusher.py` module — `push_to_sandbox` and `push_to_sandboxes` are concrete methods on `SandboxManager`'s base class (§4). Push types (`PushResult`, `PushFailure`, etc.) live in `models.py` alongside the existing sandbox models. Tarball building (`_build_targz`) and auth header construction (`_build_push_auth_header`) are private functions in `kubernetes_sandbox_manager.py`, not separate modules. The daemon is a self-contained package under `kubernetes/docker/sandbox_daemon/` with no `onyx.*` imports; it is copied to `/workspace/sandbox_daemon/` in the sandbox image. The local implementation uses only `shutil` + `os.rename` for atomic swap; no daemon dependency.
+No `pusher.py` module — `push_to_sandbox` and `push_to_sandboxes` are concrete methods on `SandboxManager`'s base class (§4). Push types (`PushResult`, `PushFailure`, etc.) live in `models.py` alongside the existing sandbox models. Tarball building (`_build_targz`) and auth header construction (`_build_push_auth_header`) are private functions in `kubernetes_sandbox_manager.py`, not separate modules. The daemon is a self-contained package under `image/sandbox_daemon/` with no `onyx.*` imports; it is copied to `/workspace/sandbox_daemon/` in the sandbox image. The local implementation uses only `shutil` + `os.rename` for atomic swap; no daemon dependency.
 
 ### Per-feature push helpers
 
@@ -417,7 +417,7 @@ backend/onyx/server/features/build/.../push.py # agent_instructions (or wherever
 ### Sandbox image
 
 ```
-backend/onyx/server/features/build/sandbox/kubernetes/docker/
+backend/onyx/server/features/build/sandbox/image/
 ├── Dockerfile                       # MODIFY: add entrypoint.sh, daemon deps, /workspace/managed
 ├── entrypoint.sh                    # NEW: supervisor (§6.1)
 └── initial-requirements.txt         # MODIFY: add fastapi, uvicorn

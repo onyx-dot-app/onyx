@@ -12,7 +12,7 @@ from typing import Any
 
 _HELPER = (
     Path(__file__).resolve().parents[3]
-    / "onyx/server/features/build/sandbox/kubernetes/docker/skills"
+    / "onyx/skills/builtin"
     / "google-drive/gdrive_api.py"
 )
 

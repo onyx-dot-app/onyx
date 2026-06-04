@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SvgCheck, SvgCopy, SvgTerminal, SvgTrash } from "@opal/icons";
-import { Button, InputTypeIn } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, InputTypeIn, Text } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { cn } from "@opal/utils";
@@ -362,7 +361,7 @@ function StatusBar({
     <div className="flex items-center gap-3 px-3 py-2">
       <div className="flex items-center gap-2 shrink-0">
         <StatusDot status={status} paused={paused} />
-        <Text secondaryBody nowrap>
+        <Text font="secondary-body" color="text-05" nowrap>
           {stateLabel}
         </Text>
         {status !== "connecting" && status !== "error" && (
@@ -371,7 +370,7 @@ function StatusBar({
               className="h-3 w-px bg-border-02 shrink-0"
               aria-hidden="true"
             />
-            <Text secondaryBody nowrap>
+            <Text font="secondary-body" color="text-05" nowrap>
               {filtered
                 ? `${visibleLines.toLocaleString()} / ${totalLines.toLocaleString()} lines`
                 : `${totalLines.toLocaleString()} lines`}
@@ -452,7 +451,9 @@ function LogContent({ scrollRef, onScroll, lines, empty }: LogContentProps) {
     >
       {empty !== null ? (
         <div className="flex h-full items-center justify-center select-none">
-          <Text secondaryBody>{empty}</Text>
+          <Text font="secondary-body" color="text-05">
+            {empty}
+          </Text>
         </div>
       ) : (
         lines.map((line) => <LogRow key={line.id} line={line} />)

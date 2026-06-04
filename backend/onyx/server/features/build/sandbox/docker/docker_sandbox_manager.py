@@ -1,24 +1,23 @@
 """Docker-based sandbox manager for self-hosted docker-compose deployments.
 
-This is the docker-compose analogue of
-:class:`KubernetesSandboxManager`. The api_server mounts the Docker socket
-and drives container lifecycle (provision/terminate, exec into the sandbox
-for setup, file ops, and agent messaging) the same way the K8s manager drives
-the Kubernetes API.
+This is the docker-compose analogue of :class:`KubernetesSandboxManager`. The
+api_server mounts the Docker socket and drives container lifecycle
+(provision/terminate, exec into the sandbox for setup, file ops, and agent
+messaging) the same way the K8s manager drives the Kubernetes API.
 
 User-shared sandbox model
 -------------------------
 One container per user, multiple sessions under ``/workspace/sessions``,
-matching the K8s pod model. ``provision()`` creates a single container
-and a per-sandbox named volume mounted at ``/workspace/sessions``.
+matching the K8s pod model. ``provision()`` creates a single container and a
+per-sandbox named volume mounted at ``/workspace/sessions``.
 
 Snapshots
 ---------
-Docker V1 streams tar bytes through api_server-owned ``FileStore`` rather
-than handing storage credentials to the agent container. ``create_snapshot``
-runs ``tar`` inside the sandbox via docker exec, pipes the bytes through
-``SnapshotManager.create_snapshot_from_stream``; ``restore_snapshot`` runs
-the reverse path via ``stream_stdin_to_container``.
+Docker V1 streams tar bytes through api_server-owned ``FileStore`` rather than
+handing storage credentials to the agent container. ``create_snapshot`` runs
+``tar`` inside the sandbox via docker exec, pipes the bytes through
+``SnapshotManager.create_snapshot_from_stream``; ``restore_snapshot`` runs the
+reverse path via ``stream_stdin_to_container``.
 
 Security model
 --------------
@@ -38,19 +37,18 @@ Sandbox containers run with:
 Threat model — Docker vs Kubernetes parity gap
 ----------------------------------------------
 The LLM provider ``api_key`` is passed into the container via
-``OPENCODE_CONFIG_CONTENT`` (a plaintext Docker env var visible to
-``docker inspect``). K8s loads the same config from an RBAC-scoped
-``Secret``. Treat host access to the Docker daemon as access to the
-key; see ``docs/craft/docker-opencode-serve.md`` for the operator-facing
-note.
+``OPENCODE_CONFIG_CONTENT`` (a plaintext Docker env var visible to ``docker
+inspect``). K8s loads the same config from an RBAC-scoped ``Secret``. Treat host
+access to the Docker daemon as access to the key; see
+``docs/craft/docker-opencode-serve.md`` for the operator-facing note.
 
 Outbound communication is intentionally limited to:
 
-1. Public internet over HTTPS (the bridge has default internet egress;
-   block at the host's ``DOCKER-USER`` chain if you need a stricter
-   posture, e.g. for EC2 IMDS).
-2. The Onyx API via ``ONYX_SERVER_URL`` — which must be the *public*
-   HTTPS URL the agent reaches just like any other onyx-cli client.
+1. Public internet over HTTPS (the bridge has default internet egress; block at
+   the host's ``DOCKER-USER`` chain if you need a stricter posture, e.g. for EC2
+   IMDS).
+2. The Onyx API via ``ONYX_SERVER_URL`` — which must be the *public* HTTPS URL
+   the agent reaches just like any other onyx-cli client.
 
 Most control-plane traffic from api_server → sandbox uses the Docker
 Engine API (``docker exec``). Prompt/event transport uses opencode-serve over
@@ -94,6 +92,9 @@ from onyx.server.features.build.configs import SANDBOX_DOCKER_MEMORY_LIMIT
 from onyx.server.features.build.configs import SANDBOX_DOCKER_NETWORK
 from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
 from onyx.server.features.build.configs import SANDBOX_DOCKER_VOLUME_PREFIX
+from onyx.server.features.build.configs import SANDBOX_PROXY_CA_VOLUME_NAME
+from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
+from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -154,6 +155,22 @@ CONTAINER_READY_TIMEOUT_SECONDS = 120
 CONTAINER_READY_POLL_INTERVAL_SECONDS = 1.0
 
 
+# Egress proxy file paths inside the sandbox container. Matched by
+# ``firewall-init.sh``: ``CA_SRC`` defaults to ``/sandbox-ca/ca.crt`` and
+# ``CA_DST`` to ``/etc/ssl/sandbox/ca-bundle.crt``. The bundle dir lives in the
+# container's writable layer (not a separate volume) since only the init step
+# writes to it and only the agent reads it.
+_PROXY_CA_SOURCE_DIR = "/sandbox-ca"
+_PROXY_CA_BUNDLE_DIR = "/etc/ssl/sandbox"
+_PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
+
+# Per-session egress tagging plugin, baked into the sandbox image (see
+# kubernetes/docker/Dockerfile). Path must match the COPY destination there.
+# Registered in the opencode config only when the proxy is wired up; otherwise
+# it would no-op (no HTTP(S)_PROXY to re-tag).
+_OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
+
+
 def _build_nextjs_start_script(
     session_path: str,
     nextjs_port: int,
@@ -194,14 +211,17 @@ def _sandbox_volume_name(sandbox_id: str | UUID) -> str:
 
 
 def _sanitize_relative_path(path: str) -> str:
-    """Strip ``..`` components and leading ``/`` from a user-provided path."""
+    """Strips ``..`` components and leading ``/`` from a user-provided path."""
     path_obj = Path(path.lstrip("/"))
     clean_parts = [p for p in path_obj.parts if p != ".."]
     return str(Path(*clean_parts)) if clean_parts else "."
 
 
 def _validate_strict_path(path: str) -> None:
-    """Reject paths with traversal, URL escapes, null bytes, or shell metacharacters."""
+    """
+    Rejects paths with traversal, URL escapes, null bytes, or shell
+    metacharacters.
+    """
     if ".." in path or "%" in path or "\x00" in path:
         raise ValueError("Invalid path: potential path traversal detected")
     if re.search(r'[;&|`$(){}[\]<>\'"\n\r\\]', path):
@@ -225,12 +245,11 @@ _COMPOSE_INTERNAL_HOSTNAMES = {
 
 
 def _looks_like_internal_compose_host(url: str) -> bool:
-    """Heuristic: does ``url`` reference a compose-internal service hostname?
+    """Heuristic: Does ``url`` reference a compose-internal service hostname?
 
     Used to warn deployers that pointed SANDBOX_API_SERVER_URL at the
-    api_server's compose DNS name. Sandboxes can't resolve that — they
-    only join the craft bridge network — so the URL must be the public
-    Onyx URL.
+    api_server's compose DNS name. Sandboxes can't resolve that — they only join
+    the craft bridge network — so the URL must be the public Onyx URL.
     """
     if not url:
         return False
@@ -251,8 +270,8 @@ def _detect_compose_project(docker_client: DockerClient) -> str | None:
     We inspect the container we're currently running in (matched by hostname,
     which Docker sets to the container short-ID) and pull
     ``com.docker.compose.project`` off its labels. Returns None when running
-    outside compose (e.g. local tests) so the manager falls back to
-    "ungrouped" sandbox containers.
+    outside compose (e.g. local tests) so the manager falls back to "ungrouped"
+    sandbox containers.
     """
     import socket as _socket
 
@@ -272,10 +291,10 @@ def build_sandbox_labels(
 ) -> dict[str, str]:
     """Standard label set for sandbox-owned docker resources.
 
-    ``compose_project`` is added as ``com.docker.compose.project`` so
-    Docker Desktop groups sandbox containers under the same "onyx" stack
-    header as api_server/postgres/redis/etc. Auto-detected by
-    ``DockerSandboxManager`` from its own container's labels.
+    ``compose_project`` is added as ``com.docker.compose.project`` so Docker
+    Desktop groups sandbox containers under the same "onyx" stack header as
+    api_server/postgres/redis/etc. Auto-detected by ``DockerSandboxManager``
+    from its own container's labels.
     """
     labels: dict[str, str] = {
         LABEL_COMPONENT: LABEL_COMPONENT_VALUE,
@@ -290,11 +309,53 @@ def build_sandbox_labels(
     return labels
 
 
-class ContainerCreateKwargs(TypedDict):
-    """Kwargs we pass to ``DockerClient.containers.run``.
+# Sandbox should reach loopback directly; everything else (api server included)
+# goes through the proxy.
+_NO_PROXY_LIST = "127.0.0.1,localhost"
 
-    Typed so ``test_docker_manager_config.py`` can read specific fields
-    without ``cast``.
+
+def _proxy_env_vars(
+    *,
+    sandbox_proxy_host: str,
+    sandbox_proxy_port: int,
+) -> dict[str, str]:
+    """Proxy-enabled env additions for the sandbox container.
+
+    Mirrors ``kubernetes_sandbox_manager._proxy_main_container_env_vars`` but
+    layered on the docker env dict instead of a list of V1EnvVars. Includes the
+    firewall-init.sh contract vars (``SANDBOX_PROXY_*``,
+    ``CA_BUNDLE_SRC``/``DST``) since the script runs as the container's
+    entrypoint wrapper and reads them from its own environment.
+    """
+    proxy_url = f"http://{sandbox_proxy_host}:{sandbox_proxy_port}"
+    return {
+        # firewall-init.sh contract.
+        "SANDBOX_PROXY_HOST": sandbox_proxy_host,
+        "SANDBOX_PROXY_PORT": str(sandbox_proxy_port),
+        "SANDBOX_PROXY_BOOTSTRAP_MODE": "entrypoint",
+        "SANDBOX_PROXY_CA_BUNDLE_SRC": f"{_PROXY_CA_SOURCE_DIR}/ca.crt",
+        "SANDBOX_PROXY_CA_BUNDLE_DST": _PROXY_CA_BUNDLE_FILE,
+        # Agent-side proxy + CA wiring.
+        "HTTPS_PROXY": proxy_url,
+        "HTTP_PROXY": proxy_url,
+        "https_proxy": proxy_url,
+        "http_proxy": proxy_url,
+        "NO_PROXY": _NO_PROXY_LIST,
+        "no_proxy": _NO_PROXY_LIST,
+        # SDK-specific CA env vars for libs that bypass /etc/ssl/certs.
+        "NODE_EXTRA_CA_CERTS": _PROXY_CA_BUNDLE_FILE,
+        "REQUESTS_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
+        "SSL_CERT_FILE": _PROXY_CA_BUNDLE_FILE,
+        "AWS_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
+        "CURL_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
+        "GIT_SSL_CAINFO": _PROXY_CA_BUNDLE_FILE,
+    }
+
+
+class _ContainerCreateKwargsRequired(TypedDict):
+    """
+    Always-set fields. Security-critical ones (cap_drop, security_opt,
+    privileged, user) live here so omitting them fails type-check.
     """
 
     name: str
@@ -316,6 +377,15 @@ class ContainerCreateKwargs(TypedDict):
     restart_policy: dict[str, str]
 
 
+class ContainerCreateKwargs(_ContainerCreateKwargsRequired, total=False):
+    """
+    Kwargs we pass to ``DockerClient.containers.run``. Proxy-mode adds
+    ``cap_add``; legacy posture omits it.
+    """
+
+    cap_add: list[str]
+
+
 def build_container_create_kwargs(
     *,
     sandbox_id: UUID,
@@ -331,11 +401,15 @@ def build_container_create_kwargs(
     opencode_password: str,
     opencode_config_json: str,
     compose_project: str | None = None,
+    sandbox_proxy_host: str | None = None,
+    sandbox_proxy_port: int | None = None,
+    proxy_ca_volume_name: str | None = None,
 ) -> ContainerCreateKwargs:
     """Build the kwargs dict for ``DockerClient.containers.create``.
 
-    Sandbox isolation invariants enforced here (locked down by
-    ``test_docker_manager_config.py``):
+    Two postures gated on ``sandbox_proxy_host`` truthiness:
+
+    Legacy (proxy disabled, default in tests/dev without proxy stack):
 
     - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL,
       AGENT_TRANSPORT, plus ``OPENCODE_SERVER_PASSWORD`` and
@@ -347,32 +421,55 @@ def build_container_create_kwargs(
     - **Cap-dropped non-root**: ``user=1000:1000``, ``cap_drop=ALL``,
       ``security_opt=no-new-privileges``, ``privileged=False``.
     - **Single network**: joins only the caller-supplied ``network`` (the
-      dedicated ``onyx_craft_sandbox`` bridge). Does NOT join compose's
-      default network; api_server / postgres / redis / minio are
-      unreachable by service name.
-    ``ONYX_SERVER_URL`` must be the *public* Onyx URL (the one onyx-cli
-    inside the sandbox will hit over HTTPS) — not an internal compose DNS
-    name. We emit a warning if it looks like the latter, since reaching it
-    would require the sandbox to be on the compose default network.
+      dedicated ``onyx_craft_sandbox`` bridge). Does NOT join compose's default
+      network; api_server / postgres / redis / minio are unreachable by service
+      name.
 
-    ``opencode_password`` is generated per-provision by the manager and
-    injected as the env var named by ``OPENCODE_SERVER_PASSWORD``.
-    The api_server reads it back via ``docker inspect`` rather than
-    persisting it on disk. ``opencode_config_json`` is the full
-    ``opencode.json`` content (single-provider for Docker today), surfaced
-    as ``OPENCODE_CONFIG_CONTENT`` for opencode-serve to load at startup.
+    Proxy-enabled (``sandbox_proxy_host`` set; production self-host compose with
+    ``--include-craft``):
+
+    - Env layered with ``HTTPS_PROXY`` / SDK CA vars + the ``firewall-init.sh``
+      contract vars (``SANDBOX_PROXY_BOOTSTRAP_MODE= entrypoint``,
+      ``CA_BUNDLE_SRC``/``DST``). The legacy 4-key core is preserved; proxy keys
+      are layered on top.
+    - Command swapped to ``["/workspace/firewall-init.sh",
+      "/workspace/entrypoint.sh"]`` so the init script runs first; ``capsh``
+      drops caps + setuid's to UID 1000 + exec's the agent entrypoint.
+    - ``cap_add=["NET_ADMIN", "SETPCAP"]`` (NET_ADMIN runs iptables; SETPCAP
+      authorises ``capsh --drop=all``). Both are dropped from the bounding set
+      by capsh before the agent execve, so the running container ends up with no
+      caps at all.
+    - ``user="0:0"`` so the init starts as root for iptables. capsh then drops
+      to UID 1000. The root+NET_ADMIN window is bounded by ``firewall-init.sh``
+      runtime (~seconds); ``set -euo pipefail`` + ``die`` short-circuit on any
+      step failure, so a broken init exits non-zero before the agent ever
+      starts. ``restart_policy: unless-stopped`` re-enters the same fail-fast
+      init -- no cumulative exposure, no user code reachable during the window.
+    - The named proxy-CA volume is mounted read-only at ``/sandbox-ca`` for
+      ``firewall-init.sh`` to read ``ca.crt``.
+
+    ``ONYX_SERVER_URL`` must be the *public* Onyx URL (the one onyx-cli inside
+    the sandbox will hit over HTTPS) — not an internal compose DNS name. We emit
+    a warning if it looks like the latter, since reaching it would require the
+    sandbox to be on the compose default network.
+
+    ``opencode_password`` is generated per-provision by the manager and injected
+    as the env var named by ``OPENCODE_SERVER_PASSWORD``. The api_server reads
+    it back via ``docker inspect`` rather than persisting it on disk.
+    ``opencode_config_json`` is the full ``opencode.json`` content
+    (single-provider for Docker today), surfaced as ``OPENCODE_CONFIG_CONTENT``
+    for opencode-serve to load at startup.
     """
     if _looks_like_internal_compose_host(api_server_url):
         logger.warning(
-            "SANDBOX_API_SERVER_URL=%s looks like an internal compose hostname. "
-            "Sandboxes only join the craft bridge network and reach the API "
-            "server like any other public client, so this URL must resolve "
-            "publicly (e.g. https://onyx.your-org.com). Internal DNS will "
+            "SANDBOX_API_SERVER_URL=%s looks like an internal compose hostname. Sandboxes only "
+            "join the craft bridge network and reach the API server like any other public client, "
+            "so this URL must resolve publicly (e.g. https://onyx.your-org.com). Internal DNS will "
             "fail and the agent will see 'connection refused'.",
             api_server_url,
         )
 
-    env = {
+    env: dict[str, str] = {
         "ONYX_PAT": onyx_pat,
         "ONYX_SERVER_URL": api_server_url,
         "AGENT_TRANSPORT": "serve",
@@ -387,31 +484,60 @@ def build_container_create_kwargs(
         # they cannot reach http://sandbox-<id>:4096 directly. Publish only in
         # dev mode, bound to localhost, while full compose uses bridge DNS.
         ports = opencode_serve_port_bindings()
+    volumes: dict[str, dict[str, str]] = {
+        volume_name: {"bind": SESSIONS_ROOT, "mode": "rw"},
+    }
 
-    return ContainerCreateKwargs(
-        name=_sandbox_container_name(sandbox_id),
-        image=image,
-        command=["/workspace/entrypoint.sh"],
-        detach=True,
-        labels=build_sandbox_labels(
+    if sandbox_proxy_host:
+        # All-or-nothing: port + ca volume must be supplied when host is.
+        if sandbox_proxy_port is None or not proxy_ca_volume_name:
+            raise ValueError(
+                "sandbox_proxy_host is set but sandbox_proxy_port or proxy_ca_volume_name is "
+                "missing; Proxy posture requires all three."
+            )
+        env.update(
+            _proxy_env_vars(
+                sandbox_proxy_host=sandbox_proxy_host,
+                sandbox_proxy_port=sandbox_proxy_port,
+            )
+        )
+        volumes[proxy_ca_volume_name] = {
+            "bind": _PROXY_CA_SOURCE_DIR,
+            "mode": "ro",
+        }
+        command = ["/workspace/firewall-init.sh", "/workspace/entrypoint.sh"]
+        user = "0:0"
+        cap_add = ["NET_ADMIN", "SETPCAP"]
+    else:
+        command = ["/workspace/entrypoint.sh"]
+        user = "1000:1000"
+        cap_add = []
+
+    kwargs: ContainerCreateKwargs = {
+        "name": _sandbox_container_name(sandbox_id),
+        "image": image,
+        "command": command,
+        "detach": True,
+        "labels": build_sandbox_labels(
             sandbox_id, tenant_id, user_id, compose_project=compose_project
         ),
-        user="1000:1000",
-        cap_drop=["ALL"],
-        security_opt=security_opts,
-        privileged=False,
-        read_only=False,
-        network=network,
-        ports=ports,
-        environment=env,
-        volumes={
-            volume_name: {"bind": SESSIONS_ROOT, "mode": "rw"},
-        },
-        mem_limit=memory_limit,
-        nano_cpus=int(cpu_limit * 1_000_000_000),
-        restart_policy={"Name": "unless-stopped"},
+        "user": user,
+        "cap_drop": ["ALL"],
+        "security_opt": security_opts,
+        "privileged": False,
+        "read_only": False,
+        "network": network,
+        "ports": ports,
+        "environment": env,
+        "volumes": volumes,
+        "mem_limit": memory_limit,
+        "nano_cpus": int(cpu_limit * 1_000_000_000),
+        "restart_policy": {"Name": "unless-stopped"},
         # No docker socket mount. No S3/MinIO env. No FileStore credentials.
-    )
+    }
+    if cap_add:
+        kwargs["cap_add"] = cap_add
+    return kwargs
 
 
 class DockerSandboxManager(SandboxManager):
@@ -437,6 +563,15 @@ class DockerSandboxManager(SandboxManager):
         return cls._instance
 
     def _initialize(self) -> None:
+        # Mirrors the K8s posture from #11604: the proxy is mandatory whenever
+        # craft is enabled.
+        if not SANDBOX_PROXY_HOST:
+            raise RuntimeError(
+                "DockerSandboxManager requires SANDBOX_PROXY_HOST. The sandbox egress proxy is "
+                "mandatory when craft is enabled; wire it in docker-compose.craft.yml or unset "
+                "SANDBOX_BACKEND."
+            )
+
         self._docker = DockerClient(base_url=f"unix://{SANDBOX_DOCKER_SOCKET}")
         self._image = SANDBOX_CONTAINER_IMAGE
         self._network_name = SANDBOX_DOCKER_NETWORK
@@ -455,7 +590,7 @@ class DockerSandboxManager(SandboxManager):
 
         logger.info(
             "DockerSandboxManager initialized: socket=%s image=%s network=%s "
-            "compose_project=%s",
+            "compose_project=%s.",
             SANDBOX_DOCKER_SOCKET,
             self._image,
             self._network_name,
@@ -468,7 +603,7 @@ class DockerSandboxManager(SandboxManager):
             return
         except NotFound:
             pass
-        logger.info("Creating sandbox network: %s", self._network_name)
+        logger.info("Creating sandbox network: %s.", self._network_name)
         # Plain bridge (internal=False) — agent needs public internet; host
         # DOCKER-USER chain handles IMDS blocking.
         self._docker.networks.create(
@@ -487,7 +622,7 @@ class DockerSandboxManager(SandboxManager):
             return volume_name
         except NotFound:
             pass
-        logger.info("Creating sandbox volume: %s", volume_name)
+        logger.info("Creating sandbox volume: %s.", volume_name)
         self._docker.volumes.create(
             name=volume_name,
             labels=build_sandbox_labels(
@@ -506,7 +641,7 @@ class DockerSandboxManager(SandboxManager):
         c = self._get_container(sandbox_id)
         if c is None:
             raise RuntimeError(
-                f"Sandbox {sandbox_id} container not found — call provision() first"
+                f"Sandbox {sandbox_id} container not found — call provision() first."
             )
         return c
 
@@ -521,8 +656,7 @@ class DockerSandboxManager(SandboxManager):
             if status in ("exited", "dead"):
                 logs = container.logs(tail=100).decode("utf-8", errors="replace")
                 raise RuntimeError(
-                    f"Sandbox container {container.name} exited unexpectedly. "
-                    f"Logs:\n{logs[:2000]}"
+                    f"Sandbox container {container.name} exited unexpectedly. Logs:\n{logs[:2000]}"
                 )
             time.sleep(CONTAINER_READY_POLL_INTERVAL_SECONDS)
         return False
@@ -538,10 +672,10 @@ class DockerSandboxManager(SandboxManager):
         all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         if not onyx_pat:
-            raise ValueError("onyx_pat is required for Docker sandbox provisioning")
+            raise ValueError("onyx_pat is required for Docker sandbox provisioning.")
         if not SANDBOX_API_SERVER_URL:
             raise ValueError(
-                "SANDBOX_API_SERVER_URL must be set for Docker sandbox provisioning"
+                "SANDBOX_API_SERVER_URL must be set for Docker sandbox provisioning."
             )
 
         if all_llm_configs is not None and len(all_llm_configs) > 1:
@@ -549,31 +683,37 @@ class DockerSandboxManager(SandboxManager):
             # overrides will fail at opencode-serve with "provider not
             # registered". Warn now so operators see it before the first turn.
             logger.warning(
-                "DockerSandboxManager.provision received %d LLM configs but only "
-                "the primary provider %r is bootstrapped; per-prompt provider "
-                "overrides will fail until Docker grows multi-provider support.",
+                "DockerSandboxManager.provision received %d LLM configs but only the primary "
+                "provider %r is bootstrapped; per-prompt provider overrides will fail until Docker "
+                "grows multi-provider support.",
                 len(all_llm_configs),
                 llm_config.provider,
             )
 
         logger.info(
-            "Provisioning Docker sandbox %s for user %s, tenant %s",
+            "Provisioning Docker sandbox %s for user %s, tenant %s.",
             sandbox_id,
             user_id,
             tenant_id,
         )
 
-        # Re-provision: clear tombstone + cached info so subscribes can
-        # build a fresh bus against the new container.
+        # Re-provision: clear tombstone + cached info so subscribes can build a
+        # fresh bus against the new container.
         with self._event_buses_lock:
             self._terminated_sandboxes.discard(sandbox_id)
         self._invalidate_serve_connection_info(sandbox_id)
 
         container = self._reuse_existing_container(sandbox_id)
         if container is None:
-            # opencode-serve reads provider config from env at startup;
-            # must be in create_kwargs before the container ever runs.
+            # opencode-serve reads provider config from env at startup; must be
+            # in create_kwargs before the container ever runs.
             opencode_password = secrets.token_urlsafe(32)
+            # Only register the egress-tagging plugin when the proxy is wired
+            # up; otherwise it would no-op (no HTTP(S)_PROXY to re-tag). Mirrors
+            # the K8s manager's gating.
+            session_tag_plugins = (
+                [_OPENCODE_SESSION_TAG_PLUGIN_PATH] if SANDBOX_PROXY_HOST else None
+            )
             opencode_config_json = json.dumps(
                 build_opencode_config(
                     provider=llm_config.provider,
@@ -581,6 +721,7 @@ class DockerSandboxManager(SandboxManager):
                     api_key=llm_config.api_key or None,
                     api_base=llm_config.api_base,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    plugins=session_tag_plugins,
                 )
             )
             self._ensure_sandbox_network()
@@ -597,16 +738,16 @@ class DockerSandboxManager(SandboxManager):
 
         if not self._wait_for_container_running(container):
             raise RuntimeError(
-                f"Timeout waiting for sandbox container {container.name} to be running"
+                f"Timeout waiting for sandbox container {container.name} to be running."
             )
 
         if not self._wait_for_opencode_serve_ready(sandbox_id):
             raise RuntimeError(
-                f"opencode-serve never became ready in sandbox container {container.name}"
+                f"opencode-serve never became ready in sandbox container {container.name}."
             )
 
         logger.info(
-            "Provisioned Docker sandbox %s, container=%s", sandbox_id, container.name
+            "Provisioned Docker sandbox %s, container=%s.", sandbox_id, container.name
         )
         return SandboxInfo(
             sandbox_id=sandbox_id,
@@ -616,17 +757,17 @@ class DockerSandboxManager(SandboxManager):
         )
 
     def _reuse_existing_container(self, sandbox_id: UUID) -> Container | None:
-        """Return a running/restarted container if one exists, else None."""
+        """Returns a running/restarted container if one exists, else None."""
         existing = self._get_container(sandbox_id)
         if existing is None:
             return None
         existing.reload()
         status = ((existing.attrs or {}).get("State") or {}).get("Status")
         if status == "running":
-            logger.info("Reusing existing running sandbox %s", sandbox_id)
+            logger.info("Reusing existing running sandbox %s.", sandbox_id)
             return existing
         if status in ("exited", "created"):
-            logger.info("Starting existing stopped sandbox %s", existing.name)
+            logger.info("Starting existing stopped sandbox %s.", existing.name)
             existing.start()
             return existing
         return None
@@ -642,7 +783,13 @@ class DockerSandboxManager(SandboxManager):
         opencode_password: str,
         opencode_config_json: str,
     ) -> Container:
-        """Run docker create + start with our security/network/labels invariants."""
+        """
+        Run docker create + start with our security/network/labels invariants.
+        """
+        # Proxy posture is gated on SANDBOX_PROXY_HOST; threaded through
+        # build_container_create_kwargs to layer on the legacy posture without
+        # bifurcating this call site.
+        proxy_host = SANDBOX_PROXY_HOST or None
         create_kwargs = build_container_create_kwargs(
             sandbox_id=sandbox_id,
             user_id=user_id,
@@ -657,13 +804,17 @@ class DockerSandboxManager(SandboxManager):
             opencode_password=opencode_password,
             opencode_config_json=opencode_config_json,
             compose_project=self._compose_project,
+            sandbox_proxy_host=proxy_host,
+            sandbox_proxy_port=SANDBOX_PROXY_PORT if proxy_host else None,
+            proxy_ca_volume_name=(SANDBOX_PROXY_CA_VOLUME_NAME if proxy_host else None),
         )
         try:
-            # Types pinned by ContainerCreateKwargs; ty can't match run's overloads.
+            # Types pinned by ContainerCreateKwargs; ty can't match run's
+            # overloads.
             return self._docker.containers.run(**create_kwargs)  # ty: ignore[no-matching-overload]
         except APIError as e:
             if "Conflict" in str(e) or getattr(e, "status_code", None) == 409:
-                logger.info("Sandbox container %s already exists, reusing", sandbox_id)
+                logger.info("Sandbox container %s already exists, reusing.", sandbox_id)
                 return self._require_container(sandbox_id)
             raise RuntimeError(f"Failed to create sandbox container: {e}") from e
 
@@ -674,24 +825,25 @@ class DockerSandboxManager(SandboxManager):
         if container is not None:
             try:
                 container.remove(force=True, v=False)
-                logger.info("Removed sandbox container %s", container.name)
+                logger.info("Removed sandbox container %s.", container.name)
             except (APIError, NotFound) as e:
                 logger.warning(
                     "Error removing sandbox container %s: %s", container.name, e
                 )
 
-        # Volume removal is separate so terminate works after manual container rm.
+        # Volume removal is separate so terminate works after manual container
+        # rm.
         volume_name = _sandbox_volume_name(sandbox_id)
         try:
             volume = self._docker.volumes.get(volume_name)
             volume.remove(force=True)
-            logger.info("Removed sandbox volume %s", volume_name)
+            logger.info("Removed sandbox volume %s.", volume_name)
         except NotFound:
             pass
         except APIError as e:
             logger.warning("Error removing sandbox volume %s: %s", volume_name, e)
 
-        logger.info("Terminated Docker sandbox %s", sandbox_id)
+        logger.info("Terminated Docker sandbox %s.", sandbox_id)
 
     def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:  # noqa: ARG002
         container = self._get_container(sandbox_id)
@@ -736,9 +888,8 @@ class DockerSandboxManager(SandboxManager):
     ) -> None:
         if snapshot_path:
             logger.warning(
-                "setup_session_workspace called with snapshot_path=%s; use "
-                "restore_snapshot for snapshot restores. Session %s will be "
-                "set up with the fresh template instead.",
+                "setup_session_workspace called with snapshot_path=%s; use restore_snapshot "
+                "for snapshot restores. Session %s will be set up with the fresh template instead.",
                 snapshot_path,
                 session_id,
             )
@@ -789,7 +940,7 @@ echo "Session workspace setup complete"
 """
 
         logger.info(
-            "Setting up session workspace %s in sandbox %s", session_id, sandbox_id
+            "Setting up session workspace %s in sandbox %s.", session_id, sandbox_id
         )
         try:
             run_in_container(container, ["/bin/sh", "-c", setup_script])
@@ -809,7 +960,7 @@ echo "Session workspace setup complete"
         container = self._get_container(sandbox_id)
         if container is None:
             logger.debug(
-                "Container missing while cleaning up session %s — already gone",
+                "Container missing while cleaning up session %s — already gone.",
                 session_id,
             )
             return
@@ -897,7 +1048,7 @@ echo "Session cleanup complete"
     ) -> SnapshotResult | None:
         container = self._get_container(sandbox_id)
         if container is None:
-            logger.info("create_snapshot: sandbox %s has no container", sandbox_id)
+            logger.info("create_snapshot: sandbox %s has no container.", sandbox_id)
             return None
 
         session_path = f"{SESSIONS_ROOT}/{session_id}"
@@ -932,9 +1083,9 @@ echo "Session cleanup complete"
         stream = stream_stdout_from_container(container, tar_cmd)
         adapter = _GeneratorReader(stream)
         try:
-            # ``_GeneratorReader`` satisfies the structural ``read(n)`` API
-            # that ``SnapshotManager``/``FileStore`` actually use, but does
-            # not subclass ``typing.IO[bytes]`` formally.
+            # ``_GeneratorReader`` satisfies the structural ``read(n)`` API that
+            # ``SnapshotManager``/``FileStore`` actually use, but does not
+            # subclass ``typing.IO[bytes]`` formally.
             _, storage_path, size_bytes = (
                 self._snapshot_manager.create_snapshot_from_stream(
                     stream=adapter,  # ty: ignore[invalid-argument-type]
@@ -946,7 +1097,7 @@ echo "Session cleanup complete"
             raise RuntimeError(f"Failed to create snapshot via stream: {e}") from e
 
         logger.info(
-            "Created snapshot for sandbox %s session %s (size=%s bytes)",
+            "Created snapshot for sandbox %s session %s (size=%s bytes).",
             sandbox_id,
             session_id,
             size_bytes,
@@ -1045,9 +1196,11 @@ fi
         nextjs_port: int | None,
         skills_section: str,
     ) -> None:
-        """Rewrite AGENTS.md and the skills symlink post-restore. opencode.json
-        is not written — config lives at container scope via
-        OPENCODE_CONFIG_CONTENT."""
+        """
+        Rewrite AGENTS.md and the skills symlink post-restore. opencode.json is
+        not written — config lives at container scope via
+        OPENCODE_CONFIG_CONTENT.
+        """
         agents_md = self._render_agents_md(
             llm_config=llm_config,
             nextjs_port=nextjs_port,
@@ -1387,14 +1540,14 @@ echo WRITE_OK"""
         mount_path: str,
         files: FileSet,
     ) -> None:
-        """Push a tar archive of ``files`` into the sandbox container.
+        """Pushes a tar archive of ``files`` into the sandbox container.
 
         Docker V1 uses ``docker exec tar -x`` instead of the K8s sidecar's
         signed HTTP push — same outcome (files atomically land under
         ``mount_path``) without the keypair/HTTP plumbing.
 
-        ``mount_path`` matches the K8s push-daemon contract: an absolute
-        path inside the sandbox container (e.g. ``/workspace/managed/skills``).
+        ``mount_path`` matches the K8s push-daemon contract: an absolute path
+        inside the sandbox container (e.g. ``/workspace/managed/skills``).
         """
         if not mount_path:
             raise ValueError("mount_path is required")
@@ -1440,12 +1593,12 @@ echo WRITE_OK"""
             raise RuntimeError(f"write_files_to_sandbox failed: {e}") from e
 
     def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:
-        """Return an http URL the api_server can reach the sandbox on.
+        """Returns an http URL the api_server can reach the sandbox on.
 
-        api_server joins the sandbox bridge network in the compose file, so
-        it can resolve the container by name on the sandbox network. If
-        the manager runs outside that network, deployers can override via
-        a Docker-discovered IP path in a follow-up.
+        api_server joins the sandbox bridge network in the compose file, so it
+        can resolve the container by name on the sandbox network. If the manager
+        runs outside that network, deployers can override via a
+        Docker-discovered IP path in a follow-up.
         """
         container = self._get_container(sandbox_id)
         if container is None:
@@ -1485,11 +1638,11 @@ echo WRITE_OK"""
             if line.strip()
         ]
         if not lines:
-            raise ValueError("Empty response from PPTX conversion")
+            raise ValueError("Empty response from PPTX conversion.")
         if lines[0] == "ERROR_NOT_FOUND":
             raise ValueError(f"File not found: {pptx_path}")
         if lines[0] == "ERROR_NO_PDF":
-            raise ValueError("soffice did not produce a PDF file")
+            raise ValueError("soffice did not produce a PDF file.")
 
         cached = lines[0] == "CACHED"
         abs_paths = lines[1:] if lines[0] in ("CACHED", "GENERATED") else lines
@@ -1504,11 +1657,11 @@ echo WRITE_OK"""
 
 
 class _GeneratorReader:
-    """Adapt a ``Generator[bytes, ...]`` into a ``read(n)``-based reader.
+    """Adapts a ``Generator[bytes, ...]`` into a ``read(n)``-based reader.
 
     ``SnapshotManager.create_snapshot_from_stream`` (and ``shutil.copyfileobj``
-    under it) only need ``read(n)``. We buffer leftover bytes so the
-    producer's chunk size doesn't constrain the consumer's.
+    under it) only need ``read(n)``. We buffer leftover bytes so the producer's
+    chunk size doesn't constrain the consumer's.
     """
 
     def __init__(self, gen: Generator[bytes, None, int]) -> None:

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Popover, PopoverMenu, Text } from "@opal/components";
+import { Popover, PopoverMenu, Text, LineItemButton } from "@opal/components";
 import {
   SvgChevronDown,
   SvgCpu,
@@ -9,7 +9,6 @@ import {
   SvgAlertTriangle,
 } from "@opal/icons";
 import { cn } from "@opal/utils";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   useSubagents,
   useViewedSubagentSessionId,
@@ -129,23 +128,27 @@ export default function AgentSwitcher() {
       <Popover.Content side="bottom" align="start">
         <PopoverMenu>
           {[
-            <LineItem
+            <LineItemButton
               key="main"
-              selected={!isViewingSubagent}
+              sizePreset="main-ui"
+              variant="section"
+              state={!isViewingSubagent ? "selected" : "empty"}
               onClick={selectMainAgent}
-            >
-              {titleLabel ?? "Main agent"}
-            </LineItem>,
+              title={titleLabel ?? "Main agent"}
+            />,
             ...sorted.map((s) => (
-              <LineItem
+              <LineItemButton
                 key={s.sessionId}
+                sizePreset="main-ui"
+                variant="section"
                 icon={SvgCpu}
-                selected={s.sessionId === viewedSubagentSessionId}
+                state={
+                  s.sessionId === viewedSubagentSessionId ? "selected" : "empty"
+                }
                 onClick={() => selectSubagent(s.sessionId)}
                 rightChildren={<SubagentStatus subagent={s} />}
-              >
-                {s.name || s.subagentType || "subagent"}
-              </LineItem>
+                title={s.name || s.subagentType || "subagent"}
+              />
             )),
           ]}
         </PopoverMenu>

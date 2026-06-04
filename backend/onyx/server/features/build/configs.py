@@ -1,6 +1,5 @@
 import os
 from enum import Enum
-from pathlib import Path
 
 
 class SandboxBackend(str, Enum):
@@ -8,13 +7,18 @@ class SandboxBackend(str, Enum):
     DOCKER = "docker"
 
 
-SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "kubernetes"))
-
-_THIS_FILE = Path(__file__)
-
-SKILLS_TEMPLATE_PATH = str(
-    _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "skills"
-)
+SANDBOX_BACKEND = SandboxBackend.KUBERNETES
+_env_sandbox_backend = os.environ.get("SANDBOX_BACKEND", "").strip()
+if _env_sandbox_backend:
+    try:
+        SANDBOX_BACKEND = SandboxBackend(_env_sandbox_backend.lower())
+    except ValueError:
+        raise ValueError(
+            f"Invalid SANDBOX_BACKEND={_env_sandbox_backend!r}. Valid values: "
+            f"{', '.join(b.value for b in SandboxBackend)}. Unset it to use the "
+            f"default, or align it with this release if you recently changed "
+            f"image versions."
+        )
 
 _disabled_tools_str = os.environ.get("OPENCODE_DISABLED_TOOLS", "question")
 OPENCODE_DISABLED_TOOLS: list[str] = [
@@ -114,12 +118,13 @@ SANDBOX_PROXY_CA_CONFIGMAP = os.environ.get(
     "SANDBOX_PROXY_CA_CONFIGMAP", "sandbox-proxy-ca-bundle"
 )
 
-# Filesystem path the docker FileCAStore reads/writes the proxy CA at. Both the
-# proxy (RW) and every sandbox container (RO) mount the same named compose
-# volume here. Not env-tunable: the source of truth for this path is the compose
-# volume mount declaration, and an operator changing one must change the other
-# in lockstep. Ignored when SANDBOX_BACKEND=kubernetes.
+# Proxy-side bind path for the CA volume. Hardcoded because the compose
+# `volumes:` mount target is the source of truth; an env override would silently
+# desync.
 SANDBOX_PROXY_CA_VOLUME_PATH = "/var/lib/sandbox-proxy/ca"
+
+# Docker named-volume for the proxy CA. Hardcoded for the same reason as above.
+SANDBOX_PROXY_CA_VOLUME_NAME = "sandbox_proxy_ca"
 
 # ==============================================================================
 # Docker sandbox (SANDBOX_BACKEND=docker, self-hosted docker-compose)

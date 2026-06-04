@@ -4160,7 +4160,7 @@ class Skill(Base):
     built_in_skill_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Bundle bytes for custom skills. NULL for built-ins (their source
-    # files live on disk under SKILLS_TEMPLATE_PATH).
+    # files live on disk under BUILTIN_SKILLS_PATH).
     bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
 

@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import {
   Collapsible,
   CollapsibleContent,
@@ -91,7 +90,7 @@ function DirectoryNode({
           ) : (
             <SvgFolder className="size-4 stroke-text-03" />
           )}
-          <Text mainContentMono text04 className="truncate">
+          <Text font="main-content-mono" color="text-04" maxLines={1}>
             {entry.name}
           </Text>
         </button>
@@ -99,7 +98,7 @@ function DirectoryNode({
       <CollapsibleContent>
         {error && (
           <div style={{ paddingLeft: `${paddingLeft + 1.25}rem` }}>
-            <Text secondaryBody className="text-status-error-01">
+            <Text font="secondary-body" color="status-error-01">
               {error}
             </Text>
           </div>
@@ -169,13 +168,17 @@ function FileNode({ entry, sessionId, depth, onPreview }: FileNodeProps) {
       style={{ paddingLeft: `${paddingLeft + 1.25}rem` }}
     >
       <SvgFileSmall className="size-4 stroke-text-03 shrink-0" />
-      <Text mainContentMono text04 className="truncate flex-1">
-        {entry.name}
-      </Text>
-      {entry.size !== null && (
-        <Text secondaryBody text03 className="shrink-0">
-          {formatSize(entry.size)}
+      <div className="flex-1 min-w-0">
+        <Text font="main-content-mono" color="text-04" maxLines={1}>
+          {entry.name}
         </Text>
+      </div>
+      {entry.size !== null && (
+        <div className="shrink-0">
+          <Text font="secondary-body" color="text-03">
+            {formatSize(entry.size)}
+          </Text>
+        </div>
       )}
       <div className="flex flex-row gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         {canPreview && (
@@ -269,7 +272,7 @@ export default function FileBrowser({ sessionId }: FileBrowserProps) {
                 <SvgChevronRight className="size-4 stroke-text-03" />
               )}
               <SvgHardDrive className="size-4 stroke-text-03" />
-              <Text mainUiAction text03>
+              <Text font="main-ui-action" color="text-03">
                 Workspace Files
               </Text>
             </button>
@@ -277,14 +280,18 @@ export default function FileBrowser({ sessionId }: FileBrowserProps) {
           <CollapsibleContent>
             <div className="p-1 max-h-[50vh] overflow-auto">
               {error && (
-                <Text secondaryBody className="text-status-error-01 p-2">
-                  {error}
-                </Text>
+                <div className="p-2">
+                  <Text font="secondary-body" color="status-error-01">
+                    {error}
+                  </Text>
+                </div>
               )}
               {rootEntries?.length === 0 && (
-                <Text secondaryBody text03 className="p-2 text-center">
-                  No files yet
-                </Text>
+                <div className="p-2 text-center">
+                  <Text font="secondary-body" color="text-03">
+                    No files yet
+                  </Text>
+                </div>
               )}
               {rootEntries?.map((entry) =>
                 entry.is_directory ? (

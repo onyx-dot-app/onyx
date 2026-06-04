@@ -5,8 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { mutate as globalMutate } from "swr";
 import { SettingsLayouts } from "@opal/layouts";
-import Card from "@/refresh-components/cards/Card";
-import { Button, Text } from "@opal/components";
+import { Button, Card, Text } from "@opal/components";
 import { SvgPlug } from "@opal/icons";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -65,7 +64,7 @@ export default function ExternalAppsOAuthCallbackPage() {
         description="Finishing the OAuth handshake…"
       />
       <SettingsLayouts.Body>
-        <Card>
+        <Card background="light" border="solid" rounding="lg">
           <div className="flex flex-col gap-2">
             {status === "exchanging" && (
               <Text font="main-content-body">

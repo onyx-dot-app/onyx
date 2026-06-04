@@ -49,7 +49,7 @@ Craft is Onyx's sandboxed build environment — per-user pods running an AI agen
 
 ## What we don't test
 
-- **Pod-side skill scripts** (`docker/skills/pptx/scripts/*.py`) — run inside the sandbox image, not reachable from the backend Python path.
+- **Pod-side skill scripts** (`onyx/skills/builtin/pptx/scripts/*.py`) — run inside the sandbox, not reachable from the backend Python path.
 - **Celery dispatch shims** — the thin `@shared_task` wrappers are covered transitively by executor tests.
 - **Frontend Craft E2E** — no Playwright tests for build mode yet.
 - **Sidecar regressions** (`/exec` pipe-deadlock, `/files/read` TOCTOU) — different deployment shape.

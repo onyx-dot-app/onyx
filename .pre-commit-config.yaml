@@ -69,7 +69,12 @@ repos:
         args: ["ty", "check"]
         pass_filenames: true
         types_or: [python]
-        exclude: ^backend/onyx/server/features/build/sandbox/kubernetes/docker/sandbox_daemon/
+        # sandbox_daemon ships in the sandbox image (own runtime); skills/builtin
+        # are sandbox-only scripts importing deps absent from the backend venv
+        # (lxml, PIL, office.*). Both are excluded from the full ty run via
+        # [tool.ty.src] in pyproject; repeat here because pre-commit passes
+        # explicit filenames, which bypass that discovery-time exclude.
+        exclude: ^backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)
       - id: uv-run
         alias: ruff
         name: ruff

@@ -181,17 +181,17 @@ WORKDIR /app
 COPY --chown=onyx:onyx ./scripts/setup_craft_templates.sh /app/scripts/setup_craft_templates.sh
 RUN chmod +x /app/scripts/setup_craft_templates.sh
 COPY --chown=onyx:onyx \
-    ./onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt \
-    /app/onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt
+    ./onyx/server/features/build/sandbox/image/initial-requirements.txt \
+    /app/onyx/server/features/build/sandbox/image/initial-requirements.txt
 COPY --chown=onyx:onyx \
-    ./onyx/server/features/build/sandbox/kubernetes/docker/templates \
-    /app/onyx/server/features/build/sandbox/kubernetes/docker/templates
+    ./onyx/server/features/build/sandbox/image/templates \
+    /app/onyx/server/features/build/sandbox/image/templates
 RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
         echo "Running Craft template setup at build time..." && \
         ENABLE_CRAFT=true /app/scripts/setup_craft_templates.sh; \
     fi
-ENV OUTPUTS_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs
-ENV VENV_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv
+ENV OUTPUTS_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/image/templates/outputs
+ENV VENV_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/image/templates/venv
 
 # Enterprise Version Files
 COPY --chown=onyx:onyx ./ee /app/ee

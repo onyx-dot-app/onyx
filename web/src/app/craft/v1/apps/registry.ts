@@ -4,6 +4,7 @@ import {
   SvgGmail,
   SvgGithub,
   SvgGoogleCalendar,
+  SvgGoogleDrive,
 } from "@opal/logos";
 import { SvgPlug } from "@opal/icons";
 import { IconFunctionComponent } from "@opal/types";
@@ -22,6 +23,7 @@ const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
   {
     SLACK: SvgSlack,
     GOOGLE_CALENDAR: SvgGoogleCalendar,
+    GOOGLE_DRIVE: SvgGoogleDrive,
     GMAIL: SvgGmail,
     LINEAR: SvgLinear,
     GITHUB: SvgGithub,

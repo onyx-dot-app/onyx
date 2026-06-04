@@ -220,9 +220,9 @@ include = ["backend"]
 exclude = [
     "**/generated/**",
     "**/.venv/**",
-    "**/onyx/server/features/build/sandbox/kubernetes/docker/daemon/**",
-    "**/onyx/server/features/build/sandbox/kubernetes/docker/skills/**",
-    "**/onyx/server/features/build/sandbox/kubernetes/docker/templates/**",
+    "**/onyx/server/features/build/sandbox/image/sandbox_daemon/**",
+    "**/onyx/skills/builtin/**",
+    "**/onyx/server/features/build/sandbox/image/templates/**",
 ]
 
 [tool.ty.rules]
@@ -238,9 +238,9 @@ members = ["tools/ods"]
 include = ["backend"]
 exclude = [
     "backend/generated",
-    "backend/onyx/server/features/build/sandbox/kubernetes/docker/daemon",
-    "backend/onyx/server/features/build/sandbox/kubernetes/docker/skills/pptx",
-    "backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv",
+    "backend/onyx/server/features/build/sandbox/image/sandbox_daemon",
+    "backend/onyx/skills/builtin/pptx",
+    "backend/onyx/server/features/build/sandbox/image/templates/venv",
 ]
 typeCheckingMode = "off"
 
