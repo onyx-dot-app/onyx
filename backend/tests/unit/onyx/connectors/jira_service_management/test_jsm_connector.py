@@ -210,6 +210,20 @@ def test_get_jsm_project_keys_raises_on_auth_error(
         _get_jsm_project_keys(mock_jira_client)
 
 
+def test_get_jsm_project_keys_returns_empty_when_jsm_unavailable(
+    mock_jira_client: MagicMock,
+) -> None:
+    """A non-auth HTTP error (e.g. 404 on a Jira Server without the JSM add-on)
+    must fall back to [] rather than raising, per the documented contract."""
+    mock_response = MagicMock(spec=Response)
+    mock_response.status_code = 404
+    mock_response.ok = False
+    mock_jira_client._session.get.return_value = mock_response
+
+    keys = _get_jsm_project_keys(mock_jira_client)
+    assert keys == []
+
+
 def test_get_jsm_project_keys_paginates(mock_jira_client: MagicMock) -> None:
     """All pages are fetched when ``isLastPage`` is False on the first page."""
     page1 = MagicMock(spec=Response)

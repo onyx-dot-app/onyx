@@ -76,7 +76,17 @@ def _get_jsm_project_keys(jira_client: JIRA) -> list[str]:
             if response.status_code in (401, 403):
                 response.raise_for_status()
 
-            response.raise_for_status()
+            # Any other non-success (e.g. 404 = JSM add-on not installed on this
+            # instance) is NOT an auth failure — treat JSM as unavailable and fall
+            # back gracefully, per this function's documented contract.
+            if not response.ok:
+                logger.warning(
+                    "JSM Service Desk API returned HTTP %s — JSM not available on "
+                    "this instance; proceeding without JSM-specific validation.",
+                    response.status_code,
+                )
+                break
+
             data = response.json()
             values = data.get("values", [])
             all_keys.extend(sd["projectKey"] for sd in values if "projectKey" in sd)
