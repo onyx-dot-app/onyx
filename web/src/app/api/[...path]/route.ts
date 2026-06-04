@@ -97,7 +97,7 @@ async function handleRequest(request: NextRequest, path: string[]) {
       process.env.NODE_ENV === "development"
     ) {
       // Inject the debug auth cookie for local development against remote backend
-      // Get from cloud site: DevTools → Application → Cookies → fastapiusersauth
+      // Get from cloud site: DevTools → Application → Cookies → <AUTH_COOKIE_NAME, default: fastapiusersauth>
       const existingCookies = headers.get("cookie") || "";
       const debugCookie = `${SERVER_SIDE_ONLY__AUTH_COOKIE_NAME}=${process.env.DEBUG_AUTH_COOKIE}`;
       headers.set(
