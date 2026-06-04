@@ -50,7 +50,7 @@
         "linguist-languages": "^9.3.1",
         "lodash": "^4.18.1",
         "lowlight": "^3.3.0",
-        "lucide-react": "^0.454.0",
+        "lucide-react": "^1.16.0",
         "mdast-util-find-and-replace": "^3.0.1",
         "mime": "^4.1.0",
         "motion": "^12.29.0",
@@ -1782,7 +1782,7 @@
 
     "lru-cache": ["lru-cache@5.1.1", "", { "dependencies": { "yallist": "^3.0.2" } }, ""],
 
-    "lucide-react": ["lucide-react@0.454.0", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0-rc" } }, ""],
+    "lucide-react": ["lucide-react@1.16.0", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-dYwyPzb4MEKpGUmNYk3WKWPnMrHs3FKM+q94kAnJrcDIqqn1hq2xY8scaS2ovsOCM5D51ey2gaRG3PBb1vgoYQ=="],
 
     "lz-string": ["lz-string@1.5.0", "", { "bin": "bin/bin.js" }, ""],
 
