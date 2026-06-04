@@ -89,6 +89,9 @@ class Settings(BaseModel):
     auto_scroll: bool | None = False
     query_history_type: QueryHistoryType | None = None
 
+    # Visibility-only: hides the sidebar page; query-history APIs + recording stay on.
+    hide_query_history_from_admin_panel: bool = False
+
     # Image processing settings
     image_extraction_and_analysis_enabled: bool | None = True
     image_analysis_max_size_mb: int | None = 20
