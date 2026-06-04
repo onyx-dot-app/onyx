@@ -158,11 +158,27 @@ function ModelPriceSection({ price }: ModelPriceSectionProps) {
 interface BudgetSectionProps {
   budgetCents: number | null;
   budgetRemainingCents: number | null;
+  budgetPeriodHours: number | null;
+}
+
+// Hours -> a friendly window label so the budget reads "per week", not "per 168h".
+function formatPeriod(hours: number | null): string {
+  if (hours == null) return "";
+  if (hours % 168 === 0) {
+    const w = hours / 168;
+    return w === 1 ? "week" : `${w} weeks`;
+  }
+  if (hours % 24 === 0) {
+    const d = hours / 24;
+    return d === 1 ? "day" : `${d} days`;
+  }
+  return hours === 1 ? "hour" : `${hours} hours`;
 }
 
 function BudgetSection({
   budgetCents,
   budgetRemainingCents,
+  budgetPeriodHours,
 }: BudgetSectionProps) {
   // budget_* are null until P5 enforcement ships; show a graceful empty state.
   const hasBudget = budgetCents !== null;
@@ -194,7 +210,9 @@ function BudgetSection({
                 {`${formatDollars(remaining)} remaining`}
               </Text>
               <Text font="secondary-body" color="text-01">
-                {`of ${formatDollars(budgetCents)}`}
+                {`of ${formatDollars(budgetCents)}${
+                  budgetPeriodHours ? ` per ${formatPeriod(budgetPeriodHours)}` : ""
+                }`}
               </Text>
             </Section>
             <div className="w-full h-1.5 rounded-full bg-background-neutral-03 overflow-hidden">
@@ -275,6 +293,7 @@ export default function UsageSettings() {
             <BudgetSection
               budgetCents={data.budget_cents}
               budgetRemainingCents={data.budget_remaining_cents}
+              budgetPeriodHours={data.budget_period_hours}
             />
           </Section>
         )}

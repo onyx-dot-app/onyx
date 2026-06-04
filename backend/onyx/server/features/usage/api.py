@@ -60,33 +60,39 @@ _LEDGER_GRID = timedelta(seconds=USAGE_LIMIT_WINDOW_SECONDS)
 
 def _user_cost_budget(
     db_session: Session, user_id: str
-) -> tuple[float | None, float | None]:
-    """The cost budget (cents) that applies to this user and how much is left,
-    or (None, None) if no cost limit applies. Picks the most binding limit (the
-    one with the least remaining) across the user's per-user and global cost
-    limits, mirroring how the gate enforces them."""
+) -> tuple[float | None, float | None, int | None]:
+    """The cost budget (cents), how much is left, and the budget's window (hours)
+    for this user — or (None, None, None) if no cost limit applies. Picks the most
+    binding limit (least remaining) across per-user and global cost limits,
+    mirroring how the gate enforces them."""
     now = datetime.now(tz=timezone.utc)
-    # (remaining_cents, budget_cents) for each applicable cost limit.
-    candidates: list[tuple[float, float]] = []
+    # (remaining_cents, budget_cents, period_hours) per applicable cost limit.
+    candidates: list[tuple[float, float, int]] = []
 
-    def _add(budget: float | None, used: float) -> None:
+    def _add(budget: float | None, used: float, period_hours: int) -> None:
         if budget is not None:
-            candidates.append((budget - used, budget))
+            candidates.append((budget - used, budget, period_hours))
 
     for rl in fetch_all_user_token_rate_limits(db_session, enabled_only=True):
         cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
         _add(
-            rl.cost_budget_cents, get_user_cost_cents_since(db_session, user_id, cutoff)
+            rl.cost_budget_cents,
+            get_user_cost_cents_since(db_session, user_id, cutoff),
+            rl.period_hours,
         )
 
     for rl in fetch_all_global_token_rate_limits(db_session, enabled_only=True):
         cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
-        _add(rl.cost_budget_cents, get_total_cost_cents_since(db_session, cutoff))
+        _add(
+            rl.cost_budget_cents,
+            get_total_cost_cents_since(db_session, cutoff),
+            rl.period_hours,
+        )
 
     if not candidates:
-        return None, None
-    remaining, budget = min(candidates, key=lambda c: c[0])
-    return budget, max(remaining, 0.0)
+        return None, None, None
+    remaining, budget, period_hours = min(candidates, key=lambda c: c[0])
+    return budget, max(remaining, 0.0), period_hours
 
 
 router = APIRouter(prefix="/admin/cost-overrides", tags=PUBLIC_API_TAGS)
@@ -140,13 +146,16 @@ def get_my_usage(
                 output_per_mtok=output_per_mtok,
             )
 
-    budget_cents, budget_remaining_cents = _user_cost_budget(db_session, str(user.id))
+    budget_cents, budget_remaining_cents, budget_period_hours = _user_cost_budget(
+        db_session, str(user.id)
+    )
 
     return UserUsageResponse(
         per_day_by_model=per_day,
         window_cost_cents=window_cost_cents,
         budget_cents=budget_cents,
         budget_remaining_cents=budget_remaining_cents,
+        budget_period_hours=budget_period_hours,
         selected_model_price=selected_model_price,
     )
 

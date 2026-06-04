@@ -90,8 +90,11 @@ class ModelPrice(BaseModel):
 class UserUsageResponse(BaseModel):
     per_day_by_model: list[UsageDayModel]
     window_cost_cents: float
-    # Budget enforcement (P5) is unbuilt; fields are present for forward-compat.
+    # The user's effective cost budget for the current window, what's left, and
+    # the window length (hours) so the UI can say "per week/day/hour". All null
+    # when no cost limit applies to the user.
     budget_cents: float | None
     budget_remaining_cents: float | None
+    budget_period_hours: int | None = None
     # null when no default chat model is configured tenant-wide.
     selected_model_price: ModelPrice | None

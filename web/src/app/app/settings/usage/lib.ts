@@ -18,9 +18,11 @@ export interface SelectedModelPrice {
 export interface UserUsageResponse {
   per_day_by_model: UsagePerDayByModel[];
   window_cost_cents: number;
-  // null until P5 enforcement ships — render gracefully.
+  // The user's cost budget, what's left, and its window in hours (for the
+  // "per week/day/hour" label). All null when no cost limit applies.
   budget_cents: number | null;
   budget_remaining_cents: number | null;
+  budget_period_hours: number | null;
   selected_model_price: SelectedModelPrice | null;
 }
 

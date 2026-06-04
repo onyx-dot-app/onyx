@@ -10,6 +10,14 @@ import { UserGroup } from "@/lib/types";
 import { Scope } from "./types";
 import { toast } from "@/hooks/useToast";
 import { SvgSettings } from "@opal/icons";
+
+// UI period units -> hours. The backend contract stays period_hours (int), so
+// this is purely a friendlier input than typing raw hours.
+const PERIOD_UNIT_HOURS: Record<string, number> = {
+  hour: 1,
+  day: 24,
+  week: 168,
+};
 interface CreateRateLimitModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
@@ -68,16 +76,17 @@ export default function CreateRateLimitModal({
         <Formik
           initialValues={{
             enabled: true,
-            period_hours: "",
+            period_value: "1",
+            period_unit: "week",
             token_budget: "",
             cost_budget_dollars: "",
             target_scope: forSpecificScope || Scope.GLOBAL,
             user_group_id: forSpecificUserGroup,
           }}
           validationSchema={Yup.object().shape({
-            period_hours: Yup.number()
+            period_value: Yup.number()
               .required("Time Window is a required field")
-              .min(1, "Time Window must be at least 1 hour"),
+              .min(1, "Time Window must be at least 1"),
             token_budget: Yup.number()
               .min(1, "Token Budget must be at least 1")
               .test(
@@ -115,9 +124,13 @@ export default function CreateRateLimitModal({
               values.cost_budget_dollars === ""
                 ? null
                 : Math.round(Number(values.cost_budget_dollars) * 100);
+            // UI picks a unit; the backend contract is unchanged (period_hours: int).
+            const periodHours =
+              Number(values.period_value) *
+              (PERIOD_UNIT_HOURS[values.period_unit] ?? 168);
             onSubmit(
               values.target_scope,
-              Number(values.period_hours),
+              periodHours,
               tokenBudget,
               costBudgetCents,
               Number(values.user_group_id)
@@ -155,12 +168,28 @@ export default function CreateRateLimitModal({
                       includeDefault={false}
                     />
                   )}
-                <TextFormField
-                  name="period_hours"
-                  label="Time Window (Hours)"
-                  type="number"
-                  placeholder=""
-                />
+                <div className="flex flex-row gap-2 items-end">
+                  <div className="flex-1">
+                    <TextFormField
+                      name="period_value"
+                      label="Time Window"
+                      type="number"
+                      placeholder=""
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <SelectorFormField
+                      name="period_unit"
+                      label="Per"
+                      options={[
+                        { name: "Hour", value: "hour" },
+                        { name: "Day", value: "day" },
+                        { name: "Week", value: "week" },
+                      ]}
+                      includeDefault={false}
+                    />
+                  </div>
+                </div>
                 <TextFormField
                   name="token_budget"
                   label="Token Budget (Thousands, optional)"
