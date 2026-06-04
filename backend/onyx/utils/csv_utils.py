@@ -1,6 +1,7 @@
 import csv
 import io
 from collections.abc import Generator
+from collections.abc import Mapping
 
 from pydantic import BaseModel
 
@@ -14,6 +15,31 @@ _CSV_FIELD_SIZE_LIMIT_BYTES = 128 * 1024 * 1024
 csv.field_size_limit(_CSV_FIELD_SIZE_LIMIT_BYTES)
 
 _NEWLINE_CSV_ERROR = "new-line character seen in unquoted field"
+
+# Leading characters that spreadsheet software (Excel, LibreOffice, Google
+# Sheets) interprets as the start of a formula. Exporting user-supplied text
+# beginning with one of these enables CSV/formula injection (e.g. DDE payloads
+# like `=cmd|' /C calc'!A1`) against whoever opens the export.
+_FORMULA_PREFIX_CHARS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def sanitize_csv_cell(value: str) -> str:
+    """Neutralize spreadsheet formula injection in a CSV cell.
+
+    Prefixes values that start with a formula-trigger character with a
+    single quote, which spreadsheet software treats as "render as text".
+    """
+    if value.startswith(_FORMULA_PREFIX_CHARS):
+        return "'" + value
+    return value
+
+
+def sanitize_csv_row(row: Mapping[str, str | None]) -> dict[str, str | None]:
+    """Apply sanitize_csv_cell to every non-None value of a CSV row dict."""
+    return {
+        key: sanitize_csv_cell(value) if value is not None else None
+        for key, value in row.items()
+    }
 
 
 class ParsedRow(BaseModel):
