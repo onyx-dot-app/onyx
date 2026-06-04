@@ -1502,6 +1502,42 @@ jobs:
             $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
 
+  # For cloud tags only: once all cloud images are built and pushed, notify the
+  # cloud-deployment-yamls repo (via repository_dispatch) so it can roll out the
+  # new image version.
+  dispatch-cloud-deployment:
+    needs:
+      - determine-builds
+      - merge-web-cloud
+      - merge-backend
+      - merge-model-server
+    if: needs.determine-builds.outputs.is-cloud-tag == 'true' && needs.determine-builds.outputs.is-test-run != 'true'
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - name: Mint GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          client-id: ${{ vars.CLOUD_DEPLOYMENT_APP_ID }}
+          private-key: ${{ secrets.CLOUD_DEPLOYMENT_APP_PRIVATE_KEY }}
+          # Scope the token to the dispatch target. Keep these in sync with CLOUD_DEPLOYMENT_REPO.
+          owner: onyx-dot-app
+          repositories: cloud-deployment-yamls
+          permission-contents: write
+
+      - name: Trigger new-cloud-image dispatch
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          CLOUD_DEPLOYMENT_REPO: ${{ vars.CLOUD_DEPLOYMENT_REPO }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          gh api "repos/${CLOUD_DEPLOYMENT_REPO}/dispatches" \
+            -f event_type=new-cloud-image \
+            -F "client_payload[version]=${VERSION}"
+
   trivy-scan:
     needs:
       - determine-builds
