@@ -24,9 +24,9 @@ import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
 
 // The user's own app connections. Org-wide configuration lives at
-// /craft/v1/apps/manage; admins and curators get a shortcut button to it here.
+// /craft/v1/apps/manage (admin-only); admins get a shortcut button to it here.
 export default function ExternalAppsPage() {
-  const { isAdmin, isCurator } = useUser();
+  const { isAdmin } = useUser();
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   // A `?connect` deep-link focuses the targeted card's Connect button, so don't
@@ -44,7 +44,7 @@ export default function ExternalAppsPage() {
         title="Apps"
         description="Connect the tools Onyx Craft can use as context while it works."
         rightChildren={
-          isAdmin || isCurator ? (
+          isAdmin ? (
             // Center vertically in the stretched header row (consistent across
             // the Craft skills/apps pages).
             <div className="flex items-center gap-2">
