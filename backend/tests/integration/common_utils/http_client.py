@@ -17,6 +17,8 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from tests.integration.common_utils.constants import API_SERVER_URL
+
 _test_client: TestClient | None = None
 
 
@@ -42,3 +44,11 @@ class _TestClientProxy:
 
 
 client = _TestClientProxy()
+
+
+def request_status(headers: dict[str, str], route: tuple[str, str]) -> int:
+    """Issue ``route`` (method, path) with ``headers`` and return the status code."""
+    method, path = route
+    return client.request(
+        method, f"{API_SERVER_URL}{path}", headers=headers, timeout=30
+    ).status_code
