@@ -96,28 +96,6 @@ export async function createCustomExternalApp(
   return res.json();
 }
 
-/**
- * Replace a custom app's bundle bytes, keeping its slug
- * (`PUT /admin/apps/{id}/bundle`). The only multipart channel for edits; all
- * other field edits go through {@link updateExternalApp}.
- */
-export async function replaceCustomAppBundle(
-  id: number,
-  bundle: File
-): Promise<ExternalAppAdminResponse> {
-  const form = new FormData();
-  form.append("bundle", bundle);
-
-  const res = await fetch(`${BUILD_API_BASE}/admin/apps/${id}/bundle`, {
-    method: "PUT",
-    body: form,
-  });
-  if (!res.ok) {
-    throw new Error(await readErrorDetail(res, "Bundle replace failed"));
-  }
-  return res.json();
-}
-
 interface UpdateExternalAppBody {
   // Every field is optional; omit to leave the stored value untouched.
   enabled?: boolean;

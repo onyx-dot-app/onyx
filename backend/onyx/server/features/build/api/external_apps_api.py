@@ -215,50 +215,6 @@ def update_external_app_admin(
     return _to_admin_response(app)
 
 
-@router.patch("/admin/apps/{external_app_id}")
-def update_external_app_admin(
-    external_app_id: int,
-    request: UpdateExternalAppRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> ExternalAppAdminResponse:
-    """Partial update of any app (404 if absent). ``None`` fields are left
-    untouched. For Onyx-managed built-ins (cloud) the gateway-config fields
-    are Onyx-owned and ignored — only ``enabled`` + ``action_policies`` apply.
-    A custom app's bundle bytes are swapped via ``PUT /admin/apps/{id}/bundle``.
-    """
-    app = _get_app_or_404(db_session, external_app_id)
-    managed = MULTI_TENANT and is_onyx_managed_app_type(app.app_type)
-
-    # Full policy set; None map leaves stored policies untouched.
-    action_policies = build_action_policies(
-        app.app_type,
-        request.action_policies,
-        get_policies(db_session, external_app_id),
-    )
-    app, _old = update_external_app(
-        db_session=db_session,
-        external_app_id=external_app_id,
-        app_type=app.app_type,
-        name=none_as_unset(request.name),
-        description=none_as_unset(request.description),
-        enabled=none_as_unset(request.enabled),
-        # Gateway config is Onyx-owned for managed built-ins; leave it untouched.
-        upstream_url_patterns=(
-            UNSET if managed else none_as_unset(request.upstream_url_patterns)
-        ),
-        auth_template=UNSET if managed else none_as_unset(request.auth_template),
-        organization_credentials=(
-            UNSET if managed else none_as_unset(request.organization_credentials)
-        ),
-        action_policies=action_policies,
-    )
-    # Push before commit so a push failure rolls back the change.
-    push_skill_to_affected_sandboxes(app.skill, db_session)
-    db_session.commit()
-    return _to_admin_response(app)
-
-
 @router.post("/admin/apps/custom")
 def create_custom_external_app(
     name: str = Form(...),
@@ -415,11 +371,6 @@ def delete_external_app_admin(
     # Resolve affected users before the delete cascades the skill row away.
     app = _get_app_or_404(db_session, external_app_id)
     if MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Built-in apps are provided by Onyx and cannot be deleted.",
-        )
-    if MULTI_TENANT and is_onyx_managed_app_type(app.app_type):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx and cannot be deleted.",

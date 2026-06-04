@@ -365,29 +365,6 @@ class UpdateExternalAppRequest(BaseModel):
     action_policies: dict[str, EndpointPolicy] | None = None
 
 
-class UpdateExternalAppRequest(BaseModel):
-    """Partial update of an existing app, keyed solely by the path ``id``
-    (``PATCH /admin/apps/{id}``). Every field is optional; ``None`` means "leave
-    untouched", so a narrow request (e.g. just ``enabled``) won't blank the rest.
-
-    This is the single update path for built-in apps. For Onyx-managed built-ins
-    (cloud) the gateway-config fields (``upstream_url_patterns``,
-    ``auth_template``, ``organization_credentials``) are Onyx-owned and ignored —
-    only ``enabled`` + ``action_policies`` take effect. Custom-app field edits
-    (and bundle replacement) go through ``POST /admin/apps/custom`` instead, since
-    that path is multipart.
-    """
-
-    enabled: bool | None = None
-    name: str | None = None
-    description: str | None = None
-    upstream_url_patterns: list[str] | None = None
-    auth_template: dict[str, Any] | None = None
-    organization_credentials: dict[str, str] | None = None
-    # Full-replace stored overrides when present (empty clears); None leaves them.
-    action_policies: dict[str, EndpointPolicy] | None = None
-
-
 class ActionPolicyView(BaseModel):
     """One action of a built-in app, with its effective policy — the admin's
     stored override if set, otherwise the action's ``default_policy``."""
