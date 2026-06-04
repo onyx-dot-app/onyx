@@ -102,6 +102,12 @@ SANDBOX_PROXY_HOST = os.environ.get("SANDBOX_PROXY_HOST", "")
 SANDBOX_PROXY_PORT = int(os.environ.get("SANDBOX_PROXY_PORT", "8080"))
 
 SANDBOX_PROXY_LISTEN_PORT = int(os.environ.get("SANDBOX_PROXY_LISTEN_PORT", "8080"))
+# Internal-only port. Env-tunable so Helm can drive it from
+# sandboxProxy.containerPorts.healthz (K8s probes resolve via named port, so the
+# two stay in sync). The docker-compose healthcheck URL hardcodes 8081 instead
+# -- compose substitutes ${...} from the host env at parse time, not container
+# env, so it can't pick up an .env override. Compose operators wanting a
+# different port must edit both this default and the healthcheck URL.
 SANDBOX_PROXY_HEALTHZ_PORT = int(os.environ.get("SANDBOX_PROXY_HEALTHZ_PORT", "8081"))
 
 # The CA Secret lives here; the CA ConfigMap is projected into SANDBOX_NAMESPACE

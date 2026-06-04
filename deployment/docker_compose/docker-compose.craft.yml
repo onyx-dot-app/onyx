@@ -22,13 +22,22 @@ services:
       # through the in-cluster proxy.
       - SANDBOX_PROXY_HOST=${SANDBOX_PROXY_HOST-sandbox-proxy}
       - SANDBOX_PROXY_PORT=${SANDBOX_PROXY_PORT:-8080}
-      - SANDBOX_PROXY_CA_VOLUME_NAME=${SANDBOX_PROXY_CA_VOLUME_NAME:-sandbox_proxy_ca}
+      # CA volume name is hardcoded in configs.SANDBOX_PROXY_CA_VOLUME_NAME;
+      # source of truth is the `volumes:` block below + install.sh pre-create.
     volumes:
       - ${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
     networks:
       # Bridge join lets api_server proxy the Next.js preview iframe.
       - default
       - onyx_craft_sandbox
+    # service_healthy (stricter than the base file's service_started pattern) so
+    # a sandbox provisioned right after stack start can actually reach the
+    # proxy; service_started fires too early -- the proxy binds its listener
+    # only after CA bootstrap + initial sync (see _build_lookup in server.py).
+    # Merges with the base depends_on map.
+    depends_on:
+      sandbox-proxy:
+        condition: service_healthy
 
   background:
     environment:
@@ -43,12 +52,17 @@ services:
       - ENABLE_OPENCODE_DEBUGGING=${ENABLE_OPENCODE_DEBUGGING:-false}
       - SANDBOX_PROXY_HOST=${SANDBOX_PROXY_HOST-sandbox-proxy}
       - SANDBOX_PROXY_PORT=${SANDBOX_PROXY_PORT:-8080}
-      - SANDBOX_PROXY_CA_VOLUME_NAME=${SANDBOX_PROXY_CA_VOLUME_NAME:-sandbox_proxy_ca}
+      # CA volume name is hardcoded in configs.SANDBOX_PROXY_CA_VOLUME_NAME;
+      # source of truth is the `volumes:` block below + install.sh pre-create.
     volumes:
       - ${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
     networks:
       - default
       - onyx_craft_sandbox
+    # See api_server above for the service_healthy rationale.
+    depends_on:
+      sandbox-proxy:
+        condition: service_healthy
 
   # Egress proxy that MITMs sandbox HTTPS traffic and gates action approvals.
   # Reuses the onyx-backend image; just a different entrypoint. The proxy speaks
@@ -66,13 +80,23 @@ services:
       - SANDBOX_BACKEND=docker
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - REDIS_HOST=${REDIS_HOST:-cache}
-      # Internal mount path the FileCAStore writes the CA to. Sandbox containers
-      # mount the same named volume read-only at /sandbox-ca.
-      - SANDBOX_PROXY_CA_VOLUME_PATH=/var/lib/sandbox-proxy/ca
-      - SANDBOX_DOCKER_SOCKET=${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}
+      # Do NOT export SANDBOX_DOCKER_SOCKET into the container. The volume mount
+      # below maps ${SANDBOX_DOCKER_SOCKET} (host path) to /var/run/docker.sock
+      # (container path); exporting the host path would make Python try to
+      # connect to a socket that doesn't exist inside the container (breaks
+      # Colima / non-default Linux setups). Python's default is
+      # /var/run/docker.sock, which is exactly where the bind mount lands.
       - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
       - SANDBOX_PROXY_LISTEN_PORT=${SANDBOX_PROXY_PORT:-8080}
-      - SANDBOX_PROXY_HEALTHZ_PORT=8081
+      # Healthz port intentionally NOT wired through env. Compose's healthcheck
+      # test below hardcodes 8081 and can't read the container's env, so
+      # exposing SANDBOX_PROXY_HEALTHZ_PORT as a knob would let it silently
+      # desync from the probe. Python's default
+      # (configs.SANDBOX_PROXY_HEALTHZ_PORT = 8081) is the source of truth for
+      # compose deployments.
+      # FileCAStore writes the CA to configs.SANDBOX_PROXY_CA_VOLUME_PATH
+      # (hardcoded). The `volumes:` block below bind-mounts the same name at
+      # that path; sandbox containers mount it read-only at /sandbox-ca.
     volumes:
       - sandbox_proxy_ca:/var/lib/sandbox-proxy/ca
       # RO: the proxy only inspects (events watcher + initial sync).
@@ -90,8 +114,9 @@ services:
       - onyx_craft_sandbox
     restart: unless-stopped
     # >= _DRAIN_TIMEOUT_S (10s in server.py) plus margin so the SIGTERM drain
-    # can terminalise parked approvals before docker tears the container down.
-    # Matches K8s terminationGracePeriodSeconds.
+    # can terminalize parked approvals (claim EXPIRED + wake BLPOP listeners,
+    # see gate._terminalize_after_unhandled_error) before docker tears the
+    # container down. Matches K8s terminationGracePeriodSeconds.
     stop_grace_period: 20s
     healthcheck:
       test:
@@ -104,7 +129,10 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
-      start_period: 30s
+      # Matches server._LOOKUP_INITIAL_SYNC_TIMEOUT_S so a slow initial sync
+      # doesn't race the healthcheck: if sync wins, next probe flips healthy; if
+      # it loses, the process exits and docker restarts.
+      start_period: 60s
     logging:
       driver: json-file
       options:
