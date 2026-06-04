@@ -1,6 +1,6 @@
 ---
 name: gmail
-description: Read, search, and send email from the connected user's Gmail via a light Gmail API wrapper.
+description: Read, search, send, and draft email from the connected user's Gmail via a light Gmail API wrapper.
 ---
 
 # Gmail
@@ -13,10 +13,14 @@ Call the Gmail API as the connected user via the bundled helper.
 
     python .opencode/skills/gmail/gmail_api.py <command> [args]
 
-Read commands auto-paginate and prune empty fields. `send`, `modify`, and
-`trash` are the only writes; there is no permanent delete. `me` is always the
+Read commands auto-paginate and prune empty fields. The writes are `send`,
+`modify`, `trash`, `draft-create`, `draft-update`, `draft-delete`, and
+`draft-send`; there is no permanent message delete. `me` is always the
 connected user. Use `--raw` to skip empty-field pruning; `python gmail_api.py
 <command> -h` shows its flags.
+
+Prefer drafts when an email needs the user's review: `draft-create` saves an
+email without sending it, so the user can check and send it from Gmail.
 
 ### List / search messages
 
@@ -33,6 +37,14 @@ Full message with decoded plain-text body.
 
 ```
 python gmail_api.py message <message_id>
+```
+
+### Read a thread
+
+A whole conversation, each message with its decoded plain-text body.
+
+```
+python gmail_api.py thread <thread_id>
 ```
 
 ### Send a message (write)
@@ -67,6 +79,47 @@ python gmail_api.py trash <message_id>
 
 ```
 python gmail_api.py profile
+```
+
+### Drafts
+
+List drafts (each summarised like a message), or read one with its decoded body.
+
+```
+python gmail_api.py drafts [--limit N]
+python gmail_api.py draft <draft_id>
+```
+
+### Create / update a draft (write, not sent)
+
+Saves an email without sending it — the user can review and send it from Gmail.
+`draft-update` replaces the whole draft.
+
+```
+python gmail_api.py draft-create to@x.com "Subject" "Body text" \
+    [--cc a@x.com,b@x.com] [--bcc c@x.com]
+python gmail_api.py draft-update <draft_id> to@x.com "Subject" "Body text" \
+    [--cc a@x.com,b@x.com] [--bcc c@x.com]
+```
+
+### Delete / send a draft (write)
+
+`draft-delete` permanently removes a draft. `draft-send` sends an existing draft
+as an email.
+
+```
+python gmail_api.py draft-delete <draft_id>
+python gmail_api.py draft-send <draft_id>
+```
+
+### Download an attachment
+
+Writes the decoded bytes to `--out`; without it, only the attachment size is
+reported (binary bytes are never printed to stdout). Attachment ids come from a
+message's payload parts (fetch the message first).
+
+```
+python gmail_api.py attachment <message_id> <attachment_id> --out path/to/file
 ```
 
 ## Output
