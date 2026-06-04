@@ -8,6 +8,7 @@ from datetime import datetime
 from datetime import time
 from datetime import timedelta
 from datetime import timezone
+from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -22,6 +23,8 @@ from onyx.db.llm import fetch_default_llm_model
 from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
+from onyx.db.token_limit import fetch_user_group_token_rate_limits
+from onyx.db.user_usage import get_group_cost_cents_buckets_since
 from onyx.db.user_usage import get_total_cost_cents_since
 from onyx.db.user_usage import get_usage_export
 from onyx.db.user_usage import get_user_cost_cents_in_window
@@ -63,8 +66,8 @@ def _user_cost_budget(
 ) -> tuple[float | None, float | None, int | None]:
     """The cost budget (cents), how much is left, and the budget's window (hours)
     for this user — or (None, None, None) if no cost limit applies. Picks the most
-    binding limit (least remaining) across per-user and global cost limits,
-    mirroring how the gate enforces them."""
+    binding limit (least remaining) across per-user, global, and group cost
+    limits, mirroring how the gate enforces them."""
     now = datetime.now(tz=timezone.utc)
     # (remaining_cents, budget_cents, period_hours) per applicable cost limit.
     candidates: list[tuple[float, float, int]] = []
@@ -89,10 +92,64 @@ def _user_cost_budget(
             rl.period_hours,
         )
 
+    group_candidate = _group_cost_budget_candidate(db_session, user_id, now)
+    if group_candidate is not None:
+        candidates.append(group_candidate)
+
     if not candidates:
         return None, None, None
     remaining, budget, period_hours = min(candidates, key=lambda c: c[0])
     return budget, max(remaining, 0.0), period_hours
+
+
+def _group_cost_budget_candidate(
+    db_session: Session, user_id: str, now: datetime
+) -> tuple[float, float, int] | None:
+    """The user's group-scope cost headroom as one (remaining, budget, period)
+    candidate, or None if groups impose no cost cap.
+
+    The gate blocks on groups only when EVERY group is over its cost budget, so
+    the binding group is the MOST PERMISSIVE one (the most remaining). A group
+    with no cost limit is cost-exempt, which exempts the whole group scope."""
+    group_limits = fetch_user_group_token_rate_limits(db_session, UUID(user_id))
+    if not group_limits:
+        return None
+
+    cost_rls = [
+        rl
+        for rls in group_limits.values()
+        for rl in rls
+        if rl.cost_budget_cents is not None
+    ]
+    if not cost_rls:
+        return None
+
+    # One batched query for every group's cost buckets, then window in Python.
+    broadest = max(rl.period_hours for rl in cost_rls)
+    fetch_cutoff = now - timedelta(hours=broadest) - _LEDGER_GRID
+    buckets = get_group_cost_cents_buckets_since(
+        db_session, list(group_limits.keys()), fetch_cutoff
+    )
+
+    most_permissive: tuple[float, float, int] | None = None
+    for group_id, limits in group_limits.items():
+        group_buckets = buckets.get(group_id, [])
+        # This group's binding cost limit = the one with the least remaining.
+        group_binding: tuple[float, float, int] | None = None
+        for rl in limits:
+            if rl.cost_budget_cents is None:
+                continue
+            cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
+            used = sum(c for ws, c in group_buckets if ws >= cutoff)
+            remaining = rl.cost_budget_cents - used
+            if group_binding is None or remaining < group_binding[0]:
+                group_binding = (remaining, rl.cost_budget_cents, rl.period_hours)
+        if group_binding is None:
+            return None  # a cost-exempt group exempts the whole group scope
+        if most_permissive is None or group_binding[0] > most_permissive[0]:
+            most_permissive = group_binding
+
+    return most_permissive
 
 
 router = APIRouter(prefix="/admin/cost-overrides", tags=PUBLIC_API_TAGS)

@@ -425,6 +425,32 @@ class TestGlobalCostRejectionPath:
 
         token_limit._user_is_rate_limited_by_global()  # no raise
 
+    def test_cost_only_skips_token_aggregation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A cost-only limit (token_budget=None) must not run the token-usage query.
+        limit = TokenRateLimit(
+            enabled=True,
+            token_budget=None,
+            cost_budget_cents=500.0,
+            period_hours=1,
+            scope=TokenRateLimitScope.GLOBAL,
+        )
+        monkeypatch.setattr(
+            token_limit, "get_session_with_current_tenant", lambda: _SessionCtx()
+        )
+        monkeypatch.setattr(
+            token_limit, "fetch_all_global_token_rate_limits", lambda **_: [limit]
+        )
+
+        def _boom(*_a: object) -> object:
+            raise AssertionError("token aggregation ran for a cost-only limit")
+
+        monkeypatch.setattr(token_limit, "_fetch_global_usage", _boom)
+        monkeypatch.setattr(token_limit, "get_total_cost_cents_since", lambda *_: 100.0)
+
+        token_limit._user_is_rate_limited_by_global()  # no raise, no token query
+
 
 class TestEEUserCostRejectionPath:
     def test_over_user_cost_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:

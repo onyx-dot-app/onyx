@@ -1,4 +1,6 @@
+from collections import defaultdict
 from collections.abc import Sequence
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -6,6 +8,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.models import TokenRateLimit
 from onyx.db.models import TokenRateLimit__UserGroup
+from onyx.db.models import User__UserGroup
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 
 
@@ -25,6 +28,33 @@ def fetch_all_user_token_rate_limits(
         query = query.order_by(TokenRateLimit.created_at.desc())
 
     return db_session.scalars(query).all()
+
+
+def fetch_user_group_token_rate_limits(
+    db_session: Session,
+    user_id: UUID,
+    enabled_only: bool = True,
+) -> dict[int, list[TokenRateLimit]]:
+    """The user-group rate limits a user is subject to, keyed by group id."""
+    query = (
+        select(TokenRateLimit, User__UserGroup.user_group_id)
+        .join(
+            TokenRateLimit__UserGroup,
+            TokenRateLimit.id == TokenRateLimit__UserGroup.rate_limit_id,
+        )
+        .join(
+            User__UserGroup,
+            User__UserGroup.user_group_id == TokenRateLimit__UserGroup.user_group_id,
+        )
+        .where(User__UserGroup.user_id == user_id)
+    )
+    if enabled_only:
+        query = query.where(TokenRateLimit.enabled.is_(True))
+
+    result: dict[int, list[TokenRateLimit]] = defaultdict(list)
+    for limit, group_id in db_session.execute(query).all():
+        result[group_id].append(limit)
+    return dict(result)
 
 
 def fetch_all_global_token_rate_limits(

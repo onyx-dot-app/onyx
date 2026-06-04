@@ -66,10 +66,13 @@ def _user_is_rate_limited_by_global() -> None:
         )
 
         if global_rate_limits:
-            global_cutoff_time = _get_cutoff_time(global_rate_limits)
-            global_usage = _fetch_global_usage(global_cutoff_time, db_session)
+            # Skip the token-usage aggregation when every limit is cost-only.
+            triggered = None
+            if _has_token_budget(global_rate_limits):
+                global_cutoff_time = _get_cutoff_time(global_rate_limits)
+                global_usage = _fetch_global_usage(global_cutoff_time, db_session)
+                triggered = _worst_triggered_limit(global_rate_limits, global_usage)
 
-            triggered = _worst_triggered_limit(global_rate_limits, global_usage)
             cost_triggered = _worst_triggered_cost_limit(
                 global_rate_limits,
                 lambda cutoff: get_total_cost_cents_since(db_session, cutoff),
@@ -110,6 +113,14 @@ Common functions
 def _get_cutoff_time(rate_limits: Sequence[TokenRateLimit]) -> datetime:
     max_period_hours = max(rate_limit.period_hours for rate_limit in rate_limits)
     return datetime.now(tz=timezone.utc) - timedelta(hours=max_period_hours)
+
+
+def _has_token_budget(rate_limits: Sequence[TokenRateLimit]) -> bool:
+    """Whether any limit sets a positive token budget. If not (cost-only limits),
+    the caller skips the token-usage aggregation query entirely."""
+    return any(
+        rl.token_budget is not None and rl.token_budget > 0 for rl in rate_limits
+    )
 
 
 def _worst_triggered_limit(

@@ -26,6 +26,8 @@ from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import ModelCostOverride
 from onyx.db.models import TokenRateLimit
+from onyx.db.models import TokenRateLimit__UserGroup
+from onyx.db.models import User__UserGroup
 from onyx.db.models import UserUsage
 from onyx.db.user_usage import record_user_usage
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
@@ -54,7 +56,13 @@ def db_session() -> Generator[Session, None, None]:
     engine: Engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
     )
-    for model in (UserUsage, ModelCostOverride, TokenRateLimit):
+    for model in (
+        UserUsage,
+        ModelCostOverride,
+        TokenRateLimit,
+        User__UserGroup,
+        TokenRateLimit__UserGroup,
+    ):
         cast(Table, model.__table__).create(bind=engine)
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
@@ -236,6 +244,38 @@ def test_budget_reflects_user_cost_limit(
             scope=TokenRateLimitScope.USER,
         )
     )
+    db_session.commit()
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
+    )
+
+    body = (
+        TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage").json()
+    )
+    assert body["budget_cents"] == pytest.approx(100.0)
+    assert body["budget_remaining_cents"] == pytest.approx(98.75)  # 100 - 1.25
+
+
+def test_budget_reflects_group_cost_limit(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A group cost limit the user belongs to surfaces in /user/usage, mirroring
+    # how the gate enforces group cost budgets.
+    from onyx.db.models import TokenRateLimitScope
+
+    caller = str(uuid4())
+    _seed_current_window(db_session, caller)  # records 1.25c of cost
+    limit = TokenRateLimit(
+        enabled=True,
+        token_budget=None,
+        cost_budget_cents=100.0,
+        period_hours=168,
+        scope=TokenRateLimitScope.USER_GROUP,
+    )
+    db_session.add(limit)
+    db_session.flush()
+    db_session.add(User__UserGroup(user_id=caller, user_group_id=1))
+    db_session.add(TokenRateLimit__UserGroup(rate_limit_id=limit.id, user_group_id=1))
     db_session.commit()
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None

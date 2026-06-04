@@ -26,6 +26,7 @@ from onyx.db.token_limit import fetch_all_user_token_rate_limits
 from onyx.db.user_usage import get_group_cost_cents_buckets_since
 from onyx.db.user_usage import get_user_cost_cents_since
 from onyx.server.query_and_chat.token_limit import _get_cutoff_time
+from onyx.server.query_and_chat.token_limit import _has_token_budget
 from onyx.server.query_and_chat.token_limit import _LEDGER_GRID
 from onyx.server.query_and_chat.token_limit import _raise_for_longest_window
 from onyx.server.query_and_chat.token_limit import _user_is_rate_limited_by_global
@@ -65,10 +66,13 @@ def _user_is_rate_limited(user_id: UUID) -> None:
         )
 
         if user_rate_limits:
-            user_cutoff_time = _get_cutoff_time(user_rate_limits)
-            user_usage = _fetch_user_usage(user_id, user_cutoff_time, db_session)
+            # Skip the token-usage aggregation when every limit is cost-only.
+            triggered = None
+            if _has_token_budget(user_rate_limits):
+                user_cutoff_time = _get_cutoff_time(user_rate_limits)
+                user_usage = _fetch_user_usage(user_id, user_cutoff_time, db_session)
+                triggered = _worst_triggered_limit(user_rate_limits, user_usage)
 
-            triggered = _worst_triggered_limit(user_rate_limits, user_usage)
             cost_triggered = _worst_triggered_cost_limit(
                 user_rate_limits,
                 lambda cutoff: get_user_cost_cents_since(
@@ -113,17 +117,10 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
         if not group_rate_limits:
             return
 
-        # Group cutoff time is the same for all groups.
-        # This could be optimized to only fetch the maximum cutoff time for
-        # a specific group, but seems unnecessary for now.
-        group_cutoff_time = _get_cutoff_time(
-            [e for sublist in group_rate_limits.values() for e in sublist]
-        )
-
         user_group_ids = list(group_rate_limits.keys())
-        group_usage = _fetch_user_group_usage(
-            user_group_ids, group_cutoff_time, db_session
-        )
+        all_group_limits = [
+            e for sublist in group_rate_limits.values() for e in sublist
+        ]
 
         # Token + cost are independent gates, each with most-permissive-group-wins:
         # the user is limited only when EVERY group the user belongs to is over
@@ -131,15 +128,21 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
         # both gates, then raise once for the longest triggering window across
         # either — so a short token window can't mask a longer cost reset.
         token_period: int | None = None
-        token_periods: list[int] = []
-        for user_group_id, rate_limits in group_rate_limits.items():
-            usage = group_usage.get(user_group_id, [])
-            triggered = _worst_triggered_limit(rate_limits, usage)
-            if triggered is None:
-                break  # an under-budget group means the user is not token-limited
-            token_periods.append(triggered.period_hours)
-        else:
-            token_period = max(token_periods)
+        if _has_token_budget(all_group_limits):
+            # Group cutoff time is the same for all groups.
+            group_cutoff_time = _get_cutoff_time(all_group_limits)
+            group_usage = _fetch_user_group_usage(
+                user_group_ids, group_cutoff_time, db_session
+            )
+            token_periods: list[int] = []
+            for user_group_id, rate_limits in group_rate_limits.items():
+                usage = group_usage.get(user_group_id, [])
+                triggered = _worst_triggered_limit(rate_limits, usage)
+                if triggered is None:
+                    break  # an under-budget group means the user isn't token-limited
+                token_periods.append(triggered.period_hours)
+            else:
+                token_period = max(token_periods)
 
         # Batch every group's cost buckets in one query (like the token path
         # above) so the cost gate windows in Python instead of issuing a query

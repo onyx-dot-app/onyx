@@ -328,5 +328,9 @@ def get_group_cost_cents_buckets_since(
 
     result: dict[int, list[tuple[datetime, float]]] = defaultdict(list)
     for group_id, window_start, cost in rows:
+        # Coerce to tz-aware UTC; SQLite returns naive datetimes, which can't be
+        # compared against the tz-aware cutoffs callers window with.
+        if window_start.tzinfo is None:
+            window_start = window_start.replace(tzinfo=timezone.utc)
         result[group_id].append((window_start, float(cost)))
     return result
