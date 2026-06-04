@@ -208,14 +208,14 @@ interface TokenLimitPayload {
 interface ExistingTokenLimit {
   token_id: number;
   enabled: boolean;
-  token_budget: number;
+  token_budget: number | null;
   period_hours: number;
   cost_budget_cents: number | null;
 }
 
 interface ValidTokenLimit {
-  // token_budget is NOT NULL on the backend; a cost-only limit sends 0.
-  tokenBudget: number;
+  // null = cost-only (the gate skips a null/<=0 token budget); never send 0.
+  tokenBudget: number | null;
   periodHours: number;
   costBudgetCents: number | null;
 }
@@ -233,7 +233,7 @@ async function saveTokenLimits(
         (l.tokenBudget != null || l.costBudgetDollars != null)
     )
     .map((l) => ({
-      tokenBudget: l.tokenBudget ?? 0,
+      tokenBudget: l.tokenBudget,
       periodHours: l.periodHours!,
       costBudgetCents:
         l.costBudgetDollars != null
