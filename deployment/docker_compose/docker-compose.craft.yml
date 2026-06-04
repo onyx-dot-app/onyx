@@ -12,18 +12,21 @@ services:
       # sandbox bridge.
       - SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-}
       - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:v0.1.50}
-      - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
+      # Pinned: must match the compose `networks:` block + install.sh literal.
+      # An env_file leak would point Python at a non-existent network.
+      - SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox
       - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
       - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
       - ENABLE_OPENCODE_DEBUGGING=${ENABLE_OPENCODE_DEBUGGING:-false}
-      # Egress proxy wiring. Setting SANDBOX_PROXY_HOST="" disables the proxy
-      # posture (sandbox containers fall back to the legacy 4-key-env /
-      # cap_drop=ALL / user=1000:1000 posture); leaving the default routes
-      # through the in-cluster proxy.
+      # Pinned: container-side bind target. Overrides host-path values that
+      # the operator's .env may inject via env_file.
+      - SANDBOX_DOCKER_SOCKET=/var/run/docker.sock
+      # Pinned: must match the sandbox container's entrypoint.sh hardcode.
+      - OPENCODE_SERVE_PORT=4096
+      # Proxy is mandatory; an explicit empty SANDBOX_PROXY_HOST raises at
+      # api_server startup (see DockerSandboxManager._initialize).
       - SANDBOX_PROXY_HOST=${SANDBOX_PROXY_HOST-sandbox-proxy}
       - SANDBOX_PROXY_PORT=${SANDBOX_PROXY_PORT:-8080}
-      # CA volume name is hardcoded in configs.SANDBOX_PROXY_CA_VOLUME_NAME;
-      # source of truth is the `volumes:` block below + install.sh pre-create.
     volumes:
       - ${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
     networks:
@@ -46,14 +49,15 @@ services:
       - SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}
       - SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-}
       - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:v0.1.50}
-      - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
+      # See api_server above re: pinned env_file-override vars.
+      - SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox
       - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
       - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
       - ENABLE_OPENCODE_DEBUGGING=${ENABLE_OPENCODE_DEBUGGING:-false}
+      - SANDBOX_DOCKER_SOCKET=/var/run/docker.sock
+      - OPENCODE_SERVE_PORT=4096
       - SANDBOX_PROXY_HOST=${SANDBOX_PROXY_HOST-sandbox-proxy}
       - SANDBOX_PROXY_PORT=${SANDBOX_PROXY_PORT:-8080}
-      # CA volume name is hardcoded in configs.SANDBOX_PROXY_CA_VOLUME_NAME;
-      # source of truth is the `volumes:` block below + install.sh pre-create.
     volumes:
       - ${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
     networks:
@@ -80,23 +84,14 @@ services:
       - SANDBOX_BACKEND=docker
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - REDIS_HOST=${REDIS_HOST:-cache}
-      # Do NOT export SANDBOX_DOCKER_SOCKET into the container. The volume mount
-      # below maps ${SANDBOX_DOCKER_SOCKET} (host path) to /var/run/docker.sock
-      # (container path); exporting the host path would make Python try to
-      # connect to a socket that doesn't exist inside the container (breaks
-      # Colima / non-default Linux setups). Python's default is
-      # /var/run/docker.sock, which is exactly where the bind mount lands.
-      - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
+      # Pinned to defeat env_file leaks. See api_server above.
+      - SANDBOX_DOCKER_SOCKET=/var/run/docker.sock
+      - SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox
       - SANDBOX_PROXY_LISTEN_PORT=${SANDBOX_PROXY_PORT:-8080}
-      # Healthz port intentionally NOT wired through env. Compose's healthcheck
-      # test below hardcodes 8081 and can't read the container's env, so
-      # exposing SANDBOX_PROXY_HEALTHZ_PORT as a knob would let it silently
-      # desync from the probe. Python's default
-      # (configs.SANDBOX_PROXY_HEALTHZ_PORT = 8081) is the source of truth for
-      # compose deployments.
-      # FileCAStore writes the CA to configs.SANDBOX_PROXY_CA_VOLUME_PATH
-      # (hardcoded). The `volumes:` block below bind-mounts the same name at
-      # that path; sandbox containers mount it read-only at /sandbox-ca.
+      # Pin to match the healthcheck URL below (which can't read container env,
+      # so any drift would silently break the probe). Overrides any value the
+      # operator's .env may have set via env_file.
+      - SANDBOX_PROXY_HEALTHZ_PORT=8081
     volumes:
       - sandbox_proxy_ca:/var/lib/sandbox-proxy/ca
       # RO: the proxy only inspects (events watcher + initial sync).
