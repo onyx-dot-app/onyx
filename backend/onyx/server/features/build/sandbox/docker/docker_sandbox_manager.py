@@ -29,7 +29,9 @@ Sandbox containers run with:
 - ``user=1000:1000``
 - no Docker socket mount
 - no S3 / MinIO / Postgres / Redis / FileStore credentials in env
-- a fixed env allowlist (``ONYX_PAT`` + ``ONYX_SERVER_URL`` only)
+- a fixed env allowlist (``ONYX_PAT``, ``ONYX_SERVER_URL``,
+  ``AGENT_TRANSPORT``, opencode auth/config only)
+- opencode-serve published only on a random localhost-bound host port
 - only the dedicated sandbox bridge network — never compose's default
   network. As a result api_server / postgres / redis / minio /
   model_server are NOT reachable by service name from inside the sandbox.
@@ -51,8 +53,9 @@ Outbound communication is intentionally limited to:
 2. The Onyx API via ``ONYX_SERVER_URL`` — which must be the *public*
    HTTPS URL the agent reaches just like any other onyx-cli client.
 
-All control-plane traffic from api_server → sandbox uses the Docker
-Engine API (``docker exec``), never network sockets to the sandbox.
+Most control-plane traffic from api_server → sandbox uses the Docker
+Engine API (``docker exec``). Prompt/event transport uses opencode-serve
+over the localhost-bound published port described above.
 """
 
 from __future__ import annotations
@@ -70,6 +73,7 @@ import threading
 import time
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 from typing import TypedDict
 from uuid import UUID
 
@@ -143,6 +147,8 @@ MANAGED_SKILLS_PATH = f"{WORKSPACE_ROOT}/managed/skills"
 # which are also module-level and not env-tunable.
 CONTAINER_READY_TIMEOUT_SECONDS = 120
 CONTAINER_READY_POLL_INTERVAL_SECONDS = 1.0
+OPENCODE_SERVE_CONTAINER_PORT = f"{OPENCODE_SERVE_PORT}/tcp"
+OPENCODE_SERVE_HOST_BIND_IP = "127.0.0.1"
 
 
 def _build_nextjs_start_script(
@@ -255,6 +261,57 @@ def _detect_compose_project(docker_client: DockerClient) -> str | None:
     return (own.labels or {}).get("com.docker.compose.project")
 
 
+def _normalize_docker_host_ip(host_ip: object) -> str:
+    """Normalize Docker port bindings to a host-reachable HTTP hostname."""
+    if not isinstance(host_ip, str) or host_ip in ("", "0.0.0.0", "::"):  # noqa: S104
+        return OPENCODE_SERVE_HOST_BIND_IP
+    return host_ip
+
+
+def _format_http_host(host_ip: str) -> str:
+    """Bracket IPv6 literals for URLs; leave hostnames/IPv4 unchanged."""
+    if ":" in host_ip and not host_ip.startswith("["):
+        return f"[{host_ip}]"
+    return host_ip
+
+
+def _published_opencode_serve_base_url(
+    container_attrs: dict[str, Any],
+) -> str | None:
+    """Return the localhost-published opencode-serve URL from docker inspect.
+
+    Docker reports published ports under
+    ``NetworkSettings.Ports["4096/tcp"]``. The sandbox binds the host side to
+    127.0.0.1 with a random port, because local dev workers run on the host and
+    cannot resolve sandbox container DNS names.
+    """
+    network_settings = container_attrs.get("NetworkSettings")
+    if not isinstance(network_settings, dict):
+        return None
+
+    ports = network_settings.get("Ports")
+    if not isinstance(ports, dict):
+        return None
+
+    bindings = ports.get(OPENCODE_SERVE_CONTAINER_PORT)
+    if not isinstance(bindings, list):
+        return None
+
+    for binding in bindings:
+        if not isinstance(binding, dict):
+            continue
+        host_port = binding.get("HostPort")
+        if host_port is None:
+            continue
+        host_port_str = str(host_port).strip()
+        if not host_port_str:
+            continue
+        host_ip = _normalize_docker_host_ip(binding.get("HostIp"))
+        return f"http://{_format_http_host(host_ip)}:{host_port_str}"
+
+    return None
+
+
 def build_sandbox_labels(
     sandbox_id: UUID,
     tenant_id: str,
@@ -299,6 +356,7 @@ class ContainerCreateKwargs(TypedDict):
     privileged: bool
     read_only: bool
     network: str
+    ports: dict[str, tuple[str, int | None]]
     environment: dict[str, str]
     volumes: dict[str, dict[str, str]]
     mem_limit: str
@@ -327,8 +385,9 @@ def build_container_create_kwargs(
     Sandbox isolation invariants enforced here (locked down by
     ``test_docker_manager_config.py``):
 
-    - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL, plus
-      ``OPENCODE_SERVER_PASSWORD`` and ``OPENCODE_CONFIG_CONTENT``.
+    - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL,
+      AGENT_TRANSPORT, plus ``OPENCODE_SERVER_PASSWORD`` and
+      ``OPENCODE_CONFIG_CONTENT``.
       No caller can inject anything else. No S3/MinIO/Postgres/Redis
       credentials. No compose service hostnames.
     - **No host mounts**: only the per-sandbox named volume mounted at
@@ -339,6 +398,9 @@ def build_container_create_kwargs(
       dedicated ``onyx_craft_sandbox`` bridge). Does NOT join compose's
       default network; api_server / postgres / redis / minio are
       unreachable by service name.
+    - **Serve port is host-local only**: publishes opencode-serve on a
+      random host port bound to 127.0.0.1 so host-run workers can reach it
+      without exposing it on the LAN.
 
     ``ONYX_SERVER_URL`` must be the *public* Onyx URL (the one onyx-cli
     inside the sandbox will hit over HTTPS) — not an internal compose DNS
@@ -365,6 +427,7 @@ def build_container_create_kwargs(
     env = {
         "ONYX_PAT": onyx_pat,
         "ONYX_SERVER_URL": api_server_url,
+        "AGENT_TRANSPORT": "serve",
         OPENCODE_SERVER_PASSWORD: opencode_password,
         "OPENCODE_CONFIG_CONTENT": opencode_config_json,
     }
@@ -385,6 +448,7 @@ def build_container_create_kwargs(
         privileged=False,
         read_only=False,
         network=network,
+        ports={OPENCODE_SERVE_CONTAINER_PORT: (OPENCODE_SERVE_HOST_BIND_IP, None)},
         environment=env,
         volumes={
             volume_name: {"bind": SESSIONS_ROOT, "mode": "rw"},
@@ -1049,13 +1113,19 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
     def _load_serve_connection_info(
         self, sandbox_id: UUID
     ) -> ServeConnectionInfo | None:
-        """One ``docker inspect`` to extract URL (container name) +
-        password (env, set at create time). Cached by the mixin."""
+        """One ``docker inspect`` to extract URL + password.
+
+        The preferred URL is Docker's localhost-published host port. Fall back
+        to container-name DNS for older containers or deployments where the
+        backend also runs inside the sandbox bridge network.
+        """
         container = self._get_container(sandbox_id)
         if container is None:
             return None
         try:
-            env_list = ((container.attrs or {}).get("Config") or {}).get("Env") or []
+            container.reload()
+            attrs = container.attrs or {}
+            env_list = (attrs.get("Config") or {}).get("Env") or []
         except (APIError, NotFound):
             return None
         password: str | None = None
@@ -1064,10 +1134,11 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
             if entry.startswith(prefix):
                 password = entry[len(prefix) :]
                 break
+        base_url = _published_opencode_serve_base_url(attrs) or (
+            f"http://{_sandbox_container_name(sandbox_id)}:{OPENCODE_SERVE_PORT}"
+        )
         return ServeConnectionInfo(
-            base_url=(
-                f"http://{_sandbox_container_name(sandbox_id)}:{OPENCODE_SERVE_PORT}"
-            ),
+            base_url=base_url,
             password=password,
         )
 

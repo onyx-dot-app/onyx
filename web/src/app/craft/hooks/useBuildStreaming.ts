@@ -14,6 +14,7 @@ import {
   interruptMessageStream,
   processSSEStream,
   fetchSession,
+  fetchScheduledRunEventStream,
   RateLimitError,
 } from "@/app/craft/services/apiServices";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -127,6 +128,317 @@ export function useBuildStreaming() {
     [triggerWebappRefresh, triggerFilesRefresh, openMarkdownPreview]
   );
 
+  const createStreamPacketProcessor = useCallback(
+    (sessionId: string, options?: { onPromptResponse?: () => void }) => {
+      let accumulatedText = "";
+      let accumulatedThinking = "";
+      let lastItemType: "text" | "thinking" | "tool" | null = null;
+
+      const finalizeStreaming = () => {
+        const session = useBuildSessionStore.getState().sessions.get(sessionId);
+        if (!session) return;
+
+        const items = session.streamItems;
+        const lastItem = items[items.length - 1];
+        if (lastItem) {
+          if (lastItem.type === "text" && lastItem.isStreaming) {
+            useBuildSessionStore
+              .getState()
+              .updateStreamItem(sessionId, lastItem.id, { isStreaming: false });
+          } else if (lastItem.type === "thinking" && lastItem.isStreaming) {
+            useBuildSessionStore
+              .getState()
+              .updateStreamItem(sessionId, lastItem.id, { isStreaming: false });
+          }
+        }
+      };
+
+      return (rawPacket: unknown) => {
+        const parsed = parsePacket(rawPacket);
+
+        switch (parsed.type) {
+          case "text_chunk": {
+            if (!parsed.text) break;
+
+            accumulatedText += parsed.text;
+
+            if (lastItemType === "text") {
+              updateLastStreamingText(sessionId, accumulatedText);
+            } else {
+              finalizeStreaming();
+              accumulatedText = parsed.text;
+              const item: StreamItem = {
+                type: "text",
+                id: genId("text"),
+                content: parsed.text,
+                isStreaming: true,
+              };
+              appendStreamItem(sessionId, item);
+              lastItemType = "text";
+            }
+            break;
+          }
+
+          case "thinking_chunk": {
+            if (!parsed.text) break;
+
+            accumulatedThinking += parsed.text;
+
+            if (lastItemType === "thinking") {
+              updateLastStreamingThinking(sessionId, accumulatedThinking);
+            } else {
+              finalizeStreaming();
+              accumulatedThinking = parsed.text;
+              const item: StreamItem = {
+                type: "thinking",
+                id: genId("thinking"),
+                content: parsed.text,
+                isStreaming: true,
+              };
+              appendStreamItem(sessionId, item);
+              lastItemType = "thinking";
+            }
+            break;
+          }
+
+          case "tool_call_start": {
+            finalizeStreaming();
+            accumulatedText = "";
+            accumulatedThinking = "";
+
+            // Child (subagent-internal) start: do not add to main transcript.
+            // The subagent pill is created from its progress events.
+            if (parsed.parentSessionId !== null && parsed.sessionId !== null) {
+              lastItemType = "tool";
+              break;
+            }
+
+            // Skip tool_call_start for TodoWrite; pill is created on progress.
+            if (parsed.isTodo) {
+              lastItemType = "tool";
+              break;
+            }
+
+            appendStreamItem(sessionId, {
+              type: "tool_call",
+              id: parsed.toolCallId,
+              toolCall: {
+                id: parsed.toolCallId,
+                kind: parsed.kind,
+                toolName: parsed.toolName,
+                title: parsed.title,
+                status: "pending",
+                description: "",
+                command: "",
+                rawOutput: "",
+                subagentType: undefined,
+                isNewFile: true,
+                oldContent: "",
+                newContent: "",
+              },
+            });
+            lastItemType = "tool";
+            break;
+          }
+
+          case "tool_call_progress": {
+            const subagentClass = classifySubagentEvent(parsed);
+
+            // Child (subagent-internal) event: route to the subagent's own
+            // tool-call list, not the main transcript.
+            if (subagentClass.kind === "child") {
+              recordSubagentToolCall(
+                sessionId,
+                subagentClass.subagentSessionId,
+                "",
+                toolCallStateFromProgress(parsed),
+                null,
+                ""
+              );
+              if (parsed.filePath && parsed.kind) {
+                for (const detector of OUTPUT_FILE_DETECTORS) {
+                  if (detector.match(parsed.filePath, parsed.kind)) {
+                    detector.onDetect(sessionId, parsed.filePath);
+                    break;
+                  }
+                }
+              }
+              break;
+            }
+
+            // Parent `task` event: keep the transcript task card and seed/update
+            // the subagent meta and completion state.
+            if (subagentClass.kind === "parentTask") {
+              seedSubagentMeta(
+                sessionId,
+                subagentClass.subagentSessionId,
+                parsed.toolCallId,
+                parsed.subagentType,
+                subagentNameFromTask(parsed),
+                parsed.command
+              );
+              if (parsed.status === "completed") {
+                markSubagentComplete(
+                  sessionId,
+                  subagentClass.subagentSessionId,
+                  "done",
+                  cleanTaskOutput(parsed.taskOutput)
+                );
+              } else if (
+                parsed.status === "failed" ||
+                parsed.status === "cancelled"
+              ) {
+                markSubagentComplete(
+                  sessionId,
+                  subagentClass.subagentSessionId,
+                  "failed",
+                  cleanTaskOutput(parsed.taskOutput)
+                );
+              }
+            }
+
+            if (parsed.isTodo) {
+              upsertTodoListStreamItem(sessionId, parsed.toolCallId, {
+                id: parsed.toolCallId,
+                todos: parsed.todos,
+                isOpen: true,
+              });
+              break;
+            }
+
+            updateToolCallStreamItem(sessionId, parsed.toolCallId, {
+              status: parsed.status,
+              title: parsed.title,
+              description: parsed.description,
+              command: parsed.command,
+              rawOutput: parsed.rawOutput,
+              toolName: parsed.toolName,
+              subagentType: parsed.subagentType ?? undefined,
+              skillName: parsed.skillName ?? undefined,
+              taskOutput: parsed.taskOutput ?? undefined,
+              ...(parsed.kind === "edit" && {
+                isNewFile: parsed.isNewFile,
+                oldContent: parsed.oldContent,
+                newContent: parsed.newContent,
+              }),
+            });
+
+            if (parsed.filePath && parsed.kind) {
+              for (const detector of OUTPUT_FILE_DETECTORS) {
+                if (detector.match(parsed.filePath, parsed.kind)) {
+                  detector.onDetect(sessionId, parsed.filePath);
+                  break;
+                }
+              }
+            }
+            break;
+          }
+
+          case "artifact_created": {
+            const newArtifact: Artifact = {
+              id: parsed.artifact.id,
+              session_id: sessionId,
+              type: parsed.artifact.type as ArtifactType,
+              name: parsed.artifact.name,
+              path: parsed.artifact.path,
+              preview_url: parsed.artifact.preview_url || null,
+              created_at: new Date(),
+              updated_at: new Date(),
+            };
+            addArtifactToSession(sessionId, newArtifact);
+
+            const isWebapp =
+              newArtifact.type === "nextjs_app" ||
+              newArtifact.type === "web_app";
+            if (isWebapp) {
+              fetchSession(sessionId)
+                .then((sessionData) => {
+                  if (sessionData.sandbox?.nextjs_port) {
+                    const webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
+                    updateSessionData(sessionId, { webappUrl });
+                  }
+                })
+                .catch((err) =>
+                  console.error("Failed to fetch session for webapp URL:", err)
+                );
+            }
+            break;
+          }
+
+          case "prompt_response": {
+            finalizeStreaming();
+
+            const session = useBuildSessionStore
+              .getState()
+              .sessions.get(sessionId);
+
+            if (session && session.streamItems.length > 0) {
+              const textContent = session.streamItems
+                .filter((item) => item.type === "text")
+                .map((item) => item.content)
+                .join("");
+
+              appendMessageToSession(sessionId, {
+                id: genId("agent-msg"),
+                type: "assistant",
+                content: textContent,
+                timestamp: new Date(),
+                message_metadata: {
+                  streamItems: session.streamItems.map((item) => ({
+                    ...item,
+                    ...(item.type === "text" || item.type === "thinking"
+                      ? { isStreaming: false }
+                      : {}),
+                  })),
+                },
+              });
+            }
+
+            updateSessionData(sessionId, {
+              status: "active",
+              streamItems: [],
+              isInterrupting: false,
+            });
+            options?.onPromptResponse?.();
+            break;
+          }
+
+          case "approval_requested": {
+            void globalMutate(SWR_KEYS.buildSessionLiveApprovals(sessionId));
+            break;
+          }
+
+          case "error": {
+            updateSessionData(sessionId, {
+              status: "failed",
+              error: parsed.message,
+              isInterrupting: false,
+            });
+            break;
+          }
+
+          default:
+            break;
+        }
+      };
+    },
+    [
+      updateSessionData,
+      appendStreamItem,
+      updateLastStreamingText,
+      updateLastStreamingThinking,
+      updateToolCallStreamItem,
+      upsertTodoListStreamItem,
+      addArtifactToSession,
+      appendMessageToSession,
+      OUTPUT_FILE_DETECTORS,
+      globalMutate,
+      recordSubagentToolCall,
+      seedSubagentMeta,
+      markSubagentComplete,
+    ]
+  );
+
   /**
    * Stream a message to the given session and process the SSE response.
    * Populates streamItems in FIFO order as packets arrive.
@@ -147,37 +459,11 @@ export function useBuildStreaming() {
       const controller = new AbortController();
       setAbortController(sessionId, controller);
 
-      // Set status to running and clear previous stream items
       updateSessionData(sessionId, {
         status: "running",
         isInterrupting: false,
       });
       clearStreamItems(sessionId);
-
-      // Track accumulated content for streaming text/thinking
-      let accumulatedText = "";
-      let accumulatedThinking = "";
-      let lastItemType: "text" | "thinking" | "tool" | null = null;
-
-      // Helper to finalize any streaming item before switching types
-      const finalizeStreaming = () => {
-        const session = useBuildSessionStore.getState().sessions.get(sessionId);
-        if (!session) return;
-
-        const items = session.streamItems;
-        const lastItem = items[items.length - 1];
-        if (lastItem) {
-          if (lastItem.type === "text" && lastItem.isStreaming) {
-            useBuildSessionStore
-              .getState()
-              .updateStreamItem(sessionId, lastItem.id, { isStreaming: false });
-          } else if (lastItem.type === "thinking" && lastItem.isStreaming) {
-            useBuildSessionStore
-              .getState()
-              .updateStreamItem(sessionId, lastItem.id, { isStreaming: false });
-          }
-        }
-      };
 
       try {
         const response = await sendMessageStream(
@@ -187,300 +473,12 @@ export function useBuildStreaming() {
           model
         );
 
-        await processSSEStream(response, (rawPacket) => {
-          const parsed = parsePacket(rawPacket);
-
-          switch (parsed.type) {
-            // Agent message content - accumulate and update/create text item
-            case "text_chunk": {
-              if (!parsed.text) break;
-
-              accumulatedText += parsed.text;
-
-              if (lastItemType === "text") {
-                updateLastStreamingText(sessionId, accumulatedText);
-              } else {
-                finalizeStreaming();
-                accumulatedText = parsed.text;
-                const item: StreamItem = {
-                  type: "text",
-                  id: genId("text"),
-                  content: parsed.text,
-                  isStreaming: true,
-                };
-                appendStreamItem(sessionId, item);
-                lastItemType = "text";
-              }
-              break;
-            }
-
-            // Agent thinking - accumulate and update/create thinking item
-            case "thinking_chunk": {
-              if (!parsed.text) break;
-
-              accumulatedThinking += parsed.text;
-
-              if (lastItemType === "thinking") {
-                updateLastStreamingThinking(sessionId, accumulatedThinking);
-              } else {
-                finalizeStreaming();
-                accumulatedThinking = parsed.text;
-                const item: StreamItem = {
-                  type: "thinking",
-                  id: genId("thinking"),
-                  content: parsed.text,
-                  isStreaming: true,
-                };
-                appendStreamItem(sessionId, item);
-                lastItemType = "thinking";
-              }
-              break;
-            }
-
-            // Tool call started
-            case "tool_call_start": {
-              finalizeStreaming();
-              accumulatedText = "";
-              accumulatedThinking = "";
-
-              // Child (subagent-internal) start: do NOT add to main transcript.
-              // The subagent's pill is created from its progress events.
-              if (
-                parsed.parentSessionId !== null &&
-                parsed.sessionId !== null
-              ) {
-                lastItemType = "tool";
-                break;
-              }
-
-              // Skip tool_call_start for TodoWrite — pill created on first progress
-              if (parsed.isTodo) {
-                lastItemType = "tool";
-                break;
-              }
-
-              appendStreamItem(sessionId, {
-                type: "tool_call",
-                id: parsed.toolCallId,
-                toolCall: {
-                  id: parsed.toolCallId,
-                  kind: parsed.kind,
-                  toolName: parsed.toolName,
-                  title: parsed.title,
-                  status: "pending",
-                  description: "",
-                  command: "",
-                  rawOutput: "",
-                  subagentType: undefined,
-                  isNewFile: true,
-                  oldContent: "",
-                  newContent: "",
-                },
-              });
-              lastItemType = "tool";
-              break;
-            }
-
-            // Tool call progress
-            case "tool_call_progress": {
-              const subagentClass = classifySubagentEvent(parsed);
-
-              // Child (subagent-internal) event: route to the subagent's own
-              // tool-call list, NOT the main transcript.
-              if (subagentClass.kind === "child") {
-                recordSubagentToolCall(
-                  sessionId,
-                  subagentClass.subagentSessionId,
-                  // parentToolCallId/name are seeded from the parent task
-                  // event; pass empty sentinels (store ignores them).
-                  "",
-                  toolCallStateFromProgress(parsed),
-                  null,
-                  ""
-                );
-                // Subagent edits hit the same sandbox — refresh preview/files.
-                if (parsed.filePath && parsed.kind) {
-                  for (const detector of OUTPUT_FILE_DETECTORS) {
-                    if (detector.match(parsed.filePath, parsed.kind)) {
-                      detector.onDetect(sessionId, parsed.filePath);
-                      break;
-                    }
-                  }
-                }
-                break;
-              }
-
-              // Parent `task` event: keep the transcript task card (below) AND
-              // seed/update the subagent meta + drive its completion state.
-              if (subagentClass.kind === "parentTask") {
-                seedSubagentMeta(
-                  sessionId,
-                  subagentClass.subagentSessionId,
-                  parsed.toolCallId,
-                  parsed.subagentType,
-                  subagentNameFromTask(parsed),
-                  parsed.command
-                );
-                if (parsed.status === "completed") {
-                  markSubagentComplete(
-                    sessionId,
-                    subagentClass.subagentSessionId,
-                    "done",
-                    cleanTaskOutput(parsed.taskOutput)
-                  );
-                } else if (
-                  parsed.status === "failed" ||
-                  parsed.status === "cancelled"
-                ) {
-                  markSubagentComplete(
-                    sessionId,
-                    subagentClass.subagentSessionId,
-                    "failed",
-                    cleanTaskOutput(parsed.taskOutput)
-                  );
-                }
-                // Fall through to the normal transcript dispatch below.
-              }
-
-              if (parsed.isTodo) {
-                upsertTodoListStreamItem(sessionId, parsed.toolCallId, {
-                  id: parsed.toolCallId,
-                  todos: parsed.todos,
-                  isOpen: true,
-                });
-                break;
-              }
-
-              updateToolCallStreamItem(sessionId, parsed.toolCallId, {
-                status: parsed.status,
-                title: parsed.title,
-                description: parsed.description,
-                command: parsed.command,
-                rawOutput: parsed.rawOutput,
-                toolName: parsed.toolName,
-                subagentType: parsed.subagentType ?? undefined,
-                skillName: parsed.skillName ?? undefined,
-                taskOutput: parsed.taskOutput ?? undefined,
-                ...(parsed.kind === "edit" && {
-                  isNewFile: parsed.isNewFile,
-                  oldContent: parsed.oldContent,
-                  newContent: parsed.newContent,
-                }),
-              });
-
-              // Run output file detectors (filePath is pre-sanitized)
-              if (parsed.filePath && parsed.kind) {
-                for (const detector of OUTPUT_FILE_DETECTORS) {
-                  if (detector.match(parsed.filePath, parsed.kind)) {
-                    detector.onDetect(sessionId, parsed.filePath);
-                    break;
-                  }
-                }
-              }
-
-              // Task completion: taskOutput is now stored on the tool call
-              // itself (rendered by TaskBody) — no separate text item.
-              break;
-            }
-
-            // Artifacts
-            case "artifact_created": {
-              const newArtifact: Artifact = {
-                id: parsed.artifact.id,
-                session_id: sessionId,
-                type: parsed.artifact.type as ArtifactType,
-                name: parsed.artifact.name,
-                path: parsed.artifact.path,
-                preview_url: parsed.artifact.preview_url || null,
-                created_at: new Date(),
-                updated_at: new Date(),
-              };
-              addArtifactToSession(sessionId, newArtifact);
-
-              // If webapp, fetch session to get sandbox port
-              const isWebapp =
-                newArtifact.type === "nextjs_app" ||
-                newArtifact.type === "web_app";
-              if (isWebapp) {
-                fetchSession(sessionId)
-                  .then((sessionData) => {
-                    if (sessionData.sandbox?.nextjs_port) {
-                      const webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
-                      updateSessionData(sessionId, { webappUrl });
-                    }
-                  })
-                  .catch((err) =>
-                    console.error(
-                      "Failed to fetch session for webapp URL:",
-                      err
-                    )
-                  );
-              }
-              break;
-            }
-
-            // Agent finished
-            case "prompt_response": {
-              finalizeStreaming();
-
-              const session = useBuildSessionStore
-                .getState()
-                .sessions.get(sessionId);
-
-              if (session && session.streamItems.length > 0) {
-                const textContent = session.streamItems
-                  .filter((item) => item.type === "text")
-                  .map((item) => item.content)
-                  .join("");
-
-                appendMessageToSession(sessionId, {
-                  id: genId("agent-msg"),
-                  type: "assistant",
-                  content: textContent,
-                  timestamp: new Date(),
-                  message_metadata: {
-                    streamItems: session.streamItems.map((item) => ({
-                      ...item,
-                      ...(item.type === "text" || item.type === "thinking"
-                        ? { isStreaming: false }
-                        : {}),
-                    })),
-                  },
-                });
-              }
-
-              updateSessionData(sessionId, {
-                status: "active",
-                streamItems: [],
-                isInterrupting: false,
-              });
-              break;
-            }
-
-            // Invalidate the /live cache so the approval card refetches.
-            case "approval_requested": {
-              void globalMutate(SWR_KEYS.buildSessionLiveApprovals(sessionId));
-              break;
-            }
-
-            // Error
-            case "error": {
-              updateSessionData(sessionId, {
-                status: "failed",
-                error: parsed.message,
-                isInterrupting: false,
-              });
-              break;
-            }
-
-            default:
-              break;
-          }
-        });
+        await processSSEStream(
+          response,
+          createStreamPacketProcessor(sessionId)
+        );
       } catch (err) {
         if ((err as Error).name === "AbortError") {
-          // Fetch aborted (session switch, unmount, or a superseding turn).
-          // Clear the flag so it can't wedge the controls "Stopping…".
           updateSessionData(sessionId, { isInterrupting: false });
         } else if (err instanceof RateLimitError) {
           console.warn("[Streaming] Rate limit exceeded");
@@ -504,29 +502,14 @@ export function useBuildStreaming() {
     [
       setAbortController,
       updateSessionData,
-      appendStreamItem,
-      updateLastStreamingText,
-      updateLastStreamingThinking,
-      updateToolCallStreamItem,
-      upsertTodoListStreamItem,
       clearStreamItems,
-      addArtifactToSession,
-      appendMessageToSession,
-      OUTPUT_FILE_DETECTORS,
-      globalMutate,
-      recordSubagentToolCall,
-      seedSubagentMeta,
-      markSubagentComplete,
+      createStreamPacketProcessor,
     ]
   );
 
   /**
-   * Interrupt the in-flight turn for a session. Asks the backend to interrupt
-   * the sandbox turn; the open SSE stream then terminates through its normal
-   * `prompt_response` path, which commits the partial output, flips the status
-   * to "active", and lets the queued-message auto-send drain naturally. We keep
-   * the stream open (rather than aborting the fetch) so that terminator can
-   * arrive — `isInterrupting` bridges the gap for immediate UI feedback.
+   * Interrupt the in-flight turn for a session. The open SSE stream terminates
+   * normally so partial output can still be committed.
    */
   const interruptStreaming = useCallback(
     async (sessionId: string): Promise<void> => {
@@ -539,7 +522,6 @@ export function useBuildStreaming() {
       try {
         await interruptMessageStream(sessionId);
       } catch (err) {
-        // Re-arm so the user can retry; the turn is still streaming.
         console.error("[Streaming] Failed to interrupt:", err);
         updateSessionData(sessionId, { isInterrupting: false });
       }
@@ -547,12 +529,65 @@ export function useBuildStreaming() {
     [updateSessionData]
   );
 
+  const streamScheduledRunEvents = useCallback(
+    async (
+      sessionId: string,
+      signal: AbortSignal,
+      onSettled?: () => void
+    ): Promise<void> => {
+      updateSessionData(sessionId, { status: "running" });
+      clearStreamItems(sessionId);
+      let streamFailed = false;
+      let settledFromPromptResponse = false;
+
+      try {
+        const response = await fetchScheduledRunEventStream(sessionId, signal);
+        await processSSEStream(
+          response,
+          createStreamPacketProcessor(sessionId, {
+            onPromptResponse: () => {
+              settledFromPromptResponse = true;
+              onSettled?.();
+            },
+          })
+        );
+      } catch (err) {
+        if ((err as Error).name === "AbortError") {
+          return;
+        }
+
+        console.error("[Streaming] Scheduled run stream error:", err);
+        streamFailed = true;
+        updateSessionData(sessionId, {
+          status: "failed",
+          error: (err as Error).message,
+        });
+      } finally {
+        if (!signal.aborted) {
+          if (!streamFailed) {
+            updateSessionData(sessionId, { status: "active" });
+          }
+          if (!settledFromPromptResponse) {
+            onSettled?.();
+          }
+        }
+      }
+    },
+    [updateSessionData, clearStreamItems, createStreamPacketProcessor]
+  );
+
   return useMemo(
     () => ({
       streamMessage,
       interruptStreaming,
+      streamScheduledRunEvents,
       abortStream: abortCurrentSession,
     }),
-    [streamMessage, interruptStreaming, abortCurrentSession]
+    [
+      streamMessage,
+      interruptStreaming,
+      streamScheduledRunEvents,
+      abortCurrentSession,
+    ]
   );
 }

@@ -49,6 +49,12 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     LABEL_USER_ID,
 )
+from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+    OPENCODE_SERVE_CONTAINER_PORT,
+)
+from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+    OPENCODE_SERVE_HOST_BIND_IP,
+)
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
 
@@ -135,6 +141,7 @@ def test_container_kwargs_env_allowlist_excludes_storage_credentials(
     assert env["ONYX_PAT"] == "pat-redacted"
     assert env["ONYX_SERVER_URL"] == "http://api_server:8080"
     # opencode-serve transport wiring
+    assert env["AGENT_TRANSPORT"] == "serve"
     assert env["OPENCODE_SERVER_PASSWORD"] == _OPENCODE_PASSWORD
     assert env["OPENCODE_CONFIG_CONTENT"] == _OPENCODE_CONFIG_JSON
     # Forbidden env - any storage credential leaking into the sandbox would
@@ -169,6 +176,15 @@ def test_container_kwargs_labels_and_volume(kwargs: ContainerCreateKwargs) -> No
 def test_container_kwargs_uses_sandbox_network(kwargs: ContainerCreateKwargs) -> None:
     """Sandbox must join only the dedicated bridge, not compose's default."""
     assert kwargs["network"] == "onyx_craft_sandbox"
+
+
+def test_container_kwargs_publishes_serve_on_localhost(
+    kwargs: ContainerCreateKwargs,
+) -> None:
+    """Host-run workers reach opencode-serve through a local ephemeral port."""
+    assert kwargs["ports"] == {
+        OPENCODE_SERVE_CONTAINER_PORT: (OPENCODE_SERVE_HOST_BIND_IP, None),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +253,7 @@ def test_container_kwargs_env_is_a_minimal_allowlist(
     assert set(env.keys()) == {
         "ONYX_PAT",
         "ONYX_SERVER_URL",
+        "AGENT_TRANSPORT",
         "OPENCODE_SERVER_PASSWORD",
         "OPENCODE_CONFIG_CONTENT",
     }

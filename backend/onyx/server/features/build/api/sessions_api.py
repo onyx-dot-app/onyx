@@ -1,6 +1,10 @@
 """API endpoints for Build Mode session management."""
 
+import json
+import time
+from collections.abc import Generator
 from datetime import datetime
+from datetime import timezone
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -9,15 +13,18 @@ from fastapi import File
 from fastapi import HTTPException
 from fastapi import Response
 from fastapi import UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import Permission
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import ScheduledTaskRunStatus
 from onyx.db.models import BuildMessage
 from onyx.db.models import User
 from onyx.db.scheduled_task import get_scheduled_run_context
@@ -888,9 +895,12 @@ class ScheduledRunContextResponse(BaseModel):
     scheduled run. Returned by ``GET /sessions/{id}/scheduled-run-context``.
     """
 
+    run_id: str
     task_id: str
     task_name: str
+    status: ScheduledTaskRunStatus
     started_at: datetime
+    finished_at: datetime | None
 
 
 @router.get("/{session_id}/scheduled-run-context")
@@ -902,8 +912,8 @@ def get_session_scheduled_run_context(
     """Return the scheduled-task context for a session, if any.
 
     The web UI calls this on every session view; a 200 response means
-    "render the banner above the transcript and hide the chat input". A
-    404 means "this is an interactive session, behave normally".
+    "render the banner above the transcript and apply scheduled-run state".
+    A 404 means "this is an interactive session, behave normally".
     """
     context = get_scheduled_run_context(
         db_session=db_session,
@@ -913,7 +923,120 @@ def get_session_scheduled_run_context(
     if context is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session has no scheduled-run context")
     return ScheduledRunContextResponse(
+        run_id=str(context["run_id"]),
         task_id=str(context["task_id"]),
         task_name=context["task_name"],
+        status=context["status"],
         started_at=context["started_at"],
+        finished_at=context["finished_at"],
+    )
+
+
+LIVE_STREAM_READY_POLL_SECONDS = 1.0
+LIVE_STREAM_KEEPALIVE_SECONDS = 15.0
+
+
+def _scheduled_run_is_running(
+    *,
+    db_session: Session,
+    session_id: UUID,
+    user_id: UUID,
+) -> bool:
+    context = get_scheduled_run_context(
+        db_session=db_session,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    return context is not None and context["status"] == ScheduledTaskRunStatus.RUNNING
+
+
+def _format_stream_error(detail: str) -> str:
+    payload = {
+        "type": "error",
+        "message": detail,
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+    }
+    return f"event: message\ndata: {json.dumps(payload)}\n\n"
+
+
+@router.get("/{session_id}/scheduled-run-events")
+def get_session_scheduled_run_events(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> StreamingResponse:
+    """Stream live ACP events for a running scheduled-origin Craft session."""
+    context = get_scheduled_run_context(
+        db_session=db_session,
+        session_id=session_id,
+        user_id=user.id,
+    )
+    if context is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session has no scheduled-run context")
+    if context["status"] != ScheduledTaskRunStatus.RUNNING:
+        raise OnyxError(OnyxErrorCode.CONFLICT, "Scheduled run is not running")
+
+    user_id = user.id
+
+    def stream_generator() -> Generator[str, None, None]:
+        # The executor links ScheduledTaskRun.session_id just before it resolves
+        # and persists BuildSession.opencode_session_id. Keep the HTTP stream
+        # alive during that short handoff so a fast click from the run table can
+        # attach without a visible error.
+        while True:
+            with get_session_with_current_tenant() as stream_db_session:
+                if not _scheduled_run_is_running(
+                    db_session=stream_db_session,
+                    session_id=session_id,
+                    user_id=user_id,
+                ):
+                    return
+
+                session = get_build_session(session_id, user_id, stream_db_session)
+                if session is None:
+                    yield _format_stream_error("Session not found")
+                    return
+                if session.opencode_session_id:
+                    break
+
+            yield ": keepalive\n\n"
+            time.sleep(LIVE_STREAM_READY_POLL_SECONDS)
+
+        try:
+            with get_session_with_current_tenant() as stream_db_session:
+                session_manager = SessionManager(stream_db_session)
+                for chunk in session_manager.subscribe_to_existing_session_events(
+                    session_id,
+                    user_id,
+                    keepalive_seconds=LIVE_STREAM_KEEPALIVE_SECONDS,
+                ):
+                    yield chunk
+                    stream_db_session.expire_all()
+                    if not _scheduled_run_is_running(
+                        db_session=stream_db_session,
+                        session_id=session_id,
+                        user_id=user_id,
+                    ):
+                        return
+        except GeneratorExit:
+            logger.info(
+                "Scheduled run live stream disconnected for session %s", session_id
+            )
+            raise
+        except OnyxError as exc:
+            yield _format_stream_error(exc.detail)
+        except Exception as exc:
+            logger.exception(
+                "Scheduled run live stream failed for session %s", session_id
+            )
+            yield _format_stream_error(str(exc))
+
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
