@@ -262,3 +262,22 @@ export const ADMIN_ROUTES = {
 export function sidebarItem(route: AdminRouteEntry) {
   return { name: route.sidebarLabel, icon: route.icon, link: route.path };
 }
+
+/**
+ * Connector/indexing admin route prefixes that need a vector DB. In Lite mode
+ * these render an informational notice instead of their normal content.
+ */
+export const VECTOR_DB_REQUIRED_ROUTE_PREFIXES: readonly string[] = [
+  ADMIN_ROUTES.INDEXING_STATUS.path,
+  ADMIN_ROUTES.ADD_CONNECTOR.path,
+  ADMIN_ROUTES.DOCUMENT_SETS.path,
+  ADMIN_ROUTES.INDEX_SETTINGS.path,
+  "/admin/connector",
+  "/admin/federated",
+];
+
+export function isVectorDbRequiredRoute(pathname: string): boolean {
+  return VECTOR_DB_REQUIRED_ROUTE_PREFIXES.some((prefix) =>
+    pathname.startsWith(prefix)
+  );
+}

@@ -9,6 +9,8 @@ import { markdown } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SvgSidebar } from "@opal/icons";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { isVectorDbRequiredRoute } from "@/lib/admin-routes";
+import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
 
 export interface ClientLayoutProps {
   children: React.ReactNode;
@@ -23,6 +25,15 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
   // Certain admin panels have their own custom sidebar.
   // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.
   const hasCustomSidebar = pathname.startsWith("/admin/connectors");
+
+  // Lite mode (no vector DB): connector/indexing pages can't run, show a notice.
+  const vectorDbEnabled = settings.settings.vector_db_enabled !== false;
+  const content =
+    !vectorDbEnabled && isVectorDbRequiredRoute(pathname) ? (
+      <LiteModeIndexingNotice />
+    ) : (
+      children
+    );
 
   return (
     <div className="h-screen w-screen flex overflow-hidden">
@@ -43,7 +54,7 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
       )}
 
       {hasCustomSidebar ? (
-        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">{children}</div>
+        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">{content}</div>
       ) : (
         <>
           <AdminSidebar />
@@ -60,7 +71,7 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
                 />
               </div>
             )}
-            {children}
+            {content}
           </div>
         </>
       )}
