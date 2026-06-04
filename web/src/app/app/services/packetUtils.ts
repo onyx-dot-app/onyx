@@ -5,6 +5,7 @@ import {
   StreamingCitation,
 } from "./streamingModels";
 import { Packet } from "@/app/app/services/streamingModels";
+import { ContextUsage } from "@/sections/chat/interfaces";
 
 export function isToolPacket(
   packet: Packet,
@@ -184,4 +185,24 @@ export function getCitations(packets: Packet[]): StreamingCitation[] {
   });
 
   return citations;
+}
+
+// Latest context_usage packet wins: in multi-model comparison each model emits
+// one, and taking the last is acceptable for v1.
+export function getContextUsage(packets: Packet[]): ContextUsage | null {
+  for (let i = packets.length - 1; i >= 0; i--) {
+    const packet = packets[i];
+    if (packet && packet.obj.type === PacketType.CONTEXT_USAGE) {
+      const o = packet.obj as {
+        used_tokens: number;
+        max_input_tokens: number;
+      };
+      return {
+        used_tokens: o.used_tokens,
+        max_input_tokens: o.max_input_tokens,
+        is_baseline: false,
+      };
+    }
+  }
+  return null;
 }

@@ -70,6 +70,9 @@ export enum PacketType {
   // Bash Tool packets
   BASH_TOOL_START = "bash_tool_start",
   BASH_TOOL_DELTA = "bash_tool_delta",
+
+  // Context-window usage (emitted at the end of each assistant turn)
+  CONTEXT_USAGE = "context_usage",
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
@@ -339,6 +342,13 @@ export interface BashToolDelta extends BaseObj {
   timed_out: boolean;
 }
 
+// Context-Window Usage Packet (one per assistant turn)
+export interface ContextUsagePacketObj extends BaseObj {
+  type: "context_usage";
+  used_tokens: number;
+  max_input_tokens: number;
+}
+
 export type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
 export type StopObj = Stop;
@@ -446,7 +456,8 @@ export type ObjTypes =
   | ResearchAgentObj
   | CodingAgentObj
   | PacketErrorObj
-  | CitationObj;
+  | CitationObj
+  | ContextUsagePacketObj;
 
 // Placement interface for packet positioning
 export interface Placement {
