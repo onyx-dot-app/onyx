@@ -1661,6 +1661,7 @@ def llm_loop_completion_handle(
     all_search_docs = state_container.get_all_search_docs()
     emitted_citations = state_container.get_emitted_citations()
     pre_answer_processing_time = state_container.get_pre_answer_processing_time()
+    prompt_tokens = state_container.get_prompt_tokens()
 
     completed_normally = is_connected()
     chat_session_id: UUID = assistant_message.chat_session_id
@@ -1703,6 +1704,7 @@ def llm_loop_completion_handle(
             is_clarification=is_clarification,
             emitted_citations=emitted_citations,
             pre_answer_processing_time=pre_answer_processing_time,
+            prompt_tokens=prompt_tokens,
         )
 
         updated_chat_history = create_chat_history_chain(

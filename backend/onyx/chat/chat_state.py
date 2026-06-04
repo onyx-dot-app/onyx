@@ -118,6 +118,11 @@ class ChatStateContainer:
         with self._lock:
             return self.is_clarification
 
+    def get_prompt_tokens(self) -> int | None:
+        """Thread-safe getter for the provider-reported prompt_tokens."""
+        with self._lock:
+            return self.prompt_tokens
+
     def set_pre_answer_processing_time(self, duration: float | None) -> None:
         """Set the pre-answer processing time (time before answer starts)."""
         with self._lock:
