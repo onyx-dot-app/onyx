@@ -442,7 +442,11 @@ def build_container_create_kwargs(
       by capsh before the agent execve, so the running container ends up with no
       caps at all.
     - ``user="0:0"`` so the init starts as root for iptables. capsh then drops
-      to UID 1000.
+      to UID 1000. The root+NET_ADMIN window is bounded by ``firewall-init.sh``
+      runtime (~seconds); ``set -euo pipefail`` + ``die`` short-circuit on any
+      step failure, so a broken init exits non-zero before the agent ever
+      starts. ``restart_policy: unless-stopped`` re-enters the same fail-fast
+      init -- no cumulative exposure, no user code reachable during the window.
     - The named proxy-CA volume is mounted read-only at ``/sandbox-ca`` for
       ``firewall-init.sh`` to read ``ca.crt``.
 
