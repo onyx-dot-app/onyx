@@ -106,10 +106,14 @@ def _create_request(
 # ---------------------------------------------------------------------------
 
 
-def test_all_currently_defined_built_ins_are_onyx_managed() -> None:
-    """For now every built-in is Onyx-managed (seeded per tenant). When a future
-    built-in opts out (not an ``OnyxManagedExtApp``), update this deliberately."""
-    assert set(_MANAGED_APP_TYPES) == set(EXTERNAL_APP_BUILT_IN_SKILL_IDS)
+def test_all_built_ins_are_onyx_managed() -> None:
+    """Every built-in skill id has a registered provider, and all are currently
+    Onyx-managed (seeded per tenant). When a future built-in opts out (not an
+    ``OnyxManagedExtApp``, e.g. admins supply their own OAuth app), update this
+    deliberately."""
+    built_in = set(EXTERNAL_APP_BUILT_IN_SKILL_IDS)
+    assert set(PROVIDERS) == built_in  # provider registry ↔ built-in skill ids
+    assert set(_MANAGED_APP_TYPES) == built_in
 
 
 def test_provisions_all_built_ins_disabled_with_credentials(

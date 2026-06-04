@@ -2,6 +2,8 @@ from typing import Any
 
 import requests
 
+from onyx.configs.app_configs import EXT_APP_GITHUB_CLIENT_ID
+from onyx.configs.app_configs import EXT_APP_GITHUB_CLIENT_SECRET
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -13,6 +15,7 @@ from onyx.external_apps.providers.base import AdminDescriptorSpec
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.base import OAuthFlowSpec
 from onyx.external_apps.providers.base import OAuthProviderSpec
+from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.base import OrgCredentialField
 from onyx.external_apps.providers.base import token_response_error
 
@@ -102,7 +105,7 @@ _ENDPOINTS: list[EndpointSpec] = [
 ]
 
 
-class GitHubProvider(OAuthExternalAppProvider):
+class GitHubProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
     spec = OAuthProviderSpec(
         app_type=ExternalAppType.GITHUB,
         app_name="GitHub",
@@ -149,6 +152,11 @@ class GitHubProvider(OAuthExternalAppProvider):
         ),
         endpoint_catalog=_ENDPOINTS,
     )
+
+    managed_org_credentials = {
+        "client_id": EXT_APP_GITHUB_CLIENT_ID,
+        "client_secret": EXT_APP_GITHUB_CLIENT_SECRET,
+    }
 
     # GitHub signals a dead refresh token with `bad_refresh_token` rather than
     # RFC-6749's `invalid_grant`; treat it as terminal so the user reconnects.
