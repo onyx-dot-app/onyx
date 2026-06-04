@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-// App management now lives at /craft/v1/apps/manage. Keep this route as a
-// redirect so existing links don't break.
+// /craft/v1/apps/admin was the shipped admin apps page before management moved
+// to /craft/v1/apps/manage; redirect so bookmarks to the old path still work.
 export default function ExternalAppsAdminRedirect() {
   const router = useRouter();
   useEffect(() => {
