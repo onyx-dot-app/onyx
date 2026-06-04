@@ -176,23 +176,6 @@ tiktoken.get_encoding('cl100k_base')"
 # Set up application files
 WORKDIR /app
 
-# Craft template setup runs BEFORE the bulk ./onyx copy so its 3-5 min
-# pip/npm install only invalidates on its own inputs, not on every PR.
-COPY --chown=onyx:onyx ./scripts/setup_craft_templates.sh /app/scripts/setup_craft_templates.sh
-RUN chmod +x /app/scripts/setup_craft_templates.sh
-COPY --chown=onyx:onyx \
-    ./onyx/server/features/build/sandbox/image/initial-requirements.txt \
-    /app/onyx/server/features/build/sandbox/image/initial-requirements.txt
-COPY --chown=onyx:onyx \
-    ./onyx/server/features/build/sandbox/image/templates \
-    /app/onyx/server/features/build/sandbox/image/templates
-RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Running Craft template setup at build time..." && \
-        ENABLE_CRAFT=true /app/scripts/setup_craft_templates.sh; \
-    fi
-ENV OUTPUTS_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/image/templates/outputs
-ENV VENV_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/image/templates/venv
-
 # Enterprise Version Files
 COPY --chown=onyx:onyx ./ee /app/ee
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf

@@ -129,7 +129,6 @@ repos:
       - id: shellcheck
         exclude: >-
           (?x)^(
-            backend/scripts/setup_craft_templates\.sh|
             deployment/docker_compose/init-letsencrypt\.sh
           )$
 

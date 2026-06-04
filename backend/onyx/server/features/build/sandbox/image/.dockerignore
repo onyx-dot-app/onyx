@@ -2,9 +2,6 @@
 # anything the Dockerfile COPYs (templates/, initial-requirements.txt,
 # sandbox_daemon/, *.sh, opencode-plugins/).
 
-# Generated venv template (built fresh in the backend image, never used here).
-templates/venv/
-
 # Not built into the image.
 README.md
 
