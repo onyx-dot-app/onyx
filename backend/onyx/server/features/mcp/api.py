@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from fastapi import Request
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth import TokenStorage
+from mcp.client.auth.oauth2 import OAuthContext
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.shared.auth import OAuthClientMetadata
 from mcp.shared.auth import OAuthMetadata
@@ -404,17 +405,6 @@ def _known_provider_oauth_metadata(mcp_server: DbMCPServer) -> OAuthMetadata | N
     )
 
 
-def _read_stored_token_expiry(connection_config_id: int) -> float | None:
-    """Read the persisted absolute access-token expiry for a connection config,
-    used to hydrate a fresh OAuth provider's expiry so the SDK enters its
-    refresh branch when the token is actually stale."""
-    with get_session_with_current_tenant() as db_session:
-        config = get_connection_config_by_id(connection_config_id, db_session)
-        config_data = extract_connection_data(config)
-        expires_at = config_data.get(MCPOAuthKeys.TOKEN_EXPIRES_AT.value)
-        return float(expires_at) if expires_at is not None else None
-
-
 class OnyxTokenStorage(TokenStorage):
     """
     store auth info in a particular user's connection config in postgres
@@ -423,6 +413,14 @@ class OnyxTokenStorage(TokenStorage):
     def __init__(self, connection_config_id: int, alt_config_id: int | None = None):
         self.alt_config_id = alt_config_id
         self.connection_config_id = connection_config_id
+        # Optional SDK context, bound by `make_oauth_provider`. When set,
+        # `get_tokens` hydrates its `token_expiry_time` from the same config
+        # read it already performs, so we never issue a separate query just to
+        # learn the token expiry.
+        self._oauth_context: OAuthContext | None = None
+
+    def bind_oauth_context(self, context: OAuthContext) -> None:
+        self._oauth_context = context
 
     def _ensure_connection_config(self, db_session: Session) -> MCPConnectionConfig:
         config = get_connection_config_by_id(self.connection_config_id, db_session)
@@ -434,6 +432,14 @@ class OnyxTokenStorage(TokenStorage):
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
             config_data = extract_connection_data(config)
+            # The SDK never derives expiry from stored tokens, so hydrate it
+            # here (while we hold the config) to drive its proactive-refresh
+            # decision. None clears any prior value (token has no known expiry).
+            if self._oauth_context is not None:
+                expires_at = config_data.get(MCPOAuthKeys.TOKEN_EXPIRES_AT.value)
+                self._oauth_context.token_expiry_time = (
+                    float(expires_at) if expires_at is not None else None
+                )
             tokens_raw = config_data.get(MCPOAuthKeys.TOKENS.value)
             if tokens_raw:
                 return OAuthToken.model_validate(tokens_raw)
@@ -450,6 +456,11 @@ class OnyxTokenStorage(TokenStorage):
             expires_at = _absolute_token_expiry(tokens)
             if expires_at is not None:
                 config_data[MCPOAuthKeys.TOKEN_EXPIRES_AT.value] = expires_at
+            else:
+                # Refresh response omitted expires_in; clear the stale absolute
+                # expiry so the next tool call does not treat the just-refreshed
+                # token as expired and trigger another needless refresh.
+                config_data.pop(MCPOAuthKeys.TOKEN_EXPIRES_AT.value, None)
             config_data["headers"] = {
                 "Authorization": f"{tokens.token_type} {tokens.access_token}"
             }
@@ -581,6 +592,7 @@ def make_oauth_provider(
         r.delete(key_auth_url(user_id), key_state(user_id))
         return code, state_obj.state
 
+    storage = OnyxTokenStorage(connection_config_id, admin_config_id)
     provider = OAuthClientProvider(
         server_url=mcp_server.server_url,
         client_metadata=OAuthClientMetadata(
@@ -590,7 +602,7 @@ def make_oauth_provider(
             response_types=["code"],
             scope=REQUESTED_SCOPE,  # TODO: do we need to pass this in? maybe make configurable
         ),
-        storage=OnyxTokenStorage(connection_config_id, admin_config_id),
+        storage=storage,
         redirect_handler=redirect_handler,
         callback_handler=callback_handler,
     )
@@ -601,12 +613,12 @@ def make_oauth_provider(
     #      (the SDK never sets expiry from stored tokens), so the proactive
     #      refresh branch never fires and an expired token only fails on a 401,
     #      which routes to full re-auth ("Please Reconnect") rather than refresh.
+    #      Bound to the storage so it is filled from the config read `get_tokens`
+    #      already does, rather than an extra query.
     #   2. KNOWN_PROVIDER OAuth metadata — without it the refresh request falls
     #      back to `<server-origin>/token`, which is wrong whenever the auth
     #      server lives on a different host (e.g. GCP).
-    stored_expiry = _read_stored_token_expiry(connection_config_id)
-    if stored_expiry is not None:
-        provider.context.token_expiry_time = stored_expiry
+    storage.bind_oauth_context(provider.context)
     known_metadata = _known_provider_oauth_metadata(mcp_server)
     if known_metadata is not None:
         provider.context.oauth_metadata = known_metadata
