@@ -152,7 +152,7 @@ def _get_available_tokens_for_persona(
 
 @router.get("/get-user-chat-sessions", tags=PUBLIC_API_TAGS)
 def get_user_chat_sessions(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.READ_CHAT)),
     db_session: Session = Depends(get_session),
     project_id: int | None = None,
     only_non_project_chats: bool = True,
@@ -268,7 +268,9 @@ def get_chat_session(
     session_id: UUID,
     is_shared: bool = False,
     include_deleted: bool = False,
-    user: User = Depends(current_chat_accessible_user),
+    user: User = Depends(
+        require_permission(Permission.READ_CHAT, allow_anonymous=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionDetailResponse:
     user_id = user.id
@@ -380,7 +382,9 @@ def get_chat_session(
 @router.post("/create-chat-session", tags=PUBLIC_API_TAGS)
 def create_new_chat_session(
     chat_session_creation_request: ChatSessionCreationRequest,
-    user: User = Depends(current_chat_accessible_user),
+    user: User = Depends(
+        require_permission(Permission.WRITE_CHAT, allow_anonymous=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> CreateChatSessionID:
     try:
@@ -561,7 +565,9 @@ def delete_chat_session_by_id(
 def handle_send_chat_message(
     chat_message_req: SendMessageRequest,
     request: Request,
-    user: User = Depends(current_chat_accessible_user),
+    user: User = Depends(
+        require_permission(Permission.WRITE_CHAT, allow_anonymous=True)
+    ),
     _rate_limit_check: None = Depends(check_token_rate_limits),
     _api_key_usage_check: None = Depends(check_api_key_usage),
     # Pins CURRENT_USER_ID_CONTEXTVAR in the event-loop context so it propagates
@@ -930,7 +936,7 @@ async def search_chats(
     query: str | None = Query(None),
     page: int = Query(1),
     page_size: int = Query(10),
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.READ_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> ChatSearchResponse:
     """
@@ -1008,7 +1014,7 @@ async def search_chats(
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
 def stop_chat_session(
     chat_session_id: UUID,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     """

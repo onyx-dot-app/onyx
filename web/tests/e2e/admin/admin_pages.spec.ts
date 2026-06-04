@@ -28,6 +28,22 @@ async function discoverAdminPages(page: Page): Promise<string[]> {
   });
 }
 
+/**
+ * Admin routes excluded from the parallel visual-regression sweep because other
+ * specs mutate their rendered content while this test is running.
+ *
+ * `/admin/indexing/status` renders the list of existing connectors. Several
+ * specs create file connectors mid-run via `apiClient.createFileConnector(...)`
+ * (agents, chat, permission-sync, inline file management), and since this
+ * `describe` block runs in parallel, a connector row appearing or disappearing
+ * during the screenshot yields non-deterministic baseline diffs. Excluding the
+ * page here keeps the sweep stable; a shared visual baseline isn't a good fit
+ * for a list whose contents depend on concurrent test state.
+ */
+const VISUAL_REGRESSION_EXCLUDED_PATHS = new Set<string>([
+  "/admin/indexing/status",
+]);
+
 for (const theme of THEMES) {
   test(`Admin pages – ${theme} mode`, async ({ page }) => {
     await setThemeBeforeNavigation(page, theme);
@@ -39,6 +55,9 @@ for (const theme of THEMES) {
     ).toBeGreaterThan(0);
 
     for (const href of adminHrefs) {
+      // Skip pages whose content is mutated by other specs running in parallel.
+      if (VISUAL_REGRESSION_EXCLUDED_PATHS.has(href)) continue;
+
       const slug = href.replace(/^\/admin\//, "").replace(/\//g, "--");
 
       await test.step(

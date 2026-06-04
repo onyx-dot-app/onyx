@@ -20,6 +20,7 @@ from typing import Any
 _BASE = "https://gmail.googleapis.com/gmail/v1/users/me/"
 _PAGE_SIZE = 100
 _DEFAULT_LIMIT = 25
+_HTTP_TIMEOUT_SECONDS = 180
 # Each listed message needs its own metadata GET (Gmail's list returns only
 # id/threadId), so fan them out concurrently rather than N sequential calls.
 _MAX_FETCH_WORKERS = 8
@@ -62,7 +63,7 @@ def _req(
     req = urllib.request.Request(  # noqa: S310 — fixed https base url
         url, data=data, method=method, headers=headers
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+    with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_SECONDS) as resp:  # noqa: S310
         raw = resp.read().decode("utf-8")
     return json.loads(raw) if raw.strip() else {}
 
@@ -113,6 +114,30 @@ def _extract_plain_body(payload: dict[str, Any]) -> str:
     return ""
 
 
+def _build_raw(
+    to: str, subject: str, body: str, cc: str | None, bcc: str | None
+) -> str:
+    """Build a base64url-encoded RFC 2822 message for send / draft writes."""
+    em = EmailMessage()
+    em["To"] = to
+    em["Subject"] = subject
+    if cc:
+        em["Cc"] = cc
+    if bcc:
+        em["Bcc"] = bcc
+    em.set_content(body)
+    return base64.urlsafe_b64encode(em.as_bytes()).decode("ascii")
+
+
+def _add_compose_args(sp: argparse.ArgumentParser) -> None:
+    """The to/subject/body/cc/bcc args shared by `send` and the draft writes."""
+    sp.add_argument("to")
+    sp.add_argument("subject")
+    sp.add_argument("body")
+    sp.add_argument("--cc", help="comma-separated emails")
+    sp.add_argument("--bcc", help="comma-separated emails")
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="gmail_api.py", description="Gmail.")
     p.add_argument("--raw", action="store_true", help="don't prune empty fields")
@@ -127,11 +152,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("message_id")
 
     sp = sub.add_parser("send", help="send an email (write)")
-    sp.add_argument("to")
-    sp.add_argument("subject")
-    sp.add_argument("body")
-    sp.add_argument("--cc", help="comma-separated emails")
-    sp.add_argument("--bcc", help="comma-separated emails")
+    _add_compose_args(sp)
 
     sub.add_parser("labels", help="list labels")
 
@@ -144,6 +165,33 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("message_id")
 
     sub.add_parser("profile", help="the connected user's Gmail profile")
+
+    sp = sub.add_parser("thread", help="one conversation thread with decoded bodies")
+    sp.add_argument("thread_id")
+
+    sp = sub.add_parser("attachment", help="download a message attachment")
+    sp.add_argument("message_id")
+    sp.add_argument("attachment_id")
+    sp.add_argument("--out", help="write the decoded bytes to this file path")
+
+    sp = sub.add_parser("drafts", help="list drafts")
+    sp.add_argument("--limit", type=int, default=_DEFAULT_LIMIT)
+
+    sp = sub.add_parser("draft", help="one draft with decoded body")
+    sp.add_argument("draft_id")
+
+    sp = sub.add_parser("draft-create", help="save a new draft (write, not sent)")
+    _add_compose_args(sp)
+
+    sp = sub.add_parser("draft-update", help="replace a draft (write, not sent)")
+    sp.add_argument("draft_id")
+    _add_compose_args(sp)
+
+    sp = sub.add_parser("draft-delete", help="delete a draft (write)")
+    sp.add_argument("draft_id")
+
+    sp = sub.add_parser("draft-send", help="send an existing draft (write)")
+    sp.add_argument("draft_id")
 
     sp = sub.add_parser("call", help="raw Gmail request")
     sp.add_argument("method", choices=_METHODS)
@@ -166,6 +214,27 @@ def _message_summary(ref: dict[str, Any]) -> dict[str, Any]:
         "snippet": msg.get("snippet"),
         "headers": _headers_to_dict(msg.get("payload", {}).get("headers", [])),
     }
+
+
+def _message_detail(msg: dict[str, Any]) -> dict[str, Any]:
+    """Reduce a `format=full` message to id/headers/decoded body."""
+    payload = msg.get("payload", {})
+    return {
+        "id": msg.get("id"),
+        "threadId": msg.get("threadId"),
+        "labelIds": msg.get("labelIds"),
+        "snippet": msg.get("snippet"),
+        "headers": _headers_to_dict(payload.get("headers", [])),
+        "body": _extract_plain_body(payload),
+    }
+
+
+def _draft_summary(draft: dict[str, Any]) -> dict[str, Any]:
+    """Fetch the underlying message metadata for one listed draft."""
+    msg_ref = draft.get("message") or {}
+    if not msg_ref.get("id"):
+        return {"draftId": draft.get("id")}
+    return {"draftId": draft.get("id"), **_message_summary(msg_ref)}
 
 
 def _cmd_messages(a: argparse.Namespace) -> dict[str, Any]:
@@ -207,29 +276,10 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
             f"messages/{_seg(a.message_id)}",
             params={"format": "full"},
         )
-        payload = msg.get("payload", {})
-        return {
-            "ok": True,
-            "message": {
-                "id": msg.get("id"),
-                "threadId": msg.get("threadId"),
-                "labelIds": msg.get("labelIds"),
-                "snippet": msg.get("snippet"),
-                "headers": _headers_to_dict(payload.get("headers", [])),
-                "body": _extract_plain_body(payload),
-            },
-        }
+        return {"ok": True, "message": _message_detail(msg)}
 
     if a.cmd == "send":
-        em = EmailMessage()
-        em["To"] = a.to
-        em["Subject"] = a.subject
-        if a.cc:
-            em["Cc"] = a.cc
-        if a.bcc:
-            em["Bcc"] = a.bcc
-        em.set_content(a.body)
-        raw = base64.urlsafe_b64encode(em.as_bytes()).decode("ascii")
+        raw = _build_raw(a.to, a.subject, a.body, a.cc, a.bcc)
         sent = _req("POST", "messages/send", body={"raw": raw})
         return {"ok": True, "sent": sent}
 
@@ -254,6 +304,80 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
 
     if a.cmd == "profile":
         return {"ok": True, "profile": _req("GET", "profile")}
+
+    if a.cmd == "thread":
+        thread = _req("GET", f"threads/{_seg(a.thread_id)}", params={"format": "full"})
+        return {
+            "ok": True,
+            "thread": {
+                "id": thread.get("id"),
+                "messages": [_message_detail(m) for m in thread.get("messages") or []],
+            },
+        }
+
+    if a.cmd == "attachment":
+        att = _req(
+            "GET",
+            f"messages/{_seg(a.message_id)}/attachments/{_seg(a.attachment_id)}",
+        )
+        size = att.get("size")
+        data = att.get("data")
+        if not a.out:
+            # Binary bytes don't belong on stdout; require --out to materialise
+            # them and otherwise just report what's available.
+            return {"ok": True, "size": size, "saved": False, "out": None}
+        if not data:
+            # No bytes to write — don't leave a zero-byte file looking like success.
+            return {"ok": False, "error": "no_attachment_data", "size": size}
+        pad = "=" * (-len(data) % 4)
+        raw_bytes = base64.urlsafe_b64decode(data + pad)
+        with open(a.out, "wb") as fh:
+            fh.write(raw_bytes)
+        return {"ok": True, "size": size, "saved": True, "out": a.out}
+
+    if a.cmd == "drafts":
+        listed = _list_ids("drafts", {}, "drafts", a.limit)
+        refs = listed["items"]
+        with ThreadPoolExecutor(
+            max_workers=min(_MAX_FETCH_WORKERS, len(refs) or 1)
+        ) as pool:
+            summaries = list(pool.map(_draft_summary, refs))
+        return {
+            "ok": True,
+            "items": summaries,
+            "count": len(summaries),
+            "truncated": listed["truncated"],
+        }
+
+    if a.cmd == "draft":
+        draft = _req("GET", f"drafts/{_seg(a.draft_id)}", params={"format": "full"})
+        return {
+            "ok": True,
+            "draft": {
+                "id": draft.get("id"),
+                "message": _message_detail(draft.get("message", {})),
+            },
+        }
+
+    if a.cmd == "draft-create":
+        raw = _build_raw(a.to, a.subject, a.body, a.cc, a.bcc)
+        draft = _req("POST", "drafts", body={"message": {"raw": raw}})
+        return {"ok": True, "draft": draft}
+
+    if a.cmd == "draft-update":
+        raw = _build_raw(a.to, a.subject, a.body, a.cc, a.bcc)
+        draft = _req(
+            "PUT", f"drafts/{_seg(a.draft_id)}", body={"message": {"raw": raw}}
+        )
+        return {"ok": True, "draft": draft}
+
+    if a.cmd == "draft-delete":
+        _req("DELETE", f"drafts/{_seg(a.draft_id)}")
+        return {"ok": True, "deleted": a.draft_id}
+
+    if a.cmd == "draft-send":
+        sent = _req("POST", "drafts/send", body={"id": a.draft_id})
+        return {"ok": True, "sent": sent}
 
     # `call` raw escape hatch
     body = None

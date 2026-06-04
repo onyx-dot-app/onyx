@@ -3,18 +3,32 @@
 # User-shared sandbox: one pod per user, sessions created via kubectl exec.
 # See docs/craft/sandbox/image-and-spinup.md for image-layer rationale.
 
-FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
+# Registry prefix for base images. Defaults to Docker Hub; CI overrides this to
+# the ECR pull-through cache
+# (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker Hub
+# rate limits.
+ARG BASE_IMAGE_REGISTRY=docker.io
+
+# bun + s5cmd binary sources. Pinned via the registry prefix in their own stages
+# because buildx rejects variable expansion directly in `COPY --from=` -- the
+# ARG is only expandable in a FROM.
+FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
+FROM ${BASE_IMAGE_REGISTRY}/peakcom/s5cmd:v2.3.0@sha256:2ff939e2ee3c76adcadd78dbfc3e2569b18a3743ed9dcfccb1ec589af7fb9903 AS s5cmd_source
+
+FROM ${BASE_IMAGE_REGISTRY}/library/node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
 
 # Set ENABLE_SKILLS=false in dev/CI to skip skill-runtime deps (LibreOffice,
-# poppler, fonts, pptxgenjs) and shave ~700 MB. Skills themselves are pushed
-# by the API server at session-setup, but their runtime tools must already
-# be in the image.
+# poppler, fonts, pptxgenjs) and shave ~700 MB. Skills themselves are pushed by
+# the API server at session-setup, but their runtime tools must already be in
+# the image.
 ARG ENABLE_SKILLS=true
 ARG OPENCODE_VERSION=1.15.7
 
 # Install system dependencies.
-# firewall-init.sh needs: iptables (egress lockdown), gosu (drop privileges
-# in compose entrypoint mode), ca-certificates (CA trust-store population).
+# firewall-init.sh needs: iptables (egress lockdown), libcap2-bin (capsh to drop
+# CAP_NET_ADMIN/SETPCAP from the bounding set in compose entrypoint mode), gosu
+# (kept for compatibility / future drops), ca-certificates (CA trust-store
+# population).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -26,6 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libc6-dev \
     iptables \
+    libcap2-bin \
     gosu \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -81,11 +96,9 @@ RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     rm -rf /root/.npm; \
     fi
 
-COPY --from=oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 \
-    /usr/local/bin/bun /usr/local/bin/bun
-
-COPY --from=peakcom/s5cmd:v2.3.0@sha256:2ff939e2ee3c76adcadd78dbfc3e2569b18a3743ed9dcfccb1ec589af7fb9903 \
-    /s5cmd /usr/local/bin/s5cmd
+# bun + s5cmd copied from the binary-source stages defined at the top of this file.
+COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=s5cmd_source /s5cmd /usr/local/bin/s5cmd
 
 USER sandbox
 RUN curl -fsSL https://opencode.ai/install \

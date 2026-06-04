@@ -252,7 +252,6 @@ class StubSandboxManager(SandboxManager):
         skills_section: str,
         snapshot_path: str | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> None:
         self.setup_session_workspace_count += 1
         self.last_setup_session_workspace_payload = {
@@ -263,7 +262,6 @@ class StubSandboxManager(SandboxManager):
             "skills_section": skills_section,
             "snapshot_path": snapshot_path,
             "user_name": user_name,
-            "user_role": user_role,
         }
         if not self.setup_session_workspace_silent:
             raise _not_configured("setup_session_workspace")
@@ -377,6 +375,7 @@ class StubSandboxManager(SandboxManager):
         agent_provider: str | None = None,
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
+        should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         self.send_message_count += 1
         self.last_send_message_payload = {
@@ -387,6 +386,7 @@ class StubSandboxManager(SandboxManager):
             "agent_provider": agent_provider,
             "agent_model": agent_model,
             "on_opencode_session_resolved": on_opencode_session_resolved,
+            "should_interrupt": should_interrupt,
         }
         if self._send_message_events is None:
             raise _not_configured("send_message")

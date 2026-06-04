@@ -26,6 +26,7 @@ import pytest
 from mitmproxy import http
 from redis.exceptions import RedisError
 
+from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.external_apps.matching.engine import RequestMatch
@@ -126,7 +127,8 @@ def _assert_403(flow: http.HTTPFlow, expected_code: SandboxProxyError) -> None:
     content = flow.response.content
     assert content is not None
     body = json.loads(content)
-    assert body == {"error": expected_code.value}
+    assert body["error"] == expected_code.value
+    assert body["message"]
 
 
 _MATCH = make_request_match(payload={"text": "hi"})
@@ -467,6 +469,211 @@ async def test_ask_denied_blocks(
 
     assert spy.approval_ran  # required approval before blocking
     _assert_403(flow, expected_code)
+    assert spy.dispatched == []
+
+
+# ---------------------------------------------------------------------------
+# request() — scheduled-task pre-approval short-circuit
+#
+# The grant lookup (`get_live_scheduled_run_grants`) is stubbed here; its
+# SQL is covered against real Postgres in
+# external_dependency_unit/craft/test_scheduled_task_pre_approvals.py.
+# ---------------------------------------------------------------------------
+
+
+_RUN_ID = UUID("55555555-5555-5555-5555-555555555555")
+# make_request_match defaults external_app_id=42.
+_GRANTED_APP_ID = 42
+
+
+def _stub_grants(
+    monkeypatch: pytest.MonkeyPatch,
+    result: tuple[UUID, list[int]] | None | Exception,
+) -> list[UUID]:
+    """Stub the gate's grant lookup; returns the recorded session_ids."""
+    calls: list[UUID] = []
+
+    def _lookup(*, db_session: Any, session_id: UUID) -> tuple[UUID, list[int]] | None:  # noqa: ARG001
+        calls.append(session_id)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(gate_mod, "get_live_scheduled_run_grants", _lookup)
+    return calls
+
+
+def _spy_pre_approve_insert(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Capture insert_action_approval kwargs (the DB session is a MagicMock)."""
+    inserted: list[dict[str, Any]] = []
+
+    def _fake_insert(db: Any, **kwargs: Any) -> Any:  # noqa: ARG001
+        inserted.append(kwargs)
+        row = MagicMock()
+        row.approval_id = uuid4()
+        return row
+
+    monkeypatch.setattr(
+        gate_mod.action_approval, "insert_action_approval", _fake_insert
+    )
+    return inserted
+
+
+@pytest.mark.asyncio
+async def test_pre_approved_scheduled_run_skips_park(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Granted app on a RUNNING scheduled run: forwarded immediately with a
+    pre-decided APPROVED row — the park pipeline never runs."""
+    user_id = uuid4()
+    sandbox = _sandbox(user_id=user_id)
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    spy = _spy_pipeline(addon, monkeypatch)
+    _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    inserted = _spy_pre_approve_insert(monkeypatch)
+    notified: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        gate_mod, "create_notification", lambda **kw: notified.append(kw)
+    )
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    assert flow.response is None  # forwarded
+    assert not spy.approval_ran  # park pipeline skipped
+    assert spy.awaited == []
+    assert spy.dispatched == [(_MATCH, user_id, sandbox.tenant_id)]
+    assert len(inserted) == 1
+    assert inserted[0]["decision"] == ApprovalDecision.APPROVED
+    assert inserted[0]["decided_via"] == ApprovalDecidedVia.PRE_APPROVAL
+    assert inserted[0]["external_app_id"] == _GRANTED_APP_ID
+    # Dedup contract: additional_data is exactly the stable (run, app) pair.
+    assert len(notified) == 1
+    assert notified[0]["additional_data"] == {
+        "run_id": str(_RUN_ID),
+        "external_app_id": _GRANTED_APP_ID,
+    }
+
+
+@pytest.mark.asyncio
+async def test_grant_lookup_cached_across_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The per-session grant cache is consulted before Postgres: two gated
+    requests on the same session hit the DB lookup only once."""
+    sandbox = _sandbox()
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    _spy_pipeline(addon, monkeypatch)
+    lookup_calls = _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    _spy_pre_approve_insert(monkeypatch)
+    monkeypatch.setattr(
+        gate_mod,
+        "create_notification",
+        lambda **kw: None,  # noqa: ARG005
+    )
+
+    await addon.request(_flow(proxy_auth=_basic_auth(_TAG_UUID)))
+    await addon.request(_flow(proxy_auth=_basic_auth(_TAG_UUID)))
+
+    assert lookup_calls == [UUID(_TAG_UUID)]  # second request served from cache
+
+
+def test_grant_lookup_cache_keyed_on_session_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The cache key is ``session_id`` alone (not the db handle): the same
+    session re-queried with a fresh db hits cache, a different session misses.
+    Guards the key lambda against leaking one session's grants to another."""
+    addon = _build(
+        resolver=_StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID)),
+        matcher=_StubMatcher(result=_MATCH),
+    )
+    lookup_calls = _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    s1, s2 = uuid4(), uuid4()
+
+    addon._live_grants(MagicMock(), s1)
+    addon._live_grants(MagicMock(), s1)  # same session, different db -> cache hit
+    addon._live_grants(MagicMock(), s2)  # different session -> miss
+
+    assert lookup_calls == [s1, s2]
+
+
+@pytest.mark.asyncio
+async def test_pre_approval_dispatch_failure_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dispatch raising after the APPROVED row is committed blocks (403) — it
+    must not let mitmproxy forward the original request."""
+    resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    _spy_pipeline(addon, monkeypatch)
+    _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    _spy_pre_approve_insert(monkeypatch)
+    monkeypatch.setattr(
+        gate_mod,
+        "create_notification",
+        lambda **kw: None,  # noqa: ARG005
+    )
+
+    def _boom(*args: Any, **kwargs: Any) -> None:  # noqa: ARG001
+        raise RuntimeError("credential refresh failed")
+
+    monkeypatch.setattr(addon, "_dispatch_injection_or_block", _boom)
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.INTERNAL_ERROR)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "grants",
+    [
+        None,  # not a scheduled run (or run not RUNNING)
+        (_RUN_ID, []),  # scheduled run, app not granted
+        (_RUN_ID, [_GRANTED_APP_ID + 1]),  # different app granted
+        RuntimeError("db down"),  # lookup failure → fail-to-ask
+    ],
+    ids=["no_live_run", "no_grants", "other_app", "lookup_error"],
+)
+async def test_no_pre_approval_falls_through_to_park(
+    monkeypatch: pytest.MonkeyPatch,
+    grants: tuple[UUID, list[int]] | None | Exception,
+) -> None:
+    """Every non-granted shape (including a lookup crash) parks as usual."""
+    resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.REJECTED)
+    _stub_grants(monkeypatch, grants)
+    inserted = _spy_pre_approve_insert(monkeypatch)
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    assert spy.approval_ran  # normal park pipeline
+    _assert_403(flow, SandboxProxyError.USER_REJECTED)
+    assert inserted == []  # no pre-decided row minted
+
+
+@pytest.mark.asyncio
+async def test_deny_wins_over_pre_approval_grant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Admin DENY blocks before the grant lookup is ever consulted."""
+    resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH_DENY))
+    spy = _spy_pipeline(addon, monkeypatch)
+    lookup_calls = _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.POLICY_DENIED)
+    assert lookup_calls == []  # DENY fires before the short-circuit
+    assert not spy.approval_ran
     assert spy.dispatched == []
 
 
@@ -1066,6 +1273,7 @@ def test_persist_approval_row_commits_announces_notifies(
         "actions": [a.model_dump(mode="json") for a in _MATCH.actions],
         "app_name": _MATCH.app_name,
         "payload": _MATCH.payload,
+        "external_app_id": _MATCH.external_app_id,
     }
 
     # insert -> commit -> rpush: announce must not precede the commit,

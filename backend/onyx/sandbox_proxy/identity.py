@@ -1,17 +1,16 @@
-"""Source-IP → sandbox identity + in-band session resolution.
+"""Source-IP -> sandbox identity + in-band session resolution.
 
-`IdentityResolver` splits resolution in two so non-gated traffic (npm
-install, apt update) can flow once the pod is identified, while only
-gated traffic needs a resolvable session:
+`IdentityResolver` splits resolution in two so non-gated traffic (npm install,
+apt update) can flow once the pod is identified, while only gated traffic needs
+a resolvable session:
 
-* `resolve_sandbox()` — pod IP → sandbox + user + tenant; enforces
-  "only known sandbox pods may egress".
-* `resolve_session_by_id()` — validate the in-band session tag against
-  its owner to route the approval card.
+- `resolve_sandbox()` — pod IP -> sandbox + user + tenant; enforces "only known
+  sandbox pods may egress".
+- `resolve_session_by_id()` — validate the in-band session tag against its owner
+  to route the approval card.
 
-There is deliberately no most-recent-active fallback: a gated request
-with no verifiable session tag fails closed rather than routing to a
-guessed session.
+There is deliberately no most-recent-active fallback: a gated request with no
+verifiable session tag fails closed rather than routing to a guessed session.
 """
 
 from dataclasses import dataclass
@@ -69,7 +68,9 @@ class SessionContext:
     sandbox_ip: str
 
     def without_session(self) -> ResolvedSandbox:
-        """Inverse of `ResolvedSandbox.with_session(...)` — drops the session id."""
+        """
+        Inverse of `ResolvedSandbox.with_session(...)` — drops the session id.
+        """
         return ResolvedSandbox(
             sandbox_id=self.sandbox_id,
             user_id=self.user_id,
@@ -80,7 +81,7 @@ class SessionContext:
 
 
 class SandboxIPLookup(Protocol):
-    """Backend-specific IP → SandboxIdentity resolver.
+    """Backend-specific IP -> SandboxIdentity resolver.
 
     Implementations must return `None` for unknown IPs and have
     `wait_for_initial_sync` block until the cache is populated.
@@ -102,9 +103,12 @@ class IdentityResolver:
         self._ip_lookup = ip_lookup
 
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None:
-        """Pod IP → owning user + tenant; `None` if IP unknown or sandbox has no owner.
+        """
+        Pod IP -> owning user + tenant; `None` if IP unknown or sandbox has no
+        owner.
 
-        Session liveness is deliberately not checked here — gate the call site instead.
+        Session liveness is deliberately not checked here — gate the call site
+        instead.
         """
         identity = self._ip_lookup.lookup(src_ip)
         if identity is None:
@@ -128,13 +132,12 @@ class IdentityResolver:
     def resolve_session_by_id(
         self, session_id: UUID, user_id: UUID, tenant_id: str
     ) -> UUID | None:
-        """Validate a sandbox-supplied `BuildSession` id against its owner.
+        """Validates a sandbox-supplied `BuildSession` id against its owner.
 
-        The id arrives in-band (the `Proxy-Authorization` username, set by
-        the `session-proxy-tag` opencode plugin) and is forgeable, so it is
-        trusted only if its `user_id` matches the user resolved from the
-        source IP. This bounds a tampered tag to the same user; mismatches
-        fail closed.
+        The id arrives in-band (the `Proxy-Authorization` username, set by the
+        `session-proxy-tag` opencode plugin) and is forgeable, so it is trusted
+        only if its `user_id` matches the user resolved from the source IP. This
+        bounds a tampered tag to the same user; mismatches fail closed.
 
         Status is intentionally not filtered: this is the session that
         originated the egress regardless of its current status.

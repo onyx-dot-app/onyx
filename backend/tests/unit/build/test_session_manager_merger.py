@@ -1,4 +1,4 @@
-"""Unit tests for `SessionManager._merge_events_with_announces`.
+"""Unit tests for `streaming._merge_events_with_announces`.
 
 The merger is a generator that interleaves a synchronous event iterator with
 approval-announce events drained from a Redis-style BLPOP. Two daemon threads
@@ -17,8 +17,7 @@ from uuid import uuid4
 import pytest
 
 from onyx.server.features.build.api.packets import ApprovalRequestedPacket
-from onyx.server.features.build.session import manager as manager_mod
-from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session import streaming as streaming_mod
 
 
 def _collect_with_timeout(
@@ -46,14 +45,14 @@ def _collect_with_timeout(
 
 def _stub_get_cache_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        manager_mod,
+        streaming_mod,
         "get_cache_backend",
         lambda tenant_id: MagicMock(),  # noqa: ARG005 — kwarg name must match production caller
     )
 
 
 def _stub_pop_announcement(monkeypatch: pytest.MonkeyPatch, fn: Any) -> None:
-    monkeypatch.setattr(manager_mod.approval_cache, "pop_announcement", fn)
+    monkeypatch.setattr(streaming_mod.approval_cache, "pop_announcement", fn)
 
 
 def _always_none(_session_id: UUID, timeout_s: int, cache: Any) -> UUID | None:  # noqa: ARG001 — kwarg name must match production caller
@@ -72,7 +71,7 @@ def test_events_only_pass_through(monkeypatch: pytest.MonkeyPatch) -> None:
         yield "c"
 
     out = _collect_with_timeout(
-        SessionManager._merge_events_with_announces(
+        streaming_mod._merge_events_with_announces(
             events(), session_id=uuid4(), tenant_id="public"
         )
     )
@@ -108,7 +107,7 @@ def test_announce_emitted_as_approval_requested_packet(
         yield "events-end"
 
     out = _collect_with_timeout(
-        SessionManager._merge_events_with_announces(
+        streaming_mod._merge_events_with_announces(
             events(), session_id=session_id, tenant_id="public"
         )
     )
@@ -165,7 +164,7 @@ def test_interleaving_events_and_announce(
         yield "y"
 
     out = _collect_with_timeout(
-        SessionManager._merge_events_with_announces(
+        streaming_mod._merge_events_with_announces(
             events(), session_id=session_id, tenant_id="public"
         )
     )
@@ -188,7 +187,7 @@ def test_terminates_when_event_iterator_ends(
 
     # Generator must finish even though the announce thread would BLPOP forever.
     out = _collect_with_timeout(
-        SessionManager._merge_events_with_announces(
+        streaming_mod._merge_events_with_announces(
             events(), session_id=uuid4(), tenant_id="public"
         ),
         timeout_s=1.0,
@@ -209,7 +208,7 @@ def test_no_deadlock_when_announce_thread_sees_nothing(
         yield "q"
 
     out = _collect_with_timeout(
-        SessionManager._merge_events_with_announces(
+        streaming_mod._merge_events_with_announces(
             events(), session_id=uuid4(), tenant_id="public"
         )
     )
@@ -265,7 +264,7 @@ def test_pop_announcement_exception_is_swallowed(
         yield "still-ok"
 
     out = _collect_with_timeout(
-        SessionManager._merge_events_with_announces(
+        streaming_mod._merge_events_with_announces(
             events(), session_id=uuid4(), tenant_id="public"
         )
     )

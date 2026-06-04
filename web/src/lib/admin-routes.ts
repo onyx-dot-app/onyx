@@ -3,7 +3,6 @@ import {
   SvgActions,
   SvgActivity,
   SvgAudio,
-  SvgBlocks,
   SvgShareWebhook,
   SvgBarChart,
   SvgBookOpen,
@@ -83,12 +82,6 @@ export const ADMIN_ROUTES = {
     icon: SvgOnyxOctagon,
     title: "Agents",
     sidebarLabel: "Agents",
-  },
-  SKILLS: {
-    path: "/admin/skills",
-    icon: SvgBlocks,
-    title: "Skills",
-    sidebarLabel: "Skills",
   },
   SLACK_BOTS: {
     path: "/admin/bots",

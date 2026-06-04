@@ -37,13 +37,13 @@ import base64
 import binascii
 import hashlib
 import io
+import ipaddress
 import json
 import mimetypes
 import os
 import re
 import secrets
 import shlex
-import socket
 import tarfile
 import threading
 import time
@@ -76,6 +76,7 @@ from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_LIMIT
 from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_REQUEST
 from onyx.server.features.build.configs import SANDBOX_PROXY_CA_CONFIGMAP
 from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
+from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
@@ -152,25 +153,8 @@ _PROXY_ALIAS = "sandbox-proxy"
 _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
 
 
-_PROXY_DNS_RETRY_ATTEMPTS = 5
-_PROXY_DNS_RETRY_BACKOFF_S = 0.5
-
-
-def _resolve_proxy_ip() -> str:
-    if not SANDBOX_PROXY_HOST:
-        raise RuntimeError("_resolve_proxy_ip called without SANDBOX_PROXY_HOST")
-    last_err: OSError | None = None
-    for attempt in range(_PROXY_DNS_RETRY_ATTEMPTS):
-        try:
-            return socket.gethostbyname(SANDBOX_PROXY_HOST)
-        except OSError as e:
-            last_err = e
-            if attempt < _PROXY_DNS_RETRY_ATTEMPTS - 1:
-                time.sleep(_PROXY_DNS_RETRY_BACKOFF_S * (2**attempt))
-    raise RuntimeError(
-        f"failed to resolve SANDBOX_PROXY_HOST={SANDBOX_PROXY_HOST!r} "
-        f"after {_PROXY_DNS_RETRY_ATTEMPTS} attempts: {last_err}"
-    )
+_PROXY_RESOLVE_RETRY_ATTEMPTS = 5
+_PROXY_RESOLVE_RETRY_BACKOFF_S = 0.5
 
 
 # Loopback only: the firewall permits nothing else to bypass the proxy, and the
@@ -196,8 +180,6 @@ def _placeholder_llm_configs(
 
 
 def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
-    if not SANDBOX_PROXY_HOST:
-        return []
     proxy_url = f"http://{_PROXY_ALIAS}:{SANDBOX_PROXY_PORT}"
     no_proxy = _NO_PROXY
     return [
@@ -358,6 +340,7 @@ fi
 set -e
 cd {session_path}/outputs/web
 {install_check}
+export WEBAPP_ASSET_PREFIX="/api/build/sessions/$(basename {session_path})/webapp"
 echo "Starting Next.js dev server on port {nextjs_port}..."
 nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
@@ -561,7 +544,6 @@ class KubernetesSandboxManager(SandboxManager):
         nextjs_port: int | None = None,
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> str:
         """Load and populate agent instructions from template file."""
         return generate_agent_instructions(
@@ -572,7 +554,6 @@ class KubernetesSandboxManager(SandboxManager):
             nextjs_port=nextjs_port,
             disabled_tools=disabled_tools,
             user_name=user_name,
-            user_role=user_role,
         )
 
     def _create_sandbox_pod(
@@ -635,16 +616,10 @@ class KubernetesSandboxManager(SandboxManager):
                 client.V1VolumeMount(
                     name="managed", mount_path="/workspace/managed", read_only=True
                 ),
-                *(
-                    [
-                        client.V1VolumeMount(
-                            name=_PROXY_CA_BUNDLE_VOLUME,
-                            mount_path=_PROXY_CA_BUNDLE_DIR,
-                            read_only=True,
-                        )
-                    ]
-                    if SANDBOX_PROXY_HOST
-                    else []
+                client.V1VolumeMount(
+                    name=_PROXY_CA_BUNDLE_VOLUME,
+                    mount_path=_PROXY_CA_BUNDLE_DIR,
+                    read_only=True,
                 ),
             ],
             resources=client.V1ResourceRequirements(
@@ -720,16 +695,10 @@ class KubernetesSandboxManager(SandboxManager):
                     name="workspace", mount_path="/workspace/sessions"
                 ),
                 client.V1VolumeMount(name="managed", mount_path="/workspace/managed"),
-                *(
-                    [
-                        client.V1VolumeMount(
-                            name=_PROXY_CA_BUNDLE_VOLUME,
-                            mount_path=_PROXY_CA_BUNDLE_DIR,
-                            read_only=True,
-                        )
-                    ]
-                    if SANDBOX_PROXY_HOST
-                    else []
+                client.V1VolumeMount(
+                    name=_PROXY_CA_BUNDLE_VOLUME,
+                    mount_path=_PROXY_CA_BUNDLE_DIR,
+                    read_only=True,
                 ),
             ],
             resources=client.V1ResourceRequirements(
@@ -766,34 +735,30 @@ class KubernetesSandboxManager(SandboxManager):
             ),
         ]
 
-        init_containers: list[client.V1Container] = []
-        host_aliases: list[client.V1HostAlias] | None = None
-        if SANDBOX_PROXY_HOST:
-            init_containers.append(_proxy_init_container())
-            volumes.extend(
-                [
-                    client.V1Volume(
-                        name=_PROXY_CA_SOURCE_VOLUME,
-                        config_map=client.V1ConfigMapVolumeSource(
-                            name=SANDBOX_PROXY_CA_CONFIGMAP,
-                            optional=False,
-                        ),
+        volumes.extend(
+            [
+                client.V1Volume(
+                    name=_PROXY_CA_SOURCE_VOLUME,
+                    config_map=client.V1ConfigMapVolumeSource(
+                        name=SANDBOX_PROXY_CA_CONFIGMAP,
+                        optional=False,
                     ),
-                    client.V1Volume(
-                        name=_PROXY_CA_BUNDLE_VOLUME,
-                        empty_dir=client.V1EmptyDirVolumeSource(),
-                    ),
-                ]
-            )
-            # kubelet injects hostAliases into every container's /etc/hosts;
-            # initContainer mutations don't propagate, so we set it here.
-            host_aliases = [
-                client.V1HostAlias(ip=_resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
+                ),
+                client.V1Volume(
+                    name=_PROXY_CA_BUNDLE_VOLUME,
+                    empty_dir=client.V1EmptyDirVolumeSource(),
+                ),
             ]
+        )
+        # kubelet injects hostAliases into every container's /etc/hosts;
+        # initContainer mutations don't propagate, so we set it here.
+        host_aliases = [
+            client.V1HostAlias(ip=self._resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
+        ]
 
         pod_spec = client.V1PodSpec(
             service_account_name=self._service_account,
-            init_containers=init_containers or None,
+            init_containers=[_proxy_init_container()],
             containers=[sandbox_container, sidecar_container],
             host_aliases=host_aliases,
             share_process_namespace=False,
@@ -862,12 +827,16 @@ class KubernetesSandboxManager(SandboxManager):
 
         service_name = self._get_service_name(sandbox_id_str)
 
-        # Build port list: opencode-serve + all session Next.js ports
         ports = [
             client.V1ServicePort(
                 name="opencode",
                 port=OPENCODE_SERVE_PORT,
                 target_port=OPENCODE_SERVE_PORT,
+            ),
+            client.V1ServicePort(
+                name="push-daemon",
+                port=PUSH_DAEMON_PORT,
+                target_port=PUSH_DAEMON_PORT,
             ),
         ]
 
@@ -1258,6 +1227,17 @@ class KubernetesSandboxManager(SandboxManager):
 
         pod_name = self._get_pod_name(str(sandbox_id))
 
+        if not onyx_pat:
+            raise ValueError("onyx_pat is required for Kubernetes sandbox provisioning")
+        if not SANDBOX_API_SERVER_URL:
+            raise ValueError(
+                "SANDBOX_API_SERVER_URL must be set for Kubernetes sandbox provisioning"
+            )
+        if not SANDBOX_PROXY_HOST:
+            raise ValueError(
+                "SANDBOX_PROXY_HOST must be set for Kubernetes sandbox provisioning"
+            )
+
         # Check if pod already exists and is healthy (idempotency check)
         if self._pod_exists_and_healthy(pod_name):
             logger.info(
@@ -1272,6 +1252,12 @@ class KubernetesSandboxManager(SandboxManager):
                 raise RuntimeError(
                     f"Timeout waiting for existing sandbox pod {pod_name} to become ready"
                 )
+
+            # Reusing a live pod: clear any stale tombstone so event-bus
+            # creation can attach. A stale password heals via the 401 path in
+            # the readiness probe below.
+            with self._event_buses_lock:
+                self._terminated_sandboxes.discard(sandbox_id)
 
             if not self._wait_for_opencode_serve_ready(sandbox_id):
                 raise RuntimeError(
@@ -1288,13 +1274,6 @@ class KubernetesSandboxManager(SandboxManager):
                 last_heartbeat=None,
             )
 
-        if not onyx_pat:
-            raise ValueError("onyx_pat is required for Kubernetes sandbox provisioning")
-        if not SANDBOX_API_SERVER_URL:
-            raise ValueError(
-                "SANDBOX_API_SERVER_URL must be set for Kubernetes sandbox provisioning"
-            )
-
         try:
             # Re-provision: clear tombstone + cached info so subscribes
             # build a fresh bus with the new Secret's password.
@@ -1306,18 +1285,13 @@ class KubernetesSandboxManager(SandboxManager):
             # provider for cross-provider model overrides; keys are swapped for
             # the proxy placeholder so the pod never holds them.
             providers = _placeholder_llm_configs(all_llm_configs or [llm_config])
-            # Only register the egress-tagging plugin when the proxy is
-            # deployed; otherwise it would no-op (no HTTP(S)_PROXY to re-tag).
-            session_tag_plugins = (
-                [_OPENCODE_SESSION_TAG_PLUGIN_PATH] if SANDBOX_PROXY_HOST else None
-            )
             opencode_config_json = json.dumps(
                 build_multi_provider_opencode_config(
                     providers=providers,
                     default_provider=llm_config.provider,
                     default_model=llm_config.model_name,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
-                    plugins=session_tag_plugins,
+                    plugins=[_OPENCODE_SESSION_TAG_PLUGIN_PATH],
                 )
             )
             self._provision_opencode_secret(str(sandbox_id), opencode_config_json)
@@ -1547,7 +1521,6 @@ class KubernetesSandboxManager(SandboxManager):
         skills_section: str,
         snapshot_path: str | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
@@ -1565,7 +1538,6 @@ class KubernetesSandboxManager(SandboxManager):
             llm_config: LLM provider configuration for opencode.json
             snapshot_path: Optional S3 path - logged but ignored (no S3 access)
             user_name: User's name for personalization in AGENTS.md
-            user_role: User's role/title for personalization in AGENTS.md
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -1591,7 +1563,6 @@ class KubernetesSandboxManager(SandboxManager):
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
-            user_role=user_role,
         )
 
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
@@ -1781,13 +1752,7 @@ echo "Session cleanup complete"
 
         Returns None if there are no outputs to snapshot.
         """
-        pod_name = self._get_pod_name(str(sandbox_id))
         snapshot_id = uuid4()
-
-        try:
-            pod_ip = self._get_pod_ip(pod_name)
-        except (FatalWriteError, RetriableWriteError) as e:
-            raise RuntimeError(f"Failed to create snapshot: {e}") from e
 
         body = (
             SnapshotCreateRequest(
@@ -1802,7 +1767,7 @@ echo "Session cleanup complete"
 
         try:
             resp = self._post_to_sidecar(
-                pod_ip, "/snapshot/create", body, timeout=300.0
+                sandbox_id, "/snapshot/create", body, timeout=300.0
             )
         except httpx.TransportError as e:
             raise RuntimeError(f"Snapshot create request failed: {e}") from e
@@ -1958,11 +1923,6 @@ echo "Session cleanup complete"
         session_path = f"/workspace/sessions/{session_id}"
         safe_session_path = shlex.quote(session_path)
 
-        try:
-            pod_ip = self._get_pod_ip(pod_name)
-        except (FatalWriteError, RetriableWriteError) as e:
-            raise RuntimeError(f"Failed to restore snapshot: {e}") from e
-
         body = (
             SnapshotRestoreRequest(
                 session_id=session_id,
@@ -1976,7 +1936,7 @@ echo "Session cleanup complete"
 
         try:
             resp = self._post_to_sidecar(
-                pod_ip, "/snapshot/restore", body, timeout=300.0
+                sandbox_id, "/snapshot/restore", body, timeout=300.0
             )
         except httpx.TransportError as e:
             raise RuntimeError(f"Snapshot restore request failed: {e}") from e
@@ -2043,7 +2003,6 @@ echo "Session cleanup complete"
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=None,
-            user_role=None,
         )
 
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
@@ -2070,20 +2029,16 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         logger.info("Session configuration files regenerated")
 
     def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
-        """Check if the sidecar's /health endpoint responds."""
-        pod_name = self._get_pod_name(str(sandbox_id))
-        try:
-            pod_ip = self._get_pod_ip(pod_name)
-        except (FatalWriteError, RetriableWriteError):
-            return False
-
-        url = f"http://{pod_ip}:{PUSH_DAEMON_PORT}/health"
-        try:
-            with httpx.Client(timeout=timeout) as http_client:
-                resp = http_client.get(url)
-            return resp.status_code == 200
-        except httpx.TransportError:
-            return False
+        """Check whether the sidecar's /health endpoint responds."""
+        for host in self._sandbox_pod_hosts(sandbox_id):
+            url = f"http://{host}:{PUSH_DAEMON_PORT}/health"
+            try:
+                with httpx.Client(timeout=timeout) as http_client:
+                    if http_client.get(url).status_code == 200:
+                        return True
+            except httpx.TransportError:
+                continue
+        return False
 
     def _load_serve_connection_info(
         self, sandbox_id: UUID
@@ -2100,9 +2055,9 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         )
 
     def _serve_health_check_base_url(self, sandbox_id: UUID) -> str | None:
-        """Probe the pod IP, not the Service FQDN ``base_url`` — an
-        out-of-cluster caller (CI test process) can't resolve cluster DNS.
-        ``None`` falls back to ``base_url`` until the IP is assigned."""
+        """Pod-IP fallback probe candidate for the readiness wait: out-of-cluster
+        CI routes pod IPs but can't resolve the Service FQDN. ``None`` until the
+        pod IP is assigned."""
         pod_name = self._get_pod_name(str(sandbox_id))
         try:
             pod_ip = self._get_pod_ip(pod_name)
@@ -2779,6 +2734,38 @@ fi
             logger.warning("Failed to get upload stats: %s", e)
             return 0, 0
 
+    def _resolve_proxy_ip(self) -> str:
+        """Resolve SANDBOX_PROXY_HOST to a pod-routable IP for the egress
+        hostAlias. Reads the Service ClusterIP from the k8s API, not the
+        api-server's OS resolver, so it stays correct under telepresence (whose
+        resolver returns a synthetic, pod-unroutable IP). A numeric host (CI
+        passes the ClusterIP directly) is returned unchanged."""
+        host = SANDBOX_PROXY_HOST
+        try:
+            ipaddress.ip_address(host)
+            return host
+        except ValueError:
+            pass
+        name, _, rest = host.partition(".")
+        namespace = rest.partition(".")[0] or SANDBOX_PROXY_NAMESPACE
+        last_err: Exception | None = None
+        for attempt in range(_PROXY_RESOLVE_RETRY_ATTEMPTS):
+            try:
+                cluster_ip = self._core_api.read_namespaced_service(
+                    name=name, namespace=namespace
+                ).spec.cluster_ip
+                if cluster_ip and cluster_ip != "None":
+                    return cluster_ip
+                last_err = RuntimeError(f"Service {name} has no ClusterIP")
+            except ApiException as e:
+                last_err = e
+            if attempt < _PROXY_RESOLVE_RETRY_ATTEMPTS - 1:
+                time.sleep(_PROXY_RESOLVE_RETRY_BACKOFF_S * (2**attempt))
+        raise RuntimeError(
+            f"failed to resolve proxy ClusterIP for SANDBOX_PROXY_HOST={host!r} "
+            f"after {_PROXY_RESOLVE_RETRY_ATTEMPTS} attempts: {last_err}"
+        )
+
     def _get_pod_ip(self, pod_name: str) -> str:
         """Read pod IP. Raises FatalWriteError on 404, RetriableWriteError otherwise."""
         try:
@@ -2796,23 +2783,38 @@ fi
             raise RetriableWriteError(f"Pod {pod_name} has no IP yet")
         return pod_ip
 
+    def _sandbox_pod_hosts(self, sandbox_id: UUID) -> list[str]:
+        """Hosts to reach the pod sidecar, in preference order: Service FQDN
+        (routes in prod + telepresence), then raw pod IP (out-of-cluster CI,
+        which routes pod IPs but has no cluster DNS)."""
+        service_name = self._get_service_name(str(sandbox_id))
+        hosts = [f"{service_name}.{self._namespace}.svc.cluster.local"]
+        try:
+            hosts.append(self._get_pod_ip(self._get_pod_name(str(sandbox_id))))
+        except (FatalWriteError, RetriableWriteError):
+            pass
+        return hosts
+
     def _post_to_sidecar(
-        self, pod_ip: str, endpoint_path: str, body: bytes, timeout: float = 30.0
+        self, sandbox_id: UUID, endpoint_path: str, body: bytes, timeout: float = 30.0
     ) -> httpx.Response:
-        """POST a signed JSON request to a sidecar endpoint."""
+        """POST a signed JSON request to the sidecar."""
         sha256_hex = hashlib.sha256(body).hexdigest()
         sig_b64, ts = _sign_sidecar_request(endpoint_path, sha256_hex)
-        url = f"http://{pod_ip}:{PUSH_DAEMON_PORT}{endpoint_path}"
-        with httpx.Client(timeout=timeout) as http_client:
-            return http_client.post(
-                url,
-                content=body,
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Push-Signature": sig_b64,
-                    "X-Push-Timestamp": ts,
-                },
-            )
+        headers = {
+            "Content-Type": "application/json",
+            "X-Push-Signature": sig_b64,
+            "X-Push-Timestamp": ts,
+        }
+        last_exc: httpx.TransportError | None = None
+        for host in self._sandbox_pod_hosts(sandbox_id):
+            url = f"http://{host}:{PUSH_DAEMON_PORT}{endpoint_path}"
+            try:
+                with httpx.Client(timeout=timeout) as http_client:
+                    return http_client.post(url, content=body, headers=headers)
+            except httpx.TransportError as e:
+                last_exc = e
+        raise last_exc or httpx.ConnectError("no sandbox pod host reachable")
 
     def write_files_to_sandbox(
         self,
@@ -2821,33 +2823,36 @@ fi
         mount_path: str,
         files: FileSet,
     ) -> None:
-        """Build tar.gz, POST to in-pod daemon."""
+        """Build tar.gz, POST to the in-pod daemon."""
         pod_name = self._get_pod_name(sandbox_id)
-        pod_ip = self._get_pod_ip(pod_name)
-
         tar_bytes, sha256_hex = _build_targz(files)
         sig_b64, ts = _sign_sidecar_request(mount_path, sha256_hex)
+        headers = {
+            "Content-Type": "application/gzip",
+            "X-Bundle-Sha256": sha256_hex,
+            "X-Push-Signature": sig_b64,
+            "X-Push-Timestamp": ts,
+        }
 
-        url = f"http://{pod_ip}:{PUSH_DAEMON_PORT}/push"
-        try:
-            with httpx.Client(timeout=30.0) as http_client:
-                resp = http_client.post(
-                    url,
-                    params={"mount_path": mount_path},
-                    content=tar_bytes,
-                    headers={
-                        "Content-Type": "application/gzip",
-                        "X-Bundle-Sha256": sha256_hex,
-                        "X-Push-Signature": sig_b64,
-                        "X-Push-Timestamp": ts,
-                    },
-                )
-        except httpx.TransportError as e:
-            raise RetriableWriteError(f"Push to {pod_name} failed: {e}") from e
-
-        if resp.status_code == 200:
-            return
-        err = f"{pod_name}: {resp.status_code} {resp.text}"
-        if resp.status_code >= 500:
-            raise RetriableWriteError(err)
-        raise FatalWriteError(err)
+        last_exc: httpx.TransportError | None = None
+        for host in self._sandbox_pod_hosts(sandbox_id):
+            url = f"http://{host}:{PUSH_DAEMON_PORT}/push"
+            try:
+                with httpx.Client(timeout=30.0) as http_client:
+                    resp = http_client.post(
+                        url,
+                        params={"mount_path": mount_path},
+                        content=tar_bytes,
+                        headers=headers,
+                    )
+            except httpx.TransportError as e:
+                last_exc = e
+                continue
+            # Reached the daemon; map status, don't try other hosts.
+            if resp.status_code == 200:
+                return
+            err = f"{pod_name}: {resp.status_code} {resp.text}"
+            if resp.status_code >= 500:
+                raise RetriableWriteError(err)
+            raise FatalWriteError(err)
+        raise RetriableWriteError(f"Push to {pod_name} failed: {last_exc}")

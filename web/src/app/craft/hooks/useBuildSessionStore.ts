@@ -1,7 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { getBuildLlmSelection } from "@/app/craft/onboarding/constants";
 import { DELETE_SUCCESS_DISPLAY_DURATION_MS } from "@/app/craft/constants";
 
 import {
@@ -42,6 +41,7 @@ import {
   deleteSession as apiDeleteSession,
   fetchMessages,
   fetchArtifacts,
+  fetchWebappInfo,
   restoreSession,
 } from "@/app/craft/services/apiServices";
 
@@ -471,10 +471,19 @@ export interface BuildSessionData {
    * current run finishes (see the auto-send effect in BuildChatPanel).
    */
   queuedMessages: QueuedMessage[];
+  /**
+   * True between an interrupt request and the turn actually terminating. Drives
+   * the "stopping…" affordance; cleared by each terminal stream handler (and on
+   * a fresh turn / aborted fetch).
+   */
+  isInterrupting: boolean;
   error: string | null;
   webappUrl: string | null;
   /** Sandbox info from backend */
   sandbox: ApiSandboxResponse | null;
+  /** Model this session runs on (from the row); seeds the composer picker. */
+  agentProvider: string | null;
+  agentModel: string | null;
   abortController: AbortController;
   lastAccessed: Date;
   isLoaded: boolean;
@@ -715,9 +724,12 @@ const createInitialSessionData = (
   toolCalls: [],
   streamItems: [],
   queuedMessages: [],
+  isInterrupting: false,
   error: null,
   webappUrl: null,
   sandbox: null,
+  agentProvider: null,
+  agentModel: null,
   abortController: new AbortController(),
   lastAccessed: new Date(),
   isLoaded: false,
@@ -741,6 +753,30 @@ const createInitialSessionData = (
 // =============================================================================
 // Store
 // =============================================================================
+
+// The dev server is started fire-and-forget, so the backend reports RUNNING
+// before the webapp serves. Poll webapp-info until ready (bounded by maxAttempts).
+export async function waitForWebappReady(
+  sessionId: string,
+  { intervalMs = 1500, maxAttempts = 20 }: WaitForWebappReadyOptions = {}
+): Promise<void> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let info: Awaited<ReturnType<typeof fetchWebappInfo>> | null = null;
+    try {
+      info = await fetchWebappInfo(sessionId);
+    } catch {
+      // keep polling
+    }
+    // Done on a definitive answer (no webapp or serving); errors keep polling.
+    if (info && (!info.has_webapp || info.ready)) return;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
+interface WaitForWebappReadyOptions {
+  intervalMs?: number;
+  maxAttempts?: number;
+}
 
 export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   currentSessionId: null,
@@ -1387,11 +1423,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     updateSessionData(tempId, { status: "creating" });
 
     try {
-      const llmSelection = getBuildLlmSelection();
+      // Provision with the backend default; the per-message override sets it later.
       const sessionData = await apiCreateSession({
         name: prompt.slice(0, 50),
-        llmProviderType: llmSelection?.provider || null,
-        llmModelName: llmSelection?.modelName || null,
       });
       const realSessionId = sessionData.id;
 
@@ -1526,30 +1560,17 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         artifacts,
         webappUrl,
         sandbox,
+        agentProvider: sessionData.agent_provider,
+        agentModel: sessionData.agent_model,
         error: null,
         isLoaded: true,
       });
 
-      // Now restore the sandbox if needed (messages are already visible).
-      // The backend enforces a timeout and returns an error if restore
-      // takes too long, so no frontend timeout needed here.
       if (needsRestore) {
         try {
           sessionData = await restoreSession(sessionId);
-
-          // Sandbox is now running - fetch artifacts
-          const restoredArtifacts = await fetchArtifacts(sessionId);
-
-          updateSessionData(sessionId, {
-            status: sessionData.status === "active" ? "active" : "idle",
-            artifacts: restoredArtifacts,
-            sandbox: sessionData.sandbox,
-            // Bump so OutputPanel's SWR refetches webapp-info (which
-            // derives the actual webappUrl from the backend).
-            webappNeedsRefresh:
-              (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
-          });
         } catch (restoreErr) {
+          // Only a genuine restore failure marks the sandbox failed.
           console.error("Sandbox restore failed:", restoreErr);
           updateSessionData(sessionId, {
             status: "idle",
@@ -1557,6 +1578,32 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
               ? { ...sessionData.sandbox, status: "failed" }
               : null,
           });
+          return;
+        }
+
+        // Hold the chip on "restoring" (and refresh the preview) until the
+        // webapp actually serves, then flip to the real status below.
+        updateSessionData(sessionId, {
+          status: sessionData.status === "active" ? "active" : "idle",
+          sandbox: sessionData.sandbox
+            ? { ...sessionData.sandbox, status: "restoring" }
+            : sessionData.sandbox,
+          webappNeedsRefresh:
+            (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
+        });
+
+        await waitForWebappReady(sessionId);
+        updateSessionData(sessionId, { sandbox: sessionData.sandbox });
+
+        // An artifact-fetch failure must NOT flip the sandbox to "failed".
+        try {
+          const restoredArtifacts = await fetchArtifacts(sessionId);
+          updateSessionData(sessionId, { artifacts: restoredArtifacts });
+        } catch (artifactsErr) {
+          console.warn(
+            "Failed to fetch artifacts after restore:",
+            artifactsErr
+          );
         }
       }
     } catch (err) {
@@ -1702,12 +1749,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     const promise = (async (): Promise<string | null> => {
       try {
-        const llmSelection = getBuildLlmSelection();
-
-        const sessionData = await apiCreateSession({
-          llmProviderType: llmSelection?.provider || null,
-          llmModelName: llmSelection?.modelName || null,
-        });
+        // Default model at provision time; per-message override sets it later.
+        const sessionData = await apiCreateSession({});
 
         provisioningPromise = null;
         set({
@@ -2499,6 +2542,13 @@ export const useIsRunning = () =>
     if (!currentSessionId) return false;
     const session = sessions.get(currentSessionId);
     return session?.status === "running" || session?.status === "creating";
+  });
+
+export const useIsInterrupting = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return false;
+    return sessions.get(currentSessionId)?.isInterrupting ?? false;
   });
 
 export const useMessages = () =>

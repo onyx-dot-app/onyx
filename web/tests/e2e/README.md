@@ -9,6 +9,7 @@ For the broader Onyx testing strategy and where Playwright fits among unit / ext
 All locators and interactions for a UI surface live on a Page Object class — never inline in a spec.
 
 - One class per surface (e.g. `ChatPage`, `InputBar`, `AdminUsersPage`).
+- Page objects live in `tests/e2e/pages/` — one file per class, named after the surface. Keep spec-only helpers (flow glue, assertion utilities) out of `pages/`; those stay beside their specs or in `tests/e2e/utils/`.
 - Composite pages expose nested objects: `chatPage.inputBar.someMethod()`.
 - Specs call methods on the page object. They do not construct locators.
 - When extending coverage for an area that has no page object, create one before writing the spec.
@@ -28,6 +29,15 @@ await expect(page.locator(".message")).toContainText("hello");
 ```
 
 **Why:** specs that read like a description of user behavior are easier to scan, review, and refactor. Locator churn changes one POM method, not every spec that touched the surface.
+
+**Locator priority** — when defining locators on a page object, prefer in this order:
+
+1. `data-testid` / `aria-label` (`getByTestId`, `getByLabel`) — preferred for Onyx components.
+2. Role-based (`getByRole`) — standard HTML elements.
+3. Text / label (`getByText`, `getByLabel`) — visible text content.
+4. CSS selectors (`locator(...)`) — last resort, only when nothing above works.
+
+Never reach for complex CSS/XPath when a built-in locator fits.
 
 ## 2. Use auto-retrying matchers — never `getAttribute` / `evaluate` for async state
 

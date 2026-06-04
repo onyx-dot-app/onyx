@@ -141,7 +141,9 @@ def test_apply_or_block_writes_403_on_blocked() -> None:
     assert flow.response.status_code == 403
     content = flow.response.content
     assert content is not None
-    assert json.loads(content) == {"error": SandboxProxyError.CREDENTIAL_ERROR.value}
+    body = json.loads(content)
+    assert body["error"] == SandboxProxyError.CREDENTIAL_ERROR.value
+    assert body["message"]
 
 
 def test_apply_or_block_leaves_response_unset_on_inject_or_pass_through() -> None:

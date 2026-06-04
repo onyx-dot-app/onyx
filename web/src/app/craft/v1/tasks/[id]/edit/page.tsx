@@ -4,8 +4,7 @@ import { useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { SettingsLayouts } from "@opal/layouts";
-import { SvgClock } from "@opal/icons";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { SvgClock, SvgSimpleLoader } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
 import ScheduleTaskForm, {
   type ScheduleTaskFormInitial,
@@ -62,7 +61,7 @@ export default function EditScheduledTaskPage() {
         <SettingsLayouts.Body>
           {isLoading ? (
             <div className="flex justify-center py-12">
-              <SimpleLoader className="h-6 w-6" />
+              <SvgSimpleLoader className="h-6 w-6" />
             </div>
           ) : (
             <Text mainUiBody text03>
@@ -100,5 +99,6 @@ function toFormInitial(detail: ScheduledTaskDetail): ScheduleTaskFormInitial {
     prompt: detail.prompt,
     mode,
     payload,
+    preApprovedAppIds: detail.pre_approved_app_ids,
   };
 }

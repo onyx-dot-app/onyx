@@ -5,8 +5,11 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.base import ExternalAppProvider
+from onyx.external_apps.providers.base import OnyxManagedExtApp
+from onyx.external_apps.providers.github import GitHubProvider
 from onyx.external_apps.providers.gmail import GmailProvider
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
+from onyx.external_apps.providers.google_drive import GoogleDriveProvider
 from onyx.external_apps.providers.linear import LinearProvider
 from onyx.external_apps.providers.slack import SlackProvider
 from onyx.server.features.build.api.models import ActionPolicyView
@@ -17,8 +20,10 @@ from onyx.server.features.build.api.models import OrgCredentialFieldDescriptor
 _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     SlackProvider,
     GoogleCalendarProvider,
+    GoogleDriveProvider,
     GmailProvider,
     LinearProvider,
+    GitHubProvider,
 ]
 
 
@@ -41,6 +46,15 @@ PROVIDERS: dict[ExternalAppType, ExternalAppProvider] = _build_providers()
 
 def get_provider_for_app(app: ExternalApp) -> ExternalAppProvider | None:
     return PROVIDERS.get(app.app_type)
+
+
+def get_onyx_managed_provider(app_type: ExternalAppType) -> OnyxManagedExtApp | None:
+    """The Onyx-managed provider for ``app_type``, or None when the app_type is
+    CUSTOM/unregistered or its provider isn't Onyx-managed. Not gated on
+    ``MULTI_TENANT`` — callers add that for the cloud-only lockdown (``is not
+    None`` is the "is this app Onyx-managed" check)."""
+    provider = PROVIDERS.get(app_type)
+    return provider if isinstance(provider, OnyxManagedExtApp) else None
 
 
 def get_provider_or_raise(app: ExternalApp) -> ExternalAppProvider:
@@ -156,6 +170,16 @@ def fetch_available_built_in_apps() -> list[BuiltInExternalAppDescriptor]:
     """All registered built-in providers as Pydantic descriptors. The
     admin UI fetches this list to render the Manage Apps page."""
     return [_descriptor_for(cls) for cls in _PROVIDER_CLASSES]
+
+
+def fetch_onyx_managed_built_in_apps() -> list[BuiltInExternalAppDescriptor]:
+    """Built-in providers Onyx owns the credentials for — the apps cloud
+    provisioning seeds per tenant. Excludes non-managed built-ins."""
+    return [
+        _descriptor_for(cls)
+        for cls in _PROVIDER_CLASSES
+        if issubclass(cls, OnyxManagedExtApp)
+    ]
 
 
 def fetch_built_in_app(app_type: ExternalAppType) -> BuiltInExternalAppDescriptor:

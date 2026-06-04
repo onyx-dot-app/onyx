@@ -57,9 +57,9 @@ def _discover_encrypted_columns() -> list[tuple[type, str, list[str], bool]]:
         for prop in mapper.column_attrs:
             for col in prop.columns:
                 if isinstance(col.type, EncryptedJson):
-                    results.append((model_cls, prop.key, pk_names, True))
+                    results.append((model_cls, prop.key, pk_names, True))  # ty: ignore[invalid-argument-type]
                 elif isinstance(col.type, EncryptedString):
-                    results.append((model_cls, prop.key, pk_names, False))
+                    results.append((model_cls, prop.key, pk_names, False))  # ty: ignore[invalid-argument-type]
 
     return results
 

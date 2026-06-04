@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 from kubernetes import client
@@ -102,7 +103,8 @@ def test_identity_from_pod_rejects_missing_managed_by() -> None:
 
 
 def test_identity_from_pod_rejects_foreign_managed_by() -> None:
-    # managed-by is the integrity check: an attacker can forge every other label.
+    # managed-by is the integrity check: an attacker can forge every other
+    # label.
     assert _identity_from_pod(_make_pod(managed_by="someone-else")) is None
 
 
@@ -119,5 +121,38 @@ def test_initial_list_raises_on_duplicate_ip() -> None:
     core_api.list_namespaced_pod.return_value = listing
     lookup = K8sInformerLookup(core_api=core_api)
 
-    with pytest.raises(RuntimeError, match="duplicate sandbox IP"):
+    with pytest.raises(RuntimeError, match="Duplicate sandbox IP"):
         lookup._initial_list()
+
+
+def test_synced_clears_after_watch_loop_returns_cleanly() -> None:
+    """
+    Clean watch EOF clears ``_synced`` so /healthz reports not-ready during the
+    reconnect window.
+    """
+    listing = client.V1PodList(
+        metadata=client.V1ListMeta(resource_version="42"),
+        items=[],
+    )
+    core_api = MagicMock(spec=client.CoreV1Api)
+    core_api.list_namespaced_pod.return_value = listing
+    lookup = K8sInformerLookup(core_api=core_api)
+
+    # Empty iter -> _watch_loop exhausts without raising. Stop after one pass.
+    call_count = [0]
+
+    class _StubWatch:
+        def stream(self, *_: object, **__: object) -> object:
+            call_count[0] += 1
+            lookup._stop_event.set()
+            return iter([])
+
+        def stop(self) -> None:
+            pass
+
+    with patch("onyx.sandbox_proxy.identity_k8s.watch.Watch", _StubWatch):
+        lookup._run()
+
+    assert lookup._initial_sync_done.is_set()
+    assert not lookup._synced.is_set()
+    assert call_count[0] == 1

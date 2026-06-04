@@ -52,10 +52,10 @@ import {
   SvgSearch,
   SvgStop,
   SvgX,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import { Button, SelectButton } from "@opal/components";
 import { Popover } from "@opal/components";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { Section } from "@/layouts/general-layouts";
 import { Spacer } from "@opal/components";
@@ -69,6 +69,7 @@ import {
   useChatSessionStore,
 } from "@/app/app/stores/useChatSessionStore";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
+import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
 
 export interface AppInputBarHandle {
   reset: () => void;
@@ -709,7 +710,7 @@ const AppInputBar = React.memo(
             id="onyx-chat-input-send-button"
             icon={
               isClassifying
-                ? SimpleLoader
+                ? SvgSimpleLoader
                 : (chatState !== "input" || awaitingPreferredSelection) &&
                     message.trim()
                   ? SvgArrowUp
@@ -866,8 +867,10 @@ const AppInputBar = React.memo(
                       }
                       data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {
-                        if (handleTileKeyDown(event)) return;
-                        if (queueNav.handleKeyDown(event)) return;
+                        if (
+                          handleInputNavKeys(event, queueNav, handleTileKeyDown)
+                        )
+                          return;
 
                         // Enter to submit or queue (Shift+Enter falls through to browser default: inserts <br>)
                         if (
@@ -954,7 +957,7 @@ const AppInputBar = React.memo(
                   <Button
                     disabled={!message || isClassifying || hasUploadingFiles}
                     id="onyx-chat-input-send-button"
-                    icon={isClassifying ? SimpleLoader : SvgSearch}
+                    icon={isClassifying ? SvgSimpleLoader : SvgSearch}
                     onClick={() => {
                       if (chatState == "streaming") {
                         stopGenerating();

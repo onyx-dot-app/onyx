@@ -165,6 +165,7 @@ fi
 set -e
 cd {session_path}/outputs/web
 {install_check}
+export WEBAPP_ASSET_PREFIX="/api/build/sessions/$(basename {session_path})/webapp"
 echo "Starting Next.js dev server on port {nextjs_port}..."
 nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
@@ -408,8 +409,13 @@ class DockerSandboxManager(SandboxManager):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialize()
+                    # Publish to the cache only after _initialize() succeeds, so a
+                    # transient init failure (e.g. the Docker socket briefly
+                    # unavailable) can't leave a half-built singleton that every
+                    # later caller reuses; the next call retries instead.
+                    instance = super().__new__(cls)
+                    instance._initialize()
+                    cls._instance = instance
         return cls._instance
 
     def _initialize(self) -> None:
@@ -687,7 +693,6 @@ class DockerSandboxManager(SandboxManager):
         nextjs_port: int | None,
         skills_section: str,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> str:
         """Shell-escaped AGENTS.md for ``printf '%s' '...'``."""
         agent_instructions = generate_agent_instructions(
@@ -698,7 +703,6 @@ class DockerSandboxManager(SandboxManager):
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
-            user_role=user_role,
         )
         return agent_instructions.replace("'", "'\\''")
 
@@ -711,7 +715,6 @@ class DockerSandboxManager(SandboxManager):
         skills_section: str,
         snapshot_path: str | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
     ) -> None:
         if snapshot_path:
             logger.warning(
@@ -729,7 +732,6 @@ class DockerSandboxManager(SandboxManager):
             nextjs_port=nextjs_port,
             skills_section=skills_section,
             user_name=user_name,
-            user_role=user_role,
         )
 
         nextjs_start = (

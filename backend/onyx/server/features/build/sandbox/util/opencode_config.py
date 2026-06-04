@@ -12,7 +12,7 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 
 # 4.6+ supports adaptive thinking; older needs enabled+budgetTokens.
 _ADAPTIVE_THINKING_MODELS = frozenset(
-    {"claude-opus-4-6", "claude-opus-4-7", "claude-sonnet-4-6"}
+    {"claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6"}
 )
 
 
@@ -123,6 +123,7 @@ def build_opencode_config(
     api_base: str | None = None,
     disabled_tools: list[str] | None = None,
     dev_mode: bool = False,
+    plugins: list[str] | None = None,
 ) -> dict[str, Any]:
     """Single-provider wrapper around :func:`build_multi_provider_opencode_config`."""
     return build_multi_provider_opencode_config(
@@ -138,6 +139,7 @@ def build_opencode_config(
         default_model=model_name,
         disabled_tools=disabled_tools,
         dev_mode=dev_mode,
+        plugins=plugins,
     )
 
 

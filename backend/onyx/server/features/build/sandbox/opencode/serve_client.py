@@ -774,10 +774,15 @@ class OpencodeServeClient:
         client_info: dict[str, Any] | None = None,
         timeouts: ClientTimeouts | None = None,
         transport: httpx.BaseTransport | None = None,
+        reload_password: Callable[[], str | None] | None = None,
     ) -> None:
         """``event_bus`` is required for :meth:`send_message`; unary
         methods (ensure_session, list_messages, abort) work without one
-        — tests can omit it when exercising the unary surface only."""
+        — tests can omit it when exercising the unary surface only.
+
+        ``reload_password`` re-fetches the password from its source of truth,
+        invoked on a 401 to self-heal a peer-pod password rotation. ``None``
+        disables the self-heal (e.g. health probes)."""
         self._base_url = base_url.rstrip("/")
         self._password = password
         self._client_info = client_info or {
@@ -785,16 +790,25 @@ class OpencodeServeClient:
             "version": "1.0.0",
         }
         self._timeouts = timeouts or ClientTimeouts()
-        self._auth: httpx.BasicAuth | None = (
-            httpx.BasicAuth(OPENCODE_SERVER_USERNAME, password) if password else None
-        )
+        self._reload_password = reload_password
         self._event_bus = event_bus
-        # transport is for tests (httpx.MockTransport). Unary only —
-        # SSE subscription is owned by the bus.
-        self._http = httpx.Client(
+        # transport is for tests (httpx.MockTransport); stored so
+        # _apply_password can rebuild the client without losing it.
+        self._transport = transport
+        self._auth = self._basic_auth(password)
+        self._http = self._make_http_client()
+
+    @staticmethod
+    def _basic_auth(password: str | None) -> httpx.BasicAuth | None:
+        return httpx.BasicAuth(OPENCODE_SERVER_USERNAME, password) if password else None
+
+    def _make_http_client(self) -> httpx.Client:
+        """Build a client bound to the current ``self._auth``. Pure — callers
+        set ``self._auth`` first."""
+        return httpx.Client(
             base_url=self._base_url,
             auth=self._auth,
-            transport=transport,
+            transport=self._transport,
             timeout=httpx.Timeout(
                 connect=self._timeouts.connect_timeout,
                 read=self._timeouts.request_timeout,
@@ -803,14 +817,29 @@ class OpencodeServeClient:
             ),
         )
 
+    def _apply_password(self, password: str | None) -> None:
+        """Rebuild the http client with a fresh password (auth is bound at
+        construction); close the old one to avoid a pool leak."""
+        old = self._http
+        self._password = password
+        self._auth = self._basic_auth(password)
+        self._http = self._make_http_client()
+        old.close()
+
     # ----- session lifecycle ----------------------------------------
 
-    def health_check(self) -> bool:
+    def health_check_status(self) -> int | None:
+        """HTTP status from ``GET /doc``, or ``None`` on transport error — lets
+        the readiness probe tell a 401 (stale password) from a not-yet-listening
+        pod (transport error)."""
         try:
             r = self._http.get("/doc", timeout=self._timeouts.connect_timeout)
-            return r.status_code == 200
+            return r.status_code
         except httpx.HTTPError:
-            return False
+            return None
+
+    def health_check(self) -> bool:
+        return self.health_check_status() == 200
 
     # Cold-pod retry tunables — short window, total worst-case ~1.5s.
     _COLD_POD_RETRIES = 3
@@ -869,6 +898,38 @@ class OpencodeServeClient:
         assert last_exc is not None
         raise last_exc
 
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        idempotent: bool = False,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        """Unary request with cold-pod retry plus a one-shot password reload
+        on 401 (a peer pod rotated the password, staling our cache). Retrying
+        is safe even for a non-idempotent POST: a 401 is rejected before
+        processing, so the server never saw the body. An unchanged reload is a
+        genuine auth failure — return it for the caller to surface."""
+        r = self._http_with_cold_pod_retry(
+            method, path, idempotent=idempotent, **kwargs
+        )
+        if r.status_code != 401 or self._reload_password is None:
+            return r
+        new_password = self._reload_password()
+        if new_password == self._password:
+            return r
+        logger.info(
+            "[SESSION-LIFECYCLE] 401 on %s %s; reloaded opencode password and "
+            "retrying (peer pod likely rotated it)",
+            method,
+            path,
+        )
+        self._apply_password(new_password)
+        return self._http_with_cold_pod_retry(
+            method, path, idempotent=idempotent, **kwargs
+        )
+
     def ensure_session(
         self,
         opencode_session_id: str | None,
@@ -896,7 +957,7 @@ class OpencodeServeClient:
         if opencode_session_id:
             # GET is idempotent — safe to retry on either ConnectError or
             # RemoteProtocolError.
-            r = self._http_with_cold_pod_retry(
+            r = self._request(
                 "GET",
                 f"/session/{opencode_session_id}",
                 params=directory_params,
@@ -931,7 +992,7 @@ class OpencodeServeClient:
         # = server never saw it) keeps the call safe; a
         # RemoteProtocolError after a half-handled POST could leak an
         # orphan opencode session.
-        r = self._http_with_cold_pod_retry(
+        r = self._request(
             "POST",
             "/session",
             params=directory_params,
@@ -979,9 +1040,11 @@ class OpencodeServeClient:
         streaming and only populated post-terminator. Use this only for
         the post-terminator fallback in the reconnect path.
         """
-        r = self._http.get(
+        r = self._request(
+            "GET",
             f"/session/{opencode_session_id}/message",
             params={"directory": directory},
+            idempotent=True,
         )
         _raise_for_status(r, "session messages")
         data = r.json()
@@ -1008,7 +1071,7 @@ class OpencodeServeClient:
     ) -> dict[str, Any] | None:
         """GET /session/{id}/message/{id}. None on any failure (never raises)."""
         try:
-            r = self._http_with_cold_pod_retry(
+            r = self._request(
                 "GET",
                 f"/session/{opencode_session_id}/message/{message_id}",
                 params={"directory": directory},
@@ -1046,6 +1109,7 @@ class OpencodeServeClient:
         model_provider: str | None = None,
         model_id: str | None = None,
         timeout: float = SANDBOX_TURN_TIMEOUT_SECONDS,
+        should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream one turn of SandboxEvents via the shared per-pod bus.
 
@@ -1114,6 +1178,7 @@ class OpencodeServeClient:
                 directory=directory,
                 parent_resolver=self._event_bus.parent_of,
                 children_resolver=self._event_bus.list_children,
+                should_interrupt=should_interrupt,
             )
 
         except GeneratorExit:
@@ -1133,13 +1198,29 @@ class OpencodeServeClient:
         directory: str,
         parent_resolver: Callable[[str], str | None] | None = None,
         children_resolver: Callable[[str], list[str]] | None = None,
+        should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Drain the bus queue, translate, yield until a
-        :class:`PromptResponse` is emitted. permission.asked → auto-allow."""
+        :class:`PromptResponse` is emitted. permission.asked → auto-allow.
+
+        ``should_interrupt`` (polled ~1/s) lets the caller end the turn
+        deterministically: we abort opencode and emit our own terminating
+        ``PromptResponse`` rather than waiting on a ``session.idle`` that may
+        never arrive after an abort — otherwise an interrupted, event-less turn
+        would pin its slot until ``timeout``."""
         terminated_locally = False
         start = time.monotonic()
         last_event = start
+        last_interrupt_check = start
         while True:
+            now = time.monotonic()
+            if should_interrupt is not None and now - last_interrupt_check >= 1.0:
+                last_interrupt_check = now
+                if should_interrupt():
+                    self.abort(opencode_session_id, directory=directory)
+                    yield PromptResponse.model_validate({"stopReason": "cancelled"})
+                    return
+
             remaining = timeout - (time.monotonic() - start)
             if remaining <= 0:
                 self.abort(opencode_session_id, directory=directory)
@@ -1211,10 +1292,13 @@ class OpencodeServeClient:
         body: dict[str, Any] = {"parts": [{"type": "text", "text": message}]}
         if model_provider and model_id:
             body["model"] = {"providerID": model_provider, "modelID": model_id}
-        r = self._http.post(
+        # idempotent=False: only the 401 reload retries this POST.
+        r = self._request(
+            "POST",
             f"/session/{opencode_session_id}/prompt_async",
             params={"directory": directory},
             json=body,
+            idempotent=False,
         )
         _raise_for_status(r, "prompt_async")
 

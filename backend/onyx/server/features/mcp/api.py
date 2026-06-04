@@ -2,13 +2,14 @@ import asyncio
 import base64
 import datetime
 import hashlib
+import ipaddress
 import json
 from enum import Enum
 from secrets import token_urlsafe
-from typing import cast
 from typing import Literal
 from urllib.parse import urlparse
 
+import requests
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -24,14 +25,21 @@ from pydantic import AnyUrl
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.oauth_token_manager import build_oauth_authorization_url
+from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
+from onyx.auth.oauth_token_manager import OAuthFlowParams
+from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
+from onyx.configs.app_configs import MCP_SERVER_ALLOW_LOOPBACK
+from onyx.configs.app_configs import MCP_SERVER_ALLOW_PRIVATE_NETWORK
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.enums import Permission
@@ -57,6 +65,8 @@ from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_tools_by_mcp_server_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.mcp.models import apply_auto_substitutions
 from onyx.server.features.mcp.models import MCPApiKeyResponse
@@ -80,11 +90,88 @@ from onyx.server.features.tool.models import ToolSnapshot
 from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_tools
 from onyx.tools.tool_implementations.mcp.mcp_client import initialize_mcp_client
 from onyx.tools.tool_implementations.mcp.mcp_client import log_exception_group
+from onyx.tools.tool_implementations.mcp.mcp_ssrf import validate_mcp_outbound_url
 from onyx.utils.encryption import mask_string
 from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import BLOCKED_HOSTNAMES
+from onyx.utils.url import SSRFException
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+_SSRF_HINT_NEVER_ALLOWED = (
+    " localhost, unspecified, and link-local/cloud-metadata addresses are never "
+    "permitted; use a loopback or private-network address instead."
+)
+
+
+def _ssrf_error_hint(url: str, error: Exception) -> str:
+    """Suffix steering the operator to the right opt-in for a blocked host:
+    loopback → MCP_SERVER_ALLOW_LOOPBACK, other private → ALLOW_PRIVATE_NETWORK.
+    Link-local/metadata, unspecified, and BLOCKED_HOSTNAMES (e.g. localhost) are
+    never reachable, so suggest a different address; scheme errors get no hint.
+    Only literal IPs are classified — store-time validation doesn't resolve
+    hostnames, so a bare name can't reach the address-specific branches."""
+    if "scheme" in str(error).lower():
+        return ""
+    host = (urlparse(url).hostname or "").lower()
+    if host in BLOCKED_HOSTNAMES:
+        return _SSRF_HINT_NEVER_ALLOWED
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return ""
+    if ip.is_unspecified or ip.is_link_local:
+        return _SSRF_HINT_NEVER_ALLOWED
+    if ip.is_loopback:
+        # Loopback needs both gates, so name whichever is still missing.
+        missing = [
+            f"{var}=true"
+            for var, enabled in (
+                ("MCP_SERVER_ALLOW_LOOPBACK", MCP_SERVER_ALLOW_LOOPBACK),
+                ("MCP_SERVER_ALLOW_PRIVATE_NETWORK", MCP_SERVER_ALLOW_PRIVATE_NETWORK),
+            )
+            if not enabled
+        ]
+        if missing:
+            return (
+                f" To allow a loopback MCP server, set {' and '.join(missing)} "
+                "(cloud-metadata stays blocked)."
+            )
+        return ""
+    if not MCP_SERVER_ALLOW_PRIVATE_NETWORK:
+        return (
+            " To allow an MCP server on a private network, set "
+            "MCP_SERVER_ALLOW_PRIVATE_NETWORK=true (loopback needs "
+            "MCP_SERVER_ALLOW_LOOPBACK; cloud-metadata stays blocked)."
+        )
+    return ""
+
+
+def _validate_mcp_server_url(
+    url: str | None, field: str, *, require_https: bool
+) -> None:
+    """Store-time SSRF guard for a curator-supplied URL; raises ``OnyxError`` as
+    a field-level frontend error. ``require_https`` routes OAuth endpoints through
+    the same validator the token exchange uses, so a URL that saves can't be
+    rejected later. Structural-only (``resolve_dns=False``): rejects bad
+    scheme/credentials/blocked hosts and literal internal IPs but doesn't resolve
+    hostnames, so a transient/internal-DNS host doesn't block a save; fetch-time
+    guards resolve DNS and cover SDK redirects/rebinding."""
+    if not url:
+        return
+    validator = (
+        validate_oauth_endpoint_url if require_https else validate_mcp_outbound_url
+    )
+    try:
+        validator(url, resolve_dns=False)
+    except (SSRFException, ValueError) as e:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Invalid {field}: {e}{_ssrf_error_hint(url, e)}",
+        )
 
 
 def _truncate_description(description: str | None, max_length: int = 500) -> str:
@@ -507,11 +594,49 @@ def make_pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
+MCP_OAUTH_CALLBACK_PATH = "/mcp/oauth/callback"
+
+
+def _mcp_oauth_redirect_uri() -> str:
+    return f"{WEB_DOMAIN}{MCP_OAUTH_CALLBACK_PATH}"
+
+
+def _mcp_known_provider_flow_params(
+    mcp_server: DbMCPServer,
+    client_info: OAuthClientInformationFull,
+) -> OAuthFlowParams:
+    """Map a known-provider MCP server + its stored client credentials onto the
+    shared OAuth flow descriptor consumed by the OAuthTokenManager primitives."""
+    if (
+        not mcp_server.oauth_authorization_endpoint
+        or not mcp_server.oauth_token_endpoint
+    ):
+        raise OnyxError(
+            OnyxErrorCode.MISSING_REQUIRED_FIELD,
+            "Known-provider OAuth mode requires oauth_authorization_endpoint "
+            "and oauth_token_endpoint",
+        )
+    if not client_info.client_id:
+        raise OnyxError(
+            OnyxErrorCode.MISSING_REQUIRED_FIELD,
+            "Known-provider OAuth mode requires a non-empty client_id",
+        )
+    return OAuthFlowParams(
+        authorization_url=mcp_server.oauth_authorization_endpoint,
+        token_url=mcp_server.oauth_token_endpoint,
+        client_id=client_info.client_id,
+        client_secret=client_info.client_secret,
+        scopes=mcp_server.oauth_scopes_override,
+        additional_params=mcp_server.oauth_additional_auth_params,
+    )
+
+
 class MCPOauthState(BaseModel):
     server_id: int
     return_path: str
     is_admin: bool
     state: str
+    code_verifier: str | None = None
 
 
 @admin_router.post("/oauth/connect", response_model=MCPUserOAuthConnectResponse)
@@ -635,6 +760,60 @@ async def _connect_oauth(
     connection_config_dict = extract_connection_data(
         connection_config, apply_mask=False
     )
+
+    if mcp_server.oauth_provider_mode == MCPOAuthProviderMode.KNOWN_PROVIDER:
+        client_info_raw = connection_config_dict.get(MCPOAuthKeys.CLIENT_INFO.value)
+        if not client_info_raw:
+            raise OnyxError(
+                OnyxErrorCode.MISSING_REQUIRED_FIELD,
+                "Known-provider OAuth mode requires a configured OAuth client_id. "
+                "Please set client credentials in the auth modal.",
+            )
+
+        client_info = OAuthClientInformationFull.model_validate(client_info_raw)
+        if not client_info.client_id:
+            raise OnyxError(
+                OnyxErrorCode.MISSING_REQUIRED_FIELD,
+                "Known-provider OAuth mode requires a non-empty client_id",
+            )
+
+        state = token_urlsafe(32)
+        code_verifier, code_challenge = make_pkce_pair()
+        state_obj = MCPOauthState(
+            server_id=mcp_server.id,
+            return_path=request.return_path,
+            is_admin=is_admin,
+            state=state,
+            code_verifier=code_verifier,
+        )
+        redis_client = get_redis_client()
+        state_key = key_state(str(user.id))
+        logger.info(
+            "Known-provider OAuth connect: stored state for server_id=%s user_id=%s tenant=%s",
+            mcp_server.id,
+            user.id,
+            get_current_tenant_id(),
+        )
+        redis_client.set(
+            state_key,
+            state_obj.model_dump_json(),
+            ex=STATE_TTL_SECONDS,
+        )
+
+        oauth_url = build_oauth_authorization_url(
+            _mcp_known_provider_flow_params(mcp_server, client_info),
+            _mcp_oauth_redirect_uri(),
+            state,
+            code_challenge=code_challenge,
+            resource=(
+                mcp_server.server_url if request.include_resource_param else None
+            ),
+        )
+        return MCPUserOAuthConnectResponse(
+            server_id=int(request.server_id),
+            oauth_url=oauth_url,
+        )
+
     is_connected = (
         MCPOAuthKeys.CLIENT_INFO.value in connection_config_dict
         and connection_config_dict.get("headers")
@@ -782,7 +961,15 @@ async def process_oauth_callback(
         raise HTTPException(status_code=400, detail="Missing state parameter")
     if not code:
         raise HTTPException(status_code=400, detail="Missing code parameter")
-    stored_data = cast(bytes, redis_client.get(key_state(user_id)))
+
+    state_key = key_state(user_id)
+    stored_data = redis_client.get(state_key)
+    logger.info(
+        "OAuth callback: state lookup for user_id=%s tenant=%s found=%s",
+        user_id,
+        get_current_tenant_id(),
+        stored_data is not None,
+    )
     if not stored_data:
         raise HTTPException(
             status_code=400, detail="Invalid or expired state parameter"
@@ -794,7 +981,77 @@ async def process_oauth_callback(
     except Exception:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
-    user_id = str(user.id)
+    if state != state_data.state:
+        logger.warning(
+            "OAuth callback: state mismatch for user_id=%s server_id=%s",
+            user_id,
+            server_id,
+        )
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid OAuth state")
+
+    if mcp_server.oauth_provider_mode == MCPOAuthProviderMode.KNOWN_PROVIDER:
+        user_config = get_user_connection_config(mcp_server.id, user.email, db_session)
+        if not user_config:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "User connection config not found for known-provider callback",
+            )
+
+        user_config_data = extract_connection_data(user_config, apply_mask=False)
+        client_info_raw = user_config_data.get(MCPOAuthKeys.CLIENT_INFO.value)
+        if not client_info_raw:
+            raise OnyxError(
+                OnyxErrorCode.MISSING_REQUIRED_FIELD,
+                "Known-provider callback missing client info. "
+                "Reconfigure OAuth client credentials and retry.",
+            )
+
+        client_info = OAuthClientInformationFull.model_validate(client_info_raw)
+        try:
+            token_payload = exchange_oauth_code_for_token(
+                _mcp_known_provider_flow_params(mcp_server, client_info),
+                code,
+                _mcp_oauth_redirect_uri(),
+                code_verifier=state_data.code_verifier,
+            )
+        except (SSRFException, ValueError) as e:
+            # Fetch-time SSRF guard (e.g. DNS rebinding, or a pre-existing
+            # internal endpoint) — surface a clean 400, not an unhandled 500.
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Known-provider OAuth token endpoint is not allowed: {e}",
+            )
+        except requests.HTTPError as e:
+            detail = e.response.text if e.response is not None else str(e)
+            upstream_status = e.response.status_code if e.response is not None else None
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                f"Known-provider OAuth token exchange failed: {detail}",
+                status_code_override=upstream_status,
+            )
+        if not token_payload.get("access_token"):
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY, "Token response missing access_token"
+            )
+        oauth_token = OAuthToken.model_validate(token_payload)
+
+        user_config_data[MCPOAuthKeys.TOKENS.value] = oauth_token.model_dump(
+            mode="json"
+        )
+        user_config_data["headers"] = {
+            "Authorization": f"{oauth_token.token_type} {oauth_token.access_token}"
+        }
+        update_connection_config(user_config.id, db_session, user_config_data)
+        redis_client.delete(key_state(user_id))
+
+        db_session.commit()
+        return MCPOAuthCallbackResponse(
+            success=True,
+            server_id=mcp_server.id,
+            server_name=mcp_server.name,
+            message=f"OAuth authorization completed successfully for {mcp_server.name}",
+            redirect_url=state_data.return_path,
+        )
 
     r = get_redis_client()
 
@@ -1176,6 +1433,11 @@ def _db_mcp_server_to_api_mcp_server(
         transport=db_server.transport,
         auth_type=db_server.auth_type,
         auth_performer=auth_performer,
+        oauth_provider_mode=db_server.oauth_provider_mode,
+        oauth_authorization_endpoint=db_server.oauth_authorization_endpoint,
+        oauth_token_endpoint=db_server.oauth_token_endpoint,
+        oauth_scopes_override=db_server.oauth_scopes_override,
+        oauth_additional_auth_params=db_server.oauth_additional_auth_params,
         is_authenticated=is_authenticated,
         user_authenticated=user_authenticated,
         status=db_server.status,
@@ -1540,6 +1802,16 @@ def _upsert_mcp_server(
     """
     Creates a new or edits an existing MCP server. Returns the DB model
     """
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
+    _validate_mcp_server_url(
+        request.oauth_authorization_endpoint,
+        "oauth_authorization_endpoint",
+        require_https=True,
+    )
+    _validate_mcp_server_url(
+        request.oauth_token_endpoint, "oauth_token_endpoint", require_https=True
+    )
+
     mcp_server = None
     admin_config = None
 
@@ -1631,6 +1903,22 @@ def _upsert_mcp_server(
                 or request.auth_performer != mcp_server.auth_performer
             )
         )
+        # Known-provider OAuth settings (endpoints/mode/scopes/extra params)
+        # determine where and with what scope user tokens are minted. A change
+        # to any of them invalidates existing user tokens, so it must trigger
+        # the same re-handshake wipe as a client_id/secret change.
+        oauth_provider_config_changed = (
+            request.auth_type == MCPAuthenticationType.OAUTH
+            and (
+                request.oauth_provider_mode != mcp_server.oauth_provider_mode
+                or request.oauth_authorization_endpoint
+                != mcp_server.oauth_authorization_endpoint
+                or request.oauth_token_endpoint != mcp_server.oauth_token_endpoint
+                or request.oauth_scopes_override != mcp_server.oauth_scopes_override
+                or request.oauth_additional_auth_params
+                != mcp_server.oauth_additional_auth_params
+            )
+        )
 
         changing_connection_config = (
             not mcp_server.admin_connection_config
@@ -1640,6 +1928,7 @@ def _upsert_mcp_server(
                     client_info is None
                     or request.oauth_client_id != client_info.client_id
                     or request.oauth_client_secret != (client_info.client_secret or "")
+                    or oauth_provider_config_changed
                 )
             )
             or (
@@ -1680,6 +1969,11 @@ def _upsert_mcp_server(
             server_url=request.server_url,
             auth_type=request.auth_type,
             auth_performer=request.auth_performer,
+            oauth_provider_mode=request.oauth_provider_mode,
+            oauth_authorization_endpoint=request.oauth_authorization_endpoint,
+            oauth_token_endpoint=request.oauth_token_endpoint,
+            oauth_scopes_override=request.oauth_scopes_override,
+            oauth_additional_auth_params=request.oauth_additional_auth_params,
             transport=request.transport,
         )
 
@@ -1707,6 +2001,11 @@ def _upsert_mcp_server(
             server_url=request.server_url,
             auth_type=request.auth_type,
             auth_performer=request.auth_performer,
+            oauth_provider_mode=request.oauth_provider_mode,
+            oauth_authorization_endpoint=request.oauth_authorization_endpoint,
+            oauth_token_endpoint=request.oauth_token_endpoint,
+            oauth_scopes_override=request.oauth_scopes_override,
+            oauth_additional_auth_params=request.oauth_additional_auth_params,
             transport=request.transport or MCPTransport.STREAMABLE_HTTP,
             db_session=db_session,
         )
@@ -2041,6 +2340,11 @@ def upsert_mcp_server(
             auth_performer=(
                 request.auth_performer.value if request.auth_performer else None
             ),
+            oauth_provider_mode=mcp_server.oauth_provider_mode,
+            oauth_authorization_endpoint=mcp_server.oauth_authorization_endpoint,
+            oauth_token_endpoint=mcp_server.oauth_token_endpoint,
+            oauth_scopes_override=mcp_server.oauth_scopes_override,
+            oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
             is_authenticated=(
                 mcp_server.auth_type == MCPAuthenticationType.NONE.value
                 or request.auth_performer == MCPAuthenticationPerformer.ADMIN
@@ -2117,6 +2421,8 @@ def create_mcp_server_simple(
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
+
     mcp_server = create_mcp_server__no_commit(
         owner_email=user.email,
         name=request.name,
@@ -2139,6 +2445,11 @@ def create_mcp_server_simple(
         transport=mcp_server.transport,
         auth_type=mcp_server.auth_type,
         auth_performer=mcp_server.auth_performer,
+        oauth_provider_mode=mcp_server.oauth_provider_mode,
+        oauth_authorization_endpoint=mcp_server.oauth_authorization_endpoint,
+        oauth_token_endpoint=mcp_server.oauth_token_endpoint,
+        oauth_scopes_override=mcp_server.oauth_scopes_override,
+        oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
         is_authenticated=False,  # Not authenticated yet
         status=mcp_server.status,
         tool_count=0,  # New server, no tools yet
@@ -2162,6 +2473,8 @@ def update_mcp_server_simple(
         raise HTTPException(status_code=404, detail="MCP server not found")
 
     _ensure_mcp_server_owner_or_admin(mcp_server, user)
+
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
 
     # Update only provided fields
     updated_server = update_mcp_server__no_commit(

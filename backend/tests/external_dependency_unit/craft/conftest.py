@@ -131,7 +131,7 @@ def _skill_table_column_keys(model: type[Any]) -> list[str]:
 
 
 def _skill_table_pk_keys(model: type[Any]) -> list[str]:
-    return [col.key for col in class_mapper(model).primary_key]
+    return [col.key for col in class_mapper(model).primary_key]  # ty: ignore[invalid-return-type]
 
 
 def _snapshot_skill_tables(

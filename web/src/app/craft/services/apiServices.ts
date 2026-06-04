@@ -211,32 +211,41 @@ export async function deleteSession(sessionId: string): Promise<void> {
   }
 }
 
-/**
- * Restore a sleeping sandbox and load the session's snapshot.
- * This is a blocking call that waits until the restore is complete.
- *
- * Handles two cases:
- * 1. Sandbox is SLEEPING: Re-provisions pod, then loads session snapshot
- * 2. Sandbox is RUNNING but session not loaded: Just loads session snapshot
- *
- * Returns immediately if session workspace already exists in pod.
- */
-export async function restoreSession(
-  sessionId: string
-): Promise<ApiDetailedSessionResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/restore`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-  });
+// ~2 min of retries — covers a concurrent provision + snapshot restore; the
+// backend's per-sandbox lock itself expires at 300s.
+const RESTORE_CONFLICT_RETRY_DELAY_MS = 2000;
+const RESTORE_CONFLICT_MAX_RETRIES = 60;
 
-  if (!res.ok) {
+export async function restoreSession(
+  sessionId: string,
+  // Overridable for tests; production callers use the module defaults.
+  opts: { retryDelayMs?: number; maxRetries?: number } = {}
+): Promise<ApiDetailedSessionResponse> {
+  const retryDelayMs = opts.retryDelayMs ?? RESTORE_CONFLICT_RETRY_DELAY_MS;
+  const maxRetries = opts.maxRetries ?? RESTORE_CONFLICT_MAX_RETRIES;
+
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/restore`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (res.ok) {
+      return res.json();
+    }
+
+    // 409 = another tab/request holds the restore lock; it's transient, so
+    // retry until that restore finishes rather than surfacing it as a failure.
+    if (res.status === 409 && attempt < maxRetries) {
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      continue;
+    }
+
     const errorData = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to restore session: ${res.status}`
     );
   }
-
-  return res.json();
 }
 
 /**
@@ -323,14 +332,18 @@ export class RateLimitError extends Error {
 export async function sendMessageStream(
   sessionId: string,
   content: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  model?: { provider: string; modelName: string } | null
 ): Promise<Response> {
   const res = await fetch(
     `${BUILD_API_BASE}/sessions/${sessionId}/send-message`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({
+        content,
+        ...(model ? { provider: model.provider, model: model.modelName } : {}),
+      }),
       signal,
     }
   );
@@ -344,6 +357,20 @@ export async function sendMessageStream(
   }
 
   return res;
+}
+
+/**
+ * Interrupt the in-flight agent turn for a session. The backend interrupts the
+ * sandbox turn; the open /send-message stream then terminates normally.
+ */
+export async function interruptMessageStream(sessionId: string): Promise<void> {
+  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/interrupt`, {
+    method: "POST",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to interrupt message: ${res.status}`);
+  }
 }
 
 // =============================================================================

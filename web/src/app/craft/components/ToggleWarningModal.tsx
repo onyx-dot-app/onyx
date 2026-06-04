@@ -1,6 +1,7 @@
 "use client";
 
 import Text from "@/refresh-components/texts/Text";
+import { RECOMMENDED_CRAFT_MODEL_LABEL } from "@/app/craft/onboarding/constants";
 
 interface ToggleWarningModalProps {
   open: boolean;
@@ -39,7 +40,8 @@ export function ToggleWarningModal({
           {/* Message */}
           <div className="flex justify-center">
             <Text mainUiBody text04 className="text-center">
-              We recommend using <strong>Claude Opus 4.6</strong> for Crafting.
+              We recommend using{" "}
+              <strong>{RECOMMENDED_CRAFT_MODEL_LABEL}</strong> for Crafting.
               <br />
               Other models may have reduced capabilities for code creation,
               <br />

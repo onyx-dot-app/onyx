@@ -738,7 +738,9 @@ export function useLlmManager(
         currentChatSession.current_temperature_override,
         isAnthropicModel ? 1.0 : 2.0
       );
-    } else if (liveAgent?.tools.some((tool) => tool.name === SEARCH_TOOL_ID)) {
+    } else if (
+      liveAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
+    ) {
       return 0;
     }
     return 0.5;
@@ -783,7 +785,9 @@ export function useLlmManager(
 
     if (currentChatSession?.current_temperature_override) {
       setTemperature(currentChatSession.current_temperature_override);
-    } else if (liveAgent?.tools.some((tool) => tool.name === SEARCH_TOOL_ID)) {
+    } else if (
+      liveAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
+    ) {
       setTemperature(0);
     } else {
       setTemperature(0.5);

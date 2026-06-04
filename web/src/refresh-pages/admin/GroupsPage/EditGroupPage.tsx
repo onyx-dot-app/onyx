@@ -6,7 +6,13 @@ import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import { Table, Button, Divider } from "@opal/components";
 import { IllustrationContent, InputHorizontal } from "@opal/layouts";
-import { SvgUsers, SvgTrash, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
+import {
+  SvgUsers,
+  SvgTrash,
+  SvgMinusCircle,
+  SvgPlusCircle,
+  SvgSimpleLoader,
+} from "@opal/icons";
 import { markdown } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Card from "@/refresh-components/cards/Card";
@@ -15,7 +21,6 @@ import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
@@ -338,7 +343,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         />
 
         <SettingsLayouts.Body>
-          {isLoading && <SimpleLoader />}
+          {isLoading && <SvgSimpleLoader />}
 
           {error && (
             <Text as="p" secondaryBody text03>

@@ -77,7 +77,7 @@ class HuggingFaceTokenizer(BaseTokenizer):
         """
         Encode a string using the HuggingFaceTokenizer, but if it fails,
         encode the string as ASCII and decode it back to a string. This helps
-        in cases where the string has weird characters like \udeb4.
+        in cases where the string has weird characters like U+DEB4.
         """
         try:
             return self.encoder.encode(string, add_special_tokens=False)
