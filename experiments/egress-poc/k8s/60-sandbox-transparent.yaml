@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sandbox-transparent
+  namespace: egress-poc
+  labels:
+    app: sandbox-transparent
+spec:
+  restartPolicy: Never
+  hostAliases:
+    - ip: 198.51.100.1
+      hostnames: ["api.allowed.example"]
+    - ip: 198.51.100.2
+      hostnames: ["api.denied.example"]
+    - ip: 198.51.100.3
+      hostnames: ["api.unregistered.example"]
+  # Order:
+  #   1. iptables-init runs to completion (regular init container). Installs
+  #      DNAT 80/443 -> 127.0.0.1:8081/8443 and REJECT for everything else.
+  #   2. proxy starts (native sidecar via restartPolicy: Always). Listens on
+  #      127.0.0.1:8443/8081 in the same pod netns as the workload, so
+  #      mitmproxy's getsockopt(SO_ORIGINAL_DST) works natively — no patch.
+  #   3. Sandbox starts only after the proxy's startupProbe passes.
+  initContainers:
+    - name: iptables-init
+      image: egress-poc/iptables-init:latest
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: PROXY_IP
+          value: "127.0.0.1"
+        - name: PROXY_HTTP_PORT
+          value: "8081"
+        - name: PROXY_HTTPS_PORT
+          value: "8443"
+        # Allow the proxy sidecar (this UID) to escape the egress fence so
+        # it can reach the broker/upstream. The workload runs as a different
+        # UID and stays fenced. Istio's istio-init does the same dance.
+        - name: PROXY_UID
+          value: "1337"
+      securityContext:
+        capabilities:
+          add: ["NET_ADMIN"]
+      volumeMounts:
+        - name: state
+          mountPath: /state
+    - name: proxy
+      image: egress-poc/proxy:latest
+      imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+      securityContext:
+        runAsUser: 1337
+        runAsGroup: 1337
+      env:
+        - name: BROKER_URL
+          value: http://broker.egress-poc.svc.cluster.local:8000
+        - name: CA_CERT_PATH
+          value: /ca/ca.crt
+        - name: CA_KEY_PATH
+          value: /ca/ca.key.enc
+        - name: ENCRYPTION_KEY_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: egress-poc-ca
+              key: passphrase
+        - name: VALID_SESSION_TOKENS
+          value: "poc-session-token-explicit,poc-session-token-extra"
+        - name: TRANSPARENT_DEFAULT_TOKEN
+          value: transparent-default
+        - name: LOG_LEVEL
+          value: INFO
+      ports:
+        - containerPort: 8443
+          name: trans-https
+        - containerPort: 8081
+          name: trans-http
+        - containerPort: 8444
+          name: probe
+      # Probe the regular listener (8444), not 8443, so the TCP probe doesn't
+      # trigger mitmproxy's tls_clienthello hook and spam "no_sni" audits.
+      startupProbe:
+        tcpSocket:
+          port: 8444
+        initialDelaySeconds: 1
+        periodSeconds: 1
+        failureThreshold: 30
+      volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
+  containers:
+    - name: sandbox
+      image: egress-poc/sandbox:latest
+      imagePullPolicy: IfNotPresent
+      command: ["/usr/local/bin/entrypoint-transparent.sh"]
+      env:
+        - name: LOG_LEVEL
+          value: INFO
+      securityContext:
+        capabilities:
+          drop: ["ALL"]
+        allowPrivilegeEscalation: false
+        runAsNonRoot: false
+      volumeMounts:
+        - name: state
+          mountPath: /state
+  volumes:
+    - name: state
+      emptyDir: {}
+    - name: ca
+      secret:
+        secretName: egress-poc-ca
+        items:
+          - key: ca.crt
+            path: ca.crt
+          - key: ca.key.enc
+            path: ca.key.enc

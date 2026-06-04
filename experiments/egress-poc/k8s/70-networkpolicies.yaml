@@ -1,0 +1,90 @@
+# Egress restrictions for the sandbox pods. These are the K8s analog of
+# docker-compose's `internal: true` networks.
+#
+# Sidecar architecture: the proxy lives inside each sandbox pod (same pod
+# IP, same netns), so cross-pod proxy egress doesn't exist. The only
+# outbound destinations these policies allow are:
+#   - DNS (kube-dns / coredns in kube-system)
+#   - the broker service (for the proxy sidecar to fetch policy)
+# Anything else — including direct egress to the internet — is denied
+# under a policy-enforcing CNI.
+#
+# IMPORTANT: kindnet (kind's default CNI) does not enforce NetworkPolicy —
+# these are advisory there. In production (EKS / GKE / cilium / calico) the
+# rules are enforced. Transparent mode is unaffected by this gap because
+# iptables-init enforces at the pod network namespace.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-explicit-egress
+  namespace: egress-poc
+spec:
+  podSelector:
+    matchLabels:
+      app: sandbox-explicit
+  policyTypes:
+    - Egress
+  egress:
+    # DNS (kube-dns / coredns in kube-system).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Broker — proxy sidecar fetches policy decisions over HTTP.
+    - to:
+        - podSelector:
+            matchLabels:
+              app: broker
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Upstream — broker.upstream_url routes mock destinations here.
+    - to:
+        - podSelector:
+            matchLabels:
+              app: upstream
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-transparent-egress
+  namespace: egress-poc
+spec:
+  podSelector:
+    matchLabels:
+      app: sandbox-transparent
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              app: broker
+      ports:
+        - protocol: TCP
+          port: 8000
+    - to:
+        - podSelector:
+            matchLabels:
+              app: upstream
+      ports:
+        - protocol: TCP
+          port: 8000

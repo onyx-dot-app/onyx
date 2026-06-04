@@ -1,0 +1,66 @@
+# Base stack: proxy, broker, upstream, and the three networks they live on.
+# Sandboxes are layered on via docker-compose.explicit.yml and
+# docker-compose.transparent.yml overlays.
+
+services:
+  proxy:
+    build:
+      context: ./proxy
+    image: egress-poc/proxy:latest
+    container_name: egress-poc-proxy
+    environment:
+      BROKER_URL: http://broker:8000
+      CA_CERT_PATH: /ca/ca.crt
+      CA_KEY_PATH: /ca/ca.key.enc
+      ENCRYPTION_KEY_SECRET: poc-key-not-for-prod
+      VALID_SESSION_TOKENS: "poc-session-token-explicit,poc-session-token-extra"
+      TRANSPARENT_DEFAULT_TOKEN: transparent-default
+      LOG_LEVEL: INFO
+    volumes:
+      - ./ca:/ca:ro
+    depends_on:
+      broker:
+        condition: service_started
+      upstream:
+        condition: service_started
+    networks:
+      egress-net:
+      sandbox-explicit-net:
+      sandbox-transparent-net:
+        ipv4_address: 172.30.0.10
+
+  broker:
+    build:
+      context: ./broker
+    image: egress-poc/broker:latest
+    container_name: egress-poc-broker
+    environment:
+      LOG_LEVEL: INFO
+      EGRESS_DEFAULT_DENY: "${EGRESS_DEFAULT_DENY:-false}"
+    networks:
+      - egress-net
+
+  upstream:
+    build:
+      context: ./upstream
+    image: egress-poc/upstream:latest
+    container_name: egress-poc-upstream
+    networks:
+      - egress-net
+
+networks:
+  egress-net:
+    name: egress-poc-egress-net
+    driver: bridge
+  sandbox-explicit-net:
+    name: egress-poc-sandbox-explicit-net
+    driver: bridge
+    internal: true
+  sandbox-transparent-net:
+    name: egress-poc-sandbox-transparent-net
+    driver: bridge
+    internal: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.30.0.0/24

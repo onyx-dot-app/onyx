@@ -211,7 +211,7 @@ override-dependencies = [
 
 [tool.ty.environment]
 python-version = "3.11"
-root = ["./backend"]
+root = ["./backend", "./experiments/egress-poc/proxy"]
 
 [tool.ty.src]
 include = ["backend"]

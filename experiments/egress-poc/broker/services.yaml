@@ -1,0 +1,36 @@
+# Service registry for the egress PoC broker. The proxy queries this via
+# POST /policy/evaluate; the broker is the only component that reads the
+# secrets/ directory.
+#
+# Hosts not listed here are "unregistered" — the broker's response depends
+# on EGRESS_DEFAULT_DENY:
+#   true  -> decision=deny, category=UNKNOWN
+#   false -> decision=allow, no injection, no upstream override (forwarded
+#            to the upstream the proxy would otherwise have resolved).
+#            In the PoC we still route unregistered hosts to the mock
+#            upstream so demos don't depend on real DNS.
+
+services:
+  - host: api.allowed.example
+    service_slug: allowed
+    upstream_url: http://upstream:8000
+    secret_file: allowed-token.txt
+    inject_header: Authorization
+    inject_template: "Bearer {secret}"
+    strip_headers: [Authorization, Cookie, X-API-Key, Proxy-Authorization]
+    classifications:
+      GET: READ
+      POST: WRITE
+      PUT: WRITE
+      PATCH: WRITE
+      DELETE: DESTRUCTIVE
+
+  - host: api.denied.example
+    service_slug: denied
+    decision: deny
+    strip_headers: [Authorization, Cookie, X-API-Key, Proxy-Authorization]
+
+# Fallback upstream for unregistered hosts (PoC convenience so demos work
+# without real DNS). Comment out to make unregistered hosts hit the real
+# internet (or fail) instead.
+unregistered_upstream_url: http://upstream:8000

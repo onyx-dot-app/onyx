@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sandbox-explicit
+  namespace: egress-poc
+  labels:
+    app: sandbox-explicit
+spec:
+  restartPolicy: Never
+  hostAliases:
+    - ip: 198.51.100.1
+      hostnames: ["api.allowed.example"]
+    - ip: 198.51.100.2
+      hostnames: ["api.denied.example"]
+    - ip: 198.51.100.3
+      hostnames: ["api.unregistered.example"]
+  # Native sidecar (initContainer w/ restartPolicy: Always): boots before the
+  # workload and keeps running. Workload doesn't start until the sidecar's
+  # startupProbe passes, so HTTPS_PROXY=127.0.0.1 is guaranteed to be live.
+  initContainers:
+    - name: proxy
+      image: egress-poc/proxy:latest
+      imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+      env:
+        - name: BROKER_URL
+          value: http://broker.egress-poc.svc.cluster.local:8000
+        - name: CA_CERT_PATH
+          value: /ca/ca.crt
+        - name: CA_KEY_PATH
+          value: /ca/ca.key.enc
+        - name: ENCRYPTION_KEY_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: egress-poc-ca
+              key: passphrase
+        - name: VALID_SESSION_TOKENS
+          value: "poc-session-token-explicit,poc-session-token-extra"
+        - name: TRANSPARENT_DEFAULT_TOKEN
+          value: transparent-default
+        - name: LOG_LEVEL
+          value: INFO
+      ports:
+        - containerPort: 8444
+          name: regular
+      startupProbe:
+        tcpSocket:
+          port: 8444
+        initialDelaySeconds: 1
+        periodSeconds: 1
+        failureThreshold: 30
+      volumeMounts:
+        - name: ca
+          mountPath: /ca
+          readOnly: true
+  containers:
+    - name: sandbox
+      image: egress-poc/sandbox:latest
+      imagePullPolicy: IfNotPresent
+      command: ["/usr/local/bin/entrypoint-explicit.sh"]
+      env:
+        - name: SESSION_TOKEN
+          value: poc-session-token-explicit
+        - name: HTTPS_PROXY
+          value: "http://session:poc-session-token-explicit@127.0.0.1:8444"
+        - name: HTTP_PROXY
+          value: "http://session:poc-session-token-explicit@127.0.0.1:8444"
+        - name: https_proxy
+          value: "http://session:poc-session-token-explicit@127.0.0.1:8444"
+        - name: http_proxy
+          value: "http://session:poc-session-token-explicit@127.0.0.1:8444"
+        - name: NO_PROXY
+          value: "localhost,127.0.0.1,.svc.cluster.local,.cluster.local"
+        - name: no_proxy
+          value: "localhost,127.0.0.1,.svc.cluster.local,.cluster.local"
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/onyx-ca.crt
+        - name: SSL_CERT_FILE
+          value: /etc/ssl/certs/onyx-ca.crt
+        - name: CURL_CA_BUNDLE
+          value: /etc/ssl/certs/onyx-ca.crt
+        - name: GIT_SSL_CAINFO
+          value: /etc/ssl/certs/onyx-ca.crt
+        - name: AWS_CA_BUNDLE
+          value: /etc/ssl/certs/onyx-ca.crt
+        - name: NODE_EXTRA_CA_CERTS
+          value: /etc/ssl/certs/onyx-ca.crt
+      securityContext:
+        capabilities:
+          drop: ["ALL"]
+        allowPrivilegeEscalation: false
+        runAsNonRoot: false
+  volumes:
+    - name: ca
+      secret:
+        secretName: egress-poc-ca
+        items:
+          - key: ca.crt
+            path: ca.crt
+          - key: ca.key.enc
+            path: ca.key.enc
