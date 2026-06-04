@@ -1,4 +1,7 @@
-import { INTERNAL_URL } from "@/lib/constants";
+import {
+  INTERNAL_URL,
+  SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
+} from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
 
 /* NextJS is annoying and makes use use a separate function for
@@ -96,7 +99,7 @@ async function handleRequest(request: NextRequest, path: string[]) {
       // Inject the debug auth cookie for local development against remote backend
       // Get from cloud site: DevTools → Application → Cookies → fastapiusersauth
       const existingCookies = headers.get("cookie") || "";
-      const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
+      const debugCookie = `${SERVER_SIDE_ONLY__AUTH_COOKIE_NAME}=${process.env.DEBUG_AUTH_COOKIE}`;
       headers.set(
         "cookie",
         existingCookies ? `${existingCookies}; ${debugCookie}` : debugCookie

@@ -1,3 +1,4 @@
+import os
 import platform
 import re
 import socket
@@ -31,8 +32,12 @@ DEFAULT_BOOST = 0
 PUBLIC_API_TAGS: list[str | Enum] = ["public"]
 
 # Cookies
+# Configurable via env so multiple deployments sharing a hostname (e.g. parallel
+# local worktrees on different ports of localhost) can keep their auth cookies
+# separate — cookies are scoped by host, not port. The frontend reads the same
+# AUTH_COOKIE_NAME so the Next proxy / auth checks look for the matching cookie.
 FASTAPI_USERS_AUTH_COOKIE_NAME = (
-    "fastapiusersauth"  # Currently a constant, but logic allows for configuration
+    os.environ.get("AUTH_COOKIE_NAME") or "fastapiusersauth"
 )
 TENANT_ID_COOKIE_NAME = "onyx_tid"  # tenant id - for workaround cases
 ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
