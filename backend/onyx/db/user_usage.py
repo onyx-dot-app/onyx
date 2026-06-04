@@ -69,6 +69,9 @@ def record_user_usage(
     new amounts to the existing row, so concurrent recorders can't lose an
     update. Caller owns the transaction commit.
     """
+    # Store "" rather than NULL for a missing provider so the dedup unique index
+    # collapses these rows on every Postgres version (no NULLS NOT DISTINCT).
+    provider = provider or ""
     dialect = db_session.bind.dialect.name if db_session.bind is not None else ""
 
     if dialect == "postgresql":
@@ -98,7 +101,6 @@ def record_user_usage(
         return
 
     # Non-postgres (SQLite tests): SELECT ... FOR UPDATE then add-or-insert.
-    # provider may be NULL, so match it with IS rather than ==.
     existing = db_session.execute(
         select(UserUsage)
         .where(
@@ -106,9 +108,7 @@ def record_user_usage(
             UserUsage.window_start == window_start,
             UserUsage.model == model,
             UserUsage.flow == flow,
-            UserUsage.provider.is_(provider)
-            if provider is None
-            else UserUsage.provider == provider,
+            UserUsage.provider == provider,
         )
         .with_for_update()
     ).scalar_one_or_none()

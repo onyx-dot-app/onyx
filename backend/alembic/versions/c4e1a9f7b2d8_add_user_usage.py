@@ -31,7 +31,9 @@ def upgrade() -> None:
         ),
         sa.Column("model", sa.String(), nullable=False),
         sa.Column("flow", sa.String(), nullable=False),
-        sa.Column("provider", sa.String(), nullable=True),
+        # Empty string (not NULL) for "no provider" so the dedup unique index
+        # works on every Postgres version (NULLS NOT DISTINCT is PG15+ only).
+        sa.Column("provider", sa.String(), nullable=False, server_default=""),
         sa.Column("input_tokens", sa.Integer(), nullable=False),
         sa.Column("output_tokens", sa.Integer(), nullable=False),
         sa.Column(
@@ -48,12 +50,13 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_user_usage_user_id", "user_usage", ["user_id"], unique=False)
-    # Upsert key; NULLS NOT DISTINCT (PG15+) so rows with provider IS NULL
-    # collide as one. Raw DDL because this SQLAlchemy version can't emit the
-    # clause via op.create_index.
-    op.execute(
-        "CREATE UNIQUE INDEX uq_user_usage_dims ON user_usage "
-        "(user_id, window_start, model, flow, provider) NULLS NOT DISTINCT"
+    # Upsert key. provider is non-null ('' when absent), so a plain unique index
+    # dedups correctly on every Postgres version (no PG15-only NULLS NOT DISTINCT).
+    op.create_index(
+        "uq_user_usage_dims",
+        "user_usage",
+        ["user_id", "window_start", "model", "flow", "provider"],
+        unique=True,
     )
 
 

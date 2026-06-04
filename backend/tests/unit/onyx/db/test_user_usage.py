@@ -155,6 +155,9 @@ class TestRecordUserUsage:
         assert len(rows) == 1
         assert rows[0].input_tokens == 40
         assert rows[0].cost_cents == pytest.approx(0.4)
+        # A missing provider is stored as "" (not NULL) so the dedup unique index
+        # collapses these rows on every Postgres version.
+        assert rows[0].provider == ""
 
 
 class TestAggregation:

@@ -5225,7 +5225,11 @@ class UserUsage(Base):
 
     model: Mapped[str] = mapped_column(String, nullable=False)
     flow: Mapped[str] = mapped_column(String, nullable=False)
-    provider: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Empty string (not NULL) for "no provider" so the dedup unique index below
+    # works on every Postgres version without NULLS NOT DISTINCT (PG15+).
+    provider: Mapped[str] = mapped_column(
+        String, nullable=False, default="", server_default=""
+    )
 
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -5238,9 +5242,8 @@ class UserUsage(Base):
 
     __table_args__ = (
         # Upsert key: accumulate into one row per dimension tuple per window.
-        # The migration creates this index NULLS NOT DISTINCT (PG15+) so rows
-        # with provider IS NULL still collide; the kwarg isn't expressible on
-        # this SQLAlchemy version, so model-side it's a plain unique index.
+        # provider is non-null ('' when absent), so a plain unique index dedups
+        # correctly on every Postgres version (no NULLS NOT DISTINCT needed).
         Index(
             "uq_user_usage_dims",
             "user_id",
