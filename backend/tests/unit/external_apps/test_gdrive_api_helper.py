@@ -44,7 +44,9 @@ def test_build_query_combines_filters_and_excludes_trashed() -> None:
     assert "trashed = false" in q
 
 
-def test_build_query_empty_still_excludes_trashed() -> None:
+def test_build_query_include_trashed_with_no_filters_is_empty() -> None:
+    # include_trashed=True drops the default `trashed = false` clause, so with no
+    # other filters the query is empty (list everything, trashed included).
     args = argparse.Namespace(
         text=None, name=None, mime=None, parent=None, include_trashed=True
     )
@@ -107,6 +109,24 @@ def test_read_downloads_binary_via_alt_media(monkeypatch: Any) -> None:
     assert calls[0][1]["alt"] == "media"
     assert result["exportedAs"] is None
     assert result["content"] == "hello"
+
+
+def test_drives_paginates_and_reports_schema(monkeypatch: Any) -> None:
+    """`drives` must honor the documented {items, count, truncated} schema and
+    page past the surplus rather than silently dropping it."""
+    pages = [
+        {"drives": [{"id": str(i)} for i in range(100)], "nextPageToken": "t"},
+        {"drives": [{"id": "overflow"}]},
+    ]
+    seen = iter(pages)
+    monkeypatch.setattr(gdrive, "_req_json", lambda *_a, **_k: next(seen))
+
+    args = gdrive._build_parser().parse_args(["drives", "--limit", "100"])
+    result = gdrive._dispatch(args)
+
+    assert result["count"] == 100
+    assert result["truncated"] is True  # the second page exists but wasn't dropped
+    assert len(result["items"]) == 100
 
 
 def test_upload_creates_and_converts_to_google_doc(

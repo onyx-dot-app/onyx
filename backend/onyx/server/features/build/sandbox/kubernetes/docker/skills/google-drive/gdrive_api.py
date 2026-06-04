@@ -157,27 +157,29 @@ def _shared_drive_params(shared: bool) -> dict[str, Any]:
     }
 
 
-def _paginate(params: dict[str, Any], limit: int) -> dict[str, Any]:
-    """Walk `files.list` (`files` + `nextPageToken`) up to `limit`."""
-    files: list[Any] = []
+def _paginate(
+    path: str, list_key: str, params: dict[str, Any], limit: int
+) -> dict[str, Any]:
+    """Walk a Drive list endpoint (`<list_key>` + `nextPageToken`) up to `limit`."""
+    items: list[Any] = []
     token: str | None = None
     while True:
-        q = dict(params, pageSize=min(_PAGE_SIZE, limit - len(files)))
+        q = dict(params, pageSize=min(_PAGE_SIZE, limit - len(items)))
         if token:
             q["pageToken"] = token
-        resp = _req_json("files", params=q)
-        files.extend(resp.get("files") or [])
+        resp = _req_json(path, params=q)
+        items.extend(resp.get(list_key) or [])
         token = resp.get("nextPageToken")
-        if len(files) >= limit:
+        if len(items) >= limit:
             return {
                 "ok": True,
-                "items": files[:limit],
+                "items": items[:limit],
                 "count": limit,
                 "truncated": bool(token),
             }
         if not token:
             break
-    return {"ok": True, "items": files, "count": len(files), "truncated": False}
+    return {"ok": True, "items": items, "count": len(items), "truncated": False}
 
 
 def _escape(value: str) -> str:
@@ -209,7 +211,7 @@ def _list(query: str, a: argparse.Namespace) -> dict[str, Any]:
         "spaces": "drive",
         **_shared_drive_params(getattr(a, "shared_drives", False)),
     }
-    return _paginate(params, a.limit)
+    return _paginate("files", "files", params, a.limit)
 
 
 def _read(a: argparse.Namespace) -> dict[str, Any]:
@@ -317,7 +319,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--max-bytes", dest="max_bytes", type=int, default=_DEFAULT_MAX_BYTES
     )
 
-    sub.add_parser("drives", help="list shared drives")
+    sp = sub.add_parser("drives", help="list shared drives")
+    sp.add_argument("--limit", type=int, default=_DEFAULT_LIMIT)
 
     # --- writes (may prompt for approval) ---
     sp = sub.add_parser("create-folder", help="create a folder (write)")
@@ -381,8 +384,7 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
         return _read(a)
 
     if a.cmd == "drives":
-        resp = _req_json("drives", {"pageSize": 100})
-        return {"ok": True, "items": resp.get("drives") or []}
+        return _paginate("drives", "drives", {}, a.limit)
 
     if a.cmd == "create-folder":
         body: dict[str, Any] = {"name": a.name, "mimeType": _FOLDER_MIME}
@@ -435,7 +437,10 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
     # `call` raw escape hatch
     parsed_body = None
     if a.json_body:
-        parsed_body = json.loads(a.json_body)
+        try:
+            parsed_body = json.loads(a.json_body)
+        except json.JSONDecodeError as e:
+            return {"ok": False, "error": f"invalid json_body: {e}"}
         if not isinstance(parsed_body, dict):
             return {"ok": False, "error": "json_body_not_object"}
     resp = _req_json(a.path.lstrip("/"), method=a.method, body=parsed_body)
@@ -450,8 +455,8 @@ def main(argv: list[str]) -> int:
         print(f"file not found: {e.filename}", file=sys.stderr)
         return 2
     except json.JSONDecodeError as e:
-        print(f"invalid json_body: {e}", file=sys.stderr)
-        return 2
+        print(f"Google Drive returned a non-JSON response: {e}", file=sys.stderr)
+        return 1
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")
         print(f"HTTP {e.code} calling Google Drive: {detail}", file=sys.stderr)
