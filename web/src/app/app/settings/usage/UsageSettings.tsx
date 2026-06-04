@@ -4,10 +4,14 @@ import { useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import { Text, EmptyMessageCard, Divider } from "@opal/components";
-import { SvgBarChart, SvgWallet, SvgCreditCard } from "@opal/icons";
+import {
+  SvgBarChart,
+  SvgWallet,
+  SvgCreditCard,
+  SvgSimpleLoader,
+} from "@opal/icons";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Card from "@/refresh-components/cards/Card";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { cn } from "@opal/utils";
 import {
   useUserUsage,
@@ -274,7 +278,7 @@ export default function UsageSettings() {
               alignItems="center"
               width="full"
             >
-              <SimpleLoader />
+              <SvgSimpleLoader />
             </Section>
           </Card>
         ) : error || !data ? (

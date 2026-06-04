@@ -1,7 +1,7 @@
 """add user_usage ledger
 
 Revision ID: c4e1a9f7b2d8
-Revises: 4d545225fd82
+Revises: 99ecd56cb2ce
 Create Date: 2026-06-03 10:00:00.000000
 
 """
@@ -12,7 +12,7 @@ import fastapi_users_db_sqlalchemy
 
 # revision identifiers, used by Alembic.
 revision = "c4e1a9f7b2d8"
-down_revision = "4d545225fd82"
+down_revision = "99ecd56cb2ce"
 branch_labels = None
 depends_on = None
 
