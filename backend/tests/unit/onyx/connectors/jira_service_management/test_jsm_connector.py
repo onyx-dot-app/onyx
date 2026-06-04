@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 import pytest
 from jira import JIRA
+from requests import HTTPError
 from requests import Response
 
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -157,11 +158,14 @@ def test_connector_property_raises_without_credentials(
 
 def test_get_jsm_project_keys_returns_keys(mock_jira_client: MagicMock) -> None:
     mock_response = MagicMock(spec=Response)
+    mock_response.status_code = 200
+    mock_response.raise_for_status = MagicMock()
     mock_response.json.return_value = {
         "values": [
             {"id": "1", "projectKey": "IT", "projectName": "IT Service Desk"},
             {"id": "2", "projectKey": "HR", "projectName": "HR Help Desk"},
-        ]
+        ],
+        "isLastPage": True,
     }
     mock_jira_client._session.get.return_value = mock_response
 
@@ -169,9 +173,10 @@ def test_get_jsm_project_keys_returns_keys(mock_jira_client: MagicMock) -> None:
     assert keys == ["IT", "HR"]
 
 
-def test_get_jsm_project_keys_returns_empty_on_error(
+def test_get_jsm_project_keys_returns_empty_on_non_http_error(
     mock_jira_client: MagicMock,
 ) -> None:
+    """Non-HTTP errors (e.g. network failures) are swallowed and [] is returned."""
     mock_jira_client._session.get.side_effect = Exception("network error")
 
     keys = _get_jsm_project_keys(mock_jira_client)
@@ -182,11 +187,53 @@ def test_get_jsm_project_keys_returns_empty_on_empty_response(
     mock_jira_client: MagicMock,
 ) -> None:
     mock_response = MagicMock(spec=Response)
-    mock_response.json.return_value = {"values": []}
+    mock_response.json.return_value = {"values": [], "isLastPage": True}
     mock_jira_client._session.get.return_value = mock_response
 
     keys = _get_jsm_project_keys(mock_jira_client)
     assert keys == []
+
+
+@pytest.mark.parametrize("status_code", [401, 403])
+def test_get_jsm_project_keys_raises_on_auth_error(
+    mock_jira_client: MagicMock,
+    status_code: int,
+) -> None:
+    """Auth/permission errors (401, 403) must NOT be swallowed so that
+    validate_connector_settings can surface bad credentials to the user."""
+    mock_response = MagicMock(spec=Response)
+    mock_response.status_code = status_code
+    mock_response.raise_for_status.side_effect = HTTPError(response=mock_response)
+    mock_jira_client._session.get.return_value = mock_response
+
+    with pytest.raises(HTTPError):
+        _get_jsm_project_keys(mock_jira_client)
+
+
+def test_get_jsm_project_keys_paginates(mock_jira_client: MagicMock) -> None:
+    """All pages are fetched when ``isLastPage`` is False on the first page."""
+    page1 = MagicMock(spec=Response)
+    page1.status_code = 200
+    page1.raise_for_status = MagicMock()
+    page1.json.return_value = {
+        "values": [{"id": "1", "projectKey": "IT"}],
+        "isLastPage": False,
+    }
+    page2 = MagicMock(spec=Response)
+    page2.status_code = 200
+    page2.raise_for_status = MagicMock()
+    page2.json.return_value = {
+        "values": [{"id": "2", "projectKey": "HR"}],
+        "isLastPage": True,
+    }
+    mock_jira_client._session.get.side_effect = [page1, page2]
+
+    keys = _get_jsm_project_keys(mock_jira_client)
+    assert keys == ["IT", "HR"]
+    assert mock_jira_client._session.get.call_count == 2
+    # Second call must use start=100
+    _, kwargs = mock_jira_client._session.get.call_args_list[1]
+    assert kwargs["params"]["start"] == 100
 
 
 # ---------------------------------------------------------------------------
@@ -211,14 +258,32 @@ def test_validate_raises_when_not_a_service_desk_project(
 ) -> None:
     # Service desk API returns a different project key
     mock_response = MagicMock(spec=Response)
+    mock_response.status_code = 200
+    mock_response.raise_for_status = MagicMock()
     mock_response.json.return_value = {
         "values": [
             {"id": "1", "projectKey": "HELP", "projectName": "Help Desk"},
-        ]
+        ],
+        "isLastPage": True,
     }
     mock_jira_client._session.get.return_value = mock_response
 
     with pytest.raises(ConnectorValidationError, match="not a Jira Service Management"):
+        jsm_connector.validate_connector_settings()
+
+
+def test_validate_raises_on_auth_error_from_jsm_api(
+    jsm_connector: JiraServiceManagementConnector,
+    mock_jira_client: MagicMock,
+) -> None:
+    """A 401/403 from the JSM API must propagate out of validate_connector_settings,
+    not be silently swallowed (which would cause the validation to appear to pass)."""
+    mock_response = MagicMock(spec=Response)
+    mock_response.status_code = 403
+    mock_response.raise_for_status.side_effect = HTTPError(response=mock_response)
+    mock_jira_client._session.get.return_value = mock_response
+
+    with pytest.raises(HTTPError):
         jsm_connector.validate_connector_settings()
 
 
@@ -228,10 +293,13 @@ def test_validate_passes_when_project_is_service_desk(
 ) -> None:
     # Service desk API returns our project key
     mock_response = MagicMock(spec=Response)
+    mock_response.status_code = 200
+    mock_response.raise_for_status = MagicMock()
     mock_response.json.return_value = {
         "values": [
             {"id": "1", "projectKey": "IT", "projectName": "IT Service Desk"},
-        ]
+        ],
+        "isLastPage": True,
     }
     mock_jira_client._session.get.return_value = mock_response
     mock_jira_client.project.return_value = MagicMock()

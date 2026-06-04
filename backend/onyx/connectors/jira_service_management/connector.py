@@ -11,10 +11,10 @@ For the actual document loading we delegate to :class:`JiraConnector` after
 setting a JQL query that is scoped to the configured JSM project key.
 """
 
-from datetime import datetime
 from typing import Any
 
 from jira import JIRA
+from requests import HTTPError
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -46,20 +46,49 @@ def _get_jsm_project_keys(jira_client: JIRA) -> list[str]:
     """
     Query the JSM Service Desk API to get all service desk project keys.
 
+    Follows pagination via the ``isLastPage`` flag so all service desks are
+    returned even when there are more than 100.
+
     Returns a list of project keys for all accessible service desk projects.
-    Falls back to an empty list if the API call fails or is not a Cloud instance.
+    Falls back to an empty list if the JSM API is not available on this
+    instance (e.g. Jira Server without the JSM add-on).
+
+    Raises:
+        HTTPError: Re-raised when the server responds with a 401 or 403 so
+            that the caller does NOT silently skip credential/permission
+            validation.
     """
     try:
         base_url = jira_client.server_url.rstrip("/")
         api_url = f"{base_url}/{_JSM_SERVICEDESK_API_PATH}"
-        response = jira_client._session.get(  # ty: ignore[unresolved-attribute]
-            api_url,
-            params={"limit": 100},
-        )
-        response.raise_for_status()
-        data = response.json()
-        values = data.get("values", [])
-        return [sd["projectKey"] for sd in values if "projectKey" in sd]
+
+        all_keys: list[str] = []
+        start = 0
+        limit = 100
+
+        while True:
+            response = jira_client._session.get(  # ty: ignore[unresolved-attribute]
+                api_url,
+                params={"limit": limit, "start": start},
+            )
+            # Auth / permission errors must NOT be swallowed — let them surface
+            # so that validate_connector_settings actually validates.
+            if response.status_code in (401, 403):
+                response.raise_for_status()
+
+            response.raise_for_status()
+            data = response.json()
+            values = data.get("values", [])
+            all_keys.extend(sd["projectKey"] for sd in values if "projectKey" in sd)
+
+            if data.get("isLastPage", True):
+                break
+            start += limit
+
+        return all_keys
+    except HTTPError:
+        # Re-raise auth/permission errors so the caller knows validation failed.
+        raise
     except Exception as e:
         logger.warning(
             "Failed to fetch JSM service desk projects via Service Desk API: %s. "
@@ -99,7 +128,6 @@ class JiraServiceManagementConnector(
         self.labels_to_skip = set(labels_to_skip)
         self.batch_size = batch_size
         self._jira_client: JIRA | None = None
-        self._project_permissions_cache: dict[str, Any] = {}
         # Delegate to JiraConnector internally; we configure it once credentials
         # are loaded so we can share all of the heavy-lifting logic.
         self._jira_connector: JiraConnector | None = None
@@ -211,6 +239,7 @@ class JiraServiceManagementConnector(
 
 if __name__ == "__main__":
     import os
+    from datetime import datetime
 
     from onyx.utils.variable_functionality import global_version
     from tests.daily.connectors.utils import load_all_from_connector
