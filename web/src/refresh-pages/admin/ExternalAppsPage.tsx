@@ -9,6 +9,7 @@ import { SettingsLayouts } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import { SvgArrowLeft, SvgPlug, SvgPlus, SvgTrash } from "@opal/icons";
 import {
+  availableBuiltInDescriptors,
   BuiltInExternalAppDescriptor,
   ExternalAppAdminResponse,
   getAppTypeLogo,
@@ -88,6 +89,12 @@ function AppsAdminContent() {
     (descriptors ?? []).map((d) => [d.app_type, d])
   );
 
+  // Already-configured providers drop off the available list (one per provider).
+  const availableDescriptors = availableBuiltInDescriptors(
+    descriptors ?? [],
+    apps ?? []
+  );
+
   if (!isReady) {
     return (
       <Card variant="tertiary">
@@ -131,12 +138,12 @@ function AppsAdminContent() {
           {hasConfigured ? "Add another" : "Available apps"}
         </Text>
         <Text font="secondary-body" color="text-03">
-          Add a built-in integration. You can configure multiple instances of
-          the same provider (e.g. two Slack workspaces) by giving each a
-          distinct name.
+          Add a built-in integration. Each provider can be configured once;
+          connected providers no longer appear here. Use a custom app for
+          anything not listed.
         </Text>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
-          {descriptors.map((descriptor) => (
+          {availableDescriptors.map((descriptor) => (
             <AvailableAppCard
               key={descriptor.app_type}
               descriptor={descriptor}
@@ -261,14 +268,17 @@ function ConfiguredAppCard({
           >
             {isMutating ? "…" : app.enabled ? "Disable" : "Enable"}
           </Button>
-          <Button
-            prominence="tertiary"
-            variant="danger"
-            icon={SvgTrash}
-            onClick={remove}
-            disabled={isMutating}
-            aria-label={`Delete ${app.name}`}
-          />
+          {/* Onyx-managed built-ins (cloud) can't be deleted — only disabled. */}
+          {!app.is_onyx_managed && (
+            <Button
+              prominence="tertiary"
+              variant="danger"
+              icon={SvgTrash}
+              onClick={remove}
+              disabled={isMutating}
+              aria-label={`Delete ${app.name}`}
+            />
+          )}
         </div>
       </div>
     </Card>
