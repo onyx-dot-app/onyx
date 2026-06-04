@@ -2,7 +2,7 @@
 
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "@opal/utils";
-import LegacyText from "@/refresh-components/texts/Text";
+import RefreshText from "@/refresh-components/texts/Text";
 
 export interface BigButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   // Subvariants
@@ -91,13 +91,13 @@ const BigButton = forwardRef<HTMLButtonElement, BigButtonProps>(
         type="button"
         {...props}
       >
-        <LegacyText
+        <RefreshText
           mainContentEmphasis
           className={cn("whitespace-nowrap", getTextOverride())}
           as="span"
         >
           {children}
-        </LegacyText>
+        </RefreshText>
       </button>
     );
   }
