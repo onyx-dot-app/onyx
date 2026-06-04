@@ -16,6 +16,3 @@ dist/
 .coverage
 htmlcov/
 model_server/legacy/
-
-# Craft: templates/outputs/venv is created at container startup
-**/templates/outputs/venv

@@ -184,8 +184,7 @@ See the main [CONTRIBUTING.md](../../../../CONTRIBUTING.md) for guidelines.
 For Craft-specific development:
 
 1. Set `ENABLE_CRAFT=true` in your environment
-2. Ensure templates are available at `/templates/outputs` and `/templates/venv`
-3. For local development, sandboxes are created under `/tmp/onyx-sandboxes`
+2. Choose a sandbox backend via `SANDBOX_BACKEND` (`kubernetes` or `docker`); see the backend sandbox README for setup
 
 ## License
 
