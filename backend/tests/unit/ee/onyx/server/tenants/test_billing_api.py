@@ -155,3 +155,80 @@ class TestGetStripePublishableKey:
             result2 = await get_stripe_publishable_key()
             # Should still return cached value
             assert result2.publishable_key == "pk_test_cached"
+
+
+class TestCreateSubscriptionSession:
+    """Tests for create_subscription_session endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_returns_session_id_and_url_for_new_checkout(self) -> None:
+        """New-subscription checkout returns both sessionId and a hosted url."""
+        from ee.onyx.server.tenants.billing_api import create_subscription_session
+        from ee.onyx.server.tenants.models import StripeCheckoutSessionResult
+        from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_123")
+        try:
+            with patch(
+                "ee.onyx.server.tenants.billing_api.fetch_stripe_checkout_session",
+                return_value=StripeCheckoutSessionResult(
+                    session_id="cs_test_123",
+                    url="https://checkout.stripe.com/session",
+                ),
+            ):
+                result = await create_subscription_session(request=None, _=MagicMock())
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+        assert result.sessionId == "cs_test_123"
+        assert result.url == "https://checkout.stripe.com/session"
+        assert result.requires_payment_method_update is False
+
+    @pytest.mark.asyncio
+    async def test_handles_past_due_portal_response(self) -> None:
+        """past_due/unpaid tenants get a portal url with a null sessionId.
+
+        Regression: the response model used to require a non-null sessionId,
+        so this branch raised a ValidationError -> 500 on the Access Restricted
+        page (the control plane routes lapsed subs to the payment-update portal).
+        """
+        from ee.onyx.server.tenants.billing_api import create_subscription_session
+        from ee.onyx.server.tenants.models import StripeCheckoutSessionResult
+        from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_123")
+        try:
+            with patch(
+                "ee.onyx.server.tenants.billing_api.fetch_stripe_checkout_session",
+                return_value=StripeCheckoutSessionResult(
+                    session_id=None,
+                    url="https://billing.stripe.com/portal",
+                    requires_payment_method_update=True,
+                ),
+            ):
+                result = await create_subscription_session(request=None, _=MagicMock())
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+        assert result.sessionId is None
+        assert result.url == "https://billing.stripe.com/portal"
+        assert result.requires_payment_method_update is True
+
+    @pytest.mark.asyncio
+    async def test_wraps_upstream_failure_as_internal_error(self) -> None:
+        """Upstream failures surface as INTERNAL_ERROR, not an unhandled crash."""
+        from ee.onyx.server.tenants.billing_api import create_subscription_session
+        from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_123")
+        try:
+            with patch(
+                "ee.onyx.server.tenants.billing_api.fetch_stripe_checkout_session",
+                side_effect=Exception("control plane 409"),
+            ):
+                with pytest.raises(OnyxError) as exc_info:
+                    await create_subscription_session(request=None, _=MagicMock())
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+        assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR

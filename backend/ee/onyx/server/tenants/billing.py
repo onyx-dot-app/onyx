@@ -10,6 +10,7 @@ from ee.onyx.configs.app_configs import STRIPE_SECRET_KEY
 from ee.onyx.db.license import acquire_seat_lock
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import BillingInformation
+from ee.onyx.server.tenants.models import StripeCheckoutSessionResult
 from ee.onyx.server.tenants.models import SubscriptionStatusResponse
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
@@ -33,7 +34,7 @@ def fetch_stripe_checkout_session(
     tenant_id: str,
     billing_period: Literal["monthly", "annual"] = "monthly",
     seats: int | None = None,
-) -> str:
+) -> StripeCheckoutSessionResult:
     token = generate_data_plane_token()
     headers = {
         "Authorization": f"Bearer {token}",
@@ -59,7 +60,11 @@ def fetch_stripe_checkout_session(
     data = response.json()
     if data.get("error"):
         raise Exception(data["error"])
-    return data["sessionId"]
+    return StripeCheckoutSessionResult(
+        session_id=data.get("sessionId"),
+        url=data.get("url"),
+        requires_payment_method_update=bool(data.get("requires_payment_method_update")),
+    )
 
 
 def fetch_tenant_stripe_information(tenant_id: str) -> dict:
