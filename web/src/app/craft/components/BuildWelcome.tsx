@@ -53,7 +53,7 @@ export default function BuildWelcome({
               and nudge the wordmark down (~0.21 × size) to share Craft's
               baseline. */}
           <div className="flex flex-row items-baseline gap-2">
-            <Logo size={28} className="translate-y-[6px]" />
+            <Logo onyxBranded size={28} className="translate-y-[6px]" />
             <Text font="heading-h2" color="text-05">
               Craft
             </Text>
