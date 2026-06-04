@@ -330,14 +330,22 @@ export default function UserLibraryModal({
                   />
                 ) : (
                   <div className="flex flex-col gap-1.5">
-                    {/* Column caption clarifies what the per-row switch controls */}
-                    <div className="flex items-center justify-end px-2">
-                      <Text font="secondary-mono-label" color="text-03">
-                        Sync to agent
-                      </Text>
+                    {/* Column header — sits in the same fixed-width column as
+                        the toggles below so the label reads as their heading */}
+                    <div className="flex items-center px-2">
+                      <div className="min-w-0 flex-1" />
+                      <div className="flex w-24 shrink-0 justify-center">
+                        <Text
+                          font="secondary-mono-label"
+                          color="text-03"
+                          nowrap
+                        >
+                          Sync to agent
+                        </Text>
+                      </div>
                     </div>
                     <ShadowDiv className="max-h-[360px]">
-                      <div className="flex flex-col gap-0.5 pr-1">
+                      <div className="flex flex-col gap-0.5">
                         <LibraryTreeView
                           entries={hierarchicalTree}
                           expandedPaths={expandedPaths}
@@ -593,19 +601,21 @@ function LibraryTreeView({
                 />
               </div>
 
-              {/* Sync toggle (aligns under the "Sync to agent" column caption) */}
-              <Tooltip
-                tooltip={
-                  entry.sync_enabled
-                    ? "Synced to agent — click to disable"
-                    : "Not synced — click to enable"
-                }
-              >
-                <Switch
-                  checked={entry.sync_enabled}
-                  onCheckedChange={(checked) => onToggleSync(entry, checked)}
-                />
-              </Tooltip>
+              {/* Sync toggle — fixed-width column aligned under the header */}
+              <div className="flex w-24 shrink-0 justify-center">
+                <Tooltip
+                  tooltip={
+                    entry.sync_enabled
+                      ? "Synced to agent — click to disable"
+                      : "Not synced — click to enable"
+                  }
+                >
+                  <Switch
+                    checked={entry.sync_enabled}
+                    onCheckedChange={(checked) => onToggleSync(entry, checked)}
+                  />
+                </Tooltip>
+              </div>
             </div>
 
             {/* Children */}
