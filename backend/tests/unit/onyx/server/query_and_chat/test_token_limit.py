@@ -5,6 +5,7 @@ so it enforces at N * 1000 tokens (the Onyx convention).
 """
 
 import datetime
+from collections.abc import Callable
 from collections.abc import Generator
 from typing import cast
 
@@ -22,6 +23,7 @@ import ee.onyx.server.query_and_chat.token_limit as ee_token_limit
 import onyx.server.query_and_chat.token_limit as token_limit
 from onyx.db.models import TokenRateLimit
 from onyx.db.models import TokenRateLimitScope
+from onyx.db.models import User
 from onyx.db.models import UserUsage
 from onyx.db.user_usage import get_window_start
 from onyx.db.user_usage import record_user_usage
@@ -476,6 +478,67 @@ class TestEEGroupCostRejectionPath:
         import uuid
 
         ee_token_limit._user_is_rate_limited_by_group(uuid.uuid4())  # no raise
+
+
+class TestEEScopeComposition:
+    """The three scopes (user, group, global) are independent gates ANDed
+    together: a user is blocked if ANY scope is over budget. A generous group
+    raises the group ceiling but never lifts a global or per-user cap."""
+
+    def _user(self) -> User:
+        import uuid
+
+        # Non-anonymous (random id) and not an API-key email -> hits all 3 gates.
+        return User(id=uuid.uuid4(), email="real-person@example.com")
+
+    def _patch_scopes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        user_over: bool,
+        group_over: bool,
+        global_over: bool,
+    ) -> None:
+        def _gate(over: bool) -> Callable[..., None]:
+            def _fn(*_args: object) -> None:
+                if over:
+                    raise OnyxError(OnyxErrorCode.RATE_LIMITED)
+
+            return _fn
+
+        monkeypatch.setattr(ee_token_limit, "_user_is_rate_limited", _gate(user_over))
+        monkeypatch.setattr(
+            ee_token_limit, "_user_is_rate_limited_by_group", _gate(group_over)
+        )
+        monkeypatch.setattr(
+            ee_token_limit, "_user_is_rate_limited_by_global", _gate(global_over)
+        )
+
+    def test_generous_group_does_not_override_global(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._patch_scopes(
+            monkeypatch, user_over=False, group_over=False, global_over=True
+        )
+        with pytest.raises(OnyxError):
+            ee_token_limit._check_token_rate_limits(self._user())
+
+    def test_generous_group_does_not_override_user_cap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._patch_scopes(
+            monkeypatch, user_over=True, group_over=False, global_over=False
+        )
+        with pytest.raises(OnyxError):
+            ee_token_limit._check_token_rate_limits(self._user())
+
+    def test_all_scopes_under_budget_passes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._patch_scopes(
+            monkeypatch, user_over=False, group_over=False, global_over=False
+        )
+        ee_token_limit._check_token_rate_limits(self._user())  # no raise
 
 
 class _RealLedgerSessionCtx:
