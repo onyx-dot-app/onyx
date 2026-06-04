@@ -24,10 +24,12 @@ import httpx
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
 from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
+from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
@@ -329,9 +331,10 @@ class _ServeMixin:
         return False
 
     def _get_or_create_event_bus(self, sandbox_id: UUID, directory: str) -> PodEventBus:
-        """Lazy per-(sandbox, directory) bus. Refuses to create for a
-        terminated sandbox; replaces self-closed buses so callers don't
-        wedge on BUS_CLOSED_SENTINEL until restart."""
+        """Lazy per-(sandbox, directory) bus. Refuses to create for a sandbox
+        with no live backend pod (terminated / failed / sleeping); replaces
+        self-closed buses so callers don't wedge on BUS_CLOSED_SENTINEL until
+        restart."""
         key = (sandbox_id, directory)
         with self._event_buses_lock:
             bus = self._event_buses.get(key)
@@ -349,6 +352,16 @@ class _ServeMixin:
                 raise RuntimeError(
                     f"Sandbox {sandbox_id} has been terminated; refusing to "
                     "create a new event bus against its (deleted) backend"
+                )
+            with get_session_with_current_tenant() as db_session:
+                sandbox = get_sandbox_by_id(db_session, sandbox_id)
+            if sandbox is not None and (
+                sandbox.status.is_terminal() or sandbox.status.is_sleeping()
+            ):
+                raise RuntimeError(
+                    f"Sandbox {sandbox_id} is {sandbox.status.value} (no live "
+                    "backend per DB); refusing to create a new event bus "
+                    "against its (deleted) backend"
                 )
             info = self._serve_connection_info(sandbox_id)
             bus = PodEventBus(
