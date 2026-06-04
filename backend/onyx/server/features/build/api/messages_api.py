@@ -112,7 +112,11 @@ def send_message(
 
                 session_manager = SessionManager(db_session)
                 for chunk in session_manager.send_message(
-                    session_id, user_id, message_content
+                    session_id,
+                    user_id,
+                    message_content,
+                    agent_provider=request.provider,
+                    agent_model=request.model,
                 ):
                     events_yielded += 1
                     yield chunk

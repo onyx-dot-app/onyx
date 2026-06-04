@@ -153,10 +153,8 @@ def test_basic_user_cannot_access_admin_routes(
     listing, updating, and deleting are all admin-only — and the test
     proves the gate by checking each verb independently rather than
     inferring from a single call."""
-    # Admin sets up a real app for the basic user to *attempt* to mutate.
     created = _create_test_app(admin_user)
 
-    # POST (create) as basic user → forbidden
     with pytest.raises(httpx.HTTPStatusError) as exc:
         ExternalAppManager.create(
             user_performing_action=basic_user,
@@ -168,12 +166,10 @@ def test_basic_user_cannot_access_admin_routes(
         )
     assert exc.value.response.status_code in (401, 403)
 
-    # GET admin list as basic user → forbidden
     with pytest.raises(httpx.HTTPStatusError) as exc:
         ExternalAppManager.list_admin(user_performing_action=basic_user)
     assert exc.value.response.status_code in (401, 403)
 
-    # POST (update existing) as basic user → forbidden
     with pytest.raises(httpx.HTTPStatusError) as exc:
         ExternalAppManager.update(
             user_performing_action=basic_user,
@@ -186,12 +182,10 @@ def test_basic_user_cannot_access_admin_routes(
         )
     assert exc.value.response.status_code in (401, 403)
 
-    # DELETE as basic user → forbidden
     with pytest.raises(httpx.HTTPStatusError) as exc:
         ExternalAppManager.delete(user_performing_action=basic_user, app_id=created.id)
     assert exc.value.response.status_code in (401, 403)
 
-    # And the app the admin created should still exist, untouched.
     after = ExternalAppManager.list_admin(user_performing_action=admin_user)
     assert len(after) == 1
     assert after[0].name == "Test App"
@@ -213,7 +207,6 @@ def test_delete_cascades_user_credentials_and_recreate_yields_fresh_state(
     only safe behavior — otherwise old creds could re-attach to a fresh
     "app" the admin thinks they're starting from scratch.
     """
-    # First lifecycle: create + user authenticates.
     first = _create_test_app(admin_user)
     ExternalAppManager.upsert_user_credentials(
         user_performing_action=basic_user,
@@ -227,16 +220,13 @@ def test_delete_cascades_user_credentials_and_recreate_yields_fresh_state(
         is True
     )
 
-    # Admin deletes the app.
     ExternalAppManager.delete(user_performing_action=admin_user, app_id=first.id)
 
-    # User can no longer see the app.
     user_list_after_delete = ExternalAppManager.list_for_user(
         user_performing_action=basic_user
     )
     assert user_list_after_delete == []
 
-    # Admin re-creates an app with identical fields.
     recreated = _create_test_app(admin_user)
     # New row → new id (Postgres SERIAL doesn't recycle by default, but
     # even if it did, what matters is that the row is logically distinct).
@@ -271,13 +261,12 @@ def test_user_credentials_are_isolated_between_users(
 
     created = _create_test_app(admin_user)
 
-    # User 1 authenticates fully.
     ExternalAppManager.upsert_user_credentials(
         user_performing_action=basic_user,
         app_id=created.id,
         credentials=_USER_CREDENTIALS,
     )
-    # User 2 stores only one of the two required values.
+    # User 2 stores only one of the two required values (partial auth).
     second_user_creds = {"access_token": "SECOND_USER_ACCESS_TOKEN"}
     ExternalAppManager.upsert_user_credentials(
         user_performing_action=second_basic_user,
@@ -292,7 +281,6 @@ def test_user_credentials_are_isolated_between_users(
         user_performing_action=second_basic_user, app_id=created.id
     )
 
-    # User 1: fully authenticated, sees their own values.
     assert view_1.authenticated is True
     assert view_1.credential_values == _USER_CREDENTIALS
 
@@ -532,10 +520,10 @@ def test_app_type_defaults_to_custom_and_is_immutable_on_update(
     """`app_type` is the discriminator the OAuth dispatch layer keys off and
     what the backing skill's definition source is bound to, so it's fixed at
     creation. The default flow (the manager's `create()` with no override)
-    produces a CUSTOM app, an explicit built-in value (SLACK) round-trips on
-    create, and an update that re-sends the *same* type succeeds — but an
-    update that tries to *change* the type is rejected with 400 rather than
-    silently rebinding the skill and orphaning credentials."""
+    produces a CUSTOM app, and an explicit built-in value (SLACK) round-trips on
+    create. The update endpoint (PATCH) carries no `app_type` field at all, so
+    the type is immutable by construction — an update mutates other fields while
+    leaving the type fixed, and there's no way to rebind it."""
     default_app = _create_test_app(admin_user, name="Default-type App")
     assert default_app.app_type == ExternalAppType.CUSTOM
 
@@ -544,8 +532,6 @@ def test_app_type_defaults_to_custom_and_is_immutable_on_update(
     )
     assert slack_app.app_type == ExternalAppType.SLACK
 
-    # Re-sending the unchanged app_type is a valid update (validation passes
-    # because old == new), and other fields still mutate.
     unchanged = ExternalAppManager.update(
         user_performing_action=admin_user,
         app_id=slack_app.id,
@@ -560,22 +546,6 @@ def test_app_type_defaults_to_custom_and_is_immutable_on_update(
     assert unchanged.app_type == ExternalAppType.SLACK
     assert unchanged.name == "Slack App (renamed)"
 
-    # Changing app_type is forbidden.
-    with pytest.raises(httpx.HTTPStatusError) as exc:
-        ExternalAppManager.update(
-            user_performing_action=admin_user,
-            app_id=slack_app.id,
-            name=slack_app.name,
-            description=slack_app.description,
-            upstream_url_patterns=slack_app.upstream_url_patterns,
-            auth_template=slack_app.auth_template,
-            organization_credentials=slack_app.organization_credentials,
-            enabled=slack_app.enabled,
-            app_type=ExternalAppType.LINEAR,
-        )
-    assert exc.value.response.status_code == 400
-
-    # The stored type is unchanged after the rejected update.
     apps = ExternalAppManager.list_admin(admin_user)
     persisted = next(a for a in apps if a.id == slack_app.id)
     assert persisted.app_type == ExternalAppType.SLACK

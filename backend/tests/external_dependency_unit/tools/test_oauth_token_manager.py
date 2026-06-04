@@ -566,8 +566,13 @@ class TestSharedOAuthPrimitives:
         assert "code_challenge_method" not in query
         assert "resource" not in query
 
+    @patch("onyx.auth.oauth_token_manager.validate_oauth_endpoint_url")
     @patch("onyx.auth.oauth_token_manager.requests.post")
-    def test_exchange_code_sends_code_verifier(self, mock_post: Mock) -> None:
+    def test_exchange_code_sends_code_verifier(
+        self, mock_post: Mock, mock_validate: Mock
+    ) -> None:
+        # Placeholder host can't resolve; SSRF guard is covered in test_mcp_ssrf.
+        del mock_validate
         mock_response = Mock(spec=Response)
         mock_response.json.return_value = {
             "access_token": "tok",
@@ -592,8 +597,12 @@ class TestSharedOAuthPrimitives:
         assert sent["code_verifier"] == "verifier_123"
         assert sent["client_secret"] == "known_client_secret"
 
+    @patch("onyx.auth.oauth_token_manager.validate_oauth_endpoint_url")
     @patch("onyx.auth.oauth_token_manager.requests.post")
-    def test_exchange_code_raises_on_http_error(self, mock_post: Mock) -> None:
+    def test_exchange_code_raises_on_http_error(
+        self, mock_post: Mock, mock_validate: Mock
+    ) -> None:
+        del mock_validate
         mock_response = Mock(spec=Response)
         mock_response.raise_for_status.side_effect = HTTPError("bad code")
         mock_post.return_value = mock_response

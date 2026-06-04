@@ -299,6 +299,12 @@ class ApprovalDecision(str, PyEnum):
     EXPIRED = "EXPIRED"
 
 
+class ApprovalDecidedVia(str, PyEnum):
+    # NULL on legacy rows and proxy-written EXPIRED claims.
+    USER = "USER"
+    PRE_APPROVAL = "PRE_APPROVAL"
+
+
 class ScheduledTaskStatus(str, PyEnum):
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"
@@ -382,11 +388,19 @@ class ExternalAppType(str, PyEnum):
     """
 
     GOOGLE_CALENDAR = "GOOGLE_CALENDAR"
+    GOOGLE_DRIVE = "GOOGLE_DRIVE"
     GMAIL = "GMAIL"
     SLACK = "SLACK"
     LINEAR = "LINEAR"
     GITHUB = "GITHUB"
     CUSTOM = "CUSTOM"
+
+    @property
+    def is_built_in(self) -> bool:
+        """True for provider-backed built-ins (unique per type per tenant),
+        False for ``CUSTOM`` (admin-defined, can repeat). Use this to guard
+        paths that only make sense for a single, well-known app per type."""
+        return self is not ExternalAppType.CUSTOM
 
 
 class EndpointPolicy(str, PyEnum):

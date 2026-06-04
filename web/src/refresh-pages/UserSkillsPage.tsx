@@ -1,16 +1,15 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { MessageCard } from "@opal/components";
+import { Button, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { SvgBlocks, SvgSimpleLoader } from "@opal/icons";
+import { SvgBlocks, SvgSettings, SvgSimpleLoader } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
 import TextSeparator from "@/refresh-components/TextSeparator";
-import { InputTypeIn } from "@opal/components";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
+import { useUser } from "@/providers/UserProvider";
 import SkillCard, { type SkillCardItem } from "@/sections/cards/SkillCard";
 
 // ---------------------------------------------------------------------------
@@ -19,6 +18,7 @@ import SkillCard, { type SkillCardItem } from "@/sections/cards/SkillCard";
 
 export default function UserSkillsPage() {
   const { data, error, isLoading } = useUserSkills();
+  const { isAdmin } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,6 +62,19 @@ export default function UserSkillsPage() {
         icon={SvgBlocks}
         title="Skills"
         description="Capability bundles your Craft agent can reach for. Skills are granted by admins; this page shows what's currently available to you."
+        rightChildren={
+          isAdmin ? (
+            <div className="flex items-center gap-2">
+              <Button
+                href="/craft/v1/skills/manage"
+                prominence="secondary"
+                icon={SvgSettings}
+              >
+                Manage skills
+              </Button>
+            </div>
+          ) : undefined
+        }
       >
         <InputTypeIn
           ref={searchInputRef}
@@ -101,11 +114,16 @@ export default function UserSkillsPage() {
               />
             ) : (
               <>
-                <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {visibleItems.map((item) => (
-                    <SkillCard key={item.id} item={item} />
-                  ))}
-                </div>
+                <section className="flex flex-col gap-2">
+                  <Text font="secondary-body" color="text-03">
+                    Browse skills
+                  </Text>
+                  <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {visibleItems.map((item) => (
+                      <SkillCard key={item.id} item={item} />
+                    ))}
+                  </div>
+                </section>
                 <TextSeparator
                   count={visibleItems.length}
                   text={visibleItems.length === 1 ? "Skill" : "Skills"}
@@ -114,10 +132,12 @@ export default function UserSkillsPage() {
             )}
 
             {visibleItems.length > 0 && (
-              <Text as="p" secondaryBody text03 className="pt-2">
-                Skills are managed by org admins. To request a new custom skill,
-                talk to your Onyx admin.
-              </Text>
+              <div className="pt-2">
+                <Text as="p" font="secondary-body" color="text-03">
+                  Skills are managed by org admins. To request a new custom
+                  skill, talk to your Onyx admin.
+                </Text>
+              </div>
             )}
           </>
         )}

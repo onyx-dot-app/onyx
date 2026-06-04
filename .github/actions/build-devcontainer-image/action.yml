@@ -55,7 +55,7 @@ runs:
         ecr-registry: ${{ inputs.ecr-registry }}
 
     - name: Build and push Devcontainer Docker image
-      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
       with:
         context: .devcontainer
         file: .devcontainer/Dockerfile

@@ -20,6 +20,25 @@ from fastapi.testclient import TestClient
 from tests.integration.common_utils.constants import API_SERVER_HOST
 from tests.integration.common_utils.constants import API_SERVER_PORT
 
+# Distinctive token tests assert on; the surrounding text is long enough to
+# exceed the small --max-output thresholds the truncation tests use.
+MOCK_LLM_TOKEN = "quick brown fox"
+MOCK_LLM_RESPONSE = f"The {MOCK_LLM_TOKEN} jumps over the lazy dog. " * 20
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _mock_llm_responses() -> Generator[None, None, None]:
+    # The CLI suite exercises the binary, not the model. Pin every chat
+    # completion to a fixed response so no test calls a real provider.
+    import onyx.llm.multi_llm as multi_llm
+
+    original = multi_llm.MOCK_LLM_RESPONSE
+    multi_llm.MOCK_LLM_RESPONSE = MOCK_LLM_RESPONSE
+    try:
+        yield
+    finally:
+        multi_llm.MOCK_LLM_RESPONSE = original
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _cli_uvicorn_server(_test_client: TestClient) -> Generator[None, None, None]:

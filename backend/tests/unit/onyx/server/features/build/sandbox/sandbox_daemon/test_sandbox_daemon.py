@@ -34,8 +34,7 @@ from fastapi.testclient import TestClient
 # so parents[9] is the repo root.
 _REPO_ROOT = Path(__file__).resolve().parents[9]
 _DAEMON_DIR = (
-    _REPO_ROOT
-    / "backend/onyx/server/features/build/sandbox/kubernetes/docker/sandbox_daemon"
+    _REPO_ROOT / "backend/onyx/server/features/build/sandbox/image/sandbox_daemon"
 )
 
 

@@ -1,11 +1,19 @@
-import { SvgSlack, SvgLinear, SvgGmail, SvgGithub } from "@opal/logos";
-import { SvgCalendar, SvgPlug } from "@opal/icons";
+import {
+  SvgSlack,
+  SvgLinear,
+  SvgGmail,
+  SvgGithub,
+  SvgGoogleCalendar,
+  SvgGoogleDrive,
+} from "@opal/logos";
+import { SvgPlug } from "@opal/icons";
 import { IconFunctionComponent } from "@opal/types";
 
 // Mirrors `onyx.db.enums.ExternalAppType` on the backend.
 export type ExternalAppType =
   | "SLACK"
   | "GOOGLE_CALENDAR"
+  | "GOOGLE_DRIVE"
   | "GMAIL"
   | "LINEAR"
   | "GITHUB"
@@ -14,7 +22,8 @@ export type ExternalAppType =
 const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
   {
     SLACK: SvgSlack,
-    GOOGLE_CALENDAR: SvgCalendar,
+    GOOGLE_CALENDAR: SvgGoogleCalendar,
+    GOOGLE_DRIVE: SvgGoogleDrive,
     GMAIL: SvgGmail,
     LINEAR: SvgLinear,
     GITHUB: SvgGithub,
@@ -79,6 +88,9 @@ export interface ExternalAppAdminResponse {
   organization_credentials: Record<string, string>;
   enabled: boolean;
   actions: ActionPolicyView[];
+  // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
+  // admin may only enable/disable + set policies (the UI hides the rest).
+  is_onyx_managed: boolean;
 }
 
 export interface ExternalAppUserResponse {
@@ -104,4 +116,19 @@ export function findUserAppByName(
   name: string
 ): ExternalAppUserResponse | null {
   return apps.find((a) => a.name === name) ?? null;
+}
+
+/**
+ * Built-in descriptors still available to add. Only one app per `app_type` is
+ * allowed (server-enforced via the built-in skill's unique slug), so configured
+ * types are dropped to avoid a duplicate-resource error. Cloud managed built-ins
+ * are pre-provisioned (always configured) and never show here. CUSTOM apps have
+ * no descriptor, so they never match and are left untouched.
+ */
+export function availableBuiltInDescriptors(
+  descriptors: BuiltInExternalAppDescriptor[],
+  configuredApps: ExternalAppAdminResponse[]
+): BuiltInExternalAppDescriptor[] {
+  const configuredAppTypes = new Set(configuredApps.map((app) => app.app_type));
+  return descriptors.filter((d) => !configuredAppTypes.has(d.app_type));
 }

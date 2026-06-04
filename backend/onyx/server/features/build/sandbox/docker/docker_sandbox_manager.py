@@ -69,7 +69,6 @@ import time
 from collections.abc import Generator
 from pathlib import Path
 from typing import TypedDict
-from urllib.parse import urlparse
 from uuid import UUID
 
 from docker import DockerClient
@@ -301,26 +300,15 @@ def build_sandbox_labels(
     return labels
 
 
-def _compute_no_proxy_list(api_server_url: str) -> str:
-    """Hostnames the sandbox should reach directly, bypassing the proxy.
-
-    Mirrors ``kubernetes_sandbox_manager._compute_no_proxy_list``. The api
-    server is in the list because onyx-cli inside the sandbox uses the PAT to
-    call back -- no need (or value) to gate that hop.
-    """
-    entries = ["127.0.0.1", "localhost"]
-    if api_server_url:
-        hostname = urlparse(api_server_url).hostname
-        if hostname:
-            entries.append(hostname)
-    return ",".join(entries)
+# Sandbox should reach loopback directly; everything else (api server included)
+# goes through the proxy.
+_NO_PROXY_LIST = "127.0.0.1,localhost"
 
 
 def _proxy_env_vars(
     *,
     sandbox_proxy_host: str,
     sandbox_proxy_port: int,
-    api_server_url: str,
 ) -> dict[str, str]:
     """Proxy-enabled env additions for the sandbox container.
 
@@ -331,7 +319,6 @@ def _proxy_env_vars(
     entrypoint wrapper and reads them from its own environment.
     """
     proxy_url = f"http://{sandbox_proxy_host}:{sandbox_proxy_port}"
-    no_proxy = _compute_no_proxy_list(api_server_url)
     return {
         # firewall-init.sh contract.
         "SANDBOX_PROXY_HOST": sandbox_proxy_host,
@@ -344,8 +331,8 @@ def _proxy_env_vars(
         "HTTP_PROXY": proxy_url,
         "https_proxy": proxy_url,
         "http_proxy": proxy_url,
-        "NO_PROXY": no_proxy,
-        "no_proxy": no_proxy,
+        "NO_PROXY": _NO_PROXY_LIST,
+        "no_proxy": _NO_PROXY_LIST,
         # SDK-specific CA env vars for libs that bypass /etc/ssl/certs.
         "NODE_EXTRA_CA_CERTS": _PROXY_CA_BUNDLE_FILE,
         "REQUESTS_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
@@ -356,12 +343,10 @@ def _proxy_env_vars(
     }
 
 
-class ContainerCreateKwargs(TypedDict, total=False):
-    """Kwargs we pass to ``DockerClient.containers.run``.
-
-    Typed so ``test_docker_manager_config.py`` can read specific fields without
-    ``cast``. ``total=False`` because proxy-mode adds optional keys
-    (``cap_add``) that legacy posture omits.
+class _ContainerCreateKwargsRequired(TypedDict):
+    """
+    Always-set fields. Security-critical ones (cap_drop, security_opt,
+    privileged, user) live here so omitting them fails type-check.
     """
 
     name: str
@@ -371,7 +356,6 @@ class ContainerCreateKwargs(TypedDict, total=False):
     labels: dict[str, str]
     user: str
     cap_drop: list[str]
-    cap_add: list[str]
     security_opt: list[str]
     privileged: bool
     read_only: bool
@@ -381,6 +365,15 @@ class ContainerCreateKwargs(TypedDict, total=False):
     mem_limit: str
     nano_cpus: int
     restart_policy: dict[str, str]
+
+
+class ContainerCreateKwargs(_ContainerCreateKwargsRequired, total=False):
+    """
+    Kwargs we pass to ``DockerClient.containers.run``. Proxy-mode adds
+    ``cap_add``; legacy posture omits it.
+    """
+
+    cap_add: list[str]
 
 
 def build_container_create_kwargs(
@@ -436,7 +429,11 @@ def build_container_create_kwargs(
       by capsh before the agent execve, so the running container ends up with no
       caps at all.
     - ``user="0:0"`` so the init starts as root for iptables. capsh then drops
-      to UID 1000.
+      to UID 1000. The root+NET_ADMIN window is bounded by ``firewall-init.sh``
+      runtime (~seconds); ``set -euo pipefail`` + ``die`` short-circuit on any
+      step failure, so a broken init exits non-zero before the agent ever
+      starts. ``restart_policy: unless-stopped`` re-enters the same fail-fast
+      init -- no cumulative exposure, no user code reachable during the window.
     - The named proxy-CA volume is mounted read-only at ``/sandbox-ca`` for
       ``firewall-init.sh`` to read ``ca.crt``.
 
@@ -484,7 +481,6 @@ def build_container_create_kwargs(
             _proxy_env_vars(
                 sandbox_proxy_host=sandbox_proxy_host,
                 sandbox_proxy_port=sandbox_proxy_port,
-                api_server_url=api_server_url,
             )
         )
         volumes[proxy_ca_volume_name] = {
@@ -538,11 +534,25 @@ class DockerSandboxManager(SandboxManager):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialize()
+                    # Publish to the cache only after _initialize() succeeds, so a
+                    # transient init failure (e.g. the Docker socket briefly
+                    # unavailable) can't leave a half-built singleton that every
+                    # later caller reuses; the next call retries instead.
+                    instance = super().__new__(cls)
+                    instance._initialize()
+                    cls._instance = instance
         return cls._instance
 
     def _initialize(self) -> None:
+        # Mirrors the K8s posture from #11604: the proxy is mandatory whenever
+        # craft is enabled.
+        if not SANDBOX_PROXY_HOST:
+            raise RuntimeError(
+                "DockerSandboxManager requires SANDBOX_PROXY_HOST. The sandbox egress proxy is "
+                "mandatory when craft is enabled; wire it in docker-compose.craft.yml or unset "
+                "SANDBOX_BACKEND."
+            )
+
         self._docker = DockerClient(base_url=f"unix://{SANDBOX_DOCKER_SOCKET}")
         self._image = SANDBOX_CONTAINER_IMAGE
         self._network_name = SANDBOX_DOCKER_NETWORK

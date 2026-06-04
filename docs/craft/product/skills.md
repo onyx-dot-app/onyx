@@ -6,7 +6,7 @@
 
 Skills come from two sources in V1:
 
-- **Built-in skills** ship with the deploy and become available automatically when their dependencies are configured. They live in the codebase under `docker/skills/<slug>/` and are registered at app boot in the in-memory `BuiltinSkillRegistry`.
+- **Built-in skills** ship with the deploy and become available automatically when their dependencies are configured. They live in the codebase under `onyx/skills/builtin/<slug>/` and are registered at app boot in the in-memory `BuiltinSkillRegistry`.
 - **Custom skills** are uploaded as zip bundles by admins through `/admin/skills`. Each custom skill is one row in the `skill` table plus a bundle blob in the file store, scoped to the tenant.
 
 Bundles are validated synchronously on upload; on success they're stored, indexed, and immediately pushed into every sandbox that should see them.

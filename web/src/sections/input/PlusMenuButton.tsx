@@ -163,7 +163,13 @@ export function PlusMenuButton({
         />
       </Popover.Trigger>
 
-      <Popover.Content side="bottom" align="start" width="lg">
+      <Popover.Content
+        side="bottom"
+        align="start"
+        width="lg"
+        // Don't restore focus to the + button on close, or its tooltip flashes.
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         <Popover.Menu>{menuChildren}</Popover.Menu>
       </Popover.Content>
     </Popover>

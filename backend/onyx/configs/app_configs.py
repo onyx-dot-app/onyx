@@ -704,6 +704,23 @@ OPEN_URL_VALIDATE_SSRF = (
     os.environ.get("OPEN_URL_VALIDATE_SSRF", "true").lower() == "true"
 )
 
+# Allow outbound MCP/OAuth calls (server_url, oauth endpoints) to resolve to
+# private/internal IPs. Default false to block SSRF; self-hosted operators with
+# an internal MCP server can opt in. Loopback/unspecified/link-local (incl.
+# cloud-metadata) stay blocked regardless.
+MCP_SERVER_ALLOW_PRIVATE_NETWORK = (
+    os.environ.get("MCP_SERVER_ALLOW_PRIVATE_NETWORK", "false").lower() == "true"
+)
+
+# Separately allow loopback (127.0.0.0/8, ::1) targets. Loopback reaches the app
+# host itself (its admin APIs, sidecars, other localhost services), so it stays
+# blocked even under MCP_SERVER_ALLOW_PRIVATE_NETWORK unless explicitly opted in.
+# Requires the private-network opt-in above to take effect. Used by our tests'
+# local mock MCP servers; cloud-metadata/link-local stay blocked regardless.
+MCP_SERVER_ALLOW_LOOPBACK = (
+    os.environ.get("MCP_SERVER_ALLOW_LOOPBACK", "false").lower() == "true"
+)
+
 HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY = os.environ.get(
     "HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY",
     HtmlBasedConnectorTransformLinksStrategy.STRIP,
@@ -1403,6 +1420,33 @@ OPENROUTER_DEFAULT_API_KEY = os.environ.get("OPENROUTER_DEFAULT_API_KEY")
 AUTO_PROVISION_DEFAULT_LLM_PROVIDERS = (
     os.environ.get("AUTO_PROVISION_DEFAULT_LLM_PROVIDERS", "true").lower() == "true"
 )
+
+# Auto-create Onyx-managed built-in external app rows (disabled, Onyx-owned creds)
+# per tenant. Default False; set True on cloud so tenants can enable built-ins
+# without registering their own OAuth app.
+AUTO_PROVISION_DEFAULT_EXTERNAL_APPS = (
+    os.environ.get("AUTO_PROVISION_DEFAULT_EXTERNAL_APPS", "false").lower() == "true"
+)
+
+# Onyx-owned OAuth credentials for built-in external apps (managed cloud)
+EXT_APP_SLACK_CLIENT_ID = os.environ.get("EXT_APP_SLACK_CLIENT_ID", "")
+EXT_APP_SLACK_CLIENT_SECRET = os.environ.get("EXT_APP_SLACK_CLIENT_SECRET", "")
+EXT_APP_GMAIL_CLIENT_ID = os.environ.get("EXT_APP_GMAIL_CLIENT_ID", "")
+EXT_APP_GMAIL_CLIENT_SECRET = os.environ.get("EXT_APP_GMAIL_CLIENT_SECRET", "")
+EXT_APP_GOOGLE_CALENDAR_CLIENT_ID = os.environ.get(
+    "EXT_APP_GOOGLE_CALENDAR_CLIENT_ID", ""
+)
+EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET = os.environ.get(
+    "EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET", ""
+)
+EXT_APP_GOOGLE_DRIVE_CLIENT_ID = os.environ.get("EXT_APP_GOOGLE_DRIVE_CLIENT_ID", "")
+EXT_APP_GOOGLE_DRIVE_CLIENT_SECRET = os.environ.get(
+    "EXT_APP_GOOGLE_DRIVE_CLIENT_SECRET", ""
+)
+EXT_APP_LINEAR_CLIENT_ID = os.environ.get("EXT_APP_LINEAR_CLIENT_ID", "")
+EXT_APP_LINEAR_CLIENT_SECRET = os.environ.get("EXT_APP_LINEAR_CLIENT_SECRET", "")
+EXT_APP_GITHUB_CLIENT_ID = os.environ.get("EXT_APP_GITHUB_CLIENT_ID", "")
+EXT_APP_GITHUB_CLIENT_SECRET = os.environ.get("EXT_APP_GITHUB_CLIENT_SECRET", "")
 
 INSTANCE_TYPE = (
     "managed"

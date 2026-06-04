@@ -135,7 +135,7 @@ NOTE: Always make sure everything is strictly typed (both in Python and Typescri
 
 ### Technology Stack
 
-- **Backend**: Python 3.11, FastAPI, SQLAlchemy, Alembic, Celery
+- **Backend**: Python 3.13, FastAPI, SQLAlchemy, Alembic, Celery
 - **Frontend**: Next.js 15+, React 18, TypeScript, Tailwind CSS
 - **Database**: PostgreSQL with Redis caching
 - **Search**: Vespa vector database

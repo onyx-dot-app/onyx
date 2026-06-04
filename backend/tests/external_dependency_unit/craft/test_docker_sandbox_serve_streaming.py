@@ -119,7 +119,12 @@ def _pool_container() -> Generator[_PoolContainer, None, None]:
     Provisioning a container is fast (~3s) but opencode-serve takes
     another 1–5s to bind :4096. Amortizing across the module avoids
     paying that cost per test.
+
+    Skipped when SANDBOX_PROXY_HOST isn't set: the manager requires it post
+    #11604 and we don't bring up the proxy stack in this test's fixtures.
     """
+    if not os.environ.get("SANDBOX_PROXY_HOST"):
+        pytest.skip("SANDBOX_PROXY_HOST not set; Requires the egress proxy stack.")
     manager = DockerSandboxManager()
     sandbox_id = uuid4()
     user_id = uuid4()
