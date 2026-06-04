@@ -1112,15 +1112,13 @@ else
         fi
         print_success "Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=docker)"
 
-        # Trust boundary warning. api_server + background mount the host
-        # Docker socket so they can drive sandbox containers. Anything that
-        # can talk to that socket is effectively root on the host.
         echo ""
-        print_warning "Craft + docker backend: api_server and background mount"
-        print_warning "/var/run/docker.sock. Compromise of either container ="
-        print_warning "root on the host. Only enable on hosts you fully control."
-        print_warning "On EC2, require IMDSv2 (HttpTokens=required) so sandboxes"
-        print_warning "cannot pull IAM credentials from the instance metadata service."
+        print_warning "Craft + docker backend: api_server and background bind-mount"
+        print_warning "/var/run/docker.sock (RW = root on host on compromise);"
+        print_warning "sandbox-proxy bind-mounts it RO (still exposes container env,"
+        print_warning "labels, and the events stream). Only enable on hosts you fully"
+        print_warning "control. On EC2, require IMDSv2 (HttpTokens=required) so"
+        print_warning "sandboxes cannot pull IAM credentials from instance metadata."
         echo ""
     else
         print_info "Onyx Craft disabled (use --include-craft to enable)"
@@ -1146,6 +1144,18 @@ if [ "$INCLUDE_CRAFT" = true ]; then
         else
             print_warning "Could not create sandbox network $SANDBOX_NET — create it manually:"
             echo "    docker network create $SANDBOX_NET"
+        fi
+    fi
+
+    # Same for the CA volume. Name pinned to match
+    # configs.SANDBOX_PROXY_CA_VOLUME_NAME.
+    SANDBOX_PROXY_CA_VOL="sandbox_proxy_ca"
+    if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker volume inspect "$SANDBOX_PROXY_CA_VOL" >/dev/null 2>&1; then
+        if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker volume create "$SANDBOX_PROXY_CA_VOL" >/dev/null 2>&1; then
+            print_success "Created sandbox proxy CA volume: $SANDBOX_PROXY_CA_VOL"
+        else
+            print_warning "Could not create sandbox proxy CA volume $SANDBOX_PROXY_CA_VOL — create it manually:"
+            echo "    docker volume create $SANDBOX_PROXY_CA_VOL"
         fi
     fi
 fi
