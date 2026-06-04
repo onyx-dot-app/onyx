@@ -1,0 +1,206 @@
+# Self-hosted Langfuse (v3) for local LLM-tracing development.
+#
+# This is a SUPPLEMENTAL, opt-in stack — it is NOT part of the main Onyx
+# deployment. Bring it up when you want to view the traces that Onyx already
+# emits (see backend/onyx/tracing/) against a local Langfuse instance instead
+# of Langfuse Cloud.
+#
+# Quick start (run from the host — there is no Docker daemon inside the dev
+# container):
+#   docker compose -f deployment/docker_compose/dev/docker-compose.langfuse.yml up -d --wait
+#
+# Then add the following to .vscode/.env and restart `ods backend api`:
+#   LANGFUSE_HOST=http://langfuse-web:3000
+#   LANGFUSE_PUBLIC_KEY=pk-lf-onyx-local-dev
+#   LANGFUSE_SECRET_KEY=sk-lf-onyx-local-dev
+#
+# Open the UI at http://localhost:3001 (login: dev@onyx.app / onyxlocaldev).
+#
+# See README.md in this directory for full details.
+#
+# NOTE: every credential below is a hardcoded LOCAL-DEV default. Do not reuse
+# any of these values outside of local development.
+
+name: onyx-langfuse-dev
+
+# Shared backing-store config for both the web and worker containers. All
+# hostnames point at the namespaced `langfuse-*` services on the private
+# `langfuse-internal` network so they never collide with Onyx's own
+# relational_db / cache / minio services.
+x-langfuse-env: &langfuse-env
+  DATABASE_URL: postgresql://postgres:postgres@langfuse-postgres:5432/postgres
+  SALT: onyx-local-salt
+  # 64 hex chars (256-bit). Local-dev only — generate a real one for any
+  # non-local use with: openssl rand -hex 32
+  ENCRYPTION_KEY: 1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+  TELEMETRY_ENABLED: "false"
+  LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+
+  CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+  CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+  CLICKHOUSE_USER: clickhouse
+  CLICKHOUSE_PASSWORD: clickhouse
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+
+  REDIS_HOST: langfuse-redis
+  REDIS_PORT: "6379"
+  REDIS_AUTH: myredissecret
+  REDIS_TLS_ENABLED: "false"
+
+  # Blob storage (events + media) lives in the namespaced MinIO. The event
+  # endpoint is reached over the internal network; the media endpoint is
+  # browser-facing so it uses the published host port.
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:9090
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+
+services:
+  langfuse-web:
+    image: docker.io/langfuse/langfuse:3
+    restart: unless-stopped
+    depends_on: &langfuse-depends-on
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+    networks:
+      - langfuse-internal
+      - onyx
+    ports:
+      # Host 3001 -> container 3000 (3000 is taken by the Onyx frontend).
+      - "3001:3000"
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: onyx-local-nextauth-secret
+      NEXTAUTH_URL: http://localhost:3001
+      # Headless init: seed a deterministic org/project/user + API keys on the
+      # very first boot so the keys above can be pasted straight into .env.
+      LANGFUSE_INIT_ORG_ID: onyx-local
+      LANGFUSE_INIT_ORG_NAME: Onyx Local
+      LANGFUSE_INIT_PROJECT_ID: onyx-local
+      LANGFUSE_INIT_PROJECT_NAME: Onyx Local Dev
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-onyx-local-dev
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-onyx-local-dev
+      LANGFUSE_INIT_USER_EMAIL: dev@onyx.app
+      LANGFUSE_INIT_USER_NAME: Onyx Dev
+      LANGFUSE_INIT_USER_PASSWORD: onyxlocaldev
+
+  langfuse-worker:
+    image: docker.io/langfuse/langfuse-worker:3
+    restart: unless-stopped
+    depends_on: *langfuse-depends-on
+    networks:
+      - langfuse-internal
+    environment:
+      <<: *langfuse-env
+
+  langfuse-postgres:
+    image: docker.io/postgres:17
+    restart: unless-stopped
+    networks:
+      - langfuse-internal
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  langfuse-clickhouse:
+    image: docker.io/clickhouse/clickhouse-server
+    restart: unless-stopped
+    user: "101:101"
+    networks:
+      - langfuse-internal
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  langfuse-redis:
+    image: docker.io/redis:7
+    restart: unless-stopped
+    networks:
+      - langfuse-internal
+    command: >
+      --requirepass myredissecret
+      --maxmemory-policy noeviction
+    volumes:
+      - langfuse_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+
+  langfuse-minio:
+    image: cgr.dev/chainguard/minio
+    restart: unless-stopped
+    networks:
+      - langfuse-internal
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    ports:
+      # Browser-facing so media links (LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT) resolve.
+      # 9090/9091 avoid Onyx's dev MinIO (9004/9005) and model server (9000).
+      - "9090:9000"
+      - "127.0.0.1:9091:9001"
+    volumes:
+      - langfuse_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 1s
+      timeout: 5s
+      retries: 5
+      start_period: 1s
+
+networks:
+  # Private network for Langfuse's own backing services.
+  langfuse-internal:
+    driver: bridge
+  # Onyx's compose network, so the in-container backend can reach the Langfuse
+  # web server at http://langfuse-web:3000. Created by the main Onyx stack.
+  onyx:
+    external: true
+    name: onyx_default
+
+volumes:
+  langfuse_postgres_data:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_redis_data:
+  langfuse_minio_data:
