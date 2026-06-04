@@ -1,17 +1,19 @@
 from datetime import datetime
 
 from pydantic import BaseModel
+from pydantic import Field
 
 from onyx.db.models import ModelCostOverride
 
 
 class CostOverrideUpsertRequest(BaseModel):
     # Negotiated rates in USD per million tokens (matches the stored columns).
-    # cache_read is optional; null bills cache reads at the input rate.
+    # cache_read is optional; null bills cache reads at the input rate. Rates are
+    # non-negative — a negative rate would credit usage and corrupt budgets.
     model: str
-    input_cost_per_mtok: float
-    output_cost_per_mtok: float
-    cache_read_cost_per_mtok: float | None = None
+    input_cost_per_mtok: float = Field(ge=0)
+    output_cost_per_mtok: float = Field(ge=0)
+    cache_read_cost_per_mtok: float | None = Field(default=None, ge=0)
 
 
 class CostOverride(BaseModel):

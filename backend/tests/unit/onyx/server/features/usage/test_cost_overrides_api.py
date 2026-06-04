@@ -177,3 +177,24 @@ def test_db_helpers_upsert_list_delete(
     assert delete_override(db_session, "gpt-4o") is True
     assert delete_override(db_session, "gpt-4o") is False
     assert [r.model for r in list_overrides(db_session)] == ["claude-haiku-4-5"]
+
+
+def test_negative_rate_rejected_by_api(db_session: Session) -> None:
+    # A negative rate would credit usage and corrupt budgets; the request model
+    # enforces ge=0, so the endpoint rejects it before any write.
+    client = TestClient(_make_app(db_session, _ADMIN))
+    res = client.put(
+        "/admin/cost-overrides",
+        json={
+            "model": "gpt-4o",
+            "input_cost_per_mtok": -1.0,
+            "output_cost_per_mtok": 4.0,
+        },
+    )
+    assert res.status_code == 422
+    assert list_overrides(db_session) == []
+
+
+def test_db_helper_rejects_negative_rate(db_session: Session) -> None:
+    with pytest.raises(ValueError):
+        upsert_override(db_session, "gpt-4o", -1.0, 4.0)

@@ -70,15 +70,15 @@ def _user_is_rate_limited_by_global() -> None:
             global_usage = _fetch_global_usage(global_cutoff_time, db_session)
 
             triggered = _worst_triggered_limit(global_rate_limits, global_usage)
-            if triggered is not None:
-                raise_rate_limited("organization", triggered.period_hours)
-
             cost_triggered = _worst_triggered_cost_limit(
                 global_rate_limits,
                 lambda cutoff: get_total_cost_cents_since(db_session, cutoff),
             )
-            if cost_triggered is not None:
-                raise_rate_limited("organization", cost_triggered.period_hours)
+            _raise_for_longest_window(
+                "organization",
+                triggered.period_hours if triggered else None,
+                cost_triggered.period_hours if cost_triggered else None,
+            )
 
 
 def _fetch_global_usage(
@@ -195,6 +195,16 @@ def raise_rate_limited(scope: str, period_hours: int) -> None:
         },
         headers={"Retry-After": str(retry_after_seconds)},
     )
+
+
+def _raise_for_longest_window(scope: str, *period_hours: int | None) -> None:
+    """Raise once for the longest of the given reset windows (Nones skipped).
+    The token and cost gates are independent; evaluating both before raising
+    avoids reporting a too-early reset when a short token window and a long cost
+    window are both exceeded."""
+    periods = [p for p in period_hours if p is not None]
+    if periods:
+        raise_rate_limited(scope, max(periods))
 
 
 @lru_cache()

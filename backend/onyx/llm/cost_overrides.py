@@ -89,6 +89,12 @@ def upsert_override(
     Rates are USD per million tokens; a null cache rate bills cache reads at the
     input rate. Caller invalidates the cache and commits.
     """
+    # Defense in depth behind the request model's ge=0: a negative rate would
+    # credit usage and corrupt budget enforcement.
+    for rate in (input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok):
+        if rate is not None and rate < 0:
+            raise ValueError("cost override rates must be non-negative")
+
     row = db_session.execute(
         select(ModelCostOverride).where(ModelCostOverride.model == model)
     ).scalar_one_or_none()

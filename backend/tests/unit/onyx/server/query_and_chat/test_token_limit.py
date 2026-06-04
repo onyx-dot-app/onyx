@@ -165,6 +165,24 @@ class TestRaiseRateLimited:
         _assert_structured_429(ei.value, "organization", 2)
 
 
+class TestRaiseForLongestWindow:
+    """Token + cost gates are evaluated together; the reported reset is the
+    longest window, so a short token limit can't mask a longer cost reset."""
+
+    def test_longest_of_token_and_cost_wins(self) -> None:
+        with pytest.raises(OnyxError) as ei:
+            token_limit._raise_for_longest_window("user", 1, 24)
+        _assert_structured_429(ei.value, "user", 24)
+
+    def test_skips_none_windows(self) -> None:
+        with pytest.raises(OnyxError) as ei:
+            token_limit._raise_for_longest_window("user", None, 5)
+        _assert_structured_429(ei.value, "user", 5)
+
+    def test_no_trigger_does_not_raise(self) -> None:
+        token_limit._raise_for_longest_window("user", None, None)  # no raise
+
+
 class _SessionCtx:
     """Minimal stand-in for get_session_with_current_tenant (only the limit fetch is patched)."""
 

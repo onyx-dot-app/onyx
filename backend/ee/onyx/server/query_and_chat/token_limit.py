@@ -24,10 +24,10 @@ from onyx.db.token_limit import fetch_all_user_token_rate_limits
 from onyx.db.user_usage import get_group_cost_cents_since
 from onyx.db.user_usage import get_user_cost_cents_since
 from onyx.server.query_and_chat.token_limit import _get_cutoff_time
+from onyx.server.query_and_chat.token_limit import _raise_for_longest_window
 from onyx.server.query_and_chat.token_limit import _user_is_rate_limited_by_global
 from onyx.server.query_and_chat.token_limit import _worst_triggered_cost_limit
 from onyx.server.query_and_chat.token_limit import _worst_triggered_limit
-from onyx.server.query_and_chat.token_limit import raise_rate_limited
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 
@@ -66,17 +66,17 @@ def _user_is_rate_limited(user_id: UUID) -> None:
             user_usage = _fetch_user_usage(user_id, user_cutoff_time, db_session)
 
             triggered = _worst_triggered_limit(user_rate_limits, user_usage)
-            if triggered is not None:
-                raise_rate_limited("user", triggered.period_hours)
-
             cost_triggered = _worst_triggered_cost_limit(
                 user_rate_limits,
                 lambda cutoff: get_user_cost_cents_since(
                     db_session, str(user_id), cutoff
                 ),
             )
-            if cost_triggered is not None:
-                raise_rate_limited("user", cost_triggered.period_hours)
+            _raise_for_longest_window(
+                "user",
+                triggered.period_hours if triggered else None,
+                cost_triggered.period_hours if cost_triggered else None,
+            )
 
 
 def _fetch_user_usage(
@@ -124,8 +124,10 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
 
         # Token + cost are independent gates, each with most-permissive-group-wins:
         # the user is limited only when EVERY group the user belongs to is over
-        # that gate's budget; one under-budget group exempts the user. Reset uses
-        # the longest triggering window across the all-over groups.
+        # that gate's budget; one under-budget group exempts the user. Evaluate
+        # both gates, then raise once for the longest triggering window across
+        # either — so a short token window can't mask a longer cost reset.
+        token_period: int | None = None
         token_periods: list[int] = []
         for user_group_id, rate_limits in group_rate_limits.items():
             usage = group_usage.get(user_group_id, [])
@@ -134,8 +136,9 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
                 break  # an under-budget group means the user is not token-limited
             token_periods.append(triggered.period_hours)
         else:
-            raise_rate_limited("user's groups", max(token_periods))
+            token_period = max(token_periods)
 
+        cost_period: int | None = None
         cost_periods: list[int] = []
         for user_group_id, rate_limits in group_rate_limits.items():
             cost_triggered = _worst_triggered_cost_limit(
@@ -148,7 +151,9 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
                 break  # an under-budget group means the user is not cost-limited
             cost_periods.append(cost_triggered.period_hours)
         else:
-            raise_rate_limited("user's groups", max(cost_periods))
+            cost_period = max(cost_periods)
+
+        _raise_for_longest_window("user's groups", token_period, cost_period)
 
 
 def _fetch_all_user_group_rate_limits(
