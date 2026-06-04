@@ -1,13 +1,12 @@
 """External-dependency-unit tests for ``DockerEventsLookup``.
 
-Unit tests stub the docker SDK; this file spins up real labelled
-containers on the host docker daemon and exercises the cache from the
-initial-sync + events paths. Skipped automatically when the docker
-socket is absent so local contributors without docker running aren't
-blocked.
+Unit tests stub the docker SDK; This file spins up real labelled containers on
+the host docker daemon and exercises the cache from the initial-sync + events
+paths. Skipped automatically when the docker socket is absent so local
+contributors without docker running aren't blocked.
 
-These tests do not require Postgres or the compose stack — they touch
-the docker socket only.
+These tests do not require Postgres or the compose stack — they touch the docker
+socket only.
 """
 
 from __future__ import annotations
@@ -34,7 +33,7 @@ _BUSYBOX_IMAGE = "busybox:1.36"
 
 pytestmark = pytest.mark.skipif(
     not os.path.exists(_DOCKER_SOCKET),
-    reason=f"docker socket not present at {_DOCKER_SOCKET}",
+    reason=f"Docker socket not present at {_DOCKER_SOCKET}.",
 )
 
 
@@ -47,9 +46,9 @@ def docker_client() -> DockerClient:
 def test_network(docker_client: DockerClient) -> Generator[str, None, None]:
     """Dedicated bridge for the test containers.
 
-    Module-scoped so all tests in the file reuse one network — bridge
-    creation is the slowest single op here and re-creating per test
-    triples the wall clock.
+    Module-scoped so all tests in the file reuse one network — bridge creation
+    is the slowest single op here and re-creating per test triples the wall
+    clock.
     """
     try:
         docker_client.networks.get(_TEST_NETWORK)
@@ -83,8 +82,8 @@ def _run_sandbox_labelled(
         },
         name=name or f"craft-sandbox-test-{str(sandbox_id)[:8]}",
     )
-    # Wait for the network IP to be assigned. Bridge attachment is async
-    # after container.run returns; reload until NetworkSettings shows up.
+    # Wait for the network IP to be assigned. Bridge attachment is async after
+    # container.run returns; Reload until NetworkSettings shows up.
     deadline = time.time() + 10.0
     while time.time() < deadline:
         container.reload()
@@ -92,7 +91,7 @@ def _run_sandbox_labelled(
             return container
         time.sleep(0.1)
     raise RuntimeError(
-        f"container {container.name} did not attach to {network} within 10s"
+        f"Container {container.name} did not attach to {network} within 10s."
     )
 
 
@@ -104,7 +103,7 @@ def fresh_lookup(
     lookup = DockerEventsLookup(docker_client=docker_client, network=test_network)
     lookup.start()
     assert lookup.wait_for_initial_sync(timeout_seconds=10.0), (
-        "DockerEventsLookup initial sync did not complete within 10s"
+        "DockerEventsLookup initial sync did not complete within 10s."
     )
     yield lookup
     lookup.stop()
@@ -112,10 +111,13 @@ def fresh_lookup(
 
 @pytest.fixture
 def cleanup_test_containers() -> Generator[list[Container], None, None]:
-    """Collect containers each test creates; remove them all on teardown.
+    """Collects containers each test creates; Removes them all on teardown.
 
-    No ``docker_client`` arg — each ``Container`` is bound to the client
-    it was created from, so ``c.remove()`` resolves on its own.
+    Tests push containers onto the yielded list via ``.append()``; The teardown
+    loop iterates whatever they registered.
+
+    No ``docker_client`` arg -- each ``Container`` is bound to the client it was
+    created from, so ``c.remove()`` resolves on its own.
     """
     created: list[Container] = []
     yield created
@@ -131,8 +133,10 @@ def test_lookup_finds_running_container_via_initial_sync(
     test_network: str,
     cleanup_test_containers: list[Container],
 ) -> None:
-    """Container started BEFORE the lookup must be discovered by the initial
-    sync against the docker daemon, not just by the events stream."""
+    """
+    Container started BEFORE the lookup must be discovered by the initial sync
+    against the docker daemon, not just by the events stream.
+    """
     sandbox_id = uuid4()
     container = _run_sandbox_labelled(
         docker_client, network=test_network, sandbox_id=sandbox_id
@@ -160,8 +164,10 @@ def test_lookup_discovers_container_started_after_via_events(
     test_network: str,
     cleanup_test_containers: list[Container],
 ) -> None:
-    """Container started AFTER the lookup is up must appear in the cache
-    via the events watcher (start event -> inspect -> upsert)."""
+    """
+    Container started AFTER the lookup is up must appear in the cache via the
+    events watcher (start event -> inspect -> upsert).
+    """
     sandbox_id = uuid4()
     container = _run_sandbox_labelled(
         docker_client, network=test_network, sandbox_id=sandbox_id
@@ -178,7 +184,7 @@ def test_lookup_discovers_container_started_after_via_events(
             break
         time.sleep(0.05)
     assert identity is not None, (
-        f"events watcher did not surface container {container.name} within 10s"
+        f"Events watcher did not surface container {container.name} within 10s."
     )
     assert identity.sandbox_id == sandbox_id
 
@@ -189,8 +195,10 @@ def test_lookup_evicts_container_on_destroy(
     test_network: str,
     cleanup_test_containers: list[Container],
 ) -> None:
-    """Removing a container must drop its IP from the cache so the proxy
-    stops resolving traffic against a dead container's identity."""
+    """
+    Removing a container must drop its IP from the cache so the proxy stops
+    resolving traffic against a dead container's identity.
+    """
     sandbox_id = uuid4()
     container = _run_sandbox_labelled(
         docker_client, network=test_network, sandbox_id=sandbox_id
@@ -215,24 +223,26 @@ def test_lookup_evicts_container_on_destroy(
     # If we get here, the eviction never happened. The container is already
     # gone, so don't try to clean it up further.
     cleanup_test_containers.clear()
-    pytest.fail(f"events watcher did not evict {container.name} within 10s of removal")
+    pytest.fail(f"Events watcher did not evict {container.name} within 10s of removal.")
 
 
-def test_lookup_ignores_unlabelled_containers(
+def test_lookup_ignores_unlabeled_containers(
     fresh_lookup: DockerEventsLookup,
     docker_client: DockerClient,
     test_network: str,
     cleanup_test_containers: list[Container],
 ) -> None:
-    """Containers without the craft-sandbox component label must not
-    surface — otherwise random user containers could spoof identity."""
+    """
+    Containers without the craft-sandbox component label must not surface --
+    otherwise random user containers could spoof identity.
+    """
     container = docker_client.containers.run(
         _BUSYBOX_IMAGE,
         command=["sleep", "3600"],
         detach=True,
         network=test_network,
         labels={"some.other/label": "value"},
-        name=f"unlabelled-test-{uuid4().hex[:8]}",
+        name=f"unlabeled-test-{uuid4().hex[:8]}",
     )
     cleanup_test_containers.append(container)
     container.reload()

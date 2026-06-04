@@ -20,14 +20,14 @@ the right tool when the docker plumbing itself is what you're changing.
 ## Prerequisites
 
 - Docker Desktop running with at least 8 CPU / 16 GB allocated.
-- The CONTRIBUTING.md prereqs (Python 3.11, uv, Node 22, the venv,
+- The CONTRIBUTING.md prereqs (Python 3.13, uv, Node 22, the venv,
   `.vscode/.env`).
 - A built `onyxdotapp/sandbox:dev` image. Build with:
 
   ```bash
   docker build \
     -t onyxdotapp/sandbox:dev \
-    backend/onyx/server/features/build/sandbox/kubernetes/docker
+    backend/onyx/server/features/build/sandbox/image
   ```
 
   The sandbox image is shared between K8s and compose; the same tag
@@ -51,7 +51,7 @@ the manager mounts the same unprefixed names.
 ### Recipe A — full stack in compose, no local debugger
 
 Closest to what self-hosters get from `install.sh --include-craft`.
-Useful for smoke-testing end-to-end behaviour.
+Useful for smoke-testing end-to-end behavior.
 
 ```bash
 cd deployment/docker_compose
@@ -62,22 +62,17 @@ docker compose \
   up -d --wait
 ```
 
-The compose file enables the proxy posture by default
-(`SANDBOX_PROXY_HOST=sandbox-proxy`). Every sandbox provisioned by
-api_server gets the firewall init + capsh + proxy egress.
+Proxy posture is mandatory under `SANDBOX_BACKEND=docker`: every sandbox
+provisioned by api_server gets `firewall-init.sh` (iptables egress
+lockdown + `setpriv` capability bounding) and routes HTTPS through
+`sandbox-proxy`. `DockerSandboxManager._initialize` raises at api_server
+startup if `SANDBOX_PROXY_HOST` is empty. To iterate without the proxy,
+use the K8s recipe linked above (`SANDBOX_BACKEND=kubernetes`).
 
-To **disable** the proxy posture (sandbox containers fall back to the
-legacy 4-key env / `cap_drop=ALL` / `user=1000:1000` posture, no MITM):
-
-```bash
-SANDBOX_PROXY_HOST= docker compose ... up -d --wait
-```
-
-The bash `:-` vs `-` distinction matters: `${SANDBOX_PROXY_HOST-...}`
-in the compose file uses `-` (default if unset), so an explicit empty
-string disables it; `${SANDBOX_PROXY_PORT:-8080}` uses `:-` so unset
-OR empty both fall through to the default. This was a deliberate
-choice in `docker-compose.craft.yml`.
+Why `${SANDBOX_PROXY_HOST-sandbox-proxy}` uses a single dash, not `:-`:
+the dash form preserves an explicit empty string, which is what lets
+the fail-loud check above fire. `${SANDBOX_PROXY_PORT:-8080}` uses
+`:-` because empty there is just a typo, not a signal.
 
 Tail proxy logs:
 
@@ -124,7 +119,6 @@ Iterate on `sandbox_proxy/` code with the VSCode debugger attached.
    SANDBOX_BACKEND=docker \
    SANDBOX_PROXY_HOST=host.docker.internal \
    SANDBOX_PROXY_PORT=8080 \
-   SANDBOX_PROXY_CA_VOLUME_NAME=sandbox_proxy_ca \
    uvicorn onyx.main:app --host 0.0.0.0 --port 8080
    ```
 

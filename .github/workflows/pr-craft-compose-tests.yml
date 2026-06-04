@@ -1,13 +1,7 @@
-# Runs the Craft docker-compose sandbox-proxy tests on each PR that touches
-# the docker sandbox manager, the sandbox-proxy package, the compose craft
-# overlay, or the install script.
-#
-# Scope: validates the compose merge + exercises the DockerEventsLookup
-# against a real docker socket. Full end-to-end coverage of the approval
-# gate against the docker backend (the compose-flavoured analogue of
-# `test_approval_gate.py`) is tracked as a follow-up — the gate logic
-# itself is backend-agnostic and already covered by the K8s lane and the
-# in-process unit tests.
+# Validates the compose merge + exercises DockerEventsLookup against a real
+# docker socket. A full compose-flavored analogue of `test_approval_gate.py` is
+# a follow-up; The gate logic is backend-agnostic and already covered by the K8s
+# lane + in-process unit tests.
 name: Craft Docker-Compose Sandbox Tests
 concurrency:
   group: Craft-Compose-Tests-${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -20,8 +14,8 @@ on:
     paths:
       - "backend/onyx/sandbox_proxy/**"
       - "backend/onyx/server/features/build/sandbox/docker/**"
-      - "backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile"
-      - "backend/onyx/server/features/build/sandbox/kubernetes/docker/firewall-init.sh"
+      - "backend/onyx/server/features/build/sandbox/image/Dockerfile"
+      - "backend/onyx/server/features/build/sandbox/image/firewall-init.sh"
       - "backend/tests/unit/sandbox_proxy/**"
       - "backend/tests/unit/onyx/server/features/build/sandbox/test_docker_manager_config.py"
       - "backend/tests/external_dependency_unit/sandbox_proxy/**"
@@ -35,7 +29,6 @@ permissions:
 
 env:
   SANDBOX_BACKEND: "docker"
-  # Default compose values (override in env.template if Onyx defaults drift).
   POSTGRES_PASSWORD: "password"
   POSTGRES_USER: "postgres"
 
@@ -63,8 +56,8 @@ jobs:
             backend/requirements/ee.txt
 
       # The compose merge is what install.sh --include-craft renders for
-      # self-hosters. If this fails, the operator's first `compose up`
-      # silently breaks.
+      # self-hosters. If this fails, the operator's first `compose up` silently
+      # breaks.
       - name: Validate compose merge
         working-directory: deployment/docker_compose
         run: |
@@ -73,9 +66,8 @@ jobs:
             -f docker-compose.craft.yml \
             --env-file env.template \
             config >/dev/null
-          # Confirm the new service is rendered and the external resources
-          # are declared with the unprefixed names DockerSandboxManager
-          # mounts by.
+          # Unprefixed `name:` is load-bearing: DockerSandboxManager mounts
+          # these resources directly, not via the compose project prefix.
           rendered=$(docker compose \
             -f docker-compose.yml \
             -f docker-compose.craft.yml \
@@ -84,22 +76,20 @@ jobs:
           echo "$rendered" | grep -A1 "sandbox_proxy_ca:" | grep -q "name: sandbox_proxy_ca"
           echo "$rendered" | grep -A1 "onyx_craft_sandbox:" | grep -q "name: onyx_craft_sandbox"
 
-      # install.sh idempotency: re-running --include-craft on a host with
-      # the resources already present must not fail. The lane creates the
-      # resources first, then re-runs the install-time block as a sanity
-      # check.
+      # Pins docker's native "already exists" error on re-create, which is what
+      # install.sh --include-craft's `inspect`-guarded block relies on to stay
+      # idempotent. A docker behavior change here would silently break
+      # re-installs.
       - name: Pre-create compose-external resources
         run: |
           docker network create onyx_craft_sandbox || true
           docker volume create sandbox_proxy_ca || true
-          # Re-run is a no-op (block is wrapped in `docker network inspect`
-          # / `docker volume inspect` guards).
           docker network create onyx_craft_sandbox 2>&1 | grep -q "already exists"
           docker volume create sandbox_proxy_ca 2>&1 | grep -q "Volume name is already in use\|already in use"
 
       # The DockerEventsLookup external-dep tests spin up real busybox
-      # containers via the host docker socket — no Postgres, no compose
-      # stack needed.
+      # containers via the host docker socket -- no Postgres, no compose stack
+      # needed.
       - name: Pull busybox for DockerEventsLookup tests
         run: docker pull busybox:1.36
 
