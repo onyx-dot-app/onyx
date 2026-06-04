@@ -7,5 +7,5 @@ craft-down:
 	deployment/helm/dev/craft-down.sh
 
 craft-sandbox-image:
-	docker build -t onyxdotapp/sandbox:dev backend/onyx/server/features/build/sandbox/kubernetes/docker
+	docker build -t onyxdotapp/sandbox:dev backend/onyx/server/features/build/sandbox/image
 	kind load docker-image onyxdotapp/sandbox:dev --name onyx-dev

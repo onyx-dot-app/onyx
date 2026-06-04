@@ -144,8 +144,8 @@ jobs:
         id: build
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
-          context: ./backend/onyx/server/features/build/sandbox/kubernetes/docker
-          file: ./backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile
+          context: ./backend/onyx/server/features/build/sandbox/image
+          file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
           platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
@@ -214,8 +214,8 @@ jobs:
         id: build
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
-          context: ./backend/onyx/server/features/build/sandbox/kubernetes/docker
-          file: ./backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile
+          context: ./backend/onyx/server/features/build/sandbox/image
+          file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
           platforms: linux/arm64
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |

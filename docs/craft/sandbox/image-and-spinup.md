@@ -6,9 +6,9 @@ motivation isn't obvious from the diff.
 
 Related files:
 
-- `backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile`
-- `backend/onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt`
-- `backend/onyx/server/features/build/sandbox/kubernetes/docker/sandbox_daemon/snapshot.py`
+- `backend/onyx/server/features/build/sandbox/image/Dockerfile`
+- `backend/onyx/server/features/build/sandbox/image/initial-requirements.txt`
+- `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/snapshot.py`
 - `backend/onyx/server/features/build/sandbox/kubernetes/kubernetes_sandbox_manager.py`
 - `backend/onyx/server/features/build/sandbox/kubernetes/scripts/bench-sandbox-spinup.sh`
 - `deployment/helm/charts/onyx/templates/sandbox-namespace.yaml`
@@ -109,7 +109,7 @@ The pptx skill needs LibreOffice + poppler-utils + extra fonts +
 pptxgenjs in the image (~700 MB). Skills themselves are pushed by the
 API server at session setup, but their **runtime tools** must be in
 the image already (the in-pod `soffice` / `pdftoppm` / `pptxgenjs` calls
-from `docker/skills/pptx/scripts/`).
+from `onyx/skills/builtin/pptx/scripts/`).
 
 - Prod / default: `ENABLE_SKILLS=true` — full image, all skills work.
 - Dev kind clusters / CI: `ENABLE_SKILLS=false` — ~700 MB smaller, but
@@ -122,7 +122,7 @@ To toggle in dev:
 ```
 docker build --build-arg ENABLE_SKILLS=false \
     -t onyxdotapp/sandbox:dev-noskills \
-    backend/onyx/server/features/build/sandbox/kubernetes/docker
+    backend/onyx/server/features/build/sandbox/image
 ```
 
 If you add a new skill that depends on a heavy system package (Chrome,
@@ -245,7 +245,7 @@ pod-create→Ready. Image sizes are read from `docker image inspect`.
 make craft-sandbox-image            # → onyxdotapp/sandbox:dev
 docker build --build-arg ENABLE_SKILLS=false \
     -t onyxdotapp/sandbox:candidate \
-    backend/onyx/server/features/build/sandbox/kubernetes/docker
+    backend/onyx/server/features/build/sandbox/image
 
 # 2. Benchmark both (3 reps each scenario by default)
 REPS=3 backend/onyx/server/features/build/sandbox/kubernetes/scripts/bench-sandbox-spinup.sh \

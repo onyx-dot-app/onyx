@@ -264,12 +264,12 @@
     },
     {
       "label": "craft: rebuild sandbox image",
-      "detail": "Rebuild onyxdotapp/sandbox:dev and load it into the kind node. Use after editing backend/onyx/server/features/build/sandbox/kubernetes/docker/.",
+      "detail": "Rebuild onyxdotapp/sandbox:dev and load it into the kind node. Use after editing backend/onyx/server/features/build/sandbox/image/.",
       "type": "shell",
       "command": "bash",
       "args": [
         "-c",
-        "docker build -t onyxdotapp/sandbox:dev backend/onyx/server/features/build/sandbox/kubernetes/docker && kind load docker-image onyxdotapp/sandbox:dev --name onyx-dev"
+        "docker build -t onyxdotapp/sandbox:dev backend/onyx/server/features/build/sandbox/image && kind load docker-image onyxdotapp/sandbox:dev --name onyx-dev"
       ],
       "options": {
         "cwd": "${workspaceFolder}"

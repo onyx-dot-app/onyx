@@ -83,13 +83,13 @@ from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SnapshotCreateRequest,
 )
-from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SnapshotCreateResponse,
 )
-from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SnapshotRestoreRequest,
 )
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config

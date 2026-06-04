@@ -136,7 +136,7 @@ which is equivalent to:
 
 ```bash
 docker build -t onyxdotapp/sandbox:dev \
-  backend/onyx/server/features/build/sandbox/kubernetes/docker
+  backend/onyx/server/features/build/sandbox/image
 kind load docker-image onyxdotapp/sandbox:dev --name onyx-dev
 ```
 
@@ -284,7 +284,7 @@ Visit `http://localhost:3000` once running.
 | Frontend (`web/`) | ~instant | Next.js HMR. |
 | Helm chart templates / values | 10–30s | Re-run `k8s-up.sh`. |
 | Backend image (`Dockerfile`) | 60–180s | `docker build` → `kind load docker-image` → `kubectl rollout restart`. |
-| Sandbox image (`backend/onyx/server/features/build/sandbox/kubernetes/docker/`) | 60–180s | Same. New sandboxes pick up the new image immediately. |
+| Sandbox image (`backend/onyx/server/features/build/sandbox/image/`) | 60–180s | Same. New sandboxes pick up the new image immediately. |
 
 ### Building and loading local images
 

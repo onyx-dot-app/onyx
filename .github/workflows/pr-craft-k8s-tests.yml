@@ -15,6 +15,7 @@ on:
     branches: [main]
     paths:
       - "backend/onyx/server/features/build/sandbox/**"
+      - "backend/onyx/skills/**"
       - "backend/onyx/sandbox_proxy/**"
       - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py"
       - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox_file_ops.py"
@@ -141,8 +142,8 @@ jobs:
       - name: Build and push sandbox image
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
-          context: ./backend/onyx/server/features/build/sandbox/kubernetes/docker
-          file: ./backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile
+          context: ./backend/onyx/server/features/build/sandbox/image
+          file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
           platforms: linux/amd64
           # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
           # so skip LibreOffice et al. to keep the CI image lean.

@@ -33,9 +33,9 @@ def _write_skill_dir(
     extra_files: dict[str, str] | None = None,
 ) -> None:
     """Write a built-in's on-disk content at ``skills_root/<skill_id>`` — the
-    same ``SKILLS_TEMPLATE_PATH/<built_in_skill_id>`` layout production uses, so
+    same ``BUILTIN_SKILLS_PATH/<built_in_skill_id>`` layout production uses, so
     the definition's computed ``source_dir`` resolves here once the caller has
-    redirected ``SKILLS_TEMPLATE_PATH`` at ``skills_root``.
+    redirected ``BUILTIN_SKILLS_PATH`` at ``skills_root``.
     """
     source_dir = skills_root / skill_id
     source_dir.mkdir(parents=True)
@@ -60,11 +60,11 @@ def _register_built_in(
     template_body: str | None = None,
 ) -> str:
     """Register a fresh synthetic built-in (definition + Skill row) whose
-    content lives under ``skills_root/<id>``, redirecting ``SKILLS_TEMPLATE_PATH``
+    content lives under ``skills_root/<id>``, redirecting ``BUILTIN_SKILLS_PATH``
     so its computed ``source_dir`` resolves there. Returns the synthetic
     ``built_in_skill_id`` (also the slug and on-disk dir name).
     """
-    monkeypatch.setattr(built_in_module, "SKILLS_TEMPLATE_PATH", str(skills_root))
+    monkeypatch.setattr(built_in_module, "BUILTIN_SKILLS_PATH", skills_root)
     built_in_skill_id = f"test-builtin-{uuid4().hex[:8]}"
     _write_skill_dir(
         skills_root,
@@ -145,11 +145,11 @@ class TestBuiltInTemplate:
             f"{_FRONTMATTER.format(slug='company-search')}"
             "Sources:\n{{AVAILABLE_SOURCES_SECTION}}\n"
         )
-        # Redirect SKILLS_TEMPLATE_PATH at tmp_path and write the template under
+        # Redirect BUILTIN_SKILLS_PATH at tmp_path and write the template under
         # company-search/ — the registry's existing definition computes its
         # source_dir from there, so no definition swap is needed. reset_* is
         # idempotent against the migration-seeded canonical row.
-        monkeypatch.setattr(built_in_module, "SKILLS_TEMPLATE_PATH", str(tmp_path))
+        monkeypatch.setattr(built_in_module, "BUILTIN_SKILLS_PATH", tmp_path)
         _write_skill_dir(tmp_path, "company-search", template_body=template_body)
         reset_built_in_skill_row(db_session, built_in_skill_id="company-search")
         db_session.commit()
@@ -172,7 +172,7 @@ class TestBuiltInTemplate:
             f"{_FRONTMATTER.format(slug='company-search')}"
             "{{AVAILABLE_SOURCES_SECTION}}\n"
         )
-        monkeypatch.setattr(built_in_module, "SKILLS_TEMPLATE_PATH", str(tmp_path))
+        monkeypatch.setattr(built_in_module, "BUILTIN_SKILLS_PATH", tmp_path)
         _write_skill_dir(
             tmp_path,
             "company-search",
