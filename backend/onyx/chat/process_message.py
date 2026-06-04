@@ -112,6 +112,7 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import ContextUsagePacket
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
@@ -1299,13 +1300,21 @@ def _run_models(
                 _save_errored_message(i, "normal")
                 continue
             try:
-                llm_loop_completion_handle(
+                prompt_tokens = llm_loop_completion_handle(
                     state_container=state_containers[i],
                     is_connected=setup.check_is_connected,
                     assistant_message=setup.reserved_messages[i],
                     llm=setup.llms[i],
                     reserved_tokens=setup.reserved_token_count,
                 )
+                if prompt_tokens is not None:
+                    yield Packet(
+                        placement=Placement(turn_index=0, model_index=i),
+                        obj=ContextUsagePacket(
+                            used_tokens=prompt_tokens,
+                            max_input_tokens=setup.llms[i].config.max_input_tokens,
+                        ),
+                    )
             except Exception:
                 logger.exception(
                     "normal completion failed for model %d (%s)",
@@ -1649,7 +1658,7 @@ def llm_loop_completion_handle(
     assistant_message: ChatMessage,
     llm: LLM,
     reserved_tokens: int,
-) -> None:
+) -> int | None:
     # Snapshot all state under the container's lock before any DB write.
     # Worker threads may still be running (e.g. user-cancellation path), so
     # direct attribute access is not thread-safe — use the provided getters.
@@ -1724,6 +1733,10 @@ def llm_loop_completion_handle(
             llm=llm,
             compression_params=compression_params,
         )
+
+    # Returned so the caller can stream a ContextUsagePacket for the gauge.
+    # None when no real turn produced provider prompt_tokens.
+    return prompt_tokens
 
 
 _CITATION_LINK_START_PATTERN = re.compile(r"\s*\[\[\d+\]\]\(")
