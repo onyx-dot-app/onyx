@@ -394,6 +394,13 @@ class ExternalAppType(str, PyEnum):
     GITHUB = "GITHUB"
     CUSTOM = "CUSTOM"
 
+    @property
+    def is_built_in(self) -> bool:
+        """True for provider-backed built-ins (unique per type per tenant),
+        False for ``CUSTOM`` (admin-defined, can repeat). Use this to guard
+        paths that only make sense for a single, well-known app per type."""
+        return self is not ExternalAppType.CUSTOM
+
 
 class EndpointPolicy(str, PyEnum):
     """What the egress layer does with an outbound request once it has been

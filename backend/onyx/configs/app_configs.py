@@ -1421,6 +1421,29 @@ AUTO_PROVISION_DEFAULT_LLM_PROVIDERS = (
     os.environ.get("AUTO_PROVISION_DEFAULT_LLM_PROVIDERS", "true").lower() == "true"
 )
 
+# Auto-create Onyx-managed built-in external app rows (disabled, Onyx-owned creds)
+# per tenant. Default False; set True on cloud so tenants can enable built-ins
+# without registering their own OAuth app.
+AUTO_PROVISION_DEFAULT_EXTERNAL_APPS = (
+    os.environ.get("AUTO_PROVISION_DEFAULT_EXTERNAL_APPS", "false").lower() == "true"
+)
+
+# Onyx-owned OAuth credentials for built-in external apps (managed cloud)
+EXT_APP_SLACK_CLIENT_ID = os.environ.get("EXT_APP_SLACK_CLIENT_ID", "")
+EXT_APP_SLACK_CLIENT_SECRET = os.environ.get("EXT_APP_SLACK_CLIENT_SECRET", "")
+EXT_APP_GMAIL_CLIENT_ID = os.environ.get("EXT_APP_GMAIL_CLIENT_ID", "")
+EXT_APP_GMAIL_CLIENT_SECRET = os.environ.get("EXT_APP_GMAIL_CLIENT_SECRET", "")
+EXT_APP_GOOGLE_CALENDAR_CLIENT_ID = os.environ.get(
+    "EXT_APP_GOOGLE_CALENDAR_CLIENT_ID", ""
+)
+EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET = os.environ.get(
+    "EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET", ""
+)
+EXT_APP_LINEAR_CLIENT_ID = os.environ.get("EXT_APP_LINEAR_CLIENT_ID", "")
+EXT_APP_LINEAR_CLIENT_SECRET = os.environ.get("EXT_APP_LINEAR_CLIENT_SECRET", "")
+EXT_APP_GITHUB_CLIENT_ID = os.environ.get("EXT_APP_GITHUB_CLIENT_ID", "")
+EXT_APP_GITHUB_CLIENT_SECRET = os.environ.get("EXT_APP_GITHUB_CLIENT_SECRET", "")
+
 INSTANCE_TYPE = (
     "managed"
     if os.environ.get("IS_MANAGED_INSTANCE", "").lower() == "true"

@@ -79,6 +79,9 @@ export interface ExternalAppAdminResponse {
   organization_credentials: Record<string, string>;
   enabled: boolean;
   actions: ActionPolicyView[];
+  // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
+  // admin may only enable/disable + set policies (the UI hides the rest).
+  is_onyx_managed: boolean;
 }
 
 export interface ExternalAppUserResponse {
@@ -104,4 +107,19 @@ export function findUserAppByName(
   name: string
 ): ExternalAppUserResponse | null {
   return apps.find((a) => a.name === name) ?? null;
+}
+
+/**
+ * Built-in descriptors still available to add. Only one app per `app_type` is
+ * allowed (server-enforced via the built-in skill's unique slug), so configured
+ * types are dropped to avoid a duplicate-resource error. Cloud managed built-ins
+ * are pre-provisioned (always configured) and never show here. CUSTOM apps have
+ * no descriptor, so they never match and are left untouched.
+ */
+export function availableBuiltInDescriptors(
+  descriptors: BuiltInExternalAppDescriptor[],
+  configuredApps: ExternalAppAdminResponse[]
+): BuiltInExternalAppDescriptor[] {
+  const configuredAppTypes = new Set(configuredApps.map((app) => app.app_type));
+  return descriptors.filter((d) => !configuredAppTypes.has(d.app_type));
 }
