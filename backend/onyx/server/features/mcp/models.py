@@ -59,10 +59,8 @@ class MCPOAuthKeys(str, Enum):
     CLIENT_INFO = "client_info"
     TOKENS = "tokens"
     METADATA = "metadata"
-    # Absolute unix timestamp (seconds) when the stored access token expires.
-    # The SDK's `OAuthToken` only carries the relative `expires_in`, which is
-    # meaningless once reloaded from storage; we persist the absolute value so
-    # a fresh per-tool-call provider can decide whether to refresh.
+    # Absolute unix expiry for the stored token. `OAuthToken` only carries the
+    # relative `expires_in`, which is meaningless once reloaded from storage.
     TOKEN_EXPIRES_AT = "token_expires_at"
 
 
