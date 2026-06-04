@@ -20,6 +20,7 @@ from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.engine import match_action
 from onyx.external_apps.matching.engine import RequestMatch
 from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.external_apps.presentation.decode import decode_action_payload
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -86,7 +87,12 @@ class ExternalAppActionMatcher(ActionMatcher):
             request.raw_content or b"",
             (request.headers.get("content-type") or "").lower(),
         )
-        return matched.model_copy(update={"payload": payload or {}})
+        # Overwrite with a human-readable form for the approval card. Display-only:
+        # the forwarded request is untouched; fails open to the raw payload.
+        display_payload = decode_action_payload(
+            app, matched.decisive.action_type, payload or {}
+        )
+        return matched.model_copy(update={"payload": display_payload})
 
 
 def _decode_body(body: bytes, content_type: str) -> dict[str, Any] | None:

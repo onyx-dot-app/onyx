@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 
 from onyx.db.enums import ExternalAppType
+from onyx.external_apps.presentation.payload_decoders import PayloadDecoder
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.utils.logger import setup_logger
 
@@ -144,6 +145,11 @@ class ExternalAppProvider(ABC):
                 f"{cls.__name__} must define `spec` as a "
                 f"{cls._spec_type.__name__} instance."
             )
+
+    def payload_decoder(self, action_type: str) -> PayloadDecoder | None:
+        """Display decoder for ``action_type``'s request body, or ``None`` if it
+        needs none. Override per provider."""
+        ...
 
 
 class OnyxManagedExtApp(ExternalAppProvider, abstract=True):
