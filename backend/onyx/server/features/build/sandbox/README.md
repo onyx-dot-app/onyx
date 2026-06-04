@@ -83,7 +83,7 @@ On EC2 the Docker bridge by default routes to `169.254.169.254` (IMDS), which ca
 **No setup required!** Just build and deploy:
 
 ```bash
-# Build backend image (bakes in the web + venv templates)
+# Build backend image
 cd backend
 docker build -f Dockerfile -t onyxdotapp/backend:latest .
 
@@ -96,71 +96,9 @@ docker build -t onyxdotapp/sandbox:latest .
 
 **How it works:**
 
-- **Backend image**: Contains both templates at build time:
-  - Web template at `/templates/outputs/web` (lightweight Next.js scaffold, ~2MB)
-  - Python venv template at `/templates/venv` (pre-installed packages, ~50MB)
+- **Sandbox image**: Bakes in the web template (`/workspace/templates/outputs`) and a pre-built Python venv (`/workspace/.venv`) from `initial-requirements.txt`
 - **Init container** (Kubernetes only): Syncs knowledge files from S3
 - **Sandbox startup**: Runs `bun install --frozen-lockfile` (hardlinks from the image's pre-warmed Bun cache) + `bun run dev`
-
-### Running Backend Directly (Without Docker)
-
-**Only needed if you're running the Onyx backend outside of Docker.** Most developers use Docker and can skip this section.
-
-If you're running the backend Python process directly on your machine, you need templates at `/templates/`:
-
-#### Web Template
-
-The web template is a lightweight Next.js app (Next.js 16, React 19, shadcn/ui, Recharts) checked into the codebase at `backend/onyx/server/features/build/sandbox/image/templates/outputs/web/`.
-
-For local development, create a symlink to this template:
-
-```bash
-sudo mkdir -p /templates/outputs
-sudo ln -s $(pwd)/backend/onyx/server/features/build/sandbox/image/templates/outputs/web /templates/outputs/web
-```
-
-#### Python Venv Template
-
-If you don't have a venv template, create it:
-
-```bash
-# Use the utility script
-cd backend
-python -m onyx.server.features.build.sandbox.util.build_venv_template
-
-# Or manually
-python3 -m venv /templates/venv
-/templates/venv/bin/pip install -r backend/onyx/server/features/build/sandbox/image/initial-requirements.txt
-```
-
-#### System Dependencies (for PPTX skill)
-
-The PPTX skill requires LibreOffice and Poppler for PDF conversion and thumbnail generation:
-
-**macOS:**
-
-```bash
-brew install poppler
-brew install --cask libreoffice
-```
-
-Ensure `soffice` is on your PATH:
-
-```bash
-export PATH="/Applications/LibreOffice.app/Contents/MacOS:$PATH"
-```
-
-**Linux (Debian/Ubuntu):**
-
-```bash
-sudo apt-get install libreoffice-impress poppler-utils
-```
-
-**That's it!** When sandboxes are created:
-
-1. Web template is copied from `/templates/outputs/web`
-2. Python venv is copied from `/templates/venv`
-3. `bun install --frozen-lockfile` runs automatically, hardlinking from the image's pre-warmed Bun tarball cache
 
 ## OpenCode Configuration
 
@@ -372,7 +310,7 @@ This template provides a modern development environment without the complexity o
 
 ### Python Venv Template
 
-The Python venv (`/templates/venv/`) includes packages from `initial-requirements.txt`:
+The Python venv (built into the sandbox image at `/workspace/.venv`) includes packages from `image/initial-requirements.txt`:
 
 - Data processing: pandas, numpy, polars
 - HTTP clients: requests, httpx

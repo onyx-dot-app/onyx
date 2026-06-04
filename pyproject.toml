@@ -240,7 +240,6 @@ exclude = [
     "backend/generated",
     "backend/onyx/server/features/build/sandbox/image/sandbox_daemon",
     "backend/onyx/skills/builtin/pptx",
-    "backend/onyx/server/features/build/sandbox/image/templates/venv",
 ]
 typeCheckingMode = "off"
 

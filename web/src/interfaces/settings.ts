@@ -34,6 +34,9 @@ export interface Settings {
   temperature_override_enabled: boolean;
   query_history_type: QueryHistoryType;
 
+  // Visibility-only: hides the sidebar page; query-history APIs + recording stay on.
+  hide_query_history_from_admin_panel?: boolean;
+
   deep_research_enabled?: boolean;
   multi_model_chat_enabled?: boolean;
   search_ui_enabled?: boolean;

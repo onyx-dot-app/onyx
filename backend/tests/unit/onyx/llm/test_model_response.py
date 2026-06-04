@@ -170,6 +170,23 @@ def _build_multiple_tool_calls_payload() -> dict:
     }
 
 
+def _build_usage_only_chunk_payload() -> dict:
+    # Final chunk OpenAI emits when stream_options.include_usage is set: empty
+    # `choices` array plus usage. litellm forwards it through verbatim.
+    return {
+        "id": "chatcmpl-usage-only",
+        "created": 1762544600,
+        "model": "gpt-5.1",
+        "object": "chat.completion.chunk",
+        "choices": [],
+        "usage": {
+            "prompt_tokens": 11,
+            "completion_tokens": 22,
+            "total_tokens": 33,
+        },
+    }
+
+
 def _build_non_streaming_response_payload() -> dict:
     return {
         "id": "chatcmpl-abc123",
@@ -293,6 +310,23 @@ def test_from_litellm_model_response_stream_parses_multiple_tool_calls() -> None
             name="web_search",
         ),
     )
+
+
+def test_from_litellm_model_response_stream_handles_empty_choices_usage_chunk() -> None:
+    response = from_litellm_model_response_stream(
+        _make_stream_double(_build_usage_only_chunk_payload())
+    )
+
+    assert isinstance(response, ModelResponseStream)
+    assert response.id == "chatcmpl-usage-only"
+    assert response.created == "1762544600"
+    assert response.choice.finish_reason is None
+    assert response.choice.delta.content is None
+    assert response.choice.delta.tool_calls == []
+    assert response.usage is not None
+    assert response.usage.prompt_tokens == 11
+    assert response.usage.completion_tokens == 22
+    assert response.usage.total_tokens == 33
 
 
 def test_from_litellm_model_response_parses_basic_message() -> None:

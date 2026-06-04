@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -8,32 +8,24 @@ import {
   uploadLibraryFiles,
   uploadLibraryZip,
   createLibraryDirectory,
-  toggleLibraryFileSync,
   deleteLibraryFile,
 } from "@/app/craft/services/apiServices";
 import { LibraryEntry } from "@/app/craft/types/user-library";
 import Modal from "@/refresh-components/Modal";
-import { Section } from "@/layouts/general-layouts";
+import { cn } from "@opal/utils";
 import {
   SvgFolder,
   SvgFolderOpen,
   SvgChevronRight,
+  SvgChevronDown,
   SvgUploadCloud,
   SvgTrash,
   SvgFileText,
   SvgFolderPlus,
 } from "@opal/icons";
-import {
-  Button,
-  InputTypeIn,
-  ShadowDiv,
-  Switch,
-  Text,
-  Tooltip,
-} from "@opal/components";
+import { Button, InputTypeIn, ShadowDiv, Text } from "@opal/components";
 
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
-import IconButton from "@/refresh-components/buttons/IconButton";
 
 /**
  * Build a hierarchical tree from a flat list of library entries.
@@ -71,10 +63,17 @@ function buildTreeFromFlatList(flatList: LibraryEntry[]): LibraryEntry[] {
   return rootEntries;
 }
 
+function formatFileSize(bytes: number | null): string {
+  if (bytes === null) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 interface UserLibraryModalProps {
   open: boolean;
   onClose: () => void;
-  onChanges?: () => void; // Called when files are uploaded, deleted, or sync toggled
+  onChanges?: () => void; // Called when files are uploaded or deleted
 }
 
 export default function UserLibraryModal({
@@ -88,8 +87,12 @@ export default function UserLibraryModal({
   const [entryToDelete, setEntryToDelete] = useState<LibraryEntry | null>(null);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadTargetPathRef = useRef<string>("/");
+  // dragenter/dragleave fire for every child element; count depth so the
+  // overlay only clears when the cursor truly leaves the drop region.
+  const dragDepth = useRef(0);
 
   // Fetch library tree
   const {
@@ -107,6 +110,15 @@ export default function UserLibraryModal({
     return buildTreeFromFlatList(tree);
   }, [tree]);
 
+  // Clear any in-progress drag state when the modal closes, so a drag that
+  // was interrupted by a close doesn't leave the overlay stuck on reopen.
+  useEffect(() => {
+    if (!open) {
+      dragDepth.current = 0;
+      setIsDragging(false);
+    }
+  }, [open]);
+
   const toggleFolder = useCallback((path: string) => {
     setExpandedPaths((prev) => {
       const newSet = new Set(prev);
@@ -119,19 +131,15 @@ export default function UserLibraryModal({
     });
   }, []);
 
-  const handleFileUpload = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const files = event.target.files;
-      if (!files || files.length === 0) return;
+  const uploadFiles = useCallback(
+    async (fileArray: File[], targetPath: string) => {
+      if (fileArray.length === 0) return;
 
       setIsUploading(true);
       setUploadError(null);
 
-      const targetPath = uploadTargetPathRef.current;
-
       try {
-        const fileArray = Array.from(files);
-        // Check if it's a single zip file
+        // A lone .zip is expanded server-side; everything else uploads as-is.
         const firstFile = fileArray[0];
         if (
           fileArray.length === 1 &&
@@ -143,17 +151,27 @@ export default function UserLibraryModal({
           await uploadLibraryFiles(targetPath, fileArray);
         }
         mutate();
-        onChanges?.(); // Notify parent that changes were made
+        onChanges?.();
       } catch (err) {
         setUploadError(err instanceof Error ? err.message : "Upload failed");
       } finally {
         setIsUploading(false);
-        uploadTargetPathRef.current = "/";
-        // Reset input
-        event.target.value = "";
       }
     },
     [mutate, onChanges]
+  );
+
+  const handleFileInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
+      const targetPath = uploadTargetPathRef.current;
+      void uploadFiles(Array.from(files), targetPath).finally(() => {
+        uploadTargetPathRef.current = "/";
+        event.target.value = "";
+      });
+    },
+    [uploadFiles]
   );
 
   const handleUploadToFolder = useCallback((folderPath: string) => {
@@ -161,17 +179,36 @@ export default function UserLibraryModal({
     fileInputRef.current?.click();
   }, []);
 
-  const handleToggleSync = useCallback(
-    async (entry: LibraryEntry, enabled: boolean) => {
-      try {
-        await toggleLibraryFileSync(entry.id, enabled);
-        mutate();
-        onChanges?.(); // Notify parent that changes were made
-      } catch (err) {
-        console.error("Failed to toggle sync:", err);
-      }
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setIsDragging(true);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepth.current -= 1;
+    if (dragDepth.current <= 0) {
+      dragDepth.current = 0;
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      dragDepth.current = 0;
+      setIsDragging(false);
+      if (isUploading) return;
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) void uploadFiles(files, "/");
     },
-    [mutate, onChanges]
+    [uploadFiles, isUploading]
   );
 
   const handleDeleteConfirm = useCallback(async () => {
@@ -180,7 +217,7 @@ export default function UserLibraryModal({
     try {
       await deleteLibraryFile(entryToDelete.id);
       mutate();
-      onChanges?.(); // Notify parent that changes were made
+      onChanges?.();
     } catch (err) {
       console.error("Failed to delete:", err);
     } finally {
@@ -206,19 +243,12 @@ export default function UserLibraryModal({
     }
   }, [mutate, newFolderName]);
 
-  const formatFileSize = (bytes: number | null): string => {
-    if (bytes === null) return "";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
   const fileCount = hierarchicalTree.length;
 
   return (
     <>
       <Modal open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-        <Modal.Content width="xl" height="fit">
+        <Modal.Content width="lg" height="fit">
           <Modal.Header
             icon={SvgFileText}
             title="Your Files"
@@ -226,109 +256,91 @@ export default function UserLibraryModal({
             onClose={onClose}
           />
           <Modal.Body>
-            <Section flexDirection="column" gap={1} alignItems="stretch">
-              {/* Upload error */}
-              {uploadError && (
-                <Section
-                  flexDirection="row"
-                  alignItems="center"
-                  justifyContent="start"
-                  padding={0.5}
-                  height="fit"
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleFileInputChange}
+              disabled={isUploading}
+            />
+
+            <div className="flex w-full flex-col gap-3">
+              {/* Toolbar: primary actions, right-aligned */}
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  prominence="secondary"
+                  icon={SvgFolderPlus}
+                  onClick={() => setShowNewFolderModal(true)}
                 >
-                  <Text font="secondary-body" color="text-05">
+                  New folder
+                </Button>
+                <Button
+                  icon={SvgUploadCloud}
+                  disabled={isUploading}
+                  onClick={() => handleUploadToFolder("/")}
+                >
+                  {isUploading ? "Uploading…" : "Upload"}
+                </Button>
+              </div>
+
+              {uploadError && (
+                <div className="rounded-8 border border-status-error-02 bg-status-error-01 px-3 py-2">
+                  <Text font="secondary-body" color="status-error-05">
                     {uploadError}
                   </Text>
-                </Section>
+                </div>
               )}
 
-              {/* File explorer */}
-              <Section flexDirection="column" alignItems="stretch">
-                {/* Action buttons */}
-                <Section
-                  flexDirection="row"
-                  justifyContent="end"
-                  gap={0.5}
-                  padding={0.5}
-                >
-                  <Button
-                    prominence="secondary"
-                    icon={SvgFolderPlus}
-                    onClick={() => setShowNewFolderModal(true)}
-                    tooltip="New Folder"
-                  />
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    style={{ display: "none" }}
-                    onChange={handleFileUpload}
-                    disabled={isUploading}
-                  />
-                  <Button
-                    disabled={isUploading}
-                    prominence="secondary"
-                    icon={SvgUploadCloud}
-                    onClick={() => handleUploadToFolder("/")}
-                    tooltip={isUploading ? "Uploading..." : "Upload"}
-                    aria-label={isUploading ? "Uploading..." : "Upload"}
-                  />
-                </Section>
-
-                {/* The exact cap is controlled by the backend env var
-                    MAX_EMBEDDED_IMAGES_PER_FILE (default 500). This copy is
-                    deliberately vague so it doesn't drift if the limit is
-                    tuned per-deployment; the precise number is surfaced in
-                    the rejection error the server returns. */}
-                <Section
-                  flexDirection="row"
-                  justifyContent="end"
-                  padding={0.5}
-                  height="fit"
-                >
-                  <Text font="secondary-body" color="text-03">
-                    PDFs with many embedded images may be rejected.
-                  </Text>
-                </Section>
-
+              {/* Drop region — accepts file drops in both empty and populated states */}
+              <div
+                className="relative"
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
                 {isLoading ? (
-                  <Section padding={2} height="fit">
+                  <div className="flex items-center justify-center py-12">
                     <Text font="secondary-body" color="text-03">
-                      Loading files...
+                      Loading files…
                     </Text>
-                  </Section>
+                  </div>
                 ) : error ? (
-                  <Section padding={2} height="fit">
-                    <Text font="secondary-body" color="text-03">
+                  <div className="flex items-center justify-center py-12">
+                    <Text font="secondary-body" color="status-error-05">
                       Failed to load files
                     </Text>
-                  </Section>
+                  </div>
                 ) : fileCount === 0 ? (
-                  <Section padding={2} height="fit" gap={0.5}>
-                    <SvgFileText size={32} className="stroke-text-02" />
-                    <Text font="secondary-body" color="text-03">
-                      No files uploaded yet
-                    </Text>
-                    <Text font="secondary-body" color="text-02">
-                      Upload Excel, Word, PowerPoint, or other files for your
-                      agent to work with
-                    </Text>
-                  </Section>
+                  <UploadDropzone
+                    onClick={() => handleUploadToFolder("/")}
+                    active={isDragging}
+                  />
                 ) : (
-                  <ShadowDiv style={{ maxHeight: "400px", padding: "0.5rem" }}>
-                    <LibraryTreeView
-                      entries={hierarchicalTree}
-                      expandedPaths={expandedPaths}
-                      onToggleFolder={toggleFolder}
-                      onToggleSync={handleToggleSync}
-                      onDelete={setEntryToDelete}
-                      onUploadToFolder={handleUploadToFolder}
-                      formatFileSize={formatFileSize}
-                    />
+                  <ShadowDiv className="max-h-[360px]">
+                    <div className="flex flex-col gap-0.5">
+                      <LibraryTreeView
+                        entries={hierarchicalTree}
+                        expandedPaths={expandedPaths}
+                        onToggleFolder={toggleFolder}
+                        onDelete={setEntryToDelete}
+                        onUploadToFolder={handleUploadToFolder}
+                      />
+                    </div>
                   </ShadowDiv>
                 )}
-              </Section>
-            </Section>
+
+                {/* Drag overlay — consistent feedback regardless of state */}
+                {isDragging && (
+                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-12 border-2 border-dashed border-action-link-04 bg-action-link-01/90">
+                    <Text font="main-ui-action" color="text-05">
+                      Drop files to upload
+                    </Text>
+                  </div>
+                )}
+              </div>
+            </div>
           </Modal.Body>
 
           <Modal.Footer>
@@ -375,7 +387,7 @@ export default function UserLibraryModal({
             }}
           />
           <Modal.Body>
-            <Section flexDirection="column" gap={0.5} alignItems="stretch">
+            <div className="flex flex-col items-stretch gap-2">
               <Text font="secondary-body" color="text-03">
                 Folder name
               </Text>
@@ -390,7 +402,7 @@ export default function UserLibraryModal({
                 }}
                 autoFocus
               />
-            </Section>
+            </div>
           </Modal.Body>
           <Modal.Footer>
             <Button
@@ -415,14 +427,48 @@ export default function UserLibraryModal({
   );
 }
 
+interface UploadDropzoneProps {
+  onClick: () => void;
+  active: boolean;
+}
+
+function UploadDropzone({ onClick, active }: UploadDropzoneProps) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className={cn(
+        "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-12 border border-dashed px-6 py-10 text-center transition-colors",
+        active
+          ? "border-action-link-04 bg-action-link-01"
+          : "border-border-03 bg-background-tint-02 hover:border-action-link-04 hover:bg-action-link-01"
+      )}
+    >
+      <SvgUploadCloud size={28} className="stroke-text-03" />
+      <Text font="main-ui-action" color="text-04">
+        Drag files here or click to upload
+      </Text>
+      <Text font="secondary-body" color="text-03">
+        Excel, Word, PowerPoint, PDF, or ZIP. PDFs with many embedded images may
+        be rejected.
+      </Text>
+    </div>
+  );
+}
+
 interface LibraryTreeViewProps {
   entries: LibraryEntry[];
   expandedPaths: Set<string>;
   onToggleFolder: (path: string) => void;
-  onToggleSync: (entry: LibraryEntry, enabled: boolean) => void;
   onDelete: (entry: LibraryEntry) => void;
   onUploadToFolder: (folderPath: string) => void;
-  formatFileSize: (bytes: number | null) => string;
   depth?: number;
 }
 
@@ -430,10 +476,8 @@ function LibraryTreeView({
   entries,
   expandedPaths,
   onToggleFolder,
-  onToggleSync,
   onDelete,
   onUploadToFolder,
-  formatFileSize,
   depth = 0,
 }: LibraryTreeViewProps) {
   // Sort entries: directories first, then alphabetically
@@ -449,96 +493,63 @@ function LibraryTreeView({
         const isExpanded = expandedPaths.has(entry.path);
 
         return (
-          <Section
-            key={entry.id}
-            flexDirection="column"
-            alignItems="stretch"
-            gap={0}
-            height="fit"
-          >
-            <Section
-              flexDirection="row"
-              alignItems="center"
-              justifyContent="start"
-              gap={0.25}
-              height="fit"
-              padding={0.5}
-            >
-              {/* Indent spacer - inline style needed for dynamic depth */}
+          <div key={entry.id} className="flex flex-col">
+            <div className="group flex items-center gap-2 rounded-8 px-2 py-1.5 transition-colors hover:bg-background-tint-01">
+              {/* Indent for nesting depth */}
               {depth > 0 && (
                 <span
                   aria-hidden
-                  style={{
-                    display: "inline-block",
-                    width: `${depth * 1.25}rem`,
-                    flexShrink: 0,
-                  }}
+                  className="shrink-0"
+                  style={{ width: `${depth * 1.25}rem` }}
                 />
               )}
 
-              {/* Expand/collapse for directories */}
+              {/* Expand/collapse for directories (icon swap avoids a rotate style) */}
               {entry.is_directory ? (
-                // TODO(@raunakab): migrate to opal Button once it supports style prop
-                <IconButton
-                  icon={SvgChevronRight}
+                <Button
+                  prominence="tertiary"
+                  size="2xs"
+                  icon={isExpanded ? SvgChevronDown : SvgChevronRight}
                   onClick={() => onToggleFolder(entry.path)}
-                  small
                   tooltip={isExpanded ? "Collapse" : "Expand"}
-                  style={{
-                    transform: isExpanded ? "rotate(90deg)" : undefined,
-                    transition: "transform 150ms ease",
-                  }}
                 />
               ) : (
-                <Section width="fit" height="fit" gap={0} padding={0}>
-                  <SvgChevronRight size={12} style={{ visibility: "hidden" }} />
-                </Section>
+                <span aria-hidden className="w-5 shrink-0" />
               )}
 
-              {/* Icon */}
+              {/* Type icon */}
               {entry.is_directory ? (
                 isExpanded ? (
-                  <SvgFolderOpen size={16} className="stroke-text-03" />
+                  <SvgFolderOpen
+                    size={16}
+                    className="shrink-0 stroke-text-03"
+                  />
                 ) : (
-                  <SvgFolder size={16} className="stroke-text-03" />
+                  <SvgFolder size={16} className="shrink-0 stroke-text-03" />
                 )
               ) : (
-                <SvgFileText size={16} className="stroke-text-03" />
+                <SvgFileText size={16} className="shrink-0 stroke-text-03" />
               )}
 
               {/* Name */}
-              <Section
-                flexDirection="row"
-                alignItems="center"
-                justifyContent="start"
-                gap={0}
-                height="fit"
-              >
+              <div className="min-w-0 flex-1">
                 <Text font="secondary-body" color="text-04" maxLines={1}>
                   {entry.name}
                 </Text>
-              </Section>
+              </div>
 
               {/* File size */}
               {!entry.is_directory && entry.file_size !== null && (
-                <Section width="fit" height="fit" gap={0} padding={0}>
-                  <Text font="secondary-body" color="text-02" nowrap>
-                    {formatFileSize(entry.file_size)}
-                  </Text>
-                </Section>
+                <Text font="secondary-body" color="text-02" nowrap>
+                  {formatFileSize(entry.file_size)}
+                </Text>
               )}
 
-              {/* Actions */}
-              <Section
-                flexDirection="row"
-                alignItems="center"
-                justifyContent="end"
-                gap={0.25}
-                width="fit"
-                height="fit"
-              >
+              {/* Row actions — revealed on hover/focus */}
+              <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                 {entry.is_directory && (
                   <Button
+                    prominence="tertiary"
                     size="sm"
                     icon={SvgUploadCloud}
                     onClick={(e) => {
@@ -552,27 +563,14 @@ function LibraryTreeView({
                 )}
                 <Button
                   variant="danger"
+                  prominence="tertiary"
                   size="sm"
                   icon={SvgTrash}
                   onClick={() => onDelete(entry)}
                   tooltip="Delete"
                 />
-              </Section>
-
-              {/* Sync toggle */}
-              <Tooltip
-                tooltip={
-                  entry.sync_enabled
-                    ? "Synced to sandbox - click to disable"
-                    : "Not synced - click to enable"
-                }
-              >
-                <Switch
-                  checked={entry.sync_enabled}
-                  onCheckedChange={(checked) => onToggleSync(entry, checked)}
-                />
-              </Tooltip>
-            </Section>
+              </div>
+            </div>
 
             {/* Children */}
             {entry.is_directory && isExpanded && entry.children && (
@@ -580,14 +578,12 @@ function LibraryTreeView({
                 entries={entry.children}
                 expandedPaths={expandedPaths}
                 onToggleFolder={onToggleFolder}
-                onToggleSync={onToggleSync}
                 onDelete={onDelete}
                 onUploadToFolder={onUploadToFolder}
-                formatFileSize={formatFileSize}
                 depth={depth + 1}
               />
             )}
-          </Section>
+          </div>
         );
       })}
     </>
