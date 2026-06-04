@@ -2,7 +2,8 @@
 
 Full docker-compose deployments should use Docker bridge DNS:
 ``http://sandbox-<id>:4096``. Host-run local dev cannot resolve those Docker
-network names, so in ``DEV_MODE=true`` we publish opencode-serve on a random
+network names. When ``docker_sandbox_manager`` decides dev-mode plumbing is
+needed, it uses this module to publish opencode-serve on a random
 localhost-bound host port and read that URL back from ``docker inspect``.
 """
 
@@ -10,33 +11,27 @@ from __future__ import annotations
 
 from typing import Any
 
-from onyx.configs.app_configs import DEV_MODE
 from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
 
 OPENCODE_SERVE_CONTAINER_PORT = f"{OPENCODE_SERVE_PORT}/tcp"
 OPENCODE_SERVE_HOST_BIND_IP = "127.0.0.1"
 
 
-def dev_mode_opencode_serve_ports() -> dict[str, tuple[str, int | None]]:
-    """Docker port bindings needed only by host-run local dev."""
-    if not DEV_MODE:
-        return {}
+def opencode_serve_port_bindings() -> dict[str, tuple[str, int | None]]:
+    """Docker port bindings for host-run local dev."""
     return {OPENCODE_SERVE_CONTAINER_PORT: (OPENCODE_SERVE_HOST_BIND_IP, None)}
 
 
-def dev_mode_published_opencode_serve_base_url(
+def published_opencode_serve_base_url(
     container_attrs: dict[str, Any],
 ) -> str | None:
-    """Return the localhost-published opencode-serve URL in dev mode.
+    """Return the localhost-published opencode-serve URL from Docker attrs.
 
     Docker reports published ports under
     ``NetworkSettings.Ports["4096/tcp"]``. The sandbox binds the host side to
     127.0.0.1 with a random port, because local dev workers run on the host and
     cannot resolve sandbox container DNS names.
     """
-    if not DEV_MODE:
-        return None
-
     network_settings = container_attrs.get("NetworkSettings")
     if not isinstance(network_settings, dict):
         return None

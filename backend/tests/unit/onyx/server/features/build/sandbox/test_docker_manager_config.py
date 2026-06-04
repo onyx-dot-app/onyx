@@ -13,7 +13,7 @@ from uuid import UUID
 
 import pytest
 
-import onyx.server.features.build.sandbox.docker.dev_mode_serve as dev_mode_serve
+import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     OPENCODE_SERVE_CONTAINER_PORT,
 )
@@ -190,7 +190,7 @@ def test_container_kwargs_publishes_serve_on_localhost_in_dev(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Host-run dev workers reach opencode-serve through a local ephemeral port."""
-    monkeypatch.setattr(dev_mode_serve, "DEV_MODE", True)
+    monkeypatch.setattr(dsm, "DEV_MODE", True)
     kwargs = build_container_create_kwargs(
         sandbox_id=SANDBOX_ID,
         user_id=USER_ID,

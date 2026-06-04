@@ -63,7 +63,7 @@ def test_load_serve_connection_info_prefers_localhost_published_port_in_dev(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Host-run workers cannot resolve Docker bridge DNS; use the published port."""
-    monkeypatch.setattr(dev_mode_serve, "DEV_MODE", True)
+    monkeypatch.setattr(dsm, "DEV_MODE", True)
     mgr = _bare_manager()
     fake_container = MagicMock()
     fake_container.attrs = {
@@ -110,7 +110,7 @@ def test_load_serve_connection_info_normalizes_wildcard_host_ip_in_dev(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Docker may report wildcard binds; clients should connect via localhost."""
-    monkeypatch.setattr(dev_mode_serve, "DEV_MODE", True)
+    monkeypatch.setattr(dsm, "DEV_MODE", True)
     mgr = _bare_manager()
     fake_container = MagicMock()
     fake_container.attrs = {
@@ -258,7 +258,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     """``provision()`` must mint a per-call HTTP Basic password and
     thread it through ``build_container_create_kwargs`` into the
     container env — otherwise every later request 401s."""
-    monkeypatch.setattr(dev_mode_serve, "DEV_MODE", True)
+    monkeypatch.setattr(dsm, "DEV_MODE", True)
     monkeypatch.setattr(dsm, "SANDBOX_API_SERVER_URL", "https://onyx.example.com")
     # Skip the actual readiness HTTP probe — that needs a real container.
     monkeypatch.setattr(

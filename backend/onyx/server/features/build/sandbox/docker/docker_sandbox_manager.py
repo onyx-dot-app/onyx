@@ -80,6 +80,7 @@ from docker.errors import APIError
 from docker.errors import NotFound
 from docker.models.containers import Container
 
+from onyx.configs.app_configs import DEV_MODE
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import ATTACHMENTS_DIRECTORY
@@ -97,10 +98,10 @@ from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
-    dev_mode_opencode_serve_ports,
+    opencode_serve_port_bindings,
 )
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
-    dev_mode_published_opencode_serve_base_url,
+    published_opencode_serve_base_url,
 )
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import ExecError
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
@@ -395,7 +396,7 @@ def build_container_create_kwargs(
         privileged=False,
         read_only=False,
         network=network,
-        ports=dev_mode_opencode_serve_ports(),
+        ports=opencode_serve_port_bindings() if DEV_MODE else {},
         environment=env,
         volumes={
             volume_name: {"bind": SESSIONS_ROOT, "mode": "rw"},
@@ -1082,7 +1083,8 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
                 password = entry[len(prefix) :]
                 break
         base_url = f"http://{_sandbox_container_name(sandbox_id)}:{OPENCODE_SERVE_PORT}"
-        base_url = dev_mode_published_opencode_serve_base_url(attrs) or base_url
+        if DEV_MODE:
+            base_url = published_opencode_serve_base_url(attrs) or base_url
         return ServeConnectionInfo(
             base_url=base_url,
             password=password,
