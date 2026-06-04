@@ -9,6 +9,7 @@ from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.github import GitHubProvider
 from onyx.external_apps.providers.gmail import GmailProvider
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
+from onyx.external_apps.providers.google_drive import GoogleDriveProvider
 from onyx.external_apps.providers.linear import LinearProvider
 from onyx.external_apps.providers.slack import SlackProvider
 from onyx.server.features.build.api.models import ActionPolicyView
@@ -19,6 +20,7 @@ from onyx.server.features.build.api.models import OrgCredentialFieldDescriptor
 _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     SlackProvider,
     GoogleCalendarProvider,
+    GoogleDriveProvider,
     GmailProvider,
     LinearProvider,
     GitHubProvider,

@@ -12,6 +12,7 @@ import { IconFunctionComponent } from "@opal/types";
 export type ExternalAppType =
   | "SLACK"
   | "GOOGLE_CALENDAR"
+  | "GOOGLE_DRIVE"
   | "GMAIL"
   | "LINEAR"
   | "GITHUB"
