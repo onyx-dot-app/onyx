@@ -2,20 +2,31 @@
 const { withSentryConfig } = require("@sentry/nextjs");
 const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
 
-const cspHeader = `
+// frame-ancestors controls who may embed a page in an iframe (clickjacking
+// protection). Pages get 'self' only, except the /nrf pages which are
+// embedded by the Chrome extension (new tab + side panel). The extension's
+// origin can't be pinned to an ID since unpacked dev installs and store
+// installs have different IDs, so the chrome-extension: scheme is allowed
+// for those routes only.
+function buildCspHeader(frameAncestors) {
+  return `
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com;
     object-src 'none';
     base-uri 'self';
     form-action 'self';
-    frame-ancestors 'self' chrome-extension:;
+    frame-ancestors ${frameAncestors};
     ${
       process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true" &&
       process.env.NODE_ENV !== "development"
         ? "upgrade-insecure-requests;"
         : ""
     }
-`;
+`.replace(/\n/g, "");
+}
+
+const strictCspHeader = buildCspHeader("'self'");
+const extensionEmbeddableCspHeader = buildCspHeader("'self' chrome-extension:");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -49,10 +60,6 @@ const nextConfig = {
         source: "/(.*)",
         headers: [
           {
-            key: "Content-Security-Policy",
-            value: cspHeader.replace(/\n/g, ""),
-          },
-          {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains; preload",
           },
@@ -68,7 +75,7 @@ const nextConfig = {
             // Legacy fallback for browsers without CSP frame-ancestors
             // support. Modern browsers ignore this header when
             // frame-ancestors is present, so the chrome-extension:
-            // allowance above still applies (e.g. for the /nrf pages).
+            // allowance still applies for the /nrf pages.
             key: "X-Frame-Options",
             value: "SAMEORIGIN",
           },
@@ -76,6 +83,29 @@ const nextConfig = {
             key: "Permissions-Policy",
             value:
               "accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), cross-origin-isolated=(), display-capture=(), document-domain=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), fullscreen=(), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), microphone=(self), midi=(), navigation-override=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(), usb=(), web-share=(), xr-spatial-tracking=()",
+          },
+        ],
+      },
+      {
+        // Strict CSP for everything except the extension-embedded /nrf pages.
+        // The lookahead must exclude exactly /nrf and /nrf/* so those routes
+        // get only the relaxed CSP below (two CSP headers would be enforced
+        // as their intersection, which would break the extension embed).
+        source: "/((?!nrf$|nrf/).*)",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: strictCspHeader,
+          },
+        ],
+      },
+      {
+        // :path* is zero-or-more, so this also matches bare /nrf
+        source: "/nrf/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: extensionEmbeddableCspHeader,
           },
         ],
       },
