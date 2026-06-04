@@ -2,8 +2,6 @@ import ipaddress
 import random
 import socket
 import time
-from datetime import datetime
-from datetime import timezone
 from enum import Enum
 from typing import Any
 from typing import cast
@@ -290,15 +288,6 @@ def _read_urls_file(location: str) -> list[str]:
     return urls
 
 
-def _get_datetime_from_last_modified_header(last_modified: str) -> datetime | None:
-    try:
-        return datetime.strptime(last_modified, "%a, %d %b %Y %H:%M:%S %Z").replace(
-            tzinfo=timezone.utc
-        )
-    except (ValueError, TypeError):
-        return None
-
-
 def _handle_cookies(context: BrowserContext, url: str) -> None:
     """Handle cookies for the given URL to help with bot detection"""
     try:
@@ -442,8 +431,14 @@ class WebConnector(LoadConnector, SlimConnector):
                 initial_url, headers=DEFAULT_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS
             )
             page_text, metadata = extract_pdf_text(response.content)
-            last_modified = response.headers.get("Last-Modified")
 
+            # doc_updated_at is intentionally left unset for web documents. The HTTP
+            # Last-Modified header is an unreliable change signal: CDN/SSR origins
+            # (e.g. Vercel ISR) regenerate it on every fetch, so it advances on each
+            # crawl even when content is identical. A spurious advance bypasses the
+            # content-hash dedup gate in the indexing pipeline, forcing pointless
+            # re-indexing. The content hash is the authoritative change signal for
+            # web docs (see DocumentBase.content_hash).
             result.doc = Document(
                 id=initial_url,
                 sections=[TextSection(link=initial_url, text=page_text)],
@@ -451,11 +446,6 @@ class WebConnector(LoadConnector, SlimConnector):
                 semantic_identifier=initial_url.rstrip("/").split("/")[-1]
                 or initial_url,
                 metadata=metadata,
-                doc_updated_at=(
-                    _get_datetime_from_last_modified_header(last_modified)
-                    if last_modified
-                    else None
-                ),
             )
 
             return result
@@ -488,9 +478,6 @@ class WebConnector(LoadConnector, SlimConnector):
             except TimeoutError:
                 pass
 
-            last_modified = (
-                page_response.header_value("Last-Modified") if page_response else None
-            )
             final_url = page.url
             if final_url != initial_url:
                 protected_url_check(final_url)
@@ -607,17 +594,15 @@ class WebConnector(LoadConnector, SlimConnector):
 
             session_ctx.content_hashes.add(hashed_text)
 
+            # doc_updated_at is intentionally left unset — see the comment in the PDF
+            # branch above. The HTTP Last-Modified header is an unreliable change
+            # signal for web content, so we rely on the content hash for dedup.
             result.doc = Document(
                 id=initial_url,
                 sections=[TextSection(link=initial_url, text=parsed_html.cleaned_text)],
                 source=DocumentSource.WEB,
                 semantic_identifier=parsed_html.title or initial_url,
                 metadata={},
-                doc_updated_at=(
-                    _get_datetime_from_last_modified_header(last_modified)
-                    if last_modified
-                    else None
-                ),
             )
         finally:
             page.close()

@@ -7,7 +7,18 @@ class SandboxBackend(str, Enum):
     DOCKER = "docker"
 
 
-SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "kubernetes"))
+SANDBOX_BACKEND = SandboxBackend.KUBERNETES
+_env_sandbox_backend = os.environ.get("SANDBOX_BACKEND", "").strip()
+if _env_sandbox_backend:
+    try:
+        SANDBOX_BACKEND = SandboxBackend(_env_sandbox_backend.lower())
+    except ValueError:
+        raise ValueError(
+            f"Invalid SANDBOX_BACKEND={_env_sandbox_backend!r}. Valid values: "
+            f"{', '.join(b.value for b in SandboxBackend)}. Unset it to use the "
+            f"default, or align it with this release if you recently changed "
+            f"image versions."
+        )
 
 _disabled_tools_str = os.environ.get("OPENCODE_DISABLED_TOOLS", "question")
 OPENCODE_DISABLED_TOOLS: list[str] = [
