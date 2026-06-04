@@ -7,13 +7,15 @@ Fail-open: `ActionMatcher` exceptions and non-matching action types.
 import asyncio
 import base64
 import binascii
+import operator
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
+from cachetools import cachedmethod
+from cachetools import TTLCache
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
@@ -88,41 +90,6 @@ _GRANT_CACHE_TTL_S = 60.0
 _GRANT_CACHE_MAX_ENTRIES = 4096
 
 
-class _GrantCache:
-    """Per-session TTL cache of the scheduled-run grant lookup; lock-guarded
-    because the lookup runs on the gate's worker threads."""
-
-    def __init__(
-        self,
-        ttl_s: float = _GRANT_CACHE_TTL_S,
-        max_entries: int = _GRANT_CACHE_MAX_ENTRIES,
-        clock: Callable[[], float] = time.monotonic,
-    ) -> None:
-        self._ttl_s = ttl_s
-        self._max_entries = max_entries
-        self._clock = clock
-        self._lock = threading.Lock()
-        self._entries: dict[UUID, tuple[float, ScheduledRunGrants]] = {}
-
-    def get(self, session_id: UUID) -> tuple[bool, ScheduledRunGrants]:
-        """``(hit, value)``; on miss ``hit`` is False and the caller hits the DB."""
-        now = self._clock()
-        with self._lock:
-            entry = self._entries.get(session_id)
-            if entry is None or entry[0] <= now:
-                return False, None
-            return True, entry[1]
-
-    def put(self, session_id: UUID, value: ScheduledRunGrants) -> None:
-        now = self._clock()
-        with self._lock:
-            if len(self._entries) >= self._max_entries:
-                self._entries = {
-                    sid: e for sid, e in self._entries.items() if e[0] > now
-                }
-            self._entries[session_id] = (now + self._ttl_s, value)
-
-
 class ParkedApprovals:
     """Approvals the proxy is currently parked on, grouped by tenant.
 
@@ -178,7 +145,12 @@ class GateAddon:
         # Tracks running `request()` coroutines so the drain can `asyncio.wait`
         # on real completion instead of sleeping. Self-cleaning.
         self._inflight_tasks: set[asyncio.Task[None]] = set()
-        self._grant_cache = _GrantCache()
+        # Per-session memoization of the scheduled-run grant lookup. Lock-guarded
+        # because `_live_grants` runs on the gate's worker threads.
+        self._grant_cache: TTLCache[UUID, ScheduledRunGrants] = TTLCache(
+            maxsize=_GRANT_CACHE_MAX_ENTRIES, ttl=_GRANT_CACHE_TTL_S
+        )
+        self._grant_cache_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # mitmproxy hooks
@@ -288,7 +260,6 @@ class GateAddon:
         # Auto-approval short-circuit: a grant source (today: a RUNNING
         # scheduled run pre-approving this app) skips the park. Off-thread to
         # keep sync DB work off the event loop; failure falls through to park.
-        auto_approved: bool
         try:
             auto_approved = await asyncio.to_thread(self._try_auto_approve, ctx, match)
         except Exception:
@@ -301,9 +272,8 @@ class GateAddon:
             )
             auto_approved = False
         if auto_approved:
-            # Same off-thread rationale as the ALWAYS / post-approval paths.
-            # Fail closed: an unguarded raise would let mitmproxy forward the
-            # original request, bypassing the gate after an APPROVED row exists.
+            # Fail closed: an unguarded raise here would let mitmproxy forward
+            # the original request, bypassing the gate after an APPROVED row exists.
             try:
                 await asyncio.to_thread(
                     self._dispatch_injection_or_block,
@@ -489,17 +459,20 @@ class GateAddon:
         # resolved here — first hit wins.
         return self._scheduled_task_grant(db, ctx, match)
 
+    @cachedmethod(
+        operator.attrgetter("_grant_cache"),
+        key=lambda _self, _db, session_id: session_id,
+        lock=operator.attrgetter("_grant_cache_lock"),
+    )
+    def _live_grants(self, db: Session, session_id: UUID) -> ScheduledRunGrants:
+        return get_live_scheduled_run_grants(db_session=db, session_id=session_id)
+
     def _scheduled_task_grant(
         self, db: Session, ctx: SessionContext, match: RequestMatch
     ) -> _AutoApproval | None:
         """Grant source: a RUNNING scheduled run whose task pre-approves the
         matched app."""
-        hit, grants = self._grant_cache.get(ctx.session_id)
-        if not hit:
-            grants = get_live_scheduled_run_grants(
-                db_session=db, session_id=ctx.session_id
-            )
-            self._grant_cache.put(ctx.session_id, grants)
+        grants = self._live_grants(db, ctx.session_id)
         if grants is None:
             return None
         run_id, granted_app_ids = grants

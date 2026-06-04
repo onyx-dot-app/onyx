@@ -87,12 +87,15 @@ def create_scheduled_task(
 
 
 def set_pre_approved_apps(task: ScheduledTask, app_ids: list[int]) -> None:
-    """Replace a task's pre-approval grants with ``app_ids`` (order-preserving,
-    deduped). Removed grants are deleted via the ``delete-orphan`` cascade.
+    """Replace a task's pre-approval grants with ``app_ids`` (deduped). Reuses
+    existing rows so re-submitting a granted app is a no-op — recreating it
+    would orphan+reinsert the same unique key in one flush, which Postgres
+    rejects. Removed grants drop via the ``delete-orphan`` cascade.
     """
-    deduped = list(dict.fromkeys(app_ids))
+    existing = {grant.external_app_id: grant for grant in task.pre_approved_apps}
     task.pre_approved_apps = [
-        ScheduledTaskPreApprovedApp(external_app_id=app_id) for app_id in deduped
+        existing.get(app_id) or ScheduledTaskPreApprovedApp(external_app_id=app_id)
+        for app_id in dict.fromkeys(app_ids)
     ]
 
 
@@ -175,7 +178,9 @@ def update_scheduled_task(
         task.name = name
     if prompt is not None and prompt != task.prompt:
         task.prompt = prompt
-        set_pre_approved_apps(task, [])
+        # Prompt change resets grants unless this same patch supplies new ones.
+        if pre_approved_app_ids is None:
+            pre_approved_app_ids = []
     if pre_approved_app_ids is not None:
         set_pre_approved_apps(task, pre_approved_app_ids)
     if editor_mode is not None:

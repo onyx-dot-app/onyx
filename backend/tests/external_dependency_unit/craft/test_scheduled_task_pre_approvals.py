@@ -277,6 +277,51 @@ def test_grants_in_same_patch_win_over_prompt_reset(
     assert updated.pre_approved_app_ids == [app_b]
 
 
+def test_resubmitting_existing_grant_is_idempotent(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Re-submitting an already-granted app must not orphan+reinsert the same
+    (task, app) unique key in one flush (which Postgres rejects). The editor
+    re-sends current grants on every save, so this is the common path."""
+    user = make_user(db_session)
+    app_a, app_b = _make_app(db_session), _make_app(db_session)
+    task = _seed_task(db_session, user, pre_approved_app_ids=[app_a])
+
+    updated = update_scheduled_task(
+        db_session=db_session,
+        task_id=task.id,
+        user_id=user.id,
+        pre_approved_app_ids=[app_a, app_b],  # app_a already granted
+    )
+    db_session.commit()
+
+    assert set(updated.pre_approved_app_ids) == {app_a, app_b}
+
+
+def test_prompt_change_plus_reincluded_grant_is_idempotent(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Prompt change + re-including a granted app in one patch must not
+    orphan+reinsert the same (task, app) key. The reset-then-set must resolve
+    to a single grant write, not two."""
+    user = make_user(db_session)
+    app_a, app_b = _make_app(db_session), _make_app(db_session)
+    task = _seed_task(db_session, user, pre_approved_app_ids=[app_a], prompt="orig")
+
+    updated = update_scheduled_task(
+        db_session=db_session,
+        task_id=task.id,
+        user_id=user.id,
+        prompt="changed",
+        pre_approved_app_ids=[app_a, app_b],  # app_a re-included AND prompt changed
+    )
+    db_session.commit()
+
+    assert set(updated.pre_approved_app_ids) == {app_a, app_b}
+
+
 def test_create_persists_grants(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001

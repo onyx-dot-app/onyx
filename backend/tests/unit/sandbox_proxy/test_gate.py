@@ -580,6 +580,26 @@ async def test_grant_lookup_cached_across_requests(
     assert lookup_calls == [UUID(_TAG_UUID)]  # second request served from cache
 
 
+def test_grant_lookup_cache_keyed_on_session_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The cache key is ``session_id`` alone (not the db handle): the same
+    session re-queried with a fresh db hits cache, a different session misses.
+    Guards the key lambda against leaking one session's grants to another."""
+    addon = _build(
+        resolver=_StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID)),
+        matcher=_StubMatcher(result=_MATCH),
+    )
+    lookup_calls = _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    s1, s2 = uuid4(), uuid4()
+
+    addon._live_grants(MagicMock(), s1)
+    addon._live_grants(MagicMock(), s1)  # same session, different db -> cache hit
+    addon._live_grants(MagicMock(), s2)  # different session -> miss
+
+    assert lookup_calls == [s1, s2]
+
+
 @pytest.mark.asyncio
 async def test_pre_approval_dispatch_failure_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
@@ -655,67 +675,6 @@ async def test_deny_wins_over_pre_approval_grant(
     assert lookup_calls == []  # DENY fires before the short-circuit
     assert not spy.approval_ran
     assert spy.dispatched == []
-
-
-# ---------------------------------------------------------------------------
-# _GrantCache — TTL behavior
-# ---------------------------------------------------------------------------
-
-
-def test_grant_cache_hit_miss_and_expiry() -> None:
-    now = [100.0]
-    cache = gate_mod._GrantCache(ttl_s=60.0, clock=lambda: now[0])
-    session_id = uuid4()
-
-    assert cache.get(session_id) == (False, None)  # miss before any put
-
-    cache.put(session_id, (_RUN_ID, [7]))
-    assert cache.get(session_id) == (True, (_RUN_ID, [7]))
-
-    now[0] += 59.0  # still inside the TTL window
-    assert cache.get(session_id) == (True, (_RUN_ID, [7]))
-
-    now[0] += 2.0  # now past expiry
-    assert cache.get(session_id) == (False, None)
-
-
-def test_grant_cache_caches_none() -> None:
-    """A negative lookup is cached too, so interactive sessions don't re-hit
-    Postgres on every gated request."""
-    cache = gate_mod._GrantCache(ttl_s=60.0, clock=lambda: 0.0)
-    session_id = uuid4()
-
-    cache.put(session_id, None)
-    assert cache.get(session_id) == (True, None)
-
-
-def test_grant_cache_keyed_per_session() -> None:
-    """One session's grants are never served for another session."""
-    cache = gate_mod._GrantCache(ttl_s=60.0, clock=lambda: 0.0)
-    granted, other = uuid4(), uuid4()
-
-    cache.put(granted, (_RUN_ID, [7]))
-
-    assert cache.get(granted) == (True, (_RUN_ID, [7]))
-    assert cache.get(other) == (False, None)  # miss — not the granted session
-
-
-def test_grant_cache_prunes_expired_over_soft_cap() -> None:
-    """Once the map exceeds the cap, a write prunes expired entries so memory
-    stays bounded; still-live entries survive."""
-    now = [0.0]
-    cache = gate_mod._GrantCache(ttl_s=60.0, max_entries=2, clock=lambda: now[0])
-
-    expired_a, expired_b = uuid4(), uuid4()
-    cache.put(expired_a, None)
-    cache.put(expired_b, None)
-
-    now[0] = 61.0  # both above expire
-    live = uuid4()
-    cache.put(live, (_RUN_ID, [7]))  # at cap (2) -> prune runs before insert
-
-    assert cache.get(live) == (True, (_RUN_ID, [7]))
-    assert cache._entries.keys() == {live}  # the two expired entries were dropped
 
 
 # ---------------------------------------------------------------------------

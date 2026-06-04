@@ -197,9 +197,9 @@ pre-decided inserts go through `insert_action_approval` in
   catalog actions added in later releases. Mitigated today by admin
   per-action `DENY`; the planned grant-time covered-actions expander will
   surface the scope.
-- **Grant lookup on the gated path.** Cached per session in-process
-  (`_GrantCache`, 60s TTL) so a run firing many actions hits Postgres
-  once, not per request. The TTL bounds staleness from the
+- **Grant lookup on the gated path.** Memoized per session in-process
+  (`cachetools.TTLCache` via `@cachedmethod`, 60s TTL) so a run firing
+  many actions hits Postgres once, not per request. The TTL bounds staleness from the
   RUNNING → terminal transition: an interactive follow-up on a finished
   scheduled session re-parks once the entry expires. The lookup itself
   is two indexed reads behind `asyncio.to_thread`.
