@@ -1,13 +1,18 @@
+import asyncio
 import time
+from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import cast
+from typing import Iterator
 from urllib.parse import parse_qs
 from urllib.parse import urlparse
 
 import pytest
+from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.shared.auth import OAuthToken
 
+import onyx.server.features.mcp.api as mcp_api
 from onyx.auth.oauth_token_manager import build_oauth_authorization_url
 from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
 from onyx.db.enums import MCPOAuthProviderMode
@@ -18,6 +23,7 @@ from onyx.server.features.mcp.api import _known_provider_oauth_metadata
 from onyx.server.features.mcp.api import _mcp_known_provider_flow_params
 from onyx.server.features.mcp.api import _token_dict_with_preserved_refresh
 from onyx.server.features.mcp.api import make_oauth_provider
+from onyx.server.features.mcp.models import MCPOAuthKeys
 
 
 def _make_mcp_server_stub(
@@ -222,46 +228,81 @@ def test_absolute_token_expiry_none_without_expires_in() -> None:
     )
 
 
-def test_make_oauth_provider_hydrates_known_provider_context(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Stored token expired a minute ago.
-    monkeypatch.setattr(
-        "onyx.server.features.mcp.api._read_stored_token_expiry",
-        lambda _config_id: time.time() - 60,
-    )
-    provider = make_oauth_provider(
-        _make_mcp_server_stub(provider_mode=MCPOAuthProviderMode.KNOWN_PROVIDER),
+def _build_provider(provider_mode: MCPOAuthProviderMode) -> OAuthClientProvider:
+    return make_oauth_provider(
+        _make_mcp_server_stub(provider_mode=provider_mode),
         user_id="user-1",
         return_path="/return",
         connection_config_id=1,
         admin_config_id=None,
     )
+
+
+def _patch_config_read(
+    monkeypatch: pytest.MonkeyPatch, config_data: dict[str, object]
+) -> None:
+    """Stub out the DB layer so OnyxTokenStorage.get_tokens reads `config_data`."""
+
+    @contextmanager
+    def _fake_session() -> Iterator[object]:
+        yield object()
+
+    monkeypatch.setattr(mcp_api, "get_session_with_current_tenant", _fake_session)
+    monkeypatch.setattr(
+        mcp_api.OnyxTokenStorage,
+        "_ensure_connection_config",
+        lambda _self, _db: object(),
+    )
+    monkeypatch.setattr(mcp_api, "extract_connection_data", lambda _config: config_data)
+
+
+def test_make_oauth_provider_sets_known_provider_metadata_and_binds_storage() -> None:
+    provider = _build_provider(MCPOAuthProviderMode.KNOWN_PROVIDER)
     assert provider.context.oauth_metadata is not None
+    # Refresh must target the configured endpoint, not `<server-origin>/token`.
     assert (
         str(provider.context.oauth_metadata.token_endpoint)
         == "https://accounts.example.com/oauth/token"
     )
-    # Guard the SDK contract: our hydrated expiry must land where the SDK reads
-    # it, so a present-but-expired token is reported invalid and the SDK's
-    # proactive refresh branch fires.
-    provider.context.current_tokens = OAuthToken(access_token="a", token_type="Bearer")
+    # Storage is wired to hydrate expiry from the config read it already does.
+    storage = cast(mcp_api.OnyxTokenStorage, provider.context.storage)
+    assert storage._oauth_context is provider.context
+
+
+def test_make_oauth_provider_auto_discovery_leaves_metadata_unset() -> None:
+    provider = _build_provider(MCPOAuthProviderMode.AUTO_DISCOVERY)
+    assert provider.context.oauth_metadata is None
+    assert provider.context.token_expiry_time is None
+
+
+def test_get_tokens_hydrates_expiry_and_invalidates_expired_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _build_provider(MCPOAuthProviderMode.KNOWN_PROVIDER)
+    past = time.time() - 60
+    _patch_config_read(
+        monkeypatch,
+        {
+            MCPOAuthKeys.TOKEN_EXPIRES_AT.value: past,
+            MCPOAuthKeys.TOKENS.value: {"access_token": "a", "token_type": "Bearer"},
+        },
+    )
+    tokens = asyncio.run(provider.context.storage.get_tokens())
+    # Guards the SDK contract: hydrated expiry lands where is_token_valid reads
+    # it, so a present-but-expired token is reported invalid (refresh fires).
+    assert provider.context.token_expiry_time == past
+    provider.context.current_tokens = tokens
     assert provider.context.is_token_valid() is False
 
 
-def test_make_oauth_provider_auto_discovery_leaves_context_unset(
+def test_get_tokens_clears_stale_expiry_when_absent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "onyx.server.features.mcp.api._read_stored_token_expiry",
-        lambda _config_id: None,
+    provider = _build_provider(MCPOAuthProviderMode.AUTO_DISCOVERY)
+    provider.context.token_expiry_time = 999.0  # stale value from a prior load
+    _patch_config_read(
+        monkeypatch,
+        {MCPOAuthKeys.TOKENS.value: {"access_token": "a", "token_type": "Bearer"}},
     )
-    provider = make_oauth_provider(
-        _make_mcp_server_stub(provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY),
-        user_id="user-1",
-        return_path="/return",
-        connection_config_id=1,
-        admin_config_id=None,
-    )
-    assert provider.context.oauth_metadata is None
+    asyncio.run(provider.context.storage.get_tokens())
     assert provider.context.token_expiry_time is None
