@@ -7,8 +7,9 @@ import { ApplicationStatus } from "@/interfaces/settings";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
-import { SvgSidebar } from "@opal/icons";
+import { SvgSidebar, SvgSimpleLoader } from "@opal/icons";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { Section } from "@/layouts/general-layouts";
 import { isVectorDbRequiredRoute } from "@/lib/admin-routes";
 import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
 
@@ -28,12 +29,18 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
 
   // Lite mode (no vector DB): connector/indexing pages can't run, show a notice.
   const vectorDbEnabled = settings.settings.vector_db_enabled !== false;
-  const content =
-    !vectorDbEnabled && isVectorDbRequiredRoute(pathname) ? (
-      <LiteModeIndexingNotice />
-    ) : (
-      children
-    );
+  let content = children;
+  if (isVectorDbRequiredRoute(pathname)) {
+    if (settings.settingsLoading) {
+      content = (
+        <Section padding={2}>
+          <SvgSimpleLoader className="h-6 w-6" />
+        </Section>
+      );
+    } else if (!vectorDbEnabled) {
+      content = <LiteModeIndexingNotice />;
+    }
+  }
 
   return (
     <div className="h-screen w-screen flex overflow-hidden">

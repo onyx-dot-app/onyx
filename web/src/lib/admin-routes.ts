@@ -270,7 +270,8 @@ export function sidebarItem(route: AdminRouteEntry) {
 export const VECTOR_DB_REQUIRED_ROUTE_PREFIXES: readonly string[] = [
   ADMIN_ROUTES.INDEXING_STATUS.path,
   ADMIN_ROUTES.ADD_CONNECTOR.path,
-  ADMIN_ROUTES.DOCUMENT_SETS.path,
+  // Covers /sets, /explorer, and /feedback — all require a vector DB.
+  ADMIN_ROUTES.DOCUMENTS.path,
   ADMIN_ROUTES.INDEX_SETTINGS.path,
   "/admin/connector",
   "/admin/federated",
