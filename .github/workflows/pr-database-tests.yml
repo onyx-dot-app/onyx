@@ -28,7 +28,7 @@ jobs:
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
           persist-credentials: false
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # ratchet:dorny/paths-filter@v3
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
