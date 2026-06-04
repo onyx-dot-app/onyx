@@ -29,7 +29,7 @@ from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
 from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
-from onyx.server.features.build.db.sandbox import get_sandbox_status
+from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
@@ -338,9 +338,22 @@ class _ServeMixin:
                     f"Sandbox {sandbox_id} has been terminated; refusing to "
                     "create a new event bus against its (deleted) backend"
                 )
-            # Tombstone is local to the terminating replica; the DB status
-            # makes the refusal fire on every replica.
-            self._assert_sandbox_backend_live(sandbox_id)
+            # The tombstone is local to the terminating replica; the DB status
+            # is the cross-replica authority. Refuse if the pod is gone
+            # (terminated / failed / sleeping) — a bus there just burns its
+            # reconnect budget against a dead Service. RUNNING / PROVISIONING
+            # keep a pod and proceed; a missing row falls through to the
+            # connection-info handling below.
+            with get_session_with_current_tenant() as db_session:
+                sandbox = get_sandbox_by_id(db_session, sandbox_id)
+            if sandbox is not None and (
+                sandbox.status.is_terminal() or sandbox.status.is_sleeping()
+            ):
+                raise RuntimeError(
+                    f"Sandbox {sandbox_id} is {sandbox.status.value} (no live "
+                    "backend per DB); refusing to create a new event bus "
+                    "against its (deleted) backend"
+                )
             info = self._serve_connection_info(sandbox_id)
             bus = PodEventBus(
                 base_url=info.base_url,
@@ -359,21 +372,6 @@ class _ServeMixin:
                 directory,
             )
             return bus
-
-    def _assert_sandbox_backend_live(self, sandbox_id: UUID) -> None:
-        """Raise if the DB reports the sandbox's pod is gone (TERMINATED /
-        FAILED / SLEEPING) — a bus there just burns its reconnect budget against
-        a dead Service. Authoritative across replicas, unlike the local
-        tombstone. RUNNING / PROVISIONING keep a pod and proceed; a missing row
-        falls through to the existing connection-info handling."""
-        with get_session_with_current_tenant() as db_session:
-            status = get_sandbox_status(db_session, sandbox_id)
-        if status is not None and (status.is_terminal() or status.is_sleeping()):
-            raise RuntimeError(
-                f"Sandbox {sandbox_id} is {status.value} (no live backend per "
-                "DB); refusing to create a new event bus against its "
-                "(deleted) backend"
-            )
 
     def _build_serve_client(
         self, sandbox_id: UUID, directory: str
