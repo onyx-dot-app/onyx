@@ -17,7 +17,18 @@ class SandboxBackend(str, Enum):
 # Sandbox backend mode (controls snapshot and cleanup behavior)
 # "local" = no snapshots, no cleanup (for development)
 # "kubernetes" = full snapshots and cleanup (for production)
-SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "local"))
+SANDBOX_BACKEND = SandboxBackend.LOCAL
+_env_sandbox_backend = os.environ.get("SANDBOX_BACKEND", "").strip()
+if _env_sandbox_backend:
+    try:
+        SANDBOX_BACKEND = SandboxBackend(_env_sandbox_backend.lower())
+    except ValueError:
+        raise ValueError(
+            f"Invalid SANDBOX_BACKEND={_env_sandbox_backend!r}. Valid values: "
+            f"{', '.join(b.value for b in SandboxBackend)}. Unset it to use the "
+            f"default, or align it with this release if you recently changed "
+            f"image versions."
+        )
 
 # Base directory path for persistent document storage (local filesystem)
 # Example: /var/onyx/file-system or /app/file-system
