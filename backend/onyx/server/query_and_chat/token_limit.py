@@ -32,7 +32,7 @@ logger = setup_logger()
 TOKEN_BUDGET_UNIT = 1000
 
 # The cost ledger buckets at this fixed grid; the cost cutoff is relaxed by one
-# grid to capture partially-overlapping buckets (see _first_triggered_cost_limit).
+# grid to capture partially-overlapping buckets (see _worst_triggered_cost_limit).
 _LEDGER_GRID = timedelta(seconds=USAGE_LIMIT_WINDOW_SECONDS)
 
 
@@ -69,11 +69,11 @@ def _user_is_rate_limited_by_global() -> None:
             global_cutoff_time = _get_cutoff_time(global_rate_limits)
             global_usage = _fetch_global_usage(global_cutoff_time, db_session)
 
-            triggered = _first_triggered_limit(global_rate_limits, global_usage)
+            triggered = _worst_triggered_limit(global_rate_limits, global_usage)
             if triggered is not None:
                 raise_rate_limited("organization", triggered.period_hours)
 
-            cost_triggered = _first_triggered_cost_limit(
+            cost_triggered = _worst_triggered_cost_limit(
                 global_rate_limits,
                 lambda cutoff: get_total_cost_cents_since(db_session, cutoff),
             )
@@ -112,10 +112,14 @@ def _get_cutoff_time(rate_limits: Sequence[TokenRateLimit]) -> datetime:
     return datetime.now(tz=timezone.utc) - timedelta(hours=max_period_hours)
 
 
-def _first_triggered_limit(
+def _worst_triggered_limit(
     rate_limits: Sequence[TokenRateLimit], usage: Sequence[tuple[datetime, int]]
 ) -> TokenRateLimit | None:
-    """Return the first exceeded limit, or None. Carries period_hours for the reset time."""
+    """Among the exceeded token limits, return the one with the longest window
+    (or None). Picking the longest period_hours makes the reported reset
+    deterministic and conservative: a client that waits it out won't immediately
+    re-trip a still-exceeded longer limit. Carries period_hours for the reset."""
+    worst: TokenRateLimit | None = None
     for rate_limit in rate_limits:
         # A null (cost-only) or non-positive token_budget is token-exempt — skip
         # the token check. Guarding <= 0 means a 0 (new cost-only rows store null,
@@ -133,16 +137,19 @@ def _first_triggered_limit(
         # The admin enters the budget in THOUSANDS of tokens (Onyx convention),
         # so the stored value is scaled up to the real token count here.
         if tokens_used >= rate_limit.token_budget * TOKEN_BUDGET_UNIT:
-            return rate_limit
+            if worst is None or rate_limit.period_hours > worst.period_hours:
+                worst = rate_limit
 
-    return None
+    return worst
 
 
-def _first_triggered_cost_limit(
+def _worst_triggered_cost_limit(
     rate_limits: Sequence[TokenRateLimit],
     cost_since: Callable[[datetime], float],
 ) -> TokenRateLimit | None:
-    """First row whose cost_budget_cents is set and exceeded, or None.
+    """Among rows whose cost_budget_cents is set and exceeded, return the one
+    with the longest window (or None) — longest period_hours so the reset is
+    deterministic and conservative, matching _worst_triggered_limit.
 
     Cost comes from the UserUsage ledger (not ChatMessage.token_count), which
     buckets spend at a coarse fixed grid (_LEDGER_GRID). A bucket has no sub-grid
@@ -153,6 +160,7 @@ def _first_triggered_cost_limit(
     Rows without a cost_budget_cents are cost-exempt (token-only).
     """
     now = datetime.now(tz=timezone.utc)
+    worst: TokenRateLimit | None = None
     for rate_limit in rate_limits:
         budget = rate_limit.cost_budget_cents
         if budget is None:
@@ -160,9 +168,10 @@ def _first_triggered_cost_limit(
 
         cutoff = now - timedelta(hours=rate_limit.period_hours) - _LEDGER_GRID
         if cost_since(cutoff) >= budget:
-            return rate_limit
+            if worst is None or rate_limit.period_hours > worst.period_hours:
+                worst = rate_limit
 
-    return None
+    return worst
 
 
 def raise_rate_limited(scope: str, period_hours: int) -> None:

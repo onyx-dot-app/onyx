@@ -23,10 +23,10 @@ from onyx.db.models import UserGroup
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
 from onyx.db.user_usage import get_group_cost_cents_since
 from onyx.db.user_usage import get_user_cost_cents_since
-from onyx.server.query_and_chat.token_limit import _first_triggered_cost_limit
-from onyx.server.query_and_chat.token_limit import _first_triggered_limit
 from onyx.server.query_and_chat.token_limit import _get_cutoff_time
 from onyx.server.query_and_chat.token_limit import _user_is_rate_limited_by_global
+from onyx.server.query_and_chat.token_limit import _worst_triggered_cost_limit
+from onyx.server.query_and_chat.token_limit import _worst_triggered_limit
 from onyx.server.query_and_chat.token_limit import raise_rate_limited
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -65,11 +65,11 @@ def _user_is_rate_limited(user_id: UUID) -> None:
             user_cutoff_time = _get_cutoff_time(user_rate_limits)
             user_usage = _fetch_user_usage(user_id, user_cutoff_time, db_session)
 
-            triggered = _first_triggered_limit(user_rate_limits, user_usage)
+            triggered = _worst_triggered_limit(user_rate_limits, user_usage)
             if triggered is not None:
                 raise_rate_limited("user", triggered.period_hours)
 
-            cost_triggered = _first_triggered_cost_limit(
+            cost_triggered = _worst_triggered_cost_limit(
                 user_rate_limits,
                 lambda cutoff: get_user_cost_cents_since(
                     db_session, str(user_id), cutoff
@@ -129,7 +129,7 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
         token_periods: list[int] = []
         for user_group_id, rate_limits in group_rate_limits.items():
             usage = group_usage.get(user_group_id, [])
-            triggered = _first_triggered_limit(rate_limits, usage)
+            triggered = _worst_triggered_limit(rate_limits, usage)
             if triggered is None:
                 break  # an under-budget group means the user is not token-limited
             token_periods.append(triggered.period_hours)
@@ -138,7 +138,7 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
 
         cost_periods: list[int] = []
         for user_group_id, rate_limits in group_rate_limits.items():
-            cost_triggered = _first_triggered_cost_limit(
+            cost_triggered = _worst_triggered_cost_limit(
                 rate_limits,
                 lambda cutoff, gid=user_group_id: get_group_cost_cents_since(
                     db_session, gid, cutoff

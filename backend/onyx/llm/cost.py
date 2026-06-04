@@ -93,11 +93,13 @@ def _image_cost_cents(model: str) -> float:
         import litellm
 
         entry = litellm.model_cost.get(model) or {}
-        # litellm prices images per-image under either of these keys.
-        per_image_usd = entry.get("output_cost_per_image") or entry.get(
-            "input_cost_per_image"
-        )
-        if per_image_usd:
+        # litellm prices images per-image under either of these keys. Use an
+        # explicit None check so a genuinely free (0.0) model is billed 0, not
+        # silently bumped to the flat fallback.
+        per_image_usd = entry.get("output_cost_per_image")
+        if per_image_usd is None:
+            per_image_usd = entry.get("input_cost_per_image")
+        if per_image_usd is not None:
             return float(per_image_usd) * 100
     except Exception:
         logger.exception("Image price lookup failed for model %s", model)

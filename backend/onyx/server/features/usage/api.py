@@ -54,7 +54,7 @@ _PERIOD_HOURS = max(USAGE_LIMIT_WINDOW_SECONDS // 3600, 1)
 _DEFAULT_EXPORT_DAYS = 30
 
 # Cost buckets at this grid; match the gate's cutoff relaxation so the budget the
-# user sees agrees with what enforcement (token_limit._first_triggered_cost_limit) does.
+# user sees agrees with what enforcement (token_limit._worst_triggered_cost_limit) does.
 _LEDGER_GRID = timedelta(seconds=USAGE_LIMIT_WINDOW_SECONDS)
 
 

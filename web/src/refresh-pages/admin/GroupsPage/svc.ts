@@ -225,21 +225,26 @@ async function saveTokenLimits(
   limits: TokenLimitPayload[],
   existing: ExistingTokenLimit[]
 ): Promise<void> {
-  // A row is valid with a time window plus a token and/or cost budget.
+  // A budget only counts when it's strictly positive — a 0/negative token
+  // budget or a cost that rounds to 0 cents is "unset", not a real limit
+  // (sending it would overwrite a real existing limit via positional matching).
+  // A row is valid with a time window plus at least one positive budget.
   const validLimits: ValidTokenLimit[] = limits
-    .filter(
-      (l) =>
-        l.periodHours != null &&
-        (l.tokenBudget != null || l.costBudgetDollars != null)
-    )
-    .map((l) => ({
-      tokenBudget: l.tokenBudget,
-      periodHours: l.periodHours!,
-      costBudgetCents:
+    .map((l) => {
+      const tokenBudget =
+        l.tokenBudget != null && l.tokenBudget > 0 ? l.tokenBudget : null;
+      const cents =
         l.costBudgetDollars != null
           ? Math.round(l.costBudgetDollars * 100)
-          : null,
-    }));
+          : null;
+      const costBudgetCents = cents != null && cents > 0 ? cents : null;
+      return { tokenBudget, periodHours: l.periodHours, costBudgetCents };
+    })
+    .filter(
+      (l): l is ValidTokenLimit =>
+        l.periodHours != null &&
+        (l.tokenBudget != null || l.costBudgetCents != null)
+    );
 
   // Update existing limits (match by index position)
   const toUpdate = Math.min(validLimits.length, existing.length);

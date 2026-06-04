@@ -300,7 +300,7 @@ class TestCostInWindow:
 class TestUserCostSince:
     """Range-scan read used by enforcement: sums ledger rows with
     window_start >= cutoff. The cutoff is grid-relaxed by the caller
-    (_first_triggered_cost_limit), so this helper is a plain range scan."""
+    (_worst_triggered_cost_limit), so this helper is a plain range scan."""
 
     def test_includes_rows_at_or_after_cutoff(self, db_session: Session) -> None:
         user_id = str(uuid4())

@@ -29,14 +29,14 @@ from onyx.db.user_usage import get_window_start
 from onyx.db.user_usage import record_user_usage
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.query_and_chat.token_limit import _first_triggered_limit
+from onyx.server.query_and_chat.token_limit import _worst_triggered_limit
 
 
 def _is_rate_limited(
     rate_limits: list[TokenRateLimit],
     usage: list[tuple[datetime.datetime, int]],
 ) -> bool:
-    return _first_triggered_limit(rate_limits, usage) is not None
+    return _worst_triggered_limit(rate_limits, usage) is not None
 
 
 # Postgres-only column types -> SQLite equivalents so the real UserUsage table
@@ -117,6 +117,26 @@ class TestIsRateLimitedUnit:
             scope=TokenRateLimitScope.GLOBAL,
         )
         assert _is_rate_limited([zero], _usage(10_000_000)) is False
+
+    def test_longest_window_among_exceeded_wins(self) -> None:
+        # When several limits are exceeded the reset must be deterministic and
+        # conservative: report the longest window so a retry can't immediately
+        # re-trip a still-exceeded longer limit. Order must not matter.
+        short = TokenRateLimit(
+            enabled=True,
+            token_budget=1,
+            period_hours=1,
+            scope=TokenRateLimitScope.GLOBAL,
+        )
+        long_ = TokenRateLimit(
+            enabled=True,
+            token_budget=1,
+            period_hours=24,
+            scope=TokenRateLimitScope.GLOBAL,
+        )
+        for order in ([short, long_], [long_, short]):
+            worst = _worst_triggered_limit(order, _usage(10_000))
+            assert worst is not None and worst.period_hours == 24
 
 
 def _assert_structured_429(exc: OnyxError, scope: str, period_hours: int) -> None:
@@ -314,12 +334,12 @@ def _cost_limit(
     return limit
 
 
-class TestFirstTriggeredCostLimit:
+class TestWorstTriggeredCostLimit:
     """Unit of the shared cost evaluator (no DB; cost is injected)."""
 
     def test_over_cost_budget_returns_row(self) -> None:
         limit = _cost_limit(100.0, TokenRateLimitScope.USER)
-        triggered = token_limit._first_triggered_cost_limit(
+        triggered = token_limit._worst_triggered_cost_limit(
             [limit], cost_since=lambda _cutoff: 150.0
         )
         assert triggered is limit
@@ -327,7 +347,7 @@ class TestFirstTriggeredCostLimit:
     def test_under_cost_budget_returns_none(self) -> None:
         limit = _cost_limit(100.0, TokenRateLimitScope.USER)
         assert (
-            token_limit._first_triggered_cost_limit(
+            token_limit._worst_triggered_cost_limit(
                 [limit], cost_since=lambda _cutoff: 99.99
             )
             is None
@@ -336,7 +356,7 @@ class TestFirstTriggeredCostLimit:
     def test_at_cost_budget_triggers(self) -> None:
         limit = _cost_limit(100.0, TokenRateLimitScope.USER)
         assert (
-            token_limit._first_triggered_cost_limit(
+            token_limit._worst_triggered_cost_limit(
                 [limit], cost_since=lambda _cutoff: 100.0
             )
             is limit
@@ -346,7 +366,7 @@ class TestFirstTriggeredCostLimit:
         # token-only row (cost_budget_cents is None) is never cost-limited
         limit = _cost_limit(None, TokenRateLimitScope.USER)
         assert (
-            token_limit._first_triggered_cost_limit(
+            token_limit._worst_triggered_cost_limit(
                 [limit], cost_since=lambda _cutoff: 10**9
             )
             is None

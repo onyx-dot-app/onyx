@@ -47,9 +47,15 @@ def get_override(db_session: Session, model: str) -> _OverrideRates | None:
             try:
                 snapshot = _load_cache(db_session)
             except Exception:
-                # Cost computation must never raise; treat as no overrides.
+                # Cost computation must never raise. On a transient load failure
+                # keep serving the last good snapshot (stale rates beat silently
+                # dropping negotiated rates); only with no prior snapshot do we
+                # treat as no overrides. The stale timestamp is left as-is so the
+                # next lookup retries the DB.
                 logger.exception("Failed to load model cost overrides")
-                return None
+                if entry is None:
+                    return None
+                return entry[1].get(model)
             entry = (time.monotonic(), snapshot)
             _cache[tenant_id] = entry
         return entry[1].get(model)
