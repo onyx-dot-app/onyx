@@ -27,6 +27,10 @@ from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
 logger = setup_logger()
 
+# Admin token budgets are entered in thousands of tokens; the stored value is
+# multiplied by this to get the real token count enforced.
+TOKEN_BUDGET_UNIT = 1000
+
 # The cost ledger buckets at this fixed grid; the cost cutoff is relaxed by one
 # grid to capture partially-overlapping buckets (see _first_triggered_cost_limit).
 _LEDGER_GRID = timedelta(seconds=USAGE_LIMIT_WINDOW_SECONDS)
@@ -126,8 +130,9 @@ def _first_triggered_limit(
             >= datetime.now(tz=tz.UTC) - timedelta(hours=rate_limit.period_hours)
         )
 
-        # token_budget is stored as a raw token count, matching the admin input.
-        if tokens_used >= rate_limit.token_budget:
+        # The admin enters the budget in THOUSANDS of tokens (Onyx convention),
+        # so the stored value is scaled up to the real token count here.
+        if tokens_used >= rate_limit.token_budget * TOKEN_BUDGET_UNIT:
             return rate_limit
 
     return None

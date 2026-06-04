@@ -1,7 +1,7 @@
 """Unit tests for token-rate-limit enforcement (in-memory SQLite).
 
-Guards the admin-facing unit: a stored ``token_budget`` of N must enforce at
-exactly N tokens (raw), so the value an admin types is the value enforced.
+Guards the admin-facing unit: a stored ``token_budget`` of N is in thousands,
+so it enforces at N * 1000 tokens (the Onyx convention).
 """
 
 import datetime
@@ -70,20 +70,20 @@ def _usage(token_count: int) -> list[tuple[datetime.datetime, int]]:
 
 
 class TestIsRateLimitedUnit:
-    def test_budget_is_raw_tokens(self) -> None:
-        # token_budget=12 must enforce at 12 tokens, not 12,000.
+    def test_budget_is_in_thousands(self) -> None:
+        # token_budget=12 means 12,000 tokens (the Onyx thousands convention).
         limit = _make_limit(token_budget=12)
-        assert _is_rate_limited([limit], _usage(11)) is False
-        assert _is_rate_limited([limit], _usage(12)) is True
-        assert _is_rate_limited([limit], _usage(13)) is True
+        assert _is_rate_limited([limit], _usage(11_999)) is False
+        assert _is_rate_limited([limit], _usage(12_000)) is True
+        assert _is_rate_limited([limit], _usage(12_001)) is True
 
     def test_below_budget_not_limited(self) -> None:
-        limit = _make_limit(token_budget=1000)
-        assert _is_rate_limited([limit], _usage(999)) is False
+        limit = _make_limit(token_budget=1000)  # 1,000,000 tokens
+        assert _is_rate_limited([limit], _usage(999_999)) is False
 
     def test_at_budget_is_limited(self) -> None:
-        limit = _make_limit(token_budget=1000)
-        assert _is_rate_limited([limit], _usage(1000)) is True
+        limit = _make_limit(token_budget=1000)  # 1,000,000 tokens
+        assert _is_rate_limited([limit], _usage(1_000_000)) is True
 
     def test_cost_only_limit_is_token_exempt(self) -> None:
         # A cost-only limit (token_budget=None) must NOT block on tokens — a 0
@@ -162,7 +162,9 @@ class TestGlobalRejectionPath:
             lambda **_: [limit],
         )
         # date_trunc isn't valid on SQLite; stub usage directly.
-        monkeypatch.setattr(token_limit, "_fetch_global_usage", lambda *_: _usage(1500))
+        monkeypatch.setattr(
+            token_limit, "_fetch_global_usage", lambda *_: _usage(1_500_000)
+        )
 
         with pytest.raises(OnyxError) as ei:
             token_limit._user_is_rate_limited_by_global()
@@ -204,7 +206,7 @@ class TestEEUserRejectionPath:
             lambda **_: [limit],
         )
         monkeypatch.setattr(
-            ee_token_limit, "_fetch_user_usage", lambda *_: _usage(2000)
+            ee_token_limit, "_fetch_user_usage", lambda *_: _usage(2_000_000)
         )
 
         import uuid
@@ -243,7 +245,7 @@ class TestEEGroupRejectionPath:
         monkeypatch.setattr(
             ee_token_limit,
             "_fetch_user_group_usage",
-            lambda *_: {10: _usage(2000), 20: _usage(2000)},
+            lambda *_: {10: _usage(2_000_000), 20: _usage(2_000_000)},
         )
 
         import uuid
@@ -279,7 +281,7 @@ class TestEEGroupRejectionPath:
         monkeypatch.setattr(
             ee_token_limit,
             "_fetch_user_group_usage",
-            lambda *_: {10: _usage(2000), 20: _usage(10)},
+            lambda *_: {10: _usage(2_000_000), 20: _usage(10)},
         )
 
         import uuid
