@@ -1,6 +1,5 @@
 import os
 from enum import Enum
-from pathlib import Path
 
 
 class SandboxBackend(str, Enum):
@@ -9,12 +8,6 @@ class SandboxBackend(str, Enum):
 
 
 SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "kubernetes"))
-
-_THIS_FILE = Path(__file__)
-
-SKILLS_TEMPLATE_PATH = str(
-    _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "skills"
-)
 
 _disabled_tools_str = os.environ.get("OPENCODE_DISABLED_TOOLS", "question")
 OPENCODE_DISABLED_TOOLS: list[str] = [

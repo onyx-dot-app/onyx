@@ -15,14 +15,14 @@ set -e
 if ! command -v opencode >/dev/null 2>&1; then
     echo "WARNING: opencode CLI is not available — creating stub template directories." >&2
     echo "Craft API endpoints will work but sandbox provisioning requires the full image." >&2
-    CRAFT_BASE="/app/onyx/server/features/build/sandbox/kubernetes/docker"
+    CRAFT_BASE="/app/onyx/server/features/build/sandbox/image"
     OUTPUTS_TEMPLATE_PATH="${OUTPUTS_TEMPLATE_PATH:-${CRAFT_BASE}/templates/outputs}"
     VENV_TEMPLATE_PATH="${VENV_TEMPLATE_PATH:-${CRAFT_BASE}/templates/venv}"
     mkdir -p "$OUTPUTS_TEMPLATE_PATH" "$VENV_TEMPLATE_PATH"
     exit 0
 fi
 
-CRAFT_BASE="/app/onyx/server/features/build/sandbox/kubernetes/docker"
+CRAFT_BASE="/app/onyx/server/features/build/sandbox/image"
 # Use environment variables if set, otherwise use defaults
 OUTPUTS_TEMPLATE_PATH="${OUTPUTS_TEMPLATE_PATH:-${CRAFT_BASE}/templates/outputs}"
 VENV_TEMPLATE_PATH="${VENV_TEMPLATE_PATH:-${CRAFT_BASE}/templates/venv}"

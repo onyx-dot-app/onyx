@@ -58,9 +58,9 @@ in it:
 - `backend/onyx/server/features/build/db/action_approval.py`
 - `backend/onyx/server/features/build/approvals/api.py`
 - `backend/onyx/server/features/build/session/manager.py::_merge_acp_with_announces`
-- `backend/onyx/server/features/build/sandbox/kubernetes/docker/firewall-init.sh`
+- `backend/onyx/server/features/build/sandbox/image/firewall-init.sh`
   (the `entrypoint` mode is already plumbed)
-- `backend/onyx/server/features/build/sandbox/kubernetes/docker/opencode-plugins/session-proxy-tag.ts`
+- `backend/onyx/server/features/build/sandbox/image/opencode-plugins/session-proxy-tag.ts`
 - Frontend: `web/src/app/craft/hooks/useBuildStreaming.ts`,
   `parsePacket.ts`, `packetTypes.ts`, SWR keys.
 
@@ -76,7 +76,7 @@ backend/onyx/sandbox_proxy/
 backend/onyx/server/features/build/sandbox/docker/
 +-- docker_sandbox_manager.py       # MODIFIED: proxy plumbing, security ctx, command
 
-backend/onyx/server/features/build/sandbox/kubernetes/docker/
+backend/onyx/server/features/build/sandbox/image/
 +-- firewall-init.sh                # MODIFIED: drop CAP_NET_ADMIN before exec
 +-- Dockerfile                      # MODIFIED: install libcap2-bin
 
@@ -384,7 +384,7 @@ ends up with zero caps in any set. After this:
   existed for the few hundred milliseconds of init, never since."
 
 Dockerfile change: add `libcap2-bin` to the `apt-get install` line in
-`backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile`.
+`backend/onyx/server/features/build/sandbox/image/Dockerfile`.
 Keep `gosu` in the image -- non-proxy local dev paths and the K8s
 init container still rely on it.
 
@@ -504,7 +504,7 @@ Notes:
 
 ### T5.8 -- Sandbox image dependency: `libcap2-bin`
 
-`backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile`
+`backend/onyx/server/features/build/sandbox/image/Dockerfile`
 already installs `iptables` and `gosu` for the K8s init container.
 Add `libcap2-bin` to the same `apt-get install` line for `capsh`
 (T5.5).

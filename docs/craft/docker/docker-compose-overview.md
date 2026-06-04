@@ -228,8 +228,8 @@ Build the sandbox image:
 ```bash
 docker build --network=host \
     -t onyxdotapp/sandbox:pr<N> \
-    -f backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile \
-    backend/onyx/server/features/build/sandbox/kubernetes/docker/
+    -f backend/onyx/server/features/build/sandbox/image/Dockerfile \
+    backend/onyx/server/features/build/sandbox/image/
 ```
 
 `--network=host` bypasses Docker Desktop's HTTP proxy if `deb.debian.org`

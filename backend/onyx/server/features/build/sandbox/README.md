@@ -83,12 +83,12 @@ On EC2 the Docker bridge by default routes to `169.254.169.254` (IMDS), which ca
 **No setup required!** Just build and deploy:
 
 ```bash
-# Build backend image (includes both templates)
+# Build backend image (bakes in the web + venv templates)
 cd backend
-docker build -f Dockerfile.sandbox-templates -t onyxdotapp/backend:latest .
+docker build -f Dockerfile -t onyxdotapp/backend:latest .
 
 # Build sandbox container (lightweight runner)
-cd onyx/server/features/build/sandbox/kubernetes/docker
+cd onyx/server/features/build/sandbox/image
 docker build -t onyxdotapp/sandbox:latest .
 
 # Deploy with docker-compose or kubectl - sandboxes work immediately!
@@ -110,13 +110,13 @@ If you're running the backend Python process directly on your machine, you need 
 
 #### Web Template
 
-The web template is a lightweight Next.js app (Next.js 16, React 19, shadcn/ui, Recharts) checked into the codebase at `backend/onyx/server/features/build/templates/outputs/web/`.
+The web template is a lightweight Next.js app (Next.js 16, React 19, shadcn/ui, Recharts) checked into the codebase at `backend/onyx/server/features/build/sandbox/image/templates/outputs/web/`.
 
 For local development, create a symlink to this template:
 
 ```bash
 sudo mkdir -p /templates/outputs
-sudo ln -s $(pwd)/backend/onyx/server/features/build/templates/outputs/web /templates/outputs/web
+sudo ln -s $(pwd)/backend/onyx/server/features/build/sandbox/image/templates/outputs/web /templates/outputs/web
 ```
 
 #### Python Venv Template
@@ -130,7 +130,7 @@ python -m onyx.server.features.build.sandbox.util.build_venv_template
 
 # Or manually
 python3 -m venv /templates/venv
-/templates/venv/bin/pip install -r backend/onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt
+/templates/venv/bin/pip install -r backend/onyx/server/features/build/sandbox/image/initial-requirements.txt
 ```
 
 #### System Dependencies (for PPTX skill)
@@ -171,7 +171,7 @@ Each sandbox includes an OpenCode agent configured with:
 - **Tool permissions**: File operations, bash commands, web access
 - **Disabled tools**: Configurable via `OPENCODE_DISABLED_TOOLS` env var
 
-Configuration is generated dynamically in `templates/opencode_config.py`.
+Configuration is generated dynamically in `util/opencode_config.py`.
 
 ## Key Components
 
@@ -192,12 +192,14 @@ Configuration is generated dynamically in `templates/opencode_config.py`.
 
 ### Templates
 
-- **`../templates/outputs/web/`** - Lightweight Next.js scaffold (shadcn/ui, Recharts) versioned with the backend code
+- **`image/templates/outputs/web/`** - Lightweight Next.js scaffold (shadcn/ui, Recharts) versioned with the backend code
 
-### Kubernetes Specific
+### Sandbox Image (shared by both backends)
 
-- **`kubernetes/docker/Dockerfile`** - Sandbox container image (runs Next.js + OpenCode)
-- **`kubernetes/docker/entrypoint.sh`** - Container startup script
+- **`image/Dockerfile`** - Sandbox container image (runs Next.js + OpenCode)
+- **`image/entrypoint.sh`** - Container startup script
+- **`image/sandbox_daemon/`** - In-pod push/snapshot daemon
+- Built-in skill sources live in `backend/onyx/skills/builtin/` (pushed at session setup, not baked in)
 
 ## Environment Variables
 
@@ -330,7 +332,7 @@ uv run pytest backend/tests/external_dependency_unit/craft/test_kubernetes_sandb
 
 ### Adding New MCP Servers
 
-1. Add MCP configuration to `templates/opencode_config.py`:
+1. Add MCP configuration to `util/opencode_config.py`:
 
    ```python
    config["mcp"] = {
@@ -348,17 +350,17 @@ uv run pytest backend/tests/external_dependency_unit/craft/test_kubernetes_sandb
 
 ### Modifying Agent Instructions
 
-Edit `AGENTS.template.md` in the build directory. This is populated with dynamic content by `templates/agent_instructions.py`.
+Edit `AGENTS.template.md` in the build directory. This is populated with dynamic content by `util/agent_instructions.py`.
 
 ### Adding New Tools/Permissions
 
-Update `templates/opencode_config.py` to add/remove tool permissions in the `permission` section.
+Update `util/opencode_config.py` to add/remove tool permissions in the `permission` section.
 
 ## Template Details
 
 ### Web Template
 
-The lightweight Next.js template (`backend/onyx/server/features/build/templates/outputs/web/`) includes:
+The lightweight Next.js template (`backend/onyx/server/features/build/sandbox/image/templates/outputs/web/`) includes:
 
 - **Framework**: Next.js 16.1.4 with React 19.2.3
 - **UI Library**: shadcn/ui components with Radix UI primitives
