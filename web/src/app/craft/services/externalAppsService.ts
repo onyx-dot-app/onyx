@@ -96,18 +96,6 @@ export async function createCustomExternalApp(
   return res.json();
 }
 
-interface UpdateExternalAppBody {
-  // Every field is optional; omit to leave the stored value untouched.
-  enabled?: boolean;
-  name?: string;
-  description?: string;
-  upstream_url_patterns?: string[];
-  auth_template?: Record<string, string>;
-  organization_credentials?: Record<string, string>;
-  // Full replace when present; omit to leave stored policies untouched.
-  action_policies?: Record<string, EndpointPolicy>;
-}
-
 /**
  * Replace a custom app's bundle bytes, keeping its slug
  * (`PUT /admin/apps/{id}/bundle`). The only multipart channel for edits; all
