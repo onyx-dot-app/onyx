@@ -30,6 +30,7 @@ from onyx.db.enums import ScheduledTaskSkipReason
 from onyx.db.enums import ScheduledTaskStatus
 from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.models import ScheduledTask
+from onyx.db.models import ScheduledTaskPreApprovedApp
 from onyx.db.models import ScheduledTaskRun
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -54,6 +55,7 @@ def create_scheduled_task(
     cron_expression: str,
     editor_mode: EditorMode,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
+    pre_approved_app_ids: list[int] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Insert a new ``ScheduledTask``.
@@ -78,9 +80,23 @@ def create_scheduled_task(
         status=status,
         next_run_at=next_run_at,
     )
+    set_pre_approved_apps(task, pre_approved_app_ids or [])
     db_session.add(task)
     db_session.flush()
     return task
+
+
+def set_pre_approved_apps(task: ScheduledTask, app_ids: list[int]) -> None:
+    """Replace a task's pre-approval grants with ``app_ids`` (deduped). Reuses
+    existing rows so re-submitting a granted app is a no-op — recreating it
+    would orphan+reinsert the same unique key in one flush, which Postgres
+    rejects. Removed grants drop via the ``delete-orphan`` cascade.
+    """
+    existing = {grant.external_app_id: grant for grant in task.pre_approved_apps}
+    task.pre_approved_apps = [
+        existing.get(app_id) or ScheduledTaskPreApprovedApp(external_app_id=app_id)
+        for app_id in dict.fromkeys(app_ids)
+    ]
 
 
 def get_scheduled_task(
@@ -135,6 +151,7 @@ def update_scheduled_task(
     cron_expression: str | None = None,
     editor_mode: EditorMode | None = None,
     status: ScheduledTaskStatus | None = None,
+    pre_approved_app_ids: list[int] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Apply a partial update to a scheduled task.
@@ -144,6 +161,9 @@ def update_scheduled_task(
         ``next_run_at`` is recomputed from ``now``.
       - If ``status`` transitions to PAUSED, ``next_run_at`` is set to NULL.
       - If ``status`` transitions to ACTIVE, ``next_run_at`` is recomputed.
+      - If ``prompt`` changes value, ``pre_approved_app_ids`` resets to []
+        (a grant is tied to a specific intent). Grants in the same patch
+        still win.
 
     Raises:
         OnyxError(NOT_FOUND): the task does not exist or is not owned by
@@ -156,8 +176,13 @@ def update_scheduled_task(
     schedule_changed = False
     if name is not None:
         task.name = name
-    if prompt is not None:
+    if prompt is not None and prompt != task.prompt:
         task.prompt = prompt
+        # Prompt change resets grants unless this same patch supplies new ones.
+        if pre_approved_app_ids is None:
+            pre_approved_app_ids = []
+    if pre_approved_app_ids is not None:
+        set_pre_approved_apps(task, pre_approved_app_ids)
     if editor_mode is not None:
         task.editor_mode = editor_mode
     if cron_expression is not None and cron_expression != task.cron_expression:
@@ -459,6 +484,45 @@ def find_stuck_runs(
         )
     )
     return list(db_session.execute(stmt).scalars())
+
+
+# ---------------------------------------------------------------------------
+# Egress-gate pre-approval lookup
+# ---------------------------------------------------------------------------
+
+# (run_id, granted external-app ids) for a RUNNING scheduled run, else None.
+ScheduledRunGrants = tuple[UUID, list[int]] | None
+
+
+def get_live_scheduled_run_grants(
+    *,
+    db_session: Session,
+    session_id: UUID,
+) -> ScheduledRunGrants:
+    """``(run_id, pre_approved_app_ids)`` when ``session_id`` is a currently
+    RUNNING scheduled run; ``None`` otherwise.
+
+    The ``scheduled_task_run`` lookup subsumes the session-origin check
+    (only SCHEDULED-origin sessions have run rows); the RUNNING filter means
+    interactive follow-ups on a finished scheduled session park as usual.
+    """
+    run = db_session.execute(
+        select(ScheduledTaskRun.id, ScheduledTaskRun.task_id).where(
+            ScheduledTaskRun.session_id == session_id,
+            ScheduledTaskRun.status == ScheduledTaskRunStatus.RUNNING,
+        )
+    ).first()
+    if run is None:
+        return None
+    run_id, task_id = run
+    app_ids = list(
+        db_session.execute(
+            select(ScheduledTaskPreApprovedApp.external_app_id)
+            .where(ScheduledTaskPreApprovedApp.scheduled_task_id == task_id)
+            .order_by(ScheduledTaskPreApprovedApp.id)
+        ).scalars()
+    )
+    return run_id, app_ids
 
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,7 @@ from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -165,7 +166,10 @@ def submit_decision(
         )
 
     decided = action_approval.try_record_decision(
-        db_session, approval_id=approval_id, decision=body.decision
+        db_session,
+        approval_id=approval_id,
+        decision=body.decision,
+        decided_via=ApprovalDecidedVia.USER,
     )
     if decided is None:
         # Lost the race. Expire the cached row — SQLAlchemy's identity

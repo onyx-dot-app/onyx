@@ -299,6 +299,12 @@ class ApprovalDecision(str, PyEnum):
     EXPIRED = "EXPIRED"
 
 
+class ApprovalDecidedVia(str, PyEnum):
+    # NULL on legacy rows and proxy-written EXPIRED claims.
+    USER = "USER"
+    PRE_APPROVAL = "PRE_APPROVAL"
+
+
 class ScheduledTaskStatus(str, PyEnum):
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"
