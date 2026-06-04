@@ -331,6 +331,7 @@ def get_last_successful_attempt_poll_range_end(
     search_settings: SearchSettings,
     db_session: Session,
     ignore_targeted_reindex: bool = True,
+    ignore_synthetic_seed: bool = True,
 ) -> float:
     """Used to get the latest `poll_range_end` for a given connector and credential.
 
@@ -353,6 +354,8 @@ def get_last_successful_attempt_poll_range_end(
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    if ignore_synthetic_seed:
+        query = query.filter(IndexAttempt.is_synthetic_seed.is_(False))
     latest_successful_index_attempt = query.order_by(
         IndexAttempt.poll_range_end.desc()
     ).first()
