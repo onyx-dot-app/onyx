@@ -338,12 +338,6 @@ class _ServeMixin:
                     f"Sandbox {sandbox_id} has been terminated; refusing to "
                     "create a new event bus against its (deleted) backend"
                 )
-            # The tombstone is local to the terminating replica; the DB status
-            # is the cross-replica authority. Refuse if the pod is gone
-            # (terminated / failed / sleeping) — a bus there just burns its
-            # reconnect budget against a dead Service. RUNNING / PROVISIONING
-            # keep a pod and proceed; a missing row falls through to the
-            # connection-info handling below.
             with get_session_with_current_tenant() as db_session:
                 sandbox = get_sandbox_by_id(db_session, sandbox_id)
             if sandbox is not None and (
