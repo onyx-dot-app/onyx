@@ -103,8 +103,10 @@ Sequenced so enforcement is complete before any scoped token exists:
    the effort: the search-scoped sandbox PAT reaches `POST /search` (via `onyx-cli search`) and `/me`,
    and nothing else.
 
-Setting scopes when minting a PAT is currently internal (a `create_pat` argument); a user-facing
-API/UI and surfacing scopes on token listings are follow-ups.
+Users select scopes when minting a token. `POST /user/pats` accepts a `scopes` list (omitted /
+`null` = full access; an empty list is rejected), `GET /user/pats` returns each token's scopes, and
+`GET /user/pats/scopes` lists the assignable scopes that back the settings-page selector. Search,
+read-chat, and write-chat are assignable today; admin scopes follow once their routes are guarded.
 
 ## Tests
 

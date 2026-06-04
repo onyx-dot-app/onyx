@@ -81,6 +81,7 @@ export const SWR_KEYS = {
   userProjects: "/api/user/projects",
   recentFiles: "/api/user/files/recent",
   userPats: "/api/user/pats",
+  userPatScopes: "/api/user/pats/scopes",
   notifications: "/api/notifications",
 
   // ── Users ─────────────────────────────────────────────────────────────────
