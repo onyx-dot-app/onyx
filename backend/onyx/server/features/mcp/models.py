@@ -59,6 +59,11 @@ class MCPOAuthKeys(str, Enum):
     CLIENT_INFO = "client_info"
     TOKENS = "tokens"
     METADATA = "metadata"
+    # Absolute unix timestamp (seconds) when the stored access token expires.
+    # The SDK's `OAuthToken` only carries the relative `expires_in`, which is
+    # meaningless once reloaded from storage; we persist the absolute value so
+    # a fresh per-tool-call provider can decide whether to refresh.
+    TOKEN_EXPIRES_AT = "token_expires_at"
 
 
 class MCPConnectionData(TypedDict):
@@ -80,6 +85,7 @@ class MCPConnectionData(TypedDict):
     client_info: NotRequired[dict[str, Any]]  # OAuthClientInformationFull
     tokens: NotRequired[dict[str, Any]]  # OAuthToken
     metadata: NotRequired[dict[str, Any]]  # OAuthClientMetadata
+    token_expires_at: NotRequired[float]  # absolute unix expiry for `tokens`
 
     # the actual models are defined in mcp.shared.auth
     # from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken

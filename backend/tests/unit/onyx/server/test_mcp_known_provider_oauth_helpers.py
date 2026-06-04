@@ -1,3 +1,4 @@
+import time
 from types import SimpleNamespace
 from typing import cast
 from urllib.parse import parse_qs
@@ -5,12 +6,18 @@ from urllib.parse import urlparse
 
 import pytest
 from mcp.shared.auth import OAuthClientInformationFull
+from mcp.shared.auth import OAuthToken
 
 from onyx.auth.oauth_token_manager import build_oauth_authorization_url
 from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
+from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.mcp.api import _absolute_token_expiry
+from onyx.server.features.mcp.api import _known_provider_oauth_metadata
 from onyx.server.features.mcp.api import _mcp_known_provider_flow_params
+from onyx.server.features.mcp.api import _token_dict_with_preserved_refresh
+from onyx.server.features.mcp.api import make_oauth_provider
 
 
 def _make_mcp_server_stub(
@@ -19,6 +26,7 @@ def _make_mcp_server_stub(
     token_endpoint: str | None = "https://accounts.example.com/oauth/token",
     scopes: list[str] | None = None,
     params: dict[str, str] | None = None,
+    provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.KNOWN_PROVIDER,
 ) -> DbMCPServer:
     return cast(
         DbMCPServer,
@@ -27,7 +35,10 @@ def _make_mcp_server_stub(
             oauth_token_endpoint=token_endpoint,
             oauth_scopes_override=scopes,
             oauth_additional_auth_params=params,
+            oauth_provider_mode=provider_mode,
             server_url="https://mcp.example.com/mcp",
+            name="Example MCP",
+            id=1,
         ),
     )
 
@@ -139,3 +150,123 @@ def test_known_provider_code_exchange_sends_code_verifier(
     assert "expires_at" in token_payload
     assert captured["data"]["code_verifier"] == "verifier-123"
     assert captured["data"]["client_secret"] == "secret-123"
+
+
+def test_known_provider_oauth_metadata_uses_configured_token_endpoint() -> None:
+    metadata = _known_provider_oauth_metadata(
+        _make_mcp_server_stub(provider_mode=MCPOAuthProviderMode.KNOWN_PROVIDER)
+    )
+    assert metadata is not None
+    # The whole point: refresh must hit the configured endpoint, not the SDK's
+    # `<server-origin>/token` fallback (which would be mcp.example.com/token).
+    assert str(metadata.token_endpoint) == "https://accounts.example.com/oauth/token"
+    assert (
+        str(metadata.authorization_endpoint)
+        == "https://accounts.example.com/oauth/authorize"
+    )
+
+
+def test_known_provider_oauth_metadata_none_for_auto_discovery() -> None:
+    assert (
+        _known_provider_oauth_metadata(
+            _make_mcp_server_stub(provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY)
+        )
+        is None
+    )
+
+
+def test_known_provider_oauth_metadata_none_without_endpoints() -> None:
+    assert (
+        _known_provider_oauth_metadata(_make_mcp_server_stub(token_endpoint=None))
+        is None
+    )
+
+
+def test_preserves_existing_refresh_token_when_response_omits_it() -> None:
+    new_tokens = OAuthToken(
+        access_token="new-access", token_type="Bearer", expires_in=3600
+    )
+    result = _token_dict_with_preserved_refresh(
+        new_tokens, {"refresh_token": "old-refresh"}
+    )
+    assert result["refresh_token"] == "old-refresh"
+    assert result["access_token"] == "new-access"
+
+
+def test_keeps_new_refresh_token_when_present() -> None:
+    new_tokens = OAuthToken(
+        access_token="a", token_type="Bearer", refresh_token="new-refresh"
+    )
+    result = _token_dict_with_preserved_refresh(
+        new_tokens, {"refresh_token": "old-refresh"}
+    )
+    assert result["refresh_token"] == "new-refresh"
+
+
+def test_no_refresh_token_when_none_stored() -> None:
+    new_tokens = OAuthToken(access_token="a", token_type="Bearer")
+    assert (
+        _token_dict_with_preserved_refresh(new_tokens, None).get("refresh_token")
+        is None
+    )
+
+
+def test_absolute_token_expiry_from_expires_in() -> None:
+    before = time.time()
+    expiry = _absolute_token_expiry(
+        OAuthToken(access_token="a", token_type="Bearer", expires_in=3600)
+    )
+    assert expiry is not None
+    assert before + 3600 <= expiry <= time.time() + 3600
+
+
+def test_absolute_token_expiry_none_without_expires_in() -> None:
+    assert (
+        _absolute_token_expiry(OAuthToken(access_token="a", token_type="Bearer"))
+        is None
+    )
+
+
+def test_make_oauth_provider_hydrates_known_provider_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Stored token expired a minute ago.
+    monkeypatch.setattr(
+        "onyx.server.features.mcp.api._read_stored_token_expiry",
+        lambda _config_id: time.time() - 60,
+    )
+    provider = make_oauth_provider(
+        _make_mcp_server_stub(provider_mode=MCPOAuthProviderMode.KNOWN_PROVIDER),
+        user_id="user-1",
+        return_path="/return",
+        connection_config_id=1,
+        admin_config_id=None,
+    )
+    assert provider.context.oauth_metadata is not None
+    assert (
+        str(provider.context.oauth_metadata.token_endpoint)
+        == "https://accounts.example.com/oauth/token"
+    )
+    # Guard the SDK contract: our hydrated expiry must land where the SDK reads
+    # it, so a present-but-expired token is reported invalid and the SDK's
+    # proactive refresh branch fires.
+    provider.context.current_tokens = OAuthToken(access_token="a", token_type="Bearer")
+    assert provider.context.is_token_valid() is False
+
+
+def test_make_oauth_provider_auto_discovery_leaves_context_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "onyx.server.features.mcp.api._read_stored_token_expiry",
+        lambda _config_id: None,
+    )
+    provider = make_oauth_provider(
+        _make_mcp_server_stub(provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY),
+        user_id="user-1",
+        return_path="/return",
+        connection_config_id=1,
+        admin_config_id=None,
+    )
+    assert provider.context.oauth_metadata is None
+    assert provider.context.token_expiry_time is None
