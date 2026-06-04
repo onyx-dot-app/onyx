@@ -1,25 +1,26 @@
-import hashlib
-from collections.abc import Callable
-from typing import List
-
 from fastapi import Depends
 from fastapi import params
 from fastapi import Request
+from fastapi import Response
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 
+from onyx.auth.users import current_chat_accessible_user
 from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import FEEDBACK_RATE_LIMIT_MAX_REQUESTS
 from onyx.configs.app_configs import FEEDBACK_RATE_LIMIT_WINDOW_SECONDS
 from onyx.configs.app_configs import FEEDBACK_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import RATE_LIMIT_MAX_REQUESTS
 from onyx.configs.app_configs import RATE_LIMIT_WINDOW_SECONDS
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.db.enums import AccountType
+from onyx.db.models import User
 from onyx.redis.redis_pool import get_async_redis_connection
 
 RATE_LIMITING_ENABLED = (
     bool(AUTH_RATE_LIMITING_ENABLED) or FEEDBACK_RATE_LIMITING_ENABLED
 )
+
+_RATE_LIMIT_USER_ID_STATE_KEY = "rate_limit_user_id"
 
 
 async def setup_auth_limiter() -> None:
@@ -42,27 +43,17 @@ async def rate_limit_key(request: Request) -> str:
     return f"{ip_part}-{ua_part}"
 
 
-async def user_rate_limit_key(request: Request) -> str:
-    """Rate-limit key for authenticated endpoints.
-
-    Keys on the caller's credential rather than resolving the user from the
-    DB (which would add a query to every request): the session cookie when
-    present, else the Authorization header (API keys), else IP + User-Agent.
-    Values are hashed so raw session tokens / API keys never appear in Redis
-    keys.
-    """
-    session_cookie = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
-    if session_cookie:
-        return "sess-" + hashlib.sha256(session_cookie.encode("utf-8")).hexdigest()
-
-    auth_header = request.headers.get("authorization")
-    if auth_header:
-        return "auth-" + hashlib.sha256(auth_header.encode("utf-8")).hexdigest()
-
+async def user_scoped_rate_limit_key(request: Request) -> str:
+    """Key on the authenticated user id stashed on request.state by the
+    user-scoped limiter dependency; falls back to IP + User-Agent when no
+    user id was stashed (anonymous access)."""
+    user_id: str | None = getattr(request.state, _RATE_LIMIT_USER_ID_STATE_KEY, None)
+    if user_id is not None:
+        return f"user-{user_id}"
     return await rate_limit_key(request)
 
 
-def get_auth_rate_limiters() -> List[Callable]:
+def get_auth_rate_limiters() -> list[params.Depends]:
     if not AUTH_RATE_LIMITING_ENABLED:
         return []
 
@@ -79,18 +70,40 @@ def get_auth_rate_limiters() -> List[Callable]:
 
 
 def get_feedback_rate_limiters() -> list[params.Depends]:
-    """Per-credential rate limiters for the chat message feedback endpoints
+    """Per-user rate limiters for the chat message feedback endpoints
     (ON-009). Enabled by default; disabled via FEEDBACK_RATE_LIMIT_* env vars
-    or automatically when running without Redis."""
+    or automatically when running without Redis.
+
+    The limiter dependency resolves the authenticated user first, so:
+    - unauthenticated floods are rejected with 401 before touching limiter
+      state, and callers can't mint rate-limit buckets by rotating cookie or
+      Authorization header values,
+    - limits are per user id, so they can't be multiplied by creating extra
+      sessions or varying credential formatting for the same account.
+
+    The shared anonymous user (when anonymous access is enabled) is keyed by
+    IP + User-Agent instead, so one anonymous abuser can't exhaust every
+    anonymous caller's budget.
+    """
     if not FEEDBACK_RATE_LIMITING_ENABLED:
         return []
 
-    return [
-        Depends(
-            RateLimiter(
-                times=FEEDBACK_RATE_LIMIT_MAX_REQUESTS,
-                seconds=FEEDBACK_RATE_LIMIT_WINDOW_SECONDS,
-                identifier=user_rate_limit_key,
-            )
+    limiter = RateLimiter(
+        times=FEEDBACK_RATE_LIMIT_MAX_REQUESTS,
+        seconds=FEEDBACK_RATE_LIMIT_WINDOW_SECONDS,
+        identifier=user_scoped_rate_limit_key,
+    )
+
+    async def user_scoped_feedback_limiter(
+        request: Request,
+        response: Response,
+        user: User = Depends(current_chat_accessible_user),
+    ) -> None:
+        # FastAPI caches the user dependency per-request, so the endpoint's
+        # own auth dependency does not run a second time.
+        request.state.rate_limit_user_id = (
+            str(user.id) if user.account_type != AccountType.ANONYMOUS else None
         )
-    ]
+        await limiter(request, response)
+
+    return [Depends(user_scoped_feedback_limiter)]
