@@ -5,14 +5,20 @@ This directory contains the Dockerfile and resources for building the Onyx Craft
 ## Directory Structure
 
 ```
-docker/
+image/
 ├── Dockerfile              # Main container image definition
-├── skills/                 # Built-in skill sources (pushed at session setup, not baked in)
+├── .dockerignore           # Trims the build context
+├── entrypoint.sh           # Container startup (+ sidecar-entrypoint.sh, firewall-init.sh)
+├── sandbox_daemon/         # In-pod push/snapshot daemon (baked in)
+├── opencode-plugins/       # Per-session egress tagging plugin (baked in)
 ├── templates/
 │   └── outputs/            # Web app scaffold template (Next.js)
 ├── initial-requirements.txt # Python packages pre-installed in sandbox
 └── README.md               # This file
 ```
+
+Built-in skill sources are **not** here — they live in `backend/onyx/skills/builtin/`
+and are pushed into sandboxes at session setup, never baked into the image.
 
 ## Building the Image
 
@@ -21,7 +27,7 @@ The sandbox image must be built for **amd64** architecture since our Kubernetes 
 ### Build for amd64 only (fastest)
 
 ```bash
-cd backend/onyx/server/features/build/sandbox/kubernetes/docker
+cd backend/onyx/server/features/build/sandbox/image
 docker build --platform linux/amd64 -t onyxdotapp/sandbox:v0.1.x .
 docker push onyxdotapp/sandbox:v0.1.x
 ```

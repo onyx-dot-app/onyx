@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import Depends
 from fastapi import Request
 
+from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -99,40 +100,29 @@ def get_effective_permissions(user: User) -> set[Permission]:
 
 def require_permission(
     required: Permission,
+    *,
+    allow_anonymous: bool = False,
 ) -> Callable[..., Coroutine[Any, Any, User]]:
-    """FastAPI dependency factory for permission-based access control.
+    """FastAPI dependency factory: require ``required`` of the caller, capped by the
+    authenticating token's scopes (unrestricted PAT / session / API key = no cap).
+    allow_anonymous admits the anonymous user where the tenant permits it (the
+    anonymous-capable chat surface)."""
+    base_user = current_chat_accessible_user if allow_anonymous else current_user
 
-    Effective authority is the user's permissions intersected with the
-    authenticating token's scopes. A restricted PAT carries its scopes on
-    ``request.state.token_scopes``; an unrestricted PAT, session, and API-key
-    auth leave it None, meaning no token-side restriction.
-
-    Usage:
-        @router.get("/endpoint")
-        def endpoint(user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS))):
-            ...
-    """
-
-    async def dependency(request: Request, user: User = Depends(current_user)) -> User:
-        effective_user_permissions = get_effective_permissions(user)
-        permitted_by_user = required in effective_user_permissions
-
+    async def dependency(request: Request, user: User = Depends(base_user)) -> User:
         token_scopes: list[Permission] | None = getattr(
             request.state, "token_scopes", None
         )
+        permitted_by_user = required in get_effective_permissions(user)
         permitted_by_token = token_scopes is None or required.value in (
             resolve_effective_permissions({s.value for s in token_scopes})
         )
-
         if not (permitted_by_user and permitted_by_token):
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "You do not have the required permissions for this action.",
             )
-
         return user
 
-    dependency._is_require_permission = (  # ty: ignore[unresolved-attribute]
-        True  # sentinel for auth_check detection
-    )
+    dependency._is_require_permission = True  # ty: ignore[unresolved-attribute]
     return dependency

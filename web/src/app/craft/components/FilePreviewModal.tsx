@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Modal from "@/refresh-components/Modal";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import {
   SvgFileText,
   SvgDownloadCloud,
@@ -71,7 +70,7 @@ export default function FilePreviewModal({
               <SvgSimpleLoader />
             </div>
           ) : error ? (
-            <Text secondaryBody className="text-status-error-01">
+            <Text font="secondary-body" color="status-error-01">
               {error}
             </Text>
           ) : isImage ? (

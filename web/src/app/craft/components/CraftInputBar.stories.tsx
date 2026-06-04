@@ -13,6 +13,7 @@ import {
 import type { SkillsList } from "@/refresh-pages/admin/SkillsPage/interfaces";
 import type { PickerEntry } from "@/lib/skills/picker";
 import type { ExternalAppType } from "@/app/craft/v1/apps/registry";
+import type { LibraryEntry } from "@/app/craft/types/user-library";
 
 const SWR_NO_FETCH = {
   provider: () => new Map(),
@@ -32,9 +33,34 @@ const apps = [
   appFixture({ slug: "gmail", app_type: "GMAIL", authenticated: false }),
 ];
 
+const libraryTree: LibraryEntry[] = [
+  {
+    id: "1",
+    name: "brand-guidelines.pdf",
+    path: "user_library/brand-guidelines.pdf",
+    is_directory: false,
+    file_size: 2_400_000,
+    mime_type: "application/pdf",
+    sync_enabled: true,
+    created_at: "2026-05-28T00:00:00Z",
+  },
+  {
+    id: "2",
+    name: "q2-financials.xlsx",
+    path: "user_library/q2-financials.xlsx",
+    is_directory: false,
+    file_size: 812_000,
+    mime_type:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    sync_enabled: true,
+    created_at: "2026-05-30T00:00:00Z",
+  },
+];
+
 const fullFallback = {
   [SWR_KEYS.userSkills]: skillsList,
   [SWR_KEYS.buildExternalApps]: apps,
+  [SWR_KEYS.buildUserLibraryTree]: libraryTree,
 };
 
 const skillEntry = (slug: string, name: string): PickerEntry => ({

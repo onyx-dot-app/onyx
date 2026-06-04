@@ -57,7 +57,7 @@ Phase 0 of this plan was run against `opencode 1.15.7` in the kind cluster's `op
 
 ### Existing scaffolding we get to keep
 
-- **Sidecar daemon already runs persistently in the pod** on port 8731 (`sandbox/kubernetes/docker/sandbox_daemon/server.py`, started by `sidecar-entrypoint.sh`). Pattern proven: long-lived HTTP server inside the pod, Ed25519-signed requests from the API server, health checked by k8s. `opencode serve` slots into the same pattern in the `sandbox` container.
+- **Sidecar daemon already runs persistently in the pod** on port 8731 (`sandbox/image/sandbox_daemon/server.py`, started by `sidecar-entrypoint.sh`). Pattern proven: long-lived HTTP server inside the pod, Ed25519-signed requests from the API server, health checked by k8s. `opencode serve` slots into the same pattern in the `sandbox` container.
 - **Snapshots already capture `.opencode-data`** (`sandbox_daemon/snapshot.py:60-63, 76`). Whatever storage opencode persists there will be carried by snapshots without code changes, modulo a sequencing fix during restore (see Risks).
 - **The Dockerfile already installs opencode** (`Dockerfile:85-91`). Port 8081 is already declared `EXPOSE`d "for OpenCode ACP HTTP server" — re-purpose it for serve.
 - **`SandboxManager.send_message` returns a `Generator[ACPEvent, …]`** (`sandbox/base.py:280-302`). Callers (`session/manager.py:_yield_acp_events`, `_stream_cli_agent_response`, `scheduled_tasks/executor.py`) and the SSE encoding to the browser stay unchanged as long as the new HTTP client yields the same ACP schema event types. The `acp.schema` Pydantic models are our internal protocol; we keep them.

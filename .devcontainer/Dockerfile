@@ -118,12 +118,13 @@ RUN apt-get update \
        uvx --quiet --from playwright playwright install-deps chromium \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Python 3.11 via uv into a stable, image-level path so venvs
+# Install Python 3.13 via uv into a stable, image-level path so venvs
 # created in bind-mounted workspaces survive across `docker run`s.
 # Ubuntu 26.04's system Python is 3.14, but onnxruntime only ships
-# cp311–cp313 wheels; the repo pins 3.11 via .python-version.
+# cp311–cp313 wheels, so the repo pins 3.13 (the top of that range)
+# via .python-version.
 ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
-RUN uv python install 3.11
+RUN uv python install 3.13
 
 # Create non-root dev user with passwordless sudo
 RUN useradd -m -s /bin/zsh dev && \

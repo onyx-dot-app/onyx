@@ -38,7 +38,7 @@ sessions, so we're reinstalling the same tree.
 - Container images live on a shared registry; image size affects pull time
   on every CI run and on every new EC2. Baking node_modules into the image
   would add ~836 MB to a 675 MB image — meaningful penalty.
-- The Next.js template (`backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web/`)
+- The Next.js template (`backend/onyx/server/features/build/sandbox/image/templates/outputs/web/`)
   is shared by all session, and the `package.json` / lockfile in there is
   the canonical version. Sessions never diverge from this lockfile unless
   the agent explicitly modifies `package.json`.
@@ -116,7 +116,7 @@ of two patterns:
 
 ### PR A — Sandbox image switches from npm to bun
 
-- Update `backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile`:
+- Update `backend/onyx/server/features/build/sandbox/image/Dockerfile`:
   - Install Bun (`curl -fsSL https://bun.sh/install | bash`).
   - In the same RUN that copies the template, run `bun install --frozen-lockfile`
     in the template's `outputs/web/` to populate Bun's cache. The cache is

@@ -264,7 +264,7 @@ All other methods continue to exec into the `sandbox` container.
 
 No changes needed.
 
-#### 6b. Production — `cloud-deployment-yamls/danswer/`
+#### 6b. Production (internal deployment repo)
 
 **`serviceaccount/sandbox-file-sync-sa.yaml`** — add `skip-containers`:
 
@@ -280,13 +280,13 @@ metadata:
     app.kubernetes.io/part-of: onyx
     app.kubernetes.io/managed-by: ArgoCD
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::855178474906:role/SandboxFileSyncRole-onyx-cloud-craft
+    eks.amazonaws.com/role-arn: arn:aws:iam::<AWS_ACCOUNT_ID>:role/<SANDBOX_FILE_SYNC_ROLE>
     eks.amazonaws.com/skip-containers: "sandbox"
 automountServiceAccountToken: true
 ```
 
 
-#### 6c. Dev — `cloud-deployment-yamls/customers/onyx/`
+#### 6c. Dev (internal deployment repo)
 
 The `sandbox-file-sync` SA for craft-dev needs the same `skip-containers: "sandbox"` annotation.
 

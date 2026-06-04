@@ -12,7 +12,6 @@ import {
   deleteLibraryFile,
 } from "@/app/craft/services/apiServices";
 import { LibraryEntry } from "@/app/craft/types/user-library";
-import Text from "@/refresh-components/texts/Text";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import {
@@ -29,6 +28,7 @@ import {
   InputTypeIn,
   ShadowDiv,
   Switch,
+  Text,
   Tooltip,
 } from "@opal/components";
 
@@ -236,7 +236,9 @@ export default function UserLibraryModal({
                   padding={0.5}
                   height="fit"
                 >
-                  <Text secondaryBody>{uploadError}</Text>
+                  <Text font="secondary-body" color="text-05">
+                    {uploadError}
+                  </Text>
                 </Section>
               )}
 
@@ -284,30 +286,30 @@ export default function UserLibraryModal({
                   padding={0.5}
                   height="fit"
                 >
-                  <Text secondaryBody text03>
+                  <Text font="secondary-body" color="text-03">
                     PDFs with many embedded images may be rejected.
                   </Text>
                 </Section>
 
                 {isLoading ? (
                   <Section padding={2} height="fit">
-                    <Text secondaryBody text03>
+                    <Text font="secondary-body" color="text-03">
                       Loading files...
                     </Text>
                   </Section>
                 ) : error ? (
                   <Section padding={2} height="fit">
-                    <Text secondaryBody text03>
+                    <Text font="secondary-body" color="text-03">
                       Failed to load files
                     </Text>
                   </Section>
                 ) : fileCount === 0 ? (
                   <Section padding={2} height="fit" gap={0.5}>
                     <SvgFileText size={32} className="stroke-text-02" />
-                    <Text secondaryBody text03>
+                    <Text font="secondary-body" color="text-03">
                       No files uploaded yet
                     </Text>
-                    <Text secondaryBody text02>
+                    <Text font="secondary-body" color="text-02">
                       Upload Excel, Word, PowerPoint, or other files for your
                       agent to work with
                     </Text>
@@ -374,7 +376,7 @@ export default function UserLibraryModal({
           />
           <Modal.Body>
             <Section flexDirection="column" gap={0.5} alignItems="stretch">
-              <Text secondaryBody text03>
+              <Text font="secondary-body" color="text-03">
                 Folder name
               </Text>
               <InputTypeIn
@@ -512,7 +514,7 @@ function LibraryTreeView({
                 gap={0}
                 height="fit"
               >
-                <Text secondaryBody text04 className="truncate">
+                <Text font="secondary-body" color="text-04" maxLines={1}>
                   {entry.name}
                 </Text>
               </Section>
@@ -520,7 +522,7 @@ function LibraryTreeView({
               {/* File size */}
               {!entry.is_directory && entry.file_size !== null && (
                 <Section width="fit" height="fit" gap={0} padding={0}>
-                  <Text secondaryBody text02 style={{ whiteSpace: "nowrap" }}>
+                  <Text font="secondary-body" color="text-02" nowrap>
                     {formatFileSize(entry.file_size)}
                   </Text>
                 </Section>

@@ -1,6 +1,5 @@
 import os
 from enum import Enum
-from pathlib import Path
 
 
 class SandboxBackend(str, Enum):
@@ -8,13 +7,18 @@ class SandboxBackend(str, Enum):
     DOCKER = "docker"
 
 
-SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "kubernetes"))
-
-_THIS_FILE = Path(__file__)
-
-SKILLS_TEMPLATE_PATH = str(
-    _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "skills"
-)
+SANDBOX_BACKEND = SandboxBackend.KUBERNETES
+_env_sandbox_backend = os.environ.get("SANDBOX_BACKEND", "").strip()
+if _env_sandbox_backend:
+    try:
+        SANDBOX_BACKEND = SandboxBackend(_env_sandbox_backend.lower())
+    except ValueError:
+        raise ValueError(
+            f"Invalid SANDBOX_BACKEND={_env_sandbox_backend!r}. Valid values: "
+            f"{', '.join(b.value for b in SandboxBackend)}. Unset it to use the "
+            f"default, or align it with this release if you recently changed "
+            f"image versions."
+        )
 
 _disabled_tools_str = os.environ.get("OPENCODE_DISABLED_TOOLS", "question")
 OPENCODE_DISABLED_TOOLS: list[str] = [
@@ -47,7 +51,7 @@ ATTACHMENTS_DIRECTORY = "attachments"
 SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 
 SANDBOX_CONTAINER_IMAGE = os.environ.get(
-    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.50"
+    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.51"
 )
 
 # Path structure: s3://{bucket}/{tenant_id}/snapshots/{session_id}/{snapshot_id}.tar.gz

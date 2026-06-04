@@ -20,9 +20,6 @@ const cspHeader = `
 const nextConfig = {
   productionBrowserSourceMaps: false,
   output: "standalone",
-  // Hosts allowed to load Next.js dev resources (e.g. HMR) cross-origin.
-  // Needed when accessing the local dev server through a tunnel like ngrok.
-  allowedDevOrigins: ["cataract-brunette-icon.ngrok-free.dev"],
   transpilePackages: ["@onyx-ai/opal"],
   typedRoutes: true,
   // NOTE: `reactCompiler` is set per-phase in module.exports below — enabled for

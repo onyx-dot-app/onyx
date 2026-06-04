@@ -172,6 +172,8 @@ export interface ApiSessionResponse {
   sandbox: ApiSandboxResponse | null;
   artifacts: ApiArtifactResponse[];
   sharing_scope: SharingScope;
+  agent_provider: string | null;
+  agent_model: string | null;
 }
 
 export interface ApiDetailedSessionResponse extends ApiSessionResponse {

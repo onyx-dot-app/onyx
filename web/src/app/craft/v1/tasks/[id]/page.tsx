@@ -4,8 +4,7 @@ import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { SettingsLayouts } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import {
@@ -22,6 +21,7 @@ import {
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
 import RunHistoryTable from "@/app/craft/v1/tasks/components/RunHistoryTable";
+import PreApprovedAppsSummary from "@/app/craft/v1/tasks/components/PreApprovedAppsSummary";
 import { TaskStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
 import { TASKS_PATH, taskEditPath } from "@/app/craft/v1/tasks/constants";
 import type {
@@ -115,7 +115,7 @@ export default function ScheduledTaskDetailPage() {
           backButton={handleBack}
         />
         <SettingsLayouts.Body>
-          <Text mainUiBody text03>
+          <Text font="main-ui-body" color="text-03">
             Missing task id.
           </Text>
         </SettingsLayouts.Body>
@@ -183,11 +183,16 @@ export default function ScheduledTaskDetailPage() {
             <SvgSimpleLoader className="h-6 w-6" />
           </div>
         ) : error || !data ? (
-          <Text mainUiBody text03>
+          <Text font="main-ui-body" color="text-03">
             Failed to load scheduled task.
           </Text>
         ) : (
-          <RunHistoryTable taskId={data.id} />
+          <div className="flex flex-col gap-6">
+            {data.pre_approved_app_ids.length > 0 && (
+              <PreApprovedAppsSummary appIds={data.pre_approved_app_ids} />
+            )}
+            <RunHistoryTable taskId={data.id} />
+          </div>
         )}
       </SettingsLayouts.Body>
 

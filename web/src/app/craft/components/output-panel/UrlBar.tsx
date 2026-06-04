@@ -2,8 +2,7 @@
 
 import React from "react";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Text, Button } from "@opal/components";
 import {
   SvgDownloadCloud,
   SvgLoader,
@@ -147,9 +146,11 @@ export default function UrlBar({
               </button>
             </Tooltip>
           )}
-          <Text secondaryBody text03 className="min-w-0 flex-1 truncate">
-            {displayUrl}
-          </Text>
+          <div className="min-w-0 flex-1">
+            <Text font="secondary-body" color="text-03" maxLines={1}>
+              {displayUrl}
+            </Text>
+          </div>
         </div>
         {/* Export button — shown for downloadable file previews (e.g. markdown → docx) */}
         {onDownload && (

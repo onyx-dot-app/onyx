@@ -132,7 +132,11 @@ export function useBuildStreaming() {
    * Populates streamItems in FIFO order as packets arrive.
    */
   const streamMessage = useCallback(
-    async (sessionId: string, content: string): Promise<void> => {
+    async (
+      sessionId: string,
+      content: string,
+      model?: { provider: string; modelName: string } | null
+    ): Promise<void> => {
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
 
@@ -179,7 +183,8 @@ export function useBuildStreaming() {
         const response = await sendMessageStream(
           sessionId,
           content,
-          controller.signal
+          controller.signal,
+          model
         );
 
         await processSSEStream(response, (rawPacket) => {

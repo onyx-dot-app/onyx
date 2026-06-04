@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -228,6 +229,27 @@ def _make_mock_response(
     return resp
 
 
+def _respond_by_url(
+    responses: dict[str, MagicMock | Exception],
+) -> Callable[..., MagicMock]:
+    """Build a ``side_effect`` that maps each URL to its response, raising any
+    mapped exception — independent of call order.
+
+    ``OnyxWebCrawler.contents`` fetches concurrently via a ThreadPoolExecutor, so
+    a positional ``side_effect`` list binds responses to URLs nondeterministically
+    (whichever thread calls ``ssrf_safe_get`` first consumes the first element).
+    Keying on the URL keeps the failure-isolation assertions deterministic.
+    """
+
+    def _side_effect(url: str, *_args: object, **_kwargs: object) -> MagicMock:
+        result = responses[url]
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    return _side_effect
+
+
 class TestParallelExecution:
     """Verify that contents() fetches URLs in parallel."""
 
@@ -274,8 +296,15 @@ class TestFailureIsolation:
         good_resp = _make_mock_response()
         bad_resp = _make_mock_response(status_code=500)
 
-        # First and third URLs succeed, second fails
-        mock_get.side_effect = [good_resp, bad_resp, good_resp]
+        # First and third URLs succeed, second fails. Keyed by URL because the
+        # crawler fetches concurrently, so call order is nondeterministic.
+        mock_get.side_effect = _respond_by_url(
+            {
+                "http://a.com": good_resp,
+                "http://b.com": bad_resp,
+                "http://c.com": good_resp,
+            }
+        )
 
         crawler = OnyxWebCrawler()
         results = crawler.contents(["http://a.com", "http://b.com", "http://c.com"])
@@ -289,12 +318,14 @@ class TestFailureIsolation:
     def test_exception_doesnt_kill_batch(self, mock_get: MagicMock) -> None:
         good_resp = _make_mock_response()
 
-        # Second URL raises an exception
-        mock_get.side_effect = [
-            good_resp,
-            RuntimeError("connection reset"),
-            _make_mock_response(),
-        ]
+        # Second URL raises an exception. Keyed by URL (concurrent fetch).
+        mock_get.side_effect = _respond_by_url(
+            {
+                "http://a.com": good_resp,
+                "http://b.com": RuntimeError("connection reset"),
+                "http://c.com": _make_mock_response(),
+            }
+        )
 
         crawler = OnyxWebCrawler()
         results = crawler.contents(["http://a.com", "http://b.com", "http://c.com"])
@@ -309,11 +340,13 @@ class TestFailureIsolation:
         from onyx.utils.url import SSRFException
 
         good_resp = _make_mock_response()
-        mock_get.side_effect = [
-            good_resp,
-            SSRFException("blocked"),
-            _make_mock_response(),
-        ]
+        mock_get.side_effect = _respond_by_url(
+            {
+                "http://a.com": good_resp,
+                "http://internal.local": SSRFException("blocked"),
+                "http://c.com": _make_mock_response(),
+            }
+        )
 
         crawler = OnyxWebCrawler()
         results = crawler.contents(

@@ -91,7 +91,7 @@ Onyx being a fully functional app, relies on some external software, specificall
 
 ### Prerequisites
 
-- **Python 3.11** — If using a lower version, modifications will have to be made to the code. Higher versions may have library compatibility issues.
+- **Python 3.13** — Other versions may require code or dependency changes; 3.14 is not yet supported (some dependencies, e.g. `onnxruntime` and CUDA `torch`, do not yet ship 3.14 wheels).
 - **Docker** — Required for running external services (Postgres, OpenSearch, Redis, MinIO).
 - **Bun** — We use [bun](https://bun.sh) as the JavaScript package manager. Install it from https://bun.sh/docs/installation.
 
@@ -100,7 +100,7 @@ Onyx being a fully functional app, relies on some external software, specificall
 We use [uv](https://docs.astral.sh/uv/) and recommend creating a [virtual environment](https://docs.astral.sh/uv/pip/environments/#using-a-virtual-environment).
 
 ```bash
-uv venv .venv --python 3.11
+uv venv .venv --python 3.13
 source .venv/bin/activate
 ```
 
@@ -312,16 +312,16 @@ docker compose up -d --build
 
 ### Setting up Python
 
-Ensure [Homebrew](https://brew.sh/) is already set up, then install Python 3.11:
+Ensure [Homebrew](https://brew.sh/) is already set up, then install Python 3.13:
 
 ```bash
-brew install python@3.11
+brew install python@3.13
 ```
 
-Add Python 3.11 to your path by adding the following line to `~/.zshrc`:
+Add Python 3.13 to your path by adding the following line to `~/.zshrc`:
 
 ```
-export PATH="$(brew --prefix)/opt/python@3.11/libexec/bin:$PATH"
+export PATH="$(brew --prefix)/opt/python@3.13/libexec/bin:$PATH"
 ```
 
 > **Note:** You will need to open a new terminal for the path change above to take effect.

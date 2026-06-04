@@ -534,8 +534,13 @@ class DockerSandboxManager(SandboxManager):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialize()
+                    # Publish to the cache only after _initialize() succeeds, so a
+                    # transient init failure (e.g. the Docker socket briefly
+                    # unavailable) can't leave a half-built singleton that every
+                    # later caller reuses; the next call retries instead.
+                    instance = super().__new__(cls)
+                    instance._initialize()
+                    cls._instance = instance
         return cls._instance
 
     def _initialize(self) -> None:
