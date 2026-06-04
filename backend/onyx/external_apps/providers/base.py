@@ -1,5 +1,6 @@
 from abc import ABC
 from abc import abstractmethod
+from collections.abc import Mapping
 from typing import Any
 from typing import ClassVar
 
@@ -146,10 +147,10 @@ class ExternalAppProvider(ABC):
                 f"{cls._spec_type.__name__} instance."
             )
 
-    def payload_decoder(self, action_type: str) -> PayloadDecoder | None:
-        """Display decoder for ``action_type``'s request body, or ``None`` if it
-        needs none. Override per provider."""
-        ...
+    def payload_decoders(self) -> Mapping[str, PayloadDecoder]:
+        """Display decoders for this provider's request bodies, keyed by
+        ``action_type``. Empty by default; override to register decoders."""
+        return {}
 
 
 class OnyxManagedExtApp(ExternalAppProvider, abstract=True):

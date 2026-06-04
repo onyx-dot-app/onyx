@@ -71,6 +71,10 @@ const SLACK_APPROVAL: ApprovalView = {
     channel: "#sales-ops",
     text: "Heads up — 3 enterprise deals slipped to Q4 on procurement review. Recovery playbook in thread. 🧵",
   },
+  display_payload: {
+    channel: "#sales-ops",
+    text: "Heads up — 3 enterprise deals slipped to Q4 on procurement review. Recovery playbook in thread. 🧵",
+  },
   created_at: "2026-05-28T15:42:11Z",
   decision: null,
   decided_at: null,

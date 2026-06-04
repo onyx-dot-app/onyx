@@ -4,9 +4,7 @@ import base64
 from email.message import EmailMessage
 from typing import Any
 
-from onyx.db.enums import ExternalAppType
-from onyx.db.models import ExternalApp
-from onyx.external_apps.presentation.decode import decode_action_payload
+from onyx.external_apps.presentation.decode import decode_payload
 from onyx.external_apps.presentation.payload_decoders import GmailRawMimeDecoder
 from onyx.external_apps.providers.gmail import GmailAction
 from onyx.external_apps.providers.gmail import GmailProvider
@@ -133,54 +131,40 @@ def test_nested_decoder_fails_open_when_message_absent() -> None:
     assert GmailRawMimeDecoder(("message", "raw")).decode(payload) == payload
 
 
-def test_provider_factory_resolves_encoded_body_actions() -> None:
-    provider = GmailProvider()
-    assert isinstance(
-        provider.payload_decoder(GmailAction.MESSAGES_SEND), GmailRawMimeDecoder
-    )
-    assert isinstance(
-        provider.payload_decoder(GmailAction.DRAFTS_CREATE), GmailRawMimeDecoder
-    )
-    assert isinstance(
-        provider.payload_decoder(GmailAction.DRAFTS_UPDATE), GmailRawMimeDecoder
-    )
-    assert provider.payload_decoder(GmailAction.MESSAGES_READ) is None
-    assert provider.payload_decoder("nonexistent.action") is None
+def test_provider_registers_encoded_body_decoders() -> None:
+    decoders = GmailProvider().payload_decoders()
+    assert set(decoders) == {
+        GmailAction.MESSAGES_SEND,
+        GmailAction.DRAFTS_CREATE,
+        GmailAction.DRAFTS_UPDATE,
+    }
+    assert all(isinstance(d, GmailRawMimeDecoder) for d in decoders.values())
 
 
-def _gmail_app() -> ExternalApp:
-    # Transient model is enough — get_provider_for_app reads only app_type.
-    return ExternalApp(app_type=ExternalAppType.GMAIL)
-
-
-def test_orchestrator_decodes_gmail_send() -> None:
+def test_decode_payload_decodes_gmail_send() -> None:
     payload = _raw(_message(to="alice@example.com", subject="Hi", body="Body"))
 
-    decoded = decode_action_payload(_gmail_app(), GmailAction.MESSAGES_SEND, payload)
+    decoded = decode_payload(GmailAction.MESSAGES_SEND, payload)
 
     assert decoded["to"] == ["alice@example.com"]
     assert decoded["subject"] == "Hi"
     assert "raw" not in decoded
 
 
-def test_orchestrator_decodes_draft_create() -> None:
+def test_decode_payload_decodes_draft_create() -> None:
     payload = {"message": _raw(_message(to="alice@example.com", subject="Draft"))}
 
-    decoded = decode_action_payload(_gmail_app(), GmailAction.DRAFTS_CREATE, payload)
+    decoded = decode_payload(GmailAction.DRAFTS_CREATE, payload)
 
     assert decoded["message"]["to"] == ["alice@example.com"]
     assert "raw" not in decoded["message"]
 
 
-def test_orchestrator_passthrough_for_undecoded_action() -> None:
+def test_decode_payload_passthrough_for_undecoded_action() -> None:
     payload = {"addLabelIds": ["INBOX"]}
-    result = decode_action_payload(_gmail_app(), GmailAction.MESSAGES_MODIFY, payload)
-    assert result == payload
+    assert decode_payload(GmailAction.MESSAGES_MODIFY, payload) == payload
 
 
-def test_orchestrator_passthrough_for_unregistered_app() -> None:
+def test_decode_payload_passthrough_for_unknown_action() -> None:
     payload = {"raw": "anything"}
-    result = decode_action_payload(
-        ExternalApp(app_type=ExternalAppType.CUSTOM), "custom.action", payload
-    )
-    assert result == payload
+    assert decode_payload("custom.action", payload) == payload
