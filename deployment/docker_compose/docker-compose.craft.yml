@@ -8,20 +8,20 @@ services:
   api_server:
     environment:
       - SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}
-      # Public Onyx URL — internal compose hostnames don't resolve from the
+      # Public Onyx URL; Internal compose hostnames don't resolve from the
       # sandbox bridge.
       - SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-}
       - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:v0.1.51}
-      # Pinned: must match the compose `networks:` block + install.sh literal.
+      # Pinned: Must match the compose `networks:` block + install.sh literal.
       # An env_file leak would point Python at a non-existent network.
       - SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox
       - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
       - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
       - ENABLE_OPENCODE_DEBUGGING=${ENABLE_OPENCODE_DEBUGGING:-false}
-      # Pinned: container-side bind target. Overrides host-path values that
+      # Pinned: Container-side bind target. Overrides host-path values that
       # the operator's .env may inject via env_file.
       - SANDBOX_DOCKER_SOCKET=/var/run/docker.sock
-      # Pinned: must match the sandbox container's entrypoint.sh hardcode.
+      # Pinned: Must match the sandbox container's entrypoint.sh hardcode.
       - OPENCODE_SERVE_PORT=4096
       # Proxy is mandatory; an explicit empty SANDBOX_PROXY_HOST raises at
       # api_server startup (see DockerSandboxManager._initialize).
@@ -33,11 +33,8 @@ services:
       # Bridge join lets api_server proxy the Next.js preview iframe.
       - default
       - onyx_craft_sandbox
-    # service_healthy (stricter than the base file's service_started pattern) so
-    # a sandbox provisioned right after stack start can actually reach the
-    # proxy; service_started fires too early -- the proxy binds its listener
-    # only after CA bootstrap + initial sync (see _build_lookup in server.py).
-    # Merges with the base depends_on map.
+    # service_healthy, not service_started: The proxy binds its listener only
+    # after initial sync, so service_started would race startup provisions.
     depends_on:
       sandbox-proxy:
         condition: service_healthy
@@ -49,7 +46,7 @@ services:
       - SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}
       - SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-}
       - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:v0.1.51}
-      # See api_server above re: pinned env_file-override vars.
+      # See api_server above re: Pinned env_file-override vars.
       - SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox
       - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
       - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
@@ -68,12 +65,7 @@ services:
       sandbox-proxy:
         condition: service_healthy
 
-  # Egress proxy that MITMs sandbox HTTPS traffic and gates action approvals.
-  # Reuses the onyx-backend image; just a different entrypoint. The proxy speaks
-  # to Postgres and Redis directly (same code path as api_server) and to the
-  # Docker socket (RO, events watcher only). Cross-process state with api_server
-  # lives in `action_approval` rows + Redis announce/wake lists, never in HTTP
-  # between the two.
+  # Egress proxy: MITMs sandbox HTTPS traffic and gates action approvals.
   sandbox-proxy:
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
     command: ["python", "-m", "onyx.sandbox_proxy.server"]
@@ -88,9 +80,7 @@ services:
       - SANDBOX_DOCKER_SOCKET=/var/run/docker.sock
       - SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox
       - SANDBOX_PROXY_LISTEN_PORT=${SANDBOX_PROXY_PORT:-8080}
-      # Pin to match the healthcheck URL below (which can't read container env,
-      # so any drift would silently break the probe). Overrides any value the
-      # operator's .env may have set via env_file.
+      # Matches the healthcheck URL below.
       - SANDBOX_PROXY_HEALTHZ_PORT=8081
     volumes:
       - sandbox_proxy_ca:/var/lib/sandbox-proxy/ca

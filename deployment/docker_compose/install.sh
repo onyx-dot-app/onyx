@@ -1112,11 +1112,6 @@ else
         fi
         print_success "Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=docker)"
 
-        # Trust boundary warning. api_server + background mount the host Docker
-        # socket RW so they can drive sandbox containers; sandbox-proxy mounts
-        # it RO (events watcher / initial sync). RW = root on host on
-        # compromise; RO still discloses every container's env, labels, and
-        # event stream.
         echo ""
         print_warning "Craft + docker backend: api_server and background bind-mount"
         print_warning "/var/run/docker.sock (RW = root on host on compromise);"
@@ -1152,10 +1147,8 @@ if [ "$INCLUDE_CRAFT" = true ]; then
         fi
     fi
 
-    # Same pattern for the proxy CA volume — compose overlay references it as
-    # external so the name stays unprefixed; the sandbox manager mounts the same
-    # name when provisioning sandbox containers. Hardcoded to match
-    # configs.SANDBOX_PROXY_CA_VOLUME_NAME and the compose `volumes:` block.
+    # Same for the CA volume. Name pinned to match
+    # configs.SANDBOX_PROXY_CA_VOLUME_NAME.
     SANDBOX_PROXY_CA_VOL="sandbox_proxy_ca"
     if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker volume inspect "$SANDBOX_PROXY_CA_VOL" >/dev/null 2>&1; then
         if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker volume create "$SANDBOX_PROXY_CA_VOL" >/dev/null 2>&1; then
