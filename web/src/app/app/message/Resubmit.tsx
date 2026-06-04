@@ -18,16 +18,26 @@ function formatRateLimitReset(details: RateLimitDetails): string | null {
   const remainingMs = resetMs - Date.now();
   if (remainingMs <= 0) return "You can try again now.";
 
+  const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"}`;
   const minutes = Math.ceil(remainingMs / 60_000);
+  const hours = Math.ceil(remainingMs / 3_600_000);
+  const days = Math.ceil(remainingMs / 86_400_000);
   const relative =
     minutes < 60
-      ? `${minutes} minute${minutes === 1 ? "" : "s"}`
-      : `${Math.ceil(minutes / 60)} hour${Math.ceil(minutes / 60) === 1 ? "" : "s"}`;
-  const localTime = new Date(resetMs).toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `Resets in ${relative} (at ${localTime}).`;
+      ? plural(minutes, "minute")
+      : hours < 48
+        ? plural(hours, "hour")
+        : plural(days, "day");
+  const resetDate = new Date(resetMs);
+  // For multi-day resets a date is clearer than just a clock time.
+  const at =
+    days >= 2
+      ? resetDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+      : resetDate.toLocaleTimeString(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+        });
+  return `Resets in ${relative} (${at}).`;
 }
 
 function resolveResetMs(details: RateLimitDetails): number | null {

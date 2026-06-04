@@ -12,8 +12,8 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-# (input_cost_per_mtok, output_cost_per_mtok) in USD per million tokens.
-_OverrideRates = tuple[float, float]
+# (input, output, cache_read | None) per-Mtok USD; null cache => bill at input.
+_OverrideRates = tuple[float, float, float | None]
 
 # Per-tenant snapshot of the override table, keyed by tenant_id. Onyx is
 # multi-tenant (one process serves many per-tenant schemas), so the cache MUST
@@ -28,7 +28,14 @@ _cache: dict[str, tuple[float, dict[str, _OverrideRates]]] = {}
 
 def _load_cache(db_session: Session) -> dict[str, _OverrideRates]:
     rows = db_session.execute(select(ModelCostOverride)).scalars().all()
-    return {r.model: (r.input_cost_per_mtok, r.output_cost_per_mtok) for r in rows}
+    return {
+        r.model: (
+            r.input_cost_per_mtok,
+            r.output_cost_per_mtok,
+            r.cache_read_cost_per_mtok,
+        )
+        for r in rows
+    }
 
 
 def get_override(db_session: Session, model: str) -> _OverrideRates | None:
@@ -70,10 +77,12 @@ def upsert_override(
     model: str,
     input_cost_per_mtok: float,
     output_cost_per_mtok: float,
+    cache_read_cost_per_mtok: float | None = None,
 ) -> ModelCostOverride:
     """Set the negotiated rates for `model`, creating or replacing its row.
 
-    Rates are USD per million tokens. Caller invalidates the cache and commits.
+    Rates are USD per million tokens; a null cache rate bills cache reads at the
+    input rate. Caller invalidates the cache and commits.
     """
     row = db_session.execute(
         select(ModelCostOverride).where(ModelCostOverride.model == model)
@@ -84,11 +93,13 @@ def upsert_override(
             model=model,
             input_cost_per_mtok=input_cost_per_mtok,
             output_cost_per_mtok=output_cost_per_mtok,
+            cache_read_cost_per_mtok=cache_read_cost_per_mtok,
         )
         db_session.add(row)
     else:
         row.input_cost_per_mtok = input_cost_per_mtok
         row.output_cost_per_mtok = output_cost_per_mtok
+        row.cache_read_cost_per_mtok = cache_read_cost_per_mtok
 
     db_session.flush()
     return row

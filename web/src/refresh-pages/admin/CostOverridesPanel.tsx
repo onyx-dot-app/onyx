@@ -53,6 +53,11 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const [outputRate, setOutputRate] = useState(
     existing ? String(existing.output_cost_per_mtok) : ""
   );
+  const [cacheRate, setCacheRate] = useState(
+    existing?.cache_read_cost_per_mtok != null
+      ? String(existing.cache_read_cost_per_mtok)
+      : ""
+  );
   const [submitting, setSubmitting] = useState(false);
 
   // Offer the org's configured models as options so the override key matches the
@@ -83,6 +88,8 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
         model: model.trim(),
         input_cost_per_mtok: parsedInput,
         output_cost_per_mtok: parsedOutput,
+        // Empty cache rate => null (cache reads bill at the input rate).
+        cache_read_cost_per_mtok: parseRate(cacheRate),
       });
       await refreshCostOverrides(mutate);
       toast.success(`Saved rate for ${model.trim()}.`);
@@ -154,6 +161,21 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
           </div>
         </div>
 
+        <div className="flex flex-col gap-1">
+          <Text font="secondary-action" color="text-03">
+            {`Cache-read rate (${RATE_UNIT_LABEL}, optional)`}
+          </Text>
+          <InputTypeIn
+            value={cacheRate}
+            prefixText="$"
+            inputMode="decimal"
+            placeholder="defaults to input rate"
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              setCacheRate(e.target.value)
+            }
+          />
+        </div>
+
         <div className="flex flex-row gap-2 justify-end">
           <Button prominence="tertiary" onClick={onDone} disabled={submitting}>
             Cancel
@@ -212,9 +234,13 @@ function OverrideRow({ override }: OverrideRowProps) {
               {override.model}
             </Text>
             <Text font="secondary-body" color="text-03">
-              {`In ${formatRate(
-                override.input_cost_per_mtok
-              )} · Out ${formatRate(override.output_cost_per_mtok)} · ${RATE_UNIT_LABEL}`}
+              {`In ${formatRate(override.input_cost_per_mtok)} · Out ${formatRate(
+                override.output_cost_per_mtok
+              )}${
+                override.cache_read_cost_per_mtok != null
+                  ? ` · Cache ${formatRate(override.cache_read_cost_per_mtok)}`
+                  : ""
+              } · ${RATE_UNIT_LABEL}`}
             </Text>
             {override.updated_at && (
               <Text font="secondary-body" color="text-02">

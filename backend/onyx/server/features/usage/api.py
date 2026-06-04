@@ -20,8 +20,12 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.models import User
+from onyx.db.token_limit import fetch_all_global_token_rate_limits
+from onyx.db.token_limit import fetch_all_user_token_rate_limits
+from onyx.db.user_usage import get_total_cost_cents_since
 from onyx.db.user_usage import get_usage_export
 from onyx.db.user_usage import get_user_cost_cents_in_window
+from onyx.db.user_usage import get_user_cost_cents_since
 from onyx.db.user_usage import get_user_usage_by_day_and_model
 from onyx.db.user_usage import get_window_start
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -44,10 +48,46 @@ from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
 # Per-user windows must coincide with the tenant-usage windows; same source as
 # the recorder (onyx/tracing/processors/user_usage_processor.py).
-_PERIOD_HOURS = USAGE_LIMIT_WINDOW_SECONDS // 3600
+_PERIOD_HOURS = max(USAGE_LIMIT_WINDOW_SECONDS // 3600, 1)
 
 # Default trailing range for the export when no start is given.
 _DEFAULT_EXPORT_DAYS = 30
+
+# Cost buckets at this grid; match the gate's cutoff relaxation so the budget the
+# user sees agrees with what enforcement (token_limit._first_triggered_cost_limit) does.
+_LEDGER_GRID = timedelta(seconds=USAGE_LIMIT_WINDOW_SECONDS)
+
+
+def _user_cost_budget(
+    db_session: Session, user_id: str
+) -> tuple[float | None, float | None]:
+    """The cost budget (cents) that applies to this user and how much is left,
+    or (None, None) if no cost limit applies. Picks the most binding limit (the
+    one with the least remaining) across the user's per-user and global cost
+    limits, mirroring how the gate enforces them."""
+    now = datetime.now(tz=timezone.utc)
+    # (remaining_cents, budget_cents) for each applicable cost limit.
+    candidates: list[tuple[float, float]] = []
+
+    def _add(budget: float | None, used: float) -> None:
+        if budget is not None:
+            candidates.append((budget - used, budget))
+
+    for rl in fetch_all_user_token_rate_limits(db_session, enabled_only=True):
+        cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
+        _add(
+            rl.cost_budget_cents, get_user_cost_cents_since(db_session, user_id, cutoff)
+        )
+
+    for rl in fetch_all_global_token_rate_limits(db_session, enabled_only=True):
+        cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
+        _add(rl.cost_budget_cents, get_total_cost_cents_since(db_session, cutoff))
+
+    if not candidates:
+        return None, None
+    remaining, budget = min(candidates, key=lambda c: c[0])
+    return budget, max(remaining, 0.0)
+
 
 router = APIRouter(prefix="/admin/cost-overrides", tags=PUBLIC_API_TAGS)
 
@@ -100,11 +140,13 @@ def get_my_usage(
                 output_per_mtok=output_per_mtok,
             )
 
+    budget_cents, budget_remaining_cents = _user_cost_budget(db_session, str(user.id))
+
     return UserUsageResponse(
         per_day_by_model=per_day,
         window_cost_cents=window_cost_cents,
-        budget_cents=None,
-        budget_remaining_cents=None,
+        budget_cents=budget_cents,
+        budget_remaining_cents=budget_remaining_cents,
         selected_model_price=selected_model_price,
     )
 
@@ -182,6 +224,7 @@ def upsert_cost_override(
         model=payload.model,
         input_cost_per_mtok=payload.input_cost_per_mtok,
         output_cost_per_mtok=payload.output_cost_per_mtok,
+        cache_read_cost_per_mtok=payload.cache_read_cost_per_mtok,
     )
     db_session.commit()
     invalidate_override_cache()

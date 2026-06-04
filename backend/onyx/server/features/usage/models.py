@@ -7,15 +7,18 @@ from onyx.db.models import ModelCostOverride
 
 class CostOverrideUpsertRequest(BaseModel):
     # Negotiated rates in USD per million tokens (matches the stored columns).
+    # cache_read is optional; null bills cache reads at the input rate.
     model: str
     input_cost_per_mtok: float
     output_cost_per_mtok: float
+    cache_read_cost_per_mtok: float | None = None
 
 
 class CostOverride(BaseModel):
     model: str
     input_cost_per_mtok: float
     output_cost_per_mtok: float
+    cache_read_cost_per_mtok: float | None
     updated_at: datetime | None
 
     @classmethod
@@ -24,6 +27,7 @@ class CostOverride(BaseModel):
             model=row.model,
             input_cost_per_mtok=row.input_cost_per_mtok,
             output_cost_per_mtok=row.output_cost_per_mtok,
+            cache_read_cost_per_mtok=row.cache_read_cost_per_mtok,
             updated_at=row.updated_at,
         )
 

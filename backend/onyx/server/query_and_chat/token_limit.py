@@ -185,8 +185,9 @@ def raise_rate_limited(scope: str, period_hours: int) -> None:
     reset_at_iso = reset_at.isoformat()
     raise OnyxError(
         OnyxErrorCode.RATE_LIMITED,
-        # Neutral wording: this gate covers both token and cost budgets.
-        f"Usage budget exceeded for {scope}. Try again after {reset_at_iso}.",
+        # Neutral wording, no raw timestamp — the FE renders a friendly reset
+        # time from reset_at / retry_after_seconds below.
+        f"You've reached the usage budget for {scope}.",
         extra={
             "scope": scope,
             "reset_at": reset_at_iso,

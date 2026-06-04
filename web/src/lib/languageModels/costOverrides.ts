@@ -14,6 +14,7 @@ export interface CostOverride {
   model: string;
   input_cost_per_mtok: number;
   output_cost_per_mtok: number;
+  cache_read_cost_per_mtok: number | null; // null = bill cache at the input rate
   updated_at: string | null;
 }
 
@@ -22,6 +23,7 @@ export interface CostOverrideUpsert {
   model: string;
   input_cost_per_mtok: number;
   output_cost_per_mtok: number;
+  cache_read_cost_per_mtok: number | null;
 }
 
 /**

@@ -185,6 +185,28 @@ class TestOverride:
         # (500k + 500k) tok at $1/Mtok = $1.00 = 100 cents.
         assert in_cents == pytest.approx(100.0)
 
+    def test_override_cache_rate_applied_when_set(self, db_session: Session) -> None:
+        db_session.add(
+            ModelCostOverride(
+                model="gpt-4o",
+                input_cost_per_mtok=1.0,
+                output_cost_per_mtok=2.0,
+                cache_read_cost_per_mtok=0.1,  # cache reads 10x cheaper than input
+            )
+        )
+        db_session.commit()
+
+        in_cents, _ = compute_cost_cents(
+            model="gpt-4o",
+            provider="openai",
+            input_tokens=1_000_000,
+            output_tokens=0,
+            cache_read_tokens=1_000_000,
+            db_session=db_session,
+        )
+        # 1M input @ $1 = 100c + 1M cache @ $0.10 = 10c = 110 cents.
+        assert in_cents == pytest.approx(110.0)
+
     def test_override_cache_is_tenant_scoped(self) -> None:
         # Each tenant has its own schema/session. Tenant A's negotiated rate
         # must not leak into tenant B's cost computation.
@@ -247,7 +269,7 @@ class TestGetOverride:
 
         rates = cost_overrides.get_override(db_session, "claude-x")
         assert rates is not None
-        assert rates == (3.0, 15.0)
+        assert rates == (3.0, 15.0, None)
 
     def test_cache_invalidation_picks_up_new_row(self, db_session: Session) -> None:
         assert cost_overrides.get_override(db_session, "late-model") is None
@@ -262,4 +284,4 @@ class TestGetOverride:
         # Stale cache still says None until invalidated.
         assert cost_overrides.get_override(db_session, "late-model") is None
         cost_overrides.invalidate_override_cache()
-        assert cost_overrides.get_override(db_session, "late-model") == (4.0, 8.0)
+        assert cost_overrides.get_override(db_session, "late-model") == (4.0, 8.0, None)
