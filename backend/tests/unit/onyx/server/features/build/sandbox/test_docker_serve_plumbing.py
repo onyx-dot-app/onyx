@@ -309,11 +309,9 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     assert set(env.keys()) == {
         "ONYX_PAT",
         "ONYX_SERVER_URL",
-        "AGENT_TRANSPORT",
         OPENCODE_SERVER_PASSWORD,
         "OPENCODE_CONFIG_CONTENT",
     }
-    assert env["AGENT_TRANSPORT"] == "serve"
     assert run_calls[0]["ports"] == {
         dev_mode_serve.OPENCODE_SERVE_CONTAINER_PORT: (
             dev_mode_serve.OPENCODE_SERVE_HOST_BIND_IP,

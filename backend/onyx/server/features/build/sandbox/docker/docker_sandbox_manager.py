@@ -29,7 +29,7 @@ Sandbox containers run with:
 - no Docker socket mount
 - no S3 / MinIO / Postgres / Redis / FileStore credentials in env
 - a fixed env allowlist (``ONYX_PAT``, ``ONYX_SERVER_URL``,
-  ``AGENT_TRANSPORT``, opencode auth/config only)
+  opencode auth/config only)
 - only the dedicated sandbox bridge network — never compose's default
   network. As a result api_server / postgres / redis / minio /
   model_server are NOT reachable by service name from inside the sandbox.
@@ -411,9 +411,8 @@ def build_container_create_kwargs(
 
     Legacy (proxy disabled, default in tests/dev without proxy stack):
 
-    - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL,
-      AGENT_TRANSPORT, plus ``OPENCODE_SERVER_PASSWORD`` and
-      ``OPENCODE_CONFIG_CONTENT``.
+    - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL, plus
+      ``OPENCODE_SERVER_PASSWORD`` and ``OPENCODE_CONFIG_CONTENT``.
       No caller can inject anything else. No S3/MinIO/Postgres/Redis
       credentials. No compose service hostnames.
     - **No host mounts**: only the per-sandbox named volume mounted at
@@ -472,7 +471,6 @@ def build_container_create_kwargs(
     env: dict[str, str] = {
         "ONYX_PAT": onyx_pat,
         "ONYX_SERVER_URL": api_server_url,
-        "AGENT_TRANSPORT": "serve",
         OPENCODE_SERVER_PASSWORD: opencode_password,
         "OPENCODE_CONFIG_CONTENT": opencode_config_json,
     }

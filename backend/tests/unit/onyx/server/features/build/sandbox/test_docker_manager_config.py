@@ -178,7 +178,6 @@ def test_container_kwargs_env_allowlist_excludes_storage_credentials(
     assert env["ONYX_PAT"] == "pat-redacted"
     assert env["ONYX_SERVER_URL"] == "http://api_server:8080"
     # opencode-serve transport wiring
-    assert env["AGENT_TRANSPORT"] == "serve"
     assert env["OPENCODE_SERVER_PASSWORD"] == _OPENCODE_PASSWORD
     assert env["OPENCODE_CONFIG_CONTENT"] == _OPENCODE_CONFIG_JSON
     # Forbidden env - any storage credential leaking into the sandbox would let
@@ -312,7 +311,6 @@ def test_container_kwargs_env_is_a_minimal_allowlist(
     assert set(env.keys()) == {
         "ONYX_PAT",
         "ONYX_SERVER_URL",
-        "AGENT_TRANSPORT",
         "OPENCODE_SERVER_PASSWORD",
         "OPENCODE_CONFIG_CONTENT",
     }
@@ -524,7 +522,6 @@ def test_proxy_kwargs_env_is_a_locked_allowlist(
         # Legacy core
         "ONYX_PAT",
         "ONYX_SERVER_URL",
-        "AGENT_TRANSPORT",
         "OPENCODE_SERVER_PASSWORD",
         "OPENCODE_CONFIG_CONTENT",
         # firewall-init.sh contract
