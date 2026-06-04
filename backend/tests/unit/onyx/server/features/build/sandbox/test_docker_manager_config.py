@@ -526,7 +526,7 @@ def test_proxy_kwargs_requires_port_and_ca_volume() -> None:
     All-or-nothing: setting just the proxy host without port + CA volume is a
     misconfiguration and must raise loudly at build time.
     """
-    with pytest.raises(ValueError, match="proxy posture requires all three"):
+    with pytest.raises(ValueError, match="Proxy posture requires all three"):
         build_container_create_kwargs(
             sandbox_id=SANDBOX_ID,
             user_id=USER_ID,

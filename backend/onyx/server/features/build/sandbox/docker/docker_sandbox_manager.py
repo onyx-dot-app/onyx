@@ -356,12 +356,10 @@ def _proxy_env_vars(
     }
 
 
-class ContainerCreateKwargs(TypedDict, total=False):
-    """Kwargs we pass to ``DockerClient.containers.run``.
-
-    Typed so ``test_docker_manager_config.py`` can read specific fields without
-    ``cast``. ``total=False`` because proxy-mode adds optional keys
-    (``cap_add``) that legacy posture omits.
+class _ContainerCreateKwargsRequired(TypedDict):
+    """
+    Always-set fields. Security-critical ones (cap_drop, security_opt,
+    privileged, user) live here so omitting them fails type-check.
     """
 
     name: str
@@ -371,7 +369,6 @@ class ContainerCreateKwargs(TypedDict, total=False):
     labels: dict[str, str]
     user: str
     cap_drop: list[str]
-    cap_add: list[str]
     security_opt: list[str]
     privileged: bool
     read_only: bool
@@ -381,6 +378,15 @@ class ContainerCreateKwargs(TypedDict, total=False):
     mem_limit: str
     nano_cpus: int
     restart_policy: dict[str, str]
+
+
+class ContainerCreateKwargs(_ContainerCreateKwargsRequired, total=False):
+    """
+    Kwargs we pass to ``DockerClient.containers.run``. Proxy-mode adds
+    ``cap_add``; legacy posture omits it.
+    """
+
+    cap_add: list[str]
 
 
 def build_container_create_kwargs(
