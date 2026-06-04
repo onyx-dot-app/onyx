@@ -173,18 +173,21 @@ class DockerEventsLookup(SandboxIPLookup):
                 backoff = _RECONNECT_INITIAL_SECONDS
                 self._watch_loop(since_ts)
             except (APIError, RequestsConnectionError, OSError) as e:
-                self._synced.clear()
                 logger.warning(
                     "Docker events lookup error: %s; reconnecting in %.1fs.",
                     e,
                     backoff,
                 )
             except Exception:
-                self._synced.clear()
                 logger.exception(
                     "Unexpected docker events failure; reconnecting in %.1fs.",
                     backoff,
                 )
+            finally:
+                # CancellableStream turns daemon-side closes into clean iterator
+                # exhaustion, not an exception. Clear here so /healthz reports
+                # not-ready during the reconnect window.
+                self._synced.clear()
 
             if self._stop_event.wait(backoff):
                 return
@@ -223,7 +226,7 @@ class DockerEventsLookup(SandboxIPLookup):
             self._by_id = new_by_id
 
         logger.info(
-            "docker events initial sync: %d sandbox containers cached", len(new_cache)
+            "Docker events initial sync: %d sandbox containers cached.", len(new_cache)
         )
 
     def _watch_loop(self, since_ts: int) -> None:
