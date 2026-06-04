@@ -207,6 +207,13 @@ def _extract_text_from_content(content: Any) -> str:
     return ""
 
 
+# SSE comment line (leading `:` => ignored by EventSource and our custom
+# processSSEStream parser). Pushes bytes periodically so idle-timeout killers
+# (nginx, load balancers, browsers) don't tear down a long-lived stream while
+# the agent emits nothing. The trailing blank line terminates the SSE record.
+SSE_KEEPALIVE = ": keepalive\n\n"
+
+
 def _serialize_sandbox_event(event: Any, event_type: str) -> str:
     """Serialize a sandbox event to SSE format, preserving all fields."""
     if hasattr(event, "model_dump"):
@@ -218,6 +225,19 @@ def _serialize_sandbox_event(event: Any, event_type: str) -> str:
     data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
 
     return f"event: message\ndata: {json.dumps(data)}\n\n"
+
+
+def event_to_sse(event: Any) -> str:
+    """Translate a raw sandbox event to its SSE wire form.
+
+    Keepalive markers become an SSE comment; every other event is serialized as
+    a typed ``event: message`` record. The single seam shared by the interactive
+    turn streams and the scheduled-run subscribe path so both emit identical
+    wire bytes.
+    """
+    if isinstance(event, SSEKeepalive):
+        return SSE_KEEPALIVE
+    return _serialize_sandbox_event(event, _get_event_type(event))
 
 
 def _format_packet_event(packet: BuildPacket) -> str:
@@ -824,7 +844,7 @@ def stream_cli_agent_turn(
                 # SSE comments start with : and are ignored by EventSource
                 # but keep the HTTP connection alive.
                 packet_logger.log_sse_emit("keepalive", session_id)
-                yield ": keepalive\n\n"
+                yield SSE_KEEPALIVE
                 continue
 
             # Persistence first so DB writes precede the SSE emit (matches
@@ -1091,7 +1111,7 @@ def stream_subagent_turn(
         ):
             # Keepalives + terminators pass through untagged.
             if isinstance(sandbox_event, SSEKeepalive):
-                yield ": keepalive\n\n"
+                yield SSE_KEEPALIVE
                 continue
 
             # Tag tool + agent-message events with routing _meta BEFORE

@@ -56,6 +56,7 @@ from onyx.server.features.build.db.sandbox import update_sandbox_status__no_comm
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
 from onyx.server.features.build.utils import sanitize_filename
 from onyx.server.features.build.utils import validate_file
 from onyx.skills.push import build_user_skills_payload
@@ -999,7 +1000,7 @@ def get_session_scheduled_run_events(
                 if session.opencode_session_id:
                     break
 
-            yield ": keepalive\n\n"
+            yield SSE_KEEPALIVE
             time.sleep(LIVE_STREAM_READY_POLL_SECONDS)
 
         try:

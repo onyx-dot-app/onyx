@@ -57,7 +57,6 @@ from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session import sandbox_lifecycle as _sandbox
 from onyx.server.features.build.session import streaming as _streaming
@@ -792,14 +791,7 @@ class SessionManager:
             directory=f"/workspace/sessions/{session_id}",
             keepalive_seconds=keepalive_seconds,
         ):
-            if isinstance(acp_event, SSEKeepalive):
-                yield ": keepalive\n\n"
-                continue
-
-            yield _streaming._serialize_sandbox_event(
-                acp_event,
-                _streaming._get_event_type(acp_event),
-            )
+            yield _streaming.event_to_sse(acp_event)
 
     # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
     #
