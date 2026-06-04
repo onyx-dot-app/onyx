@@ -60,9 +60,15 @@ def fetch_stripe_checkout_session(
     data = response.json()
     if data.get("error"):
         raise Exception(data["error"])
+    # Both control-plane success branches (new checkout, payment-update portal)
+    # always include a url; a missing one is a contract violation, not a valid
+    # state to forward silently to the client.
+    url = data.get("url")
+    if not url:
+        raise Exception("Control plane returned no checkout URL")
     return StripeCheckoutSessionResult(
         session_id=data.get("sessionId"),
-        url=data.get("url"),
+        url=url,
         requires_payment_method_update=bool(data.get("requires_payment_method_update")),
     )
 

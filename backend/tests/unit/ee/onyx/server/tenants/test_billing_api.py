@@ -232,3 +232,56 @@ class TestCreateSubscriptionSession:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
         assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR
+
+
+class TestFetchStripeCheckoutSession:
+    """Tests for the control-plane checkout-session proxy."""
+
+    def test_raises_when_control_plane_returns_no_url(self) -> None:
+        """A success response without a url is a contract violation, not silent."""
+        from ee.onyx.server.tenants.billing import fetch_stripe_checkout_session
+
+        mock_response = MagicMock()
+        mock_response.ok = True
+        mock_response.json.return_value = {"sessionId": "cs_test_123"}
+
+        with (
+            patch(
+                "ee.onyx.server.tenants.billing.generate_data_plane_token",
+                return_value="cp_token",
+            ),
+            patch(
+                "ee.onyx.server.tenants.billing.requests.post",
+                return_value=mock_response,
+            ),
+        ):
+            with pytest.raises(Exception, match="no checkout URL"):
+                fetch_stripe_checkout_session("tenant_123")
+
+    def test_returns_full_result(self) -> None:
+        """Parses sessionId, url, and the payment-method-update flag."""
+        from ee.onyx.server.tenants.billing import fetch_stripe_checkout_session
+
+        mock_response = MagicMock()
+        mock_response.ok = True
+        mock_response.json.return_value = {
+            "sessionId": None,
+            "url": "https://billing.stripe.com/portal",
+            "requires_payment_method_update": True,
+        }
+
+        with (
+            patch(
+                "ee.onyx.server.tenants.billing.generate_data_plane_token",
+                return_value="cp_token",
+            ),
+            patch(
+                "ee.onyx.server.tenants.billing.requests.post",
+                return_value=mock_response,
+            ),
+        ):
+            result = fetch_stripe_checkout_session("tenant_123")
+
+        assert result.session_id is None
+        assert result.url == "https://billing.stripe.com/portal"
+        assert result.requires_payment_method_update is True
