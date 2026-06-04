@@ -3,6 +3,7 @@
 A window-rollup like TenantUsage: rows accumulate in place per (user, window,
 model, flow, provider), not an append-only per-call ledger."""
 
+from collections import defaultdict
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -301,3 +302,31 @@ def get_group_cost_cents_since(
         )
     ).scalar_one()
     return float(total)
+
+
+def get_group_cost_cents_buckets_since(
+    db_session: Session,
+    user_group_ids: list[int],
+    cutoff: datetime,
+) -> dict[int, list[tuple[datetime, float]]]:
+    """Per-group cost buckets (window_start, cents) for windows >= `cutoff`, in
+    one query. Batched counterpart to get_group_cost_cents_since so the group
+    cost gate can window in Python instead of a query per group/limit."""
+    rows = db_session.execute(
+        select(
+            User__UserGroup.user_group_id,
+            UserUsage.window_start,
+            func.coalesce(func.sum(UserUsage.cost_cents), 0.0),
+        )
+        .join(User__UserGroup, User__UserGroup.user_id == UserUsage.user_id)
+        .where(
+            User__UserGroup.user_group_id.in_(user_group_ids),
+            UserUsage.window_start >= cutoff,
+        )
+        .group_by(User__UserGroup.user_group_id, UserUsage.window_start)
+    ).all()
+
+    result: dict[int, list[tuple[datetime, float]]] = defaultdict(list)
+    for group_id, window_start, cost in rows:
+        result[group_id].append((window_start, float(cost)))
+    return result

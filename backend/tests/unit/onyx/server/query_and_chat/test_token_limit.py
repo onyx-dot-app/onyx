@@ -483,14 +483,25 @@ class TestEEGroupCostRejectionPath:
         # token side never triggers (no token budget reached)
         monkeypatch.setattr(ee_token_limit, "_fetch_user_group_usage", lambda *_: {})
 
+    def _patch_cost_buckets(
+        self, monkeypatch: pytest.MonkeyPatch, per_group_cents: dict[int, float]
+    ) -> None:
+        # The gate fetches all group cost buckets in one batched query; a single
+        # recent bucket per group is enough to drive each group's windowed sum.
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        buckets = {gid: [(now, cents)] for gid, cents in per_group_cents.items()}
+        monkeypatch.setattr(
+            ee_token_limit,
+            "get_group_cost_cents_buckets_since",
+            lambda *_: buckets,
+        )
+
     def test_all_groups_over_cost_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         g1 = _cost_limit(100.0, TokenRateLimitScope.USER_GROUP, period_hours=1)
         g2 = _cost_limit(100.0, TokenRateLimitScope.USER_GROUP, period_hours=5)
         self._patch_common(monkeypatch, {10: [g1], 20: [g2]})
         # both group windows over their 100c budget
-        monkeypatch.setattr(
-            ee_token_limit, "get_group_cost_cents_since", lambda *_: 200.0
-        )
+        self._patch_cost_buckets(monkeypatch, {10: 200.0, 20: 200.0})
 
         import uuid
 
@@ -508,10 +519,7 @@ class TestEEGroupCostRejectionPath:
         self._patch_common(monkeypatch, {10: [g1], 20: [g2]})
 
         # group 10 over its 100c budget; group 20 well under its 5000c budget
-        def _cost(_session: object, gid: int, _ws: object) -> float:
-            return 200.0 if gid == 10 else 50.0
-
-        monkeypatch.setattr(ee_token_limit, "get_group_cost_cents_since", _cost)
+        self._patch_cost_buckets(monkeypatch, {10: 200.0, 20: 50.0})
 
         import uuid
 

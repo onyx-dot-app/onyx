@@ -1,6 +1,8 @@
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 from itertools import groupby
 from typing import Dict
 from typing import List
@@ -21,9 +23,10 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
-from onyx.db.user_usage import get_group_cost_cents_since
+from onyx.db.user_usage import get_group_cost_cents_buckets_since
 from onyx.db.user_usage import get_user_cost_cents_since
 from onyx.server.query_and_chat.token_limit import _get_cutoff_time
+from onyx.server.query_and_chat.token_limit import _LEDGER_GRID
 from onyx.server.query_and_chat.token_limit import _raise_for_longest_window
 from onyx.server.query_and_chat.token_limit import _user_is_rate_limited_by_global
 from onyx.server.query_and_chat.token_limit import _worst_triggered_cost_limit
@@ -138,14 +141,34 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
         else:
             token_period = max(token_periods)
 
+        # Batch every group's cost buckets in one query (like the token path
+        # above) so the cost gate windows in Python instead of issuing a query
+        # per group/limit. Fetch since the broadest cost window any group sets.
+        cost_limits = [
+            rl
+            for rls in group_rate_limits.values()
+            for rl in rls
+            if rl.cost_budget_cents is not None
+        ]
+        group_cost_buckets: dict[int, list[tuple[datetime, float]]] = {}
+        if cost_limits:
+            max_cost_period = max(rl.period_hours for rl in cost_limits)
+            cost_fetch_cutoff = (
+                datetime.now(tz=timezone.utc)
+                - timedelta(hours=max_cost_period)
+                - _LEDGER_GRID
+            )
+            group_cost_buckets = get_group_cost_cents_buckets_since(
+                db_session, user_group_ids, cost_fetch_cutoff
+            )
+
         cost_period: int | None = None
         cost_periods: list[int] = []
         for user_group_id, rate_limits in group_rate_limits.items():
+            buckets = group_cost_buckets.get(user_group_id, [])
             cost_triggered = _worst_triggered_cost_limit(
                 rate_limits,
-                lambda cutoff, gid=user_group_id: get_group_cost_cents_since(
-                    db_session, gid, cutoff
-                ),
+                lambda cutoff, b=buckets: sum(c for ws, c in b if ws >= cutoff),
             )
             if cost_triggered is None:
                 break  # an under-budget group means the user is not cost-limited
