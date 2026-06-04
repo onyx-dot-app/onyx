@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -12,26 +11,13 @@ import (
 )
 
 const (
+	wikiBuildRepo       = "onyx-dot-app/agent-wiki"
 	wikiBuildWorkflow   = "nightly-build.yml"
+	wikiDeployRepo      = "onyx-dot-app/cloud-deployment-yamls"
 	wikiDeployWorkflow  = "dev-wiki-deploy.yml"
 	wikiBuildPollLimit  = 30 * time.Minute
 	wikiDeployPollLimit = 20 * time.Minute
-
-	wikiBuildRepoEnv  = "ODS_WIKI_BUILD_REPO"
-	wikiDeployRepoEnv = "ODS_WIKI_DEPLOY_REPO"
 )
-
-// wikiRepos returns the GitHub repos (org/name) hosting the wiki build and
-// deploy workflows. They are read from the environment rather than hardcoded
-// so that internal repo names don't live in this public repository.
-func wikiRepos() (string, string) {
-	buildRepo := os.Getenv(wikiBuildRepoEnv)
-	deployRepo := os.Getenv(wikiDeployRepoEnv)
-	if buildRepo == "" || deployRepo == "" {
-		log.Fatalf("%s and %s must be set to the org/name of the wiki build and deploy repos", wikiBuildRepoEnv, wikiDeployRepoEnv)
-	}
-	return buildRepo, deployRepo
-}
 
 // DeployWikiOptions holds options for the deploy wiki command.
 type DeployWikiOptions struct {
@@ -51,21 +37,16 @@ func NewDeployWikiCommand() *cobra.Command {
 		Long: `Build a fresh nightly image of agent-wiki and deploy it to dev-wiki.
 
 This command will:
-  1. Dispatch the nightly-build.yml workflow in the wiki build repo
-     ($ODS_WIKI_BUILD_REPO), which builds and pushes the
-     nightly-latest-YYYYMMDD images
+  1. Dispatch the nightly-build.yml workflow in onyx-dot-app/agent-wiki
+     (builds and pushes onyxdotapp/agent-wiki-{backend,frontend}:nightly-latest-YYYYMMDD)
   2. Wait for the build workflow to finish
-  3. Dispatch the dev-wiki-deploy.yml workflow in the wiki deploy repo
-     ($ODS_WIKI_DEPLOY_REPO) with version_tag=nightly-latest-YYYYMMDD
-     (today's UTC date)
+  3. Dispatch the dev-wiki-deploy.yml workflow in onyx-dot-app/cloud-deployment-yamls
+     with version_tag=nightly-latest-YYYYMMDD (today's UTC date)
   4. Wait for the deploy workflow to finish
-
-Requires $ODS_WIKI_BUILD_REPO and $ODS_WIKI_DEPLOY_REPO to be set to the
-org/name of the wiki build and deploy repos.
 
 All GitHub operations run through the gh CLI, so authorization is enforced
 by your gh credentials and GitHub's repo/workflow permissions. A kickoff
-Slack message will appear in the deployments Slack channel.
+Slack message will appear in #monitor-deployments.
 
 Pass --no-build to skip step 1 and just deploy whatever's already on
 Docker Hub for today's tag.
@@ -89,7 +70,6 @@ Example usage:
 
 func deployWiki(opts *DeployWikiOptions) {
 	git.CheckGitHubCLI()
-	buildRepo, deployRepo := wikiRepos()
 
 	if opts.DryRun {
 		log.Warning("=== DRY RUN MODE: workflow dispatches will be skipped ===")
@@ -113,71 +93,71 @@ func deployWiki(opts *DeployWikiOptions) {
 
 	if !opts.NoBuild {
 		if opts.DryRun {
-			log.Warnf("[DRY RUN] Would dispatch %s in %s", wikiBuildWorkflow, buildRepo)
+			log.Warnf("[DRY RUN] Would dispatch %s in %s", wikiBuildWorkflow, wikiBuildRepo)
 		} else {
-			runBuild(buildRepo)
+			runBuild()
 		}
 	}
 
 	if opts.DryRun {
-		log.Warnf("[DRY RUN] Would dispatch %s in %s with version_tag=%s", wikiDeployWorkflow, deployRepo, versionTag)
+		log.Warnf("[DRY RUN] Would dispatch %s in %s with version_tag=%s", wikiDeployWorkflow, wikiDeployRepo, versionTag)
 		return
 	}
 
-	runDeploy(deployRepo, versionTag, opts.NoWaitDeploy)
+	runDeploy(versionTag, opts.NoWaitDeploy)
 }
 
-func runBuild(buildRepo string) {
-	priorRunID, err := latestWorkflowRunID(buildRepo, wikiBuildWorkflow, "workflow_dispatch", "")
+func runBuild() {
+	priorRunID, err := latestWorkflowRunID(wikiBuildRepo, wikiBuildWorkflow, "workflow_dispatch", "")
 	if err != nil {
 		log.Fatalf("Failed to query existing build runs: %v", err)
 	}
 	log.Debugf("Most recent prior build run id: %d", priorRunID)
 
-	log.Infof("Dispatching %s in %s...", wikiBuildWorkflow, buildRepo)
-	if err := dispatchWorkflow(buildRepo, wikiBuildWorkflow, nil); err != nil {
+	log.Infof("Dispatching %s in %s...", wikiBuildWorkflow, wikiBuildRepo)
+	if err := dispatchWorkflow(wikiBuildRepo, wikiBuildWorkflow, nil); err != nil {
 		log.Fatalf("Failed to dispatch build workflow: %v", err)
 	}
 
 	log.Info("Waiting for build workflow to start...")
-	buildRun, err := waitForNewRun(buildRepo, wikiBuildWorkflow, "workflow_dispatch", "", priorRunID)
+	buildRun, err := waitForNewRun(wikiBuildRepo, wikiBuildWorkflow, "workflow_dispatch", "", priorRunID)
 	if err != nil {
 		log.Fatalf("Failed to find triggered build run: %v", err)
 	}
 	log.Infof("Build run started: %s", buildRun.URL)
 
-	if err := waitForRunCompletion(buildRepo, buildRun.DatabaseID, wikiBuildPollLimit, "build"); err != nil {
+	if err := waitForRunCompletion(wikiBuildRepo, buildRun.DatabaseID, wikiBuildPollLimit, "build"); err != nil {
 		log.Fatalf("Build did not complete successfully: %v", err)
 	}
 	log.Info("Build completed successfully.")
 }
 
-func runDeploy(deployRepo string, versionTag string, noWait bool) {
-	priorRunID, err := latestWorkflowRunID(deployRepo, wikiDeployWorkflow, "workflow_dispatch", "")
+func runDeploy(versionTag string, noWait bool) {
+	priorRunID, err := latestWorkflowRunID(wikiDeployRepo, wikiDeployWorkflow, "workflow_dispatch", "")
 	if err != nil {
 		log.Fatalf("Failed to query existing deploy runs: %v", err)
 	}
 	log.Debugf("Most recent prior deploy run id: %d", priorRunID)
 
 	log.Infof("Dispatching %s with version_tag=%s...", wikiDeployWorkflow, versionTag)
-	if err := dispatchWorkflow(deployRepo, wikiDeployWorkflow, map[string]string{"version_tag": versionTag}); err != nil {
+	if err := dispatchWorkflow(wikiDeployRepo, wikiDeployWorkflow, map[string]string{"version_tag": versionTag}); err != nil {
 		log.Fatalf("Failed to dispatch deploy workflow: %v", err)
 	}
 
 	log.Info("Waiting for deploy workflow to start...")
-	deployRun, err := waitForNewRun(deployRepo, wikiDeployWorkflow, "workflow_dispatch", "", priorRunID)
+	deployRun, err := waitForNewRun(wikiDeployRepo, wikiDeployWorkflow, "workflow_dispatch", "", priorRunID)
 	if err != nil {
 		log.Fatalf("Failed to find dispatched deploy run: %v", err)
 	}
 	log.Infof("Deploy run started: %s", deployRun.URL)
-	log.Info("A kickoff Slack message will appear in the deployments Slack channel.")
+	log.Info("A kickoff Slack message will appear in #monitor-deployments.")
 
 	if noWait {
 		log.Info("--no-wait-deploy set; not waiting for deploy completion.")
 		return
 	}
 
-	if err := waitForRunCompletion(deployRepo, deployRun.DatabaseID, wikiDeployPollLimit, "deploy"); err != nil {
+	if err := waitForRunCompletion(wikiDeployRepo, deployRun.DatabaseID, wikiDeployPollLimit, "deploy"); err != nil {
 		log.Fatalf("Deploy did not complete successfully: %v", err)
 	}
 	log.Info("Deploy completed successfully.")
