@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useRef } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import {
@@ -81,25 +81,24 @@ export default function BuildChatPanel({
   const toggleOutputPanel = useToggleOutputPanel();
 
   const { llmProviders } = useLLMProviders();
-  const [selectedModel, setSelectedModel] = useState<BuildLlmSelection | null>(
-    null
-  );
-  useEffect(() => {
-    // Reset on session switch so a prior session's model can't leak in.
-    if (!session?.agentProvider || !session?.agentModel) {
-      setSelectedModel(null);
-      return;
-    }
-    // providerName = configured provider's name (matches getDefaultLlmSelection).
+  // Picker shows the session's stored model unless the user picks another.
+  // The pick is keyed by session so it can't leak across sessions.
+  const sessionModel = useMemo<BuildLlmSelection | null>(() => {
+    if (!session?.agentProvider || !session?.agentModel) return null;
     const match = llmProviders?.find(
       (p) => p.provider === session.agentProvider
     );
-    setSelectedModel({
+    return {
       provider: session.agentProvider,
       providerName: match?.name ?? session.agentProvider,
       modelName: session.agentModel,
-    });
+    };
   }, [session?.agentProvider, session?.agentModel, llmProviders]);
+  const [modelBySession, setModelBySession] = useState<
+    Record<string, BuildLlmSelection>
+  >({});
+  const selectedModel =
+    (sessionId ? modelBySession[sessionId] : undefined) ?? sessionModel;
 
   // Main-column view mode: chat (main agent) vs a subagent transcript.
   const viewedSubagentSessionId = useViewedSubagentSessionId();
@@ -601,7 +600,14 @@ export default function BuildChatPanel({
                     <div className="flex justify-end pb-2">
                       <ModelPickerButton
                         selection={selectedModel}
-                        onChange={setSelectedModel}
+                        onChange={(model) => {
+                          if (sessionId) {
+                            setModelBySession((m) => ({
+                              ...m,
+                              [sessionId]: model,
+                            }));
+                          }
+                        }}
                         disabled={isViewingSubagent}
                       />
                     </div>
