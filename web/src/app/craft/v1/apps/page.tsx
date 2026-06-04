@@ -45,8 +45,6 @@ export default function ExternalAppsPage() {
         description="Connect the tools Onyx Craft can use as context while it works."
         rightChildren={
           isAdmin ? (
-            // Center vertically in the stretched header row (consistent across
-            // the Craft skills/apps pages).
             <div className="flex items-center gap-2">
               <Button
                 href="/craft/v1/apps/manage"
@@ -78,7 +76,6 @@ interface AppConnectionsProps {
   query: string;
 }
 
-// Connected apps lead as a list; the rest are browsable as a grid.
 function AppConnections({ query }: AppConnectionsProps) {
   const { data, mutate } = useSWR<ExternalAppUserResponse[]>(
     SWR_KEYS.buildExternalApps,

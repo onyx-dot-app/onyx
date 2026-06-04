@@ -26,9 +26,6 @@ import type { CustomSkill } from "@/refresh-pages/admin/SkillsPage/interfaces";
 // ---------------------------------------------------------------------------
 
 interface SkillsPageProps {
-  // Renders an inline "Back" action in the header's right slot (not the stacked
-  // Opal back-button row) so the title stays anchored across the personal↔manage
-  // transition.
   onBack?: () => void;
 }
 
@@ -100,8 +97,6 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
         description="Capability bundles the Craft agent can reach for. Built-in skills ship with Onyx; custom skills are uploaded zip bundles, gated by group grants."
         rightChildren={
           onBack ? (
-            // Center vertically in the stretched header row (consistent across
-            // the Craft skills/apps pages).
             <div className="flex items-center gap-2">
               <Button
                 prominence="secondary"

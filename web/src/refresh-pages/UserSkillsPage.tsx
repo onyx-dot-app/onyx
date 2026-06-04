@@ -64,8 +64,6 @@ export default function UserSkillsPage() {
         description="Capability bundles your Craft agent can reach for. Skills are granted by admins; this page shows what's currently available to you."
         rightChildren={
           isAdmin ? (
-            // Center vertically in the stretched header row (consistent across
-            // the Craft skills/apps pages).
             <div className="flex items-center gap-2">
               <Button
                 href="/craft/v1/skills/manage"

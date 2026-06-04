@@ -91,8 +91,7 @@ const RECOMMENDED_MODEL_NAMES = new Set(
   )
 );
 
-// Display label of the top recommended Craft model (the recommended provider's
-// recommended model). Derived so UI copy never hardcodes a stale version.
+// Top recommended Craft model's label, derived so UI copy isn't hardcoded.
 export const RECOMMENDED_CRAFT_MODEL_LABEL: string = (() => {
   const provider =
     BUILD_MODE_PROVIDERS.find((p) => p.recommended) ?? BUILD_MODE_PROVIDERS[0]!;

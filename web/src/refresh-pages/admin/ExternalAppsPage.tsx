@@ -27,13 +27,10 @@ interface ModalState {
 }
 
 interface ExternalAppsPageProps {
-  // Inline "Back" action in the header's right slot — keeps the title anchored
-  // across the personal↔manage transition (see SkillsPage for rationale).
   onBack?: () => void;
 }
 
-// Admin External Apps management: configure which integrations the whole org
-// can use. Members connect their own accounts from the Craft Apps page.
+// Admin External Apps management; members connect their own accounts on the Apps page.
 export default function ExternalAppsPage({
   onBack,
 }: ExternalAppsPageProps = {}) {
@@ -45,8 +42,6 @@ export default function ExternalAppsPage({
         description="Connect third-party integrations so users in your org can authorize them with their personal accounts in Onyx Craft."
         rightChildren={
           onBack ? (
-            // Center vertically in the stretched header row (consistent across
-            // the Craft skills/apps pages).
             <div className="flex items-center gap-2">
               <Button
                 prominence="secondary"

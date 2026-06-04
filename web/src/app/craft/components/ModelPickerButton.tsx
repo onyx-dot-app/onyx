@@ -13,15 +13,13 @@ import {
 } from "@/app/craft/onboarding/constants";
 
 interface ModelPickerButtonProps {
-  /** The session's current model (null → show the recommended default). */
+  // null → show the recommended default.
   selection: BuildLlmSelection | null;
   onChange: (selection: BuildLlmSelection) => void;
   disabled?: boolean;
 }
 
-// Controlled model picker pill matching the main app's ModelSelector. The
-// owner persists the choice (per-message override → session row); this
-// component is stateless beyond provider fetch and the "Connect" flow.
+// Controlled model picker pill matching the main app's ModelSelector.
 export default function ModelPickerButton({
   selection,
   onChange,

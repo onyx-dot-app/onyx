@@ -80,20 +80,17 @@ export default function BuildChatPanel({
   const { isMobile } = useScreenSize();
   const toggleOutputPanel = useToggleOutputPanel();
 
-  // Model the next message will use, seeded from the loaded session's row.
   const { llmProviders } = useLLMProviders();
   const [selectedModel, setSelectedModel] = useState<BuildLlmSelection | null>(
     null
   );
   useEffect(() => {
-    // Reset on session switch so a prior session's pick can't leak into a new
-    // session's first message.
+    // Reset on session switch so a prior session's model can't leak in.
     if (!session?.agentProvider || !session?.agentModel) {
       setSelectedModel(null);
       return;
     }
-    // Resolve providerName to the configured provider's name (same contract as
-    // getDefaultLlmSelection) rather than the raw provider key.
+    // providerName = configured provider's name (matches getDefaultLlmSelection).
     const match = llmProviders?.find(
       (p) => p.provider === session.agentProvider
     );
@@ -283,7 +280,6 @@ export default function BuildChatPanel({
 
       track(AnalyticsEvent.SENT_CRAFT_MESSAGE);
 
-      // Welcome passes its own pick; the active session uses selectedModel.
       const chosen = modelOverride ?? selectedModel;
       const model = chosen
         ? { provider: chosen.provider, modelName: chosen.modelName }

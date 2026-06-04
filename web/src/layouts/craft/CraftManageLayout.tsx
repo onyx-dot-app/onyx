@@ -7,9 +7,8 @@ interface CraftManageLayoutProps {
   children: React.ReactNode;
 }
 
-// Server-side gate for Craft org-management pages (apps/skills "Manage").
-// These call the /api/admin/* endpoints which require full admin, so curators
-// are excluded — unlike requireAdminAuth, which also allows curator roles.
+// Server-side admin-only gate (the /api/admin/* endpoints exclude curators,
+// unlike requireAdminAuth which allows them).
 export default async function CraftManageLayout({
   children,
 }: CraftManageLayoutProps) {

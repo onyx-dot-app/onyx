@@ -1423,8 +1423,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     updateSessionData(tempId, { status: "creating" });
 
     try {
-      // Provision with the backend's default model; the composer's per-message
-      // override sets the model from the first message onward.
+      // Provision with the backend default; the per-message override sets it later.
       const sessionData = await apiCreateSession({
         name: prompt.slice(0, 50),
       });
