@@ -189,7 +189,9 @@ export default function ScheduledTaskDetailPage() {
           </Text>
         ) : (
           <div className="flex flex-col gap-6">
-            <PreApprovedAppsSummary appIds={data.pre_approved_app_ids} />
+            {data.pre_approved_app_ids.length > 0 && (
+              <PreApprovedAppsSummary appIds={data.pre_approved_app_ids} />
+            )}
             <RunHistoryTable taskId={data.id} />
           </div>
         )}

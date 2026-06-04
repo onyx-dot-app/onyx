@@ -19,7 +19,7 @@ export default function PreApprovalPicker({
   selectedIds,
   onChange,
 }: PreApprovalPickerProps) {
-  const { data, isLoading } = useUserExternalApps();
+  const { data, isLoading, error } = useUserExternalApps();
 
   const selected = new Set(selectedIds);
   const toggle = useCallback(
@@ -37,6 +37,16 @@ export default function PreApprovalPicker({
       <Card variant="tertiary">
         <Text font="secondary-body" color="text-03">
           Loading apps…
+        </Text>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card variant="tertiary">
+        <Text font="secondary-body" color="text-03">
+          Couldn’t load your apps. Refresh to try again.
         </Text>
       </Card>
     );

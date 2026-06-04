@@ -11,8 +11,10 @@ interface PreApprovedAppsSummaryProps {
 export default function PreApprovedAppsSummary({
   appIds,
 }: PreApprovedAppsSummaryProps) {
-  const { data } = useUserExternalApps();
+  const { data, isLoading } = useUserExternalApps();
   if (appIds.length === 0) return null;
+  // Wait for names so the tags never flash raw "App #id" fallbacks.
+  if (isLoading) return null;
 
   const byId = new Map((data ?? []).map((app) => [app.id, app]));
   return (
