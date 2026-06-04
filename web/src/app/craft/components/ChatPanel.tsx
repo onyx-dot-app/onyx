@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useRef } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import {
@@ -33,6 +33,9 @@ import Dropzone from "react-dropzone";
 import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";
+import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
+import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import ScheduledRunBanner from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
@@ -76,6 +79,26 @@ export default function BuildChatPanel({
   const { setLeftSidebarFolded, leftSidebarFolded } = useBuildContext();
   const { isMobile } = useScreenSize();
   const toggleOutputPanel = useToggleOutputPanel();
+
+  const { llmProviders } = useLLMProviders();
+  // Picker shows the session's stored model unless the user picks another.
+  // The pick is keyed by session so it can't leak across sessions.
+  const sessionModel = useMemo<BuildLlmSelection | null>(() => {
+    if (!session?.agentProvider || !session?.agentModel) return null;
+    const match = llmProviders?.find(
+      (p) => p.provider === session.agentProvider
+    );
+    return {
+      provider: session.agentProvider,
+      providerName: match?.name ?? session.agentProvider,
+      modelName: session.agentModel,
+    };
+  }, [session?.agentProvider, session?.agentModel, llmProviders]);
+  const [modelBySession, setModelBySession] = useState<
+    Record<string, BuildLlmSelection>
+  >({});
+  const selectedModel =
+    (sessionId ? modelBySession[sessionId] : undefined) ?? sessionModel;
 
   // Main-column view mode: chat (main agent) vs a subagent transcript.
   const viewedSubagentSessionId = useViewedSubagentSessionId();
@@ -244,13 +267,22 @@ export default function BuildChatPanel({
   }, [sessionId]);
 
   const handleSubmit = useCallback(
-    async (message: string, files: BuildFile[]) => {
+    async (
+      message: string,
+      files: BuildFile[],
+      modelOverride?: BuildLlmSelection | null
+    ) => {
       if (limits?.isLimited) {
         setShowUpgradeModal(true);
         return;
       }
 
       track(AnalyticsEvent.SENT_CRAFT_MESSAGE);
+
+      const chosen = modelOverride ?? selectedModel;
+      const model = chosen
+        ? { provider: chosen.provider, modelName: chosen.modelName }
+        : null;
 
       if (hasSession && sessionId) {
         // Existing session flow
@@ -268,7 +300,7 @@ export default function BuildChatPanel({
           timestamp: new Date(),
         });
         // Stream the response
-        await streamMessage(sessionId, message);
+        await streamMessage(sessionId, message, model);
         refreshLimits();
       } else {
         // New session flow - ALWAYS use pre-provisioned session
@@ -342,7 +374,7 @@ export default function BuildChatPanel({
         setTimeout(() => nameBuildSession(newSessionId), 1000);
 
         // Stream the response (uses session ID directly, not currentSessionId)
-        await streamMessage(newSessionId, message);
+        await streamMessage(newSessionId, message, model);
         refreshLimits();
       }
     },
@@ -359,6 +391,7 @@ export default function BuildChatPanel({
       hasUploadingFiles,
       limits,
       refreshLimits,
+      selectedModel,
     ]
   );
 
@@ -559,6 +592,24 @@ export default function BuildChatPanel({
                           />
                         </button>
                       </Tooltip>
+                    </div>
+                  )}
+                  {/* Model is locked once the session starts — show the picker
+                  only before the first message. */}
+                  {session?.messages.length === 0 && (
+                    <div className="flex justify-end pb-2">
+                      <ModelPickerButton
+                        selection={selectedModel}
+                        onChange={(model) => {
+                          if (sessionId) {
+                            setModelBySession((m) => ({
+                              ...m,
+                              [sessionId]: model,
+                            }));
+                          }
+                        }}
+                        disabled={isViewingSubagent}
+                      />
                     </div>
                   )}
                   {/* The composer stays in view for subagents (layout consistency)

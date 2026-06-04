@@ -13,11 +13,6 @@ import {
   OnboardingModalMode,
   OnboardingStep,
 } from "@/app/craft/onboarding/types";
-import {
-  setBuildLlmSelection,
-  getBuildLlmSelection,
-  getDefaultLlmSelection,
-} from "@/app/craft/onboarding/constants";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { testApiKeyHelper } from "@/sections/modals/languageModels/svc";
@@ -26,22 +21,6 @@ import OnboardingLlmSetup, {
   PROVIDERS,
   type ProviderKey,
 } from "@/app/craft/onboarding/components/OnboardingLlmSetup";
-
-/**
- * Auto-select the best available LLM based on priority order.
- * Used when user completes onboarding without going through LLM setup step.
- */
-function autoSelectBestLlm(
-  llmProviders: LLMProviderDescriptor[] | undefined
-): void {
-  // Don't override if user already has a selection
-  if (getBuildLlmSelection()) return;
-
-  const selection = getDefaultLlmSelection(llmProviders);
-  if (selection) {
-    setBuildLlmSelection(selection);
-  }
-}
 
 interface BuildOnboardingModalProps {
   mode: OnboardingModalMode;
@@ -246,12 +225,6 @@ export default function BuildOnboardingModal({
         }
       }
 
-      setBuildLlmSelection({
-        providerName: providerName,
-        provider: currentProviderConfig.providerName,
-        modelName: selectedModel,
-      });
-
       track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
         provider: currentProviderConfig.providerName,
         is_creation: true,
@@ -294,10 +267,6 @@ export default function BuildOnboardingModal({
       if (steps.includes("llm-setup") && connectionStatus === "success") {
         await onLlmComplete();
       }
-
-      // Auto-select best available LLM if user didn't go through LLM setup
-      // (e.g., non-admin users or when all providers already configured)
-      autoSelectBestLlm(llmProviders);
 
       await onComplete();
 

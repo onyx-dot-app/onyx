@@ -91,6 +91,15 @@ const RECOMMENDED_MODEL_NAMES = new Set(
   )
 );
 
+// Top recommended Craft model's label, derived so UI copy isn't hardcoded.
+export const RECOMMENDED_CRAFT_MODEL_LABEL: string = (() => {
+  const provider =
+    BUILD_MODE_PROVIDERS.find((p) => p.recommended) ?? BUILD_MODE_PROVIDERS[0]!;
+  const model =
+    provider.models.find((m) => m.recommended) ?? provider.models[0]!;
+  return model.label;
+})();
+
 interface MinimalLlmProvider {
   name: string | null;
   provider: string;
@@ -137,37 +146,6 @@ export function getDefaultLlmSelection(
   }
 
   return null;
-}
-
-const BUILD_LLM_COOKIE_KEY = "build_llm_selection";
-
-export function getBuildLlmSelection(): BuildLlmSelection | null {
-  if (typeof document === "undefined") return null;
-  const cookie = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith(`${BUILD_LLM_COOKIE_KEY}=`));
-  if (!cookie) return null;
-  try {
-    const value = cookie.split("=")[1];
-    if (!value) return null;
-    return JSON.parse(decodeURIComponent(value));
-  } catch {
-    return null;
-  }
-}
-
-export function setBuildLlmSelection(selection: BuildLlmSelection): void {
-  if (typeof document === "undefined") return;
-  const value = encodeURIComponent(JSON.stringify(selection));
-  const expires = new Date(
-    Date.now() + 365 * 24 * 60 * 60 * 1000
-  ).toUTCString();
-  document.cookie = `${BUILD_LLM_COOKIE_KEY}=${value}; path=/; expires=${expires}; SameSite=Lax`;
-}
-
-export function clearBuildLlmSelection(): void {
-  if (typeof document === "undefined") return;
-  document.cookie = `${BUILD_LLM_COOKIE_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
 }
 
 // =============================================================================
