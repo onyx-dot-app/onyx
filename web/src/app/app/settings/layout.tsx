@@ -36,6 +36,7 @@ export default function Layout({ children }: LayoutProps) {
       ? [{ href: "/app/settings/accounts-access", label: "Accounts & Access" }]
       : []),
     { href: "/app/settings/connectors", label: "Connectors" },
+    { href: "/app/settings/usage", label: "Usage" },
   ];
 
   // Derive the trigger label from the pathname directly. InputSelect normally

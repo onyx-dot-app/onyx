@@ -19,7 +19,8 @@ interface CreateRateLimitModalProps {
   onSubmit: (
     target_scope: Scope,
     period_hours: number,
-    token_budget: number,
+    token_budget: number | null,
+    cost_budget_cents: number | null,
     group_id: number
   ) => void;
   forSpecificScope?: Scope;
@@ -72,6 +73,7 @@ export default function CreateRateLimitModal({
             enabled: true,
             period_days: "",
             token_budget: "",
+            cost_budget_dollars: "",
             target_scope: forSpecificScope || Scope.GLOBAL,
             user_group_id: forSpecificUserGroup,
           }}
@@ -81,8 +83,17 @@ export default function CreateRateLimitModal({
               .integer("Time Window must be a whole number of days")
               .min(1, "Time Window must be at least 1 day"),
             token_budget: Yup.number()
-              .required("Token Budget is a required field")
-              .min(1, "Token Budget must be at least 1"),
+              .min(1, "Token Budget must be at least 1")
+              .test(
+                "budget-required",
+                "Set a token budget and/or a cost budget",
+                (value, context) =>
+                  value != null || context.parent.cost_budget_dollars !== ""
+              ),
+            cost_budget_dollars: Yup.number().min(
+              0,
+              "Cost Budget cannot be negative"
+            ),
             target_scope: Yup.string().required(
               "Target Scope is a required field"
             ),
@@ -100,10 +111,19 @@ export default function CreateRateLimitModal({
           })}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
+            // Empty token field → null (cost-only); the gate skips a null budget.
+            // Sending 0 would mean "0-token limit" and block every request.
+            const tokenBudget =
+              values.token_budget === "" ? null : Number(values.token_budget);
+            const costBudgetCents =
+              values.cost_budget_dollars === ""
+                ? null
+                : Math.round(Number(values.cost_budget_dollars) * 100);
             onSubmit(
               values.target_scope,
               Number(values.period_days) * HOURS_PER_DAY,
-              Number(values.token_budget),
+              tokenBudget,
+              costBudgetCents,
               Number(values.user_group_id)
             );
             return formikHelpers.setSubmitting(false);
@@ -147,7 +167,13 @@ export default function CreateRateLimitModal({
                 />
                 <TextFormField
                   name="token_budget"
-                  label="Token Budget (Thousands)"
+                  label="Token Budget (Thousands, optional)"
+                  type="number"
+                  placeholder=""
+                />
+                <TextFormField
+                  name="cost_budget_dollars"
+                  label="Cost Budget (USD per period, optional)"
                   type="number"
                   placeholder=""
                 />

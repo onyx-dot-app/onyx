@@ -204,13 +204,21 @@ const HOURS_PER_DAY = 24;
 interface TokenLimitPayload {
   tokenBudget: number | null;
   periodDays: number | null;
+  costBudgetDollars: number | null;
 }
 
 interface ExistingTokenLimit {
   token_id: number;
   enabled: boolean;
-  token_budget: number;
+  token_budget: number | null;
   period_hours: number;
+  cost_budget_cents: number | null;
+}
+
+interface ValidTokenLimit {
+  tokenBudget: number | null;
+  periodDays: number;
+  costBudgetCents: number | null;
 }
 
 async function saveTokenLimits(
@@ -218,11 +226,22 @@ async function saveTokenLimits(
   limits: TokenLimitPayload[],
   existing: ExistingTokenLimit[]
 ): Promise<void> {
-  // Filter to only valid (non-null) limits
-  const validLimits = limits.filter(
-    (l): l is { tokenBudget: number; periodDays: number } =>
-      l.tokenBudget != null && l.periodDays != null
-  );
+  const validLimits: ValidTokenLimit[] = limits
+    .map((l) => {
+      const tokenBudget =
+        l.tokenBudget != null && l.tokenBudget > 0 ? l.tokenBudget : null;
+      const cents =
+        l.costBudgetDollars != null
+          ? Math.round(l.costBudgetDollars * 100)
+          : null;
+      const costBudgetCents = cents != null && cents > 0 ? cents : null;
+      return { tokenBudget, periodDays: l.periodDays, costBudgetCents };
+    })
+    .filter(
+      (l): l is ValidTokenLimit =>
+        l.periodDays != null &&
+        (l.tokenBudget != null || l.costBudgetCents != null)
+    );
 
   // Update existing limits (match by index position)
   const toUpdate = Math.min(validLimits.length, existing.length);
@@ -238,6 +257,7 @@ async function saveTokenLimits(
           enabled: existingLimit.enabled,
           token_budget: limit.tokenBudget,
           period_hours: limit.periodDays * HOURS_PER_DAY,
+          cost_budget_cents: limit.costBudgetCents,
         }),
       }
     );
@@ -260,6 +280,7 @@ async function saveTokenLimits(
           enabled: true,
           token_budget: limit.tokenBudget,
           period_hours: limit.periodDays * HOURS_PER_DAY,
+          cost_budget_cents: limit.costBudgetCents,
         }),
       }
     );
