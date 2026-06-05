@@ -27,6 +27,7 @@ describe("UrlBar", () => {
 
     expect(urlText.tagName).toBe("P");
     expect(urlText).toHaveClass("truncate");
+    expect(urlText).toHaveAttribute("title", longPreviewUrl);
     expect(textWrapper).toHaveClass("min-w-0", "flex-1", "overflow-hidden");
     expect(urlPill).toHaveClass("min-w-0", "flex-1");
     expect(

@@ -147,7 +147,13 @@ export default function UrlBar({
             </Tooltip>
           )}
           <div className="min-w-0 flex-1 overflow-hidden">
-            <Text as="p" font="secondary-body" color="text-03" maxLines={1}>
+            <Text
+              as="p"
+              font="secondary-body"
+              color="text-03"
+              maxLines={1}
+              title={displayUrl}
+            >
               {displayUrl}
             </Text>
           </div>
