@@ -19,6 +19,8 @@ import {
   SKILL_TILE_TYPE,
 } from "@/lib/richInputTile";
 
+type PasteTileData = { text: string; tile: HTMLElement };
+
 export interface UseContentEditableOptions {
   initialContent?: string;
   wrapperRef: React.RefObject<HTMLDivElement | null>;
@@ -43,7 +45,7 @@ export interface UseContentEditableReturn {
   /** Insert a skill tile, replacing `beforeToken` (the `/<query>` before the caret). */
   insertSkillTile: (slug: string, name: string, beforeToken: string) => boolean;
   pasteText: (text: string) => void;
-  resetPasteTracking: () => void;
+  armPasteExpansion: () => void;
   handleCopy: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   handleCut: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   setCursorToEnd: () => void;
@@ -51,7 +53,7 @@ export interface UseContentEditableReturn {
   handleTileMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
   handleTileClick: (event: React.MouseEvent<HTMLDivElement>) => void;
   handleTileKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => boolean;
-  tilePopover: { text: string; tile: HTMLElement } | null;
+  tilePopover: PasteTileData | null;
   dismissTilePopover: () => void;
   updateTileText: (newText: string) => void;
 }
@@ -73,13 +75,9 @@ export function useContentEditable({
   const rafRef = useRef<number | null>(null);
   const wrapperPaddingYRef = useRef(0);
   const selectedTileRef = useRef<HTMLElement | null>(null);
-  const lastPasteTileRef = useRef<{ text: string; tile: HTMLElement } | null>(
-    null
-  );
-  const [tilePopover, setTilePopover] = useState<{
-    text: string;
-    tile: HTMLElement;
-  } | null>(null);
+  const lastPasteTileRef = useRef<PasteTileData | null>(null);
+  const pendingExpansionRef = useRef<PasteTileData | null>(null);
+  const [tilePopover, setTilePopover] = useState<PasteTileData | null>(null);
 
   useEffect(() => {
     onContentChangeRef.current = onContentChange;
@@ -335,23 +333,28 @@ export function useContentEditable({
 
   const pasteText = useCallback(
     (text: string) => {
+      const pendingExpansion = pendingExpansionRef.current;
+      pendingExpansionRef.current = null;
       if (pasteTilesEnabled && shouldCreatePasteTile(text)) {
-        const last = lastPasteTileRef.current;
-        if (last && last.text === text && ref.current?.contains(last.tile)) {
-          expandTile(last.tile);
+        if (
+          pendingExpansion &&
+          pendingExpansion.text === text &&
+          ref.current?.contains(pendingExpansion.tile)
+        ) {
+          expandTile(pendingExpansion.tile);
           return;
         }
         const tile = insertTileAtCursor(text);
         lastPasteTileRef.current = tile ? { text, tile } : null;
       } else {
         insertTextAtCursor(text);
-        lastPasteTileRef.current = null;
       }
     },
     [pasteTilesEnabled, insertTileAtCursor, insertTextAtCursor, expandTile]
   );
 
-  const resetPasteTracking = useCallback(() => {
+  const armPasteExpansion = useCallback(() => {
+    pendingExpansionRef.current = lastPasteTileRef.current;
     lastPasteTileRef.current = null;
   }, []);
 
@@ -646,7 +649,7 @@ export function useContentEditable({
     expandTile,
     insertSkillTile,
     pasteText,
-    resetPasteTracking,
+    armPasteExpansion,
     handleCopy,
     handleCut,
     setCursorToEnd,

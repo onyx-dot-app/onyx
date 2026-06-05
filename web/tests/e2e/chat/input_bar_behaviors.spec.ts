@@ -645,7 +645,7 @@ test.describe("Paste Tiles", () => {
     await chatPage.inputBar.expectText("line 4");
   });
 
-  test("a paste handled outside pasteText breaks the back-to-back expand", async ({
+  test("an intervening empty paste prevents the back-to-back expand", async ({
     chatPage,
   }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);

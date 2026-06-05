@@ -155,7 +155,7 @@ const AppInputBar = React.memo(
       handleCompositionStart,
       handleCompositionEnd,
       pasteText,
-      resetPasteTracking,
+      armPasteExpansion,
       handleCopy,
       handleCut,
       setCursorToEnd,
@@ -371,20 +371,17 @@ const AppInputBar = React.memo(
 
     function handlePaste(event: React.ClipboardEvent) {
       if (disabled) return;
+      armPasteExpansion();
       const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
       if (pastedFiles.length > 0) {
         event.preventDefault();
-        resetPasteTracking();
         handleFileUpload(pastedFiles);
         return;
       }
 
       event.preventDefault();
       const text = event.clipboardData.getData("text/plain");
-      if (!text) {
-        resetPasteTracking();
-        return;
-      }
+      if (!text) return;
 
       pasteText(text);
     }
