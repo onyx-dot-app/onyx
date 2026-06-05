@@ -409,7 +409,7 @@ def build_container_create_kwargs(
     sandbox_proxy_port: int | None = None,
     proxy_ca_volume_name: str | None = None,
 ) -> ContainerCreateKwargs:
-    """Build the kwargs dict for ``DockerClient.containers.create``.
+    """Builds the kwargs dict for ``DockerClient.containers.create``.
 
     Two postures gated on ``sandbox_proxy_host`` truthiness:
 
@@ -515,7 +515,7 @@ def build_container_create_kwargs(
             "mode": "ro",
         }
         # Override the image's ENTRYPOINT (set to entrypoint.sh in #11748);
-        # without this, Docker prepends entrypoint.sh and our firewall-init
+        # Without this, Docker prepends entrypoint.sh and our firewall-init
         # never runs -- the proxy lockdown + setpriv drop are silently skipped.
         entrypoint = ["/workspace/firewall-init.sh"]
         command = ["/workspace/entrypoint.sh"]
@@ -574,8 +574,8 @@ class DockerSandboxManager(SandboxManager):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    # Publish to the cache only after _initialize() succeeds, so a
-                    # transient init failure (e.g. the Docker socket briefly
+                    # Publish to the cache only after _initialize() succeeds, so
+                    # a transient init failure (e.g. the Docker socket briefly
                     # unavailable) can't leave a half-built singleton that every
                     # later caller reuses; the next call retries instead.
                     instance = super().__new__(cls)
@@ -819,7 +819,7 @@ class DockerSandboxManager(SandboxManager):
         opencode_config_json: str,
     ) -> Container:
         """
-        Run docker create + start with our security/network/labels invariants.
+        Runs docker create + start with our security/network/labels invariants.
         """
         # Proxy posture is gated on SANDBOX_PROXY_HOST; threaded through
         # build_container_create_kwargs to layer on the legacy posture without

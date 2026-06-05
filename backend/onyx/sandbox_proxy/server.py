@@ -120,10 +120,10 @@ def _start_healthz_server(readiness: _Readiness, lookup: SandboxIPLookup) -> HTT
 
 
 def _bootstrap_ca() -> MaterializedCA:
-    # Pass pem_path explicitly so it tracks _MITM_CONFDIR. ca.py's
-    # default points at /var/run/...; we cannot let the two drift, since
-    # mitmproxy auto-loads $confdir/mitmproxy-ca.pem and would otherwise
-    # never see what CABootstrap wrote.
+    # Pass pem_path explicitly so it tracks _MITM_CONFDIR. ca.py's default
+    # points at /var/run/...; we cannot let the two drift, since mitmproxy
+    # auto-loads $confdir/mitmproxy-ca.pem and would otherwise never see what
+    # CABootstrap wrote.
     return CABootstrap(
         store=build_ca_store(),
         pem_path=f"{_MITM_CONFDIR}/mitmproxy-ca.pem",
