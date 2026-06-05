@@ -39,12 +39,10 @@ export interface UseContentEditableReturn {
   handleCompositionEnd: () => void;
   insertTextAtCursor: (text: string) => void;
   insertTileAtCursor: (text: string) => HTMLElement | null;
-  /** Replace a paste tile with its full text inline at its position. */
   expandTile: (tile: HTMLElement) => void;
   /** Insert a skill tile, replacing `beforeToken` (the `/<query>` before the caret). */
   insertSkillTile: (slug: string, name: string, beforeToken: string) => boolean;
   pasteText: (text: string) => void;
-  /** Clear double-paste tracking for paste events not routed through pasteText. */
   resetPasteTracking: () => void;
   handleCopy: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   handleCut: (event: React.ClipboardEvent<HTMLDivElement>) => void;
@@ -75,9 +73,6 @@ export function useContentEditable({
   const rafRef = useRef<number | null>(null);
   const wrapperPaddingYRef = useRef(0);
   const selectedTileRef = useRef<HTMLElement | null>(null);
-  // Most recent paste's tile, so a second back-to-back paste of the same text
-  // expands it inline instead of stacking a duplicate. Cleared by any
-  // intervening keystroke or click (see handleTileKeyDown).
   const lastPasteTileRef = useRef<{ text: string; tile: HTMLElement } | null>(
     null
   );
@@ -356,9 +351,6 @@ export function useContentEditable({
     [pasteTilesEnabled, insertTileAtCursor, insertTextAtCursor, expandTile]
   );
 
-  // Hosts call this for paste events handled without reaching pasteText (file
-  // pastes, intercepted `/skill` pastes); since Ctrl/Cmd+V is exempted from the
-  // keydown reset, the tracker would otherwise stay armed across them.
   const resetPasteTracking = useCallback(() => {
     lastPasteTileRef.current = null;
   }, []);
@@ -468,8 +460,6 @@ export function useContentEditable({
 
   const handleTileKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>): boolean => {
-      // A keystroke between two pastes breaks the back-to-back expand, but
-      // modifier holds and Ctrl/Cmd+V itself are part of pasting.
       const isModifier =
         event.key === "Control" ||
         event.key === "Meta" ||

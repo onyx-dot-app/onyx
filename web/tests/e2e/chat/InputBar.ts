@@ -100,8 +100,6 @@ export class InputBar {
     }, text);
   }
 
-  // Dispatches a paste with neither text nor files — exercises the paste-handler
-  // path that returns before pasteText (like a file or `/skill` paste).
   async pasteEmpty(): Promise<void> {
     await this.page.evaluate(() => {
       const el = document.getElementById("onyx-chat-input-textbox")!;

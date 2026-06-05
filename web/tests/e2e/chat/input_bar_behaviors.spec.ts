@@ -542,7 +542,6 @@ test.describe("Paste Tiles", () => {
 
   test("multiple tiles can coexist", async ({ chatPage }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);
-    // Breaks the back-to-back sequence; without it the second paste expands.
     await chatPage.page.keyboard.press("End");
     await chatPage.inputBar.paste(LARGE_TEXT);
     await chatPage.inputBar.expectTileCount(2);
@@ -650,8 +649,6 @@ test.describe("Paste Tiles", () => {
     chatPage,
   }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);
-    // Stands in for a file/`/skill` paste: returns before pasteText, so the
-    // next identical text paste must create a new tile, not expand the first.
     await chatPage.inputBar.pasteEmpty();
     await chatPage.inputBar.paste(LARGE_TEXT);
     await chatPage.inputBar.expectTileCount(2);
