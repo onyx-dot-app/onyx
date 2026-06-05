@@ -76,9 +76,12 @@ class DiscordCacheManager:
                         logger.exception("Failed to refresh tenant %s", tenant_id)
                         return None
 
+                # allow_failures keeps per-tenant isolation explicit and independent
+                # of load()'s exception handling: one tenant can't abort the batch.
                 results: list[TenantDiscordData | None] = await asyncio.to_thread(
                     run_functions_tuples_in_parallel,
                     [(load, (tenant_id,)) for tenant_id in tenant_ids],
+                    allow_failures=True,
                     max_workers=_REFRESH_MAX_WORKERS,
                 )
 
