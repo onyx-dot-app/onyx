@@ -15,19 +15,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi.testclient import TestClient
+import httpx
 
 from tests.integration.common_utils.constants import API_SERVER_URL
 
-_test_client: TestClient | None = None
+# Typed as ``httpx.Client`` so both FastAPI's ``TestClient`` (in-process, the
+# default) and a raw ``httpx.Client`` (used by the docker e2e to hit a real
+# dockerized api_server) satisfy the signature.
+_test_client: httpx.Client | None = None
 
 
-def set_test_client(c: TestClient | None) -> None:
+def set_test_client(c: httpx.Client | None) -> None:
     global _test_client
     _test_client = c
 
 
-def _require_client() -> TestClient:
+def _require_client() -> httpx.Client:
     if _test_client is None:
         raise RuntimeError(
             "TestClient not initialized; integration conftest must call "

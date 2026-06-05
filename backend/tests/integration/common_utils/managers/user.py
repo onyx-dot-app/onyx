@@ -104,8 +104,9 @@ class UserManager:
         if not session_cookie:
             raise Exception("Failed to login")
 
-        # Set cookies in the headers
-        test_user.headers["Cookie"] = f"fastapiusersauth={session_cookie}; "
+        # Set cookies in the headers. No trailing "; " -- httpx rejects it
+        # as an illegal header value; TestClient is lenient about both.
+        test_user.headers["Cookie"] = f"fastapiusersauth={session_cookie}"
         test_user.cookies = {"fastapiusersauth": session_cookie}
 
         # TestClient shares a single cookie jar across the whole session.
