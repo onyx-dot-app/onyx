@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 45
     permissions:
+      contents: read # needed to checkout the repo on private repos (no-op on public)
       security-events: write # needed for SARIF uploads
     steps:
       - name: Checkout repository
