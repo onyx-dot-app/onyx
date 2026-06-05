@@ -48,12 +48,13 @@ import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { SvgSidebar, SvgChevronDown } from "@opal/icons";
+import { SvgBubbleText, SvgSidebar, SvgChevronDown } from "@opal/icons";
 import { Button as OpalButton, Tooltip } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
+import { useShowThinking } from "@/app/craft/hooks/useShowThinking";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
@@ -113,6 +114,7 @@ export default function BuildChatPanel({
   const viewedSubagentSessionId = useViewedSubagentSessionId();
   const isViewingSubagent = viewedSubagentSessionId !== null;
   const reduceMotion = useReducedMotion();
+  const showThinking = useShowThinking();
 
   const { limits, refreshLimits } = useUsageLimits();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -547,6 +549,23 @@ export default function BuildChatPanel({
               toggle stays pinned to the right edge, so the status chip's width
               changes grow leftward into empty space without shifting anything. */}
               <div className="flex flex-row items-center gap-2 shrink-0">
+                <OpalButton
+                  icon={SvgBubbleText}
+                  size="sm"
+                  prominence={showThinking.enabled ? "secondary" : "tertiary"}
+                  onClick={showThinking.toggle}
+                  tooltip={
+                    showThinking.enabled
+                      ? "Hide saved thinking"
+                      : "Show saved thinking"
+                  }
+                  aria-label={
+                    showThinking.enabled
+                      ? "Hide saved thinking"
+                      : "Show saved thinking"
+                  }
+                  aria-pressed={showThinking.enabled}
+                />
                 <SandboxStatusIndicator />
                 {/* Output panel toggle — same icon for open and close */}
                 {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
@@ -599,6 +618,7 @@ export default function BuildChatPanel({
                       messages={session?.messages ?? []}
                       streamItems={session?.streamItems ?? []}
                       isStreaming={displayIsRunning}
+                      showThinkingDetails={showThinking.enabled}
                       autoScrollEnabled={isAtBottom}
                       scrollContainerRef={scrollContainerRef}
                       trailingAssistantSlot={

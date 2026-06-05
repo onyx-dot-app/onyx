@@ -30,6 +30,8 @@ interface BuildMessageListProps {
   messages: BuildMessage[];
   streamItems: StreamItem[];
   isStreaming?: boolean;
+  /** Show completed thought packets in saved/restored turns. Live thinking always renders. */
+  showThinkingDetails?: boolean;
   /** Whether auto-scroll is enabled (user is at bottom) */
   autoScrollEnabled?: boolean;
   /**
@@ -59,6 +61,7 @@ export default function BuildMessageList({
   messages,
   streamItems,
   isStreaming = false,
+  showThinkingDetails = false,
   autoScrollEnabled = true,
   scrollContainerRef,
   trailingAssistantSlot,
@@ -83,23 +86,30 @@ export default function BuildMessageList({
 
   const renderStreamItems = (
     rawItems: StreamItem[],
-    opts: { isCurrentStream: boolean; extractLatestTodo: boolean }
+    opts: {
+      isCurrentStream: boolean;
+      extractLatestTodo: boolean;
+      showSettledThinking: boolean;
+    }
   ): { nodes: React.ReactNode[]; pinnedTodo: TodoListState | null } => {
     // Render items in stream order (tools, text, thinking interleaved).
     //
     // Filtering rules that apply first:
     // - Only the LATEST todo_list is kept (either pinned via extractLatestTodo
     //   or rendered inline at its original position).
-    // - Thinking is ephemeral: the card shows only while the model is actively
-    //   thinking and disappears once that block settles.
+    // - Live thinking always shows as a small progress row. Settled thinking
+    //   only appears when the user opts into thought details.
     let latestTodoIdx = -1;
     rawItems.forEach((it, idx) => {
       if (it.type === "todo_list") latestTodoIdx = idx;
     });
 
     const items = rawItems.filter((it, idx) => {
-      // Drop settled thinking entirely — it's only shown live, in progress.
-      if (it.type === "thinking" && !it.isStreaming) {
+      if (
+        it.type === "thinking" &&
+        !it.isStreaming &&
+        !opts.showSettledThinking
+      ) {
         return false;
       }
       // Collapse to one todo_list per turn.
@@ -215,6 +225,7 @@ export default function BuildMessageList({
         ? renderStreamItems(savedStreamItems, {
             isCurrentStream: false,
             extractLatestTodo: true,
+            showSettledThinking: showThinkingDetails,
           })
         : null;
 
@@ -260,6 +271,7 @@ export default function BuildMessageList({
     ? renderStreamItems(streamItems, {
         isCurrentStream: true,
         extractLatestTodo: true,
+        showSettledThinking: showThinkingDetails,
       })
     : null;
 

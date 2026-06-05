@@ -70,6 +70,36 @@ interface ThinkingCardProps {
   isStreaming: boolean;
 }
 
+function ThinkingActivityIcon({ isStreaming }: { isStreaming: boolean }) {
+  if (!isStreaming) {
+    return <SvgBubbleText className="size-4 shrink-0 stroke-text-03" />;
+  }
+
+  return (
+    <span
+      aria-hidden
+      className="relative flex size-4 shrink-0 items-center justify-center"
+    >
+      <span className="absolute size-3 rounded-full bg-status-info-03 opacity-35 motion-safe:animate-ping motion-reduce:hidden" />
+      <span className="size-1.5 rounded-full bg-status-info-05" />
+    </span>
+  );
+}
+
+function ThinkingDots() {
+  return (
+    <span aria-hidden className="flex items-center gap-0.5">
+      {[0, 1, 2].map((idx) => (
+        <span
+          key={idx}
+          className="size-1 rounded-full bg-status-info-05 opacity-60 motion-safe:animate-pulse motion-reduce:animate-none"
+          style={{ animationDelay: `${idx * 120}ms` }}
+        />
+      ))}
+    </span>
+  );
+}
+
 function formatTokenCount(chars: number): string {
   // ~4 chars per token; coarse but consistent with Claude/OpenAI's "Thought for Ns"
   // approximations when wall-clock timing isn't tracked.
@@ -92,15 +122,16 @@ export default function ThinkingCard({
       <CollapsibleTrigger asChild>
         <button
           className={cn(
-            "group w-full text-left px-3 py-2 rounded-md transition-colors",
-            "hover:bg-background-tint-02"
+            "group w-full text-left px-3 py-1.5 rounded-md transition-colors duration-200",
+            "hover:bg-background-tint-02 motion-reduce:transition-none"
           )}
         >
           <div className="flex items-center gap-2 min-w-0 w-full">
-            <SvgBubbleText className="size-4 shrink-0 stroke-text-03" />
+            <ThinkingActivityIcon isStreaming={isStreaming} />
             <Text font="main-ui-muted" color="text-04" nowrap>
               {isStreaming ? "Thinking" : "Thought"}
             </Text>
+            {isStreaming && <ThinkingDots />}
             {!isStreaming && (
               <span className="shrink-0">
                 <Tag title={chip} size="sm" color="gray" />
@@ -108,7 +139,7 @@ export default function ThinkingCard({
             )}
             <SvgChevronDown
               className={cn(
-                "size-4 stroke-text-03 transition-all duration-150 shrink-0 ml-auto",
+                "size-4 stroke-text-03 transition-all duration-150 shrink-0 ml-auto motion-reduce:transition-none",
                 "group-hover:stroke-text-05",
                 !isOpen && "-rotate-90"
               )}
