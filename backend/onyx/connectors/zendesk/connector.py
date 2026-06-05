@@ -39,6 +39,8 @@ from onyx.utils.retry_wrapper import retry_builder
 MAX_PAGE_SIZE = 30  # Zendesk API maximum
 MAX_AUTHOR_MAP_SIZE = 50_000  # Reset author map cache if it gets too large
 _SLIM_BATCH_SIZE = 1000
+# Upper bound on how long we'll honor a server-provided Retry-After.
+_MAX_RETRY_AFTER_SLEEP_SECONDS = 60
 
 
 class ZendeskCredentialsNotSetUpError(PermissionError):
@@ -82,7 +84,7 @@ def request_with_rate_limit(
             retry_after = parse_retry_after_seconds(response.headers.get("Retry-After"))
             if retry_after is not None:
                 # Sleep for the duration indicated by the Retry-After header
-                time.sleep(retry_after)
+                time.sleep(min(retry_after, _MAX_RETRY_AFTER_SLEEP_SECONDS))
 
         elif (
             response.status_code == 403

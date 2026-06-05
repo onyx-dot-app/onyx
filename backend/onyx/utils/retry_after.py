@@ -1,3 +1,4 @@
+import math
 from datetime import datetime
 from datetime import timezone
 from email.utils import parsedate_to_datetime
@@ -25,12 +26,13 @@ def parse_retry_after_seconds(value: str | None) -> float | None:
     if not text:
         return None
 
-    # delay-seconds form. The spec says integer, but some servers send floats;
-    # accept both and floor at 0 since a negative wait is meaningless.
+    # The spec says integer, but some servers send floats. Reject nan/inf
     try:
-        return max(float(text), 0.0)
+        seconds = float(text)
     except ValueError:
-        pass
+        seconds = None
+    if seconds is not None:
+        return max(seconds, 0.0) if math.isfinite(seconds) else None
 
     # HTTP-date form.
     try:

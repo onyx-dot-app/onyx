@@ -29,6 +29,15 @@ def test_returns_none_for_missing_or_unparseable(value: str | None) -> None:
     assert parse_retry_after_seconds(value) is None
 
 
+@pytest.mark.parametrize(
+    "value", ["nan", "inf", "-inf", "infinity", "Inf", "NaN", "1e400"]
+)
+def test_rejects_non_finite_numbers(value: str) -> None:
+    # These parse as floats but are not valid delays; they must not produce an
+    # undefined or unbounded sleep.
+    assert parse_retry_after_seconds(value) is None
+
+
 def test_parses_future_http_date() -> None:
     future = datetime.now(timezone.utc) + timedelta(seconds=120)
     parsed = parse_retry_after_seconds(format_datetime(future, usegmt=True))

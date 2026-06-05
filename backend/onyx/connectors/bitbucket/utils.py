@@ -22,6 +22,10 @@ from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
+# Upper bound on how long we'll honor a server-provided Retry-After before
+# sleeping. Bitbucket's rate-limit window is per-minute.
+_MAX_RETRY_AFTER_SLEEP_SECONDS = 60
+
 # Fields requested from Bitbucket PR list endpoint to ensure rich PR data
 PR_LIST_RESPONSE_FIELDS: str = ",".join(
     [
@@ -118,7 +122,7 @@ def bitbucket_get(
                 else None
             )
             if retry_after is not None:
-                time.sleep(retry_after)
+                time.sleep(min(retry_after, _MAX_RETRY_AFTER_SLEEP_SECONDS))
             raise BitbucketRetriableError("Bitbucket rate limit exceeded (429)") from e
         if status is not None and 500 <= status < 600:
             raise BitbucketRetriableError(f"Bitbucket server error: {status}") from e

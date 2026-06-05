@@ -97,7 +97,10 @@ R = TypeVar("R", bound=Callable[..., requests.Response])
 
 
 def wrap_request_to_handle_ratelimiting(
-    request_fn: R, default_wait_time_sec: int = 30, max_waits: int = 30
+    request_fn: R,
+    default_wait_time_sec: int = 30,
+    max_waits: int = 30,
+    max_wait_time_sec: int = 300,
 ) -> R:
     def wrapped_request(*args: list, **kwargs: dict[str, Any]) -> requests.Response:
         for _ in range(max_waits):
@@ -105,6 +108,8 @@ def wrap_request_to_handle_ratelimiting(
             if response.status_code == 429:
                 parsed = parse_retry_after_seconds(response.headers.get("Retry-After"))
                 wait_time = parsed if parsed is not None else default_wait_time_sec
+                # Cap so an absurd Retry-After can't stall the caller indefinitely.
+                wait_time = min(wait_time, max_wait_time_sec)
 
                 time.sleep(wait_time)
                 continue
