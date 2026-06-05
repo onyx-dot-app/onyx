@@ -10,6 +10,7 @@ import json
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -31,14 +32,38 @@ def _prune(value: Any) -> Any:
     return value
 
 
-def _call(method: str, body: dict[str, Any]) -> dict[str, Any]:
+def _form_value(value: Any) -> str:
+    """Coerce a param value for x-www-form-urlencoded Slack requests.
+    Booleans become "true"/"false"; nested values are JSON-encoded
+    (Slack reads complex args like blocks as JSON strings)."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value)
+    return str(value)
+
+
+def _call(method: str, body: dict[str, Any], as_json: bool = False) -> dict[str, Any]:
     """POST to a Slack method; return the parsed JSON. Raises on
-    transport failure (handled by the caller)."""
+    transport failure (handled by the caller).
+
+    Args are form-encoded by default, not JSON: Slack's web/query methods
+    (conversations.list, users.list, etc.) read params from the
+    form-encoded body and silently ignore a JSON body. Set as_json=True
+    for the few methods that require an application/json body."""
+    if as_json:
+        data = json.dumps(body).encode("utf-8")
+        content_type = "application/json; charset=utf-8"
+    else:
+        data = urllib.parse.urlencode(
+            {k: _form_value(v) for k, v in body.items()}
+        ).encode("utf-8")
+        content_type = "application/x-www-form-urlencoded; charset=utf-8"
     req = urllib.request.Request(  # noqa: S310 — fixed https base url
         _BASE + method,
-        data=json.dumps(body).encode("utf-8"),
+        data=data,
         method="POST",
-        headers={"Content-Type": "application/json; charset=utf-8"},
+        headers={"Content-Type": content_type},
     )
     with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_SECONDS) as resp:  # noqa: S310
         return json.loads(resp.read().decode("utf-8"))
@@ -110,7 +135,27 @@ def _build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("call", help="raw Slack method")
     sp.add_argument("method")
     sp.add_argument("json_args", nargs="?")
+    sp.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="send args as a JSON body (for JSON-only methods)",
+    )
     return p
+
+
+def _raw_call(method: str, json_args: str | None, as_json: bool) -> dict[str, Any]:
+    """`call` escape hatch: invoke an arbitrary Slack method with a
+    JSON object of args."""
+    if not _METHOD_RE.match(method):
+        return {"ok": False, "error": "invalid_method_name"}
+    args: dict[str, Any] = {}
+    if json_args:
+        parsed = json.loads(json_args)
+        if not isinstance(parsed, dict):
+            return {"ok": False, "error": "json_args_not_object"}
+        args = parsed
+    return _call(method, args, as_json=as_json)
 
 
 def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
@@ -147,16 +192,8 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
     if a.cmd == "post":
         return _call("chat.postMessage", {"channel": a.channel, "text": a.text})
 
-    # `call` raw escape hatch
-    if not _METHOD_RE.match(a.method):
-        return {"ok": False, "error": "invalid_method_name"}
-    args: dict[str, Any] = {}
-    if a.json_args:
-        parsed = json.loads(a.json_args)
-        if not isinstance(parsed, dict):
-            return {"ok": False, "error": "json_args_not_object"}
-        args = parsed
-    return _call(a.method, args)
+    # `call` is the only remaining subcommand (subparser is required).
+    return _raw_call(a.method, a.json_args, a.as_json)
 
 
 def main(argv: list[str]) -> int:
