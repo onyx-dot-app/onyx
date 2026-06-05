@@ -47,6 +47,7 @@ class OnyxError(Exception):
         detail: str | None = None,
         *,
         status_code_override: int | None = None,
+        extra: dict[str, object] | None = None,
         headers: dict[str, str] | None = None,
     ) -> None:
         resolved_detail = detail or error_code.code
@@ -54,6 +55,9 @@ class OnyxError(Exception):
         self.error_code = error_code
         self.detail = resolved_detail
         self._status_code_override = status_code_override
+        # extra: machine-readable fields merged into the JSON body (e.g. reset_at).
+        # headers: response headers the FE/clients need (e.g. Retry-After).
+        self.extra = extra
         self.headers = headers
 
     @property
@@ -71,9 +75,13 @@ def log_onyx_error(exc: OnyxError) -> None:
 
 
 def onyx_error_to_json_response(exc: OnyxError) -> JSONResponse:
+    content = exc.error_code.detail(exc.detail)
+    if exc.extra:
+        # extra first so the canonical error_code/detail can't be overwritten.
+        content = {**exc.extra, **content}
     return JSONResponse(
         status_code=exc.status_code,
-        content=exc.error_code.detail(exc.detail),
+        content=content,
         headers=exc.headers,
     )
 
