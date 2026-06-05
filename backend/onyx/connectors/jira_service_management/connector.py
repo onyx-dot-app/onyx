@@ -1,5 +1,5 @@
 import copy
-from collections.abc import Generator, Iterable, Iterator
+from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
 
@@ -26,7 +26,8 @@ class JiraServiceManagementConnector(JiraConnector):
         try:
             resp = self.jira_client._session.get(url)
             resp.raise_for_status()
-            return str(resp.json().get("id"))
+            desk_id = resp.json().get("id")
+            return str(desk_id) if desk_id is not None else None
         except Exception as e:
             logger.error("Failed to retrieve service desk ID for project %s: %s", project_key, e)
             return None
@@ -77,13 +78,9 @@ class JiraServiceManagementConnector(JiraConnector):
         end: SecondsSinceUnixEpoch,
         checkpoint: JiraConnectorCheckpoint,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
-        try:
-            return self._load_from_checkpoint_jsm(
-                start, end, checkpoint, include_permissions=False
-            )
-        except Exception as e:
-            logger.error("Failed to load JSM documents from checkpoint: %s", e)
-            raise e
+        return self._load_from_checkpoint_jsm(
+            start, end, checkpoint, include_permissions=False
+        )
 
     def load_from_checkpoint_with_perm_sync(
         self,
@@ -91,13 +88,9 @@ class JiraServiceManagementConnector(JiraConnector):
         end: SecondsSinceUnixEpoch,
         checkpoint: JiraConnectorCheckpoint,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
-        try:
-            return self._load_from_checkpoint_jsm(
-                start, end, checkpoint, include_permissions=True
-            )
-        except Exception as e:
-            logger.error("Failed to load JSM documents from checkpoint with perm sync: %s", e)
-            raise e
+        return self._load_from_checkpoint_jsm(
+            start, end, checkpoint, include_permissions=True
+        )
 
     def _load_from_checkpoint_jsm(
         self,
@@ -158,12 +151,7 @@ class JiraServiceManagementConnector(JiraConnector):
                     latest_activity_dt = max([created_dt, status_dt] + comment_dts)
                     latest_activity_ts = latest_activity_dt.timestamp()
 
-                    if latest_activity_ts < start:
-                        has_more_requests = False
-                        new_checkpoint.has_more = False
-                        break
-
-                    if latest_activity_ts > end:
+                    if latest_activity_ts < start or latest_activity_ts > end:
                         current_offset += 1
                         continue
 
@@ -325,11 +313,7 @@ class JiraServiceManagementConnector(JiraConnector):
                     latest_activity_dt = max([created_dt, status_dt] + comment_dts)
                     latest_activity_ts = latest_activity_dt.timestamp()
 
-                    if latest_activity_ts < start:
-                        has_more_requests = False
-                        break
-
-                    if latest_activity_ts > end:
+                    if latest_activity_ts < start or latest_activity_ts > end:
                         current_offset += 1
                         continue
 

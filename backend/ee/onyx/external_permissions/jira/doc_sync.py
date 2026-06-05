@@ -8,11 +8,10 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.connectors.jira_service_management.connector import JiraServiceManagementConnector
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-from onyx.connectors.jira_service_management.connector import JiraServiceManagementConnector
 
 JIRA_DOC_SYNC_TAG = "jira_doc_sync"
 JSM_DOC_SYNC_TAG = "jsm_doc_sync"

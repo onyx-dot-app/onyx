@@ -182,7 +182,7 @@ def test_load_from_checkpoint_date_filtering() -> None:
                 ],
             },
         ],
-        "isLastPage": False,
+        "isLastPage": True,
     }
 
     comments_resp = MagicMock()
