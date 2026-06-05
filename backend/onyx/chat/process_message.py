@@ -1265,7 +1265,7 @@ def _run_models(
 
             # Citations are emitted only when both the request allows them
             # and the agent (persona) is configured to include them.
-            include_citations = setup.new_msg_req.include_citations and (
+            include_citations: bool = setup.new_msg_req.include_citations and (
                 setup.persona.include_citations if setup.persona else True
             )
 
