@@ -20,7 +20,7 @@ from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.matching.engine import ActionMatch
+from onyx.external_apps.matching.engine import MatchedAction
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.approvals.api import DecisionBody
 from onyx.server.features.build.approvals.api import list_live_approvals
@@ -601,13 +601,13 @@ def test_list_live_approvals_returns_multi_action_view(
 
     # Strictest-first ordering is the API contract surface; ASK > ALWAYS.
     expected_actions = [
-        ActionMatch(
+        MatchedAction(
             action_type="linear.issues.create",
             display_name="Create an issue",
             description="Create a new issue.",
             policy=EndpointPolicy.ASK,
         ),
-        ActionMatch(
+        MatchedAction(
             action_type="linear.viewer.read",
             display_name="Read the connected user",
             description="Read the authenticated user's profile (viewer).",

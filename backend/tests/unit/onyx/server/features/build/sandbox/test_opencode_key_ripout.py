@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 
 import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
+from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
@@ -33,7 +34,7 @@ def test_placeholder_swap_replaces_real_keys_keeps_routing() -> None:
             _config("anthropic", _REAL_KEY, api_base="https://gw.example/v1"),
         ]
     )
-    assert [c.api_key for c in swapped] == [ksm._PROXY_INJECTED_PLACEHOLDER] * 2
+    assert [c.api_key for c in swapped] == [SANDBOX_PROXY_INJECTED_PLACEHOLDER] * 2
     # provider / model / api_base (non-secret routing inputs) are untouched.
     assert [c.provider for c in swapped] == ["openai", "anthropic"]
     assert swapped[1].api_base == "https://gw.example/v1"
@@ -57,5 +58,5 @@ def test_rendered_opencode_config_leaks_no_real_key() -> None:
     for provider in ("openai", "anthropic"):
         assert (
             config["provider"][provider]["options"]["apiKey"]
-            == ksm._PROXY_INJECTED_PLACEHOLDER
+            == SANDBOX_PROXY_INJECTED_PLACEHOLDER
         )

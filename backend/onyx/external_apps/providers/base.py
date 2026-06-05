@@ -1,5 +1,6 @@
 from abc import ABC
 from abc import abstractmethod
+from collections.abc import Mapping
 from typing import Any
 from typing import ClassVar
 
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 
 from onyx.db.enums import ExternalAppType
+from onyx.external_apps.presentation.payload_decoders import PayloadDecoder
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.utils.logger import setup_logger
 
@@ -144,6 +146,11 @@ class ExternalAppProvider(ABC):
                 f"{cls.__name__} must define `spec` as a "
                 f"{cls._spec_type.__name__} instance."
             )
+
+    def payload_decoders(self) -> Mapping[str, PayloadDecoder]:
+        """Display decoders for this provider's request bodies, keyed by
+        ``action_type``. Empty by default; override to register decoders."""
+        return {}
 
 
 class OnyxManagedExtApp(ExternalAppProvider, abstract=True):

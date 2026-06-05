@@ -98,27 +98,40 @@ Iterate on `sandbox_proxy/` code with the VSCode debugger attached.
 
    ```bash
    source .venv/bin/activate
-   SANDBOX_BACKEND=docker python -m onyx.sandbox_proxy.server
+   PYTHONPATH=./backend \
+   SANDBOX_BACKEND=docker \
+   SANDBOX_PROXY_LISTEN_PORT=8888 \
+   python -m onyx.sandbox_proxy.server
    ```
+
+   `PYTHONPATH=./backend` is required because the `onyx` package lives
+   under `backend/`; running from the repo root without it raises
+   `ModuleNotFoundError`. Same applies to step 3 below.
 
    Or add a VSCode launch config that points at
    `backend/onyx/sandbox_proxy/server.py` with the same env. The
    proxy reads `.vscode/.env` for Postgres + Redis hosts.
 
-   Defaults: the proxy listens on `0.0.0.0:8080` (mitm) and
-   `0.0.0.0:8081` (healthz). The `FileCAStore` writes to
-   `/var/lib/sandbox-proxy/ca/` by default — set
-   `SANDBOX_PROXY_CA_VOLUME_PATH` to a writable local path
-   (e.g. `/tmp/sandbox-proxy-ca`) so the local proxy doesn't need
-   root.
+   The `SANDBOX_PROXY_LISTEN_PORT=8888` override is load-bearing for
+   Recipe B: the proxy defaults to 8080, but api_server (step 3) also
+   binds 8080 on the host, so we move the proxy elsewhere. Healthz
+   stays on its 8081 default (free).
+
+   The `FileCAStore` writes to `/var/lib/sandbox-proxy/ca/`. That path
+   is hardcoded (`SANDBOX_PROXY_CA_VOLUME_PATH` in `configs.py` is a
+   constant, not env-driven), so the local proxy needs write access
+   there — either pre-create it with your uid (`sudo mkdir -p
+   /var/lib/sandbox-proxy/ca && sudo chown $USER /var/lib/sandbox-proxy/ca`)
+   or run the proxy via `sudo`.
 
 3. **Run api_server locally** with the docker backend pointed at your
    local proxy:
 
    ```bash
+   PYTHONPATH=./backend \
    SANDBOX_BACKEND=docker \
    SANDBOX_PROXY_HOST=host.docker.internal \
-   SANDBOX_PROXY_PORT=8080 \
+   SANDBOX_PROXY_PORT=8888 \
    uvicorn onyx.main:app --host 0.0.0.0 --port 8080
    ```
 

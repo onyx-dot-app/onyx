@@ -116,6 +116,8 @@ jobs:
     permissions:
       id-token: write
       contents: read
+      # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
+      pull-requests: read
     # See https://runs-on.com/runners/linux/
     runs-on:
       [
