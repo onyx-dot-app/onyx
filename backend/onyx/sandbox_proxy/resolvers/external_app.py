@@ -1,7 +1,7 @@
 """External-app credential resolver.
 
 Claims a request iff the matcher has attributed it to a connected `ExternalApp`
-(`ctx.match is not None`) and renders the app's `auth_template` from the org +
+(`ctx.matched_actions is not None`) and renders the app's `auth_template` from the org +
 per-user credentials via `resolve_injection_headers`. Per-header fail-open
 behaviour for missing placeholders lives in `build_auth_headers`.
 """
@@ -30,11 +30,11 @@ class ExternalAppResolver(CredentialResolver):
         ctx: InjectionContext,
     ) -> bool:
         # The matcher has already proven URL→app attribution; host is unused.
-        return ctx.match is not None
+        return ctx.matched_actions is not None
 
     def resolve(self, request: http.Request, ctx: InjectionContext) -> dict[str, str]:
-        match = ctx.match
-        if match is None:
+        matched_actions = ctx.matched_actions
+        if matched_actions is None:
             # `claims` guarantees this is unreachable; explicit raise so a
             # broken Protocol contract surfaces as a 403, not a NoneType crash.
             raise CredentialUnavailableError(
@@ -48,13 +48,13 @@ class ExternalAppResolver(CredentialResolver):
         # clears the credential, which renders as empty headers below).
         ensure_fresh_credentials(
             ctx.sandbox.tenant_id,
-            match.external_app_id,
+            matched_actions.external_app_id,
             ctx.sandbox.user_id,
         )
 
         with get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id) as db:
             headers = resolve_injection_headers(
-                db, match.external_app_id, ctx.sandbox.user_id
+                db, matched_actions.external_app_id, ctx.sandbox.user_id
             )
 
         # Per-app audit line so `external_app_id` survives in logs even when
@@ -63,7 +63,7 @@ class ExternalAppResolver(CredentialResolver):
         # the request still forwards (upstream 401 surfaces to the user).
         logger.info(
             "external_app_resolver.resolved external_app_id=%s host=%s headers=%s",
-            match.external_app_id,
+            matched_actions.external_app_id,
             request.host,
             sorted(headers),
         )

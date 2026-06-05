@@ -123,7 +123,7 @@ def test_custom_app_glob_matches_deep_path(
     """Custom apps store their URL patterns as authored globs; the matcher
     translates them to regexes that cover deep paths (the Discord 401
     regression — ``/api/*`` must match ``/api/v10/...``)."""
-    from onyx.sandbox_proxy.action_matcher import resolve_app_for_url
+    from onyx.sandbox_proxy.request_evaluator import resolve_app_for_url
 
     monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
     slug = f"custom-test-{uuid4().hex[:8]}"

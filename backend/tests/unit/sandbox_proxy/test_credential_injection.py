@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
-from onyx.external_apps.matching.engine import RequestMatch
+from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
@@ -17,13 +17,13 @@ from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.credential_injection import InjectionOutcome
 from onyx.sandbox_proxy.errors import SandboxProxyError
 from tests.unit.sandbox_proxy.conftest import make_flow as _flow
-from tests.unit.sandbox_proxy.conftest import make_request_match
+from tests.unit.sandbox_proxy.conftest import make_matched_actions
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
 from tests.unit.sandbox_proxy.conftest import RecordingCredentialResolver
 
 
-def _ctx(*, match: RequestMatch | None = None) -> InjectionContext:
-    return InjectionContext(sandbox=_sandbox(), match=match)
+def _ctx(*, matched_actions: AllMatchedActions | None = None) -> InjectionContext:
+    return InjectionContext(sandbox=_sandbox(), matched_actions=matched_actions)
 
 
 def test_no_resolver_claims_returns_pass_through() -> None:
@@ -165,10 +165,10 @@ def test_resolver_receives_request_and_full_context() -> None:
     """Sanity: `claims` and `resolve` both see the same request + ctx the
     dispatcher was handed, unchanged."""
     sandbox = _sandbox(tenant_id="tenant-xyz")
-    match = make_request_match()
+    matched_actions = make_matched_actions()
     resolver = RecordingCredentialResolver(claims_result=True)
     flow = _flow(host="api.anthropic.com")
-    ctx = InjectionContext(sandbox=sandbox, match=match)
+    ctx = InjectionContext(sandbox=sandbox, matched_actions=matched_actions)
 
     CredentialInjectionDispatcher([resolver]).apply(flow, ctx)
 

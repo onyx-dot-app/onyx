@@ -5,7 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from onyx.db.enums import EndpointPolicy
-from onyx.external_apps.matching.engine import ActionMatch
+from onyx.external_apps.matching.engine import MatchedAction
 from onyx.external_apps.providers.gmail import GmailAction
 from onyx.server.features.build.approvals.api import ApprovalView
 
@@ -24,7 +24,7 @@ def _view(action_type: str, payload: dict[str, Any]) -> ApprovalView:
         approval_id=uuid4(),
         session_id=uuid4(),
         actions=[
-            ActionMatch(
+            MatchedAction(
                 action_type=action_type,
                 display_name="x",
                 description="x",

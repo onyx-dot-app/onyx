@@ -1,7 +1,7 @@
 """Shared stubs and factories for sandbox_proxy unit tests.
 
 - `StaticLookup` — `SandboxIPLookup` stub keyed by source IP.
-- `make_resolved_sandbox` / `make_flow` / `make_request_match` — value
+- `make_resolved_sandbox` / `make_flow` / `make_matched_actions` — value
   + mitmproxy-flow factories.
 - `StubResolver` — identity resolver stub (sandbox + session) for the gate.
 - `RecordingCredentialResolver` — `CredentialResolver` stub recording the
@@ -18,8 +18,8 @@ from uuid import uuid4
 from mitmproxy import http
 
 from onyx.db.enums import EndpointPolicy
-from onyx.external_apps.matching.engine import ActionMatch
-from onyx.external_apps.matching.engine import RequestMatch
+from onyx.external_apps.matching.engine import AllMatchedActions
+from onyx.external_apps.matching.engine import MatchedAction
 from onyx.sandbox_proxy.addons.gate import _IdentityResolver
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import InjectionContext
@@ -199,7 +199,7 @@ class RecordingCredentialResolver(CredentialResolver):
         return dict(self._headers)
 
 
-def make_request_match(
+def make_matched_actions(
     *,
     action_type: str = "slack.messages.write",
     display_name: str = "Post a message",
@@ -208,11 +208,11 @@ def make_request_match(
     policy: EndpointPolicy = EndpointPolicy.ASK,
     external_app_id: int = 42,
     app_name: str = "Slack",
-) -> RequestMatch:
-    """Factory for single-action `RequestMatch` test rows."""
-    return RequestMatch(
+) -> AllMatchedActions:
+    """Factory for single-action `AllMatchedActions` test rows."""
+    return AllMatchedActions(
         actions=(
-            ActionMatch(
+            MatchedAction(
                 action_type=action_type,
                 display_name=display_name,
                 description=description,
