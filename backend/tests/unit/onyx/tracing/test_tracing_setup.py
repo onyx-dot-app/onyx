@@ -9,11 +9,12 @@ from onyx.tracing import setup as tracing_setup
 
 
 def test_setup_tracing_with_no_creds() -> None:
-    """Test that setup_tracing returns empty list when no credentials are configured."""
+    """No external backends and usage tracking off -> empty provider list."""
     # Ensure no tracing credentials are set
     os.environ.pop("BRAINTRUST_API_KEY", None)
     os.environ.pop("LANGFUSE_SECRET_KEY", None)
     os.environ.pop("LANGFUSE_PUBLIC_KEY", None)
+    os.environ["USER_USAGE_TRACKING_ENABLED"] = "false"
 
     # Reload modules to pick up environment changes
     importlib.reload(app_configs)
@@ -22,9 +23,30 @@ def test_setup_tracing_with_no_creds() -> None:
     # Reset the initialized flag
     tracing_setup._initialized = False
 
-    # Call the function - should return empty list
-    result = tracing_setup.setup_tracing()
-    assert result == []
+    try:
+        result = tracing_setup.setup_tracing()
+        assert result == []
+    finally:
+        os.environ.pop("USER_USAGE_TRACKING_ENABLED", None)
+        importlib.reload(app_configs)
+        importlib.reload(tracing_setup)
+
+
+def test_setup_tracing_registers_user_usage_by_default() -> None:
+    """Usage tracking is on by default, independent of external backends."""
+    os.environ.pop("BRAINTRUST_API_KEY", None)
+    os.environ.pop("LANGFUSE_SECRET_KEY", None)
+    os.environ.pop("LANGFUSE_PUBLIC_KEY", None)
+    os.environ.pop("USER_USAGE_TRACKING_ENABLED", None)
+
+    importlib.reload(app_configs)
+    importlib.reload(tracing_setup)
+    tracing_setup._initialized = False
+
+    with patch.object(tracing_setup, "_setup_user_usage_tracking") as mock_setup:
+        result = tracing_setup.setup_tracing()
+        mock_setup.assert_called_once()
+        assert "user_usage" in result
 
 
 def test_setup_tracing_is_idempotent() -> None:
@@ -41,12 +63,15 @@ def test_setup_tracing_is_idempotent() -> None:
     # Reset the initialized flag
     tracing_setup._initialized = False
 
-    # First call
-    tracing_setup.setup_tracing()
+    # Patch the usage-tracking setup so the first call doesn't spawn a real
+    # recorder thread / register against the global provider.
+    with patch.object(tracing_setup, "_setup_user_usage_tracking"):
+        # First call
+        tracing_setup.setup_tracing()
 
-    # Second call should return empty (already initialized)
-    result2 = tracing_setup.setup_tracing()
-    assert result2 == []
+        # Second call should return empty (already initialized)
+        result2 = tracing_setup.setup_tracing()
+        assert result2 == []
 
     # Clean up
     tracing_setup._initialized = False
