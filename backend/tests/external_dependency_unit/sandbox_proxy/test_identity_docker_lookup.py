@@ -203,6 +203,7 @@ def test_lookup_evicts_container_on_destroy(
     container = _run_sandbox_labelled(
         docker_client, network=test_network, sandbox_id=sandbox_id
     )
+    cleanup_test_containers.append(container)
     ip = container.attrs["NetworkSettings"]["Networks"][test_network]["IPAddress"]
 
     # Wait for the start event to land in the cache.
