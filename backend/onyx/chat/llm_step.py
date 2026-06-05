@@ -1281,7 +1281,10 @@ def run_llm_step_pkt_generator(
                     "cache_read_input_tokens": usage.cache_read_input_tokens,
                     "cache_creation_input_tokens": usage.cache_creation_input_tokens,
                 }
-                if state_container:
+                # A real turn always has a non-zero prompt; 0 means the provider
+                # reported usage without input tokens (e.g. some local models) —
+                # skip it so the gauge keeps its baseline instead of reading ~0%.
+                if state_container and usage.prompt_tokens:
                     state_container.set_prompt_tokens(usage.prompt_tokens)
                 # Note: LLM cost tracking is now handled in multi_llm.py
             finish_reason = packet.choice.finish_reason
