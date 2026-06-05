@@ -29,10 +29,10 @@ from onyx.db.utils import UNSET
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import action_policy_views
-from onyx.external_apps.providers.registry import build_action_policies
 from onyx.external_apps.providers.registry import fetch_available_built_in_apps
 from onyx.external_apps.providers.registry import fetch_built_in_app
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
+from onyx.external_apps.providers.registry import resolve_action_overrides
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
@@ -145,8 +145,7 @@ def create_built_in_external_app(
             "enable/disable them or set action policies.",
         )
 
-    # Full policy set (one row per catalog action); validates unknown ids.
-    action_policies = build_action_policies(
+    action_policies = resolve_action_overrides(
         request.app_type, request.action_policies, {}
     )
 
@@ -197,8 +196,7 @@ def update_external_app_admin(
         for pattern in request.upstream_url_patterns:
             UrlGlob.parse(pattern)
 
-    # Full policy set; None map leaves stored policies untouched.
-    action_policies = build_action_policies(
+    action_policies = resolve_action_overrides(
         app.app_type,
         request.action_policies,
         get_policies(db_session, external_app_id),
