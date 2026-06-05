@@ -645,6 +645,17 @@ test.describe("Paste Tiles", () => {
     await chatPage.inputBar.expectText("line 1");
     await chatPage.inputBar.expectText("line 4");
   });
+
+  test("a paste handled outside pasteText breaks the back-to-back expand", async ({
+    chatPage,
+  }) => {
+    await chatPage.inputBar.paste(LARGE_TEXT);
+    // Stands in for a file/`/skill` paste: returns before pasteText, so the
+    // next identical text paste must create a new tile, not expand the first.
+    await chatPage.inputBar.pasteEmpty();
+    await chatPage.inputBar.paste(LARGE_TEXT);
+    await chatPage.inputBar.expectTileCount(2);
+  });
 });
 
 test.describe("Paste Tiles — User Setting", () => {

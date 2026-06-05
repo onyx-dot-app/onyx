@@ -44,6 +44,8 @@ export interface UseContentEditableReturn {
   /** Insert a skill tile, replacing `beforeToken` (the `/<query>` before the caret). */
   insertSkillTile: (slug: string, name: string, beforeToken: string) => boolean;
   pasteText: (text: string) => void;
+  /** Clear double-paste tracking for paste events not routed through pasteText. */
+  resetPasteTracking: () => void;
   handleCopy: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   handleCut: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   setCursorToEnd: () => void;
@@ -354,6 +356,13 @@ export function useContentEditable({
     [pasteTilesEnabled, insertTileAtCursor, insertTextAtCursor, expandTile]
   );
 
+  // Hosts call this for paste events handled without reaching pasteText (file
+  // pastes, intercepted `/skill` pastes); since Ctrl/Cmd+V is exempted from the
+  // keydown reset, the tracker would otherwise stay armed across them.
+  const resetPasteTracking = useCallback(() => {
+    lastPasteTileRef.current = null;
+  }, []);
+
   const handleTileMouseDown = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       clearTileSelection();
@@ -647,6 +656,7 @@ export function useContentEditable({
     expandTile,
     insertSkillTile,
     pasteText,
+    resetPasteTracking,
     handleCopy,
     handleCut,
     setCursorToEnd,

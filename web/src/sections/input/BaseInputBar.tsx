@@ -113,6 +113,7 @@ const BaseInputBar = memo(
         handleCompositionStart,
         handleCompositionEnd,
         pasteText,
+        resetPasteTracking,
         handleCopy,
         handleCut,
         setCursorToEnd,
@@ -189,16 +190,23 @@ const BaseInputBar = memo(
           const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
           if (pastedFiles.length > 0) {
             event.preventDefault();
+            resetPasteTracking();
             onPasteFiles?.(pastedFiles);
             return;
           }
           event.preventDefault();
           const text = event.clipboardData.getData("text/plain");
-          if (!text) return;
-          if (onPasteText?.(text)) return;
+          if (!text) {
+            resetPasteTracking();
+            return;
+          }
+          if (onPasteText?.(text)) {
+            resetPasteTracking();
+            return;
+          }
           pasteText(text);
         },
-        [disabled, onPasteFiles, onPasteText, pasteText]
+        [disabled, onPasteFiles, onPasteText, pasteText, resetPasteTracking]
       );
 
       const handleSubmit = useCallback(() => {
