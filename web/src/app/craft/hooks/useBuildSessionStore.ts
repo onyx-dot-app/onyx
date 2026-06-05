@@ -1556,9 +1556,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           return;
         }
 
-        // Restore finished: report the sandbox ready right away. The preview
-        // polls webapp-info on its own (webappNeedsRefresh), so the status
-        // chip doesn't wait on the Next.js dev server coming up.
         updateSessionData(sessionId, {
           status: sessionData.status === "active" ? "active" : "idle",
           sandbox: sessionData.sandbox,
