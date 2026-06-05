@@ -33,8 +33,14 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import NotificationType
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import BuildSessionStatus
+from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ExternalAppType
+from onyx.db.external_app import create_external_app
+from onyx.db.external_app import get_built_in_external_app
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
 from onyx.db.models import Notification
@@ -52,6 +58,7 @@ from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import action_entry
 from tests.external_dependency_unit.craft.conftest import pod_exec_async
@@ -74,6 +81,44 @@ _SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 # Spec value for approval_cache.WAIT_TIMEOUT_S; pinned by
 # test_wait_timeout_constant_matches_spec.
 _WAIT_TIMEOUT_S_SPEC = 180
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _seed_slack_external_app() -> Generator[None, None, None]:
+    """Seed an enabled Slack ``external_app`` so the matcher claims
+    ``chat.postMessage``. The K8s lane doesn't auto-provision
+    (``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS`` defaults off and only fires in
+    MT tenant provisioning), so without this row every test below would 404
+    the matcher and never park an approval.
+
+    Survives the per-test ``_isolate_skill_tables`` snapshot/restore because
+    it commits before the first test in this module runs -- the isolation
+    fixture's baseline captures it and restores it after each test.
+    Idempotent: skips if a Slack row already exists.
+    """
+    SqlEngine.init_engine(pool_size=10, max_overflow=5)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    try:
+        with get_session_with_current_tenant() as session:
+            if get_built_in_external_app(session, ExternalAppType.SLACK) is None:
+                create_external_app(
+                    db_session=session,
+                    name="Slack",
+                    description="Slack integration for gate-flow K8s tests.",
+                    bundle_file_id="",
+                    bundle_sha256="",
+                    app_type=ExternalAppType.SLACK,
+                    upstream_url_patterns=["https://slack\\.com/api/.*"],
+                    auth_template={"Authorization": "Bearer {access_token}"},
+                    organization_credentials={},
+                    enabled=True,
+                    is_public=True,
+                    action_policies={"slack.messages.write": EndpointPolicy.ASK},
+                )
+                session.commit()
+        yield
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 def _post_slack_via_curl(
@@ -418,7 +463,7 @@ def test_sigterm_drain_unblocks_parked_request(
         )
     finally:
         # Restore proxy health before the next test runs.
-        wait_for_proxy_redeploy(k8s_client, timeout_s=120)
+        wait_for_proxy_redeploy(k8s_client, timeout_s=180)
 
 
 def test_non_gated_egress_works_without_active_session(
