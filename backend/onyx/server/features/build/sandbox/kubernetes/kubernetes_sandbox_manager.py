@@ -570,8 +570,9 @@ class KubernetesSandboxManager(SandboxManager):
         """
         pod_name = self._get_pod_name(sandbox_id)
 
-        # Sandbox container — runs the agent. No IRSA (skip-containers annotation
-        # on the SA strips AWS env vars and the projected token from this container).
+        # Sandbox container — runs the agent. No IRSA: the pod's skip-containers
+        # annotation (set on the pod metadata, where the webhook reads it) keeps the
+        # AWS env vars and projected token out of this container.
         sandbox_ports = [
             client.V1ContainerPort(name="opencode", container_port=OPENCODE_SERVE_PORT),
         ]
@@ -800,6 +801,9 @@ class KubernetesSandboxManager(SandboxManager):
             metadata=client.V1ObjectMeta(
                 name=pod_name,
                 namespace=self._namespace,
+                # The pod-identity webhook reads skip-containers from the POD, not the
+                # SA — keep the IRSA token out of the untrusted agent container.
+                annotations={"eks.amazonaws.com/skip-containers": "sandbox"},
                 labels={
                     LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
                     LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
