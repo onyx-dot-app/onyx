@@ -141,7 +141,7 @@ def apply_credential_gate(
         actions=(
             MatchedAction(
                 action_type=WHOLE_DOMAIN_ACTION_TYPE,
-                display_name=f"Access {_app_name(app)}",
+                display_name="Perform action",
                 description=f"{request.method} {request.path}",
                 policy=EndpointPolicy.ASK,
             ),
