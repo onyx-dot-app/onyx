@@ -3,6 +3,42 @@ locals {
     bucket_arn     = "arn:aws:s3:::${name}"
     bucket_objects = "arn:aws:s3:::${name}/*"
   }]
+
+  # Optional dedicated node group for sandbox pods (nodeSelector/toleration below).
+  # IMDSv2 hop-limit 1 blocks sandboxed containers from the node metadata service.
+  craft_sandbox_node_groups = var.enable_craft_sandbox_node_group ? {
+    sandbox = {
+      name           = "sandbox-node-group"
+      instance_types = var.craft_sandbox_node_instance_types
+      min_size       = var.craft_sandbox_node_min_size
+      max_size       = var.craft_sandbox_node_max_size
+      desired_size   = var.craft_sandbox_node_desired_size
+      labels = {
+        "onyx.app/workload" = "sandbox"
+      }
+      taints = [{
+        key    = "workload"
+        value  = "sandbox"
+        effect = "NO_SCHEDULE"
+      }]
+      metadata_options = {
+        http_endpoint               = "enabled"
+        http_tokens                 = "required"
+        http_put_response_hop_limit = 1
+      }
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = 50
+            volume_type           = "gp3"
+            encrypted             = true
+            delete_on_termination = true
+          }
+        }
+      }
+    }
+  } : {}
 }
 
 module "eks" {
@@ -27,7 +63,7 @@ module "eks" {
     ami_type = "AL2023_x86_64_STANDARD"
   }
 
-  eks_managed_node_groups = {
+  eks_managed_node_groups = merge({
     for k, v in var.eks_managed_node_groups : k => merge(v,
       {
         instance_types = v.instance_types != null ? v.instance_types : (
@@ -45,7 +81,7 @@ module "eks" {
         subnet_ids = var.main_node_subnet_ids
       } : {}
     )
-  }
+  }, local.craft_sandbox_node_groups)
 
   tags = var.tags
 }
