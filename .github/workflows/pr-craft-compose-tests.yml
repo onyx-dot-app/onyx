@@ -13,9 +13,12 @@ on:
     branches: [main]
     paths:
       - "backend/onyx/sandbox_proxy/**"
+      - "backend/onyx/server/features/build/configs.py"
       - "backend/onyx/server/features/build/sandbox/docker/**"
       - "backend/onyx/server/features/build/sandbox/image/Dockerfile"
       - "backend/onyx/server/features/build/sandbox/image/firewall-init.sh"
+      - "backend/onyx/server/features/build/sandbox/labels.py"
+      - "backend/onyx/server/features/build/sandbox/util/opencode_config.py"
       - "backend/tests/unit/sandbox_proxy/**"
       - "backend/tests/unit/onyx/server/features/build/sandbox/test_docker_manager_config.py"
       - "backend/tests/unit/onyx/server/features/build/sandbox/test_opencode_config.py"
@@ -98,8 +101,7 @@ jobs:
 
       - name: Run new sandbox_proxy unit tests (no deps)
         run: |
-          source .venv/bin/activate
-          python -m pytest \
+          py.test \
             -xvs \
             --durations=8 \
             backend/tests/unit/sandbox_proxy/ \
@@ -109,8 +111,7 @@ jobs:
       - name: Run DockerEventsLookup external-dep tests
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
-          source .venv/bin/activate
-          python -m pytest \
+          py.test \
             -xv \
             --durations=8 \
             --log-cli-level=INFO \

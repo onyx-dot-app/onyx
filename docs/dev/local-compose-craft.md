@@ -98,10 +98,15 @@ Iterate on `sandbox_proxy/` code with the VSCode debugger attached.
 
    ```bash
    source .venv/bin/activate
+   PYTHONPATH=./backend \
    SANDBOX_BACKEND=docker \
    SANDBOX_PROXY_LISTEN_PORT=8888 \
    python -m onyx.sandbox_proxy.server
    ```
+
+   `PYTHONPATH=./backend` is required because the `onyx` package lives
+   under `backend/`; running from the repo root without it raises
+   `ModuleNotFoundError`. Same applies to step 3 below.
 
    Or add a VSCode launch config that points at
    `backend/onyx/sandbox_proxy/server.py` with the same env. The
@@ -123,6 +128,7 @@ Iterate on `sandbox_proxy/` code with the VSCode debugger attached.
    local proxy:
 
    ```bash
+   PYTHONPATH=./backend \
    SANDBOX_BACKEND=docker \
    SANDBOX_PROXY_HOST=host.docker.internal \
    SANDBOX_PROXY_PORT=8888 \
