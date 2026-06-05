@@ -38,7 +38,9 @@ export interface UseContentEditableReturn {
   handleCompositionStart: () => void;
   handleCompositionEnd: () => void;
   insertTextAtCursor: (text: string) => void;
-  insertTileAtCursor: (text: string) => void;
+  insertTileAtCursor: (text: string) => HTMLElement | null;
+  /** Replace a paste tile with its full text inline at its position. */
+  expandTile: (tile: HTMLElement) => void;
   /** Insert a skill tile, replacing `beforeToken` (the `/<query>` before the caret). */
   insertSkillTile: (slug: string, name: string, beforeToken: string) => boolean;
   pasteText: (text: string) => void;
@@ -71,6 +73,12 @@ export function useContentEditable({
   const rafRef = useRef<number | null>(null);
   const wrapperPaddingYRef = useRef(0);
   const selectedTileRef = useRef<HTMLElement | null>(null);
+  // Most recent paste's tile, so a second back-to-back paste of the same text
+  // expands it inline instead of stacking a duplicate. Cleared by any
+  // intervening keystroke or click (see handleTileKeyDown).
+  const lastPasteTileRef = useRef<{ text: string; tile: HTMLElement } | null>(
+    null
+  );
   const [tilePopover, setTilePopover] = useState<{
     text: string;
     tile: HTMLElement;
@@ -213,6 +221,7 @@ export function useContentEditable({
 
       clearTileSelection();
       setTilePopover(null);
+      lastPasteTileRef.current = null;
 
       ref.current.textContent = text;
       messageRef.current = text;
@@ -241,6 +250,7 @@ export function useContentEditable({
 
     clearTileSelection();
     setTilePopover(null);
+    lastPasteTileRef.current = null;
 
     ref.current.innerHTML = "";
     messageRef.current = "";
@@ -260,8 +270,8 @@ export function useContentEditable({
   );
 
   const insertTileAtCursor = useCallback(
-    (text: string) => {
-      if (!ref.current) return;
+    (text: string): HTMLElement | null => {
+      if (!ref.current) return null;
       const tile = createRichInputTileNode({
         type: "paste",
         text,
@@ -270,6 +280,31 @@ export function useContentEditable({
       });
       insertNodeAtCursorUtil(ref.current, tile);
       setCursorAfterNode(tile);
+
+      syncFromDOM();
+      resize();
+      return tile;
+    },
+    [syncFromDOM, resize]
+  );
+
+  const expandTile = useCallback(
+    (tile: HTMLElement) => {
+      const el = ref.current;
+      if (!el || !el.contains(tile)) return;
+
+      const textNode = document.createTextNode(
+        tile.getAttribute("data-text") ?? ""
+      );
+      tile.replaceWith(textNode);
+
+      if (selectedTileRef.current === tile) selectedTileRef.current = null;
+      lastPasteTileRef.current = null;
+      setTilePopover(null);
+
+      el.focus();
+      setCursorAfterNode(textNode);
+      el.normalize();
 
       syncFromDOM();
       resize();
@@ -304,17 +339,25 @@ export function useContentEditable({
   const pasteText = useCallback(
     (text: string) => {
       if (pasteTilesEnabled && shouldCreatePasteTile(text)) {
-        insertTileAtCursor(text);
+        const last = lastPasteTileRef.current;
+        if (last && last.text === text && ref.current?.contains(last.tile)) {
+          expandTile(last.tile);
+          return;
+        }
+        const tile = insertTileAtCursor(text);
+        lastPasteTileRef.current = tile ? { text, tile } : null;
       } else {
         insertTextAtCursor(text);
+        lastPasteTileRef.current = null;
       }
     },
-    [pasteTilesEnabled, insertTileAtCursor, insertTextAtCursor]
+    [pasteTilesEnabled, insertTileAtCursor, insertTextAtCursor, expandTile]
   );
 
   const handleTileMouseDown = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       clearTileSelection();
+      lastPasteTileRef.current = null;
       if (disabledRef.current) return;
 
       const target = event.target as HTMLElement;
@@ -416,6 +459,20 @@ export function useContentEditable({
 
   const handleTileKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>): boolean => {
+      // A keystroke between two pastes breaks the back-to-back expand, but
+      // modifier holds and Ctrl/Cmd+V itself are part of pasting.
+      const isModifier =
+        event.key === "Control" ||
+        event.key === "Meta" ||
+        event.key === "Shift" ||
+        event.key === "Alt";
+      const isPasteShortcut =
+        (event.ctrlKey || event.metaKey) &&
+        (event.key === "v" || event.key === "V");
+      if (!isModifier && !isPasteShortcut) {
+        lastPasteTileRef.current = null;
+      }
+
       const isNav = event.key === "ArrowLeft" || event.key === "ArrowRight";
       const isDelete = event.key === "Backspace" || event.key === "Delete";
 
@@ -587,6 +644,7 @@ export function useContentEditable({
     handleCompositionEnd,
     insertTextAtCursor,
     insertTileAtCursor,
+    expandTile,
     insertSkillTile,
     pasteText,
     handleCopy,

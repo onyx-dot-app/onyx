@@ -122,6 +122,7 @@ const BaseInputBar = memo(
         tilePopover,
         dismissTilePopover,
         updateTileText,
+        expandTile,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
         pasteTilesEnabled,
@@ -387,6 +388,7 @@ const BaseInputBar = memo(
               tileElement={tilePopover.tile}
               onDismiss={dismissTilePopover}
               onTextChange={updateTileText}
+              onExpand={() => expandTile(tilePopover.tile)}
             />
           )}
         </Disabled>

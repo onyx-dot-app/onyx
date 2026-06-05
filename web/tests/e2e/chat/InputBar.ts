@@ -33,6 +33,7 @@ export class InputBar {
   readonly tilePopover: Locator;
   readonly tilePopoverTextarea: Locator;
   readonly tilePopoverBackdrop: Locator;
+  readonly tilePopoverExpandButton: Locator;
   readonly tilePreview: Locator;
   readonly tileMeta: Locator;
 
@@ -49,6 +50,9 @@ export class InputBar {
     );
     this.tilePopoverTextarea = this.tilePopover.locator("textarea");
     this.tilePopoverBackdrop = page.getByTestId("paste-tile-backdrop");
+    this.tilePopoverExpandButton = this.tilePopover.getByRole("button", {
+      name: "Expand into input bar",
+    });
     this.tilePreview = page.locator(".rich-input-tile-preview");
     this.tileMeta = page.locator(".rich-input-tile-meta");
   }
@@ -142,6 +146,10 @@ export class InputBar {
 
   async editTileText(newText: string): Promise<void> {
     await this.tilePopoverTextarea.fill(newText);
+  }
+
+  async expandTileViaPopover(): Promise<void> {
+    await this.tilePopoverExpandButton.click();
   }
 
   async dismissPopoverViaEscape(): Promise<void> {

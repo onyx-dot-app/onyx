@@ -542,6 +542,7 @@ test.describe("Paste Tiles", () => {
 
   test("multiple tiles can coexist", async ({ chatPage }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);
+    // Breaks the back-to-back sequence; without it the second paste expands.
     await chatPage.page.keyboard.press("End");
     await chatPage.inputBar.paste(LARGE_TEXT);
     await chatPage.inputBar.expectTileCount(2);
@@ -599,6 +600,50 @@ test.describe("Paste Tiles", () => {
     await chatPage.inputBar.clickTile();
     await chatPage.inputBar.expectPopoverVisible();
     await chatPage.inputBar.dismissPopoverViaBackdrop();
+  });
+
+  test("popover Expand button replaces the tile with inline text", async ({
+    chatPage,
+  }) => {
+    await chatPage.inputBar.paste(LARGE_TEXT);
+    await chatPage.inputBar.clickTile();
+    await chatPage.inputBar.expandTileViaPopover();
+    await chatPage.inputBar.expectTileCount(0);
+    await chatPage.inputBar.expectPopoverHidden();
+    await chatPage.inputBar.expectText("line 1");
+    await chatPage.inputBar.expectText("line 4");
+  });
+
+  test("Expand keeps edits made in the popover", async ({ chatPage }) => {
+    await chatPage.inputBar.paste(LARGE_TEXT);
+    await chatPage.inputBar.clickTile();
+    await chatPage.inputBar.editTileText("edited\nline 2\nline 3\nline 4");
+    await chatPage.inputBar.expandTileViaPopover();
+    await chatPage.inputBar.expectTileCount(0);
+    await chatPage.inputBar.expectText("edited");
+  });
+
+  test("Expanded text is sent as the message body", async ({ chatPage }) => {
+    await chatPage.inputBar.typeText("Context: ");
+    await chatPage.inputBar.paste(LARGE_TEXT);
+    await chatPage.inputBar.clickTile();
+    await chatPage.inputBar.expandTileViaPopover();
+    await chatPage.inputBar.send();
+    const msg = chatPage.humanMessage();
+    await expect(msg).toContainText("Context:");
+    await expect(msg).toContainText("line 1");
+    await expect(msg).toContainText("line 4");
+  });
+
+  test("second back-to-back paste expands the tile into inline text", async ({
+    chatPage,
+  }) => {
+    await chatPage.inputBar.paste(LARGE_TEXT);
+    await chatPage.inputBar.expectTileCount(1);
+    await chatPage.inputBar.paste(LARGE_TEXT);
+    await chatPage.inputBar.expectTileCount(0);
+    await chatPage.inputBar.expectText("line 1");
+    await chatPage.inputBar.expectText("line 4");
   });
 });
 
