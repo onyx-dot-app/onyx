@@ -108,6 +108,7 @@ from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.usage_limits import check_usage_and_raise
 from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
+from onyx.server.utils import set_current_user_id_dependency
 from onyx.tracing.framework.create import ensure_trace
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
@@ -410,11 +411,17 @@ def create_new_chat_session(
     return CreateChatSessionID(chat_session_id=new_chat_session.id)
 
 
+# Shared callable so FastAPI runs auth once across the user + contextvar deps.
+_rename_basic_access = require_permission(Permission.BASIC_ACCESS)
+
+
 @router.put("/rename-chat-session")
 def rename_chat_session(
     rename_req: ChatRenameRequest,
     request: Request,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(_rename_basic_access),
+    # Attribute the LLM-generated title to the user (this endpoint can call an LLM).
+    _user_ctx: None = Depends(set_current_user_id_dependency(_rename_basic_access)),
 ) -> RenameChatSessionResponse:
     # 3000 tokens is more than enough for a pair of messages which is enough to provide the required context for generating a
     # good name for the chat session. It's also small enough to fit on even the worst context window LLMs.
@@ -433,6 +440,10 @@ def rename_chat_session(
                 description=name,
             )
         return RenameChatSessionResponse(new_name=name)
+
+    # Auto-naming calls an LLM, so apply the same per-user budget gate as
+    # send-message. Manual renames return above and stay free.
+    check_token_rate_limits(user)
 
     llm = get_default_llm(
         additional_headers=extract_headers(
@@ -567,6 +578,11 @@ def handle_send_chat_message(
     ),
     _rate_limit_check: None = Depends(check_token_rate_limits),
     _api_key_usage_check: None = Depends(check_api_key_usage),
+    # Pins CURRENT_USER_ID_CONTEXTVAR in the event-loop context so it propagates
+    # into the streaming generator (all branches) for usage attribution.
+    _user_ctx: None = Depends(
+        set_current_user_id_dependency(current_chat_accessible_user)
+    ),
 ) -> StreamingResponse | ChatFullResponse:
     """
     This endpoint is used to send a new chat message.
