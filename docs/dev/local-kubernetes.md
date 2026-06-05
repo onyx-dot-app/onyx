@@ -11,6 +11,11 @@ Non-Craft work can still use the docker-compose deps + vscode debugger path
 described in [CONTRIBUTING.md](/CONTRIBUTING.md); use that when you don't
 need a sandbox.
 
+For iterating on the **docker** sandbox backend specifically
+(`SANDBOX_BACKEND=docker`, the self-host compose path) — typically when
+touching `backend/onyx/sandbox_proxy/` or the docker manager — see
+[local-compose-craft.md](./local-compose-craft.md) instead.
+
 ## Prerequisites
 
 Builds on the CONTRIBUTING.md prereqs (Python 3.13, uv, Node.js 22, the venv,
