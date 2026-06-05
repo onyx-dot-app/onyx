@@ -16,6 +16,7 @@ from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
 from onyx.db.enums import AccountType
+from onyx.db.enums import Permission
 from onyx.db.models import ApiKey
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
@@ -118,6 +119,11 @@ def insert_api_key(
             api_key_user_row,
             is_admin=(api_key_args.role == UserRole.ADMIN),
         )
+    elif api_key_args.role == UserRole.LIMITED:
+        # LIMITED keys join no group, so they get no group-derived permissions.
+        # Grant chat scope directly to preserve their chat-only capability
+        # (WRITE_CHAT implies READ_CHAT).
+        api_key_user_row.effective_permissions = [Permission.WRITE_CHAT.value]
 
     db_session.commit()
 
@@ -171,9 +177,12 @@ def update_api_key(
                 api_key_user,
                 is_admin=(api_key_args.role == UserRole.ADMIN),
             )
+        elif api_key_args.role == UserRole.LIMITED:
+            # LIMITED keys join no group; grant chat scope directly to match
+            # insert_api_key (WRITE_CHAT implies READ_CHAT).
+            api_key_user.effective_permissions = [Permission.WRITE_CHAT.value]
         else:
-            # No group assigned for LIMITED, but we still need to recompute
-            # since we just removed the old default-group membership above.
+            # Recompute since we just removed the old default-group membership.
             recompute_user_permissions__no_commit(api_key_user.id, db_session)
 
     db_session.commit()
