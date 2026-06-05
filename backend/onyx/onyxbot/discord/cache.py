@@ -64,22 +64,26 @@ class DiscordCacheManager:
                     if tenant_id not in gated
                 ]
 
+                # Wrap each load so a failure is logged with its tenant_id (and the
+                # underlying error) here, where we still have that context, rather
+                # than surfacing as the index-keyed log from the thread pool.
+                def load(tenant_id: str) -> TenantDiscordData | None:
+                    try:
+                        return self._load_tenant_data(
+                            tenant_id, self._api_keys.get(tenant_id)
+                        )
+                    except Exception:
+                        logger.exception("Failed to refresh tenant %s", tenant_id)
+                        return None
+
                 results: list[TenantDiscordData | None] = await asyncio.to_thread(
                     run_functions_tuples_in_parallel,
-                    [
-                        (
-                            self._load_tenant_data,
-                            (tenant_id, self._api_keys.get(tenant_id)),
-                        )
-                        for tenant_id in tenant_ids
-                    ],
-                    allow_failures=True,
+                    [(load, (tenant_id,)) for tenant_id in tenant_ids],
                     max_workers=_REFRESH_MAX_WORKERS,
                 )
 
                 for tenant_id, result in zip(tenant_ids, results):
                     if result is None:
-                        logger.warning("Failed to refresh tenant %s", tenant_id)
                         continue
 
                     guild_ids, api_key = result
