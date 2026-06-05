@@ -31,8 +31,9 @@ def compute_context_usage(
 
     A turn lacks prompt_tokens when its provider returned no usage; falling back to
     the last turn that did report is a closer estimate of the live context than
-    re-deriving the baseline. baseline_fn is only invoked for empty/never-answered
-    chats — keeping the expensive system-prompt tokenization off the common hot path.
+    re-deriving the baseline. baseline_fn is invoked only when no assistant turn has
+    a recorded prompt size (empty chats, or history predating this column) — keeping
+    the expensive system-prompt tokenization off the common hot path.
     """
     last_reported_tokens = next(
         (

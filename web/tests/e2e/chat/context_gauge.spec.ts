@@ -1,5 +1,6 @@
 import { test } from "@tests/e2e/chat/fixtures";
 import {
+  buildMockStream,
   buildMockStreamWithContextUsage,
   mockChatEndpoint,
 } from "@tests/e2e/utils/chatMock";
@@ -23,11 +24,17 @@ test.describe("Context-window gauge", () => {
     await chatPage.expectContextGauge(50);
   });
 
-  test("hides when the stream carries no context usage", async ({
+  test("stays hidden when a turn streams no context_usage packet", async ({
     chatPage,
   }) => {
     await chatPage.goto();
-    // A fresh chat with no context_usage packet and no session value -> no gauge.
+    // Models/paths that don't report usage emit no context_usage packet -> no gauge.
+    await mockChatEndpoint(chatPage.page, buildMockStream("Mock response"));
+
+    await chatPage.inputBar.fill("hello");
+    await chatPage.inputBar.send();
+    await chatPage.expectHumanMessage("hello");
+
     await chatPage.expectNoContextGauge();
   });
 });

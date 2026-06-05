@@ -386,11 +386,10 @@ def get_chat_session(
             )
             # msg_packet_list.append(Packet(ind=end_step_nr, obj=OverallStop()))
 
-    # Resolve the persona LLM once for the context window. The baseline (which
-    # tokenizes the system prompt + reads the default base prompt from the DB) is
-    # deferred behind baseline_fn so it runs only for empty/never-answered chats.
-    # Best-effort: a provider-resolution failure (e.g. no LLM configured) must not
-    # break loading the session — the gauge just hides when context_usage is None.
+    # baseline_fn (tokenizes the system prompt) is deferred so it runs only when no
+    # assistant turn has a recorded prompt size — empty chats + pre-column history.
+    # Best-effort: a provider-resolution failure must not break session load; the
+    # gauge just hides when context_usage stays None.
     context_usage = None
     if chat_session.persona:
         persona = chat_session.persona
