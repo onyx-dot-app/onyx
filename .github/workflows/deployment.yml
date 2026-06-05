@@ -9,6 +9,8 @@ on:
 # Set restrictive default permissions for all jobs. Jobs that need more permissions
 # should explicitly declare them.
 permissions:
+  # Required to checkout the repo on private repos (no-op on public)
+  contents: read
   # Required for OIDC authentication with AWS
   id-token: write # zizmor: ignore[excessive-permissions]
 
@@ -1568,6 +1570,7 @@ jobs:
       - run-id=${{ github.run_id }}-trivy-scan-${{ matrix.component }}
       - extras=ecr-cache
     permissions:
+      contents: read # needed to checkout the repo on private repos (no-op on public)
       security-events: write # needed for SARIF uploads
     timeout-minutes: 10
     strategy:
