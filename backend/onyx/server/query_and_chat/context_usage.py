@@ -34,17 +34,17 @@ def compute_context_usage(
     re-deriving the baseline. baseline_fn is only invoked for empty/never-answered
     chats — keeping the expensive system-prompt tokenization off the common hot path.
     """
-    last_reported = next(
+    last_reported_tokens = next(
         (
-            m
+            m.prompt_tokens
             for m in reversed(messages)
             if m.message_type == MessageType.ASSISTANT and m.prompt_tokens is not None
         ),
         None,
     )
-    if last_reported is not None and last_reported.prompt_tokens is not None:
+    if last_reported_tokens is not None:
         return ContextUsage(
-            used_tokens=last_reported.prompt_tokens,
+            used_tokens=last_reported_tokens,
             max_input_tokens=max_input_tokens,
             is_baseline=False,
         )

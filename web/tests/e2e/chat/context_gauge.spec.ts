@@ -1,4 +1,4 @@
-import { test, expect } from "@tests/e2e/chat/fixtures";
+import { test } from "@tests/e2e/chat/fixtures";
 import {
   buildMockStreamWithContextUsage,
   mockChatEndpoint,
@@ -20,9 +20,7 @@ test.describe("Context-window gauge", () => {
     await chatPage.inputBar.send();
     await chatPage.expectHumanMessage("hello");
 
-    await expect(
-      chatPage.page.getByLabel(/Context window 50% used/)
-    ).toBeVisible({ timeout: 15_000 });
+    await chatPage.expectContextGauge(50);
   });
 
   test("hides when the stream carries no context usage", async ({
@@ -30,8 +28,6 @@ test.describe("Context-window gauge", () => {
   }) => {
     await chatPage.goto();
     // A fresh chat with no context_usage packet and no session value -> no gauge.
-    await expect(
-      chatPage.page.getByLabel(/Context window \d+% used/)
-    ).toHaveCount(0);
+    await chatPage.expectNoContextGauge();
   });
 });
