@@ -15,8 +15,7 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
-# Tenants are loaded concurrently during a full refresh. Bounded to avoid
-# exhausting the DB connection pool when a cluster has many tenants.
+# Bounded so a cluster with many tenants can't exhaust the DB connection pool.
 _REFRESH_MAX_WORKERS = 16
 
 
@@ -64,9 +63,8 @@ class DiscordCacheManager:
                     if tenant_id not in gated
                 ]
 
-                # Wrap each load so a failure is logged with its tenant_id (and the
-                # underlying error) here, where we still have that context, rather
-                # than surfacing as the index-keyed log from the thread pool.
+                # Log failures with tenant_id here; the thread pool only knows the
+                # positional index.
                 def load(tenant_id: str) -> TenantDiscordData | None:
                     try:
                         return self._load_tenant_data(
@@ -76,8 +74,8 @@ class DiscordCacheManager:
                         logger.exception("Failed to refresh tenant %s", tenant_id)
                         return None
 
-                # allow_failures keeps per-tenant isolation explicit and independent
-                # of load()'s exception handling: one tenant can't abort the batch.
+                # allow_failures so one tenant can't abort the batch, independent of
+                # load()'s except clause.
                 results: list[TenantDiscordData | None] = await asyncio.to_thread(
                     run_functions_tuples_in_parallel,
                     [(load, (tenant_id,)) for tenant_id in tenant_ids],
