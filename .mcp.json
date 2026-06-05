@@ -7,6 +7,10 @@
     "agent-wiki": {
       "type": "http",
       "url": "https://dev-wiki.onyx.app/api/mcp"
+    },
+    "linear": {
+      "type": "http",
+      "url": "https://mcp.linear.app/mcp"
     }
   }
 }
