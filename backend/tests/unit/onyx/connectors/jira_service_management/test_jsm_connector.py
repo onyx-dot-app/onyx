@@ -22,6 +22,7 @@ from onyx.connectors.jira_service_management.connector import _stamp_source
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
+from onyx.db.enums import HierarchyNodeType
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +108,7 @@ def test_stamp_source_preserves_hierarchy_nodes() -> None:
         raw_parent_id=None,
         display_name="Help Desk",
         link="https://example.atlassian.net/projects/HELP",
+        node_type=HierarchyNodeType.PROJECT,
     )
 
     def _gen() -> Generator[Any, None, JiraConnectorCheckpoint]:
