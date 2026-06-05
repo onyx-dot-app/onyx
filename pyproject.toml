@@ -214,7 +214,7 @@ include = ["backend"]
 exclude = [
     "**/generated/**",
     "**/.venv/**",
-    "**/onyx/server/features/build/sandbox/kubernetes/docker/daemon/**",
+    "**/onyx/server/features/build/sandbox/kubernetes/docker/sandbox_daemon/**",
     "**/onyx/server/features/build/sandbox/kubernetes/docker/skills/**",
     "**/onyx/server/features/build/sandbox/kubernetes/docker/templates/**",
 ]
