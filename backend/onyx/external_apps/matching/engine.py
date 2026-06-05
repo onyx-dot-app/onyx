@@ -10,6 +10,7 @@ from pydantic import model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import POLICY_SEVERITY
 from onyx.db.external_app import get_policies
 from onyx.db.models import ExternalApp
@@ -71,6 +72,21 @@ def match_action(
     treat ``decisive`` as the verdict-driving action. Body decoding is the
     caller's job — ``payload`` is empty here; refill via ``model_copy``.
     """
+    # Custom apps are routed to ask for now.
+    if app.app_type == ExternalAppType.CUSTOM:
+        return RequestMatch(
+            actions=(
+                ActionMatch(
+                    action_type="custom_request",
+                    display_name=f"{request.method} {request.path}",
+                    description="Custom external app request",
+                    policy=EndpointPolicy.ASK,
+                ),
+            ),
+            app_name=app.skill.name,
+            external_app_id=app.id,
+        )
+
     context = MatchContext(request)
     stored = get_policies(db_session, app.id)
     catalog = get_endpoint_catalog(app.app_type)
