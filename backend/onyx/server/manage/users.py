@@ -120,6 +120,7 @@ from onyx.server.models import MinimalUserSnapshot
 from onyx.server.models import UserGroupInfo
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
+from onyx.utils.csv_utils import sanitize_csv_cell
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import (
@@ -413,11 +414,13 @@ def download_users_csv(
     # Write CSV header
     writer.writerow(["Email", "Role", "Status"])
 
-    # Write user data
+    # Write user data. Emails are user-supplied (a local part can legally
+    # start with a formula trigger like `=`), so sanitize to prevent
+    # CSV/formula injection against the admin opening the export.
     for user in users:
         writer.writerow(
             [
-                user.email,
+                sanitize_csv_cell(user.email),
                 user.role.value if user.role else "",
                 "Active" if user.is_active else "Inactive",
             ]
