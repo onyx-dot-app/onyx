@@ -82,16 +82,17 @@ jobs:
           echo "$rendered" | grep -A1 "sandbox_proxy_ca:" | grep -q "name: sandbox_proxy_ca"
           echo "$rendered" | grep -A1 "onyx_craft_sandbox:" | grep -q "name: onyx_craft_sandbox"
 
-      # Pins docker's native "already exists" error on re-create, which is what
-      # install.sh --include-craft's `inspect`-guarded block relies on to stay
-      # idempotent. A docker behavior change here would silently break
-      # re-installs.
+      # Pins the contract install.sh --include-craft's `inspect`-guarded block
+      # relies on: after `create`, `inspect` exits 0 for both network and
+      # volume. The earlier shape grepped docker's error string on re-create;
+      # that wording varies across docker versions and isn't what install.sh
+      # uses (install.sh checks `inspect` first, then creates if missing).
       - name: Pre-create compose-external resources
         run: |
-          docker network create onyx_craft_sandbox || true
-          docker volume create sandbox_proxy_ca || true
-          docker network create onyx_craft_sandbox 2>&1 | grep -q "already exists"
-          docker volume create sandbox_proxy_ca 2>&1 | grep -q "Volume name is already in use\|already in use"
+          docker network create onyx_craft_sandbox
+          docker volume create sandbox_proxy_ca
+          docker network inspect onyx_craft_sandbox >/dev/null
+          docker volume inspect sandbox_proxy_ca >/dev/null
 
       # The DockerEventsLookup external-dep tests spin up real busybox
       # containers via the host docker socket -- no Postgres, no compose stack
