@@ -17,6 +17,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
@@ -111,12 +112,13 @@ def bitbucket_get(
     except httpx.HTTPStatusError as e:
         status = e.response.status_code if e.response is not None else None
         if status == 429:
-            retry_after = e.response.headers.get("Retry-After") if e.response else None
+            retry_after = (
+                parse_retry_after_seconds(e.response.headers.get("Retry-After"))
+                if e.response
+                else None
+            )
             if retry_after is not None:
-                try:
-                    time.sleep(int(retry_after))
-                except (TypeError, ValueError):
-                    pass
+                time.sleep(retry_after)
             raise BitbucketRetriableError("Bitbucket rate limit exceeded (429)") from e
         if status is not None and 500 <= status < 600:
             raise BitbucketRetriableError(f"Bitbucket server error: {status}") from e

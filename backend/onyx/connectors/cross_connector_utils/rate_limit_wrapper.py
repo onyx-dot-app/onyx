@@ -8,6 +8,7 @@ from typing import TypeVar
 import requests
 
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
@@ -102,12 +103,8 @@ def wrap_request_to_handle_ratelimiting(
         for _ in range(max_waits):
             response = request_fn(*args, **kwargs)
             if response.status_code == 429:
-                try:
-                    wait_time = int(
-                        response.headers.get("Retry-After", default_wait_time_sec)
-                    )
-                except ValueError:
-                    wait_time = default_wait_time_sec
+                parsed = parse_retry_after_seconds(response.headers.get("Retry-After"))
+                wait_time = parsed if parsed is not None else default_wait_time_sec
 
                 time.sleep(wait_time)
                 continue

@@ -33,6 +33,7 @@ from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.retry_wrapper import retry_builder
 
 MAX_PAGE_SIZE = 30  # Zendesk API maximum
@@ -78,10 +79,10 @@ def request_with_rate_limit(
         )
 
         if response.status_code == 429:
-            retry_after = response.headers.get("Retry-After")
+            retry_after = parse_retry_after_seconds(response.headers.get("Retry-After"))
             if retry_after is not None:
                 # Sleep for the duration indicated by the Retry-After header
-                time.sleep(int(retry_after))
+                time.sleep(retry_after)
 
         elif (
             response.status_code == 403

@@ -232,13 +232,19 @@ def test_backoff_seconds_respects_retry_after_header_verbatim() -> None:
             assert sp_connector._backoff_seconds(0, retry_after=raw) == float(raw)
 
 
+def test_backoff_seconds_honors_http_date_retry_after() -> None:
+    """An already-elapsed HTTP-date Retry-After is honored verbatim (0s wait)."""
+    assert (
+        sp_connector._backoff_seconds(0, retry_after="Wed, 21 Oct 2015 07:28:00 GMT")
+        == 0
+    )
+
+
 def test_backoff_seconds_falls_back_when_retry_after_unparseable() -> None:
-    """Non-numeric Retry-After (HTTP-date) falls through to jittered backoff."""
+    """Genuinely unparseable Retry-After values fall through to jittered backoff."""
     base = 5  # attempt=0
     for _ in range(20):
-        s = sp_connector._backoff_seconds(
-            0, retry_after="Wed, 21 Oct 2026 07:28:00 GMT"
-        )
+        s = sp_connector._backoff_seconds(0, retry_after="not-a-date")
         assert base / 2 <= s <= base
 
 
