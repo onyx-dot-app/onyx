@@ -35,7 +35,7 @@ def insert_action_approval(
     decided_via: ApprovalDecidedVia | None = None,
 ) -> ActionApproval:
     """Commit an approval row. ``actions`` is the JSONB list of
-    ``ActionMatch``-shaped dicts; must be non-empty. Re-sorted
+    ``MatchedAction``-shaped dicts; must be non-empty. Re-sorted
     strictest-policy-first so every reader can rely on ``actions[0]``.
 
     Defaults to a pending row (``decision IS NULL``). Passing ``decision``

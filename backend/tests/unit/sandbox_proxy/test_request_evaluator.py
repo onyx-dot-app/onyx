@@ -1,16 +1,16 @@
 """Unit tests for the proxy's URL → ExternalApp resolution.
 
 ``resolve_app_for_url`` binds a request to a connected app before deferring to
-``external_apps.matching.match_action``. Transient (un-flushed) ``ExternalApp``
-objects suffice — it only reads ``upstream_url_patterns``, never the DB. CUSTOM
-apps author globs; built-in providers author regexes.
+``external_apps.matching.recognize_actions``. Transient (un-flushed)
+``ExternalApp`` objects suffice — it only reads ``upstream_url_patterns``, never
+the DB. CUSTOM apps author globs; built-in providers author regexes.
 """
 
 from __future__ import annotations
 
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
-from onyx.sandbox_proxy.action_matcher import resolve_app_for_url
+from onyx.sandbox_proxy.request_evaluator import resolve_app_for_url
 
 
 def _app(

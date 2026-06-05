@@ -47,7 +47,7 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
-from onyx.external_apps.matching.engine import ActionMatch
+from onyx.external_apps.matching.engine import MatchedAction
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 
 
@@ -360,9 +360,9 @@ def action_entry(
     policy: EndpointPolicy = EndpointPolicy.ASK,
 ) -> dict[str, Any]:
     """JSONB-shape dict for one `ActionApproval.actions` entry. Routes
-    through `ActionMatch` so the shape can't drift from the production
+    through `MatchedAction` so the shape can't drift from the production
     model."""
-    return ActionMatch(
+    return MatchedAction(
         action_type=action_type,
         display_name=display_name,
         description=description,

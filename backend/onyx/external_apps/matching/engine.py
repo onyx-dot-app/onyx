@@ -17,11 +17,15 @@ from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.request import MatchContext
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
+from onyx.external_apps.providers.registry import effective_policy
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.external_apps.providers.registry import get_provider_for_app
 
+# action_type for a domain-matched request that hit no catalog action.
+WHOLE_DOMAIN_ACTION_TYPE = "unspecified"
 
-class ActionMatch(BaseModel):
+
+class MatchedAction(BaseModel):
     """One catalog action a request invoked, with the display strings the
     FE renders. Carried verbatim from matcher through DB JSONB to API."""
 
@@ -33,82 +37,115 @@ class ActionMatch(BaseModel):
     policy: EndpointPolicy
 
 
-class RequestMatch(BaseModel):
+class AllMatchedActions(BaseModel):
     """Every catalog action the request matched within the resolved app.
 
-    ``actions`` is sorted strictest-policy-first; ``decisive`` returns the
+    ``actions`` is sorted strictest-policy-first; ``governing_action`` returns the
     head, whose policy drives the gate's verdict. A batched GraphQL POST is
     the canonical multi-action case.
     """
 
     model_config = ConfigDict(frozen=True)
 
-    actions: tuple[ActionMatch, ...]
+    actions: tuple[MatchedAction, ...]
     app_name: str
     external_app_id: int
     payload: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _non_empty(self) -> "RequestMatch":
+    def _non_empty(self) -> "AllMatchedActions":
         if not self.actions:
-            raise ValueError("RequestMatch.actions must be non-empty")
+            raise ValueError("AllMatchedActions.actions must be non-empty")
         return self
 
     @property
-    def decisive(self) -> ActionMatch:
+    def governing_action(self) -> MatchedAction:
         """The action whose policy drove the verdict (head of the sorted list)."""
         return self.actions[0]
 
 
-def match_action(
+def _app_name(app: ExternalApp) -> str:
+    provider = get_provider_for_app(app)
+    if provider is not None:
+        return provider.spec.app_name
+    # CUSTOM apps have no provider; their human name lives on the linked skill.
+    if app.app_type == ExternalAppType.CUSTOM:
+        return app.skill.name
+    return app.app_type.value
+
+
+def recognize_actions(
     db_session: Session,
     app: ExternalApp,
     request: ProxiedRequest,
-) -> RequestMatch | None:
-    """Resolve every catalog action ``request`` invoked within ``app``.
+) -> AllMatchedActions | None:
+    """Which catalog action(s) ``request`` invokes within ``app`` — pure
+    recognition, no credential knowledge.
 
-    Stored policy rows are the source of truth: a catalog action without a
-    row is un-gated. ``actions`` is sorted strictest-first so callers can
-    treat ``decisive`` as the verdict-driving action. Body decoding is the
-    caller's job — ``payload`` is empty here; refill via ``model_copy``.
+    Returns an ``AllMatchedActions`` over every catalog action whose rules fire (each
+    carrying its ``effective_policy`` — stored override else catalog default),
+    sorted strictest-first so ``actions[0]`` is the verdict, or ``None`` when no
+    catalog action matches. The credential gate and the whole-domain fallback are
+    the caller's job (see ``apply_credential_gate``). ``payload`` is left empty here; refill
+    it via ``model_copy``.
     """
-    # Custom apps are routed to ask for now.
-    if app.app_type == ExternalAppType.CUSTOM:
-        return RequestMatch(
-            actions=(
-                ActionMatch(
-                    action_type="custom_request",
-                    display_name=f"{request.method} {request.path}",
-                    description="Custom external app request",
-                    policy=EndpointPolicy.ASK,
-                ),
-            ),
-            app_name=app.skill.name,
-            external_app_id=app.id,
-        )
-
     context = MatchContext(request)
     stored = get_policies(db_session, app.id)
     catalog = get_endpoint_catalog(app.app_type)
     matched = [
-        ActionMatch(
+        MatchedAction(
             action_type=endpoint.id,
             display_name=endpoint.normalised_name,
             description=endpoint.description,
-            policy=stored[endpoint.id],
+            policy=effective_policy(endpoint, stored),
         )
         for endpoint in catalog
-        if endpoint.id in stored
-        and any(rule_matches(rule, context) for rule in endpoint.matches)
+        if any(rule_matches(rule, context) for rule in endpoint.matches)
     ]
     if not matched:
         return None
     matched.sort(key=lambda a: POLICY_SEVERITY[a.policy], reverse=True)
-
-    provider = get_provider_for_app(app)
-    app_name = provider.spec.app_name if provider is not None else app.app_type.value
-    return RequestMatch(
+    return AllMatchedActions(
         actions=tuple(matched),
-        app_name=app_name,
+        app_name=_app_name(app),
+        external_app_id=app.id,
+    )
+
+
+def apply_credential_gate(
+    app: ExternalApp,
+    request: ProxiedRequest,
+    matched_actions: AllMatchedActions | None,
+    *,
+    is_available: bool,
+) -> AllMatchedActions | None:
+    """Apply the credential gate to a pure ``recognize_actions`` result, given
+    whether the app ``is_available`` (is active and injectable — the caller resolves
+    that). Pure: no DB or credential access.
+
+    - ``is_available`` + a catalog action matched → those actions, unchanged.
+    - ``is_available`` + nothing matched → gate the whole domain under a default ``ASK``.
+    - not ``is_available`` → keep only a recorded ``DENY`` (an explicit block fires with
+      or without a credential), else ``None`` (forward the request bare, no prompt).
+    """
+    if not is_available:
+        if matched_actions is None:
+            return None
+        deny = tuple(
+            a for a in matched_actions.actions if a.policy is EndpointPolicy.DENY
+        )
+        return matched_actions.model_copy(update={"actions": deny}) if deny else None
+    if matched_actions is not None:
+        return matched_actions
+    return AllMatchedActions(
+        actions=(
+            MatchedAction(
+                action_type=WHOLE_DOMAIN_ACTION_TYPE,
+                display_name=f"Access {_app_name(app)}",
+                description=f"{request.method} {request.path}",
+                policy=EndpointPolicy.ASK,
+            ),
+        ),
+        app_name=_app_name(app),
         external_app_id=app.id,
     )

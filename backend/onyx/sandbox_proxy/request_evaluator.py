@@ -11,22 +11,27 @@ from collections.abc import Iterable
 from typing import Any
 from typing import Protocol
 from urllib.parse import parse_qs
+from uuid import UUID
 
 from mitmproxy import http
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.external_app import get_external_apps
 from onyx.db.models import ExternalApp
-from onyx.external_apps.matching.engine import match_action
-from onyx.external_apps.matching.engine import RequestMatch
+from onyx.external_apps.credentials import app_is_available
+from onyx.external_apps.matching.engine import AllMatchedActions
+from onyx.external_apps.matching.engine import apply_credential_gate
+from onyx.external_apps.matching.engine import recognize_actions
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-class ActionMatcher(Protocol):
-    def match(self, request: http.Request, tenant_id: str) -> RequestMatch | None: ...
+class RequestEvaluator(Protocol):
+    def evaluate(
+        self, request: http.Request, tenant_id: str, user_id: UUID
+    ) -> AllMatchedActions | None: ...
 
 
 def resolve_app_for_url(
@@ -54,15 +59,18 @@ def resolve_app_for_url(
     return None
 
 
-class ExternalAppActionMatcher(ActionMatcher):
+class ExternalAppRequestEvaluator(RequestEvaluator):
     """Matches a request against the tenant's connected external apps.
 
     Opens its own short tenant-scoped DB session (mirrors ``IdentityResolver``):
-    load the tenant's apps, resolve the one owning the request URL, then defer to
-    the pre-written ``match_action`` for the policy verdict.
+    load the tenant's apps, resolve the one owning the request URL, recognise the
+    catalog action(s) via ``recognize_actions``, then apply the credential gate via
+    ``apply_credential_gate`` to produce the verdict.
     """
 
-    def match(self, request: http.Request, tenant_id: str) -> RequestMatch | None:
+    def evaluate(
+        self, request: http.Request, tenant_id: str, user_id: UUID
+    ) -> AllMatchedActions | None:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             apps = get_external_apps(db)
             app = resolve_app_for_url(request.url, apps)
@@ -76,8 +84,13 @@ class ExternalAppActionMatcher(ActionMatcher):
                 path=(request.path or "").split("?", 1)[0],
                 body=request.raw_content,
             )
-            matched = match_action(db, app, proxied)
-            if matched is None:
+            matched_actions = apply_credential_gate(
+                app,
+                proxied,
+                recognize_actions(db, app, proxied),
+                is_available=app_is_available(db, app, user_id),
+            )
+            if matched_actions is None:
                 return None
 
         # Engine leaves `payload` empty — we own the raw content + content-type.
@@ -85,7 +98,7 @@ class ExternalAppActionMatcher(ActionMatcher):
             request.raw_content or b"",
             (request.headers.get("content-type") or "").lower(),
         )
-        return matched.model_copy(update={"payload": payload or {}})
+        return matched_actions.model_copy(update={"payload": payload or {}})
 
 
 def _decode_body(body: bytes, content_type: str) -> dict[str, Any] | None:

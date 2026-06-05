@@ -47,7 +47,9 @@ def _patch_session(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _ctx() -> InjectionContext:
-    return InjectionContext(sandbox=_sandbox(tenant_id="tenant-7"), match=None)
+    return InjectionContext(
+        sandbox=_sandbox(tenant_id="tenant-7"), matched_actions=None
+    )
 
 
 @pytest.fixture

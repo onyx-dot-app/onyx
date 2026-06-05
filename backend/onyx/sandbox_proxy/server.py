@@ -16,7 +16,6 @@ from mitmproxy.tools.dump import DumpMaster
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.sandbox_proxy.action_matcher import ExternalAppActionMatcher
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.backend import build_ca_store
 from onyx.sandbox_proxy.backend import build_ip_lookup
@@ -26,6 +25,7 @@ from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatche
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIPLookup
+from onyx.sandbox_proxy.request_evaluator import ExternalAppRequestEvaluator
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
 from onyx.sandbox_proxy.resolvers.llm_provider_key import LLMProviderKeyResolver
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
@@ -245,7 +245,7 @@ def main() -> int:
         )
         gate = GateAddon(
             identity=identity,
-            action_matcher=ExternalAppActionMatcher(),
+            request_evaluator=ExternalAppRequestEvaluator(),
             cache_factory=_build_cache_factory(),
             proxy_instance_id=proxy_instance_id,
             credential_dispatcher=CredentialInjectionDispatcher(resolvers),
