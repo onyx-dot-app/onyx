@@ -105,7 +105,6 @@ RUN apt-get update && \
         procps \
         libjemalloc2 \
         libxmlsec1-openssl \
-        postgresql-client \
         && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
@@ -156,6 +155,9 @@ RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     apt-get remove -y --allow-remove-essential perl-base && \
     apt-get autoremove -y && \
     playwright install-deps chromium && \
+    # Re-install after autoremove: perl-base removal cascades through postgresql-client's
+    # perl dependency, sweeping it up. Install it here (post-autoremove) so it survives.
+    apt-get install -y postgresql-client && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
