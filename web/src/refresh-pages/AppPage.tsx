@@ -44,7 +44,9 @@ import {
   useChatSessionStore,
   useCurrentMessageHistory,
   useCurrentMessageTree,
+  useCurrentSessionContextUsage,
 } from "@/app/app/stores/useChatSessionStore";
+import { getContextUsage } from "@/app/app/services/packetUtils";
 import {
   useCurrentChatState,
   useIsReady,
@@ -357,6 +359,20 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   );
   const messageHistory = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
+
+  // Context-window gauge: prefer the live value from the latest assistant turn's
+  // packets, else fall back to the session-detail baseline loaded into the store.
+  const sessionContextUsage = useCurrentSessionContextUsage();
+  const liveContextUsage = useMemo(() => {
+    for (let i = messageHistory.length - 1; i >= 0; i--) {
+      const message = messageHistory[i];
+      if (message?.type === "assistant") {
+        return getContextUsage(message.packets);
+      }
+    }
+    return null;
+  }, [messageHistory]);
+  const contextUsage = liveContextUsage ?? sessionContextUsage ?? null;
 
   // Block input when the last turn is multi-model and the user hasn't
   // selected a preferred response yet. Without a selection, it's ambiguous
@@ -1004,6 +1020,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                               : projectContextTokenCount
                           }
                           availableContextTokens={availableContextTokens}
+                          contextUsage={contextUsage}
                           selectedAgent={selectedAgent || liveAgent}
                           handleFileUpload={handleMessageSpecificFileUpload}
                           setPresentingDocument={setPresentingDocument}
