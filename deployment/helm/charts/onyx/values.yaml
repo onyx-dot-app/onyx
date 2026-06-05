@@ -1496,6 +1496,13 @@ configMap:
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
 
+# -- Craft sandbox identity/RBAC (rendered when configMap.ENABLE_CRAFT=true).
+craft:
+  # Required when ENABLE_CRAFT=true. The craft_sandbox terraform module's role_arn output.
+  sandboxFileSyncRoleArn: ""
+  # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
+  extraBoundServiceAccounts: []
+
 # -- Sandbox egress proxy.
 sandboxProxy:
   replicaCount: 2
