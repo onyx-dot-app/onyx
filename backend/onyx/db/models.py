@@ -5457,7 +5457,7 @@ class BuildMessage(Base):
 class ActionApproval(Base):
     """One agent-initiated gated request and its decision.
 
-    ``actions`` is a non-empty JSONB list of :class:`ActionMatch`-shaped
+    ``actions`` is a non-empty JSONB list of :class:`MatchedAction`-shaped
     dicts, sorted strictest-policy-first; ``actions[0]`` drove the gating
     decision. ``decision IS NULL`` is pending (or a proxy-crash orphan).
     """

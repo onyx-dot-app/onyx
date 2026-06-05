@@ -30,7 +30,7 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.matching.engine import ActionMatch
+from onyx.external_apps.matching.engine import MatchedAction
 from onyx.external_apps.presentation.decode import decode_payload
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.db import action_approval
@@ -56,7 +56,7 @@ class ApprovalView(BaseModel):
     approval_id: UUID
     session_id: UUID
     # Non-empty by construction; sorted strictest-policy-first.
-    actions: list[ActionMatch]
+    actions: list[MatchedAction]
     app_name: str
     payload: dict[str, Any]
     created_at: datetime

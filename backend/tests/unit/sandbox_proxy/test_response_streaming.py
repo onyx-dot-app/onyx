@@ -32,11 +32,11 @@ from mitmproxy import http as mitm_http
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
-from onyx.sandbox_proxy.action_matcher import ActionMatcher
 from onyx.sandbox_proxy.addons.gate import _IdentityResolver
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.identity import ResolvedSandbox
+from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 
 # Inter-chunk delay on the upstream. The whole stream takes
 # `(_CHUNK_COUNT - 1) * _CHUNK_DELAY_S`, during which a streamed client must
@@ -113,10 +113,15 @@ class _StubResolver(_IdentityResolver):
         return None
 
 
-class _NonGatingMatcher(ActionMatcher):
+class _NonGatingMatcher(RequestEvaluator):
     """Never matches, so every request fails open and is forwarded."""
 
-    def match(self, request: mitm_http.Request, tenant_id: str) -> None:  # noqa: ARG002
+    def evaluate(
+        self,
+        request: mitm_http.Request,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+    ) -> None:
         return None
 
 
@@ -165,7 +170,7 @@ def _start_proxy(
     """
     gate = GateAddon(
         identity=_StubResolver(),
-        action_matcher=_NonGatingMatcher(),
+        request_evaluator=_NonGatingMatcher(),
         cache_factory=_unused_factory,
         proxy_instance_id="proxy-test",
         credential_dispatcher=CredentialInjectionDispatcher([]),

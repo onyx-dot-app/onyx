@@ -47,7 +47,7 @@ def test_claims_then_resolve_round_trips_encrypted_key(
             sandbox_name="sandbox-test",
             sandbox_ip="127.0.0.1",
         ),
-        match=None,
+        matched_actions=None,
     )
 
     try:
