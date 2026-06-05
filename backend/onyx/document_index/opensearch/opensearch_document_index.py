@@ -905,11 +905,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return inference_chunks
 
-    def index_raw_chunks(self, chunks: list[DocumentChunk]) -> None:
+    def index_raw_chunks(
+        self, chunks: list[DocumentChunk], use_external_versioning: bool = False
+    ) -> None:
         """Indexes raw document chunks into OpenSearch.
 
-        Used in the Vespa migration task. Can be deleted after migrations are
-        complete.
+        Used by the Vespa migration task and the reindex port. When
+        use_external_versioning is True the write is ordered by doc_updated_at
+        (newest-wins, 409 benign) so a slower port write can't clobber a newer
+        live sync to the same chunk.
         """
         logger.debug(
             "[OpenSearchDocumentIndex] Indexing %s raw chunks for index %s.",
@@ -920,7 +924,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # because the document may already have been indexed during the
         # OpenSearch transition period.
         self._client.bulk_index_documents(
-            documents=chunks, tenant_state=self._tenant_state, update_if_exists=True
+            documents=chunks,
+            tenant_state=self._tenant_state,
+            update_if_exists=True,
+            use_external_versioning=use_external_versioning,
         )
 
 

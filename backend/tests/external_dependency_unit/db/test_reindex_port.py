@@ -11,24 +11,38 @@ covered by applying the migration, which this repo does not test programmaticall
 - the synthetic seed: writer row shape, seed-blind filtering (a seed must not count
   toward the swap or masquerade as the poll cursor), and the gated should_index
   FUTURE branch (legacy once-only vs port-flow continuous)
+- run_port_attempt: ports docs in batches, advances/commits the cursor, retries a
+  failed batch then marks FAILED (cursor left at the prior good batch)
 """
 
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from typing import cast
+from unittest.mock import MagicMock
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
+from onyx.background.celery.tasks.docprocessing import port_task
+from onyx.background.celery.tasks.docprocessing.port_task import run_check_for_port
+from onyx.background.celery.tasks.docprocessing.port_task import run_port_attempt
 from onyx.background.celery.tasks.docprocessing.utils import should_index
+from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.constants import OnyxCeleryQueues
+from onyx.configs.constants import OnyxCeleryTask
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
+from onyx.db.document import get_document_ids_for_cc_pair_batch
 from onyx.db.document import mark_document_as_modified
 from onyx.db.document import mark_document_as_synced
 from onyx.db.document import mark_document_synced_secondary_pending
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import PortAttemptStatus
@@ -41,20 +55,73 @@ from onyx.db.index_attempt import get_latest_successful_index_attempt_for_cc_pai
 from onyx.db.index_attempt import mock_successful_index_attempt
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
+from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import PortAttempt
 from onyx.db.models import SearchSettings
 from onyx.db.port_attempt import commit_port_cursor
 from onyx.db.port_attempt import create_port_attempt
 from onyx.db.port_attempt import get_active_port_attempt
+from onyx.db.port_attempt import mark_port_canceled
 from onyx.db.port_attempt import mark_port_failed
 from onyx.db.port_attempt import mark_port_in_progress
 from onyx.db.port_attempt import mark_port_succeeded
 from onyx.db.search_settings import create_search_settings
 from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.opensearch import port_copy
+from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future
+from onyx.indexing.port_reembed import ReembedStrategy
 from onyx.kg.models import KGStage
+from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+
+
+def _seed_cc_pair_documents(
+    db_session: Session, cc_pair: ConnectorCredentialPair, count: int
+) -> list[str]:
+    """Create `count` documents linked to the cc_pair; returns their ids, sorted."""
+    doc_ids = [f"portdoc-{i:03d}" for i in range(1, count + 1)]
+    for doc_id in doc_ids:
+        db_session.add(
+            DbDocument(id=doc_id, semantic_id=doc_id, kg_stage=KGStage.NOT_STARTED)
+        )
+    db_session.flush()
+    for doc_id in doc_ids:
+        db_session.add(
+            DocumentByConnectorCredentialPair(
+                id=doc_id,
+                connector_id=cc_pair.connector_id,
+                credential_id=cc_pair.credential_id,
+                has_been_indexed=True,
+            )
+        )
+    db_session.commit()
+    return doc_ids
+
+
+def _run_check_for_port(
+    cc_pair: ConnectorCredentialPair,
+    future_id: int,
+    celery_app: MagicMock | None = None,
+) -> tuple[int | None, MagicMock]:
+    """Run check_for_port scoped to this test's FUTURE + cc_pair (the real
+    get_secondary/fetch helpers are global). Returns (result, celery_app)."""
+    celery_app = celery_app or MagicMock()
+    with (
+        patch.object(
+            port_task,
+            "get_secondary_search_settings",
+            lambda db, *_, **__: db.get(SearchSettings, future_id),
+        ),
+        patch.object(
+            port_task,
+            "fetch_indexable_standard_connector_credential_pair_ids",
+            lambda *_, **__: [cc_pair.id],
+        ),
+    ):
+        result = run_check_for_port(get_current_tenant_id(), celery_app)
+    return result, celery_app
 
 
 @pytest.fixture
@@ -366,4 +433,453 @@ def test_should_index_future_gated_on_port_flow(
             cc_pair, future_ss, secondary_index_building=True, db_session=db_session
         )
         is True
+    )
+
+
+def test_get_document_ids_for_cc_pair_batch(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """Cursor pagination over a cc_pair's doc ids: ascending, exclusive of the
+    cursor, capped at limit, empty once exhausted -> the port's resume scan."""
+    doc_ids = _seed_cc_pair_documents(db_session, cc_pair, 5)
+
+    first = get_document_ids_for_cc_pair_batch(
+        db_session, cc_pair.id, after_doc_id=None, limit=2
+    )
+    assert first == doc_ids[:2]
+
+    # resume past the last id of the prior page
+    second = get_document_ids_for_cc_pair_batch(
+        db_session, cc_pair.id, after_doc_id=first[-1], limit=2
+    )
+    assert second == doc_ids[2:4]
+
+    third = get_document_ids_for_cc_pair_batch(
+        db_session, cc_pair.id, after_doc_id=second[-1], limit=2
+    )
+    assert third == doc_ids[4:]
+
+    # cursor at/after the last id -> exhausted
+    assert (
+        get_document_ids_for_cc_pair_batch(
+            db_session, cc_pair.id, after_doc_id=doc_ids[-1], limit=2
+        )
+        == []
+    )
+
+
+def test_copy_present_chunks_to_future_orchestration() -> None:
+    """Per batch: each PIT-scan page is re-embedded and written to FUTURE with
+    external versioning; the return is the total chunks written. Mocks the
+    OpenSearch read/write + re-embed (covered by their own tests)."""
+    present_client = MagicMock()
+    future_index = MagicMock()
+    strategy = cast(ReembedStrategy, MagicMock())
+    embedder = MagicMock()
+    # two pages out of the PIT scan
+    present_client.iter_chunks_for_doc_ids.return_value = iter([["c1", "c2"], ["c3"]])
+
+    with patch.object(
+        port_copy,
+        "re_embed_chunks",
+        side_effect=lambda chunks, _strategy, _embedder: [f"re:{c}" for c in chunks],
+    ) as mock_reembed:
+        written = copy_present_chunks_to_future(
+            present_client, future_index, ["d1", "d2"], strategy, embedder
+        )
+
+    assert written == 3
+    present_client.iter_chunks_for_doc_ids.assert_called_once_with(["d1", "d2"])
+    # re-embed once per page, with that page's chunks + prebuilt strategy/embedder
+    assert mock_reembed.call_count == 2
+    assert mock_reembed.call_args_list[0].args == (["c1", "c2"], strategy, embedder)
+    # FUTURE write once per page, always external-versioned
+    assert future_index.index_raw_chunks.call_count == 2
+    first_write = future_index.index_raw_chunks.call_args_list[0]
+    assert first_write.args[0] == ["re:c1", "re:c2"]
+    assert first_write.kwargs == {"use_external_versioning": True}
+
+
+def test_run_port_attempt_happy_path(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Ports every doc in INDEX_BATCH_SIZE batches: copier called once per batch,
+    cursor advanced to the last id, docs_ported == total, status SUCCESS."""
+    cc_pair, future_id = cc_pair_and_future
+    doc_ids = _seed_cc_pair_documents(db_session, cc_pair, INDEX_BATCH_SIZE + 4)
+    attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
+
+    mock_copier = MagicMock()
+    mock_copier.copy_doc_batch.side_effect = lambda ids: len(ids)
+    with patch.object(port_task, "PortCopier", return_value=mock_copier):
+        run_port_attempt(attempt_id)
+
+    # two batches: a full INDEX_BATCH_SIZE then the remaining 4
+    assert mock_copier.copy_doc_batch.call_count == 2
+    assert (
+        mock_copier.copy_doc_batch.call_args_list[0].args[0]
+        == doc_ids[:INDEX_BATCH_SIZE]
+    )
+    assert (
+        mock_copier.copy_doc_batch.call_args_list[1].args[0]
+        == doc_ids[INDEX_BATCH_SIZE:]
+    )
+
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt_id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.SUCCESS
+    assert row.last_processed_doc_id == doc_ids[-1]
+    assert row.docs_ported == len(doc_ids)
+    assert row.time_completed is not None
+
+
+def test_run_port_attempt_batch_retry_then_failed(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A batch that keeps failing is retried _PORT_BATCH_MAX_RETRIES times, then
+    the attempt is FAILED with the cursor un-advanced (a fresh attempt resumes
+    from the prior good batch -- here, the start)."""
+    cc_pair, future_id = cc_pair_and_future
+    _seed_cc_pair_documents(db_session, cc_pair, 3)
+    attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
+
+    mock_copier = MagicMock()
+    mock_copier.copy_doc_batch.side_effect = RuntimeError("opensearch down")
+    with (
+        patch.object(port_task, "PortCopier", return_value=mock_copier),
+        patch.object(port_task.time, "sleep"),  # don't sleep between retries
+    ):
+        run_port_attempt(attempt_id)
+
+    assert mock_copier.copy_doc_batch.call_count == port_task._PORT_BATCH_MAX_RETRIES
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt_id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.FAILED
+    assert row.error_msg == "opensearch down"
+    assert row.last_processed_doc_id is None  # cursor never advanced
+    assert row.docs_ported == 0
+    assert row.time_completed is not None
+
+
+def test_run_port_attempt_resumes_from_cursor(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A resumed attempt scans only ids past its stored cursor and accumulates
+    docs_ported on top of the prior count."""
+    cc_pair, future_id = cc_pair_and_future
+    doc_ids = _seed_cc_pair_documents(db_session, cc_pair, 5)
+    attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
+    # simulate a prior partial run: cursor at the 2nd doc, 2 docs ported
+    mark_port_in_progress(db_session, attempt_id)
+    commit_port_cursor(
+        db_session, attempt_id, last_processed_doc_id=doc_ids[1], docs_ported=2
+    )
+
+    mock_copier = MagicMock()
+    mock_copier.copy_doc_batch.side_effect = lambda ids: len(ids)
+    with patch.object(port_task, "PortCopier", return_value=mock_copier):
+        run_port_attempt(attempt_id)
+
+    # only the docs after the cursor are copied
+    assert mock_copier.copy_doc_batch.call_count == 1
+    assert mock_copier.copy_doc_batch.call_args_list[0].args[0] == doc_ids[2:]
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt_id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.SUCCESS
+    assert row.last_processed_doc_id == doc_ids[-1]
+    assert row.docs_ported == 5  # 2 prior + 3 newly ported
+
+
+def test_run_port_attempt_stops_when_canceled(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """An external CANCEL (operator) marks the attempt terminal; the task stops at
+    the next batch boundary with its partial cursor preserved."""
+    cc_pair, future_id = cc_pair_and_future
+    doc_ids = _seed_cc_pair_documents(db_session, cc_pair, INDEX_BATCH_SIZE + 4)
+    attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
+
+    def copy_then_cancel(ids: list[str]) -> int:
+        mark_port_canceled(db_session, attempt_id)  # operator cancels after batch 1
+        return len(ids)
+
+    mock_copier = MagicMock()
+    mock_copier.copy_doc_batch.side_effect = copy_then_cancel
+    with patch.object(port_task, "PortCopier", return_value=mock_copier):
+        run_port_attempt(attempt_id)
+
+    # first batch ran; the CANCELED status stops it at the next boundary
+    assert mock_copier.copy_doc_batch.call_count == 1
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt_id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.CANCELED
+    assert row.last_processed_doc_id == doc_ids[INDEX_BATCH_SIZE - 1]
+    assert row.docs_ported == INDEX_BATCH_SIZE
+
+
+def test_run_port_attempt_exits_when_cc_pair_deleting(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A cc_pair flipped to DELETING stops the port at the boundary before any
+    copy (the CASCADE will remove the attempt row)."""
+    cc_pair, future_id = cc_pair_and_future
+    _seed_cc_pair_documents(db_session, cc_pair, 3)
+    attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
+    cc_pair.status = ConnectorCredentialPairStatus.DELETING
+    db_session.commit()
+
+    mock_copier = MagicMock()
+    with patch.object(port_task, "PortCopier", return_value=mock_copier):
+        run_port_attempt(attempt_id)
+
+    assert mock_copier.copy_doc_batch.call_count == 0
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt_id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.IN_PROGRESS  # left for the CASCADE to remove
+
+
+def test_run_port_attempt_soft_time_limit_yields(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Hitting the self-enforced soft time limit yields (no copy, no terminal
+    mark) so the watchdog can reschedule from the cursor."""
+    cc_pair, future_id = cc_pair_and_future
+    _seed_cc_pair_documents(db_session, cc_pair, 3)
+    attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
+
+    mock_copier = MagicMock()
+    with (
+        patch.object(port_task, "PortCopier", return_value=mock_copier),
+        patch.object(port_task, "_PORT_SOFT_TIME_LIMIT", -1),  # already "expired"
+    ):
+        run_port_attempt(attempt_id)
+
+    assert mock_copier.copy_doc_batch.call_count == 0
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt_id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.IN_PROGRESS  # not terminal; watchdog resumes
+
+
+def test_check_for_port_creates_and_enqueues(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A use_port_flow FUTURE with an in-scope cc_pair and no active attempt ->
+    one NOT_STARTED PortAttempt created + run_port_attempt enqueued."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    result, celery_app = _run_check_for_port(cc_pair, future_id)
+
+    assert result == 1
+    db_session.expire_all()
+    attempts = (
+        db_session.query(PortAttempt)
+        .filter(
+            PortAttempt.cc_pair_id == cc_pair.id,
+            PortAttempt.search_settings_id == future_id,
+        )
+        .all()
+    )
+    assert len(attempts) == 1
+    assert attempts[0].status == PortAttemptStatus.NOT_STARTED
+    celery_app.send_task.assert_called_once()
+    call = celery_app.send_task.call_args
+    assert call.args[0] == OnyxCeleryTask.RUN_PORT_ATTEMPT
+    assert call.kwargs["kwargs"] == {
+        "port_attempt_id": attempts[0].id,
+        "tenant_id": get_current_tenant_id(),
+    }
+    assert call.kwargs["queue"] == OnyxCeleryQueues.DOCPROCESSING
+    assert call.kwargs["expires"] == BEAT_EXPIRES_DEFAULT
+
+
+def test_check_for_port_gated_off_when_not_port_flow(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A legacy FUTURE (use_port_flow=False) is a no-op -> nothing created/enqueued."""
+    cc_pair, future_id = cc_pair_and_future  # use_port_flow stays False (default)
+
+    result, celery_app = _run_check_for_port(cc_pair, future_id)
+
+    assert result is None
+    celery_app.send_task.assert_not_called()
+    assert (
+        db_session.query(PortAttempt)
+        .filter(PortAttempt.cc_pair_id == cc_pair.id)
+        .count()
+        == 0
+    )
+
+
+def test_check_for_port_resumes_failed_cursor(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A prior FAILED attempt is rescheduled with its cursor carried forward."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    failed = create_port_attempt(db_session, cc_pair.id, future_id)
+    mark_port_in_progress(db_session, failed.id)
+    commit_port_cursor(
+        db_session, failed.id, last_processed_doc_id="portdoc-042", docs_ported=42
+    )
+    mark_port_failed(db_session, failed.id, error_msg="boom")
+
+    result, _ = _run_check_for_port(cc_pair, future_id)
+
+    assert result == 1
+    db_session.expire_all()
+    fresh = (
+        db_session.query(PortAttempt)
+        .filter(
+            PortAttempt.cc_pair_id == cc_pair.id,
+            PortAttempt.status == PortAttemptStatus.NOT_STARTED,
+        )
+        .all()
+    )
+    assert len(fresh) == 1
+    assert fresh[0].last_processed_doc_id == "portdoc-042"  # resumed cursor
+
+
+def test_check_for_port_fails_stale_in_progress(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A stalled IN_PROGRESS attempt is FAILED, then a fresh attempt is created
+    and enqueued to resume."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    stale = create_port_attempt(db_session, cc_pair.id, future_id)
+    mark_port_in_progress(db_session, stale.id)
+    # force last_progress_time well past the stall threshold
+    old = datetime.now(timezone.utc) - timedelta(hours=1)
+    db_session.query(PortAttempt).filter(PortAttempt.id == stale.id).update(
+        {PortAttempt.last_progress_time: old}
+    )
+    db_session.commit()
+
+    result, celery_app = _run_check_for_port(cc_pair, future_id)
+
+    db_session.expire_all()
+    stale_row = db_session.get(PortAttempt, stale.id)
+    assert stale_row is not None
+    assert stale_row.status == PortAttemptStatus.FAILED  # watchdog failed the stall
+    fresh = (
+        db_session.query(PortAttempt)
+        .filter(
+            PortAttempt.cc_pair_id == cc_pair.id,
+            PortAttempt.status == PortAttemptStatus.NOT_STARTED,
+        )
+        .all()
+    )
+    assert len(fresh) == 1
+    assert result == 1
+    celery_app.send_task.assert_called_once()
+
+
+def test_check_for_port_leaves_active_in_progress(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A healthy (recent) IN_PROGRESS attempt is left untouched and not duplicated."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    active = create_port_attempt(db_session, cc_pair.id, future_id)
+    mark_port_in_progress(db_session, active.id)  # recent last_progress_time
+
+    result, celery_app = _run_check_for_port(cc_pair, future_id)
+
+    assert result == 0
+    celery_app.send_task.assert_not_called()
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, active.id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.IN_PROGRESS  # untouched
+    assert (
+        db_session.query(PortAttempt)
+        .filter(PortAttempt.cc_pair_id == cc_pair.id)
+        .count()
+        == 1
+    )
+
+
+def test_check_for_port_fails_attempt_when_enqueue_raises(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """If send_task fails after the row is committed, the attempt is FAILED (not
+    left orphaned NOT_STARTED) so the next tick recreates + re-enqueues it."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    celery_app = MagicMock()
+    celery_app.send_task.side_effect = RuntimeError("broker down")
+    _run_check_for_port(cc_pair, future_id, celery_app=celery_app)
+
+    db_session.expire_all()
+    attempts = (
+        db_session.query(PortAttempt).filter(PortAttempt.cc_pair_id == cc_pair.id).all()
+    )
+    assert len(attempts) == 1
+    assert attempts[0].status == PortAttemptStatus.FAILED  # not orphaned NOT_STARTED
+    assert attempts[0].error_msg == "enqueue failed"
+
+
+def test_check_for_port_survives_create_failure(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A create_port_attempt failure for one cc_pair is swallowed so the tick
+    completes (the next tick retries) rather than aborting every other cc_pair."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    celery_app = MagicMock()
+    with (
+        patch.object(
+            port_task,
+            "get_secondary_search_settings",
+            lambda db, *_, **__: db.get(SearchSettings, future_id),
+        ),
+        patch.object(
+            port_task,
+            "fetch_indexable_standard_connector_credential_pair_ids",
+            lambda *_, **__: [cc_pair.id],
+        ),
+        patch.object(
+            port_task, "create_port_attempt", side_effect=RuntimeError("db blip")
+        ),
+    ):
+        result = run_check_for_port(get_current_tenant_id(), celery_app)
+
+    assert result == 0  # tick completed; the failed create was skipped
+    celery_app.send_task.assert_not_called()
+    db_session.expire_all()
+    assert (
+        db_session.query(PortAttempt)
+        .filter(PortAttempt.cc_pair_id == cc_pair.id)
+        .count()
+        == 0
     )

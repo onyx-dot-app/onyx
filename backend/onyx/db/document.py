@@ -10,9 +10,11 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_
+from sqlalchemy import CompoundSelect
 from sqlalchemy import delete
 from sqlalchemy import exists
 from sqlalchemy import func
+from sqlalchemy import literal
 from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
@@ -92,20 +94,62 @@ def count_documents_by_needs_sync(session: Session) -> int:
     )
 
 
-def construct_document_id_select_by_needs_sync() -> Select:
-    """Get all document IDs that need syncing across all connector credential pairs.
+def count_secondary_only_sync_pending_documents(db_session: Session) -> int:
+    """Count docs whose FUTURE metadata sync was deferred (D2) and not yet drained.
 
-    Returns a Select statement for documents where:
-    1. last_modified is newer than last_synced
-    2. last_synced is null (meaning we've never synced)
-    AND the document has a relationship with a connector/credential pair
+    Uses the partial index ix_document_secondary_only_sync_pending. The port-aware
+    swap holds until this reaches 0 (the deferred-sync backlog is fully applied).
     """
-    return select(DbDocument.id).where(
-        or_(
-            DbDocument.last_modified > DbDocument.last_synced,
-            DbDocument.last_synced.is_(None),
+    return db_session.execute(
+        select(func.count()).where(DbDocument.secondary_only_sync_pending.is_(True))
+    ).scalar_one()
+
+
+def count_documents_by_needs_sync_or_secondary_pending(session: Session) -> int:
+    """count_documents_by_needs_sync plus docs whose FUTURE sync was deferred.
+
+    The vespa sync producer gates on this so a deferred-only backlog still
+    generates drain tasks — a deferred doc has its needs_sync already cleared, so
+    count_documents_by_needs_sync alone would miss it.
+    """
+    return (
+        session.query(DbDocument.id)
+        .filter(
+            or_(
+                DbDocument.last_modified > DbDocument.last_synced,
+                DbDocument.last_synced.is_(None),
+                DbDocument.secondary_only_sync_pending.is_(True),
+            )
         )
+        .count()
     )
+
+
+def construct_document_id_select_by_needs_sync_or_secondary_pending() -> CompoundSelect:
+    """Document ids that need a metadata sync, each tagged whether it is a *purely
+    deferred* FUTURE sync (so the producer can drop it to LOW while a port runs).
+
+    Two SQL-disjoint legs, unioned:
+      - needs_sync rows -> tag False. These have real work and drain at normal
+        priority even if also flagged deferred.
+      - deferred-only rows (flagged and NOT needs_sync) -> tag True.
+    A doc that is both needs_sync and deferred falls in the first leg (tag False),
+    so it is never under-prioritized to LOW.
+    """
+    needs_sync_predicate = or_(
+        DbDocument.last_modified > DbDocument.last_synced,
+        DbDocument.last_synced.is_(None),
+    )
+    needs_sync = select(
+        DbDocument.id, literal(False).label("secondary_only_sync_pending")
+    ).where(needs_sync_predicate)
+    deferred_only = select(
+        DbDocument.id, literal(True).label("secondary_only_sync_pending")
+    ).where(
+        DbDocument.secondary_only_sync_pending.is_(True),
+        ~needs_sync_predicate,
+    )
+    return needs_sync.union(deferred_only)
 
 
 def construct_document_id_select_for_connector_credential_pair(
@@ -162,6 +206,40 @@ def get_document_ids_for_connector_credential_pair(
         )
     )
     return list(db_session.execute(doc_ids_stmt).scalars().all())
+
+
+def get_document_ids_for_cc_pair_batch(
+    db_session: Session,
+    cc_pair_id: int,
+    after_doc_id: str | None,
+    limit: int,
+) -> list[str]:
+    """An ordered page of a cc_pair's document ids, for a cursor scan.
+
+    Returns ids `> after_doc_id` ascending, capped at `limit`. Pass the last id
+    of a page back as `after_doc_id` to resume past it — the reindex port stores
+    that cursor on the PortAttempt so a fresh attempt continues deterministically
+    rather than restarting.
+    """
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session, cc_pair_id=cc_pair_id
+    )
+    if not cc_pair:
+        raise ValueError(f"No CC pair found with ID: {cc_pair_id}")
+
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id == cc_pair.credential_id,
+        )
+        .distinct()
+        .order_by(DocumentByConnectorCredentialPair.id)
+        .limit(limit)
+    )
+    if after_doc_id is not None:
+        stmt = stmt.where(DocumentByConnectorCredentialPair.id > after_doc_id)
+    return list(db_session.execute(stmt).scalars().all())
 
 
 def get_documents_for_connector_credential_pair_limited_columns(

@@ -76,14 +76,18 @@ def get_filerecord(db_session: Session, file_id: str) -> FileRecord | None:
     return get_filerecord_by_file_id_optional(file_id=file_id, db_session=db_session)
 
 
-def make_cc_pair(db_session: Session) -> ConnectorCredentialPair:
+def make_cc_pair(
+    db_session: Session,
+    source: DocumentSource = DocumentSource.MOCK_CONNECTOR,
+) -> ConnectorCredentialPair:
     """Create a Connector + Credential + ConnectorCredentialPair for a test.
 
-    All names are UUID-suffixed so parallel test runs don't collide.
+    All names are UUID-suffixed so parallel test runs don't collide. Pass `source`
+    to build a non-standard pair (e.g. INGESTION_API for push-based-pair tests).
     """
     connector = Connector(
         name=f"test-connector-{uuid4().hex[:8]}",
-        source=DocumentSource.MOCK_CONNECTOR,
+        source=source,
         input_type=InputType.LOAD_STATE,
         connector_specific_config={},
         refresh_freq=None,
@@ -94,7 +98,7 @@ def make_cc_pair(db_session: Session) -> ConnectorCredentialPair:
     db_session.flush()
 
     credential = Credential(
-        source=DocumentSource.MOCK_CONNECTOR,
+        source=source,
         credential_json={},
     )
     db_session.add(credential)

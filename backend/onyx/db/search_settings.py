@@ -144,6 +144,12 @@ def get_secondary_search_settings(db_session: Session) -> SearchSettings | None:
     return latest_settings
 
 
+def get_search_settings_by_id(
+    db_session: Session, search_settings_id: int
+) -> SearchSettings | None:
+    return db_session.get(SearchSettings, search_settings_id)
+
+
 def get_active_search_settings(db_session: Session) -> ActiveSearchSettings:
     """Returns active search settings. Secondary search settings may be None."""
 

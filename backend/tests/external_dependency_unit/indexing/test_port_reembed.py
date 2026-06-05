@@ -1,4 +1,4 @@
-"""Tests for re_embed_for_future (reindex port re-embedding).
+"""Tests for the reindex-port re-embedding (port_reembed).
 
 These cover the pure re-embed logic: strategy selection, rebuilding the semantic
 metadata tail, the embed-input recovery (the crux — stored content carries the
@@ -10,6 +10,7 @@ from the raw stored content (here) is equivalent to proving the resulting vector
 differs; the real-embedder path is exercised once the port task is wired.
 """
 
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -24,12 +25,12 @@ from onyx.document_index.chunk_content_enrichment import (
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.indexing.chunker import _get_metadata_suffix_for_document_index
-from onyx.indexing.embedder import DefaultIndexingEmbedder
+from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import IndexChunk
 from onyx.indexing.port_reembed import _stored_chunk_to_doc_aware
-from onyx.indexing.port_reembed import re_embed_for_future
+from onyx.indexing.port_reembed import re_embed_chunks
 from onyx.indexing.port_reembed import rebuild_semantic_tail
 from onyx.indexing.port_reembed import recover_embedding_input
 from onyx.indexing.port_reembed import ReembedStrategy
@@ -167,23 +168,19 @@ def test_to_doc_aware_chunk_feeds_embed_input() -> None:
 
 def test_re_embed_augmentation_not_implemented() -> None:
     with pytest.raises(NotImplementedError):
-        re_embed_for_future(
-            [_stored_chunk("body")],
-            _ss(enable_contextual_rag=False),
-            _ss(enable_contextual_rag=True),
+        re_embed_chunks(
+            [_stored_chunk("body")], ReembedStrategy.AUGMENTATION, MagicMock()
         )
 
 
 def test_re_embed_empty_returns_empty() -> None:
-    assert re_embed_for_future([], _ss(), _ss()) == []
+    assert re_embed_chunks([], ReembedStrategy.MODEL_ONLY, MagicMock()) == []
 
 
-def test_re_embed_preserves_all_fields_swaps_only_vectors(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """re_embed_for_future returns the whole stored chunk as a DocumentChunk with
-    only content_vector/title_vector recomputed — every other field is copied
-    through (so the FUTURE write is a faithful copy with new embeddings)."""
+def test_re_embed_preserves_all_fields_swaps_only_vectors() -> None:
+    """re_embed_chunks returns the whole stored chunk as a DocumentChunk with only
+    content_vector/title_vector recomputed — every other field is copied through
+    (so the FUTURE write is a faithful copy with new embeddings)."""
     metadata_list = convert_metadata_dict_to_list_of_strings({"author": "Jane"})
     stored = _stored_chunk(
         "body text", title="My Title", metadata_list=metadata_list, chunk_index=3
@@ -203,13 +200,9 @@ def test_re_embed_preserves_all_fields_swaps_only_vectors(
                 for chunk in chunks
             ]
 
-    monkeypatch.setattr(
-        DefaultIndexingEmbedder,
-        "from_db_search_settings",
-        MagicMock(return_value=_FakeEmbedder()),
+    [result] = re_embed_chunks(
+        [stored], ReembedStrategy.MODEL_ONLY, cast(IndexingEmbedder, _FakeEmbedder())
     )
-
-    [result] = re_embed_for_future([stored], _ss(), _ss())
 
     # only the two vectors are new
     assert result.content_vector == fake_cv
