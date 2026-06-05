@@ -725,10 +725,12 @@ class DockerSandboxManager(SandboxManager):
             container_onyx_pat = (
                 SANDBOX_PROXY_INJECTED_PLACEHOLDER if SANDBOX_PROXY_HOST else onyx_pat
             )
+            # api_key=None (e.g. Ollama) -> skip; The resolver has nothing to
+            # swap and the placeholder would reach the LLM verbatim.
             container_llm_api_key = (
                 SANDBOX_PROXY_INJECTED_PLACEHOLDER
-                if SANDBOX_PROXY_HOST
-                else (llm_config.api_key or None)
+                if SANDBOX_PROXY_HOST and llm_config.api_key
+                else llm_config.api_key
             )
             opencode_config_json = json.dumps(
                 build_opencode_config(
