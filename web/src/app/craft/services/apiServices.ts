@@ -373,6 +373,26 @@ export async function interruptMessageStream(sessionId: string): Promise<void> {
   }
 }
 
+export async function fetchScheduledRunEventStream(
+  sessionId: string,
+  signal?: AbortSignal
+): Promise<Response> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/scheduled-run-events`,
+    { signal }
+  );
+
+  if (res.status === 409) {
+    return new Response("");
+  }
+
+  if (!res.ok) {
+    throw new Error(`Failed to stream scheduled run: ${res.status}`);
+  }
+
+  return res;
+}
+
 // =============================================================================
 // Artifacts API
 // =============================================================================

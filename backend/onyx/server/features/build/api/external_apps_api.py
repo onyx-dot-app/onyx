@@ -33,6 +33,7 @@ from onyx.external_apps.providers.registry import build_action_policies
 from onyx.external_apps.providers.registry import fetch_available_built_in_apps
 from onyx.external_apps.providers.registry import fetch_built_in_app
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
+from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
 from onyx.server.features.build.api.models import CreateBuiltInExternalAppRequest
@@ -186,6 +187,16 @@ def update_external_app_admin(
     app = _get_app_or_404(db_session, external_app_id)
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
 
+    # Custom apps author URL patterns as globs; validate them (built-ins author
+    # regexes, which the matcher uses as-is).
+    if (
+        not managed
+        and app.app_type == ExternalAppType.CUSTOM
+        and request.upstream_url_patterns is not None
+    ):
+        for pattern in request.upstream_url_patterns:
+            UrlGlob.parse(pattern)
+
     # Full policy set; None map leaves stored policies untouched.
     action_policies = build_action_policies(
         app.app_type,
@@ -254,6 +265,10 @@ def create_custom_external_app(
             OnyxErrorCode.INVALID_INPUT,
             "upstream_url_patterns must not contain empty entries.",
         )
+    # Custom app globs; validate before ingesting the bundle so a bad
+    # pattern fails fast.
+    for pattern in parsed_patterns:
+        UrlGlob.parse(pattern)
     validate_auth_template(parsed_auth_template, parsed_org_credentials)
 
     if bundle is None:

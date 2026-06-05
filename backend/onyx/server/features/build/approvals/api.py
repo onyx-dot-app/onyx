@@ -31,6 +31,7 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import ActionMatch
+from onyx.external_apps.presentation.decode import decode_payload
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.db import action_approval
 from onyx.server.features.build.db.build_session import get_build_session
@@ -62,7 +63,15 @@ class ApprovalView(BaseModel):
     decision: ApprovalDecision | None
     decided_at: datetime | None
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
+    @property
+    def display_payload(self) -> dict[str, Any]:
+        """`payload` decoded for the reviewer (e.g. Gmail base64url MIME →
+        To/Subject/Body), or `payload` itself when nothing decodes it."""
+        action_type = self.actions[0].action_type if self.actions else ""
+        return decode_payload(action_type, self.payload)
+
+    @computed_field
     @property
     def is_live(self) -> bool:
         if self.decision is not None:

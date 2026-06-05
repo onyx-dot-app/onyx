@@ -1,7 +1,11 @@
+from collections.abc import Mapping
+
 from onyx.configs.app_configs import EXT_APP_GMAIL_CLIENT_ID
 from onyx.configs.app_configs import EXT_APP_GMAIL_CLIENT_SECRET
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
+from onyx.external_apps.presentation.payload_decoders import GmailRawMimeDecoder
+from onyx.external_apps.presentation.payload_decoders import PayloadDecoder
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.actions import ExternalAppAction
 from onyx.external_apps.providers.actions import RestRoute
@@ -163,3 +167,14 @@ class GmailProvider(GoogleOAuthProvider, OnyxManagedExtApp):
         "client_id": EXT_APP_GMAIL_CLIENT_ID,
         "client_secret": EXT_APP_GMAIL_CLIENT_SECRET,
     }
+
+    # base64url MIME bodies decoded for the approval card. `messages.send` holds
+    # `raw` top-level; draft create/update nest it under `message`.
+    _PAYLOAD_DECODERS: Mapping[str, PayloadDecoder] = {
+        GmailAction.MESSAGES_SEND: GmailRawMimeDecoder(),
+        GmailAction.DRAFTS_CREATE: GmailRawMimeDecoder(wrapper_key="message"),
+        GmailAction.DRAFTS_UPDATE: GmailRawMimeDecoder(wrapper_key="message"),
+    }
+
+    def payload_decoders(self) -> Mapping[str, PayloadDecoder]:
+        return self._PAYLOAD_DECODERS

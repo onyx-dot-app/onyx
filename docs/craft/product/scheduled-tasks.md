@@ -74,19 +74,26 @@ Two sections stacked:
   - Duration
   - Status (queued, running, succeeded, failed, skipped, awaiting approval)
   - Summary (first ~120 chars of the agent's final message, once complete)
-  - Row click → opens the run's Craft session in the existing session view (only
-    after the run has finished — see "Intentionally Not Doing" for why in-progress
-    runs are not openable)
+  - Row click -> opens the run's Craft session in the existing session view as
+    soon as the run has created a session. Queued and skipped runs are not
+    openable because they have no session.
 
 Pagination: show the last 50 by default with a "Load more" button.
 
 ### 4. Run view — existing Craft session view
 
 A run **is** a Craft session. Clicking a run from the history table opens that
-session in the standard `/craft/v1/session/:id` view the user already knows: the
-full transcript, artifacts, search calls, approvals, etc. We add a small banner at
-the top: "This session was started by scheduled task *Name* at *time*. ← Back to
-task."
+session in the standard `/craft/v1?sessionId=:id` view the user already knows:
+the full transcript, artifacts, search calls, approvals, etc. We add a small
+banner at the top with the scheduled task name, status while live, and a back link
+to the task.
+
+If the run is still running, the session view attaches to the live agent event
+stream and shows progress without a page reload. The normal Craft input is locked
+while the background executor is still driving the scheduled prompt, then unlocks
+after the run finishes so the user can ask follow-up questions in the same
+session. Runs that are awaiting approval remain read-only until they resume and
+finish.
 
 No new run-detail page is needed — the existing session view is the run detail view.
 
@@ -161,12 +168,6 @@ the run row updates accordingly. (Detail in the approvals doc.)
 
 ## Intentionally Not Doing in V1
 
-- **Live-streaming a run in progress.** While a run is executing, the user sees its
-  status in the run history table but cannot open the session and watch the agent
-  stream in real time — the current Craft streaming architecture is tied to the
-  interactive request that started the session, so attaching a second viewer to a
-  backend-launched run is non-trivial. V1 makes the user wait until the run finishes,
-  then opens the completed session. Live-attach is a follow-up.
 - **Event triggers** (run when a Slack message arrives, when a Linear ticket
   changes, when a file lands in a folder). Schedule-only for V1; event triggers are
   a follow-up.

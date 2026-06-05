@@ -753,6 +753,46 @@ class SessionManager:
         request_interrupt(session_id, get_cache_backend())
         return True
 
+    def subscribe_to_existing_session_events(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        *,
+        keepalive_seconds: float = 15.0,
+    ) -> Generator[str, None, None]:
+        """Attach to an existing opencode session and stream translated ACP SSE.
+
+        Used by scheduled-run viewers: the Celery executor is already driving
+        the prompt, so this path only subscribes to the pod-wide event stream and
+        filters by the session's persisted opencode session id. It deliberately
+        does not persist events because the executor remains the durable writer.
+        """
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
+
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        if sandbox is None or sandbox.status != SandboxStatus.RUNNING:
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
+                "Sandbox is not running. Please wait for it to start.",
+            )
+
+        opencode_session_id = session.opencode_session_id
+        if not opencode_session_id:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "Session live stream is not ready yet.",
+            )
+
+        for acp_event in self._sandbox_manager.subscribe_to_opencode_session(
+            sandbox.id,
+            opencode_session_id,
+            directory=f"/workspace/sessions/{session_id}",
+            keepalive_seconds=keepalive_seconds,
+        ):
+            yield _streaming.event_to_sse(acp_event)
+
     # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
     #
     # `_yield_sandbox_events` is a thin wrapper around the sandbox manager that drives

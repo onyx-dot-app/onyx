@@ -91,6 +91,8 @@ class StubSandboxManager(SandboxManager):
       ``send_message``. The iterable is **snapshotted to a list on
       assignment** so the same stub can be re-driven across multiple
       ``send_message`` calls.
+    - ``subscribe_to_opencode_session_events``: iterable of ACP events yielded
+      by ``subscribe_to_opencode_session``.
     - ``create_snapshot_returns``: ``SnapshotResult | None`` returned by
       ``create_snapshot``.
     - ``list_directory_returns``, ``read_file_returns``,
@@ -155,6 +157,7 @@ class StubSandboxManager(SandboxManager):
         # ``send_message_events`` is stored via the property below so it is
         # materialised at assignment time (see __setattr__-like setter).
         self._send_message_events: list[SandboxEvent] | None = None
+        self._subscribe_to_opencode_session_events: list[SandboxEvent] | None = None
 
         # Observable state: scoped counters and last-payload snapshots.
         self.provision_count: int = 0
@@ -171,6 +174,7 @@ class StubSandboxManager(SandboxManager):
         self.ensure_opencode_session_count: int = 0
         self.last_ensure_opencode_session_payload: dict[str, Any] | None = None
         self.send_message_count: int = 0
+        self.subscribe_to_opencode_session_count: int = 0
         self.list_directory_count: int = 0
         self.read_file_count: int = 0
         self.upload_file_count: int = 0
@@ -190,6 +194,7 @@ class StubSandboxManager(SandboxManager):
         self.last_session_workspace_exists_payload: dict[str, Any] | None = None
         self.last_health_check_payload: dict[str, Any] | None = None
         self.last_send_message_payload: dict[str, Any] | None = None
+        self.last_subscribe_to_opencode_session_payload: dict[str, Any] | None = None
         self.last_list_directory_payload: dict[str, Any] | None = None
         self.last_read_file_payload: dict[str, Any] | None = None
         self.last_upload_file_payload: dict[str, Any] | None = None
@@ -213,6 +218,18 @@ class StubSandboxManager(SandboxManager):
     @send_message_events.setter
     def send_message_events(self, value: Iterable[SandboxEvent] | None) -> None:
         self._send_message_events = None if value is None else list(value)
+
+    @property
+    def subscribe_to_opencode_session_events(self) -> list[SandboxEvent] | None:
+        return self._subscribe_to_opencode_session_events
+
+    @subscribe_to_opencode_session_events.setter
+    def subscribe_to_opencode_session_events(
+        self, value: Iterable[SandboxEvent] | None
+    ) -> None:
+        self._subscribe_to_opencode_session_events = (
+            None if value is None else list(value)
+        )
 
     def provision(
         self,
@@ -392,6 +409,25 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("send_message")
         # Iterate over the snapshot — re-driveable across calls.
         yield from self._send_message_events
+
+    def subscribe_to_opencode_session(
+        self,
+        sandbox_id: UUID,
+        opencode_session_id: str,
+        *,
+        directory: str,
+        keepalive_seconds: float = 15.0,
+    ) -> Generator[SandboxEvent, None, None]:
+        self.subscribe_to_opencode_session_count += 1
+        self.last_subscribe_to_opencode_session_payload = {
+            "sandbox_id": sandbox_id,
+            "opencode_session_id": opencode_session_id,
+            "directory": directory,
+            "keepalive_seconds": keepalive_seconds,
+        }
+        if self._subscribe_to_opencode_session_events is None:
+            raise _not_configured("subscribe_to_opencode_session")
+        yield from self._subscribe_to_opencode_session_events
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str

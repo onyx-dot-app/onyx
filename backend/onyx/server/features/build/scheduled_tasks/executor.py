@@ -416,6 +416,7 @@ def _drive_agent(
                     return False
 
                 session_manager._persist_sandbox_event(session_id, state, sandbox_event)
+                db_session.commit()
                 final_event_count += 1
 
             if approval_required:

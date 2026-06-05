@@ -6,13 +6,30 @@ import { Text } from "@opal/components";
 import { SvgClock, SvgExternalLink } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { taskDetailPath } from "@/app/craft/v1/tasks/constants";
-import { formatAbsolute } from "@/app/craft/v1/tasks/utils";
+import {
+  formatAbsolute,
+  isScheduledRunContextInFlight,
+} from "@/app/craft/v1/tasks/utils";
 import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/interfaces";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 interface ScheduledRunBannerProps {
   sessionId: string | null;
+  context?: ScheduledRunContextResponse | null;
+}
+
+export function useScheduledRunContext(sessionId: string | null) {
+  return useSWR<ScheduledRunContextResponse>(
+    sessionId ? SWR_KEYS.scheduledRunContext(sessionId) : null,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      refreshInterval: (data) =>
+        isScheduledRunContextInFlight(data) ? 5000 : 0,
+      shouldRetryOnError: false,
+    }
+  );
 }
 
 /**
@@ -25,18 +42,27 @@ interface ScheduledRunBannerProps {
  */
 export default function ScheduledRunBanner({
   sessionId,
+  context,
 }: ScheduledRunBannerProps) {
   // 404 is the expected "this session isn't scheduled" signal — the standard
   // fetcher throws on it, which lands in `error` and falls through the
   // `if (!data)` guard below to render nothing. `shouldRetryOnError: false`
   // keeps SWR from hammering the endpoint after a legit 404.
-  const { data } = useSWR<ScheduledRunContextResponse>(
-    sessionId ? SWR_KEYS.scheduledRunContext(sessionId) : null,
-    errorHandlingFetcher,
-    { revalidateOnFocus: false, shouldRetryOnError: false }
+  const { data: fetchedContext } = useScheduledRunContext(
+    context === undefined ? sessionId : null
   );
+  const data = context === undefined ? fetchedContext : context;
 
   if (!data) return null;
+
+  const statusText =
+    data.status === "RUNNING"
+      ? "This scheduled run is still running. Follow-up messages unlock when it finishes."
+      : data.status === "AWAITING_APPROVAL"
+        ? "This scheduled run is awaiting approval. Follow-up messages unlock after it resumes and finishes."
+        : `This session was started by scheduled task ${data.task_name} at ${formatAbsolute(
+            data.started_at
+          )}.`;
 
   return (
     <div
@@ -57,12 +83,8 @@ export default function ScheduledRunBanner({
           "focus-visible:ring-border-04"
         )}
         data-testid="back-to-task-button"
-        title={`Scheduled task: ${data.task_name}. Started ${formatAbsolute(
-          data.started_at
-        )}.`}
-        aria-label={`View scheduled task ${data.task_name}, started ${formatAbsolute(
-          data.started_at
-        )}`}
+        title={statusText}
+        aria-label={`View scheduled task ${data.task_name}. ${statusText}`}
       >
         <span className="grid shrink-0 translate-y-px items-center">
           <span

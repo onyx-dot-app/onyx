@@ -43,7 +43,7 @@ def _create_test_app(
     defaults: dict[str, Any] = {
         "name": "Test App",
         "description": "An app for testing",
-        "upstream_url_patterns": [r"^https://api\.example\.com/.*$"],
+        "upstream_url_patterns": ["https://api.example.com/*"],
         "auth_template": dict(_AUTH_TEMPLATE),
         "organization_credentials": dict(_ORG_CREDENTIALS),
         "enabled": True,
@@ -104,7 +104,7 @@ def test_admin_creates_app_user_configures_credentials(
     assert admin_app.name == "Test App"
     assert admin_app.description == "An app for testing"
     assert admin_app.enabled is True
-    assert admin_app.upstream_url_patterns == [r"^https://api\.example\.com/.*$"]
+    assert admin_app.upstream_url_patterns == ["https://api.example.com/*"]
     assert admin_app.auth_template == _AUTH_TEMPLATE
     # Org credentials are masked in the admin response so secrets are never
     # returned to the client.
@@ -431,7 +431,7 @@ def test_update_or_delete_nonexistent_app_returns_404(
             app_id=missing_id,
             name="x",
             description="x",
-            upstream_url_patterns=[r"^https://api\.example\.com/.*$"],
+            upstream_url_patterns=["https://api.example.com/*"],
             auth_template={},
             organization_credentials={},
         )

@@ -37,20 +37,19 @@ def resolve_app_for_url(
     ``url``, or ``None`` if no connected app claims it.
 
     ``apps`` is expected id-ordered (as ``get_external_apps`` returns it), so the
-    lowest-id app wins when patterns overlap. A malformed stored pattern is
-    skipped rather than failing the whole resolution — egress for other apps must
-    not hinge on one bad regex.
+    lowest-id app wins when patterns overlap. A malformed built-in regex is
+    skipped rather than failing resolution for every other app.
     """
     for app in apps:
-        for pattern in app.upstream_url_patterns:
+        for regex in app.upstream_url_regexes:
             try:
-                if re.fullmatch(pattern, url):
+                if re.fullmatch(regex, url):
                     return app
             except re.error:
                 logger.warning(
                     "skipping malformed upstream_url_pattern app_id=%s pattern=%r",
                     app.id,
-                    pattern,
+                    regex,
                 )
     return None
 

@@ -19,6 +19,7 @@ jobs:
       - run-id=${{ github.run_id }}-devcontainer-amd64
     environment: deploy
     permissions:
+      contents: read # needed to checkout the repo on private repos (no-op on public)
       id-token: write
     timeout-minutes: 60
     outputs:
@@ -79,6 +80,7 @@ jobs:
       - run-id=${{ github.run_id }}-devcontainer-arm64
     environment: deploy
     permissions:
+      contents: read # needed to checkout the repo on private repos (no-op on public)
       id-token: write
     timeout-minutes: 60
     outputs:
