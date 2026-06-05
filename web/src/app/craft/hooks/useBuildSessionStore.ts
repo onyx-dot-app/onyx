@@ -41,7 +41,6 @@ import {
   deleteSession as apiDeleteSession,
   fetchMessages,
   fetchArtifacts,
-  fetchWebappInfo,
   restoreSession,
 } from "@/app/craft/services/apiServices";
 
@@ -753,30 +752,6 @@ const createInitialSessionData = (
 // =============================================================================
 // Store
 // =============================================================================
-
-// The dev server is started fire-and-forget, so the backend reports RUNNING
-// before the webapp serves. Poll webapp-info until ready (bounded by maxAttempts).
-export async function waitForWebappReady(
-  sessionId: string,
-  { intervalMs = 1500, maxAttempts = 20 }: WaitForWebappReadyOptions = {}
-): Promise<void> {
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    let info: Awaited<ReturnType<typeof fetchWebappInfo>> | null = null;
-    try {
-      info = await fetchWebappInfo(sessionId);
-    } catch {
-      // keep polling
-    }
-    // Done on a definitive answer (no webapp or serving); errors keep polling.
-    if (info && (!info.has_webapp || info.ready)) return;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-}
-
-interface WaitForWebappReadyOptions {
-  intervalMs?: number;
-  maxAttempts?: number;
-}
 
 export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   currentSessionId: null,
@@ -1581,19 +1556,15 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           return;
         }
 
-        // Hold the chip on "restoring" (and refresh the preview) until the
-        // webapp actually serves, then flip to the real status below.
+        // Restore finished: report the sandbox ready right away. The preview
+        // polls webapp-info on its own (webappNeedsRefresh), so the status
+        // chip doesn't wait on the Next.js dev server coming up.
         updateSessionData(sessionId, {
           status: sessionData.status === "active" ? "active" : "idle",
-          sandbox: sessionData.sandbox
-            ? { ...sessionData.sandbox, status: "restoring" }
-            : sessionData.sandbox,
+          sandbox: sessionData.sandbox,
           webappNeedsRefresh:
             (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
         });
-
-        await waitForWebappReady(sessionId);
-        updateSessionData(sessionId, { sandbox: sessionData.sandbox });
 
         // An artifact-fetch failure must NOT flip the sandbox to "failed".
         try {
