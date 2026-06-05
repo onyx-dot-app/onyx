@@ -27,12 +27,14 @@ def compute_context_usage(
     max_input_tokens: int,
     baseline_fn: Callable[[], int],
 ) -> "ContextUsage":
-    """Last assistant turn's real prompt size, or the baseline if no turn yet.
+    """Most recent assistant turn that reported a real prompt size, else the baseline.
 
-    baseline_fn is only invoked for empty/never-answered chats — keeping the
-    expensive system-prompt tokenization off the common (non-empty) hot path.
+    A turn lacks prompt_tokens when its provider returned no usage; falling back to
+    the last turn that did report is a closer estimate of the live context than
+    re-deriving the baseline. baseline_fn is only invoked for empty/never-answered
+    chats — keeping the expensive system-prompt tokenization off the common hot path.
     """
-    last = next(
+    last_reported = next(
         (
             m
             for m in reversed(messages)
@@ -40,9 +42,9 @@ def compute_context_usage(
         ),
         None,
     )
-    if last is not None and last.prompt_tokens is not None:
+    if last_reported is not None and last_reported.prompt_tokens is not None:
         return ContextUsage(
-            used_tokens=last.prompt_tokens,
+            used_tokens=last_reported.prompt_tokens,
             max_input_tokens=max_input_tokens,
             is_baseline=False,
         )

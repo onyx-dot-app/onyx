@@ -389,16 +389,23 @@ def get_chat_session(
     # Resolve the persona LLM once for the context window. The baseline (which
     # tokenizes the system prompt + reads the default base prompt from the DB) is
     # deferred behind baseline_fn so it runs only for empty/never-answered chats.
+    # Best-effort: a provider-resolution failure (e.g. no LLM configured) must not
+    # break loading the session — the gauge just hides when context_usage is None.
     context_usage = None
     if chat_session.persona:
         persona = chat_session.persona
-        llm = get_llm_for_persona(persona=persona, user=user)
-        max_input_tokens = llm.config.max_input_tokens
-        if max_input_tokens > 0:
-            context_usage = compute_context_usage(
-                chat_message_details,
-                max_input_tokens,
-                baseline_fn=lambda: _baseline_used_tokens(persona, db_session, llm),
+        try:
+            llm = get_llm_for_persona(persona=persona, user=user)
+            max_input_tokens = llm.config.max_input_tokens
+            if max_input_tokens > 0:
+                context_usage = compute_context_usage(
+                    chat_message_details,
+                    max_input_tokens,
+                    baseline_fn=lambda: _baseline_used_tokens(persona, db_session, llm),
+                )
+        except Exception:
+            logger.exception(
+                "Failed to compute context usage for session %s", session_id
             )
 
     return ChatSessionDetailResponse(

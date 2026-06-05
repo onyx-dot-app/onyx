@@ -1236,13 +1236,25 @@ def _run_models(
                             def _stop_button_is_connected(s: bool = succeeded) -> bool:
                                 return s
 
-                            llm_loop_completion_handle(
+                            prompt_tokens = llm_loop_completion_handle(
                                 state_container=state_containers[i],
                                 is_connected=_stop_button_is_connected,
                                 assistant_message=setup.reserved_messages[i],
                                 llm=setup.llms[i],
                                 reserved_tokens=setup.reserved_token_count,
                             )
+                            # Stream usage on the stop path too, so the gauge
+                            # reflects the cancelled turn without a reload.
+                            if prompt_tokens is not None:
+                                yield Packet(
+                                    placement=Placement(turn_index=0, model_index=i),
+                                    obj=ContextUsagePacket(
+                                        used_tokens=prompt_tokens,
+                                        max_input_tokens=setup.llms[
+                                            i
+                                        ].config.max_input_tokens,
+                                    ),
+                                )
                         except Exception:
                             logger.exception(
                                 "stop-button completion failed for model %d (%s)",
