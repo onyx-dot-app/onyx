@@ -1,6 +1,7 @@
 """Multi-tenant cache for Discord bot guild-tenant mappings and API keys."""
 
 import asyncio
+from typing import NamedTuple
 
 from onyx.db.discord_bot import get_guild_configs
 from onyx.db.discord_bot import get_or_create_discord_service_api_key
@@ -8,10 +9,22 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.onyxbot.discord.exceptions import CacheError
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
+
+# Tenants are loaded concurrently during a full refresh. Bounded to avoid
+# exhausting the DB connection pool when a cluster has many tenants.
+_REFRESH_MAX_WORKERS = 16
+
+
+class TenantDiscordData(NamedTuple):
+    """A tenant's enabled guild IDs and its Discord service API key."""
+
+    guild_ids: list[int]
+    api_key: str | None
 
 
 class DiscordCacheManager:
@@ -45,33 +58,46 @@ class DiscordCacheManager:
                     set(),
                 )()
 
-                tenant_ids = await asyncio.to_thread(get_all_tenant_ids)
-                for tenant_id in tenant_ids:
-                    if tenant_id in gated:
+                tenant_ids = [
+                    tenant_id
+                    for tenant_id in await asyncio.to_thread(get_all_tenant_ids)
+                    if tenant_id not in gated
+                ]
+
+                results: list[TenantDiscordData | None] = await asyncio.to_thread(
+                    run_functions_tuples_in_parallel,
+                    [
+                        (
+                            self._load_tenant_data,
+                            (tenant_id, self._api_keys.get(tenant_id)),
+                        )
+                        for tenant_id in tenant_ids
+                    ],
+                    allow_failures=True,
+                    max_workers=_REFRESH_MAX_WORKERS,
+                )
+
+                for tenant_id, result in zip(tenant_ids, results):
+                    if result is None:
+                        logger.warning("Failed to refresh tenant %s", tenant_id)
                         continue
 
-                    context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-                    try:
-                        guild_ids, api_key = await self._load_tenant_data(tenant_id)
-                        if not guild_ids:
-                            logger.debug("No guilds found for tenant %s", tenant_id)
-                            continue
+                    guild_ids, api_key = result
+                    if not guild_ids:
+                        logger.debug("No guilds found for tenant %s", tenant_id)
+                        continue
 
-                        if not api_key:
-                            logger.warning(
-                                "Discord service API key missing for tenant that has registered guilds. %s will not be handled in this refresh cycle.",
-                                tenant_id,
-                            )
-                            continue
+                    if not api_key:
+                        logger.warning(
+                            "Discord service API key missing for tenant that has registered guilds. %s will not be handled in this refresh cycle.",
+                            tenant_id,
+                        )
+                        continue
 
-                        for guild_id in guild_ids:
-                            new_guild_tenants[guild_id] = tenant_id
+                    for guild_id in guild_ids:
+                        new_guild_tenants[guild_id] = tenant_id
 
-                        new_api_keys[tenant_id] = api_key
-                    except Exception as e:
-                        logger.warning("Failed to refresh tenant %s: %s", tenant_id, e)
-                    finally:
-                        CURRENT_TENANT_ID_CONTEXTVAR.reset(context_token)
+                    new_api_keys[tenant_id] = api_key
 
                 self._guild_tenants = new_guild_tenants
                 self._api_keys = new_api_keys
@@ -94,7 +120,9 @@ class DiscordCacheManager:
                 "Refreshing cache for guild %s (tenant: %s)", guild_id, tenant_id
             )
 
-            guild_ids, api_key = await self._load_tenant_data(tenant_id)
+            guild_ids, api_key = await asyncio.to_thread(
+                self._load_tenant_data, tenant_id, self._api_keys.get(tenant_id)
+            )
 
             if guild_id in guild_ids:
                 self._guild_tenants[guild_id] = tenant_id
@@ -104,16 +132,20 @@ class DiscordCacheManager:
             else:
                 logger.warning("Guild %s not found or disabled", guild_id)
 
-    async def _load_tenant_data(self, tenant_id: str) -> tuple[list[int], str | None]:
-        """Load guild IDs and provision API key if needed.
+    @staticmethod
+    def _load_tenant_data(tenant_id: str, cached_key: str | None) -> TenantDiscordData:
+        """Load a tenant's enabled guilds and provision an API key if needed.
 
-        Returns:
-            (active_guild_ids, api_key) - api_key is the cached key if available,
-            otherwise a newly created key. Returns None if no guilds found.
+        Synchronous so it can run in a worker thread (via to_thread / the parallel
+        refresh). Sets the tenant contextvar so downstream calls that rely on it
+        resolve the correct tenant; the surrounding copied context keeps this
+        isolated from other concurrent workers.
+
+        api_key is the cached key if available, otherwise a newly created one.
+        guild_ids is empty if none are found.
         """
-        cached_key = self._api_keys.get(tenant_id)
-
-        def _sync() -> tuple[list[int], str | None]:
+        context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        try:
             with get_session_with_tenant(tenant_id=tenant_id) as db:
                 configs = get_guild_configs(db)
                 guild_ids = [
@@ -123,16 +155,16 @@ class DiscordCacheManager:
                 ]
 
                 if not guild_ids:
-                    return [], None
+                    return TenantDiscordData([], None)
 
                 if not cached_key:
                     new_key = get_or_create_discord_service_api_key(db, tenant_id)
                     db.commit()
-                    return guild_ids, new_key
+                    return TenantDiscordData(guild_ids, new_key)
 
-                return guild_ids, cached_key
-
-        return await asyncio.to_thread(_sync)
+                return TenantDiscordData(guild_ids, cached_key)
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(context_token)
 
     def get_tenant(self, guild_id: int) -> str | None:
         """Get tenant ID for a guild."""
