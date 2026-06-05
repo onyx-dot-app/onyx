@@ -6,6 +6,7 @@ import { AlertCircle, Clock, Lock, Wifi, Server } from "lucide-react";
 export const getErrorIcon = (errorCode?: string) => {
   switch (errorCode) {
     case "RATE_LIMIT":
+    case "RATE_LIMITED":
       return <Clock className="h-4 w-4" />;
     case "AUTH_ERROR":
     case "PERMISSION_DENIED":
@@ -28,6 +29,8 @@ export const getErrorTitle = (errorCode?: string) => {
   switch (errorCode) {
     case "RATE_LIMIT":
       return "Rate Limit Exceeded";
+    case "RATE_LIMITED":
+      return "Usage limit reached";
     case "AUTH_ERROR":
       return "Authentication Error";
     case "PERMISSION_DENIED":
