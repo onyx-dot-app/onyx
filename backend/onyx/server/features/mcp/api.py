@@ -102,6 +102,10 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
+# Refresh slightly before the real expiry to absorb network latency and clock
+# skew between us and the provider, avoiding edge-of-expiry 401s.
+TOKEN_EXPIRY_BUFFER_SECONDS = 30.0
+
 
 _SSRF_HINT_NEVER_ALLOWED = (
     " localhost, unspecified, and link-local/cloud-metadata addresses are never "
@@ -381,7 +385,7 @@ def _absolute_token_expiry(tokens: OAuthToken) -> float | None:
     survives a reload into a fresh OAuth provider (see TOKEN_EXPIRES_AT)."""
     if tokens.expires_in is None:
         return None
-    return time.time() + tokens.expires_in
+    return time.time() + tokens.expires_in - TOKEN_EXPIRY_BUFFER_SECONDS
 
 
 def _known_provider_oauth_metadata(mcp_server: DbMCPServer) -> OAuthMetadata | None:
