@@ -23,7 +23,7 @@ function buildAgentUpsertRequest(
     remove_image: params.remove_image,
     search_start_date: params.search_start_date,
     datetime_aware: params.datetime_aware,
-    include_citations: params.include_citations ?? true,
+    include_citations: params.include_citations,
     is_featured: params.is_featured ?? false,
     default_model_configuration_id:
       params.default_model_configuration_id ?? null,

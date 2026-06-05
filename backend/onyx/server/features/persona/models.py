@@ -135,8 +135,9 @@ class PersonaUpsertRequest(BaseModel):
     replace_base_system_prompt: bool = False
     task_prompt: str
     datetime_aware: bool
-    # When False, the agent's answers omit inline citations and the sources list
-    include_citations: bool = True
+    # When False, the agent's answers omit inline citations and the sources list.
+    # None means "leave unchanged" on update; upsert_persona defaults it to True on create.
+    include_citations: bool | None = None
 
 
 class MinimalPersonaSnapshot(BaseModel):
