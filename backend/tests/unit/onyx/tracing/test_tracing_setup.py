@@ -18,6 +18,8 @@ def test_setup_tracing_registers_single_dynamic_processor() -> None:
     tracing_setup._initialized = False
     with (
         patch.object(tracing_setup, "set_trace_processors") as mock_set,
+        patch.object(tracing_setup, "_setup_user_usage_tracking"),
+        patch.object(tracing_setup, "USER_USAGE_TRACKING_ENABLED", False),
         patch(RESOLVE, return_value=EffectiveTracingConfig()),
         patch(BUILD, return_value=[]),
     ):
@@ -32,10 +34,28 @@ def test_setup_tracing_registers_single_dynamic_processor() -> None:
     tracing_setup._initialized = False
 
 
+def test_setup_tracing_registers_user_usage_by_default() -> None:
+    """Usage tracking is on by default, independent of external backends."""
+    tracing_setup._initialized = False
+    with (
+        patch.object(tracing_setup, "set_trace_processors"),
+        patch.object(tracing_setup, "_setup_user_usage_tracking") as mock_setup,
+        patch.object(tracing_setup, "USER_USAGE_TRACKING_ENABLED", True),
+        patch(RESOLVE, return_value=EffectiveTracingConfig()),
+        patch(BUILD, return_value=[]),
+    ):
+        result = tracing_setup.setup_tracing()
+        mock_setup.assert_called_once()
+        assert "user_usage" in result
+
+    tracing_setup._initialized = False
+
+
 def test_setup_tracing_is_idempotent() -> None:
     tracing_setup._initialized = False
     with (
         patch.object(tracing_setup, "set_trace_processors") as mock_set,
+        patch.object(tracing_setup, "_setup_user_usage_tracking"),
         patch(RESOLVE, return_value=EffectiveTracingConfig()),
         patch(BUILD, return_value=[]),
     ):
@@ -56,6 +76,8 @@ def test_setup_tracing_reports_active_providers() -> None:
     tracing_setup._initialized = False
     with (
         patch.object(tracing_setup, "set_trace_processors"),
+        patch.object(tracing_setup, "_setup_user_usage_tracking"),
+        patch.object(tracing_setup, "USER_USAGE_TRACKING_ENABLED", False),
         patch(RESOLVE, return_value=config),
         patch(BUILD, return_value=[]),
     ):
