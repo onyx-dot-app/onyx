@@ -101,7 +101,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const [selectedDocSetIds, setSelectedDocSetIds] = useState<number[]>([]);
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
   const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
-    { tokenBudget: null, periodDays: null },
+    { tokenBudget: null, periodDays: null, costBudgetDollars: null },
   ]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -143,6 +143,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         tokenRateLimits.map((trl) => ({
           tokenBudget: trl.token_budget,
           periodDays: trl.period_hours / HOURS_PER_DAY,
+          costBudgetDollars:
+            trl.cost_budget_cents != null ? trl.cost_budget_cents / 100 : null,
         }))
       );
     }
