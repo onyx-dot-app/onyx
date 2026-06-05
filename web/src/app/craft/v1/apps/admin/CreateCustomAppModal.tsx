@@ -181,8 +181,9 @@ export default function CreateCustomAppModal({
             <div className="flex flex-col gap-1">
               <Text font="main-ui-action">Upstream URL patterns</Text>
               <Text font="secondary-body" color="text-03">
-                Outbound URLs the proxy may inject credentials into. Type a
-                pattern and press Enter.
+                {
+                  "Outbound URLs the proxy may inject credentials into. Use * to match any characters (e.g. https://api.example.com/* covers every path on that host). The host must be literal — no wildcards before the first slash. Type a pattern and press Enter."
+                }
               </Text>
               <ListFieldInput
                 values={upstreamPatterns}

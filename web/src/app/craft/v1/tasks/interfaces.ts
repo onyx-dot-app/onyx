@@ -117,7 +117,10 @@ export interface RunNowResponse {
 }
 
 export interface ScheduledRunContextResponse {
+  run_id: string;
   task_id: string;
   task_name: string;
+  status: ScheduledTaskRunStatus;
   started_at: string;
+  finished_at: string | null;
 }

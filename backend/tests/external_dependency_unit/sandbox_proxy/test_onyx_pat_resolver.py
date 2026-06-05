@@ -45,7 +45,7 @@ def test_claims_then_resolve_round_trips_minted_pat(
             sandbox_name="sandbox-test",
             sandbox_ip="127.0.0.1",
         ),
-        match=None,
+        matched_actions=None,
     )
 
     monkeypatch.setattr(onyx_pat_mod, "SANDBOX_API_SERVER_URL", f"https://{_API_HOST}")

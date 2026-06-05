@@ -1,6 +1,6 @@
 """Unit tests for the GateAddon mitmproxy addon.
 
-External dependencies (`_IdentityResolver`, `ActionMatcher`, `CacheFactory`)
+External dependencies (`_IdentityResolver`, `RequestEvaluator`, `CacheFactory`)
 are stubbed via small Protocol implementations; `get_session_with_tenant` is
 patched per test.
 
@@ -29,8 +29,7 @@ from redis.exceptions import RedisError
 from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
-from onyx.external_apps.matching.engine import RequestMatch
-from onyx.sandbox_proxy.action_matcher import ActionMatcher
+from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy.addons import gate as gate_mod
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.addons.gate import ParkedApprovals
@@ -41,9 +40,10 @@ from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
 from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
+from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from tests.unit.sandbox_proxy.conftest import make_flow as _flow
-from tests.unit.sandbox_proxy.conftest import make_request_match
+from tests.unit.sandbox_proxy.conftest import make_matched_actions
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
 from tests.unit.sandbox_proxy.conftest import RecordingCredentialResolver
 from tests.unit.sandbox_proxy.conftest import StubResolver as _StubResolver
@@ -53,22 +53,23 @@ from tests.unit.sandbox_proxy.conftest import StubResolver as _StubResolver
 # ---------------------------------------------------------------------------
 
 
-class _StubMatcher(ActionMatcher):
+class _StubMatcher(RequestEvaluator):
     def __init__(
         self,
         *,
-        result: RequestMatch | None = None,
+        result: AllMatchedActions | None = None,
         exc: Exception | None = None,
     ) -> None:
         self._result = result
         self._exc = exc
         self.calls = 0
 
-    def match(
+    def evaluate(
         self,
         request: http.Request,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
-    ) -> RequestMatch | None:
+        user_id: UUID,  # noqa: ARG002
+    ) -> AllMatchedActions | None:
         self.calls += 1
         if self._exc is not None:
             raise self._exc
@@ -112,7 +113,7 @@ def _build(
 ) -> GateAddon:
     return GateAddon(
         identity=resolver,
-        action_matcher=matcher,
+        request_evaluator=matcher,
         cache_factory=cache_factory,
         proxy_instance_id="proxy-test",
         credential_dispatcher=CredentialInjectionDispatcher(
@@ -131,11 +132,11 @@ def _assert_403(flow: http.HTTPFlow, expected_code: SandboxProxyError) -> None:
     assert body["message"]
 
 
-_MATCH = make_request_match(payload={"text": "hi"})
-_MATCH_ALWAYS = make_request_match(
+_MATCH = make_matched_actions(payload={"text": "hi"})
+_MATCH_ALWAYS = make_matched_actions(
     action_type="slack.channels.read", policy=EndpointPolicy.ALWAYS
 )
-_MATCH_DENY = make_request_match(payload={"text": "hi"}, policy=EndpointPolicy.DENY)
+_MATCH_DENY = make_matched_actions(payload={"text": "hi"}, policy=EndpointPolicy.DENY)
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +241,7 @@ async def test_resolve_and_match_no_tag_fails_closed() -> None:
 @pytest.mark.asyncio
 async def test_resolve_and_match_matcher_returns_none_fails_open() -> None:
     """Non-gated traffic: matcher returns None → forwarded; the off-catalog
-    dispatcher invocation runs with `match=None` so host-only resolvers can
+    dispatcher invocation runs with `matched_actions=None` so host-only resolvers can
     still claim by host."""
     sandbox = _sandbox()
     resolver = _StubResolver(sandbox=sandbox)
@@ -254,10 +255,10 @@ async def test_resolve_and_match_matcher_returns_none_fails_open() -> None:
     assert result is None
     assert flow.response is None  # forwarded
     assert resolver.resolve_session_by_id_calls == []
-    # The off-catalog dispatch IS wired — the resolver was probed with match=None.
+    # The off-catalog dispatch IS wired — the resolver was probed with matched_actions=None.
     assert len(spy.claims_calls) == 1
     _request, ctx = spy.claims_calls[0]
-    assert ctx.match is None
+    assert ctx.matched_actions is None
     assert ctx.sandbox is sandbox
 
 
@@ -277,9 +278,9 @@ async def test_resolve_and_match_matcher_raises_falls_through_as_off_catalog() -
     assert result is None
     assert flow.response is None  # forwarded
     assert resolver.resolve_session_by_id_calls == []
-    # Dispatcher was invoked with match=None (same as a real off-catalog).
+    # Dispatcher was invoked with matched_actions=None (same as a real off-catalog).
     assert len(spy.claims_calls) == 1
-    assert spy.claims_calls[0][1].match is None
+    assert spy.claims_calls[0][1].matched_actions is None
 
 
 # ---------------------------------------------------------------------------
@@ -342,11 +343,11 @@ async def test_resolve_and_match_deny_blocks_with_403() -> None:
 class _PipelineSpy:
     """Records the approval pipeline + dispatcher so a test can read the path."""
 
-    persisted: list[tuple[SessionContext, RequestMatch]]
-    awaited: list[RequestMatch]
-    # (match, sandbox_user_id, sandbox_tenant_id) — captured off the
+    persisted: list[tuple[SessionContext, AllMatchedActions]]
+    awaited: list[AllMatchedActions]
+    # (matched_actions, sandbox_user_id, sandbox_tenant_id) — captured off the
     # InjectionContext the dispatcher was handed.
-    dispatched: list[tuple[RequestMatch | None, UUID, str]]
+    dispatched: list[tuple[AllMatchedActions | None, UUID, str]]
 
     @property
     def approval_ran(self) -> bool:
@@ -367,23 +368,23 @@ def _spy_pipeline(
     """
     spy = _PipelineSpy(persisted=[], awaited=[], dispatched=[])
 
-    def _persist(ctx: SessionContext, match: RequestMatch) -> UUID:
-        spy.persisted.append((ctx, match))
+    def _persist(ctx: SessionContext, matched_actions: AllMatchedActions) -> UUID:
+        spy.persisted.append((ctx, matched_actions))
         return uuid4()
 
     async def _await(
-        _aid: UUID, _ctx: SessionContext, match: RequestMatch
+        _aid: UUID, _ctx: SessionContext, matched_actions: AllMatchedActions
     ) -> ApprovalDecision | None:
-        spy.awaited.append(match)
+        spy.awaited.append(matched_actions)
         return decision
 
     def _dispatch(
         flow: http.HTTPFlow,  # noqa: ARG001
         *,
         sandbox: ResolvedSandbox,
-        match: RequestMatch | None,
+        matched_actions: AllMatchedActions | None,
     ) -> None:
-        spy.dispatched.append((match, sandbox.user_id, sandbox.tenant_id))
+        spy.dispatched.append((matched_actions, sandbox.user_id, sandbox.tenant_id))
 
     monkeypatch.setattr(addon, "_persist_approval_row", _persist)
     monkeypatch.setattr(addon, "_await_decision", _await)
@@ -482,7 +483,7 @@ async def test_ask_denied_blocks(
 
 
 _RUN_ID = UUID("55555555-5555-5555-5555-555555555555")
-# make_request_match defaults external_app_id=42.
+# make_matched_actions defaults external_app_id=42.
 _GRANTED_APP_ID = 42
 
 
@@ -695,8 +696,8 @@ async def test_resolve_and_match_happy_path_promotes_session() -> None:
     result = await addon._resolve_and_match(flow)
 
     assert result is not None
-    ctx, match = result
-    assert match is _MATCH
+    ctx, matched_actions = result
+    assert matched_actions is _MATCH
     assert ctx.session_id == session_id
     assert ctx.user_id == user_id
     assert ctx.tenant_id == sandbox.tenant_id
@@ -1025,14 +1026,16 @@ def test_dispatch_injection_writes_resolved_headers() -> None:
     flow.request.headers["Authorization"] = "sandbox-placeholder"
     sandbox = _sandbox()
 
-    addon._dispatch_injection_or_block(flow, sandbox=sandbox, match=_MATCH_ALWAYS)
+    addon._dispatch_injection_or_block(
+        flow, sandbox=sandbox, matched_actions=_MATCH_ALWAYS
+    )
 
     assert flow.response is None  # forwarded
     assert flow.request.headers["Authorization"] == "Bearer real-secret"
     assert len(spy.resolve_calls) == 1
     seen = spy.resolve_calls[0]
     assert seen.sandbox is sandbox
-    assert seen.match is _MATCH_ALWAYS
+    assert seen.matched_actions is _MATCH_ALWAYS
 
 
 def test_dispatch_injection_pass_through_forwards_untouched() -> None:
@@ -1045,7 +1048,9 @@ def test_dispatch_injection_pass_through_forwards_untouched() -> None:
     flow = _flow()
     flow.request.headers["X-Pod-Side"] = "preserve"
 
-    addon._dispatch_injection_or_block(flow, sandbox=_sandbox(), match=_MATCH_ALWAYS)
+    addon._dispatch_injection_or_block(
+        flow, sandbox=_sandbox(), matched_actions=_MATCH_ALWAYS
+    )
 
     assert flow.response is None
     assert flow.request.headers["X-Pod-Side"] == "preserve"
@@ -1066,7 +1071,9 @@ def test_dispatch_injection_credential_unavailable_blocks_with_403() -> None:
     )
     flow = _flow()
 
-    addon._dispatch_injection_or_block(flow, sandbox=_sandbox(), match=_MATCH_ALWAYS)
+    addon._dispatch_injection_or_block(
+        flow, sandbox=_sandbox(), matched_actions=_MATCH_ALWAYS
+    )
 
     _assert_403(flow, SandboxProxyError.CREDENTIAL_ERROR)
 
@@ -1082,7 +1089,9 @@ def test_dispatch_injection_resolver_exception_blocks_with_403() -> None:
     )
     flow = _flow()
 
-    addon._dispatch_injection_or_block(flow, sandbox=_sandbox(), match=_MATCH_ALWAYS)
+    addon._dispatch_injection_or_block(
+        flow, sandbox=_sandbox(), matched_actions=_MATCH_ALWAYS
+    )
 
     _assert_403(flow, SandboxProxyError.CREDENTIAL_ERROR)
 
@@ -1318,10 +1327,10 @@ def test_persist_approval_row_announce_failure_is_swallowed(
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
 
-    notify_calls: list[tuple[UUID, SessionContext, RequestMatch]] = []
+    notify_calls: list[tuple[UUID, SessionContext, AllMatchedActions]] = []
 
     def _fake_notify(
-        _self: Any, aid: UUID, ctx_arg: SessionContext, match_arg: RequestMatch
+        _self: Any, aid: UUID, ctx_arg: SessionContext, match_arg: AllMatchedActions
     ) -> None:
         notify_calls.append((aid, ctx_arg, match_arg))
 

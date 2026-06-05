@@ -18,11 +18,11 @@ from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
-from onyx.sandbox_proxy.action_matcher import ActionMatcher
 from onyx.sandbox_proxy.addons.gate import _IdentityResolver
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.identity import ResolvedSandbox
+from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.craft._test_helpers import action_entry
@@ -85,9 +85,9 @@ class _UnusedResolver(_IdentityResolver):
         raise AssertionError("identity.resolve_session_by_id unexpectedly used")
 
 
-class _UnusedMatcher(ActionMatcher):
-    def match(self, request: Any, tenant_id: str) -> Any:  # noqa: ARG002
-        raise AssertionError("action_matcher.match unexpectedly used")
+class _UnusedMatcher(RequestEvaluator):
+    def evaluate(self, request: Any, tenant_id: str, user_id: UUID) -> Any:  # noqa: ARG002
+        raise AssertionError("request_evaluator.evaluate unexpectedly used")
 
 
 def _build_addon() -> GateAddon:
@@ -100,7 +100,7 @@ def _build_addon() -> GateAddon:
 
     return GateAddon(
         identity=_UnusedResolver(),
-        action_matcher=_UnusedMatcher(),
+        request_evaluator=_UnusedMatcher(),
         cache_factory=_factory_raises,
         proxy_instance_id="proxy-test",
         credential_dispatcher=CredentialInjectionDispatcher([]),

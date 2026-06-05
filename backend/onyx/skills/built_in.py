@@ -66,12 +66,12 @@ class BuiltInSkillDefinition(BaseModel):
     is_available: Callable[[Session], bool] = _always_available
     unavailable_reason: str | None = None
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def source_dir(self) -> Path:
         return BUILTIN_SKILLS_PATH / self.built_in_skill_id
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def has_template(self) -> bool:
         # Disk-derived so it can't drift from the actual source layout.

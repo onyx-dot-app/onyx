@@ -115,6 +115,58 @@ def test_create_persists_skill_and_app(
     db_session.commit()
 
 
+def test_custom_app_glob_matches_deep_path(
+    db_session: Session,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Custom apps store their URL patterns as authored globs; the matcher
+    translates them to regexes that cover deep paths (the Discord 401
+    regression — ``/api/*`` must match ``/api/v10/...``)."""
+    from onyx.sandbox_proxy.request_evaluator import resolve_app_for_url
+
+    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
+    slug = f"custom-test-{uuid4().hex[:8]}"
+
+    resp = _create(db_session, test_user, slug)
+    # The glob is stored and round-tripped verbatim — no regex stored at rest.
+    assert resp.upstream_url_patterns == _UPSTREAM
+
+    app = db_session.scalar(select(ExternalApp).where(ExternalApp.id == resp.id))
+    assert app is not None
+    assert list(app.upstream_url_patterns) == _UPSTREAM
+    # The matcher translates the glob, resolving a realistic deep path here.
+    assert resolve_app_for_url("https://api.example.com/v10/users/@me", [app]) is app
+    assert resolve_app_for_url("https://other.example.com/x", [app]) is None
+
+    db_session.execute(delete(Skill).where(Skill.slug == slug))
+    db_session.commit()
+
+
+def test_create_rejects_wildcard_host_glob(
+    db_session: Session,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
+    slug = f"custom-test-{uuid4().hex[:8]}"
+
+    with pytest.raises(OnyxError):
+        api.create_custom_external_app(
+            name="Wildcard Host",
+            description="",
+            upstream_url_patterns=json.dumps(["https://*.example.com/*"]),
+            auth_template=json.dumps(_AUTH_TEMPLATE),
+            organization_credentials=json.dumps({"api_key": "sk-test"}),
+            enabled=True,
+            bundle=_upload(f"{slug}.zip"),
+            _=test_user,
+            db_session=db_session,
+        )
+    # Rejected before persistence — no skill row created.
+    assert db_session.scalar(select(Skill).where(Skill.slug == slug)) is None
+
+
 def test_create_with_no_credentials(
     db_session: Session,
     test_user: User,

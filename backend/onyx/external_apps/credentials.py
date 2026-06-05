@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import get_external_app_user_credential
+from onyx.db.models import ExternalApp
 
 
 def build_auth_headers(
@@ -60,3 +61,21 @@ def resolve_injection_headers(
         credentials.update(user_cred.user_credentials.get_value(apply_mask=False))
 
     return build_auth_headers(app.auth_template, credentials)
+
+
+def app_is_available(db_session: Session, app: ExternalApp, user_id: UUID) -> bool:
+    """Whether the gate should act on ``app`` for ``user_id`` — i.e. it's active
+    and we have everything needed to serve the request.
+
+    Distinguishes "no credential required" from "required credential unavailable":
+    an enabled app with an empty ``auth_template`` (an allowlist-only app that
+    injects nothing) is available; an app whose template can't be filled is not.
+    A disabled skill (the proxy's kill switch) is never available. Injection
+    re-resolves later with an OAuth refresh, so this verdict-time render is the
+    cheap presence check, not the final one.
+    """
+    if not app.skill.enabled:
+        return False
+    if not app.auth_template:
+        return True
+    return bool(resolve_injection_headers(db_session, app.id, user_id))

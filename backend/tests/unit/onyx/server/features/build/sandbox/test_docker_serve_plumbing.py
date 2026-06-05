@@ -6,9 +6,9 @@ docker-sandbox-serve port — no Docker engine required. We use
 (which would try to open the Docker socket) and verify:
 
 - ``_load_serve_connection_info`` produces the expected container-name
-  URL + cleartext password from a mocked container's ``inspect.Config.Env``,
-  yields a ``None`` password for legacy containers, and returns ``None``
-  when the container is gone.
+  fallback URL or localhost-published URL + cleartext password from a mocked
+  container's ``inspect`` data, yields a ``None`` password for legacy
+  containers, and returns ``None`` when the container is gone.
 - ``_render_agents_md`` produces shell-escaped AGENTS.md content.
 """
 
@@ -21,6 +21,7 @@ from uuid import UUID
 
 import pytest
 
+import onyx.server.features.build.sandbox.docker.dev_mode_serve as dev_mode_serve
 import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
 from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
 from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
@@ -46,8 +47,7 @@ def _bare_manager() -> DockerSandboxManager:
 
 
 def test_load_serve_connection_info_uses_container_name_and_port() -> None:
-    """Sandboxes are addressed by container name on the bridge network.
-    K8s does the same thing with a Service DNS name."""
+    """Older/unpublished containers fall back to bridge DNS."""
     mgr = _bare_manager()
     fake_container = MagicMock()
     fake_container.attrs = {"Config": {"Env": []}}
@@ -57,6 +57,78 @@ def test_load_serve_connection_info_uses_container_name_and_port() -> None:
     info = mgr._load_serve_connection_info(_SBX)
     assert info is not None
     assert info.base_url == f"http://sandbox-12345678:{OPENCODE_SERVE_PORT}"
+
+
+def test_load_serve_connection_info_prefers_localhost_published_port_in_dev(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Host-run workers cannot resolve Docker bridge DNS; use the published port."""
+    monkeypatch.setattr(dsm, "DEV_MODE", True)
+    mgr = _bare_manager()
+    fake_container = MagicMock()
+    fake_container.attrs = {
+        "Config": {"Env": []},
+        "NetworkSettings": {
+            "Ports": {
+                dev_mode_serve.OPENCODE_SERVE_CONTAINER_PORT: [
+                    {"HostIp": "127.0.0.1", "HostPort": "49153"},
+                ],
+            },
+        },
+    }
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker.containers.get.return_value = fake_container
+
+    info = mgr._load_serve_connection_info(_SBX)
+    assert info is not None
+    assert info.base_url == "http://127.0.0.1:49153"
+
+
+def test_load_serve_connection_info_ignores_published_port_outside_dev() -> None:
+    """Compose workers use sandbox bridge DNS, not host localhost."""
+    mgr = _bare_manager()
+    fake_container = MagicMock()
+    fake_container.attrs = {
+        "Config": {"Env": []},
+        "NetworkSettings": {
+            "Ports": {
+                dev_mode_serve.OPENCODE_SERVE_CONTAINER_PORT: [
+                    {"HostIp": "127.0.0.1", "HostPort": "49153"},
+                ],
+            },
+        },
+    }
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker.containers.get.return_value = fake_container
+
+    info = mgr._load_serve_connection_info(_SBX)
+    assert info is not None
+    assert info.base_url == f"http://sandbox-12345678:{OPENCODE_SERVE_PORT}"
+
+
+def test_load_serve_connection_info_normalizes_wildcard_host_ip_in_dev(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Docker may report wildcard binds; clients should connect via localhost."""
+    monkeypatch.setattr(dsm, "DEV_MODE", True)
+    mgr = _bare_manager()
+    fake_container = MagicMock()
+    fake_container.attrs = {
+        "Config": {"Env": []},
+        "NetworkSettings": {
+            "Ports": {
+                dev_mode_serve.OPENCODE_SERVE_CONTAINER_PORT: [
+                    {"HostIp": "0.0.0.0", "HostPort": "49154"},
+                ],
+            },
+        },
+    }
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker.containers.get.return_value = fake_container
+
+    info = mgr._load_serve_connection_info(_SBX)
+    assert info is not None
+    assert info.base_url == "http://127.0.0.1:49154"
 
 
 def test_load_serve_connection_info_parses_password_from_container_env() -> None:
@@ -186,6 +258,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     """``provision()`` must mint a per-call HTTP Basic password and
     thread it through ``build_container_create_kwargs`` into the
     container env — otherwise every later request 401s."""
+    monkeypatch.setattr(dsm, "DEV_MODE", True)
     monkeypatch.setattr(dsm, "SANDBOX_API_SERVER_URL", "https://onyx.example.com")
     # Skip the actual readiness HTTP probe — that needs a real container.
     monkeypatch.setattr(
@@ -238,6 +311,12 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
         "ONYX_SERVER_URL",
         OPENCODE_SERVER_PASSWORD,
         "OPENCODE_CONFIG_CONTENT",
+    }
+    assert run_calls[0]["ports"] == {
+        dev_mode_serve.OPENCODE_SERVE_CONTAINER_PORT: (
+            dev_mode_serve.OPENCODE_SERVE_HOST_BIND_IP,
+            None,
+        ),
     }
     # The password is a fresh token_urlsafe(32) — long-ish, no spaces.
     pw = env[OPENCODE_SERVER_PASSWORD]

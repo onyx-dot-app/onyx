@@ -23,6 +23,7 @@ export interface ApprovalView {
   actions: ApprovalAction[];
   app_name: string;
   payload: Record<string, unknown>;
+  display_payload: Record<string, unknown>;
   created_at: string;
   decision: ApprovalDecision | null;
   decided_at: string | null;

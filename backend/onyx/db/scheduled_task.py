@@ -536,7 +536,14 @@ def get_scheduled_run_context(
 
     Result shape::
 
-        {"task_id": UUID, "task_name": str, "started_at": datetime}
+        {
+            "run_id": UUID,
+            "task_id": UUID,
+            "task_name": str,
+            "status": ScheduledTaskRunStatus,
+            "started_at": datetime,
+            "finished_at": datetime | None,
+        }
 
     Returns ``None`` when the session was not produced by a scheduled run,
     or when the owning task is not accessible to ``user_id``.
@@ -554,7 +561,10 @@ def get_scheduled_run_context(
         return None
     run, task = row
     return {
+        "run_id": run.id,
         "task_id": task.id,
         "task_name": task.name,
+        "status": run.status,
         "started_at": run.started_at,
+        "finished_at": run.finished_at,
     }

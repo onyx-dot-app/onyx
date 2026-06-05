@@ -38,8 +38,12 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture(scope="module")
-def docker_client() -> DockerClient:
-    return DockerClient(base_url=f"unix://{_DOCKER_SOCKET}")
+def docker_client() -> Generator[DockerClient, None, None]:
+    client = DockerClient(base_url=f"unix://{_DOCKER_SOCKET}")
+    try:
+        yield client
+    finally:
+        client.close()
 
 
 @pytest.fixture(scope="module")
@@ -69,7 +73,13 @@ def _run_sandbox_labeled(
     tenant_id: str = "public",
     name: str | None = None,
 ) -> Container:
-    """Spawn a busybox container with the sandbox label set + a long sleep."""
+    """Spawn a busybox container with the sandbox label set + a long sleep.
+
+    If the post-create wait times out (or anything in it raises) the caller
+    never gets a reference, so ``cleanup_test_containers.append`` can't reach
+    the container. Remove here so the test network's teardown isn't blocked by
+    an orphan endpoint.
+    """
     container = docker_client.containers.run(
         _BUSYBOX_IMAGE,
         command=["sleep", "3600"],
@@ -82,31 +92,46 @@ def _run_sandbox_labeled(
         },
         name=name or f"craft-sandbox-test-{str(sandbox_id)[:8]}",
     )
-    # Wait for the network IP to be assigned. Bridge attachment is async after
-    # container.run returns; Reload until NetworkSettings shows up.
-    deadline = time.time() + 10.0
-    while time.time() < deadline:
-        container.reload()
-        if _identity_from_container(container, network) is not None:
-            return container
-        time.sleep(0.1)
-    raise RuntimeError(
-        f"Container {container.name} did not attach to {network} within 10s."
-    )
+    try:
+        # Wait for the network IP to be assigned. Bridge attachment is async
+        # after container.run returns; Reload until NetworkSettings shows up.
+        deadline = time.time() + 10.0
+        while time.time() < deadline:
+            container.reload()
+            if _identity_from_container(container, network) is not None:
+                return container
+            time.sleep(0.1)
+        raise RuntimeError(
+            f"Container {container.name} did not attach to {network} within 10s."
+        )
+    except Exception:
+        try:
+            container.remove(force=True, v=False)
+        except (NotFound, APIError):
+            pass
+        raise
 
 
 @pytest.fixture
 def fresh_lookup(
     docker_client: DockerClient, test_network: str
 ) -> Generator[DockerEventsLookup, None, None]:
-    """A started lookup wired to the test network. Stops on teardown."""
+    """A started lookup wired to the test network. Stops on teardown.
+
+    ``stop()`` must wrap both the initial-sync assertion and the yield: if the
+    assertion fires before yield, pytest skips the post-yield code and the
+    events-watcher thread leaks, polling the shared docker socket and mutating
+    caches in later tests.
+    """
     lookup = DockerEventsLookup(docker_client=docker_client, network=test_network)
     lookup.start()
-    assert lookup.wait_for_initial_sync(timeout_seconds=10.0), (
-        "DockerEventsLookup initial sync did not complete within 10s."
-    )
-    yield lookup
-    lookup.stop()
+    try:
+        assert lookup.wait_for_initial_sync(timeout_seconds=10.0), (
+            "DockerEventsLookup initial sync did not complete within 10s."
+        )
+        yield lookup
+    finally:
+        lookup.stop()
 
 
 @pytest.fixture
@@ -203,6 +228,7 @@ def test_lookup_evicts_container_on_destroy(
     container = _run_sandbox_labeled(
         docker_client, network=test_network, sandbox_id=sandbox_id
     )
+    cleanup_test_containers.append(container)
     ip = container.attrs["NetworkSettings"]["Networks"][test_network]["IPAddress"]
 
     # Wait for the start event to land in the cache.

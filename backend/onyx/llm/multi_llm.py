@@ -660,37 +660,47 @@ class LitellmLLM(LLM):
             user_identity=user_identity,
         )
 
-        # OpenRouter sticky routing: inject session_id into extra_body so that
-        # OpenRouter pins all turns of a conversation to the same upstream provider,
-        # enabling prompt cache hits across turns.
+        # OpenRouter: inject session_id and user into extra_body.
+        #
+        # session_id — sticky routing: pins all turns of a conversation to the
+        # same upstream provider, enabling prompt cache hits across turns.
         # Without this, OpenRouter may alternate between e.g. Anthropic and Google
         # for the same model, causing cache misses on every other turn.
         # See: https://openrouter.ai/docs/features/provider-routing#session-id
         #
-        # Gated on SEND_USER_METADATA_TO_LLM_PROVIDER for consistency with the
-        # user/session metadata handled in build_litellm_passthrough_kwargs: an
-        # operator who opted out of sending session identifiers to providers
-        # should not have the session_id forwarded to OpenRouter either.
+        # user — activity tracking: OpenRouter reads the user identifier from
+        # extra_body for its per-user activity logs; the top-level LiteLLM
+        # `user` parameter is forwarded to the upstream model but is not picked
+        # up by OpenRouter's own tracking dashboard.
+        #
+        # Both are gated on SEND_USER_METADATA_TO_LLM_PROVIDER: an operator who
+        # opted out of sending session/user identifiers to providers should not
+        # have them forwarded to OpenRouter either.
         if (
             SEND_USER_METADATA_TO_LLM_PROVIDER
             and self._model_provider == LlmProviderNames.OPENROUTER
             and user_identity is not None
-            and user_identity.session_id
         ):
-            if passthrough_kwargs is self._model_kwargs:
-                passthrough_kwargs = copy.deepcopy(self._model_kwargs)
-            existing_extra_body = passthrough_kwargs.get("extra_body") or {}
-            if isinstance(existing_extra_body, dict):
-                passthrough_kwargs["extra_body"] = {
-                    **existing_extra_body,
-                    "session_id": user_identity.session_id,
-                }
-            else:
-                logger.warning(
-                    "OpenRouter sticky routing: extra_body is not a dict (%s), "
-                    "skipping session_id injection",
-                    type(existing_extra_body).__name__,
-                )
+            extra_body_updates: dict[str, str] = {}
+            if user_identity.session_id:
+                extra_body_updates["session_id"] = user_identity.session_id
+            if user_identity.user_id:
+                extra_body_updates["user"] = user_identity.user_id
+            if extra_body_updates:
+                if passthrough_kwargs is self._model_kwargs:
+                    passthrough_kwargs = copy.deepcopy(self._model_kwargs)
+                existing_extra_body = passthrough_kwargs.get("extra_body") or {}
+                if isinstance(existing_extra_body, dict):
+                    passthrough_kwargs["extra_body"] = {
+                        **existing_extra_body,
+                        **extra_body_updates,
+                    }
+                else:
+                    logger.warning(
+                        "OpenRouter extra_body injection: extra_body is not a dict (%s), "
+                        "skipping session_id/user injection",
+                        type(existing_extra_body).__name__,
+                    )
 
         try:
             # NOTE: must pass in None instead of empty strings otherwise litellm

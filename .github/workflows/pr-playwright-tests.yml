@@ -88,6 +88,10 @@ jobs:
     # `true` so everything runs.
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       playwright: ${{ steps.filter.outputs.playwright || 'true' }}
       # Whether this change touches MCP-OAuth-relevant code. Drives whether a

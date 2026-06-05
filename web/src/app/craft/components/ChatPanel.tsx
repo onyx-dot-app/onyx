@@ -28,6 +28,7 @@ import {
 } from "@/app/craft/contexts/UploadFilesContext";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
+import { isScheduledRunContextInFlight } from "@/app/craft/v1/tasks/utils";
 import { toast } from "@/hooks/useToast";
 import Dropzone from "react-dropzone";
 import CraftInputBar, {
@@ -36,7 +37,9 @@ import CraftInputBar, {
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
-import ScheduledRunBanner from "@/app/craft/components/ScheduledRunBanner";
+import ScheduledRunBanner, {
+  useScheduledRunContext,
+} from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsRegion";
@@ -46,11 +49,10 @@ import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicato
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown } from "@opal/icons";
-import { Button as OpalButton } from "@opal/components";
+import { Button as OpalButton, Tooltip } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
-import { Tooltip } from "@opal/components";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 
 interface BuildChatPanelProps {
@@ -74,8 +76,15 @@ export default function BuildChatPanel({
   const outputPanelOpen = useOutputPanelOpen();
   const session = useSession();
   const sessionId = useSessionId();
+  const scheduledSessionId = sessionId ?? existingSessionId ?? null;
+  const { data: scheduledRunContext, mutate: mutateScheduledRunContext } =
+    useScheduledRunContext(scheduledSessionId);
+  const scheduledRunInFlight =
+    isScheduledRunContextInFlight(scheduledRunContext);
+  const shouldStreamScheduledRun = scheduledRunContext?.status === "RUNNING";
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
+  const displayIsRunning = isRunning || scheduledRunInFlight;
   const { setLeftSidebarFolded, leftSidebarFolded } = useBuildContext();
   const { isMobile } = useScreenSize();
   const toggleOutputPanel = useToggleOutputPanel();
@@ -107,6 +116,9 @@ export default function BuildChatPanel({
 
   const { limits, refreshLimits } = useUsageLimits();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const updateSessionData = useBuildSessionStore(
+    (state) => state.updateSessionData
+  );
   const setCurrentError = useBuildSessionStore(
     (state) => state.setCurrentError
   );
@@ -130,7 +142,8 @@ export default function BuildChatPanel({
   const nameBuildSession = useBuildSessionStore(
     (state) => state.nameBuildSession
   );
-  const { streamMessage, interruptStreaming } = useBuildStreaming();
+  const { streamMessage, interruptStreaming, streamScheduledRunEvents } =
+    useBuildStreaming();
   const isInterrupting = useIsInterrupting();
   const queuedMessages = useQueuedMessages();
   const enqueueMessage = useBuildSessionStore((state) => state.enqueueMessage);
@@ -180,6 +193,34 @@ export default function BuildChatPanel({
     }
     prevWebappUrlRef.current = current;
   }, [session?.webappUrl, sessionId, maybeAutoOpenPanelForPreview]);
+
+  useEffect(() => {
+    if (!scheduledSessionId || !shouldStreamScheduledRun) return;
+
+    const controller = new AbortController();
+    void streamScheduledRunEvents(scheduledSessionId, controller.signal, () => {
+      void mutateScheduledRunContext();
+    });
+
+    return () => controller.abort();
+  }, [
+    scheduledSessionId,
+    shouldStreamScheduledRun,
+    streamScheduledRunEvents,
+    mutateScheduledRunContext,
+  ]);
+
+  useEffect(() => {
+    if (!scheduledSessionId || !scheduledRunContext || scheduledRunInFlight) {
+      return;
+    }
+    updateSessionData(scheduledSessionId, { status: "active" });
+  }, [
+    scheduledSessionId,
+    scheduledRunContext,
+    scheduledRunInFlight,
+    updateSessionData,
+  ]);
 
   // Ref to access InputBar methods
   const inputBarRef = useRef<CraftInputBarHandle>(null);
@@ -274,6 +315,11 @@ export default function BuildChatPanel({
     ) => {
       if (limits?.isLimited) {
         setShowUpgradeModal(true);
+        return;
+      }
+
+      if (scheduledRunInFlight) {
+        toast.error("Please wait for the scheduled run to finish.");
         return;
       }
 
@@ -382,6 +428,7 @@ export default function BuildChatPanel({
       hasSession,
       sessionId,
       isRunning,
+      scheduledRunInFlight,
       appendMessageToCurrent,
       streamMessage,
       consumePreProvisionedSession,
@@ -492,7 +539,8 @@ export default function BuildChatPanel({
                 )}
                 <AgentSwitcher />
                 <ScheduledRunBanner
-                  sessionId={sessionId ?? existingSessionId ?? null}
+                  sessionId={scheduledSessionId}
+                  context={scheduledRunContext ?? null}
                 />
               </div>
               {/* Right cluster: sandbox status sits left of the panel toggle. The
@@ -543,14 +591,14 @@ export default function BuildChatPanel({
                   ) : !hasSession && !existingSessionId ? (
                     <BuildWelcome
                       onSubmit={handleSubmit}
-                      isRunning={isRunning}
+                      isRunning={displayIsRunning}
                       sandboxInitializing={sandboxNotReady}
                     />
                   ) : (
                     <BuildMessageList
                       messages={session?.messages ?? []}
                       streamItems={session?.streamItems ?? []}
-                      isStreaming={isRunning}
+                      isStreaming={displayIsRunning}
                       autoScrollEnabled={isAtBottom}
                       scrollContainerRef={scrollContainerRef}
                       trailingAssistantSlot={
@@ -617,14 +665,18 @@ export default function BuildChatPanel({
                   <CraftInputBar
                     ref={inputBarRef}
                     onSubmit={handleSubmit}
-                    isRunning={isRunning}
+                    isRunning={displayIsRunning}
                     isInterrupting={isInterrupting}
-                    onInterrupt={handleInterrupt}
-                    disabled={isViewingSubagent}
+                    onInterrupt={
+                      scheduledRunInFlight ? undefined : handleInterrupt
+                    }
+                    disabled={isViewingSubagent || scheduledRunInFlight}
                     placeholder={
                       isViewingSubagent
                         ? "Switch to the main agent to send a message"
-                        : "Continue the conversation..."
+                        : scheduledRunInFlight
+                          ? "Scheduled run in progress..."
+                          : "Continue the conversation..."
                     }
                     queuedMessages={queuedMessages}
                     onQueueMessage={handleQueueMessage}
