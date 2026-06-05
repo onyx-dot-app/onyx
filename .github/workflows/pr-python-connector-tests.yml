@@ -116,6 +116,11 @@ jobs:
     permissions:
       id-token: write
       contents: read
+      # dorny/paths-filter (Detect Connector changes) reads the PR's changed
+      # files via the GitHub API (pulls.listFiles), which private repos gate
+      # behind pull-requests:read; without it the step fails with "Resource not
+      # accessible by integration". Harmless no-op on public repos.
+      pull-requests: read
     # See https://runs-on.com/runners/linux/
     runs-on:
       [

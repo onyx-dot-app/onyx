@@ -88,6 +88,13 @@ jobs:
     # `true` so everything runs.
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # dorny/paths-filter reads the PR's changed files via the GitHub API
+    # (pulls.listFiles), which private repos gate behind pull-requests:read;
+    # without it the job fails with "Resource not accessible by integration".
+    # Harmless no-op on public repos, which don't enforce the scope.
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       playwright: ${{ steps.filter.outputs.playwright || 'true' }}
       # Whether this change touches MCP-OAuth-relevant code. Drives whether a
