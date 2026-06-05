@@ -52,6 +52,7 @@ class UrlGlob(BaseModel):
 
     @classmethod
     def parse(cls, value: str) -> "UrlGlob":
+        value = value.strip()
         _validate(value)
         return cls(value=value)
 
