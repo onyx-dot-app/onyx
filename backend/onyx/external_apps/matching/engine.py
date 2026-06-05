@@ -80,7 +80,7 @@ def match_action(
                     action_type="custom_request",
                     display_name=f"{request.method} {request.path}",
                     description="Custom external app request",
-                    policy=EndpointPolicy.ALWAYS,
+                    policy=EndpointPolicy.ASK,
                 ),
             ),
             app_name=app.skill.name,
