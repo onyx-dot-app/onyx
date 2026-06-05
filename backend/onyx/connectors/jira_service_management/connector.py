@@ -11,6 +11,13 @@ and permission-sync logic from JiraConnector; the only additions are:
   Management (service desk) projects.
 * validate_connector_settings errors when a caller supplies a project_key
   that belongs to a non-service-desk project.
+
+Note: documents are keyed by the Jira issue URL (inherited from JiraConnector),
+so a JSM ticket has the same document id it would have under the generic Jira
+connector. Indexing the same Atlassian instance/projects with BOTH the Jira and
+the Jira Service Management connectors will produce colliding document ids (the
+two connectors overwrite each other and the document's source flip-flops between
+runs). Configure one connector per project scope to avoid this.
 """
 
 from __future__ import annotations
