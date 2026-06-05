@@ -142,10 +142,28 @@ def test_stamp_source_propagates_checkpoint_return_value() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_jql_adds_project_type_when_no_scope() -> None:
+def test_jql_scopes_to_jsm_projects_when_no_scope() -> None:
     connector = _make_connector()
+    jsm = MagicMock()
+    jsm.key = "HELP"
+    jsm.projectTypeKey = "service_desk"
+    software = MagicMock()
+    software.key = "SOFT"
+    software.projectTypeKey = "software"
+    connector._jira_client.projects.return_value = [jsm, software]  # type: ignore
+
     jql = connector._get_jql_query(0, time.time())
-    assert 'project type = "service_management"' in jql
+    assert 'project in ("HELP")' in jql
+    assert "SOFT" not in jql
+
+
+def test_jql_falls_back_when_no_jsm_projects_found() -> None:
+    connector = _make_connector()
+    connector._jira_client.projects.return_value = []  # type: ignore
+    jql = connector._get_jql_query(0, time.time())
+    # No discoverable JSM projects -> fall back to the base query (no filter)
+    # rather than emitting invalid JQL.
+    assert "project in" not in jql
 
 
 def test_jql_does_not_add_project_type_when_project_key_given() -> None:
@@ -173,14 +191,14 @@ def test_validate_raises_for_non_jsm_project() -> None:
     mock_project.projectTypeKey = "software"
     connector._jira_client.project.return_value = mock_project  # type: ignore
 
-    with pytest.raises(ConnectorValidationError, match="service_management"):
+    with pytest.raises(ConnectorValidationError, match="service desk"):
         connector.validate_connector_settings()
 
 
 def test_validate_accepts_jsm_project() -> None:
     connector = _make_connector(project_key="HELP")
     mock_project = MagicMock()
-    mock_project.projectTypeKey = "service_management"
+    mock_project.projectTypeKey = "service_desk"
     connector._jira_client.project.return_value = mock_project  # type: ignore
 
     # Should not raise
@@ -194,12 +212,26 @@ def test_validate_skips_type_check_when_custom_jql() -> None:
     connector._jira_client.project.assert_not_called()  # type: ignore
 
 
-def test_validate_tolerates_project_type_fetch_failure() -> None:
-    """If project() raises an unexpected error, validation should not fail."""
+def test_validate_tolerates_missing_project_type() -> None:
+    """Older Jira Server may omit projectTypeKey; validation should pass."""
     connector = _make_connector(project_key="HELP")
-    connector._jira_client.project.side_effect = RuntimeError("network error")  # type: ignore
+    mock_project = MagicMock(spec=[])  # no projectTypeKey attribute
+    connector._jira_client.project.return_value = mock_project  # type: ignore
     # Should not raise
     connector.validate_connector_settings()
+
+
+def test_validate_surfaces_invalid_project_key() -> None:
+    """A failed project() lookup must surface as a validation error."""
+    connector = _make_connector(project_key="NOPE")
+
+    class _JiraError(Exception):
+        status_code = 404
+        text = "No project could be found with key 'NOPE'."
+
+    connector._jira_client.project.side_effect = _JiraError()  # type: ignore
+    with pytest.raises(ConnectorValidationError):
+        connector.validate_connector_settings()
 
 
 # ---------------------------------------------------------------------------
