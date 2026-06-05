@@ -103,6 +103,7 @@ from onyx.db.enums import UserFileStatus
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType
 from onyx.db.pydantic_type import PydanticType
+from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes
 from onyx.kg.models import KGStage
@@ -5945,6 +5946,7 @@ class ExternalApp(Base):
         default=ExternalAppType.CUSTOM,
         server_default=ExternalAppType.CUSTOM.value,
     )
+    # CUSTOM apps store URL globs here (translated to regexes at match time
     upstream_url_patterns: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
     )
@@ -5982,6 +5984,17 @@ class ExternalApp(Base):
         back_populates="external_app",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def upstream_url_regexes(self) -> list[str]:
+        """``upstream_url_patterns`` as match-ready regexes: CUSTOM apps author
+        globs (translated here), built-in providers author regexes used as-is."""
+        if self.app_type == ExternalAppType.CUSTOM:
+            return [
+                UrlGlob(value=pattern).to_regex()
+                for pattern in self.upstream_url_patterns
+            ]
+        return list(self.upstream_url_patterns)
 
 
 class ExternalAppUserCredential(Base):
