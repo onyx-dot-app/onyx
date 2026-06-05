@@ -4467,13 +4467,24 @@ class TokenRateLimit(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    token_budget: Mapped[int] = mapped_column(Integer, nullable=False)
+    # A row carries a token budget, a cost budget, or both; a null side is exempt
+    # from that gate. At least one must be set — enforced by the check constraint
+    # below, so a backfill / direct write can't create an unenforceable row.
+    token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cost_budget_cents: Mapped[float | None] = mapped_column(Float, nullable=True)
     period_hours: Mapped[int] = mapped_column(Integer, nullable=False)
     scope: Mapped[TokenRateLimitScope] = mapped_column(
         Enum(TokenRateLimitScope, native_enum=False)
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "token_budget IS NOT NULL OR cost_budget_cents IS NOT NULL",
+            name="ck_token_rate_limit_budget_set",
+        ),
     )
 
 
@@ -5218,6 +5229,88 @@ class TenantUsage(Base):
     __table_args__ = (
         # Ensure only one row per window start (tenant_id is in the schema name)
         UniqueConstraint("window_start", name="uq_tenant_usage_window"),
+    )
+
+
+class UserUsage(Base):
+    """
+    Per-user LLM usage rollup within a time window — the source of truth for
+    per-user cost/token attribution and budget checks. Mirrors TenantUsage's
+    window-rollup model (one accumulating row per window+dims, not a per-call
+    ledger).
+
+    One row per (user, window, model, flow, provider), accumulated in place;
+    windows match the tenant-usage alignment so per-user and per-tenant totals
+    reconcile.
+    """
+
+    __tablename__ = "user_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    window_start: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    flow: Mapped[str] = mapped_column(String, nullable=False)
+    # Empty string (not NULL) for "no provider" so the dedup unique index below
+    # works on every Postgres version without NULLS NOT DISTINCT (PG15+).
+    provider: Mapped[str] = mapped_column(
+        String, nullable=False, default="", server_default=""
+    )
+
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost_cents: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        # Upsert key: accumulate into one row per dimension tuple per window.
+        # provider is non-null ('' when absent), so a plain unique index dedups
+        # correctly on every Postgres version (no NULLS NOT DISTINCT needed).
+        Index(
+            "uq_user_usage_dims",
+            "user_id",
+            "window_start",
+            "model",
+            "flow",
+            "provider",
+            unique=True,
+        ),
+    )
+
+
+class ModelCostOverride(Base):
+    """Admin-set per-model rates that supersede litellm pricing.
+
+    Negotiated enterprise rates win over litellm's published numbers, so cost
+    computation consults this table before falling back to litellm.
+    """
+
+    __tablename__ = "model_cost_override"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # litellm-style model name (e.g. "gpt-4o"); one override per model.
+    model: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+
+    # Rates in USD per million tokens.
+    input_cost_per_mtok: Mapped[float] = mapped_column(Float, nullable=False)
+    output_cost_per_mtok: Mapped[float] = mapped_column(Float, nullable=False)
+    # Cache-read rate; null bills cache reads at the input rate (litellm default).
+    cache_read_cost_per_mtok: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
 
