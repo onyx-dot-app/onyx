@@ -92,14 +92,14 @@ class TestCreateSession:
         assert stub_sandbox_manager.provision_count == 1
         assert build_session.user_id == test_user.id
 
-    def test_create_session_overlaps_serve_wait_with_setup(
+    def test_create_session_waits_for_serve_once(
         self,
         test_user: User,
         session_manager_with_stub: SessionManager,
         stub_sandbox_manager: StubSandboxManager,
     ) -> None:
-        # provision() hands back at pod-Ready; the opencode-serve wait runs
-        # concurrently with workspace setup + hydration instead.
+        # provision() hands back at pod-Ready; create waits for opencode-serve
+        # separately (overlapped with workspace setup + hydration).
         stub_sandbox_manager.provision_returns = SandboxInfo(
             sandbox_id=uuid4(),
             directory_path="/tmp/sandbox",
@@ -111,12 +111,7 @@ class TestCreateSession:
 
         session_manager_with_stub.create_session__no_commit(user_id=test_user.id)
 
-        assert stub_sandbox_manager.last_provision_payload is not None
-        assert (
-            stub_sandbox_manager.last_provision_payload["block_until_serve_ready"]
-            is False
-        )
-        # The wait is still performed — just decoupled from provision().
+        assert stub_sandbox_manager.provision_count == 1
         assert stub_sandbox_manager.wait_for_serve_ready_count == 1
 
     def test_create_session_raises_when_serve_never_ready(

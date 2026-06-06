@@ -259,7 +259,7 @@ class SessionManager:
         if user is None:
             raise ValueError(f"User {user_id} not found")
         _, all_llm_configs = self.build_llm_configs(user)
-        return _sandbox.ensure_sandbox_ready(
+        sandbox = _sandbox.ensure_sandbox_ready(
             self._db_session,
             self._sandbox_manager,
             user_id,
@@ -268,6 +268,13 @@ class SessionManager:
             provisioning_wait_seconds=provisioning_wait_seconds,
             user=user,
         )
+        # Headless callers send a prompt right after; block until opencode-serve
+        # answers (create overlaps this wait, but here there's nothing to overlap).
+        if not self._sandbox_manager.wait_for_serve_ready(sandbox.id):
+            raise RuntimeError(
+                f"opencode-serve never became ready for sandbox {sandbox.id}"
+            )
+        return sandbox
 
     def create_session__no_commit(
         self,
@@ -343,9 +350,9 @@ class SessionManager:
 
         # Ensure the user's sandbox is RUNNING. Interactive callers can't
         # afford to wait through a concurrent provisioner, so we use the
-        # FAIL policy (raise RuntimeError if another request is mid-
-        # provision). block_until_serve_ready=False: opencode-serve binding is
-        # awaited below, concurrently with workspace setup + hydration.
+        # FAIL policy (raise RuntimeError if another request is mid-provision).
+        # The pod is Ready on return; the opencode-serve wait runs below,
+        # concurrently with workspace setup + hydration.
         sandbox = _sandbox.ensure_sandbox_ready(
             self._db_session,
             self._sandbox_manager,
@@ -353,7 +360,6 @@ class SessionManager:
             all_llm_configs,
             policy=_sandbox.ProvisioningPolicy.FAIL,
             user=user,
-            block_until_serve_ready=False,
         )
 
         logger.info(

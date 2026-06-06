@@ -408,6 +408,12 @@ def restore_session(
                 onyx_pat=onyx_pat,
                 all_llm_configs=all_llm_configs,
             )
+            # provision() returns at pod-Ready; the workspace setup below talks
+            # to opencode-serve, so block until it has bound.
+            if not sandbox_manager.wait_for_serve_ready(sandbox.id):
+                raise RuntimeError(
+                    f"opencode-serve never became ready for sandbox {sandbox.id}"
+                )
 
             update_sandbox_status__no_commit(
                 db_session, sandbox.id, SandboxStatus.RUNNING

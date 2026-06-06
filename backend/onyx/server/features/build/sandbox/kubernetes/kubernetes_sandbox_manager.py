@@ -1193,7 +1193,6 @@ class KubernetesSandboxManager(SandboxManager):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
-        block_until_serve_ready: bool = True,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
@@ -1260,16 +1259,9 @@ class KubernetesSandboxManager(SandboxManager):
 
             # Reusing a live pod: clear any stale tombstone so event-bus
             # creation can attach. A stale password heals via the 401 path in
-            # the readiness probe below.
+            # the caller's wait_for_serve_ready().
             with self._event_buses_lock:
                 self._terminated_sandboxes.discard(sandbox_id)
-
-            if block_until_serve_ready and not self._wait_for_opencode_serve_ready(
-                sandbox_id
-            ):
-                raise RuntimeError(
-                    f"opencode-serve never became ready in existing sandbox pod {pod_name}"
-                )
 
             logger.info(
                 "Reusing existing Kubernetes sandbox %s, pod: %s", sandbox_id, pod_name
@@ -1346,15 +1338,6 @@ class KubernetesSandboxManager(SandboxManager):
             if not self._wait_for_pod_ready(pod_name):
                 raise RuntimeError(
                     f"Timeout waiting for sandbox pod {pod_name} to become ready"
-                )
-
-            # 4. Wait for opencode-serve to bind :4096 (unless the caller will
-            # do it concurrently with workspace setup).
-            if block_until_serve_ready and not self._wait_for_opencode_serve_ready(
-                sandbox_id
-            ):
-                raise RuntimeError(
-                    f"opencode-serve never became ready in sandbox pod {pod_name}"
                 )
 
             logger.info(

@@ -243,7 +243,6 @@ class StubSandboxManager(SandboxManager):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
-        block_until_serve_ready: bool = True,
     ) -> SandboxInfo:
         self.provision_count += 1
         self.last_provision_payload = {
@@ -253,7 +252,6 @@ class StubSandboxManager(SandboxManager):
             "llm_config": llm_config,
             "onyx_pat": onyx_pat,
             "all_llm_configs": all_llm_configs,
-            "block_until_serve_ready": block_until_serve_ready,
         }
         if self.provision_returns is None:
             raise _not_configured("provision")

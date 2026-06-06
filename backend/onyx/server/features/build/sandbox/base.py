@@ -119,7 +119,6 @@ class SandboxManager(_ServeMixin, ABC):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
-        block_until_serve_ready: bool = True,
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
@@ -128,11 +127,10 @@ class SandboxManager(_ServeMixin, ABC):
         so per-prompt model overrides can cross providers without restarting
         the pod. Defaults to ``[llm_config]`` (single-provider, back-compat).
 
-        ``block_until_serve_ready``: block until opencode-serve answers before
-        returning. Default keeps the pod-Ready + serve-Ready contract that
-        callers rely on. The create-session flow passes ``False`` and runs
-        ``wait_for_serve_ready()`` concurrently with workspace setup + skill
-        hydration instead.
+        Returns once the pod/container is Ready. opencode-serve binds a few
+        seconds later — callers that need to talk to it must
+        ``wait_for_serve_ready()`` first (create overlaps that wait with
+        workspace setup; other flows call it inline).
 
         Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces

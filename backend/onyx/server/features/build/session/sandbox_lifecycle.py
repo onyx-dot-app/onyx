@@ -53,14 +53,13 @@ def provision_sandbox(
     user_id: UUID,
     tenant_id: str,
     all_llm_configs: list[LLMProviderConfig],
-    block_until_serve_ready: bool = True,
 ) -> None:
     """Ensure a PAT exists, then provision the pod with every accessible
     provider pre-loaded so per-prompt model overrides can cross providers
     without a pod restart. ``all_llm_configs[0]`` is the default.
 
-    ``block_until_serve_ready=False`` returns once the pod is Ready, leaving the
-    opencode-serve wait to the caller (so it can overlap workspace setup).
+    Returns once the pod is Ready; opencode-serve readiness is the caller's
+    concern (see ``SandboxManager.wait_for_serve_ready``).
 
     Updates the sandbox row's status to whatever the manager returns.
     Caller is responsible for committing.
@@ -73,7 +72,6 @@ def provision_sandbox(
         llm_config=all_llm_configs[0],
         onyx_pat=onyx_pat,
         all_llm_configs=all_llm_configs,
-        block_until_serve_ready=block_until_serve_ready,
     )
     update_sandbox_status__no_commit(db_session, sandbox.id, sandbox_info.status)
 
@@ -140,10 +138,10 @@ def ensure_sandbox_ready(
     policy: ProvisioningPolicy,
     provisioning_wait_seconds: float = 30.0,
     user: User | None = None,
-    block_until_serve_ready: bool = True,
 ) -> Sandbox:
     """Return a ``RUNNING`` sandbox for ``user_id``, creating, waking, or
-    recovering as needed.
+    recovering as needed. The pod is Ready on return; opencode-serve readiness
+    is the caller's concern (``SandboxManager.wait_for_serve_ready``).
 
     Branches by current sandbox status:
     - No sandbox row: create + provision.
@@ -237,6 +235,5 @@ def ensure_sandbox_ready(
         user_id,
         tenant_id,
         all_llm_configs,
-        block_until_serve_ready=block_until_serve_ready,
     )
     return sandbox
