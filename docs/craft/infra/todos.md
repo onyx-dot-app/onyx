@@ -6,24 +6,26 @@ Things to codify so enabling Craft on a new cluster becomes "set `ENABLE_CRAFT=t
 
 Render everything in the sandbox namespace required for Craft via the Helm chart when `ENABLE_CRAFT=true`:
 
-- The sandbox ServiceAccount, with workload-identity annotations and the `eks.amazonaws.com/skip-containers=sandbox` annotation so only the sidecar container receives cloud credentials.
-- The sandbox-namespace Role granting `pods`, `pods/exec`, `services` verbs.
+- The sandbox ServiceAccount, with the workload-identity role annotation.
+- The sandbox-namespace Role granting `pods`, `pods/exec`, `pods/log`, `services`, and `secrets` verbs used by the sandbox manager.
 - RoleBinding(s) attaching that Role to whichever workload ServiceAccount(s) call the K8s API to manage sandbox pods (typically the api-server SA and the relevant Celery worker SAs).
 
 Source identifiers (IAM role ARN, bound SA names) from a configurable values block and mark them required so a misconfigured deploy fails fast.
 
-This removes the need for manual `kubectl annotate` and `kubectl create rolebinding` steps when onboarding a new cluster. Existing clusters whose Role is currently shipped via raw manifests / external GitOps need a one-time cleanup so the chart becomes the single source of truth.
+The `eks.amazonaws.com/skip-containers=sandbox` credential-isolation annotation belongs on each sandbox pod's metadata, not on this ServiceAccount. `KubernetesSandboxManager` owns that runtime pod annotation.
+
+This removes the need for manual `kubectl create serviceaccount`, `kubectl annotate`, and `kubectl create rolebinding` steps when onboarding a new cluster. Existing clusters whose Role is currently shipped via raw manifests / external GitOps need a one-time cleanup so the chart becomes the single source of truth.
 
 ## 2. Terraform module: sandbox object store + workload-identity role
 
 A shared Terraform module that provisions the cloud-side prerequisites for Craft on a given cluster:
 
-- Object-storage bucket for snapshots (with encryption + public-access block)
+- Optional object-storage bucket for snapshots (with encryption + public-access block)
 - IAM policy granting the SA read/write/delete/list on that bucket
 - IAM role with a trust policy scoped to the sandbox namespace + SA via the cluster's OIDC provider
 - Outputs (`role_arn`, `bucket_name`) to wire into the cluster's Helm values
 
-Existing buckets/roles on already-deployed clusters need to be imported into module state, not recreated.
+For migrations with an existing bucket, set `create_bucket=false` and pass the existing bucket name. Terraform will still create the IAM role and policy for that bucket, but it will not create or manage the bucket itself. Existing roles that should become module-managed still need Terraform import.
 
 ## 3. Node-group security-group composition
 
@@ -54,8 +56,8 @@ Replicate the production network-firewall setup in every region that runs Craft.
 
 Onboarding a new Craft cluster becomes:
 
-1. `terraform apply` against the cluster (provisions bucket + role, sets metadata hop-limit).
+1. `terraform apply` against the cluster (provisions or references the bucket, creates the role, sets metadata hop-limit).
 2. Copy `role_arn` and `bucket_name` from terraform outputs into the cluster's Helm values alongside `ENABLE_CRAFT: "true"`.
-3. `helm upgrade` (creates namespace, SA, network policy).
+3. `helm upgrade` (creates namespace, SA, and sandbox RBAC).
 
 Item 5 is independent and bolts on to any cluster after the rest is in place.
