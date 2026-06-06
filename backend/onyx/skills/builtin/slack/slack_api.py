@@ -56,7 +56,7 @@ def _call(method: str, body: dict[str, Any], as_json: bool = False) -> dict[str,
         content_type = "application/json; charset=utf-8"
     else:
         data = urllib.parse.urlencode(
-            {k: _form_value(v) for k, v in body.items()}
+            {k: _form_value(v) for k, v in body.items() if v is not None}
         ).encode("utf-8")
         content_type = "application/x-www-form-urlencoded; charset=utf-8"
     req = urllib.request.Request(  # noqa: S310 — fixed https base url
