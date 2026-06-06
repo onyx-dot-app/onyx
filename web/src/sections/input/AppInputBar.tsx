@@ -164,6 +164,7 @@ const AppInputBar = React.memo(
       tilePopover,
       dismissTilePopover,
       updateTileText,
+      expandTile,
     } = useContentEditable({
       initialContent: initialMessage,
       wrapperRef: inputWrapperRef,
@@ -994,6 +995,7 @@ const AppInputBar = React.memo(
                 tileElement={tilePopover.tile}
                 onDismiss={dismissTilePopover}
                 onTextChange={updateTileText}
+                onExpand={() => expandTile(tilePopover.tile)}
               />
             )}
           </div>
