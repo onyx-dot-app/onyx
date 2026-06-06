@@ -74,7 +74,7 @@ opencode auth/config.
 | `SandboxFileSyncRole-*` IAM role | Yes | Lets the sandbox file-sync ServiceAccount access the snapshot bucket without static AWS keys. |
 | S3 IAM policy | Yes | Grants `GetObject`, `PutObject`, `DeleteObject`, `AbortMultipartUpload`, and `ListBucket` on the snapshot bucket. |
 | EKS OIDC outputs | Yes | Let the `craft_sandbox` module build IRSA trust without an EKS data source, so fresh apply and destroy both work. |
-| Optional Craft sandbox node group | Strongly recommended | Gives sandbox pods dedicated, tainted, IMDS-hardened nodes. Existing labeled/tainted nodes can satisfy the same scheduling contract. The Terraform node group attaches both the shared node SG and EKS primary cluster SG. |
+| Optional Craft sandbox node group | Strongly recommended | Gives sandbox pods dedicated, tainted, IMDS-hardened nodes. Existing labeled/tainted nodes can satisfy the same scheduling contract. The Terraform node group uses the upstream shared node SG and intentionally does not also attach the EKS primary cluster SG. |
 
 ### Helm/Kubernetes additions
 
@@ -155,11 +155,11 @@ sidecar S3 permissions; IRSA does that. It is defense-in-depth so untrusted code
 cannot easily reach node metadata credentials.
 
 Security-group composition matters too. Regular managed node groups get the
-shared node security group from the upstream EKS module. The sandbox node group
-also sets `attach_cluster_primary_security_group=true`, so its launch template
-gets both the shared node SG and the EKS primary cluster SG. That keeps sandbox
-nodes on the same in-cluster connectivity footing as the regular node groups
-while still separating scheduling with labels/taints.
+shared node security group from the upstream EKS module, and the sandbox node
+group follows that shape. Do not also attach the EKS primary cluster SG: the
+upstream module tags the shared node SG and EKS tags the primary cluster SG with
+`kubernetes.io/cluster/<name>`, so attaching both to the same nodes breaks
+controllers that expect exactly one cluster-tagged node security group.
 
 ## 3. Deploy on a fresh cluster
 
@@ -285,8 +285,8 @@ If the existing node group already has:
 - label `onyx.app/workload=sandbox`;
 - taint `workload=sandbox:NoSchedule`;
 - acceptable IMDS hardening;
-- the same security-group shape as regular managed node groups: shared node SG
-  plus EKS primary cluster SG;
+- the same security-group shape as regular managed node groups: the shared node
+  SG, without also attaching another `kubernetes.io/cluster/<name>`-tagged SG;
 
 then leave `enable_craft_sandbox_node_group=false` and keep using those nodes.
 If you want Terraform to own the node group, either import the existing node
@@ -403,7 +403,7 @@ The lead infra TODO list in `docs/craft/infra/todos.md` is accounted for as:
 |---|---|---|
 | Helm sandbox namespace RBAC + ServiceAccount | Covered | Helm owns `onyx-sandboxes` via `sandbox-namespace.yaml`, then owns `sandbox-file-sync`, sandbox manager RBAC, and proxy service lookup RBAC via `sandbox-rbac.yaml` when Craft is enabled. |
 | Terraform sandbox object store + workload identity | Covered | `craft_sandbox` creates/references the snapshot bucket and creates the sandbox file-sync IRSA role/policy. Existing buckets use `create_bucket=false`. |
-| Node-group security-group composition | Covered | The Terraform sandbox node group carries both the shared node SG and EKS primary cluster SG. Migrated manual node groups should be checked for the same SG shape. |
+| Node-group security-group composition | Covered | The Terraform sandbox node group uses the upstream shared node SG, matching regular managed node groups while avoiding duplicate `kubernetes.io/cluster/<name>`-tagged SGs on the same nodes. Migrated manual node groups should be checked for the same invariant. |
 | Node-group metadata-service hardening | Covered | The Terraform sandbox node group enforces IMDSv2 and hop-limit 1. Migrated manual node groups should match before relying on them. |
 | Network firewall defense-in-depth | Not codified here | Still valid. This requires regional network-firewall resources, dedicated firewall subnets, sandbox-subnet route-table updates, RFC1918/metadata denies, and managed threat-intel rules. Track and land independently. |
 

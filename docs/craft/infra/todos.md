@@ -8,7 +8,7 @@ Status in PR 11787:
 |---|---|---|
 | 1. Helm sandbox RBAC + ServiceAccount | Covered | `templates/sandbox-namespace.yaml` renders the sandbox namespace, and `templates/sandbox-rbac.yaml` renders the `sandbox-file-sync` ServiceAccount, sandbox manager Role/RoleBinding, proxy service lookup Role/RoleBinding, and fails fast when the EKS IRSA role ARN is missing. |
 | 2. Terraform sandbox object store + workload identity | Covered | `modules/aws/craft_sandbox` creates or references the snapshot bucket, creates the S3 policy, creates the sandbox file-sync IRSA role, and outputs the role ARN/bucket name for Helm. |
-| 3. Node-group security-group composition | Covered | The sandbox managed node group uses the upstream shared node SG and explicitly sets `attach_cluster_primary_security_group=true`, so the launch template carries both the shared node SG and EKS primary cluster SG. |
+| 3. Node-group security-group composition | Covered | The sandbox managed node group uses the upstream shared node SG, matching regular managed node groups without also attaching the EKS primary cluster SG and creating duplicate `kubernetes.io/cluster/<name>`-tagged SGs on the same nodes. |
 | 4. Node-group metadata-service hardening | Covered | The sandbox managed node group sets IMDSv2 required and hop-limit 1. |
 | 5. Network firewall | Not codified in this PR | Still valid and still independent. The runbook calls this out as remaining defense-in-depth work because it needs regional firewall subnets, route-table changes, and firewall rule deployment beyond this Terraform/Helm slice. |
 
@@ -39,9 +39,9 @@ For migrations with an existing bucket, set `create_bucket=false` and pass the e
 
 ## 3. Node-group security-group composition
 
-A dedicated sandbox node group must carry the same set of security groups that the cluster's regular managed node groups carry — typically the EKS cluster SG **plus** the shared node SG. If the launch template only attaches the cluster SG, pods on sandbox nodes can't reach pods on the regular node group (DNS, in-cluster service calls, etc.) because the shared node SG's ingress is self-referential.
+A dedicated sandbox node group must use the same shared node security group shape as the cluster's regular managed node groups. Do not attach both the upstream shared node SG and the EKS primary cluster SG to the same nodes: both SGs are tagged with `kubernetes.io/cluster/<name>`, and AWS Load Balancer Controller expects exactly one matching SG on nodes.
 
-**Acceptance:** the Terraform launch template for the sandbox node group attaches both SGs by default, matching how EKS managed node groups normally provision.
+**Acceptance:** the Terraform launch template for the sandbox node group attaches the upstream shared node SG and no second `kubernetes.io/cluster/<name>`-tagged SG.
 
 ## 4. Node-group metadata-service hardening
 
