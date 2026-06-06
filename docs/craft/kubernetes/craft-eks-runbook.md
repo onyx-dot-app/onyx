@@ -1,7 +1,8 @@
-# Onyx Craft on a fresh EKS cluster
+# Onyx Craft on EKS: infrastructure and migration runbook
 
-How to stand up Onyx + Craft on a brand-new EKS cluster (single-tenant model: managed RDS +
-ElastiCache + OpenSearch + S3), and the chart/terraform changes that make it work out of the box.
+How to stand up Onyx + Craft on a brand-new EKS cluster, and how to migrate existing
+manual Craft/EKS setups onto the codified Terraform + Helm path. This assumes a
+single-tenant model with managed RDS, ElastiCache, OpenSearch, and S3.
 
 Validated end-to-end on `roshan-craft-test` (us-west-2): `terraform apply` + `helm install` →
 Craft provisions a sandbox + snapshot/restore, with no manual kubectl/RBAC/node steps.
@@ -35,39 +36,124 @@ Craft provisions a sandbox + snapshot/restore, with no manual kubectl/RBAC/node 
 | workload role ARN | `serviceAccount.annotations` (recommended) |
 
 > ⚠️ The one currently-blurred boundary: today the **eks module also creates the `onyx` namespace + the
-> `onyx-workload-access` SA** (so terraform reaches into k8s). The recommended end state (see §3) is to move
+> `onyx-workload-access` SA** (so terraform reaches into k8s). The recommended end state (see §5) is to move
 > both to Helm (`--create-namespace` + `serviceAccount.create`/`annotations`), leaving terraform with AWS only.
 
-## 1. Changes to ship (product repo)
+## 1. What Craft adds
 
-All backward-compatible — every new variable defaults to the prior behavior; existing consumers
-(st-dev, customers) are unaffected.
+Craft needs infrastructure that a normal Onyx deployment does not need because it
+runs untrusted code in short-lived Kubernetes pods and persists their workspace
+state through snapshots.
 
-### Terraform modules (`deployment/terraform/modules/aws/`)
+### Runtime model
 
-| File | Change | Why |
-|---|---|---|
-| `vpc/{main,variables}.tf` | `azs = slice(names, 0, min(3, len))`; add `single_nat_gateway` var | `slice(…,0,3)` crashed in 2-AZ regions; per-AZ NAT (3 EIPs) can exhaust the EIP quota |
-| `eks/outputs.tf` | Re-export `node_security_group_id`, `cluster_security_group_id` | `enable_opensearch=true` referenced them but they weren't exported (OpenSearch was broken) |
-| `eks/main.tf` | Create `kubernetes_namespace` for the IRSA SA before the SA | Fresh cluster has no `onyx` ns yet → SA create failed |
-| `eks/{main,variables}.tf` | `main_node_{min,max,desired}_size` vars (desired default 2) | One node doesn't fit the workload; autoscaler isn't relied on for initial size |
-| `eks/{main,variables}.tf` | `enable_craft_sandbox_node_group` (+ instance/min/max/desired) → node group labeled `onyx.app/workload=sandbox`, tainted `workload=sandbox:NoSchedule`, IMDSv2 `http_put_response_hop_limit=1` | Sandbox pods have a hardcoded `nodeSelector: onyx.app/workload=sandbox`; IMDS hardening keeps untrusted code off node creds |
-| `postgres/{main,variables}.tf` | `deletion_protection` + `skip_final_snapshot` vars | Were hardcoded → dev/throwaway teardown impossible |
-| `onyx/{main,variables}.tf` | Forward all of the above + `redis_instance_type`, `postgres_instance_type`, `opensearch_{zone_awareness_enabled,availability_zone_count,auto_tune_enabled}`, `cluster_endpoint_public_access_cidrs` already exposed | The product `onyx` module lagged the cloud module; couldn't run lean or single-node OpenSearch |
-| **NEW `craft_sandbox/`** | Optional S3 bucket creation (SSE, public-access-block, abort-incomplete-MPU) + IAM policy + IRSA role trust-scoped to `system:serviceaccount:onyx-sandboxes:sandbox-file-sync`; outputs `role_arn`, `bucket_name` | Cloud-side prereqs for sandbox snapshot S3 access (was a manual console runbook). Set `create_bucket=false` to reuse an existing bucket. |
+When a Craft sandbox starts, the application code creates a sandbox pod in
+`onyx-sandboxes`. That pod has:
 
-### Helm chart (`deployment/helm/charts/onyx/`)
+- a `sandbox` container, which runs the user-facing agent/code environment;
+- a `sidecar` container, which runs the push daemon and snapshot API;
+- a shared `emptyDir` workspace mounted at `/workspace/sessions`;
+- a ConfigMap-backed proxy CA bundle;
+- a pod-level `eks.amazonaws.com/skip-containers: sandbox` annotation so IRSA
+  credentials are injected into the sidecar but not the untrusted sandbox container;
+- `nodeSelector: onyx.app/workload=sandbox`;
+- a matching `workload=sandbox:NoSchedule` toleration.
 
-| File | Change |
-|---|---|
-| **NEW `templates/sandbox-rbac.yaml`** | Gated on `ENABLE_CRAFT=true`, renders: `sandbox-file-sync` SA (IRSA `role-arn`); `onyx-sandbox-manager` Role+RoleBinding in the sandbox ns (pods, pods/exec, pods/log, services, secrets); `onyx-proxy-resolve` Role+RoleBinding in the proxy ns (services read, for SANDBOX_PROXY_HOST ClusterIP resolution). Bound to `onyx.serviceAccountName` + `craft.extraBoundServiceAccounts`. Fails fast if `craft.sandboxFileSyncRoleArn` is unset. |
-| `values.yaml` | `craft.sandboxFileSyncRoleArn` (required when Craft on) + `craft.extraBoundServiceAccounts` |
+The sandbox manager also creates a per-sandbox ClusterIP Service for opencode,
+the push daemon, and Next.js dev-server ports, plus a per-sandbox Secret for
+opencode auth/config.
 
-> These two close `docs/craft/infra/todos.md` items #1 (chart SA/RBAC) and #2 (craft_sandbox terraform).
+### AWS/Terraform additions
 
----
+| Resource | Required? | Purpose |
+|---|---:|---|
+| `modules/aws/craft_sandbox` | Yes for EKS snapshot support | Creates or references the sandbox snapshot bucket, creates the S3 IAM policy, and creates the IRSA role trusted by `system:serviceaccount:onyx-sandboxes:sandbox-file-sync`. |
+| Sandbox snapshot S3 bucket | Yes, but may already exist | Stores workspace snapshots. Use `create_bucket=false` when migrating an existing bucket. |
+| S3 bucket hardening | Only when Terraform creates the bucket | Enables SSE, blocks public access, and aborts incomplete multipart uploads after 7 days. Existing buckets are not modified when `create_bucket=false`. |
+| `SandboxFileSyncRole-*` IAM role | Yes | Lets the sandbox file-sync ServiceAccount access the snapshot bucket without static AWS keys. |
+| S3 IAM policy | Yes | Grants `GetObject`, `PutObject`, `DeleteObject`, `AbortMultipartUpload`, and `ListBucket` on the snapshot bucket. |
+| EKS OIDC outputs | Yes | Let the `craft_sandbox` module build IRSA trust without an EKS data source, so fresh apply and destroy both work. |
+| Optional Craft sandbox node group | Strongly recommended | Gives sandbox pods dedicated, tainted, IMDS-hardened nodes. Existing labeled/tainted nodes can satisfy the same scheduling contract. |
 
-## 2. Deploy on a fresh cluster
+### Helm/Kubernetes additions
+
+| Object | Namespace | Required? | Purpose |
+|---|---|---:|---|
+| `Namespace/onyx-sandboxes` | cluster | Yes | Keeps runtime sandbox pods/services/secrets separate from app workloads. |
+| `ServiceAccount/sandbox-file-sync` | `onyx-sandboxes` | Yes on EKS | Annotated with `craft.sandboxFileSyncRoleArn`; used by sandbox pods for sidecar S3 access. |
+| `Role/onyx-sandbox-manager` | `onyx-sandboxes` | Yes | Allows the Onyx workload SA to manage sandbox pods, services, secrets, exec, and logs. |
+| `RoleBinding/onyx-sandbox-manager` | `onyx-sandboxes` | Yes | Binds sandbox-management permissions to `onyx.serviceAccountName` and `craft.extraBoundServiceAccounts`. |
+| `Role/onyx-proxy-resolve` | proxy namespace | Yes | Allows service lookup for resolving `SANDBOX_PROXY_HOST` to a ClusterIP. |
+| `RoleBinding/onyx-proxy-resolve` | proxy namespace | Yes | Binds proxy service lookup to the same workload SAs. |
+| `Deployment/onyx-sandbox-proxy` | release namespace | Yes for proxied egress | Runs the egress proxy/gate. |
+| `Service/onyx-sandbox-proxy` | release namespace | Yes for proxied egress | Stable in-cluster address for sandbox traffic. |
+| `ServiceAccount/onyx-sandbox-proxy` | release namespace | Yes for proxy | Identity used by the proxy deployment. |
+| Proxy CA `Role`/`RoleBinding` | release namespace | Yes for proxy CA | Lets the proxy read/create its CA Secret. |
+| Proxy sandbox `Role`/`RoleBinding` | `onyx-sandboxes` | Yes for proxy | Lets the proxy watch sandbox pods and write the CA ConfigMap. |
+| `NetworkPolicy/onyx-sandbox-proxy` | release namespace | Strongly recommended | Allows only the sandbox namespace to reach the proxy port. |
+| `NetworkPolicy/onyx-sandbox-push` | `onyx-sandboxes` | Strongly recommended | Allows only API server and scheduled-task worker pods to reach sandbox push/opencode/Next.js ports. |
+| `PodDisruptionBudget/onyx-sandbox-proxy` | release namespace | Availability only | Keeps multi-replica proxy deployments from voluntary disruption all at once. |
+
+### Helm values added by this PR
+
+| Value | Required? | Meaning |
+|---|---:|---|
+| `craft.sandboxFileSyncRoleArn` | Yes when `ENABLE_CRAFT=true` on EKS | The `craft_sandbox.role_arn` Terraform output; annotated onto `sandbox-file-sync`. |
+| `craft.extraBoundServiceAccounts` | Only for additional managers | Extra release-namespace ServiceAccounts that should manage sandboxes. |
+| `sandboxProxy.*` | Existing Craft proxy config | Controls sandbox proxy replicas, ports, resources, CA names, scheduling, and security context. |
+
+## 2. How the sandbox node group works
+
+The sandbox node group is an optional EKS managed node group dedicated to Craft
+sandbox pods. It is enabled with:
+
+```hcl
+enable_craft_sandbox_node_group = true
+```
+
+Terraform creates a node group with:
+
+```yaml
+labels:
+  onyx.app/workload: sandbox
+taints:
+  - key: workload
+    value: sandbox
+    effect: NO_SCHEDULE
+```
+
+The sandbox manager creates every sandbox pod with:
+
+```yaml
+nodeSelector:
+  onyx.app/workload: sandbox
+tolerations:
+  - key: workload
+    operator: Equal
+    value: sandbox
+    effect: NoSchedule
+```
+
+That means:
+
+- sandbox pods can only schedule onto nodes labeled `onyx.app/workload=sandbox`;
+- normal Onyx pods cannot schedule onto the sandbox nodes because they do not
+  tolerate `workload=sandbox:NoSchedule`;
+- existing manually created nodes can work if they have the same label and taint;
+- the Terraform node group is the repeatable/codified version of that manual setup.
+
+The node group also sets:
+
+```hcl
+http_tokens                 = "required"
+http_put_response_hop_limit = 1
+```
+
+This hardens access to EC2 Instance Metadata Service. It is not what gives the
+sidecar S3 permissions; IRSA does that. It is defense-in-depth so untrusted code
+cannot easily reach node metadata credentials.
+
+## 3. Deploy on a fresh cluster
 
 Prereqs: `terraform` (HashiCorp tap), `kubectl`, `helm`, `aws`. AWS auth via SSO — before every
 terraform/aws command (SSO static-key shadow + ~daily token expiry):
@@ -97,9 +183,29 @@ helm upgrade --install onyx . -n onyx -f <values> \
 # 5. kubectl port-forward -n onyx svc/onyx-nginx-controller 8080:80  → http://localhost:8080
 ```
 
-For a migration that already has a sandbox snapshot bucket, pass that bucket name to
-`craft_sandbox.bucket_name` and set `craft_sandbox.create_bucket=false`. The module will still
-create the file-sync IAM role and policy for that bucket; it will not create or manage the bucket.
+Example root-module shape for the Craft-specific Terraform:
+
+```hcl
+module "craft_sandbox" {
+  source = "../modules/aws/craft_sandbox"
+
+  cluster_name      = module.onyx.cluster_name
+  oidc_provider_arn = module.onyx.oidc_provider_arn
+  oidc_provider     = module.onyx.oidc_provider
+
+  bucket_name   = "<sandbox-snapshot-bucket>"
+  create_bucket = true
+  tags          = local.merged_tags
+}
+
+output "sandbox_file_sync_role_arn" {
+  value = module.craft_sandbox.role_arn
+}
+
+output "sandbox_snapshot_bucket_name" {
+  value = module.craft_sandbox.bucket_name
+}
+```
 
 ### Required managed-service wiring (chart `configMap`)
 Point at the terraform endpoints; disable in-cluster deps:
@@ -116,7 +222,166 @@ Craft). `code-interpreter`: `latest` (no craft-edge tag). Sandbox image default 
 
 ---
 
-## 3. Remaining work (not codified)
+## 4. Migrating an existing manual Craft/EKS setup
+
+Existing setups usually already have some combination of: a snapshot bucket, an
+IAM role, a manually annotated ServiceAccount, sandbox RBAC, and manually
+labeled/tainted sandbox nodes. The migration is to make Terraform own AWS/IAM
+and Helm own Kubernetes objects without changing the runtime contract.
+
+### Existing snapshot bucket
+
+Do not recreate the bucket. Configure:
+
+```hcl
+module "craft_sandbox" {
+  source = "../modules/aws/craft_sandbox"
+
+  cluster_name      = module.onyx.cluster_name
+  oidc_provider_arn = module.onyx.oidc_provider_arn
+  oidc_provider     = module.onyx.oidc_provider
+
+  bucket_name   = "<existing-bucket>"
+  create_bucket = false
+  tags          = local.merged_tags
+}
+```
+
+With `create_bucket=false`, Terraform does not create or modify the bucket. It
+still creates the IAM policy and IRSA role that allow `sandbox-file-sync` to use
+that bucket. Then pass both pieces to Helm:
+
+```bash
+helm upgrade --install onyx deployment/helm/charts/onyx \
+  -n onyx \
+  -f your-values.yaml \
+  --set craft.sandboxFileSyncRoleArn="$(terraform output -raw sandbox_file_sync_role_arn)" \
+  --set configMap.SANDBOX_S3_BUCKET="<existing-bucket>"
+```
+
+Until these chart changes are released, deploy from the local chart path
+(`deployment/helm/charts/onyx`). Do not edit chart templates manually; set values.
+
+### Existing manual sandbox node group
+
+Craft does not require the Terraform-created node group specifically. It requires
+nodes that satisfy the sandbox pod scheduling contract:
+
+```bash
+kubectl get nodes -l onyx.app/workload=sandbox
+kubectl describe node <sandbox-node> | rg 'Taints|workload=sandbox'
+```
+
+If the existing node group already has:
+
+- label `onyx.app/workload=sandbox`;
+- taint `workload=sandbox:NoSchedule`;
+- acceptable IMDS hardening;
+
+then leave `enable_craft_sandbox_node_group=false` and keep using those nodes.
+If you want Terraform to own the node group, either import the existing node
+group into Terraform state or create a Terraform-managed node group with a
+non-conflicting name and drain/remove the manual one after sandboxes move.
+
+Do not enable the Terraform node group with the same name as an existing manual
+node group unless you are intentionally importing that resource. Otherwise the
+apply can fail or create duplicate capacity.
+
+### Existing manual Kubernetes objects
+
+The chart now owns these Kubernetes objects when `ENABLE_CRAFT=true`:
+
+- `namespace/onyx-sandboxes`;
+- `serviceaccount/sandbox-file-sync`;
+- `role/onyx-sandbox-manager`;
+- `rolebinding/onyx-sandbox-manager`;
+- `role/onyx-proxy-resolve`;
+- `rolebinding/onyx-proxy-resolve`;
+- sandbox proxy ServiceAccount, Roles, RoleBindings, Deployment, Service, PDB,
+  and NetworkPolicy;
+- sandbox push/proxy NetworkPolicies.
+
+If those objects were created manually, Helm may refuse to install because they
+lack Helm ownership metadata. Prefer a maintenance window where no sandboxes are
+running, then replace the manual objects with chart-managed ones:
+
+```bash
+kubectl -n onyx-sandboxes get pods,svc,secret
+kubectl -n onyx-sandboxes delete role onyx-sandbox-manager --ignore-not-found
+kubectl -n onyx-sandboxes delete rolebinding onyx-sandbox-manager --ignore-not-found
+kubectl -n onyx-sandboxes delete serviceaccount sandbox-file-sync --ignore-not-found
+kubectl -n onyx delete role onyx-proxy-resolve --ignore-not-found
+kubectl -n onyx delete rolebinding onyx-proxy-resolve --ignore-not-found
+helm upgrade --install onyx deployment/helm/charts/onyx -n onyx -f your-values.yaml ...
+```
+
+If you cannot delete the objects, you can adopt them into Helm by adding the
+standard Helm ownership labels/annotations, but deletion and recreation is
+usually simpler for RBAC/ServiceAccount objects. Do not delete active sandbox
+pods or their Services in the middle of a user turn.
+
+### Existing manually annotated `sandbox-file-sync` ServiceAccount
+
+The chart recreates/updates `sandbox-file-sync` with:
+
+```yaml
+annotations:
+  eks.amazonaws.com/role-arn: <craft.sandboxFileSyncRoleArn>
+```
+
+The `skip-containers` annotation belongs on the sandbox pod, not the
+ServiceAccount. The runtime pod metadata sets:
+
+```yaml
+eks.amazonaws.com/skip-containers: sandbox
+```
+
+so the sidecar receives IRSA credentials and the untrusted sandbox container does
+not.
+
+### Existing published-chart install
+
+If the published `onyx/onyx` Helm chart does not yet include this PR, install or
+upgrade from the local chart in this branch:
+
+```bash
+helm dependency build deployment/helm/charts/onyx
+helm upgrade --install onyx deployment/helm/charts/onyx -n onyx -f your-values.yaml ...
+```
+
+This is a chart-source change, not a values-only change against the old
+published chart. Setting `craft.sandboxFileSyncRoleArn` against a chart version
+that does not contain `templates/sandbox-rbac.yaml` will not create the missing
+RBAC/ServiceAccount objects.
+
+### Post-migration checks
+
+```bash
+# Terraform outputs exist.
+terraform output sandbox_file_sync_role_arn
+terraform output sandbox_snapshot_bucket_name
+
+# Helm renders the Craft objects.
+helm template onyx deployment/helm/charts/onyx -n onyx -f your-values.yaml \
+  --set craft.sandboxFileSyncRoleArn="$(terraform output -raw sandbox_file_sync_role_arn)" \
+  --show-only templates/sandbox-rbac.yaml
+
+# Workload SA can manage sandboxes.
+kubectl auth can-i create pods -n onyx-sandboxes \
+  --as system:serviceaccount:onyx:onyx-workload-access
+kubectl auth can-i create pods/exec -n onyx-sandboxes \
+  --as system:serviceaccount:onyx:onyx-workload-access
+kubectl auth can-i get services -n onyx \
+  --as system:serviceaccount:onyx:onyx-workload-access
+
+# Sandbox nodes exist if using dedicated scheduling.
+kubectl get nodes -l onyx.app/workload=sandbox
+
+# The sandbox file-sync SA has the IRSA role annotation.
+kubectl -n onyx-sandboxes get sa sandbox-file-sync -o yaml | rg 'eks.amazonaws.com/role-arn'
+```
+
+## 5. Remaining work (not codified)
 
 - **cluster-autoscaler** doesn't scale managed node groups: node groups lack the discovery tags
   (`k8s.io/cluster-autoscaler/enabled`, `…/<cluster>`) and the addon (eks-blueprints 1.16.3) ClusterRole
@@ -150,7 +415,7 @@ Craft). `code-interpreter`: `latest` (no craft-edge tag). Sandbox image default 
 
 ---
 
-## 4. Notes / gotchas (condensed)
+## 6. Notes / gotchas (condensed)
 
 - us-west-1 has only 2 AZs (→ the slice fix). Shared account near the EIP quota → use `single_nat_gateway=true`.
 - The `vespa` node group is vestigial in v4.0 (OpenSearch replaced Vespa) — size it small or make it optional.
@@ -169,7 +434,7 @@ Craft). `code-interpreter`: `latest` (no craft-edge tag). Sandbox image default 
 
 ---
 
-## 5. Test harness (this validation — not for the PR)
+## 7. Test harness (this validation — not for the PR)
 
 `deployment/terraform/craft-test/` (root module + `secrets.auto.tfvars`, gitignored) and
 `deployment/helm/values-craft-test.yaml` are the throwaway test instance used to validate the above.
