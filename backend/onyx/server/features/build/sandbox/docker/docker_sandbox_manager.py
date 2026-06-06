@@ -350,7 +350,6 @@ def _proxy_env_vars(
         "AWS_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
         "CURL_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
         "GIT_SSL_CAINFO": _PROXY_CA_BUNDLE_FILE,
-        # `gh` auth: placeholder token (proxy-overwritten) + no update nag.
         "GH_TOKEN": SANDBOX_PROXY_INJECTED_PLACEHOLDER,
         "GH_NO_UPDATE_NOTIFIER": "1",
     }
