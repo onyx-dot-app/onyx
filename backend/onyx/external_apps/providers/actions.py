@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import field_validator
 from pydantic import InstanceOf
 
 from onyx.db.enums import EndpointPolicy
@@ -39,6 +40,17 @@ class RestRoute(BaseModel):
     path: str
     resource_type: str | None = None
 
+    @field_validator("path")
+    @classmethod
+    def _wildcard_must_be_trailing(cls, path: str) -> str:
+        # `path_matches` only honours a `{name...}` wildcard in the last segment;
+        # reject it elsewhere at catalog-load time instead of mis-matching silently.
+        if any(seg.endswith("...}") for seg in path.rstrip("/").split("/")[:-1]):
+            raise ValueError(
+                f"'{{name...}}' wildcard must be the last segment: {path!r}"
+            )
+        return path
+
 
 def _segment_matches(expected: str, actual: str) -> bool:
     """One template segment vs one path segment: a ``{name}`` placeholder
@@ -63,8 +75,9 @@ def path_matches(template: str, path: str) -> bool:
     last = expected_segments[-1]
     if last.startswith("{") and last.endswith("...}"):
         prefix = expected_segments[:-1]
-        # The wildcard needs at least one segment beyond the fixed prefix.
-        if len(actual_segments) <= len(prefix):
+        tail: list[str] = actual_segments[len(prefix) :]
+        # Wildcard must swallow >=1 segment and reject empties (`//`), like `{name}`.
+        if not tail or not all(tail):
             return False
         return all(_segment_matches(e, a) for e, a in zip(prefix, actual_segments))
 

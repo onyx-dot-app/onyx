@@ -1,8 +1,19 @@
 """Unit tests for RestRoute path-template matching."""
 
 import pytest
+from pydantic import ValidationError
 
 from onyx.external_apps.providers.actions import path_matches
+from onyx.external_apps.providers.actions import RestRoute
+
+
+def test_non_trailing_wildcard_rejected_at_construction() -> None:
+    """A `{name...}` wildcard is only valid as the last segment; defining it
+    elsewhere must fail loudly when the catalog loads, not mis-match silently."""
+    with pytest.raises(ValidationError, match="must be the last segment"):
+        RestRoute(method="GET", path="/repos/{owner...}/issues")
+    # Trailing position stays valid.
+    RestRoute(method="GET", path="/repos/{owner}/{repo}/contents/{path...}")
 
 
 @pytest.mark.parametrize(
@@ -64,6 +75,9 @@ from onyx.external_apps.providers.actions import path_matches
         ("/repos/{o}/{r}/git/ref/{ref...}", "/repos/o/r/git/ref/heads", True),
         # The wildcard needs at least one trailing segment.
         ("/repos/{o}/{r}/contents/{path...}", "/repos/o/r/contents", False),
+        # An empty tail segment (`//`) must be rejected, like single placeholders.
+        ("/repos/{o}/{r}/contents/{path...}", "/repos/o/r/contents//evil", False),
+        ("/repos/{o}/{r}/contents/{path...}", "/repos/o/r/contents/a//b", False),
         # The fixed prefix before the wildcard must still match exactly.
         ("/repos/{o}/{r}/contents/{path...}", "/repos/o/r/blobs/a.py", False),
         # A trailing slash after the wildcard tail is ignored.
