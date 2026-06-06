@@ -4,18 +4,22 @@
 locals {
   # OIDC passed as inputs (not a data source) so this works in the same apply that
   # creates the cluster, and on destroy after it's gone.
-  oidc_url = var.oidc_provider
-  oidc_arn = var.oidc_provider_arn
-  sa_sub   = "system:serviceaccount:${var.sandbox_namespace}:${var.service_account_name}"
+  oidc_url                = var.oidc_provider
+  oidc_arn                = var.oidc_provider_arn
+  sa_sub                  = "system:serviceaccount:${var.sandbox_namespace}:${var.service_account_name}"
+  bucket_arn              = "arn:aws:s3:::${var.bucket_name}"
+  cluster_name_iam_suffix = length(var.cluster_name) <= 44 ? var.cluster_name : "${substr(var.cluster_name, 0, 35)}-${substr(sha1(var.cluster_name), 0, 8)}"
 }
 
 resource "aws_s3_bucket" "sandbox" {
+  count  = var.create_bucket ? 1 : 0
   bucket = var.bucket_name
   tags   = var.tags
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "sandbox" {
-  bucket = aws_s3_bucket.sandbox.id
+  count  = var.create_bucket ? 1 : 0
+  bucket = aws_s3_bucket.sandbox[0].id
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
@@ -24,7 +28,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "sandbox" {
 }
 
 resource "aws_s3_bucket_public_access_block" "sandbox" {
-  bucket                  = aws_s3_bucket.sandbox.id
+  count                   = var.create_bucket ? 1 : 0
+  bucket                  = aws_s3_bucket.sandbox[0].id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -32,7 +37,8 @@ resource "aws_s3_bucket_public_access_block" "sandbox" {
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "sandbox" {
-  bucket = aws_s3_bucket.sandbox.id
+  count  = var.create_bucket ? 1 : 0
+  bucket = aws_s3_bucket.sandbox[0].id
   rule {
     id     = "abort-incomplete-multipart"
     status = "Enabled"
@@ -52,19 +58,19 @@ resource "aws_iam_policy" "sandbox_s3" {
       {
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"]
-        Resource = "${aws_s3_bucket.sandbox.arn}/*"
+        Resource = "${local.bucket_arn}/*"
       },
       {
         Effect   = "Allow"
         Action   = ["s3:ListBucket"]
-        Resource = aws_s3_bucket.sandbox.arn
+        Resource = local.bucket_arn
       }
     ]
   })
 }
 
 resource "aws_iam_role" "sandbox_file_sync" {
-  name = "SandboxFileSyncRole-${var.cluster_name}"
+  name = "SandboxFileSyncRole-${local.cluster_name_iam_suffix}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

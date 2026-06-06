@@ -54,13 +54,13 @@ All backward-compatible — every new variable defaults to the prior behavior; e
 | `eks/{main,variables}.tf` | `enable_craft_sandbox_node_group` (+ instance/min/max/desired) → node group labeled `onyx.app/workload=sandbox`, tainted `workload=sandbox:NoSchedule`, IMDSv2 `http_put_response_hop_limit=1` | Sandbox pods have a hardcoded `nodeSelector: onyx.app/workload=sandbox`; IMDS hardening keeps untrusted code off node creds |
 | `postgres/{main,variables}.tf` | `deletion_protection` + `skip_final_snapshot` vars | Were hardcoded → dev/throwaway teardown impossible |
 | `onyx/{main,variables}.tf` | Forward all of the above + `redis_instance_type`, `postgres_instance_type`, `opensearch_{zone_awareness_enabled,availability_zone_count,auto_tune_enabled}`, `cluster_endpoint_public_access_cidrs` already exposed | The product `onyx` module lagged the cloud module; couldn't run lean or single-node OpenSearch |
-| **NEW `craft_sandbox/`** | S3 bucket (SSE, public-access-block, abort-incomplete-MPU) + IAM policy + IRSA role trust-scoped to `system:serviceaccount:onyx-sandboxes:sandbox-file-sync`; outputs `role_arn`, `bucket_name` | Cloud-side prereqs for sandbox snapshot S3 access (was a manual console runbook) |
+| **NEW `craft_sandbox/`** | Optional S3 bucket creation (SSE, public-access-block, abort-incomplete-MPU) + IAM policy + IRSA role trust-scoped to `system:serviceaccount:onyx-sandboxes:sandbox-file-sync`; outputs `role_arn`, `bucket_name` | Cloud-side prereqs for sandbox snapshot S3 access (was a manual console runbook). Set `create_bucket=false` to reuse an existing bucket. |
 
 ### Helm chart (`deployment/helm/charts/onyx/`)
 
 | File | Change |
 |---|---|
-| **NEW `templates/sandbox-rbac.yaml`** | Gated on `ENABLE_CRAFT=true`, renders: `sandbox-file-sync` SA (IRSA `role-arn` + `skip-containers=sandbox`); `onyx-sandbox-manager` Role+RoleBinding in the sandbox ns (pods/exec/attach/portforward/log, services, configmaps, secrets, pvc); `onyx-proxy-resolve` Role+RoleBinding in the proxy ns (services/endpoints read, for SANDBOX_PROXY_HOST ClusterIP resolution). Bound to `onyx.serviceAccountName` + `craft.extraBoundServiceAccounts`. Fails fast if `craft.sandboxFileSyncRoleArn` is unset. |
+| **NEW `templates/sandbox-rbac.yaml`** | Gated on `ENABLE_CRAFT=true`, renders: `sandbox-file-sync` SA (IRSA `role-arn`); `onyx-sandbox-manager` Role+RoleBinding in the sandbox ns (pods, pods/exec, pods/log, services, secrets); `onyx-proxy-resolve` Role+RoleBinding in the proxy ns (services read, for SANDBOX_PROXY_HOST ClusterIP resolution). Bound to `onyx.serviceAccountName` + `craft.extraBoundServiceAccounts`. Fails fast if `craft.sandboxFileSyncRoleArn` is unset. |
 | `values.yaml` | `craft.sandboxFileSyncRoleArn` (required when Craft on) + `craft.extraBoundServiceAccounts` |
 
 > These two close `docs/craft/infra/todos.md` items #1 (chart SA/RBAC) and #2 (craft_sandbox terraform).
@@ -97,6 +97,10 @@ helm upgrade --install onyx . -n onyx -f <values> \
 # 5. kubectl port-forward -n onyx svc/onyx-nginx-controller 8080:80  → http://localhost:8080
 ```
 
+For a migration that already has a sandbox snapshot bucket, pass that bucket name to
+`craft_sandbox.bucket_name` and set `craft_sandbox.create_bucket=false`. The module will still
+create the file-sync IAM role and policy for that bucket; it will not create or manage the bucket.
+
 ### Required managed-service wiring (chart `configMap`)
 Point at the terraform endpoints; disable in-cluster deps:
 - `postgresql.enabled/redis.enabled/opensearch.enabled/minio.enabled: false`; `serviceAccount.name: onyx-workload-access` (IRSA), `auth.objectstorage.enabled: false`.
@@ -128,22 +132,6 @@ Craft). `code-interpreter`: `latest` (no craft-edge tag). Sandbox image default 
 - **`craft_sandbox` module** should keep taking OIDC (`oidc_provider_arn`/`oidc_provider`) as inputs,
   NOT via `data.aws_eks_cluster` — the data-source form breaks both fresh apply (cluster not created yet)
   and destroy (cluster gone). (Already fixed; noted so it isn't reverted.)
-- **SECURITY — `skip-containers` on the SA is silently ignored; the untrusted sandbox container holds the
-  file-sync IRSA.** `sandbox-rbac.yaml` puts `eks.amazonaws.com/skip-containers: sandbox` on the
-  `sandbox-file-sync` **ServiceAccount** to keep AWS creds out of the agent (`sandbox`) container. But the
-  `amazon-eks-pod-identity-webhook` reads `skip-containers` from the **pod annotation**, NOT the SA — while
-  it reads `role-arn` from the SA (which is why injection happened). The sandbox manager builds the pod with
-  no annotations, so `skip-containers` never reaches the webhook → `AWS_ROLE_ARN` + the projected token land
-  in **both** containers. Confirmed by a controlled 2-container pod: with `skip-containers` on the *pod*, the
-  listed container got no creds and the other did. Net: agent code in the sandbox can assume
-  `SandboxFileSyncRole` and read/write/delete the whole snapshot bucket. **Fix:** set the annotation on the
-  POD in `kubernetes_sandbox_manager.py` (`V1ObjectMeta`, ~L800): `annotations={"eks.amazonaws.com/
-  skip-containers": "sandbox"}`. (The SA-level annotation is dead weight for this — keep or drop.)
-  Defense-in-depth (per-tenant prefix-scoped IAM) was weighed and **deferred as overkill**: once the token
-  no longer reaches the untrusted container, the bucket-wide policy is only exploitable by compromising the
-  trusted sidecar itself. Scoping per-identity isn't a policy edit anyway — all sandboxes share one role, so
-  it needs per-tenant roles or EKS Pod Identity + ABAC. Revisit for **MT cloud** if cross-tenant isolation
-  guarantees are required.
 - **SECURITY — egress proxy is allow-all without a catalog, and forwards link-local IMDS.** The
   `sandbox-proxy` gate logs every request as `policy=off_catalog` and forwards it (verified: `example.com`
   returned the real page; `registry.npmjs.org`/`api.openai.com` → 200). It also forwards `169.254.169.254`

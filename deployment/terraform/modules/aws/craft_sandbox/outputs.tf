@@ -5,9 +5,10 @@ output "role_arn" {
 
 output "bucket_name" {
   description = "Sandbox S3 bucket name (set as SANDBOX_S3_BUCKET)."
-  value       = aws_s3_bucket.sandbox.id
+  value       = var.bucket_name
 }
 
 output "bucket_arn" {
-  value = aws_s3_bucket.sandbox.arn
+  description = "Sandbox S3 bucket ARN."
+  value       = local.bucket_arn
 }

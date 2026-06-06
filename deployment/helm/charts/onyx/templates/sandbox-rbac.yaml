@@ -1,13 +1,13 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- $craft := .Values.craft | default dict }}
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
 {{- $saName := (index .Values.configMap "SANDBOX_SERVICE_ACCOUNT_NAME") | default "sandbox-file-sync" }}
 {{- $proxyNs := (index .Values.configMap "SANDBOX_PROXY_NAMESPACE") | default .Release.Namespace }}
-{{- $roleArn := .Values.craft.sandboxFileSyncRoleArn | default "" }}
+{{- $roleArn := (index $craft "sandboxFileSyncRoleArn") | default "" }}
 {{- if not $roleArn }}
 {{- fail "craft.sandboxFileSyncRoleArn is required when configMap.ENABLE_CRAFT=true (IRSA role ARN for the sandbox-file-sync ServiceAccount — output of the craft_sandbox terraform module)." }}
 {{- end }}
-{{- $boundSAs := prepend (.Values.craft.extraBoundServiceAccounts | default list) (include "onyx.serviceAccountName" .) }}
-# skip-containers keeps the IRSA creds in the file-sync sidecar, out of the agent container.
+{{- $boundSAs := prepend ((index $craft "extraBoundServiceAccounts") | default (list)) (include "onyx.serviceAccountName" .) }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -18,7 +18,6 @@ metadata:
     app.kubernetes.io/component: sandbox-file-sync
   annotations:
     eks.amazonaws.com/role-arn: {{ $roleArn | quote }}
-    eks.amazonaws.com/skip-containers: "sandbox"
 automountServiceAccountToken: true
 ---
 apiVersion: rbac.authorization.k8s.io/v1

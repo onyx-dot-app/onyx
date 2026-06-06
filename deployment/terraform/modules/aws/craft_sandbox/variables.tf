@@ -18,6 +18,12 @@ variable "bucket_name" {
   description = "S3 bucket name for sandbox snapshots / file-sync."
 }
 
+variable "create_bucket" {
+  type        = bool
+  description = "Whether to create and manage the sandbox S3 bucket. Set false to reuse an existing bucket named by bucket_name."
+  default     = true
+}
+
 variable "sandbox_namespace" {
   type        = string
   description = "Kubernetes namespace the sandbox file-sync ServiceAccount lives in."

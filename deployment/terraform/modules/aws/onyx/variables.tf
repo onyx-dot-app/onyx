@@ -124,18 +124,21 @@ variable "craft_sandbox_node_instance_types" {
 }
 
 variable "craft_sandbox_node_min_size" {
-  type    = number
-  default = 0
+  type        = number
+  description = "Min size of the Craft sandbox node group."
+  default     = 0
 }
 
 variable "craft_sandbox_node_max_size" {
-  type    = number
-  default = 4
+  type        = number
+  description = "Max size of the Craft sandbox node group."
+  default     = 4
 }
 
 variable "craft_sandbox_node_desired_size" {
-  type    = number
-  default = 1
+  type        = number
+  description = "Desired size of the Craft sandbox node group."
+  default     = 1
 }
 
 variable "enable_iam_auth" {
