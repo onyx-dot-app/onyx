@@ -16,7 +16,6 @@ from mitmproxy.tools.dump import DumpMaster
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.sandbox_proxy.action_matcher import ExternalAppActionMatcher
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.backend import build_ca_store
 from onyx.sandbox_proxy.backend import build_ip_lookup
@@ -26,6 +25,7 @@ from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatche
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIPLookup
+from onyx.sandbox_proxy.request_evaluator import ExternalAppRequestEvaluator
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
 from onyx.sandbox_proxy.resolvers.llm_provider_key import LLMProviderKeyResolver
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
@@ -47,8 +47,12 @@ _DRAIN_TIMEOUT_S = 10.0
 # unbacked identity.
 _LOOKUP_INITIAL_SYNC_TIMEOUT_S = 60.0
 
-# Must be the parent of ca._DEFAULT_CA_PEM_PATH.
-_MITM_CONFDIR = "/var/run/sandbox-proxy/mitmproxy-confdir"
+# Default suits prod (root in /var/run/ tmpfs, K8s-standard); env-tunable so
+# local-dev runs without root can point at /tmp.
+_MITM_CONFDIR = os.environ.get(
+    "SANDBOX_PROXY_MITM_CONFDIR",
+    "/var/run/sandbox-proxy/mitmproxy-confdir",
+)
 
 logger = setup_logger()
 
@@ -116,7 +120,14 @@ def _start_healthz_server(readiness: _Readiness, lookup: SandboxIPLookup) -> HTT
 
 
 def _bootstrap_ca() -> MaterializedCA:
-    return CABootstrap(store=build_ca_store()).ensure_ca()
+    # Pass pem_path explicitly so it tracks _MITM_CONFDIR. ca.py's default
+    # points at /var/run/...; we cannot let the two drift, since mitmproxy
+    # auto-loads $confdir/mitmproxy-ca.pem and would otherwise never see what
+    # CABootstrap wrote.
+    return CABootstrap(
+        store=build_ca_store(),
+        pem_path=f"{_MITM_CONFDIR}/mitmproxy-ca.pem",
+    ).ensure_ca()
 
 
 def _build_lookup() -> SandboxIPLookup:
@@ -245,7 +256,7 @@ def main() -> int:
         )
         gate = GateAddon(
             identity=identity,
-            action_matcher=ExternalAppActionMatcher(),
+            request_evaluator=ExternalAppRequestEvaluator(),
             cache_factory=_build_cache_factory(),
             proxy_instance_id=proxy_instance_id,
             credential_dispatcher=CredentialInjectionDispatcher(resolvers),

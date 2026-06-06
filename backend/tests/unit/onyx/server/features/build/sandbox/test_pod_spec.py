@@ -24,6 +24,7 @@ from cryptography.hazmat.primitives.serialization import PrivateFormat
 from kubernetes import client
 
 import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
+from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
@@ -99,6 +100,16 @@ def test_pod_has_sandbox_and_sidecar_with_distinct_entrypoints(
     assert by_name["sandbox"].command != by_name["sidecar"].command
     assert by_name["sandbox"].command == ["/workspace/entrypoint.sh"]
     assert by_name["sidecar"].command == ["/workspace/sidecar-entrypoint.sh"]
+
+
+def test_irsa_skip_containers_annotation_targets_sandbox_container(
+    pod: client.V1Pod,
+) -> None:
+    annotations = pod.metadata.annotations or {}
+    assert (
+        annotations["eks.amazonaws.com/skip-containers"]
+        == _container(pod, "sandbox").name
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +199,7 @@ def test_share_process_namespace_is_disabled(pod: client.V1Pod) -> None:
 def test_onyx_pat_env_is_placeholder_not_real(pod: client.V1Pod) -> None:
     """The pod ships a placeholder; the egress proxy injects the real PAT."""
     env = {e.name: e.value for e in _container(pod, "sandbox").env}
-    assert env["ONYX_PAT"] == ksm._PROXY_INJECTED_PLACEHOLDER
+    assert env["ONYX_PAT"] == SANDBOX_PROXY_INJECTED_PLACEHOLDER
 
 
 def test_no_proxy_is_loopback_only() -> None:

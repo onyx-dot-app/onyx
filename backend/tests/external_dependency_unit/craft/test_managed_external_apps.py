@@ -22,13 +22,16 @@ import ee.onyx.server.tenants.provisioning as prov
 import onyx.server.features.build.api.external_apps_api as api
 from onyx.db.enums import ExternalAppType
 from onyx.db.external_app import get_built_in_external_app
+from onyx.db.external_app import get_policies
 from onyx.db.models import ExternalApp
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OnyxManagedExtApp
+from onyx.external_apps.providers.registry import action_policy_views
 from onyx.external_apps.providers.registry import fetch_onyx_managed_built_in_apps
+from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.external_apps.providers.registry import PROVIDERS
 from onyx.server.features.build.api.models import CreateBuiltInExternalAppRequest
 from onyx.server.features.build.api.models import UpdateExternalAppRequest
@@ -134,12 +137,20 @@ def test_provisions_all_built_ins_disabled_with_credentials(
     assert gmail is not None
     assert gmail.organization_credentials.get_value(apply_mask=False) == _GMAIL_CREDS
 
-    # An app with no configured creds is still provisioned, with empty creds and
-    # default action policies seeded.
+    # An app with no configured creds is still provisioned, with empty creds.
+    # Override-storage seeds no policy rows; defaults resolve at read time, so
+    # the effective view still exposes the full catalog at its default policies.
     slack = get_built_in_external_app(db_session, ExternalAppType.SLACK)
     assert slack is not None
     assert slack.organization_credentials.get_value(apply_mask=False) == {}
-    assert len(slack.policies) >= 1
+    assert slack.policies == []
+    views = action_policy_views(
+        ExternalAppType.SLACK, get_policies(db_session, slack.id)
+    )
+    assert {v.action_id: v.state for v in views} == {
+        endpoint.id: endpoint.default_policy
+        for endpoint in get_endpoint_catalog(ExternalAppType.SLACK)
+    }
 
 
 def test_provisioning_skipped_when_auto_provision_disabled(

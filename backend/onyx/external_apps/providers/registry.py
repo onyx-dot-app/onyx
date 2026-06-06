@@ -107,6 +107,17 @@ def get_endpoint_catalog(app_type: ExternalAppType) -> list[EndpointSpec]:
     return list(provider.spec.endpoint_catalog) if provider is not None else []
 
 
+def effective_policy(
+    endpoint: EndpointSpec,
+    stored: dict[str, EndpointPolicy],
+) -> EndpointPolicy:
+    """Policy in force for ``endpoint``: the admin's stored override, else the
+    catalog's curated default. Shared by the runtime gate (``recognize_actions``) and
+    the FE view (``action_policy_views``) so they never diverge — notably during
+    catalog drift, when a newly-shipped endpoint has no stored row yet."""
+    return stored.get(endpoint.id, endpoint.default_policy)
+
+
 def validate_action_policies(
     app_type: ExternalAppType,
     policies: dict[str, EndpointPolicy],
@@ -124,26 +135,33 @@ def validate_action_policies(
     return policies
 
 
-def build_action_policies(
+def resolve_action_overrides(
     app_type: ExternalAppType,
     requested: dict[str, EndpointPolicy] | None,
     existing: dict[str, EndpointPolicy],
 ) -> dict[str, EndpointPolicy]:
-    """The complete policy set to persist for a built-in app: one entry per
-    catalog action, so the stored rows are the full source of truth.
+    """The per-action overrides to persist: the admin's validated picks merged
+    over existing overrides, with any entry equal to the catalog default — or
+    naming an endpoint no longer in the catalog — pruned out.
 
-    Each action resolves to the admin's validated override if supplied, else the
-    value already stored, else the action's ``default_policy`` (``ASK`` unless the
-    provider declared otherwise). Unmentioned actions keep their stored choice — a
-    partial update (or an enable toggle that omits the map) never clobbers existing
-    policies. Raises if ``requested`` names an action id outside the catalog.
+    Catalog defaults are never materialized into rows: an action with no row
+    resolves to its ``default_policy`` at read time (``effective_policy``), so
+    new or re-defaulted catalog endpoints propagate to every tenant with no
+    migration. ``requested is None`` leaves existing overrides untouched (still
+    re-pruned against the current catalog, so materialized rows self-heal on the
+    next write). Raises if ``requested`` names an action id outside the catalog.
     """
-    validated = validate_action_policies(app_type, requested or {})
-    return {
-        endpoint.id: validated.get(
-            endpoint.id, existing.get(endpoint.id, endpoint.default_policy)
-        )
+    catalog_defaults: dict[str, EndpointPolicy] = {
+        endpoint.id: endpoint.default_policy
         for endpoint in get_endpoint_catalog(app_type)
+    }
+    merged = dict(existing)
+    if requested is not None:
+        merged.update(validate_action_policies(app_type, requested))
+    return {
+        action_id: policy
+        for action_id, policy in merged.items()
+        if action_id in catalog_defaults and policy != catalog_defaults[action_id]
     }
 
 
@@ -160,7 +178,7 @@ def action_policy_views(
             action_id=endpoint.id,
             normalised_name=endpoint.normalised_name,
             description=endpoint.description,
-            state=stored.get(endpoint.id, endpoint.default_policy),
+            state=effective_policy(endpoint, stored),
         )
         for endpoint in get_endpoint_catalog(app_type)
     ]
