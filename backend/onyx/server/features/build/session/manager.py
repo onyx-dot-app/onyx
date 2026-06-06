@@ -4,6 +4,7 @@ SessionManager is the main entry point for build session lifecycle management.
 It orchestrates session CRUD, message handling, artifact management, and file system access.
 """
 
+import contextvars
 import hashlib
 import io
 import mimetypes
@@ -11,6 +12,8 @@ import uuid
 import zipfile
 from collections.abc import Callable
 from collections.abc import Generator
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
@@ -57,6 +60,7 @@ from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.user_library import build_user_library_fileset
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session import sandbox_lifecycle as _sandbox
 from onyx.server.features.build.session import streaming as _streaming
@@ -204,9 +208,11 @@ class SessionManager:
                 "Failed to push skills to sandbox %s", sandbox_id, exc_info=True
             )
 
-    def _hydrate_user_library(self, sandbox_id: UUID, user_id: UUID) -> None:
+    def _hydrate_user_library(
+        self, sandbox_id: UUID, user_id: UUID, files: FileSet | None = None
+    ) -> None:
         try:
-            hydrate_user_library(sandbox_id, user_id, self._db_session)
+            hydrate_user_library(sandbox_id, user_id, self._db_session, files=files)
         except Exception:
             logger.warning(
                 "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
@@ -338,7 +344,8 @@ class SessionManager:
         # Ensure the user's sandbox is RUNNING. Interactive callers can't
         # afford to wait through a concurrent provisioner, so we use the
         # FAIL policy (raise RuntimeError if another request is mid-
-        # provision).
+        # provision). wait_for_serve_ready=False: opencode-serve binding is
+        # awaited below, concurrently with workspace setup + hydration.
         sandbox = _sandbox.ensure_sandbox_ready(
             self._db_session,
             self._sandbox_manager,
@@ -346,27 +353,59 @@ class SessionManager:
             all_llm_configs,
             policy=_sandbox.ProvisioningPolicy.FAIL,
             user=user,
+            wait_for_serve_ready=False,
         )
 
-        # Set up session workspace within the sandbox
         logger.info(
             "Setting up session workspace %s in sandbox %s", session_id, sandbox.id
         )
         user_name = user.personal_name
 
+        # Prebuild filesets (DB reads) on this thread so the pushes can run
+        # off-thread without touching db_session. Capture ids as primitives too,
+        # so the worker threads never touch a (non-thread-safe) ORM attribute.
         skills_section, skills_files = build_user_skills_payload(user, self._db_session)
+        user_library_files = build_user_library_fileset(user_id, self._db_session)
+        sandbox_id = sandbox.id
+        build_session_id = build_session.id
 
-        self._sandbox_manager.setup_session_workspace(
-            sandbox_id=sandbox.id,
-            session_id=build_session.id,
-            llm_config=llm_config,
-            nextjs_port=nextjs_port,
-            skills_section=skills_section,
-            snapshot_path=None,  # TODO: Support restoring from snapshot
-            user_name=user_name,
-        )
-        self._hydrate_skills(sandbox.id, user, files=skills_files)
-        self._hydrate_user_library(sandbox.id, user_id)
+        # opencode-serve binding, workspace setup (bun install + Next.js), and
+        # the managed-dir pushes share no ordering — only a Ready pod. Fan them
+        # out so the slowest, not their sum, sets the wall-clock.
+        def _wait_serve() -> None:
+            if not self._sandbox_manager.wait_for_serve_ready(sandbox_id):
+                raise RuntimeError(
+                    f"opencode-serve never became ready for sandbox {sandbox_id}"
+                )
+
+        def _setup_workspace() -> None:
+            self._sandbox_manager.setup_session_workspace(
+                sandbox_id=sandbox_id,
+                session_id=build_session_id,
+                llm_config=llm_config,
+                nextjs_port=nextjs_port,
+                skills_section=skills_section,
+                snapshot_path=None,  # TODO: Support restoring from snapshot
+                user_name=user_name,
+            )
+
+        tasks: list[Callable[[], None]] = [
+            _wait_serve,
+            _setup_workspace,
+            lambda: self._hydrate_skills(sandbox_id, user, skills_files),
+            lambda: self._hydrate_user_library(sandbox_id, user_id, user_library_files),
+        ]
+
+        with ThreadPoolExecutor(
+            max_workers=len(tasks), thread_name_prefix="session-warmup"
+        ) as executor:
+            # ThreadPoolExecutor doesn't copy contextvars; run each task in its
+            # own copy so the tenant id + tracing context propagate.
+            futures = [
+                executor.submit(contextvars.copy_context().run, task) for task in tasks
+            ]
+            for future in as_completed(futures):
+                future.result()
 
         logger.info(
             "Successfully created session %s with workspace in sandbox %s",

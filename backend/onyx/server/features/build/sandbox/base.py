@@ -119,6 +119,7 @@ class SandboxManager(_ServeMixin, ABC):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
+        wait_for_serve_ready: bool = True,
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
@@ -126,6 +127,12 @@ class SandboxManager(_ServeMixin, ABC):
         configured. K8s pre-loads each into opencode-serve's startup config
         so per-prompt model overrides can cross providers without restarting
         the pod. Defaults to ``[llm_config]`` (single-provider, back-compat).
+
+        ``wait_for_serve_ready``: block until opencode-serve answers before
+        returning. Default keeps the pod-Ready + serve-Ready contract that
+        callers rely on. The create-session flow passes ``False`` and runs
+        ``wait_for_serve_ready()`` concurrently with workspace setup + skill
+        hydration instead.
 
         Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces
@@ -320,6 +327,12 @@ class SandboxManager(_ServeMixin, ABC):
             True if sandbox is healthy, False otherwise
         """
         ...
+
+    def wait_for_serve_ready(self, sandbox_id: UUID) -> bool:
+        """Block until opencode-serve answers. Split out of ``provision()`` so
+        the create-session flow can overlap it with workspace setup + skill
+        hydration (all only need the pod to be Ready)."""
+        return self._wait_for_opencode_serve_ready(sandbox_id)
 
     def send_message(
         self,

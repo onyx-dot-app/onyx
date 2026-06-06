@@ -691,6 +691,7 @@ class DockerSandboxManager(SandboxManager):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
+        wait_for_serve_ready: bool = True,
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning.")
@@ -776,7 +777,7 @@ class DockerSandboxManager(SandboxManager):
                 f"Timeout waiting for sandbox container {container.name} to be running."
             )
 
-        if not self._wait_for_opencode_serve_ready(sandbox_id):
+        if wait_for_serve_ready and not self._wait_for_opencode_serve_ready(sandbox_id):
             raise RuntimeError(
                 f"opencode-serve never became ready in sandbox container {container.name}."
             )
