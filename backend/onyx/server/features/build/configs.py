@@ -128,6 +128,11 @@ SANDBOX_PROXY_CA_VOLUME_PATH = "/var/lib/sandbox-proxy/ca"
 # Docker named-volume for the proxy CA. Hardcoded for the same reason as above.
 SANDBOX_PROXY_CA_VOLUME_NAME = "sandbox_proxy_ca"
 
+# Non-empty sentinel for every proxy-injected credential (ONYX_PAT + each
+# opencode apiKey); the proxy overwrites the real value on the wire. Sandboxes
+# never see the raw values.
+SANDBOX_PROXY_INJECTED_PLACEHOLDER = "replaced_by_egress_proxy"
+
 # ==============================================================================
 # Docker sandbox (SANDBOX_BACKEND=docker, self-hosted docker-compose)
 # ==============================================================================

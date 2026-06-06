@@ -14,6 +14,7 @@ from uuid import UUID
 import pytest
 
 import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
+from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     OPENCODE_SERVE_CONTAINER_PORT,
 )
@@ -132,13 +133,18 @@ def proxy_kwargs() -> ContainerCreateKwargs:
     """
     Proxy-enabled posture. Mirrors what production self-host compose deployments
     with ``--include-craft`` produce.
+
+    Note: ``onyx_pat`` is the proxy-injected placeholder because in proxy mode
+    the manager's provision flow scrubs the real PAT before reaching this
+    builder; the real value lives in Postgres and the proxy injects it on the
+    wire. Same for any ``api_key`` in ``opencode_config_json``.
     """
     return build_container_create_kwargs(
         sandbox_id=SANDBOX_ID,
         user_id=USER_ID,
         tenant_id=TENANT_ID,
         image="onyxdotapp/sandbox:test",
-        onyx_pat="pat-redacted",
+        onyx_pat=SANDBOX_PROXY_INJECTED_PLACEHOLDER,
         api_server_url="https://onyx.example.com",
         network="onyx_craft_sandbox",
         volume_name="onyx-craft-sandbox-12345678",
@@ -397,30 +403,40 @@ def test_container_kwargs_no_warning_for_public_url(
 # ------------------------------------------------------------------------------
 
 
-def test_proxy_kwargs_swap_command_to_firewall_init(
+def test_proxy_kwargs_wraps_entrypoint_in_firewall_init(
     proxy_kwargs: ContainerCreateKwargs,
 ) -> None:
     """
-    firewall-init.sh wraps the real entrypoint so iptables + CA install +
-    capsh-bounded setuid all happen before the agent ever runs.
+    Must set ``entrypoint`` (not just ``command``) -- the image bakes
+    ENTRYPOINT, and Docker concatenates image-ENTRYPOINT + command-args. Setting
+    only ``command`` leaves firewall-init.sh as ignored argv to the image's
+    entrypoint.sh; the lockdown silently never runs and the sandbox boots
+    without the proxy posture.
     """
-    assert proxy_kwargs["command"] == [
-        "/workspace/firewall-init.sh",
-        "/workspace/entrypoint.sh",
-    ]
+    assert proxy_kwargs["entrypoint"] == ["/workspace/firewall-init.sh"]
+    assert proxy_kwargs["command"] == ["/workspace/entrypoint.sh"]
 
 
-def test_proxy_kwargs_runs_init_as_root_with_net_admin_and_setpcap(
-    proxy_kwargs: ContainerCreateKwargs,
+def test_legacy_kwargs_do_not_override_entrypoint(
+    kwargs: ContainerCreateKwargs,
 ) -> None:
     """
-    NET_ADMIN runs iptables; SETPCAP authorises ``capsh --drop=all``. capsh
-    drops both from the bounding set + setuid()s to UID 1000 before the agent
-    exec; the running container ends up with zero caps.
+    Proxy-disabled posture relies on the image's baked ENTRYPOINT to launch
+    entrypoint.sh; the manager must NOT set ``entrypoint`` here, or legacy
+    dev/test runs would lose the agent-launch path.
     """
+    assert "entrypoint" not in kwargs
+    assert kwargs["command"] == ["/workspace/entrypoint.sh"]
+
+
+def test_proxy_kwargs_runs_init_as_root_with_required_caps(
+    proxy_kwargs: ContainerCreateKwargs,
+) -> None:
+    """NET_ADMIN for iptables; SETPCAP authorises the bounding-set drop;
+    SETUID + SETGID gate the uid/gid switch under cap_drop=ALL."""
     assert proxy_kwargs["user"] == "0:0"
     assert proxy_kwargs["cap_drop"] == ["ALL"]
-    assert proxy_kwargs["cap_add"] == ["NET_ADMIN", "SETPCAP"]
+    assert proxy_kwargs["cap_add"] == ["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]
     # The other invariants must not regress in proxy mode.
     assert proxy_kwargs["privileged"] is False
     assert "no-new-privileges:true" in proxy_kwargs["security_opt"]
@@ -450,8 +466,9 @@ def test_proxy_kwargs_env_contains_proxy_and_ca_keys(
     contract vars (bootstrap mode + CA paths).
     """
     env = proxy_kwargs["environment"]
-    # The legacy 4-key core is preserved.
-    assert env["ONYX_PAT"] == "pat-redacted"
+    # The legacy 4-key core is preserved; ONYX_PAT is the proxy placeholder in
+    # this posture (real value lives in Postgres, proxy injects on wire).
+    assert env["ONYX_PAT"] == SANDBOX_PROXY_INJECTED_PLACEHOLDER
     assert env["ONYX_SERVER_URL"] == "https://onyx.example.com"
     assert env["OPENCODE_SERVER_PASSWORD"] == _OPENCODE_PASSWORD
     assert env["OPENCODE_CONFIG_CONTENT"] == _OPENCODE_CONFIG_JSON

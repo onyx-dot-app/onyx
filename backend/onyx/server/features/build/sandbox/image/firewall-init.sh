@@ -3,8 +3,8 @@
 #
 # SANDBOX_PROXY_BOOTSTRAP_MODE:
 #   initcontainer — K8s initContainer; runs steps then exits 0.
-#   entrypoint    — docker-compose entrypoint; runs steps then execs the
-#                   real entrypoint as UID 1000 via gosu.
+#   entrypoint    — docker-compose entrypoint; runs steps then execs the real
+#                   entrypoint as UID 1000 via setpriv.
 #
 # Required env: SANDBOX_PROXY_HOST, SANDBOX_PROXY_PORT, SANDBOX_PROXY_BOOTSTRAP_MODE.
 # Optional env: SANDBOX_PROXY_CA_BUNDLE_SRC (default /sandbox-ca/ca.crt),
@@ -35,8 +35,8 @@ for bin in iptables ip6tables update-ca-certificates getent; do
     command -v "$bin" >/dev/null 2>&1 || die "required binary '$bin' missing"
 done
 if [[ "$SANDBOX_PROXY_BOOTSTRAP_MODE" == "entrypoint" ]] \
-        && ! command -v capsh >/dev/null 2>&1; then
-    die "entrypoint mode requires capsh (libcap2-bin); not found"
+        && ! command -v setpriv >/dev/null 2>&1; then
+    die "entrypoint mode requires setpriv (util-linux); not found"
 fi
 
 log "mode=$SANDBOX_PROXY_BOOTSTRAP_MODE proxy=$SANDBOX_PROXY_HOST:$SANDBOX_PROXY_PORT"
@@ -62,8 +62,13 @@ step_apply_iptables() {
     if [[ "$SANDBOX_PROXY_HOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         PROXY_IP="$SANDBOX_PROXY_HOST"
     else
-        PROXY_IP="$(getent hosts "$SANDBOX_PROXY_HOST" | awk '{print $1; exit}')"
-        [[ -n "$PROXY_IP" ]] || die "could not resolve proxy host $SANDBOX_PROXY_HOST"
+        # `ahostsv4` (not `hosts`) so we only get AF_INET answers. The iptables
+        # rule below is IPv4-only -- a dual-stack resolver that returns the AAAA
+        # first (e.g. Docker Desktop's host.docker.internal) would make the
+        # `iptables -d <ipv6>` call fail with "host/network not found" and the
+        # init would die mid-bootstrap.
+        PROXY_IP="$(getent ahostsv4 "$SANDBOX_PROXY_HOST" | awk '{print $1; exit}')"
+        [[ -n "$PROXY_IP" ]] || die "could not resolve proxy host $SANDBOX_PROXY_HOST to an IPv4 address"
     fi
     log "resolved proxy ip=$PROXY_IP"
 
@@ -123,21 +128,20 @@ case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
         exit 0
         ;;
     entrypoint)
-        # Compose-only privilege transition. The case dispatch above is the
-        # gate: the K8s initcontainer branch above is the only other reachable
-        # path and exits before this point, so the K8s sandbox container never
-        # runs as root in its main lifecycle and never hits capsh.
-        #
-        # The docker manager grants cap_add=[NET_ADMIN, SETPCAP] for this init
-        # step. NET_ADMIN runs iptables; SETPCAP authorises PR_CAPBSET_DROP.
-        # capsh applies --drop *before* --user, so we still have SETPCAP in
-        # effective when the bounding-set drop runs. --user then setuid()s,
-        # clearing permitted/effective/ambient. The subsequent execve has no
-        # file capabilities, so the agent process ends up with zero caps in any
-        # set and an empty bounding set -- matching the K8s posture (cap exists
-        # only during init, never on the running container).
+        # Compose-only: K8s initcontainer mode exits earlier, never reaches
+        # here. Docker manager grants cap_add=[NET_ADMIN, SETPCAP, SETUID,
+        # SETGID]: NET_ADMIN for iptables, SETPCAP for the bounding-set drop,
+        # SETUID/SETGID for setpriv's --reuid/--regid under cap_drop=ALL.
+        # setpriv (not capsh): capsh's `-- args` form invokes /bin/bash and
+        # mangles non-script targets; setpriv execve's directly.
         [[ "$#" -ge 1 ]] || die "entrypoint mode requires the real entrypoint as args"
         log "entrypoint mode: clearing bounding set, dropping to UID 1000, exec'ing: $*"
-        exec capsh --drop=all --user=sandbox -- "$@"
+        # HOME/USER must be set explicitly: setpriv switches uid/gid but does
+        # not refresh env vars. Inheriting HOME=/root from the root parent
+        # leaves the dropped-to-1000 agent unable to write its caches
+        # (opencode-serve dies at startup on EACCES /root/.cache).
+        HOME=/home/sandbox USER=sandbox \
+            exec setpriv --reuid=1000 --regid=1000 --init-groups \
+            --bounding-set=-all -- "$@"
         ;;
 esac
