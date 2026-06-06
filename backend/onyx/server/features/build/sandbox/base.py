@@ -58,6 +58,10 @@ logger = setup_logger()
 BUN_CACHE_DIR = "/workspace/sessions/.bun-cache"
 BUN_IMAGE_CACHE_DIR = "/home/sandbox/.bun/install/cache"
 
+# Non-empty sentinel for every proxy-injected credential (ONYX_PAT, GH_TOKEN,
+# each opencode apiKey); the egress proxy overwrites the real value on the wire.
+PROXY_INJECTED_PLACEHOLDER = "replaced_by_egress_proxy"
+
 # Internal sandbox-event protocol — the type contract between the agent
 # harness and everything downstream (session manager, SSE encoder,
 # persistence, frontend). Schema lives in :mod:`event_schema`.

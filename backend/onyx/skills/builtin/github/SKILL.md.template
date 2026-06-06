@@ -1,78 +1,96 @@
 ---
 name: github
-description: Read repositories, issues, and pull requests, open new issues, and add comments in GitHub on the user's behalf via a light REST wrapper.
+description: Read repositories, issues, and pull requests, open new issues, and add comments in GitHub on the user's behalf via the GitHub CLI (gh).
 ---
 
 # GitHub
 
-Call the GitHub REST API as the connected user via the bundled helper.
+Use the GitHub CLI (`gh`) to act as the connected user. **You are already
+authenticated** — the egress proxy injects the user's GitHub token on the wire.
+Never run `gh auth login`, `gh auth logout`, or `gh auth setup-git`; just run
+commands.
 
 {{ACTION_AVAILABILITY_SECTION}}
 
 ## Usage
 
-    python .opencode/skills/github/github_api.py <command> [args]
-
-Read commands auto-paginate and prune empty / `*_url` fields. `create-issue`
-and `comment` are the only writes. Use `--raw` to skip pruning;
-`python github_api.py <command> -h` shows its flags.
-
 ### The connected user
 
 ```
-python github_api.py me
+gh api user
 ```
 
 ### Repositories
 
 ```
-python github_api.py repos [--limit N]
-python github_api.py repo OWNER REPO
+gh repo view OWNER/REPO
+gh repo list [OWNER] [--limit N]
 ```
 
 ### Issues
 
 ```
-python github_api.py issues OWNER REPO [--state open|closed|all] [--limit N]
-python github_api.py issue OWNER REPO 123
+gh issue list --repo OWNER/REPO [--state open|closed|all] [--limit N]
+gh issue view NUMBER --repo OWNER/REPO [--comments]
 ```
 
 ### Pull requests
 
 ```
-python github_api.py pulls OWNER REPO [--state open|closed|all] [--limit N]
-python github_api.py pull OWNER REPO 123
+gh pr list --repo OWNER/REPO [--state open|closed|all] [--limit N]
+gh pr view NUMBER --repo OWNER/REPO [--comments]
 ```
 
 ### Search
 
 ```
-python github_api.py search-repos "language:python stars:>500" [--limit N]
-python github_api.py search-issues "repo:owner/repo is:open label:bug" [--limit N]
+gh search repos "language:python stars:>500" [--limit N]
+gh search issues "repo:owner/repo is:open label:bug" [--limit N]
+gh search prs "repo:owner/repo is:open" [--limit N]
 ```
 
 ### Open an issue (write)
 
 ```
-python github_api.py create-issue OWNER REPO "Title" [--body "Details"]
+gh issue create --repo OWNER/REPO --title "Title" [--body "Details"]
 ```
 
 ### Comment on an issue or PR (write)
 
 ```
-python github_api.py comment OWNER REPO 123 "Looking into this"
+gh issue comment NUMBER --repo OWNER/REPO --body "Looking into this"
+gh pr comment NUMBER --repo OWNER/REPO --body "Looking into this"
+```
+
+### Arbitrary API calls
+
+`gh api` reaches any REST endpoint; `gh api graphql` runs a GraphQL query. Pass
+user input as fields/variables, not by string-formatting into the path/query.
+
+```
+gh api repos/OWNER/REPO/releases --paginate
 ```
 
 ## Output
 
-JSON on stdout. List commands return `{"ok": true, "<command>": [...], "count":
-N, "truncated": bool}` (`truncated` means more results existed past `--limit`).
-Failures return `{"ok": false, "status": <code>, "error": "<message>"}` and exit
-non-zero — surface the error rather than retrying blindly.
+`gh` prints human-readable text by default. For compact, parseable output that
+keeps your context small, prefer `--json` with an explicit field list (and
+`--jq` to filter):
+
+```
+gh pr list --repo OWNER/REPO --json number,title,state --jq '.[] | {number,title}'
+```
+
+Use `--limit N` on list/search commands to cap results. A non-zero exit means
+the command failed — surface the error rather than retrying blindly.
 
 ## Notes
 
-- Repos are addressed as `OWNER REPO` (two args), not `owner/repo`.
-- Search uses GitHub's query syntax; pass the whole query as one quoted arg.
-- Scopes were chosen by the admin. You cannot widen them; a 403 / `Resource not
-  accessible` usually means the needed scope wasn't granted — tell the user.
+- **HTTPS only.** SSH and `github.com` git remotes are unreachable from here, so
+  `git clone`/`push` against GitHub and `gh repo clone` over SSH will fail. Stay
+  on the API commands above (and `gh api`).
+- **Scopes are fixed** by the admin (repo, read:org, read:user). An operation
+  needing a scope you don't have returns `403 / Resource not accessible` — tell
+  the user rather than retrying.
+- A command that isn't pre-approved may pause for the user's approval; if a call
+  is blocked or returns `401`, report it instead of looping.

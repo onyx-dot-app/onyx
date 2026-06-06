@@ -52,6 +52,22 @@ from onyx.external_apps.providers.actions import path_matches
             "/calendar/v3/calendars//events",
             False,
         ),
+        # Trailing {name...} wildcard matches one or more remaining segments
+        # (a file path under contents, a slash-bearing ref).
+        ("/repos/{o}/{r}/contents/{path...}", "/repos/o/r/contents/README.md", True),
+        (
+            "/repos/{o}/{r}/contents/{path...}",
+            "/repos/o/r/contents/backend/onyx/main.py",
+            True,
+        ),
+        ("/repos/{o}/{r}/git/ref/{ref...}", "/repos/o/r/git/ref/heads/feature/x", True),
+        ("/repos/{o}/{r}/git/ref/{ref...}", "/repos/o/r/git/ref/heads", True),
+        # The wildcard needs at least one trailing segment.
+        ("/repos/{o}/{r}/contents/{path...}", "/repos/o/r/contents", False),
+        # The fixed prefix before the wildcard must still match exactly.
+        ("/repos/{o}/{r}/contents/{path...}", "/repos/o/r/blobs/a.py", False),
+        # A trailing slash after the wildcard tail is ignored.
+        ("/repos/{o}/{r}/contents/{path...}", "/repos/o/r/contents/a/b/", True),
     ],
 )
 def test_path_matches(template: str, path: str, expected: bool) -> None:

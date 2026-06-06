@@ -84,6 +84,7 @@ from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
+from onyx.server.features.build.sandbox.base import PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SnapshotCreateRequest,
@@ -595,6 +596,10 @@ class KubernetesSandboxManager(SandboxManager):
                     name="ONYX_PAT", value=SANDBOX_PROXY_INJECTED_PLACEHOLDER
                 ),
                 client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
+                # `gh` needs a token to run; the proxy overwrites this placeholder
+                # with the user's real GitHub token on the wire.
+                client.V1EnvVar(name="GH_TOKEN", value=PROXY_INJECTED_PLACEHOLDER),
+                client.V1EnvVar(name="GH_NO_UPDATE_NOTIFIER", value="1"),
                 client.V1EnvVar(
                     name=OPENCODE_SERVER_PASSWORD,
                     value_from=client.V1EnvVarSource(

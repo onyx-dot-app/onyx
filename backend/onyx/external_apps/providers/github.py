@@ -10,6 +10,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.actions import ExternalAppAction
+from onyx.external_apps.providers.actions import GraphQLOp
 from onyx.external_apps.providers.actions import RestRoute
 from onyx.external_apps.providers.base import AdminDescriptorSpec
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
@@ -28,19 +29,33 @@ class GitHubAction(ExternalAppAction):
     ISSUES_READ = "github.issues.read"
     PULLS_READ = "github.pulls.read"
     SEARCH_READ = "github.search.read"
+    REPO_GRAPHQL_READ = "github.graphql.repo.read"
+    REFS_READ = "github.refs.read"
+    CONTENTS_READ = "github.contents.read"
+    GIT_DATA_READ = "github.git_data.read"
+    RELEASES_READ = "github.releases.read"
     ISSUES_CREATE = "github.issues.create"
     COMMENTS_CREATE = "github.comments.create"
+    CONTENTS_WRITE = "github.contents.write"
+    REFS_WRITE = "github.refs.write"
+    PULLS_CREATE = "github.pulls.create"
 
 
 # GitHub's REST API is a path-addressed JSON API rooted at
 # https://api.github.com; the action is the method + path template. A `{name}`
 # segment matches one path segment (owner / repo / issue number, etc.).
+#
+# `gh` also drives commands through GraphQL (POST /graphql), so actions carry
+# GraphQLOp rules too; gh's repo-scoped reads collapse onto REPO_GRAPHQL_READ.
 _ENDPOINTS: list[EndpointSpec] = [
     EndpointSpec(
         id=GitHubAction.USER_READ,
         normalised_name="Read the connected user",
         description="Read the authenticated user's profile.",
-        matches=(RestRoute(method="GET", path="/user"),),
+        matches=(
+            RestRoute(method="GET", path="/user"),
+            GraphQLOp(operation_type="query", field="viewer"),
+        ),
         default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
@@ -83,6 +98,73 @@ _ENDPOINTS: list[EndpointSpec] = [
         matches=(
             RestRoute(method="GET", path="/search/repositories"),
             RestRoute(method="GET", path="/search/issues"),
+            GraphQLOp(operation_type="query", field="search"),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=GitHubAction.REPO_GRAPHQL_READ,
+        normalised_name="Read repos, issues, and PRs via the GitHub CLI",
+        description=(
+            "Read repository-scoped data (the repo, its issues, and its pull "
+            "requests) through GitHub's GraphQL API — the path `gh repo/pr/issue "
+            "view` and `list` take."
+        ),
+        matches=(
+            GraphQLOp(operation_type="query", field="repository"),
+            GraphQLOp(operation_type="query", field="repositoryOwner"),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=GitHubAction.REFS_READ,
+        normalised_name="Read branches and refs",
+        description="List branches and read a branch or git ref (its SHA).",
+        matches=(
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/branches"),
+            # Branch/ref names contain slashes, so the tail is a multi-segment wildcard.
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/branches/{branch...}"),
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/git/ref/{ref...}"),
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/git/refs"),
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/git/refs/{ref...}"),
+            RestRoute(
+                method="GET", path="/repos/{owner}/{repo}/git/matching-refs/{ref...}"
+            ),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=GitHubAction.CONTENTS_READ,
+        normalised_name="Read file contents",
+        description="Read a file or directory's contents (and the README).",
+        matches=(
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/contents"),
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/contents/{path...}"),
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/readme"),
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/readme/{dir...}"),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=GitHubAction.GIT_DATA_READ,
+        normalised_name="Read commits and git objects",
+        description="Read commits, trees, and blobs (the git object graph).",
+        matches=(
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/git/trees/{sha}"),
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/git/blobs/{sha}"),
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/git/commits/{sha}"),
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/commits"),
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/commits/{ref...}"),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=GitHubAction.RELEASES_READ,
+        normalised_name="Read releases",
+        description="List releases and read a single release, asset, or tag.",
+        matches=(
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/releases"),
+            RestRoute(method="GET", path="/repos/{owner}/{repo}/releases/{release...}"),
         ),
         default_policy=EndpointPolicy.ALWAYS,
     ),
@@ -90,7 +172,10 @@ _ENDPOINTS: list[EndpointSpec] = [
         id=GitHubAction.ISSUES_CREATE,
         normalised_name="Create an issue",
         description="Open a new issue in a repository.",
-        matches=(RestRoute(method="POST", path="/repos/{owner}/{repo}/issues"),),
+        matches=(
+            RestRoute(method="POST", path="/repos/{owner}/{repo}/issues"),
+            GraphQLOp(operation_type="mutation", field="createIssue"),
+        ),
     ),
     EndpointSpec(
         id=GitHubAction.COMMENTS_CREATE,
@@ -100,6 +185,35 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(
                 method="POST", path="/repos/{owner}/{repo}/issues/{number}/comments"
             ),
+            GraphQLOp(operation_type="mutation", field="addComment"),
+        ),
+    ),
+    EndpointSpec(
+        id=GitHubAction.CONTENTS_WRITE,
+        normalised_name="Create, update, or delete files",
+        description="Write or delete a file in a repository (a single-file commit).",
+        matches=(
+            RestRoute(method="PUT", path="/repos/{owner}/{repo}/contents/{path...}"),
+            RestRoute(method="DELETE", path="/repos/{owner}/{repo}/contents/{path...}"),
+        ),
+    ),
+    EndpointSpec(
+        id=GitHubAction.REFS_WRITE,
+        normalised_name="Create, update, or delete branches",
+        description="Create a branch/ref, move it, or delete it.",
+        matches=(
+            RestRoute(method="POST", path="/repos/{owner}/{repo}/git/refs"),
+            RestRoute(method="PATCH", path="/repos/{owner}/{repo}/git/refs/{ref...}"),
+            RestRoute(method="DELETE", path="/repos/{owner}/{repo}/git/refs/{ref...}"),
+        ),
+    ),
+    EndpointSpec(
+        id=GitHubAction.PULLS_CREATE,
+        normalised_name="Open a pull request",
+        description="Open a new pull request.",
+        matches=(
+            RestRoute(method="POST", path="/repos/{owner}/{repo}/pulls"),
+            GraphQLOp(operation_type="mutation", field="createPullRequest"),
         ),
     ),
 ]

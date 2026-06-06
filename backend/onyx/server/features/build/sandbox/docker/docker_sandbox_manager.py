@@ -98,6 +98,7 @@ from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDE
 from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
+from onyx.server.features.build.sandbox.base import PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     opencode_serve_port_bindings,
@@ -350,6 +351,9 @@ def _proxy_env_vars(
         "AWS_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
         "CURL_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
         "GIT_SSL_CAINFO": _PROXY_CA_BUNDLE_FILE,
+        # `gh` auth: placeholder token (proxy-overwritten) + no update nag.
+        "GH_TOKEN": PROXY_INJECTED_PLACEHOLDER,
+        "GH_NO_UPDATE_NOTIFIER": "1",
     }
 
 
