@@ -100,13 +100,44 @@ export class InputBar {
     }, text);
   }
 
-  async pasteEmpty(): Promise<void> {
+  /** Paste preceded by a Ctrl+Shift+V keydown (plain paste — never tiles). */
+  async pastePlain(text: string): Promise<void> {
+    await this.page.evaluate((t) => {
+      const el = document.getElementById("onyx-chat-input-textbox")!;
+      el.focus();
+      el.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "V",
+          code: "KeyV",
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      const dt = new DataTransfer();
+      dt.setData("text/plain", t);
+      el.dispatchEvent(
+        new ClipboardEvent("paste", {
+          clipboardData: dt,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    }, text);
+  }
+
+  /** Dispatch a Ctrl+Shift+V keydown only (arms plain paste, no paste follows). */
+  async armPlainPaste(): Promise<void> {
     await this.page.evaluate(() => {
       const el = document.getElementById("onyx-chat-input-textbox")!;
       el.focus();
       el.dispatchEvent(
-        new ClipboardEvent("paste", {
-          clipboardData: new DataTransfer(),
+        new KeyboardEvent("keydown", {
+          key: "V",
+          code: "KeyV",
+          ctrlKey: true,
+          shiftKey: true,
           bubbles: true,
           cancelable: true,
         })

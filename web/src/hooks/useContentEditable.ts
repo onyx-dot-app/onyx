@@ -45,7 +45,8 @@ export interface UseContentEditableReturn {
   /** Insert a skill tile, replacing `beforeToken` (the `/<query>` before the caret). */
   insertSkillTile: (slug: string, name: string, beforeToken: string) => boolean;
   pasteText: (text: string) => void;
-  armPasteExpansion: () => void;
+  /** Whether to show the "paste again to expand" hint — true while a paste tile exists. */
+  pasteExpandHintVisible: boolean;
   handleCopy: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   handleCut: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   setCursorToEnd: () => void;
@@ -75,9 +76,10 @@ export function useContentEditable({
   const rafRef = useRef<number | null>(null);
   const wrapperPaddingYRef = useRef(0);
   const selectedTileRef = useRef<HTMLElement | null>(null);
-  const lastPasteTileRef = useRef<PasteTileData | null>(null);
-  const pendingExpansionRef = useRef<PasteTileData | null>(null);
+  // Set by a Ctrl/Cmd+Shift+V keydown so the imminent paste stays plain text.
+  const plainPasteRef = useRef(false);
   const [tilePopover, setTilePopover] = useState<PasteTileData | null>(null);
+  const [pasteExpandHintVisible, setPasteExpandHintVisible] = useState(false);
 
   useEffect(() => {
     onContentChangeRef.current = onContentChange;
@@ -165,6 +167,10 @@ export function useContentEditable({
     const text = getTextContent(el);
     messageRef.current = text;
     setMessageState(text);
+    // The "paste again to expand" hint lives as long as a paste tile does.
+    setPasteExpandHintVisible(
+      !!el.querySelector('[data-rich-tile]:not([data-tile-type="skill"])')
+    );
     onContentChangeRef.current?.(text);
     return text;
   }, []);
@@ -216,7 +222,7 @@ export function useContentEditable({
 
       clearTileSelection();
       setTilePopover(null);
-      lastPasteTileRef.current = null;
+      setPasteExpandHintVisible(false);
 
       ref.current.textContent = text;
       messageRef.current = text;
@@ -245,7 +251,7 @@ export function useContentEditable({
 
     clearTileSelection();
     setTilePopover(null);
-    lastPasteTileRef.current = null;
+    setPasteExpandHintVisible(false);
 
     ref.current.innerHTML = "";
     messageRef.current = "";
@@ -294,7 +300,6 @@ export function useContentEditable({
       tile.replaceWith(textNode);
 
       if (selectedTileRef.current === tile) selectedTileRef.current = null;
-      lastPasteTileRef.current = null;
       setTilePopover(null);
 
       el.focus();
@@ -331,37 +336,53 @@ export function useContentEditable({
     [syncFromDOM, resize]
   );
 
+  // The existing paste tile whose content equals `text`, if any (skill tiles excluded).
+  const findMatchingPasteTile = useCallback(
+    (text: string): HTMLElement | null => {
+      const el = ref.current;
+      if (!el) return null;
+      const tiles = Array.from(
+        el.querySelectorAll<HTMLElement>("[data-rich-tile]")
+      );
+      return (
+        tiles.find(
+          (tile) =>
+            !isSkillTile(tile) && tile.getAttribute("data-text") === text
+        ) ?? null
+      );
+    },
+    []
+  );
+
   const pasteText = useCallback(
     (text: string) => {
-      const pendingExpansion = pendingExpansionRef.current;
-      pendingExpansionRef.current = null;
-      if (pasteTilesEnabled && shouldCreatePasteTile(text)) {
-        if (
-          pendingExpansion &&
-          pendingExpansion.text === text &&
-          ref.current?.contains(pendingExpansion.tile)
-        ) {
-          expandTile(pendingExpansion.tile);
+      const plainPaste = plainPasteRef.current;
+      plainPasteRef.current = false;
+
+      if (pasteTilesEnabled && !plainPaste && shouldCreatePasteTile(text)) {
+        // Same clipboard as an existing tile → expand it instead of duplicating.
+        const existing = findMatchingPasteTile(text);
+        if (existing) {
+          expandTile(existing);
           return;
         }
-        const tile = insertTileAtCursor(text);
-        lastPasteTileRef.current = tile ? { text, tile } : null;
+        insertTileAtCursor(text);
       } else {
         insertTextAtCursor(text);
       }
     },
-    [pasteTilesEnabled, insertTileAtCursor, insertTextAtCursor, expandTile]
+    [
+      pasteTilesEnabled,
+      insertTileAtCursor,
+      insertTextAtCursor,
+      expandTile,
+      findMatchingPasteTile,
+    ]
   );
-
-  const armPasteExpansion = useCallback(() => {
-    pendingExpansionRef.current = lastPasteTileRef.current;
-    lastPasteTileRef.current = null;
-  }, []);
 
   const handleTileMouseDown = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       clearTileSelection();
-      lastPasteTileRef.current = null;
       if (disabledRef.current) return;
 
       const target = event.target as HTMLElement;
@@ -471,8 +492,12 @@ export function useContentEditable({
       const isPasteShortcut =
         (event.ctrlKey || event.metaKey) &&
         (event.key === "v" || event.key === "V");
-      if (!isModifier && !isPasteShortcut) {
-        lastPasteTileRef.current = null;
+      // A Ctrl/Cmd+Shift+V arms a plain paste; any other (non-modifier) key
+      // disarms it so a stale flag can't hijack a later normal paste.
+      if (isPasteShortcut) {
+        plainPasteRef.current = event.shiftKey;
+      } else if (!isModifier) {
+        plainPasteRef.current = false;
       }
 
       const isNav = event.key === "ArrowLeft" || event.key === "ArrowRight";
@@ -649,7 +674,7 @@ export function useContentEditable({
     expandTile,
     insertSkillTile,
     pasteText,
-    armPasteExpansion,
+    pasteExpandHintVisible,
     handleCopy,
     handleCut,
     setCursorToEnd,

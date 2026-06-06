@@ -7,6 +7,7 @@ import {
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const LARGE_TEXT = "line 1\nline 2\nline 3\nline 4";
+const LARGE_TEXT_B = "alpha\nbeta\ngamma\ndelta";
 
 test.describe("Core Text Input & Submission", () => {
   test.beforeEach(async ({ chatPage }) => {
@@ -540,10 +541,12 @@ test.describe("Paste Tiles", () => {
     await chatPage.inputBar.expectEmpty();
   });
 
-  test("multiple tiles can coexist", async ({ chatPage }) => {
+  test("pasting different large text creates a second tile", async ({
+    chatPage,
+  }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);
     await chatPage.page.keyboard.press("End");
-    await chatPage.inputBar.paste(LARGE_TEXT);
+    await chatPage.inputBar.paste(LARGE_TEXT_B);
     await chatPage.inputBar.expectTileCount(2);
   });
 
@@ -634,7 +637,7 @@ test.describe("Paste Tiles", () => {
     await expect(msg).toContainText("line 4");
   });
 
-  test("second back-to-back paste expands the tile into inline text", async ({
+  test("pasting the same clipboard again expands the tile into inline text", async ({
     chatPage,
   }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);
@@ -645,13 +648,33 @@ test.describe("Paste Tiles", () => {
     await chatPage.inputBar.expectText("line 4");
   });
 
-  test("an intervening empty paste prevents the back-to-back expand", async ({
+  test("pasting matching text expands the existing tile even after typing", async ({
     chatPage,
   }) => {
     await chatPage.inputBar.paste(LARGE_TEXT);
-    await chatPage.inputBar.pasteEmpty();
+    await chatPage.inputBar.expectTileCount(1);
+    await chatPage.inputBar.typeText(" middle ");
     await chatPage.inputBar.paste(LARGE_TEXT);
-    await chatPage.inputBar.expectTileCount(2);
+    await chatPage.inputBar.expectTileCount(0);
+    await chatPage.inputBar.expectText("line 1");
+  });
+
+  test("Ctrl+Shift+V pastes plain text without creating a tile", async ({
+    chatPage,
+  }) => {
+    await chatPage.inputBar.pastePlain(LARGE_TEXT);
+    await chatPage.inputBar.expectTileCount(0);
+    await chatPage.inputBar.expectText("line 1");
+    await chatPage.inputBar.expectText("line 4");
+  });
+
+  test("a keystroke disarms a pending Ctrl+Shift+V so the next paste tiles", async ({
+    chatPage,
+  }) => {
+    await chatPage.inputBar.armPlainPaste();
+    await chatPage.inputBar.typeText("x");
+    await chatPage.inputBar.paste(LARGE_TEXT);
+    await chatPage.inputBar.expectTileCount(1);
   });
 });
 

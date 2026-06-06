@@ -113,7 +113,7 @@ const BaseInputBar = memo(
         handleCompositionStart,
         handleCompositionEnd,
         pasteText,
-        armPasteExpansion,
+        pasteExpandHintVisible,
         handleCopy,
         handleCut,
         setCursorToEnd,
@@ -187,7 +187,6 @@ const BaseInputBar = memo(
       const handlePaste = useCallback(
         (event: ClipboardEvent) => {
           if (disabled) return;
-          armPasteExpansion();
           const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
           if (pastedFiles.length > 0) {
             event.preventDefault();
@@ -200,7 +199,7 @@ const BaseInputBar = memo(
           if (onPasteText?.(text)) return;
           pasteText(text);
         },
-        [disabled, onPasteFiles, onPasteText, pasteText, armPasteExpansion]
+        [disabled, onPasteFiles, onPasteText, pasteText]
       );
 
       const handleSubmit = useCallback(() => {
@@ -331,13 +330,23 @@ const BaseInputBar = memo(
             <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
               <div className="flex flex-row items-center gap-2">
                 {bottomLeftSlot}
-                {!message && queueEnabled && queue.length > 0 && (
+                {pasteExpandHintVisible ? (
                   <div className="flex items-center gap-1 select-none">
-                    <Keycap>↑</Keycap>
                     <Text font="secondary-body" color="text-02">
-                      to edit queued messages
+                      Paste again to expand
                     </Text>
                   </div>
+                ) : (
+                  !message &&
+                  queueEnabled &&
+                  queue.length > 0 && (
+                    <div className="flex items-center gap-1 select-none">
+                      <Keycap>↑</Keycap>
+                      <Text font="secondary-body" color="text-02">
+                        to edit queued messages
+                      </Text>
+                    </div>
+                  )
                 )}
               </div>
               <div className="flex flex-row items-center gap-1">
