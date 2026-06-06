@@ -1193,7 +1193,7 @@ class KubernetesSandboxManager(SandboxManager):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
-        wait_for_serve_ready: bool = True,
+        block_until_serve_ready: bool = True,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
@@ -1264,7 +1264,7 @@ class KubernetesSandboxManager(SandboxManager):
             with self._event_buses_lock:
                 self._terminated_sandboxes.discard(sandbox_id)
 
-            if wait_for_serve_ready and not self._wait_for_opencode_serve_ready(
+            if block_until_serve_ready and not self._wait_for_opencode_serve_ready(
                 sandbox_id
             ):
                 raise RuntimeError(
@@ -1350,7 +1350,7 @@ class KubernetesSandboxManager(SandboxManager):
 
             # 4. Wait for opencode-serve to bind :4096 (unless the caller will
             # do it concurrently with workspace setup).
-            if wait_for_serve_ready and not self._wait_for_opencode_serve_ready(
+            if block_until_serve_ready and not self._wait_for_opencode_serve_ready(
                 sandbox_id
             ):
                 raise RuntimeError(

@@ -113,7 +113,8 @@ class TestCreateSession:
 
         assert stub_sandbox_manager.last_provision_payload is not None
         assert (
-            stub_sandbox_manager.last_provision_payload["wait_for_serve_ready"] is False
+            stub_sandbox_manager.last_provision_payload["block_until_serve_ready"]
+            is False
         )
         # The wait is still performed — just decoupled from provision().
         assert stub_sandbox_manager.wait_for_serve_ready_count == 1

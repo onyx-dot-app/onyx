@@ -344,7 +344,7 @@ class SessionManager:
         # Ensure the user's sandbox is RUNNING. Interactive callers can't
         # afford to wait through a concurrent provisioner, so we use the
         # FAIL policy (raise RuntimeError if another request is mid-
-        # provision). wait_for_serve_ready=False: opencode-serve binding is
+        # provision). block_until_serve_ready=False: opencode-serve binding is
         # awaited below, concurrently with workspace setup + hydration.
         sandbox = _sandbox.ensure_sandbox_ready(
             self._db_session,
@@ -353,7 +353,7 @@ class SessionManager:
             all_llm_configs,
             policy=_sandbox.ProvisioningPolicy.FAIL,
             user=user,
-            wait_for_serve_ready=False,
+            block_until_serve_ready=False,
         )
 
         logger.info(
