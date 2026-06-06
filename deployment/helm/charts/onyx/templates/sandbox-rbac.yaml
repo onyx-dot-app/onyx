@@ -6,7 +6,15 @@
 {{- if not $roleArn }}
 {{- fail "craft.sandboxFileSyncRoleArn is required when configMap.ENABLE_CRAFT=true (IRSA role ARN for the sandbox-file-sync ServiceAccount — output of the craft_sandbox terraform module)." }}
 {{- end }}
+{{- $controllerName := printf "%s-sandbox-controller" (include "onyx.fullname" .) }}
+{{- $dedicated := .Values.craft.dedicatedControllerServiceAccount | default false }}
 {{- $boundSAs := prepend (.Values.craft.extraBoundServiceAccounts | default list) (include "onyx.serviceAccountName" .) }}
+{{- if $dedicated }}
+{{- $boundSAs = prepend (.Values.craft.extraBoundServiceAccounts | default list) $controllerName }}
+{{- if not (.Values.craft.sandboxControllerRoleArn | default "") }}
+{{- fail "craft.sandboxControllerRoleArn is required when craft.dedicatedControllerServiceAccount=true (workload IRSA role ARN; its trust policy must also list this SA's OIDC subject via the terraform irsa_additional_service_accounts var)." }}
+{{- end }}
+{{- end }}
 # skip-containers keeps the IRSA creds in the file-sync sidecar, out of the agent container.
 apiVersion: v1
 kind: ServiceAccount
@@ -21,6 +29,22 @@ metadata:
     eks.amazonaws.com/skip-containers: "sandbox"
 automountServiceAccountToken: true
 ---
+{{- if $dedicated }}
+# Dedicated SA for the only workloads that touch the sandbox k8s API (api, heavy,
+# scheduled-tasks); carries the workload IRSA role so they keep S3 + RDS.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $controllerName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-controller
+  annotations:
+    eks.amazonaws.com/role-arn: {{ .Values.craft.sandboxControllerRoleArn | quote }}
+automountServiceAccountToken: true
+---
+{{- end }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

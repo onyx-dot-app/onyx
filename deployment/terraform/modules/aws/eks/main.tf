@@ -185,11 +185,16 @@ module "irsa-workload-access" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   version = "4.7.0"
 
-  create_role                   = true
-  role_name                     = "AmazonEKSTFWorkloadAccessRole-${module.eks.cluster_name}"
-  provider_url                  = module.eks.oidc_provider
-  role_policy_arns              = [aws_iam_policy.s3_access_policy[0].arn]
-  oidc_fully_qualified_subjects = ["system:serviceaccount:${var.irsa_service_account_namespace}:${var.irsa_service_account_name}"]
+  create_role      = true
+  role_name        = "AmazonEKSTFWorkloadAccessRole-${module.eks.cluster_name}"
+  provider_url     = module.eks.oidc_provider
+  role_policy_arns = [aws_iam_policy.s3_access_policy[0].arn]
+  # Trust the default workload SA plus any extras (e.g. the Craft
+  # `<release>-sandbox-controller` SA) so they can assume this same role.
+  oidc_fully_qualified_subjects = concat(
+    ["system:serviceaccount:${var.irsa_service_account_namespace}:${var.irsa_service_account_name}"],
+    [for sa in var.irsa_additional_service_accounts : "system:serviceaccount:${var.irsa_service_account_namespace}:${sa}"]
+  )
 
   depends_on = [module.eks]
 }

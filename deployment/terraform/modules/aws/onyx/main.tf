@@ -80,6 +80,8 @@ module "eks" {
   craft_sandbox_node_max_size       = var.craft_sandbox_node_max_size
   craft_sandbox_node_desired_size   = var.craft_sandbox_node_desired_size
 
+  irsa_additional_service_accounts = var.irsa_additional_service_accounts
+
   main_node_subnet_ids = length(var.main_node_subnet_ids) > 0 ? var.main_node_subnet_ids : (
     var.main_node_private_subnets_only ? local.private_subnets : []
   )
