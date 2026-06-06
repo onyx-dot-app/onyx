@@ -1232,6 +1232,11 @@ EXPECTED_API_KEY = os.environ.get(
     "EXPECTED_API_KEY", ""
 )  # Additional security check for the control plane API
 
+# Optional Bearer token required to scrape the Prometheus /metrics endpoint.
+# When unset (default), /metrics is served without auth for backwards
+# compatibility. When set, callers must send "Authorization: Bearer <token>".
+METRICS_AUTH_TOKEN = os.environ.get("METRICS_AUTH_TOKEN") or ""
+
 # API configuration
 CONTROL_PLANE_API_BASE_URL = os.environ.get(
     "CONTROL_PLANE_API_BASE_URL", "http://localhost:8082"

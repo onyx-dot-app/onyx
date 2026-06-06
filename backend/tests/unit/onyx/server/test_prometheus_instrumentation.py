@@ -5,11 +5,15 @@ from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry
 from prometheus_client import Gauge
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.metrics.auth import verify_metrics_token
 from onyx.server.metrics.per_tenant import per_tenant_request_callback
 from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
 from onyx.server.metrics.slow_requests import slow_request_callback
@@ -98,7 +102,50 @@ def test_setup_attaches_instrumentator_to_app() -> None:
                 10.0,
             ),
         )
-        mock_instance.expose.assert_called_once_with(app)
+        # /metrics is exposed with the Bearer-token dependency attached.
+        mock_instance.expose.assert_called_once()
+        expose_args, expose_kwargs = mock_instance.expose.call_args
+        assert expose_args == (app,)
+        dependencies = expose_kwargs["dependencies"]
+        assert len(dependencies) == 1
+        assert dependencies[0].dependency is verify_metrics_token
+
+
+@pytest.mark.asyncio
+async def test_verify_metrics_token_noop_when_unset() -> None:
+    """With no token configured, /metrics stays open (backwards-compatible)."""
+    with patch("onyx.server.metrics.auth.METRICS_AUTH_TOKEN", ""):
+        # Must not raise regardless of what (if anything) the caller sends.
+        await verify_metrics_token(authorization=None)
+        await verify_metrics_token(authorization="Bearer whatever")
+
+
+@pytest.mark.asyncio
+async def test_verify_metrics_token_accepts_valid_bearer() -> None:
+    with patch("onyx.server.metrics.auth.METRICS_AUTH_TOKEN", "s3cret"):
+        await verify_metrics_token(authorization="Bearer s3cret")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "authorization",
+    [
+        None,  # missing header
+        "",  # empty header
+        "s3cret",  # missing Bearer scheme
+        "Basic s3cret",  # wrong scheme
+        "Bearer wrong",  # wrong token
+        "Bearer ",  # empty token
+    ],
+)
+async def test_verify_metrics_token_rejects_bad_auth(
+    authorization: str | None,
+) -> None:
+    with patch("onyx.server.metrics.auth.METRICS_AUTH_TOKEN", "s3cret"):
+        with pytest.raises(OnyxError) as exc_info:
+            await verify_metrics_token(authorization=authorization)
+        assert exc_info.value.error_code == OnyxErrorCode.UNAUTHENTICATED
+        assert exc_info.value.status_code == 401
 
 
 def test_per_tenant_callback_increments_with_tenant_id() -> None:

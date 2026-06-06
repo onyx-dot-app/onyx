@@ -14,11 +14,10 @@ from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 PUBLIC_ENDPOINT_SPECS = [
-    # built-in documentation functions
-    ("/openapi.json", {"GET", "HEAD"}),
-    ("/docs", {"GET", "HEAD"}),
-    ("/docs/oauth2-redirect", {"GET", "HEAD"}),
-    ("/redoc", {"GET", "HEAD"}),
+    # NOTE: the documentation routes (/openapi.json, /docs, /redoc,
+    # /docs/oauth2-redirect) are intentionally NOT public. They are registered
+    # behind current_curator_or_admin_user in onyx.server.api_docs so the API
+    # surface is not disclosed to anonymous clients (ON-010 / ENG-4131).
     # should always be callable, will just return 401 if not authenticated
     ("/me", {"GET"}),
     # just returns 200 to validate that the server is up
@@ -61,7 +60,10 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/saml/logout", {"POST"}),
     # anonymous user on cloud
     ("/tenants/anonymous-user", {"POST"}),
-    ("/metrics", {"GET"}),  # added by prometheus_fastapi_instrumentator
+    # Added by prometheus_fastapi_instrumentator. Access is gated by
+    # verify_metrics_token (a Bearer-token check) when METRICS_AUTH_TOKEN is set;
+    # that token gate is not user auth, so the route stays whitelisted here.
+    ("/metrics", {"GET"}),
     # craft webapp proxy — access enforced per-session via sharing_scope in handler
     ("/build/sessions/{session_id}/webapp", {"GET"}),
     ("/build/sessions/{session_id}/webapp/{path:path}", {"GET"}),

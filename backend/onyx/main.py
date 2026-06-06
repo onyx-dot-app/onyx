@@ -66,6 +66,7 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
 from onyx.hooks.registry import validate_registry
+from onyx.server.api_docs import add_authenticated_docs_routes
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth.captcha_api import CaptchaCookieMiddleware
 from onyx.server.auth.captcha_api import LoginCaptchaMiddleware
@@ -458,6 +459,12 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             {"url": f"{WEB_DOMAIN.rstrip('/')}/api", "description": "Onyx API Server"}
         ],
         lifespan=lifespan_override or lifespan,
+        # Disable the built-in (unauthenticated) docs routes. They are
+        # re-registered behind admin auth via add_authenticated_docs_routes()
+        # below so the API surface isn't disclosed to anonymous clients.
+        openapi_url=None,
+        docs_url=None,
+        redoc_url=None,
     )
     if SENTRY_DSN:
         from onyx.configs.sentry import _add_instance_tags
@@ -714,6 +721,10 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     # counter). Must be called here — before the app starts — because the
     # instrumentator adds middleware via app.add_middleware().
     setup_prometheus_metrics(application)
+
+    # Re-register the documentation routes (/openapi.json, /docs, /redoc) behind
+    # admin auth. The built-in versions were disabled in the FastAPI(...) ctor.
+    add_authenticated_docs_routes(application)
 
     # Ensure all routes have auth enabled or are explicitly marked as public
     check_router_auth(application)

@@ -20,4 +20,11 @@ spec:
       path: /metrics
       interval: 30s
       scrapeTimeout: 10s
+      {{- if and .Values.auth.metricsToken (ne (toString .Values.auth.metricsToken.enabled) "false") }}
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ include "onyx.secretName" .Values.auth.metricsToken }}
+          key: {{ default "metrics_auth_token" .Values.auth.metricsToken.secretKeys.METRICS_AUTH_TOKEN }}
+      {{- end }}
 {{- end }}
