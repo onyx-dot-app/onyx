@@ -4,7 +4,6 @@ SessionManager is the main entry point for build session lifecycle management.
 It orchestrates session CRUD, message handling, artifact management, and file system access.
 """
 
-import contextvars
 import hashlib
 import io
 import mimetypes
@@ -12,8 +11,6 @@ import uuid
 import zipfile
 from collections.abc import Callable
 from collections.abc import Generator
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
@@ -75,6 +72,8 @@ from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.skills.push import build_user_skills_payload
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import FunctionCall
+from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -199,9 +198,19 @@ class SessionManager:
         return get_user_build_sessions(user_id, self._db_session)
 
     def _hydrate_skills(
-        self, sandbox_id: UUID, user: User, files: FileSet | None = None
+        self, sandbox_id: UUID, user_id: UUID, files: FileSet | None = None
     ) -> None:
         try:
+            # When the caller prebuilt ``files`` (e.g. the parallel create-session
+            # warm-up) we never touch the ORM, so this is thread-safe.
+            user = (
+                None
+                if files is not None
+                else fetch_user_by_id(self._db_session, user_id)
+            )
+            if files is None and user is None:
+                logger.warning("Cannot push skills: user %s not found", user_id)
+                return
             hydrate_sandbox_skills(sandbox_id, user, self._db_session, files=files)
         except Exception:
             logger.warning(
@@ -378,6 +387,8 @@ class SessionManager:
         # opencode-serve binding, workspace setup (bun install + Next.js), and
         # the managed-dir pushes share no ordering — only a Ready pod. Fan them
         # out so the slowest, not their sum, sets the wall-clock.
+        # run_functions_in_parallel propagates contextvars (tenant id, tracing)
+        # and re-raises the first failure.
         def _wait_serve() -> None:
             if not self._sandbox_manager.wait_for_serve_ready(sandbox_id):
                 raise RuntimeError(
@@ -395,23 +406,35 @@ class SessionManager:
                 user_name=user_name,
             )
 
-        tasks: list[Callable[[], None]] = [
-            _wait_serve,
-            _setup_workspace,
-            lambda: self._hydrate_skills(sandbox_id, user, skills_files),
-            lambda: self._hydrate_user_library(sandbox_id, user_id, user_library_files),
-        ]
-
-        with ThreadPoolExecutor(
-            max_workers=len(tasks), thread_name_prefix="session-warmup"
-        ) as executor:
-            # ThreadPoolExecutor doesn't copy contextvars; run each task in its
-            # own copy so the tenant id + tracing context propagate.
-            futures = [
-                executor.submit(contextvars.copy_context().run, task) for task in tasks
-            ]
-            for future in as_completed(futures):
-                future.result()
+        try:
+            run_functions_in_parallel(
+                [
+                    FunctionCall(_wait_serve),
+                    FunctionCall(_setup_workspace),
+                    FunctionCall(
+                        self._hydrate_skills, (sandbox_id, user_id, skills_files)
+                    ),
+                    FunctionCall(
+                        self._hydrate_user_library,
+                        (sandbox_id, user_id, user_library_files),
+                    ),
+                ]
+            )
+        except Exception:
+            # A failed warm-up (e.g. serve never bound) can leave a partial
+            # workspace + Next.js dev server holding nextjs_port. Tear it down so
+            # the rolled-back nextjs_port can be reused without colliding.
+            try:
+                self._sandbox_manager.cleanup_session_workspace(
+                    sandbox_id, build_session_id, nextjs_port
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to clean up partial workspace for session %s",
+                    build_session_id,
+                    exc_info=True,
+                )
+            raise
 
         logger.info(
             "Successfully created session %s with workspace in sandbox %s",
@@ -468,11 +491,7 @@ class SessionManager:
                     )
                 )
                 if is_healthy and workspace_exists:
-                    user = fetch_user_by_id(self._db_session, user_id)
-                    if user is None:
-                        logger.warning("Cannot push skills: user %s not found", user_id)
-                    else:
-                        self._hydrate_skills(sandbox.id, user)
+                    self._hydrate_skills(sandbox.id, user_id)
                     self._hydrate_user_library(sandbox.id, user_id)
                     logger.info(
                         "Returning existing empty session %s for user %s",
