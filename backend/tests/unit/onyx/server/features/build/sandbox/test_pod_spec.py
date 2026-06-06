@@ -101,6 +101,16 @@ def test_pod_has_sandbox_and_sidecar_with_distinct_entrypoints(
     assert by_name["sidecar"].command == ["/workspace/sidecar-entrypoint.sh"]
 
 
+def test_irsa_skip_containers_annotation_targets_sandbox_container(
+    pod: client.V1Pod,
+) -> None:
+    annotations = pod.metadata.annotations or {}
+    assert (
+        annotations["eks.amazonaws.com/skip-containers"]
+        == _container(pod, "sandbox").name
+    )
+
+
 # ---------------------------------------------------------------------------
 # Push daemon / snapshot API placement (sidecar only)
 # ---------------------------------------------------------------------------

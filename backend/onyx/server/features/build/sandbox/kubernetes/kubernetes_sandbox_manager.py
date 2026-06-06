@@ -147,6 +147,7 @@ _PROXY_CA_SOURCE_VOLUME = "sandbox-ca-source"
 # Pinned to the proxy IP via pod hostAliases — the iptables lockdown
 # blocks DNS, so the sandbox can't resolve it on its own.
 _PROXY_ALIAS = "sandbox-proxy"
+_SANDBOX_CONTAINER_NAME = "sandbox"
 
 # Per-session egress tagging plugin, baked into the sandbox image (see
 # docker/Dockerfile). Path must match the COPY destination there.
@@ -582,7 +583,7 @@ class KubernetesSandboxManager(SandboxManager):
             )
 
         sandbox_container = client.V1Container(
-            name="sandbox",
+            name=_SANDBOX_CONTAINER_NAME,
             image=self._image,
             image_pull_policy="IfNotPresent",
             command=["/workspace/entrypoint.sh"],
@@ -803,7 +804,9 @@ class KubernetesSandboxManager(SandboxManager):
                 namespace=self._namespace,
                 # The pod-identity webhook reads skip-containers from the POD, not the
                 # SA — keep the IRSA token out of the untrusted agent container.
-                annotations={"eks.amazonaws.com/skip-containers": "sandbox"},
+                annotations={
+                    "eks.amazonaws.com/skip-containers": _SANDBOX_CONTAINER_NAME
+                },
                 labels={
                     LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
                     LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
@@ -932,7 +935,7 @@ class KubernetesSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         *,
-        container: str = "sandbox",
+        container: str = _SANDBOX_CONTAINER_NAME,
         tail_lines: int = 200,
     ) -> Iterator[str]:
         """Yield log lines from a sandbox pod's container as they arrive.
@@ -1649,7 +1652,7 @@ echo "Session workspace setup complete"
                 name=pod_name,
                 namespace=self._namespace,
                 command=["/bin/sh", "-c", setup_script],
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 stderr=True,
                 stdin=False,
                 stdout=True,
@@ -1718,7 +1721,7 @@ echo "Session cleanup complete"
                 name=pod_name,
                 namespace=self._namespace,
                 command=["/bin/sh", "-c", cleanup_script],
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 stderr=True,
                 stdin=False,
                 stdout=True,
@@ -1823,7 +1826,7 @@ echo "Session cleanup complete"
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=exec_command,
                 stderr=True,
                 stdin=False,
@@ -1866,7 +1869,7 @@ echo "Session cleanup complete"
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=exec_command,
                 stderr=True,
                 stdin=False,
@@ -1968,7 +1971,7 @@ echo "Session cleanup complete"
                     self._stream_core_api.connect_get_namespaced_pod_exec,
                     name=pod_name,
                     namespace=self._namespace,
-                    container="sandbox",
+                    container=_SANDBOX_CONTAINER_NAME,
                     command=["/bin/sh", "-c", start_script],
                     stderr=True,
                     stdin=False,
@@ -2023,7 +2026,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             self._stream_core_api.connect_get_namespaced_pod_exec,
             name=pod_name,
             namespace=self._namespace,
-            container="sandbox",
+            container=_SANDBOX_CONTAINER_NAME,
             command=["/bin/sh", "-c", config_script],
             stderr=True,
             stdin=False,
@@ -2113,7 +2116,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=exec_command,
                 stderr=True,
                 stdin=False,
@@ -2243,7 +2246,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=exec_command,
                 stderr=True,
                 stdin=False,
@@ -2321,7 +2324,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=exec_command,
                 stderr=True,
                 stdin=False,
@@ -2409,7 +2412,7 @@ fi
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=["/bin/sh", "-c", script],
                 stderr=True,
                 stdin=False,
@@ -2507,7 +2510,7 @@ echo "$base"
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=["/bin/sh", "-c", script],
                 stdin=True,
                 stdout=True,
@@ -2612,7 +2615,7 @@ echo "$base"
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=exec_command,
                 stdin=False,
                 stdout=True,
@@ -2660,7 +2663,7 @@ echo WRITE_OK"""
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=["/bin/sh", "-c", script],
                 stdin=False,
                 stdout=True,
@@ -2712,7 +2715,7 @@ fi
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=exec_command,
                 stdin=False,
                 stdout=True,
