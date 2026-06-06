@@ -3,6 +3,10 @@
     "playwright": {
       "command": "npx",
       "args": ["@playwright/mcp@0.0.75", "--headless", "--isolated"]
+    },
+    "agent-wiki": {
+      "type": "http",
+      "url": "https://dev-wiki.onyx.app/api/mcp"
     }
   }
 }
