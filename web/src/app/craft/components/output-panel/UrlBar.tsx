@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { cn } from "@opal/utils";
+import { cn, copyText } from "@opal/utils";
 import { Text, Button } from "@opal/components";
 import {
   SvgDownloadCloud,
@@ -10,6 +10,7 @@ import {
   SvgArrowRight,
   SvgExternalLink,
   SvgRevert,
+  SvgCheck,
 } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import { Tooltip } from "@opal/components";
@@ -71,9 +72,40 @@ export default function UrlBar({
   sharingScope = "private",
   onScopeChange,
 }: UrlBarProps) {
+  const [copyState, setCopyState] = React.useState<"idle" | "copied">("idle");
+  const copyResetTimeoutRef = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const isUrlCopied = copyState === "copied";
+
+  React.useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current) {
+        clearTimeout(copyResetTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleOpenInNewTab = () => {
     if (previewUrl) {
       window.open(previewUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const handleCopyUrl = async () => {
+    if (copyResetTimeoutRef.current) {
+      clearTimeout(copyResetTimeoutRef.current);
+    }
+
+    try {
+      await copyText(displayUrl);
+      setCopyState("copied");
+      copyResetTimeoutRef.current = setTimeout(() => {
+        setCopyState("idle");
+      }, 1500);
+    } catch (err) {
+      console.error("Failed to copy URL:", err);
+      setCopyState("idle");
     }
   };
 
@@ -136,26 +168,48 @@ export default function UrlBar({
           )}
           {/* Open in new tab button - only shown for Preview tab with valid URL */}
           {previewUrl && (
-            <Tooltip tooltip="open in a new tab" delayDuration={200}>
+            <Tooltip
+              tooltip={isUrlCopied ? "Copied URL" : "open in a new tab"}
+              delayDuration={200}
+            >
               <button
                 onClick={handleOpenInNewTab}
                 className="shrink-0 p-0.5 rounded-sm transition-colors hover:bg-background-tint-03 text-text-03"
-                aria-label="open in a new tab"
+                aria-label={
+                  isUrlCopied
+                    ? "Copied URL; open in a new tab"
+                    : "open in a new tab"
+                }
               >
-                <SvgExternalLink size={14} />
+                {isUrlCopied ? (
+                  <SvgCheck
+                    key="copied"
+                    size={14}
+                    className="animate-in fade-in-0 zoom-in-95 duration-200 stroke-status-success-05"
+                  />
+                ) : (
+                  <SvgExternalLink
+                    key="open"
+                    size={14}
+                    className="transition-transform duration-200"
+                  />
+                )}
               </button>
             </Tooltip>
           )}
           <div className="min-w-0 flex-1 overflow-hidden">
-            <Text
-              as="p"
-              font="secondary-body"
-              color="text-03"
-              maxLines={1}
-              title={displayUrl}
-            >
-              {displayUrl}
-            </Text>
+            <Tooltip tooltip={displayUrl} side="bottom" delayDuration={200}>
+              <button
+                type="button"
+                onClick={handleCopyUrl}
+                className="block w-full min-w-0 cursor-pointer text-left focus:outline-hidden"
+                aria-label={`Copy URL: ${displayUrl}`}
+              >
+                <Text as="p" font="secondary-body" color="text-03" maxLines={1}>
+                  {displayUrl}
+                </Text>
+              </button>
+            </Tooltip>
           </div>
         </div>
         {/* Export button — shown for downloadable file previews (e.g. markdown → docx) */}
