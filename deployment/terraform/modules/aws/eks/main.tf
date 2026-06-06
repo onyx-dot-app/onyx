@@ -7,8 +7,8 @@ locals {
   # Optional dedicated node group for sandbox pods (nodeSelector/toleration below).
   # IMDSv2 hop-limit 1 blocks sandboxed containers from the node metadata service.
   craft_sandbox_node_groups = var.enable_craft_sandbox_node_group ? {
-    craft_sandbox = {
-      name           = "craft-sandbox-node-group"
+    sandbox = {
+      name           = "sandbox-node-group"
       instance_types = var.craft_sandbox_node_instance_types
       min_size       = var.craft_sandbox_node_min_size
       max_size       = var.craft_sandbox_node_max_size
