@@ -76,7 +76,6 @@ export function useContentEditable({
   const rafRef = useRef<number | null>(null);
   const wrapperPaddingYRef = useRef(0);
   const selectedTileRef = useRef<HTMLElement | null>(null);
-  // Set by a Ctrl/Cmd+Shift+V keydown so the imminent paste stays plain text.
   const plainPasteRef = useRef(false);
   const [tilePopover, setTilePopover] = useState<PasteTileData | null>(null);
   const [pasteExpandHintVisible, setPasteExpandHintVisible] = useState(false);
@@ -167,9 +166,8 @@ export function useContentEditable({
     const text = getTextContent(el);
     messageRef.current = text;
     setMessageState(text);
-    // The "paste again to expand" hint lives as long as a paste tile does.
     setPasteExpandHintVisible(
-      !!el.querySelector('[data-rich-tile]:not([data-tile-type="skill"])')
+      !!el.querySelector('[data-rich-tile][data-tile-type="paste"]')
     );
     onContentChangeRef.current?.(text);
     return text;
@@ -207,6 +205,7 @@ export function useContentEditable({
 
   const handleCompositionEnd = useCallback(() => {
     isComposingRef.current = false;
+    plainPasteRef.current = false;
     syncFromDOM();
     resize();
   }, [syncFromDOM, resize]);
@@ -336,7 +335,6 @@ export function useContentEditable({
     [syncFromDOM, resize]
   );
 
-  // The existing paste tile whose content equals `text`, if any (skill tiles excluded).
   const findMatchingPasteTile = useCallback(
     (text: string): HTMLElement | null => {
       const el = ref.current;
@@ -360,7 +358,6 @@ export function useContentEditable({
       plainPasteRef.current = false;
 
       if (pasteTilesEnabled && !plainPaste && shouldCreatePasteTile(text)) {
-        // Same clipboard as an existing tile → expand it instead of duplicating.
         const existing = findMatchingPasteTile(text);
         if (existing) {
           expandTile(existing);
@@ -492,8 +489,7 @@ export function useContentEditable({
       const isPasteShortcut =
         (event.ctrlKey || event.metaKey) &&
         (event.key === "v" || event.key === "V");
-      // A Ctrl/Cmd+Shift+V arms a plain paste; any other (non-modifier) key
-      // disarms it so a stale flag can't hijack a later normal paste.
+      // Arm plain paste on Ctrl/Cmd+Shift+V; any other key disarms a stale flag.
       if (isPasteShortcut) {
         plainPasteRef.current = event.shiftKey;
       } else if (!isModifier) {
@@ -650,6 +646,7 @@ export function useContentEditable({
       event.clipboardData.setData("text/plain", getTextContent(temp));
 
       range.deleteContents();
+      selectedTileRef.current = null;
       syncFromDOM();
       resize();
     },

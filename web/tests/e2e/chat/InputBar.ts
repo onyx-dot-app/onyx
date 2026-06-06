@@ -100,7 +100,6 @@ export class InputBar {
     }, text);
   }
 
-  /** Paste preceded by a Ctrl+Shift+V keydown (plain paste — never tiles). */
   async pastePlain(text: string): Promise<void> {
     await this.page.evaluate((t) => {
       const el = document.getElementById("onyx-chat-input-textbox")!;
@@ -127,7 +126,6 @@ export class InputBar {
     }, text);
   }
 
-  /** Dispatch a Ctrl+Shift+V keydown only (arms plain paste, no paste follows). */
   async armPlainPaste(): Promise<void> {
     await this.page.evaluate(() => {
       const el = document.getElementById("onyx-chat-input-textbox")!;
