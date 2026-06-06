@@ -90,6 +90,45 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.JIRA,
         ),
+        "JIRA_SERVICE_MANAGEMENT": KGEntityTypeDefinition(
+            description=(
+                "A formal Jira Service Management ticket about a customer issue or request."
+            ),
+            attributes=KGEntityTypeAttributes(
+                metadata_attribute_conversion={
+                    "issuetype": KGAttributeProperty(name="subtype", keep=True),
+                    "status": KGAttributeProperty(name="status", keep=True),
+                    "priority": KGAttributeProperty(name="priority", keep=True),
+                    "project_name": KGAttributeProperty(name="project", keep=True),
+                    "created": KGAttributeProperty(name="created_at", keep=True),
+                    "updated": KGAttributeProperty(name="updated_at", keep=True),
+                    "resolution_date": KGAttributeProperty(
+                        name="completed_at", keep=True
+                    ),
+                    "duedate": KGAttributeProperty(name="due_date", keep=True),
+                    "reporter_email": KGAttributeProperty(
+                        name="creator",
+                        keep=False,
+                        implication_property=KGAttributeImplicationProperty(
+                            implied_entity_type=KGAttributeEntityOption.FROM_EMAIL,
+                            implied_relationship_name="is_creator_of",
+                        ),
+                    ),
+                    "assignee_email": KGAttributeProperty(
+                        name="assignee",
+                        keep=False,
+                        implication_property=KGAttributeImplicationProperty(
+                            implied_entity_type=KGAttributeEntityOption.FROM_EMAIL,
+                            implied_relationship_name="is_assignee_of",
+                        ),
+                    ),
+                    "key": KGAttributeProperty(name="key", keep=True),
+                    "parent": KGAttributeProperty(name="parent", keep=True),
+                },
+            ),
+            grounding=KGGroundingType.GROUNDED,
+            grounded_source_name=DocumentSource.JIRA_SERVICE_MANAGEMENT,
+        ),
         "GITHUB_PR": KGEntityTypeDefinition(
             description="A formal engineering request to merge proposed changes into the codebase.",
             attributes=KGEntityTypeAttributes(
