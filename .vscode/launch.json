@@ -139,6 +139,8 @@
       "args": [
         "model_server.main:app",
         "--reload",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/skills/builtin",
         "--port",
         "9000"
       ],
@@ -163,6 +165,8 @@
       "args": [
         "onyx.main:app",
         "--reload",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/skills/builtin",
         "--port",
         "8080"
       ],
@@ -189,6 +193,8 @@
       "args": [
         "onyx.main:app",
         "--reload",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/skills/builtin",
         "--port",
         "8080"
       ],
@@ -252,6 +258,8 @@
       "args": [
         "onyx.mcp_server.api:mcp_app",
         "--reload",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/skills/builtin",
         "--port",
         "8090",
         "--timeout-graceful-shutdown",
