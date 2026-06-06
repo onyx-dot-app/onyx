@@ -117,6 +117,12 @@ variable "enable_craft_sandbox_node_group" {
   default     = false
 }
 
+variable "irsa_additional_service_accounts" {
+  type        = list(string)
+  description = "Extra SA names added to the workload IRSA role's trust policy — e.g. the Craft `<release>-sandbox-controller` SA when craft.dedicatedControllerServiceAccount is enabled in Helm."
+  default     = []
+}
+
 variable "craft_sandbox_node_instance_types" {
   type        = list(string)
   description = "Instance types for the Craft sandbox node group."

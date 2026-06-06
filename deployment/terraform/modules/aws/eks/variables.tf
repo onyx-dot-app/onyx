@@ -180,6 +180,12 @@ variable "irsa_service_account_name" {
   default     = "onyx-workload-access"
 }
 
+variable "irsa_additional_service_accounts" {
+  type        = list(string)
+  description = "Extra SA names (in irsa_service_account_namespace) to add to the workload IRSA role's trust policy — e.g. the Craft `<release>-sandbox-controller` SA so it can assume the same role."
+  default     = []
+}
+
 variable "enable_rds_iam_for_service_account" {
   type        = bool
   description = "Whether to create a dedicated RDS IRSA role and service account (grants rds-db:connect)"

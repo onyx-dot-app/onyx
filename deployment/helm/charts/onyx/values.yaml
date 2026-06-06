@@ -1472,6 +1472,18 @@ craft:
   sandboxFileSyncRoleArn: ""
   # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
   extraBoundServiceAccounts: []
+  # When true, create a dedicated `<release>-sandbox-controller` SA, bind the
+  # sandbox RBAC to ONLY it (not the shared workload SA), and run the three
+  # workloads that touch the sandbox k8s API under it: api_server, the heavy
+  # worker (cleanup_idle_sandboxes), and the scheduled-tasks worker
+  # (run_scheduled_task). Shrinks "who can exec into sandboxes" from every
+  # workload to just those three. Requires sandboxControllerRoleArn AND the
+  # workload IRSA role's trust policy to list this SA's OIDC subject.
+  dedicatedControllerServiceAccount: false
+  # Workload IRSA role ARN (eks module output `workload_irsa_role_arn`) annotated
+  # onto the controller SA so api_server/celery keep S3 + RDS. Required when
+  # dedicatedControllerServiceAccount=true.
+  sandboxControllerRoleArn: ""
 
 # -- Sandbox egress proxy.
 sandboxProxy:

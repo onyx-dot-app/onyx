@@ -38,7 +38,11 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if and (eq (include "onyx.craftEnabled" .) "true") .Values.craft.dedicatedControllerServiceAccount }}
+      serviceAccountName: {{ include "onyx.fullname" . }}-sandbox-controller
+      {{- else }}
       serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
       {{- with .Values.celery_worker_heavy.nodeSelector }}
