@@ -2,6 +2,16 @@
 
 Things to codify so enabling Craft on a new cluster becomes "set `ENABLE_CRAFT=true` in values.yaml" instead of following a manual setup guide. Each item is independent — ship in any order.
 
+Status in PR 11787:
+
+| Item | Status | Notes |
+|---|---|---|
+| 1. Helm sandbox RBAC + ServiceAccount | Covered | `templates/sandbox-namespace.yaml` renders the sandbox namespace, and `templates/sandbox-rbac.yaml` renders the `sandbox-file-sync` ServiceAccount, sandbox manager Role/RoleBinding, proxy service lookup Role/RoleBinding, and fails fast when the EKS IRSA role ARN is missing. |
+| 2. Terraform sandbox object store + workload identity | Covered | `modules/aws/craft_sandbox` creates or references the snapshot bucket, creates the S3 policy, creates the sandbox file-sync IRSA role, and outputs the role ARN/bucket name for Helm. |
+| 3. Node-group security-group composition | Covered | The sandbox managed node group uses the upstream shared node SG and explicitly sets `attach_cluster_primary_security_group=true`, so the launch template carries both the shared node SG and EKS primary cluster SG. |
+| 4. Node-group metadata-service hardening | Covered | The sandbox managed node group sets IMDSv2 required and hop-limit 1. |
+| 5. Network firewall | Not codified in this PR | Still valid and still independent. The runbook calls this out as remaining defense-in-depth work because it needs regional firewall subnets, route-table changes, and firewall rule deployment beyond this Terraform/Helm slice. |
+
 ## 1. Helm template: sandbox namespace RBAC + ServiceAccount
 
 Render everything in the sandbox namespace required for Craft via the Helm chart when `ENABLE_CRAFT=true`:

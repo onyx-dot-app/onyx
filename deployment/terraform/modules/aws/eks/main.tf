@@ -13,6 +13,10 @@ locals {
       min_size       = var.craft_sandbox_node_min_size
       max_size       = var.craft_sandbox_node_max_size
       desired_size   = var.craft_sandbox_node_desired_size
+      # The upstream EKS module always adds the shared node security group.
+      # Attach the EKS primary cluster SG too so sandbox nodes match normal
+      # managed node group connectivity assumptions.
+      attach_cluster_primary_security_group = true
       labels = {
         "onyx.app/workload" = "sandbox"
       }
