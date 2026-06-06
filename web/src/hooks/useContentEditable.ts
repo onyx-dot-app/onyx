@@ -293,6 +293,10 @@ export function useContentEditable({
       const el = ref.current;
       if (!el || !el.contains(tile)) return;
 
+      const sel = window.getSelection();
+      const caret =
+        sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
+
       const textNode = document.createTextNode(
         tile.getAttribute("data-text") ?? ""
       );
@@ -302,8 +306,19 @@ export function useContentEditable({
       setTilePopover(null);
 
       el.focus();
-      setCursorAfterNode(textNode);
-      el.normalize();
+      // Restore the caret if it's still in the input; a caret on the now-detached
+      // tile (or in the popover) fails this and falls back to the text end.
+      if (
+        caret &&
+        el.contains(caret.startContainer) &&
+        el.contains(caret.endContainer)
+      ) {
+        sel!.removeAllRanges();
+        sel!.addRange(caret);
+      } else {
+        setCursorAfterNode(textNode);
+        el.normalize();
+      }
 
       syncFromDOM();
       resize();
