@@ -34,6 +34,7 @@ from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import enforce_seat_limit_locked
 from onyx.auth.users import optional_user
+from onyx.auth.users import scope_exempt
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
@@ -119,6 +120,7 @@ from onyx.server.models import MinimalUserSnapshot
 from onyx.server.models import UserGroupInfo
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
+from onyx.utils.csv_utils import sanitize_csv_cell
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import (
@@ -412,11 +414,13 @@ def download_users_csv(
     # Write CSV header
     writer.writerow(["Email", "Role", "Status"])
 
-    # Write user data
+    # Write user data. Emails are user-supplied (a local part can legally
+    # start with a formula trigger like `=`), so sanitize to prevent
+    # CSV/formula injection against the admin opening the export.
     for user in users:
         writer.writerow(
             [
-                user.email,
+                sanitize_csv_cell(user.email),
                 user.role.value if user.role else "",
                 "Active" if user.is_active else "Inactive",
             ]
@@ -873,7 +877,7 @@ def get_current_user_permissions(
     return sorted(p.value for p in get_effective_permissions(user))
 
 
-@router.get("/me", tags=PUBLIC_API_TAGS)
+@router.get("/me", tags=PUBLIC_API_TAGS, dependencies=[Depends(scope_exempt)])
 def verify_user_logged_in(
     request: Request,
     user: User | None = Depends(optional_user),

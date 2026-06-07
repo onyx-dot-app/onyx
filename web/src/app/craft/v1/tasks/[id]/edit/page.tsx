@@ -4,9 +4,8 @@ import { useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { SettingsLayouts } from "@opal/layouts";
-import { SvgClock } from "@opal/icons";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import Text from "@/refresh-components/texts/Text";
+import { SvgClock, SvgSimpleLoader } from "@opal/icons";
+import { Text } from "@opal/components";
 import ScheduleTaskForm, {
   type ScheduleTaskFormInitial,
 } from "@/app/craft/v1/tasks/components/ScheduleTaskForm";
@@ -42,7 +41,7 @@ export default function EditScheduledTaskPage() {
           divider
         />
         <SettingsLayouts.Body>
-          <Text mainUiBody text03>
+          <Text font="main-ui-body" color="text-03">
             Missing task id.
           </Text>
         </SettingsLayouts.Body>
@@ -62,10 +61,10 @@ export default function EditScheduledTaskPage() {
         <SettingsLayouts.Body>
           {isLoading ? (
             <div className="flex justify-center py-12">
-              <SimpleLoader className="h-6 w-6" />
+              <SvgSimpleLoader className="h-6 w-6" />
             </div>
           ) : (
-            <Text mainUiBody text03>
+            <Text font="main-ui-body" color="text-03">
               Failed to load scheduled task.
             </Text>
           )}
@@ -100,5 +99,6 @@ function toFormInitial(detail: ScheduledTaskDetail): ScheduleTaskFormInitial {
     prompt: detail.prompt,
     mode,
     payload,
+    preApprovedAppIds: detail.pre_approved_app_ids,
   };
 }

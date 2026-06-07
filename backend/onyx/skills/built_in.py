@@ -17,7 +17,7 @@ sandbox-injection query, not here.
 Everything else is derived from the registry, which validates at import that no
 two providers share a ``skill_id`` or an ``app_type``. Adding a built-in skill
 or external app is a single ``_REGISTRY`` entry plus its on-disk
-``skills/<skill_id>/`` directory.
+``builtin/<skill_id>/`` directory.
 """
 
 import re
@@ -35,7 +35,10 @@ from pydantic import model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
-from onyx.server.features.build.configs import SKILLS_TEMPLATE_PATH
+
+# On-disk root for built-in skill content (one ``<skill_id>/`` dir each). Pushed
+# to sandboxes at session setup; not baked into the sandbox image.
+BUILTIN_SKILLS_PATH: Final[Path] = Path(__file__).parent / "builtin"
 
 # Slug grammar shared with custom bundle slugs (bundle.py imports this).
 SKILL_SLUG_PATTERN: Final[str] = r"^[a-z][a-z0-9-]{0,63}$"
@@ -49,12 +52,12 @@ def _always_available(_: Session) -> bool:
 class BuiltInSkillDefinition(BaseModel):
     """Runtime behavior for one built-in skill (the resolved view a provider
     produces). ``built_in_skill_id`` is the stable identifier, seeded slug, and
-    on-disk directory name under ``SKILLS_TEMPLATE_PATH`` — which fully
+    on-disk directory name under ``BUILTIN_SKILLS_PATH`` — which fully
     determines ``source_dir`` and ``has_template``, so both are computed.
 
     ``extra="forbid"`` makes a stray ``source_dir=`` (e.g. an old test trying to
     inject one) fail loud rather than be silently dropped; redirect via
-    ``SKILLS_TEMPLATE_PATH`` instead.
+    ``BUILTIN_SKILLS_PATH`` instead.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -63,12 +66,12 @@ class BuiltInSkillDefinition(BaseModel):
     is_available: Callable[[Session], bool] = _always_available
     unavailable_reason: str | None = None
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def source_dir(self) -> Path:
-        return Path(SKILLS_TEMPLATE_PATH) / self.built_in_skill_id
+        return BUILTIN_SKILLS_PATH / self.built_in_skill_id
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def has_template(self) -> bool:
         # Disk-derived so it can't drift from the actual source layout.
@@ -171,7 +174,11 @@ _REGISTRY: Final = BuiltInSkillRegistry(
         ExternalAppBuiltInProvider(
             skill_id="google-calendar", app_type=ExternalAppType.GOOGLE_CALENDAR
         ),
+        ExternalAppBuiltInProvider(
+            skill_id="google-drive", app_type=ExternalAppType.GOOGLE_DRIVE
+        ),
         ExternalAppBuiltInProvider(skill_id="gmail", app_type=ExternalAppType.GMAIL),
+        ExternalAppBuiltInProvider(skill_id="github", app_type=ExternalAppType.GITHUB),
     )
 )
 
@@ -183,6 +190,12 @@ BUILT_IN_SKILLS: Final[dict[str, BuiltInSkillDefinition]] = (
 EXTERNAL_APP_BUILT_IN_SKILL_IDS: Final[dict[ExternalAppType, str]] = (
     _REGISTRY.external_app_skill_ids
 )
+# Inverse of the above: ``built_in_skill_id -> app_type``. Lets the skill push
+# path go from a ``Skill`` row's ``built_in_skill_id`` back to the provider
+# catalog without touching the DB. Skill ids are unique, so the inverse is too.
+EXTERNAL_APP_SKILL_ID_TO_APP_TYPE: Final[dict[str, ExternalAppType]] = {
+    skill_id: app_type for app_type, skill_id in EXTERNAL_APP_BUILT_IN_SKILL_IDS.items()
+}
 
 # Named handles so callers avoid bare slug literals.
 COMPANY_SEARCH: Final[BuiltInSkillDefinition] = BUILT_IN_SKILLS["company-search"]

@@ -14,6 +14,7 @@ yielded SSE text.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
@@ -37,8 +38,8 @@ from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
 from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
-from onyx.server.features.build.session.manager import BuildStreamingState
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.streaming import BuildStreamingState
 from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 
 
@@ -241,6 +242,54 @@ class TestStreamingPersistence:
             if (m.message_metadata or {}).get("type") == "agent_message"
         ]
         assert agent_messages == []
+
+    def test_existing_session_event_subscription_streams_without_persisting(
+        self,
+        db_session: Session,
+        test_user: User,
+        build_session: BuildSession,
+        sandbox: Callable[..., Sandbox],
+        session_manager_with_stub: SessionManager,
+        stub_sandbox_manager: StubSandboxManager,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """Live viewers receive ACP SSE without becoming a second DB writer."""
+        sandbox_row = sandbox(user=test_user)
+        build_session.opencode_session_id = "opencode-live-session"
+        db_session.commit()
+
+        stub_sandbox_manager.subscribe_to_opencode_session_events = [
+            _text_chunk("live text"),
+            SSEKeepalive(),
+            _prompt_response(),
+        ]
+
+        frames = list(
+            session_manager_with_stub.subscribe_to_existing_session_events(
+                build_session.id,
+                test_user.id,
+                keepalive_seconds=0.5,
+            )
+        )
+
+        assert stub_sandbox_manager.subscribe_to_opencode_session_count == 1
+        assert stub_sandbox_manager.last_subscribe_to_opencode_session_payload == {
+            "sandbox_id": sandbox_row.id,
+            "opencode_session_id": "opencode-live-session",
+            "directory": f"/workspace/sessions/{build_session.id}",
+            "keepalive_seconds": 0.5,
+        }
+        assert ": keepalive\n\n" in frames
+
+        data_frames = [frame for frame in frames if frame.startswith("event: message")]
+        payloads = [
+            json.loads(frame.split("data: ", maxsplit=1)[1]) for frame in data_frames
+        ]
+        assert [payload["type"] for payload in payloads] == [
+            "agent_message_chunk",
+            "prompt_response",
+        ]
+        assert get_session_messages(build_session.id, db_session) == []
 
     def test_tool_call_start_never_persisted(
         self,

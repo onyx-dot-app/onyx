@@ -82,8 +82,6 @@ configMap:
   SANDBOX_API_SERVER_URL: "http://host.docker.internal:3000"
   ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
 
-# Can't be disabled when ENABLE_CRAFT=true: sandbox pods won't start
-# without the CA ConfigMap the proxy projects.
 sandboxProxy:
   replicaCount: 1
   resources:

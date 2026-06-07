@@ -19,8 +19,7 @@ async function readErrorDetail(
   return data.detail ?? `${fallback} (HTTP ${res.status}).`;
 }
 
-interface UpsertExternalAppBody {
-  id: number | null;
+interface CreateBuiltInExternalAppBody {
   name: string;
   description: string;
   app_type: ExternalAppType;
@@ -28,14 +27,19 @@ interface UpsertExternalAppBody {
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
   enabled: boolean;
-  // Full replace when present; omit to leave stored policies untouched.
+  // Full replace when present; omit to default every action to ASK.
   action_policies?: Record<string, EndpointPolicy>;
 }
 
-export async function upsertExternalApp(
-  body: UpsertExternalAppBody
+/**
+ * Create a built-in external app (`POST /admin/apps/built-in`). Built-in
+ * providers only — custom apps use {@link createCustomExternalApp}. Updates go
+ * through {@link updateExternalApp}.
+ */
+export async function createBuiltInExternalApp(
+  body: CreateBuiltInExternalAppBody
 ): Promise<ExternalAppAdminResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/admin/apps`, {
+  const res = await fetch(`${BUILD_API_BASE}/admin/apps/built-in`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -46,30 +50,27 @@ export async function upsertExternalApp(
   return res.json();
 }
 
-interface UpsertCustomExternalAppInput {
-  /** Omit to create; set to edit an existing custom app. */
-  id?: number;
+interface CreateCustomExternalAppInput {
   name: string;
   description: string;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
   enabled: boolean;
-  /** Required on create; optional on edit (when set, replaces the bundle). */
-  bundle?: File;
+  /** Required — the skill bundle whose filename becomes the app slug. */
+  bundle: File;
 }
 
 /**
- * Create or edit a CUSTOM external app. Custom apps go through this multipart
- * endpoint (never the JSON `/admin/apps`) so their bundle can be uploaded or
- * replaced. The structured fields are JSON-encoded form strings to match the
- * backend's `POST /admin/apps/custom` handler.
+ * Create a CUSTOM external app (`POST /admin/apps/custom`). Multipart so the
+ * bundle can be uploaded; structured fields are JSON-encoded form strings.
+ * Field edits go through {@link updateExternalApp}; bundle replacement through
+ * {@link replaceCustomAppBundle}.
  */
-export async function upsertCustomExternalApp(
-  input: UpsertCustomExternalAppInput
+export async function createCustomExternalApp(
+  input: CreateCustomExternalAppInput
 ): Promise<ExternalAppAdminResponse> {
   const form = new FormData();
-  if (input.id !== undefined) form.append("app_id", String(input.id));
   form.append("name", input.name);
   form.append("description", input.description);
   form.append("enabled", String(input.enabled));
@@ -82,7 +83,7 @@ export async function upsertCustomExternalApp(
     "organization_credentials",
     JSON.stringify(input.organization_credentials)
   );
-  if (input.bundle) form.append("bundle", input.bundle);
+  form.append("bundle", input.bundle);
 
   // No explicit Content-Type — the browser sets the multipart boundary.
   const res = await fetch(`${BUILD_API_BASE}/admin/apps/custom`, {
@@ -96,36 +97,68 @@ export async function upsertCustomExternalApp(
 }
 
 /**
- * Toggle `enabled` without touching credentials. Custom apps route through the
- * custom endpoint (resending their current config, no bundle); built-in
- * providers use the JSON endpoint.
+ * Replace a custom app's bundle bytes, keeping its slug
+ * (`PUT /admin/apps/{id}/bundle`). The only multipart channel for edits; all
+ * other field edits go through {@link updateExternalApp}.
+ */
+export async function replaceCustomAppBundle(
+  id: number,
+  bundle: File
+): Promise<ExternalAppAdminResponse> {
+  const form = new FormData();
+  form.append("bundle", bundle);
+
+  const res = await fetch(`${BUILD_API_BASE}/admin/apps/${id}/bundle`, {
+    method: "PUT",
+    body: form,
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Bundle replace failed"));
+  }
+  return res.json();
+}
+
+interface UpdateExternalAppBody {
+  // Every field is optional; omit to leave the stored value untouched.
+  enabled?: boolean;
+  name?: string;
+  description?: string;
+  upstream_url_patterns?: string[];
+  auth_template?: Record<string, string>;
+  organization_credentials?: Record<string, string>;
+  // Full replace when present; omit to leave stored policies untouched.
+  action_policies?: Record<string, EndpointPolicy>;
+}
+
+/**
+ * Partial update of any app (PATCH /admin/apps/{id}). For Onyx-managed built-ins
+ * the gateway-config fields are ignored server-side (only enablement + policies
+ * apply); a custom app's bundle bytes go through {@link replaceCustomAppBundle}.
+ */
+export async function updateExternalApp(
+  id: number,
+  body: UpdateExternalAppBody
+): Promise<ExternalAppAdminResponse> {
+  const res = await fetch(`${BUILD_API_BASE}/admin/apps/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Save failed"));
+  }
+  return res.json();
+}
+
+/**
+ * Toggle `enabled` without touching credentials or stored policies — works the
+ * same for built-in and custom apps via the PATCH endpoint.
  */
 export async function setExternalAppEnabled(
   app: ExternalAppAdminResponse,
   enabled: boolean
 ): Promise<ExternalAppAdminResponse> {
-  if (app.app_type === "CUSTOM") {
-    return upsertCustomExternalApp({
-      id: app.id,
-      name: app.name,
-      description: app.description,
-      upstream_url_patterns: app.upstream_url_patterns,
-      auth_template: app.auth_template,
-      organization_credentials: app.organization_credentials,
-      enabled,
-    });
-  }
-  return upsertExternalApp({
-    id: app.id,
-    name: app.name,
-    description: app.description,
-    app_type: app.app_type,
-    upstream_url_patterns: app.upstream_url_patterns,
-    auth_template: app.auth_template,
-    organization_credentials: app.organization_credentials,
-    enabled,
-    // action_policies omitted: a toggle must not touch stored policies.
-  });
+  return updateExternalApp(app.id, { enabled });
 }
 
 export async function deleteExternalApp(id: number): Promise<void> {

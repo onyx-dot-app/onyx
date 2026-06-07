@@ -195,6 +195,32 @@ fetch_latest_release_tag() {
     return 0
 }
 
+# Craft sandbox backend for an image tag. The docker backend exists only in
+# v4.0.6+; older pinned tags get "kubernetes" (rolling tags track newest).
+sandbox_backend_for_tag() {
+    local ver="${1#craft-}"; ver="${ver#v}"; ver="${ver%%-*}"
+    printf '%s' "$ver" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo docker; return; }
+    local major="${ver%%.*}" rest="${ver#*.}"
+    local minor="${rest%%.*}" patch="${rest#*.}"
+    if [ "$major" -gt 4 ] ||
+        { [ "$major" -eq 4 ] && [ "$minor" -gt 0 ]; } ||
+        { [ "$major" -eq 4 ] && [ "$minor" -eq 0 ] && [ "$patch" -ge 6 ]; }; then
+        echo docker
+    else
+        echo kubernetes
+    fi
+}
+
+# Write SANDBOX_BACKEND to .env for image tag $1; sets SANDBOX_BACKEND_VALUE.
+set_sandbox_backend_for_tag() {
+    SANDBOX_BACKEND_VALUE="$(sandbox_backend_for_tag "$1")"
+    if grep -q "^#* *SANDBOX_BACKEND=" "$ENV_FILE"; then
+        sed -i.bak "s/^#* *SANDBOX_BACKEND=.*/SANDBOX_BACKEND=$SANDBOX_BACKEND_VALUE/" "$ENV_FILE"
+    else
+        echo "SANDBOX_BACKEND=$SANDBOX_BACKEND_VALUE" >> "$ENV_FILE"
+    fi
+}
+
 # --- Docker Compose detection ---
 # Sets COMPOSE_CMD to "docker compose" (plugin) or "docker-compose" (standalone).
 # Returns 0 if either is available, 1 otherwise. Safe to re-run after installing
@@ -1005,6 +1031,14 @@ if [ -f "$ENV_FILE" ]; then
         print_success "Will restart with current settings"
     fi
 
+    # Keep SANDBOX_BACKEND aligned with the effective image tag (the one just
+    # chosen, or the pinned IMAGE_TAG already in .env on a plain restart).
+    if [ "$INCLUDE_CRAFT" = true ]; then
+        EFFECTIVE_TAG="${VERSION:-$(grep -E '^IMAGE_TAG=' "$ENV_FILE" | head -1 | cut -d= -f2-)}"
+        set_sandbox_backend_for_tag "$EFFECTIVE_TAG"
+        print_success "Craft sandbox backend set to $SANDBOX_BACKEND_VALUE (image tag: ${EFFECTIVE_TAG})"
+    fi
+
     # Ensure COMPOSE_PROFILES is cleared when running in lite mode on an
     # existing .env (the template ships with s3-filestore enabled).
     if [[ "$LITE_MODE" = true ]] && grep -q "^COMPOSE_PROFILES=.*s3-filestore" "$ENV_FILE" 2>/dev/null; then
@@ -1102,26 +1136,22 @@ else
     if [ "$INCLUDE_CRAFT" = true ]; then
         # Set ENABLE_CRAFT=true for runtime configuration (handles commented and uncommented lines)
         sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
-        # Ensure SANDBOX_BACKEND=docker is written explicitly (docker-compose
-        # defaults to it already, but a literal entry in .env makes the
-        # selection visible/auditable to operators).
-        if grep -q "^#* *SANDBOX_BACKEND=" "$ENV_FILE"; then
-            sed -i.bak 's/^#* *SANDBOX_BACKEND=.*/SANDBOX_BACKEND=docker/' "$ENV_FILE"
-        else
-            echo "SANDBOX_BACKEND=docker" >> "$ENV_FILE"
-        fi
-        print_success "Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=docker)"
+        # docker backend exists only in v4.0.6+; older tags get kubernetes.
+        set_sandbox_backend_for_tag "$VERSION"
+        print_success "Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=$SANDBOX_BACKEND_VALUE)"
 
-        # Trust boundary warning. api_server + background mount the host
-        # Docker socket so they can drive sandbox containers. Anything that
-        # can talk to that socket is effectively root on the host.
-        echo ""
-        print_warning "Craft + docker backend: api_server and background mount"
-        print_warning "/var/run/docker.sock. Compromise of either container ="
-        print_warning "root on the host. Only enable on hosts you fully control."
-        print_warning "On EC2, require IMDSv2 (HttpTokens=required) so sandboxes"
-        print_warning "cannot pull IAM credentials from the instance metadata service."
-        echo ""
+        if [ "$SANDBOX_BACKEND_VALUE" = "docker" ]; then
+            echo ""
+            print_warning "Craft + docker backend: api_server and background bind-mount"
+            print_warning "/var/run/docker.sock (RW = root on host on compromise);"
+            print_warning "sandbox-proxy bind-mounts it RO (still exposes container env,"
+            print_warning "labels, and the events stream). Only enable on hosts you fully"
+            print_warning "control. On EC2, require IMDSv2 (HttpTokens=required) so"
+            print_warning "sandboxes cannot pull IAM credentials from instance metadata."
+            echo ""
+        else
+            print_info "Image tag ${VERSION} predates the docker sandbox backend (v4.0.6+); using SANDBOX_BACKEND=${SANDBOX_BACKEND_VALUE}."
+        fi
     else
         print_info "Onyx Craft disabled (use --include-craft to enable)"
     fi
@@ -1146,6 +1176,18 @@ if [ "$INCLUDE_CRAFT" = true ]; then
         else
             print_warning "Could not create sandbox network $SANDBOX_NET — create it manually:"
             echo "    docker network create $SANDBOX_NET"
+        fi
+    fi
+
+    # Same for the CA volume. Name pinned to match
+    # configs.SANDBOX_PROXY_CA_VOLUME_NAME.
+    SANDBOX_PROXY_CA_VOL="sandbox_proxy_ca"
+    if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker volume inspect "$SANDBOX_PROXY_CA_VOL" >/dev/null 2>&1; then
+        if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker volume create "$SANDBOX_PROXY_CA_VOL" >/dev/null 2>&1; then
+            print_success "Created sandbox proxy CA volume: $SANDBOX_PROXY_CA_VOL"
+        else
+            print_warning "Could not create sandbox proxy CA volume $SANDBOX_PROXY_CA_VOL — create it manually:"
+            echo "    docker volume create $SANDBOX_PROXY_CA_VOL"
         fi
     fi
 fi

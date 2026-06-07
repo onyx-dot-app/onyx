@@ -14,7 +14,7 @@ import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { InputVertical } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import { SvgArrowExchange, SvgUnplug } from "@opal/icons";
+import { SvgArrowExchange, SvgUnplug, SvgSimpleLoader } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
@@ -34,7 +34,6 @@ import {
   resolveModelId,
   type ProviderMode,
 } from "@/lib/voice/utils";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 export { type ProviderMode } from "@/lib/voice/utils";
 
@@ -298,7 +297,7 @@ export function VoiceProviderSetupModal({
                 <Button
                   type="submit"
                   disabled={isSubmitting || !isValid || !dirty}
-                  icon={isSubmitting ? SimpleLoader : undefined}
+                  icon={isSubmitting ? SvgSimpleLoader : undefined}
                 >
                   {isEditing ? "Update" : "Connect"}
                 </Button>

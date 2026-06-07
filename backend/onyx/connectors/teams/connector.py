@@ -32,6 +32,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.teams.models import Message
+from onyx.connectors.teams.utils import execute_query_with_retry
 from onyx.connectors.teams.utils import fetch_expert_infos
 from onyx.connectors.teams.utils import fetch_external_access
 from onyx.connectors.teams.utils import fetch_messages
@@ -585,7 +586,9 @@ def _collect_all_teams(
                     lambda req: _update_request_url(request=req, next_url=url)
                 )
 
-            team_collection = query.execute_query()
+            team_collection = execute_query_with_retry(
+                query, method_name="_collect_all_teams"
+            )
         except (ClientRequestException, ValueError) as e:
             # If OData filter fails, fall back to client-side filtering
             if not use_client_side_filtering and odata_filter:
@@ -742,9 +745,8 @@ def _get_team_by_id(
     graph_client: GraphClient,
     team_id: str,
 ) -> Team:
-    team_collection = (
-        graph_client.teams.get().filter(f"id eq '{team_id}'").top(1).execute_query()
-    )
+    query = graph_client.teams.get().filter(f"id eq '{team_id}'").top(1)
+    team_collection = execute_query_with_retry(query, method_name="_get_team_by_id")
 
     if not team_collection:
         raise ValueError(f"No team with {team_id=} was found")
@@ -775,7 +777,9 @@ def _collect_all_channels_from_team(
                 lambda req: _update_request_url(request=req, next_url=url)
             )
 
-        channel_collection = query.execute_query()
+        channel_collection = execute_query_with_retry(
+            query, method_name="_collect_all_channels_from_team"
+        )
         channels.extend(channel for channel in channel_collection if channel.id)
 
         if not channel_collection.has_next:

@@ -78,6 +78,7 @@ export interface ScheduledTaskDetail {
   next_run_at: string | null;
   next_runs: string[];
   last_run: ScheduledRunSummary | null;
+  pre_approved_app_ids: number[];
   created_at: string;
   updated_at: string;
 }
@@ -89,6 +90,7 @@ export interface ScheduledTaskCreateBody {
   editor_payload: EditorPayload;
   status?: ScheduledTaskStatus;
   run_immediately?: boolean;
+  pre_approved_app_ids?: number[];
 }
 
 export interface ScheduledTaskPatchBody {
@@ -97,6 +99,7 @@ export interface ScheduledTaskPatchBody {
   editor_mode?: EditorMode;
   editor_payload?: EditorPayload;
   status?: ScheduledTaskStatus;
+  pre_approved_app_ids?: number[];
 }
 
 export interface ScheduledTaskListResponse {
@@ -114,7 +117,10 @@ export interface RunNowResponse {
 }
 
 export interface ScheduledRunContextResponse {
+  run_id: string;
   task_id: string;
   task_name: string;
+  status: ScheduledTaskRunStatus;
   started_at: string;
+  finished_at: string | null;
 }

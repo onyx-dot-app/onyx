@@ -31,7 +31,7 @@ from onyx.server.features.build.db.sandbox import update_sandbox_status__no_comm
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.session.manager import SandboxProvisioningError
+from onyx.server.features.build.session.errors import SandboxProvisioningError
 from onyx.server.features.build.session.manager import SessionManager
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
@@ -253,7 +253,7 @@ class TestEnsureSandboxRunning:
                 db_session.commit()
 
         monkeypatch.setattr(
-            "onyx.server.features.build.session.manager.time.sleep",
+            "onyx.server.features.build.session.sandbox_lifecycle.time.sleep",
             _flipping_sleep,
         )
 
@@ -292,7 +292,7 @@ class TestEnsureSandboxRunning:
             return None
 
         monkeypatch.setattr(
-            "onyx.server.features.build.session.manager.time.sleep",
+            "onyx.server.features.build.session.sandbox_lifecycle.time.sleep",
             _sleep_noop,
         )
 

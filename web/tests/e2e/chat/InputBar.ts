@@ -33,6 +33,7 @@ export class InputBar {
   readonly tilePopover: Locator;
   readonly tilePopoverTextarea: Locator;
   readonly tilePopoverBackdrop: Locator;
+  readonly tilePopoverExpandButton: Locator;
   readonly tilePreview: Locator;
   readonly tileMeta: Locator;
 
@@ -49,6 +50,9 @@ export class InputBar {
     );
     this.tilePopoverTextarea = this.tilePopover.locator("textarea");
     this.tilePopoverBackdrop = page.getByTestId("paste-tile-backdrop");
+    this.tilePopoverExpandButton = this.tilePopover.getByRole("button", {
+      name: "Expand into input bar",
+    });
     this.tilePreview = page.locator(".rich-input-tile-preview");
     this.tileMeta = page.locator(".rich-input-tile-meta");
   }
@@ -94,6 +98,49 @@ export class InputBar {
         })
       );
     }, text);
+  }
+
+  async pastePlain(text: string): Promise<void> {
+    await this.page.evaluate((t) => {
+      const el = document.getElementById("onyx-chat-input-textbox")!;
+      el.focus();
+      el.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "V",
+          code: "KeyV",
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      const dt = new DataTransfer();
+      dt.setData("text/plain", t);
+      el.dispatchEvent(
+        new ClipboardEvent("paste", {
+          clipboardData: dt,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    }, text);
+  }
+
+  async armPlainPaste(): Promise<void> {
+    await this.page.evaluate(() => {
+      const el = document.getElementById("onyx-chat-input-textbox")!;
+      el.focus();
+      el.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "V",
+          code: "KeyV",
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
   }
 
   async pasteHtml(html: string, plainText: string): Promise<void> {
@@ -142,6 +189,10 @@ export class InputBar {
 
   async editTileText(newText: string): Promise<void> {
     await this.tilePopoverTextarea.fill(newText);
+  }
+
+  async expandTileViaPopover(): Promise<void> {
+    await this.tilePopoverExpandButton.click();
   }
 
   async dismissPopoverViaEscape(): Promise<void> {

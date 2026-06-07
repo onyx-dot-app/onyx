@@ -1,7 +1,12 @@
 """Helper for managing Personal Access Tokens in integration tests."""
 
+from uuid import UUID
+
 import httpx
 
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import Permission
+from onyx.db.pat import create_pat
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestPAT
@@ -12,30 +17,88 @@ class PATManager:
     """Manager for creating and managing Personal Access Tokens in tests."""
 
     @staticmethod
+    def create_response(
+        name: str,
+        expiration_days: int | None,
+        user_performing_action: DATestUser,
+        scopes: list[Permission] | None = None,
+    ) -> httpx.Response:
+        """Call the create-token API and return the raw response (no status check)."""
+        body: dict[str, object] = {"name": name, "expiration_days": expiration_days}
+        if scopes is not None:
+            body["scopes"] = [scope.value for scope in scopes]
+        return client.post(
+            f"{API_SERVER_URL}/user/pats",
+            json=body,
+            headers=user_performing_action.headers,
+            cookies=user_performing_action.cookies,
+            timeout=60,
+        )
+
+    @staticmethod
     def create(
         name: str,
         expiration_days: int | None,
         user_performing_action: DATestUser,
+        scopes: list[Permission] | None = None,
     ) -> DATestPAT:
-        """Create a Personal Access Token for a user.
+        """Create a Personal Access Token for a user via the API.
 
-        Args:
-            name: Name of the token
-            expiration_days: Number of days until expiration (None for never)
-            user_performing_action: User creating the token
-
-        Returns:
-            DATestPAT with PAT data including the raw token
+        scopes=None mints an unrestricted token (full user access); a list scopes
+        it to those permissions. Returns the DATestPAT including the raw token.
         """
-        response = client.post(
-            f"{API_SERVER_URL}/user/pats",
-            json={"name": name, "expiration_days": expiration_days},
+        response = PATManager.create_response(
+            name, expiration_days, user_performing_action, scopes
+        )
+        response.raise_for_status()
+        return DATestPAT(**response.json())
+
+    @staticmethod
+    def selectable_scopes(user_performing_action: DATestUser) -> list[dict[str, str]]:
+        """Fetch the scopes a user may assign when minting a token."""
+        response = client.get(
+            f"{API_SERVER_URL}/user/pats/scopes",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
             timeout=60,
         )
         response.raise_for_status()
-        return DATestPAT(**response.json())
+        return response.json()
+
+    @staticmethod
+    def create_scoped(
+        name: str,
+        expiration_days: int | None,
+        user_performing_action: DATestUser,
+        scopes: list[Permission] | None,
+    ) -> str:
+        """Mint a PAT with explicit scopes and return the raw token."""
+        with get_session_with_current_tenant() as db_session:
+            _, raw_token = create_pat(
+                db_session=db_session,
+                user_id=UUID(user_performing_action.id),
+                name=name,
+                expiration_days=expiration_days,
+                scopes=scopes,
+            )
+            db_session.commit()
+        return raw_token
+
+    @staticmethod
+    def scoped_auth_headers(
+        name: str,
+        expiration_days: int | None,
+        user_performing_action: DATestUser,
+        scopes: list[Permission] | None,
+    ) -> dict[str, str]:
+        """Mint a scoped PAT and return its bearer auth headers."""
+        raw_token = PATManager.create_scoped(
+            name=name,
+            expiration_days=expiration_days,
+            user_performing_action=user_performing_action,
+            scopes=scopes,
+        )
+        return PATManager.get_auth_headers(raw_token)
 
     @staticmethod
     def list(user_performing_action: DATestUser) -> list[DATestPAT]:

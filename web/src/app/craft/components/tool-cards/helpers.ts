@@ -4,7 +4,7 @@ import {
   SvgEdit,
   SvgSearch,
   SvgGlobe,
-  SvgBubbleText,
+  SvgCpu,
   SvgCheckSquare,
   SvgAlertCircle,
   SvgLoader,
@@ -27,7 +27,7 @@ export function getToolIcon(kind: ToolCallKind): IconFunctionComponent {
     case "search":
       return SvgSearch;
     case "task":
-      return SvgBubbleText;
+      return SvgCpu;
     case "other":
     default:
       return SvgEdit;
@@ -91,6 +91,16 @@ export function isTerminalStatus(status: ToolCallStatus): boolean {
   return (
     status === "completed" || status === "failed" || status === "cancelled"
   );
+}
+
+/** The "Using <skill> skill" invocation card (drives the sparkle + border). */
+export function isSkillInvocation(toolCall: ToolCallState): boolean {
+  return toolCall.toolName === "skill";
+}
+
+/** The invocation or a tool call made inside a skill (drives the comet edge). */
+export function isSkillCall(toolCall: ToolCallState): boolean {
+  return toolCall.toolName === "skill" || !!toolCall.skillName;
 }
 
 /**

@@ -31,6 +31,7 @@ MULTI_TENANT_GATING_ALLOWED_PREFIXES: frozenset[str] = frozenset(
         "/health",
         "/me",
         "/settings",
+        "/enterprise-settings",
         "/billing",
         "/admin/billing",
         "/tenants/billing-information",

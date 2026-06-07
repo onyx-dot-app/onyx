@@ -57,7 +57,7 @@ source of truth.
 The shared sandbox bootstrap script lives in the sandbox image dir:
 
 ```
-backend/onyx/server/features/build/sandbox/kubernetes/docker/
+backend/onyx/server/features/build/sandbox/image/
 └── firewall-init.sh       # runs as the K8s initContainer command
                             # in this phase; Phase 5 reuses it as the
                             # docker-compose entrypoint wrapper. Mode

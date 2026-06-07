@@ -1,5 +1,8 @@
 from typing import Any
 
+from onyx.configs.app_configs import EXT_APP_SLACK_CLIENT_ID
+from onyx.configs.app_configs import EXT_APP_SLACK_CLIENT_SECRET
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -10,6 +13,7 @@ from onyx.external_apps.providers.base import AdminDescriptorSpec
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.base import OAuthFlowSpec
 from onyx.external_apps.providers.base import OAuthProviderSpec
+from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.base import OrgCredentialField
 
 
@@ -31,6 +35,7 @@ _ENDPOINTS: list[EndpointSpec] = [
         normalised_name="List channels",
         description="List the workspace's channels and conversations.",
         matches=(RestRoute(method="POST", path="/api/conversations.list"),),
+        default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=SlackAction.MESSAGES_READ,
@@ -40,6 +45,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="POST", path="/api/conversations.history"),
             RestRoute(method="POST", path="/api/conversations.replies"),
         ),
+        default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=SlackAction.USERS_READ,
@@ -49,12 +55,14 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="POST", path="/api/users.list"),
             RestRoute(method="POST", path="/api/users.info"),
         ),
+        default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=SlackAction.SEARCH_READ,
         normalised_name="Search messages",
         description="Full-text search across messages the user can see.",
         matches=(RestRoute(method="POST", path="/api/search.messages"),),
+        default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=SlackAction.MESSAGES_WRITE,
@@ -65,7 +73,7 @@ _ENDPOINTS: list[EndpointSpec] = [
 ]
 
 
-class SlackProvider(OAuthExternalAppProvider):
+class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
     spec = OAuthProviderSpec(
         app_type=ExternalAppType.SLACK,
         app_name="Slack",
@@ -123,6 +131,11 @@ class SlackProvider(OAuthExternalAppProvider):
         ),
         endpoint_catalog=_ENDPOINTS,
     )
+
+    managed_org_credentials = {
+        "client_id": EXT_APP_SLACK_CLIENT_ID,
+        "client_secret": EXT_APP_SLACK_CLIENT_SECRET,
+    }
 
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
         # Slack v2 with `user_scope` returns the user token nested

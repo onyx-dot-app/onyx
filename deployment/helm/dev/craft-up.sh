@@ -33,7 +33,7 @@ PASSTHROUGH=()
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 SANDBOX_IMAGE="onyxdotapp/sandbox:dev"
-SANDBOX_DOCKER_DIR="$REPO_ROOT/backend/onyx/server/features/build/sandbox/kubernetes/docker"
+SANDBOX_IMAGE_DIR="$REPO_ROOT/backend/onyx/server/features/build/sandbox/image"
 ENV_K8S="$REPO_ROOT/.vscode/.env.k8s"
 ENV_K8S_TEMPLATE="$REPO_ROOT/.vscode/.env.k8s.template"
 
@@ -114,7 +114,7 @@ if [[ "$SKIP_SANDBOX_IMAGE" -eq 1 ]]; then
   echo "==> skipping sandbox image build (--skip-sandbox-image)"
 else
   echo "==> building $SANDBOX_IMAGE ..."
-  docker build -t "$SANDBOX_IMAGE" "$SANDBOX_DOCKER_DIR"
+  docker build -t "$SANDBOX_IMAGE" "$SANDBOX_IMAGE_DIR"
 fi
 
 echo "==> loading $SANDBOX_IMAGE into kind node ($CLUSTER_NAME) ..."

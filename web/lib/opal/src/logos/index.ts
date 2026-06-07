@@ -35,6 +35,7 @@ export { default as SvgGitlab } from "@opal/logos/gitlab";
 export { default as SvgGmail } from "@opal/logos/gmail";
 export { default as SvgGong } from "@opal/logos/gong";
 export { default as SvgGoogle } from "@opal/logos/google";
+export { default as SvgGoogleCalendar } from "@opal/logos/google-calendar";
 export { default as SvgGoogleCloud } from "@opal/logos/google-cloud";
 export { default as SvgGoogleDrive } from "@opal/logos/google-drive";
 export { default as SvgGoogleSites } from "@opal/logos/google-sites";

@@ -60,6 +60,7 @@ from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
 from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config
 
@@ -118,7 +119,12 @@ def _pool_container() -> Generator[_PoolContainer, None, None]:
     Provisioning a container is fast (~3s) but opencode-serve takes
     another 1–5s to bind :4096. Amortizing across the module avoids
     paying that cost per test.
+
+    Skipped when SANDBOX_PROXY_HOST isn't set: the manager requires it post
+    #11604 and we don't bring up the proxy stack in this test's fixtures.
     """
+    if not os.environ.get("SANDBOX_PROXY_HOST"):
+        pytest.skip("SANDBOX_PROXY_HOST not set; Requires the egress proxy stack.")
     manager = DockerSandboxManager()
     sandbox_id = uuid4()
     user_id = uuid4()
@@ -411,3 +417,95 @@ def test_terminate_then_subscribe_refuses(
             pool.manager.terminate(sandbox_id)
         except Exception:
             pass
+
+
+# ----------------------------------------------------------------------
+# Stale-password 401 self-heal
+#
+# A peer api_server replica's cached opencode password goes stale after a
+# re-provision rotates the per-pod Secret; K8s never pushes the new value into
+# a running container's env. Each heal site must recover against the REAL
+# opencode-serve (a genuine 401) by reloading the password from the backend
+# (here: docker inspect). We mimic the stale-cache state by poisoning the
+# in-memory cache with a wrong password — byte-identical to the post-rotation
+# state, but deterministic (no flaky re-provision timing).
+# ----------------------------------------------------------------------
+
+
+def _poison_password_cache(
+    manager: DockerSandboxManager, sandbox_id: UUID
+) -> ServeConnectionInfo:
+    """Overwrite the cached ``ServeConnectionInfo`` with a wrong password and
+    return the real one (read fresh from docker inspect) so callers can assert
+    the heal restored it."""
+    real = manager._load_serve_connection_info(sandbox_id)
+    assert real is not None and real.password, "expected a real cached password"
+    stale = ServeConnectionInfo(
+        base_url=real.base_url, password=f"{real.password}-stale"
+    )
+    with manager._serve_conn_info_lock:
+        manager._serve_conn_info[sandbox_id] = stale
+    return real
+
+
+def _restore_password_cache(
+    manager: DockerSandboxManager, sandbox_id: UUID, real: ServeConnectionInfo
+) -> None:
+    with manager._serve_conn_info_lock:
+        manager._serve_conn_info[sandbox_id] = real
+
+
+def test_stale_password_heals_on_readiness_probe(
+    _pool_container: _PoolContainer,
+) -> None:
+    """``_wait_for_opencode_serve_ready`` probes with the stale password, gets
+    a real 401, reloads from docker inspect, and rebuilds the probe client —
+    instead of collapsing the 401 into "not ready" and polling to timeout."""
+    pool = _pool_container
+    real = _poison_password_cache(pool.manager, pool.sandbox_id)
+    try:
+        assert pool.manager._wait_for_opencode_serve_ready(pool.sandbox_id) is True
+        # Heal reloaded the current password into the cache.
+        assert (
+            pool.manager._serve_connection_info(pool.sandbox_id).password
+            == real.password
+        )
+    finally:
+        _restore_password_cache(pool.manager, pool.sandbox_id, real)
+
+
+def test_stale_password_heals_on_unary_call(handle: _Handle) -> None:
+    """A unary serve call (``ensure_opencode_session`` → POST /session) hits a
+    real 401 with the stale password, reloads, and retries once via
+    ``_request`` — so it still returns a valid opencode session id."""
+    real = _poison_password_cache(handle.manager, handle.sandbox_id)
+    try:
+        opencode_session_id = handle.manager.ensure_opencode_session(
+            handle.sandbox_id, handle.session_id
+        )
+        assert opencode_session_id, "ensure_opencode_session must heal and return an id"
+        assert (
+            handle.manager._serve_connection_info(handle.sandbox_id).password
+            == real.password
+        )
+    finally:
+        _restore_password_cache(handle.manager, handle.sandbox_id, real)
+
+
+def test_stale_password_heals_event_bus(handle: _Handle) -> None:
+    """The event-bus ``/event`` stream hits a real 401 with the stale password;
+    the reader reloads auth and reconnects rather than burning its reconnect
+    budget. ``stream_ready`` becomes set once it heals. The per-session bus is
+    closed by the ``handle`` fixture's workspace cleanup."""
+    directory = handle.manager._session_directory(handle.session_id)
+    real = _poison_password_cache(handle.manager, handle.sandbox_id)
+    bus = None
+    try:
+        bus = handle.manager._get_or_create_event_bus(handle.sandbox_id, directory)
+        assert bus.stream_ready.wait(timeout=20.0), (
+            "event bus never became ready after a 401 — reload_auth heal failed"
+        )
+    finally:
+        if bus is not None:
+            bus.close()
+        _restore_password_cache(handle.manager, handle.sandbox_id, real)

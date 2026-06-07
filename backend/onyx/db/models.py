@@ -59,6 +59,7 @@ from onyx.configs.constants import TokenRateLimitScope
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import AccountType
+from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
@@ -78,6 +79,7 @@ from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.enums import OpenSearchDocumentMigrationStatus
@@ -101,6 +103,7 @@ from onyx.db.enums import UserFileStatus
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType
 from onyx.db.pydantic_type import PydanticType
+from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes
 from onyx.kg.models import KGStage
@@ -538,6 +541,14 @@ class PersonalAccessToken(Base):
         Enum(PatType, native_enum=False),
         nullable=False,
         server_default=PatType.USER.value,
+    )
+
+    # Permission values this token may exercise; NULL = no restriction (full
+    # user access). An empty list grants nothing (fail-closed).
+    scopes: Mapped[list[str] | None] = mapped_column(
+        postgresql.JSONB(),
+        nullable=True,
+        default=None,
     )
 
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
@@ -4150,7 +4161,7 @@ class Skill(Base):
     built_in_skill_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Bundle bytes for custom skills. NULL for built-ins (their source
-    # files live on disk under SKILLS_TEMPLATE_PATH).
+    # files live on disk under BUILTIN_SKILLS_PATH).
     bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
@@ -4869,6 +4880,21 @@ class MCPServer(Base):
     auth_performer: Mapped[MCPAuthenticationPerformer | None] = mapped_column(
         Enum(MCPAuthenticationPerformer, native_enum=False), nullable=True
     )
+    oauth_provider_mode: Mapped[MCPOAuthProviderMode] = mapped_column(
+        Enum(MCPOAuthProviderMode, native_enum=False),
+        nullable=False,
+        server_default=MCPOAuthProviderMode.AUTO_DISCOVERY.value,
+    )
+    oauth_authorization_endpoint: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    oauth_token_endpoint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    oauth_scopes_override: Mapped[list[str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    oauth_additional_auth_params: Mapped[dict[str, str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     # Status tracking for configuration flow
     status: Mapped[MCPServerStatus] = mapped_column(
         Enum(MCPServerStatus, native_enum=False),
@@ -5431,7 +5457,7 @@ class BuildMessage(Base):
 class ActionApproval(Base):
     """One agent-initiated gated request and its decision.
 
-    ``actions`` is a non-empty JSONB list of :class:`ActionMatch`-shaped
+    ``actions`` is a non-empty JSONB list of :class:`MatchedAction`-shaped
     dicts, sorted strictest-policy-first; ``actions[0]`` drove the gating
     decision. ``decision IS NULL`` is pending (or a proxy-crash orphan).
     """
@@ -5458,6 +5484,17 @@ class ActionApproval(Base):
     )
     decided_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    decided_via: Mapped[ApprovalDecidedVia | None] = mapped_column(
+        Enum(ApprovalDecidedVia, native_enum=False, name="approvaldecidedvia"),
+        nullable=True,
+    )
+    # Lookups key off this id, not ``app_name``: the latter isn't unique
+    # across instances (self-hosted GitLab/Jira share an app_type).
+    external_app_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
 
@@ -5522,6 +5559,18 @@ class ScheduledTask(Base):
         back_populates="task",
         cascade="all, delete-orphan",
     )
+    pre_approved_apps: Mapped[list["ScheduledTaskPreApprovedApp"]] = relationship(
+        "ScheduledTaskPreApprovedApp",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="ScheduledTaskPreApprovedApp.id",
+    )
+
+    @property
+    def pre_approved_app_ids(self) -> list[int]:
+        """Granted external-app ids in grant order. Set via
+        ``onyx.db.scheduled_task.set_pre_approved_apps``."""
+        return [grant.external_app_id for grant in self.pre_approved_apps]
 
     __table_args__ = (
         # Dispatcher hot path: WHERE status='active' AND deleted=false
@@ -5610,6 +5659,45 @@ class ScheduledTaskRun(Base):
         # Session-view banner lookup: get_scheduled_run_context filters by
         # session_id on every session open.
         Index("ix_scheduled_task_run_session", "session_id"),
+    )
+
+
+class ScheduledTaskPreApprovedApp(Base):
+    """One (task, app) pre-approval grant: the matched app's ASK-gated
+    actions skip the approval park for the task's RUNNING runs.
+
+    Deleting the task (CASCADE) or the app (CASCADE) drops the grant; a
+    stale grant on a removed app is meaningless. The unique constraint
+    keeps grants idempotent and its index serves the per-task lookup.
+    """
+
+    __tablename__ = "scheduled_task_pre_approved_app"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scheduled_task_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    external_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    task: Mapped[ScheduledTask] = relationship(
+        "ScheduledTask", back_populates="pre_approved_apps"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "scheduled_task_id",
+            "external_app_id",
+            name="uq_scheduled_task_pre_approved_app",
+        ),
     )
 
 
@@ -5858,6 +5946,7 @@ class ExternalApp(Base):
         default=ExternalAppType.CUSTOM,
         server_default=ExternalAppType.CUSTOM.value,
     )
+    # CUSTOM apps store URL globs here (translated to regexes at match time).
     upstream_url_patterns: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
     )
@@ -5895,6 +5984,17 @@ class ExternalApp(Base):
         back_populates="external_app",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def upstream_url_regexes(self) -> list[str]:
+        """``upstream_url_patterns`` as match-ready regexes: CUSTOM apps author
+        globs (translated here), built-in providers author regexes used as-is."""
+        if self.app_type == ExternalAppType.CUSTOM:
+            return [
+                UrlGlob(value=pattern).to_regex()
+                for pattern in self.upstream_url_patterns
+            ]
+        return list(self.upstream_url_patterns)
 
 
 class ExternalAppUserCredential(Base):

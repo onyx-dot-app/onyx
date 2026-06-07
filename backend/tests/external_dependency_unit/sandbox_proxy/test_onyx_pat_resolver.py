@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME
 from onyx.auth.constants import API_KEY_HEADER_NAME
-from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.resolvers import onyx_pat as onyx_pat_mod
@@ -46,10 +45,7 @@ def test_claims_then_resolve_round_trips_minted_pat(
             sandbox_name="sandbox-test",
             sandbox_ip="127.0.0.1",
         ),
-        match=None,
-        db_session_factory=lambda tenant_id: get_session_with_tenant(
-            tenant_id=tenant_id
-        ),
+        matched_actions=None,
     )
 
     monkeypatch.setattr(onyx_pat_mod, "SANDBOX_API_SERVER_URL", f"https://{_API_HOST}")

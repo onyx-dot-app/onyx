@@ -13,7 +13,10 @@ import {
   EndpointPolicy,
   ExternalAppAdminResponse,
 } from "@/app/craft/v1/apps/registry";
-import { upsertExternalApp } from "@/app/craft/services/externalAppsService";
+import {
+  createBuiltInExternalApp,
+  updateExternalApp,
+} from "@/app/craft/services/externalAppsService";
 
 const POLICY_OPTIONS: { value: EndpointPolicy; label: string }[] = [
   { value: "ALWAYS", label: "Auto-approve" },
@@ -53,7 +56,9 @@ function bulkPolicyOf(
   actions: EndpointDescriptor[],
   policies: Record<string, EndpointPolicy>
 ): BulkPolicy {
-  const values = actions.map((action) => policies[action.action_id] ?? "ASK");
+  const values = actions.map(
+    (action) => policies[action.action_id] ?? action.default_policy
+  );
   if (values.length === 0) return "ASK";
   if (values.every((value) => value === "ALWAYS")) return "ALWAYS";
   if (values.every((value) => value === "ASK")) return "ASK";
@@ -85,6 +90,10 @@ export default function ConfigureProviderModal({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Managed built-ins (cloud): Onyx owns creds/config, so the modal only edits
+  // policies — cred fields are hidden and the backend ignores them anyway.
+  const managed = existingApp?.is_onyx_managed ?? false;
+
   // Re-seed every time the modal opens so admins can tweak one
   // field without re-entering the rest.
   useEffect(() => {
@@ -97,15 +106,17 @@ export default function ConfigureProviderModal({
     }
     setCredentialValues(initial);
 
-    // Seed each action from the admin's stored choice (edit) or "Ask" by
-    // default (create) — every action starts in ask-approval mode.
+    // Seed each action from the admin's stored choice (edit) or the action's
+    // backend-declared default (create) — usually "Ask", but a provider can
+    // declare a different out-of-the-box stance per action.
     const storedState: Record<string, EndpointPolicy> = {};
     for (const action of existingApp?.actions ?? []) {
       storedState[action.action_id] = action.state;
     }
     const seededPolicies: Record<string, EndpointPolicy> = {};
     for (const action of descriptor.actions) {
-      seededPolicies[action.action_id] = storedState[action.action_id] ?? "ASK";
+      seededPolicies[action.action_id] =
+        storedState[action.action_id] ?? action.default_policy;
     }
     setPolicies(seededPolicies);
     // Open "Advanced" up front only when the stored choices can't be shown as a
@@ -120,7 +131,8 @@ export default function ConfigureProviderModal({
   const credsFilled = descriptor.required_org_credential_fields.every(
     (f) => (credentialValues[f.key] ?? "").trim().length > 0
   );
-  const canSave = nameFilled && credsFilled && !isSaving;
+  // Managed apps only edit policies, so name/credentials aren't required.
+  const canSave = managed ? !isSaving : nameFilled && credsFilled && !isSaving;
 
   const bulkValue = bulkPolicyOf(descriptor.actions, policies);
 
@@ -137,25 +149,38 @@ export default function ConfigureProviderModal({
     setIsSaving(true);
     setError(null);
     try {
-      // Merge so future non-credential metadata on the row (region,
-      // instance URL, …) survives a credential edit.
-      const merged = {
-        ...existingApp?.organization_credentials,
-        ...credentialValues,
-      };
-      await upsertExternalApp({
-        id: existingApp?.id ?? null,
-        name: name.trim(),
-        description: descriptor.description,
-        app_type: descriptor.app_type,
-        upstream_url_patterns: descriptor.upstream_url_patterns,
-        auth_template: descriptor.auth_template,
-        organization_credentials: merged,
-        // Saving credentials implies enable; disable is a separate
-        // action on the admin page.
-        enabled: true,
-        action_policies: policies,
-      });
+      if (managed && existingApp) {
+        // Managed: only policies are persisted; a partial PATCH leaves the rest.
+        await updateExternalApp(existingApp.id, {
+          action_policies: policies,
+        });
+      } else if (existingApp) {
+        // Merge creds so non-credential metadata survives a credential edit.
+        await updateExternalApp(existingApp.id, {
+          name: name.trim(),
+          description: descriptor.description,
+          upstream_url_patterns: descriptor.upstream_url_patterns,
+          auth_template: descriptor.auth_template,
+          organization_credentials: {
+            ...existingApp.organization_credentials,
+            ...credentialValues,
+          },
+          // Saving credentials implies enable; disable is separate.
+          enabled: true,
+          action_policies: policies,
+        });
+      } else {
+        await createBuiltInExternalApp({
+          name: name.trim(),
+          description: descriptor.description,
+          app_type: descriptor.app_type,
+          upstream_url_patterns: descriptor.upstream_url_patterns,
+          auth_template: descriptor.auth_template,
+          organization_credentials: credentialValues,
+          enabled: true,
+          action_policies: policies,
+        });
+      }
       onSaved();
       onClose();
     } catch (e) {
@@ -174,43 +199,59 @@ export default function ConfigureProviderModal({
       <Modal.Content width="lg" height="lg">
         <Modal.Header
           title={headerTitle}
-          description={descriptor.setup_instructions}
+          description={
+            managed
+              ? "Provided by Onyx — configure what the agent may do."
+              : descriptor.setup_instructions
+          }
         />
         <Modal.Body>
           <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <Text font="main-ui-action">Name</Text>
-              <InputTypeIn
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={descriptor.name}
-              />
+            {managed ? (
               <Text font="secondary-body" color="text-03">
-                {`A label for this connection. Use a distinct name when adding multiple instances of the same provider (e.g. "${descriptor.name} — Engineering").`}
+                This app is provided by Onyx — credentials are managed for you.
+                Enable it from the apps list, then choose what the agent may do
+                below.
               </Text>
-            </div>
-
-            {descriptor.required_org_credential_fields.map((field) => {
-              const Input = field.secret ? PasswordInputTypeIn : InputTypeIn;
-              return (
-                <div key={field.key} className="flex flex-col gap-1">
-                  <Text font="main-ui-action">{field.label}</Text>
-                  <Input
-                    value={credentialValues[field.key] ?? ""}
-                    onChange={(e) =>
-                      setCredentialValues((prev) => ({
-                        ...prev,
-                        [field.key]: e.target.value,
-                      }))
-                    }
-                    placeholder={field.label}
+            ) : (
+              <>
+                <div className="flex flex-col gap-1">
+                  <Text font="main-ui-action">Name</Text>
+                  <InputTypeIn
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={descriptor.name}
                   />
                   <Text font="secondary-body" color="text-03">
-                    {field.description}
+                    {`A label for this connection. Use a distinct name when adding multiple instances of the same provider (e.g. "${descriptor.name} — Engineering").`}
                   </Text>
                 </div>
-              );
-            })}
+
+                {descriptor.required_org_credential_fields.map((field) => {
+                  const Input = field.secret
+                    ? PasswordInputTypeIn
+                    : InputTypeIn;
+                  return (
+                    <div key={field.key} className="flex flex-col gap-1">
+                      <Text font="main-ui-action">{field.label}</Text>
+                      <Input
+                        value={credentialValues[field.key] ?? ""}
+                        onChange={(e) =>
+                          setCredentialValues((prev) => ({
+                            ...prev,
+                            [field.key]: e.target.value,
+                          }))
+                        }
+                        placeholder={field.label}
+                      />
+                      <Text font="secondary-body" color="text-03">
+                        {field.description}
+                      </Text>
+                    </div>
+                  );
+                })}
+              </>
+            )}
 
             {descriptor.actions.length > 0 && (
               <div className="flex flex-col gap-2 pt-2">
@@ -260,7 +301,10 @@ export default function ConfigureProviderModal({
                             </Text>
                           </div>
                           <PolicyToggle
-                            value={policies[action.action_id] ?? "ASK"}
+                            value={
+                              policies[action.action_id] ??
+                              action.default_policy
+                            }
                             onChange={(value) =>
                               setPolicies((prev) => ({
                                 ...prev,

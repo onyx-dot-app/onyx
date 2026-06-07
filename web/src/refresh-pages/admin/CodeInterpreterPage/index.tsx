@@ -9,6 +9,7 @@ import {
   SvgTerminal,
   SvgUnplug,
   SvgXOctagon,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Section } from "@/layouts/general-layouts";
@@ -16,7 +17,6 @@ import { Button, SelectCard } from "@opal/components";
 import { Card, Content, ContentAction } from "@opal/layouts";
 import { Disabled, Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import useCodeInterpreter from "@/hooks/useCodeInterpreter";
 import { updateCodeInterpreter } from "@/refresh-pages/admin/CodeInterpreterPage/svc";
@@ -41,7 +41,7 @@ function CheckingStatus() {
       <Text mainUiAction text03>
         Checking...
       </Text>
-      <SimpleLoader />
+      <SvgSimpleLoader />
     </Section>
   );
 }

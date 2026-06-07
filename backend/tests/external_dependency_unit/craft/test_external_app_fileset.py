@@ -18,9 +18,11 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import Skill
 from onyx.db.models import User
+from onyx.external_apps.providers.slack import SlackAction
 from onyx.skills.built_in import SLACK
 from onyx.skills.push import build_skills_fileset_for_user
 from tests.external_dependency_unit.craft._test_helpers import make_external_app
@@ -89,6 +91,61 @@ def test_unauthenticated_provider_delivers_nothing(
     files = build_skills_fileset_for_user(user, db_session)
 
     assert not _has_slack_content(files)
+
+
+def test_denied_action_listed_as_unavailable(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    """A ``DENY`` policy override surfaces the action in the unavailable warning;
+    available actions are not listed, and the raw template is never shipped."""
+    user = make_user(db_session)
+    skill = _slack_skill(db_session)
+    app = make_external_app(
+        db_session,
+        skill=skill,
+        app_type=ExternalAppType.SLACK,
+        auth_template=_AUTH_TEMPLATE,
+        action_policies={SlackAction.MESSAGES_WRITE.value: EndpointPolicy.DENY},
+    )
+    make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
+    db_session.commit()
+
+    files = build_skills_fileset_for_user(user, db_session)
+
+    assert f"{_SLACK_ID}/SKILL.md.template" not in files
+    rendered = files[f"{_SLACK_ID}/SKILL.md"].decode("utf-8")
+    warning = rendered.split(
+        "These actions are unavailable and should not be attempted:", 1
+    )[1]
+    # The denied write is listed; an available read is not (its "### List
+    # channels" usage header lives elsewhere, never as a "- List channels" item).
+    assert "- Post a message" in warning
+    assert "- List channels" not in warning
+
+
+def test_no_disabled_actions_omits_section(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    """With no ``DENY`` overrides nothing is unavailable, so the warning section
+    is omitted entirely — available actions are never enumerated."""
+    user = make_user(db_session)
+    skill = _slack_skill(db_session)
+    app = make_external_app(
+        db_session,
+        skill=skill,
+        app_type=ExternalAppType.SLACK,
+        auth_template=_AUTH_TEMPLATE,
+    )
+    make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
+    db_session.commit()
+
+    files = build_skills_fileset_for_user(user, db_session)
+
+    rendered = files[f"{_SLACK_ID}/SKILL.md"].decode("utf-8")
+    # No DENY policies -> the unavailable-actions warning is omitted entirely.
+    assert "unavailable and should not be attempted" not in rendered
 
 
 def test_disabled_provider_delivers_nothing_even_when_authenticated(

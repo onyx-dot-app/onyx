@@ -719,7 +719,7 @@ def upsert_documents(
         # Use COALESCE to preserve existing permissions when new values are NULL.
         # This prevents subsequent indexing runs (which don't fetch permissions)
         # from overwriting permissions set by permission sync jobs.
-        update_set.update(
+        update_set.update(  # ty: ignore[no-matching-overload]
             {
                 "external_user_emails": func.coalesce(
                     insert_stmt.excluded.external_user_emails,

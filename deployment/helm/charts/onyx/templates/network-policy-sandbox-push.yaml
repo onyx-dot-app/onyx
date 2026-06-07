@@ -18,6 +18,15 @@ spec:
           podSelector:
             matchLabels:
               app: api-server
+        # The scheduled-tasks worker provisions + drives sandboxes headlessly
+        # (run_scheduled_task → ensure_sandbox_running), so it needs the same
+        # push / opencode-serve / dev-server connectivity as the api_server.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: celery-worker-scheduled-tasks
         {{- if .Values.sandboxPushPolicy.allowTelepresenceAmbassador }}
         # Local-dev only (enabled via values-localdev.yaml): when an api_server
         # is intercepted by telepresence, outbound traffic from the developer's

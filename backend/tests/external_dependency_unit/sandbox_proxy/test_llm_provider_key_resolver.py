@@ -13,7 +13,6 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.sandbox_proxy.credential_injection import InjectionContext
@@ -48,10 +47,7 @@ def test_claims_then_resolve_round_trips_encrypted_key(
             sandbox_name="sandbox-test",
             sandbox_ip="127.0.0.1",
         ),
-        match=None,
-        db_session_factory=lambda tenant_id: get_session_with_tenant(
-            tenant_id=tenant_id
-        ),
+        matched_actions=None,
     )
 
     try:

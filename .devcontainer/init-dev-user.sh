@@ -70,7 +70,7 @@ fi
 # Chown the mountpoint to match the workspace owner so the dev user can
 # write into them. Non-recursive: contents are created by the dev user
 # (e.g. via `bun install`) and don't need re-chown on every start.
-for vol in /workspace/web/node_modules /workspace/web/.next; do
+for vol in /workspace/web/node_modules /workspace/web/.next /workspace/.venv; do
     [ -d "$vol" ] || continue
     if ! chown "$WS_UID":"$WS_GID" "$vol" 2>&1; then
         echo "warning: failed to chown $vol" >&2

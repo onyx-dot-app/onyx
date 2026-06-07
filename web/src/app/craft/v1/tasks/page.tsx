@@ -5,14 +5,24 @@ import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
-import { Button, Table, Tooltip, createTableColumns } from "@opal/components";
+import {
+  Button,
+  Table,
+  Text,
+  Tooltip,
+  createTableColumns,
+} from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { toast } from "@/hooks/useToast";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { SvgClock, SvgPlus, SvgRefreshCw, SvgTrash } from "@opal/icons";
+import {
+  SvgClock,
+  SvgPlus,
+  SvgRefreshCw,
+  SvgTrash,
+  SvgSimpleLoader,
+} from "@opal/icons";
 import { deleteScheduledTask } from "@/app/craft/v1/tasks/api";
 import {
   RunStatusBadge,
@@ -49,7 +59,7 @@ function buildColumns(handlers: RowActionHandlers) {
       weight: 25,
       enableSorting: false,
       cell: (value) => (
-        <Text mainUiBody text05 nowrap>
+        <Text font="main-ui-body" color="text-05" nowrap>
           {value}
         </Text>
       ),
@@ -59,7 +69,7 @@ function buildColumns(handlers: RowActionHandlers) {
       weight: 22,
       enableSorting: false,
       cell: (value) => (
-        <Text mainUiBody text03 nowrap>
+        <Text font="main-ui-body" color="text-03" nowrap>
           {value}
         </Text>
       ),
@@ -77,7 +87,7 @@ function buildColumns(handlers: RowActionHandlers) {
       cell: (lastRun) => {
         if (!lastRun) {
           return (
-            <Text mainUiBody text03>
+            <Text font="main-ui-body" color="text-03">
               —
             </Text>
           );
@@ -85,7 +95,7 @@ function buildColumns(handlers: RowActionHandlers) {
         return (
           <div className="flex flex-col gap-0.5">
             <RunStatusBadge status={lastRun.status} />
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               {formatRelativeShort(lastRun.started_at)}
             </Text>
           </div>
@@ -99,14 +109,14 @@ function buildColumns(handlers: RowActionHandlers) {
       cell: (nextRunAt) => {
         if (!nextRunAt) {
           return (
-            <Text mainUiBody text03>
+            <Text font="main-ui-body" color="text-03">
               —
             </Text>
           );
         }
         return (
           <Tooltip tooltip={formatAbsolute(nextRunAt)} side="top">
-            <Text mainUiBody text03 nowrap>
+            <Text font="main-ui-body" color="text-03" nowrap>
               {formatRelativeShort(nextRunAt)}
             </Text>
           </Tooltip>
@@ -187,7 +197,7 @@ export default function ScheduledTasksListPage() {
   );
 
   return (
-    <SettingsLayouts.Root width="lg">
+    <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgClock}
         title="Scheduled Tasks"
@@ -197,11 +207,11 @@ export default function ScheduledTasksListPage() {
       <SettingsLayouts.Body>
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <SimpleLoader className="h-6 w-6" />
+            <SvgSimpleLoader className="h-6 w-6" />
           </div>
         ) : error ? (
           <Section gap={0.5}>
-            <Text mainUiBody text03>
+            <Text font="main-ui-body" color="text-03">
               Failed to load scheduled tasks.
             </Text>
             <Button

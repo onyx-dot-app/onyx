@@ -1,5 +1,4 @@
 export const CRAFT_PATH = "/craft/v1";
-export const CRAFT_CONFIGURE_PATH = `${CRAFT_PATH}/configure`;
 export const CRAFT_TASKS_PATH = `${CRAFT_PATH}/tasks`;
 export const CRAFT_SKILLS_PATH = `${CRAFT_PATH}/skills`;
 export const CRAFT_APPS_PATH = `${CRAFT_PATH}/apps`;

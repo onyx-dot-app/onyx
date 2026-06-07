@@ -83,12 +83,12 @@ On EC2 the Docker bridge by default routes to `169.254.169.254` (IMDS), which ca
 **No setup required!** Just build and deploy:
 
 ```bash
-# Build backend image (includes both templates)
+# Build backend image
 cd backend
-docker build -f Dockerfile.sandbox-templates -t onyxdotapp/backend:latest .
+docker build -f Dockerfile -t onyxdotapp/backend:latest .
 
 # Build sandbox container (lightweight runner)
-cd onyx/server/features/build/sandbox/kubernetes/docker
+cd onyx/server/features/build/sandbox/image
 docker build -t onyxdotapp/sandbox:latest .
 
 # Deploy with docker-compose or kubectl - sandboxes work immediately!
@@ -96,71 +96,9 @@ docker build -t onyxdotapp/sandbox:latest .
 
 **How it works:**
 
-- **Backend image**: Contains both templates at build time:
-  - Web template at `/templates/outputs/web` (lightweight Next.js scaffold, ~2MB)
-  - Python venv template at `/templates/venv` (pre-installed packages, ~50MB)
+- **Sandbox image**: Bakes in the web template (`/workspace/templates/outputs`) and a pre-built Python venv (`/workspace/.venv`) from `initial-requirements.txt`
 - **Init container** (Kubernetes only): Syncs knowledge files from S3
 - **Sandbox startup**: Runs `bun install --frozen-lockfile` (hardlinks from the image's pre-warmed Bun cache) + `bun run dev`
-
-### Running Backend Directly (Without Docker)
-
-**Only needed if you're running the Onyx backend outside of Docker.** Most developers use Docker and can skip this section.
-
-If you're running the backend Python process directly on your machine, you need templates at `/templates/`:
-
-#### Web Template
-
-The web template is a lightweight Next.js app (Next.js 16, React 19, shadcn/ui, Recharts) checked into the codebase at `backend/onyx/server/features/build/templates/outputs/web/`.
-
-For local development, create a symlink to this template:
-
-```bash
-sudo mkdir -p /templates/outputs
-sudo ln -s $(pwd)/backend/onyx/server/features/build/templates/outputs/web /templates/outputs/web
-```
-
-#### Python Venv Template
-
-If you don't have a venv template, create it:
-
-```bash
-# Use the utility script
-cd backend
-python -m onyx.server.features.build.sandbox.util.build_venv_template
-
-# Or manually
-python3 -m venv /templates/venv
-/templates/venv/bin/pip install -r backend/onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt
-```
-
-#### System Dependencies (for PPTX skill)
-
-The PPTX skill requires LibreOffice and Poppler for PDF conversion and thumbnail generation:
-
-**macOS:**
-
-```bash
-brew install poppler
-brew install --cask libreoffice
-```
-
-Ensure `soffice` is on your PATH:
-
-```bash
-export PATH="/Applications/LibreOffice.app/Contents/MacOS:$PATH"
-```
-
-**Linux (Debian/Ubuntu):**
-
-```bash
-sudo apt-get install libreoffice-impress poppler-utils
-```
-
-**That's it!** When sandboxes are created:
-
-1. Web template is copied from `/templates/outputs/web`
-2. Python venv is copied from `/templates/venv`
-3. `bun install --frozen-lockfile` runs automatically, hardlinking from the image's pre-warmed Bun tarball cache
 
 ## OpenCode Configuration
 
@@ -171,7 +109,7 @@ Each sandbox includes an OpenCode agent configured with:
 - **Tool permissions**: File operations, bash commands, web access
 - **Disabled tools**: Configurable via `OPENCODE_DISABLED_TOOLS` env var
 
-Configuration is generated dynamically in `templates/opencode_config.py`.
+Configuration is generated dynamically in `util/opencode_config.py`.
 
 ## Key Components
 
@@ -192,12 +130,14 @@ Configuration is generated dynamically in `templates/opencode_config.py`.
 
 ### Templates
 
-- **`../templates/outputs/web/`** - Lightweight Next.js scaffold (shadcn/ui, Recharts) versioned with the backend code
+- **`image/templates/outputs/web/`** - Lightweight Next.js scaffold (shadcn/ui, Recharts) versioned with the backend code
 
-### Kubernetes Specific
+### Sandbox Image (shared by both backends)
 
-- **`kubernetes/docker/Dockerfile`** - Sandbox container image (runs Next.js + OpenCode)
-- **`kubernetes/docker/entrypoint.sh`** - Container startup script
+- **`image/Dockerfile`** - Sandbox container image (runs Next.js + OpenCode)
+- **`image/entrypoint.sh`** - Container startup script
+- **`image/sandbox_daemon/`** - In-pod push/snapshot daemon
+- Built-in skill sources live in `backend/onyx/skills/builtin/` (pushed at session setup, not baked in)
 
 ## Environment Variables
 
@@ -231,7 +171,7 @@ SANDBOX_SERVICE_ACCOUNT_NAME=sandbox-file-sync  # Has S3 access via IRSA for sna
 
 ```bash
 # Container image (defaults to a pinned tag in docker-compose.yml)
-SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:v0.1.44
+SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:v0.1.52
 
 # Public URL the sandbox agent uses to reach Onyx (HTTPS, externally resolvable —
 # compose hostnames like http://api_server:8080 will not resolve from inside the
@@ -330,7 +270,7 @@ uv run pytest backend/tests/external_dependency_unit/craft/test_kubernetes_sandb
 
 ### Adding New MCP Servers
 
-1. Add MCP configuration to `templates/opencode_config.py`:
+1. Add MCP configuration to `util/opencode_config.py`:
 
    ```python
    config["mcp"] = {
@@ -348,17 +288,17 @@ uv run pytest backend/tests/external_dependency_unit/craft/test_kubernetes_sandb
 
 ### Modifying Agent Instructions
 
-Edit `AGENTS.template.md` in the build directory. This is populated with dynamic content by `templates/agent_instructions.py`.
+Edit `AGENTS.template.md` in the build directory. This is populated with dynamic content by `util/agent_instructions.py`.
 
 ### Adding New Tools/Permissions
 
-Update `templates/opencode_config.py` to add/remove tool permissions in the `permission` section.
+Update `util/opencode_config.py` to add/remove tool permissions in the `permission` section.
 
 ## Template Details
 
 ### Web Template
 
-The lightweight Next.js template (`backend/onyx/server/features/build/templates/outputs/web/`) includes:
+The lightweight Next.js template (`backend/onyx/server/features/build/sandbox/image/templates/outputs/web/`) includes:
 
 - **Framework**: Next.js 16.1.4 with React 19.2.3
 - **UI Library**: shadcn/ui components with Radix UI primitives
@@ -370,7 +310,7 @@ This template provides a modern development environment without the complexity o
 
 ### Python Venv Template
 
-The Python venv (`/templates/venv/`) includes packages from `initial-requirements.txt`:
+The Python venv (built into the sandbox image at `/workspace/.venv`) includes packages from `image/initial-requirements.txt`:
 
 - Data processing: pandas, numpy, polars
 - HTTP clients: requests, httpx

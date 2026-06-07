@@ -1,3 +1,4 @@
+import copy
 import os
 import threading
 from collections.abc import Iterator
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING
 from typing import Union
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
@@ -657,6 +659,48 @@ class LitellmLLM(LLM):
             model_kwargs=self._model_kwargs,
             user_identity=user_identity,
         )
+
+        # OpenRouter: inject session_id and user into extra_body.
+        #
+        # session_id — sticky routing: pins all turns of a conversation to the
+        # same upstream provider, enabling prompt cache hits across turns.
+        # Without this, OpenRouter may alternate between e.g. Anthropic and Google
+        # for the same model, causing cache misses on every other turn.
+        # See: https://openrouter.ai/docs/features/provider-routing#session-id
+        #
+        # user — activity tracking: OpenRouter reads the user identifier from
+        # extra_body for its per-user activity logs; the top-level LiteLLM
+        # `user` parameter is forwarded to the upstream model but is not picked
+        # up by OpenRouter's own tracking dashboard.
+        #
+        # Both are gated on SEND_USER_METADATA_TO_LLM_PROVIDER: an operator who
+        # opted out of sending session/user identifiers to providers should not
+        # have them forwarded to OpenRouter either.
+        if (
+            SEND_USER_METADATA_TO_LLM_PROVIDER
+            and self._model_provider == LlmProviderNames.OPENROUTER
+            and user_identity is not None
+        ):
+            extra_body_updates: dict[str, str] = {}
+            if user_identity.session_id:
+                extra_body_updates["session_id"] = user_identity.session_id
+            if user_identity.user_id:
+                extra_body_updates["user"] = user_identity.user_id
+            if extra_body_updates:
+                if passthrough_kwargs is self._model_kwargs:
+                    passthrough_kwargs = copy.deepcopy(self._model_kwargs)
+                existing_extra_body = passthrough_kwargs.get("extra_body") or {}
+                if isinstance(existing_extra_body, dict):
+                    passthrough_kwargs["extra_body"] = {
+                        **existing_extra_body,
+                        **extra_body_updates,
+                    }
+                else:
+                    logger.warning(
+                        "OpenRouter extra_body injection: extra_body is not a dict (%s), "
+                        "skipping session_id/user injection",
+                        type(existing_extra_body).__name__,
+                    )
 
         try:
             # NOTE: must pass in None instead of empty strings otherwise litellm

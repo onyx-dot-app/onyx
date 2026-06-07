@@ -9,7 +9,11 @@ import InputKeyValue, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
 import { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
-import { upsertCustomExternalApp } from "@/app/craft/services/externalAppsService";
+import {
+  createCustomExternalApp,
+  replaceCustomAppBundle,
+  updateExternalApp,
+} from "@/app/craft/services/externalAppsService";
 
 interface CreateCustomAppModalProps {
   open: boolean;
@@ -84,10 +88,8 @@ export default function CreateCustomAppModal({
     setFile(event.target.files?.[0] ?? null);
   }
 
-  // Headers and organization credentials are both optional: an app may inject
-  // no credentials at all and simply allowlist its upstream patterns. Name and
-  // at least one upstream pattern are always required; a bundle is required
-  // only when creating (the bundle can't be replaced through this edit path).
+  // Headers and org credentials are optional; name + at least one upstream
+  // pattern are required. A bundle is required only on create (optional on edit).
   const canSave =
     name.trim().length > 0 &&
     upstreamPatterns.length > 0 &&
@@ -97,24 +99,49 @@ export default function CreateCustomAppModal({
   async function save() {
     setIsSaving(true);
     setError(null);
+    // Edit is two calls (bundle + fields); track the bundle step to message
+    // partial success accurately.
+    let bundleSaved = false;
     try {
-      // Custom apps always go through the custom endpoint. On edit a bundle is
-      // optional (replaces the existing one when present); enabled is toggled
-      // separately on the card, so preserve the existing value here.
-      await upsertCustomExternalApp({
-        id: existingApp?.id,
-        name: name.trim(),
-        description: description.trim(),
-        upstream_url_patterns: upstreamPatterns,
-        auth_template: toRecord(headers),
-        organization_credentials: toRecord(orgCredentials),
-        enabled: existingApp?.enabled ?? true,
-        bundle: file ?? undefined,
-      });
+      if (existingApp) {
+        // Bundle first (the failure-prone step): a failure here leaves fields
+        // unsent. Clear the file so a retry doesn't re-upload it.
+        if (file) {
+          await replaceCustomAppBundle(existingApp.id, file);
+          setFile(null);
+          bundleSaved = true;
+        }
+        // enabled is toggled separately on the card.
+        await updateExternalApp(existingApp.id, {
+          name: name.trim(),
+          description: description.trim(),
+          upstream_url_patterns: upstreamPatterns,
+          auth_template: toRecord(headers),
+          organization_credentials: toRecord(orgCredentials),
+        });
+      } else {
+        // Create: bundle is required (enforced by `canSave`).
+        await createCustomExternalApp({
+          name: name.trim(),
+          description: description.trim(),
+          upstream_url_patterns: upstreamPatterns,
+          auth_template: toRecord(headers),
+          organization_credentials: toRecord(orgCredentials),
+          enabled: true,
+          bundle: file!,
+        });
+      }
       onSaved();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // A step may have committed; refresh the list to reflect what persisted.
+      onSaved();
+      const detail = e instanceof Error ? e.message : String(e);
+      setError(
+        bundleSaved
+          ? `The new bundle was saved, but updating the other fields failed — retry to finish: ${detail}`
+          : detail
+      );
     } finally {
       setIsSaving(false);
     }
@@ -154,8 +181,9 @@ export default function CreateCustomAppModal({
             <div className="flex flex-col gap-1">
               <Text font="main-ui-action">Upstream URL patterns</Text>
               <Text font="secondary-body" color="text-03">
-                Outbound URLs the proxy may inject credentials into. Type a
-                pattern and press Enter.
+                {
+                  "Outbound URLs the proxy may inject credentials into. Use * to match any characters (e.g. https://api.example.com/* covers every path on that host). The host must be literal — no wildcards before the first slash. Type a pattern and press Enter."
+                }
               </Text>
               <ListFieldInput
                 values={upstreamPatterns}

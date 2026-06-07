@@ -5,7 +5,11 @@
 # site-packages + console scripts are copied into the runtime stage; the build toolchain never
 # reaches the shipped image.
 ####################################################################################################
-FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2 AS builder
+# Registry prefix for base images. Defaults to Docker Hub; CI overrides this to the ECR
+# pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker
+# Hub rate limits. Declared before the first FROM so it applies to every base image below.
+ARG BASE_IMAGE_REGISTRY=docker.io
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:b04b5d7233d2ad9c379e22ea8927cd1378cd15c60d4ef876c065b25ea8fb3bf3 AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 
@@ -43,7 +47,7 @@ RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
         -r /tmp/ee-requirements.txt && \
     pip uninstall -y py && \
     # https://github.com/tornadoweb/tornado/issues/3107
-    rm -f /usr/local/lib/python3.11/site-packages/tornado/test/test.key && \
+    rm -f /usr/local/lib/python3.13/site-packages/tornado/test/test.key && \
     rm -rf ~/.cache/uv /tmp/*.txt
 
 
@@ -53,7 +57,7 @@ RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
 # The actual shipped image. Installs only runtime system libraries and copies the already-built
 # Python packages from the builder stage.
 ####################################################################################################
-FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2 AS runtime
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:b04b5d7233d2ad9c379e22ea8927cd1378cd15c60d4ef876c065b25ea8fb3bf3 AS runtime
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
@@ -101,7 +105,6 @@ RUN apt-get update && \
         procps \
         libjemalloc2 \
         libxmlsec1-openssl \
-        postgresql-client \
         && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
@@ -128,7 +131,7 @@ ENV PATH="/root/.opencode/bin:${PATH}"
 # celery workers/beat, alembic migrations, supervisord, Playwright). Both stages share the same base
 # image digest, so paths and ABI match. Listing the scripts explicitly keeps the base interpreter
 # binaries and any build-stage executables out of the shipped /usr/local/bin.
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY --from=builder \
     /usr/local/bin/alembic \
     /usr/local/bin/celery \
@@ -152,6 +155,9 @@ RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     apt-get remove -y --allow-remove-essential perl-base && \
     apt-get autoremove -y && \
     playwright install-deps chromium && \
+    # Re-install after autoremove: perl-base removal cascades through postgresql-client's
+    # perl dependency, sweeping it up. Install it here (post-autoremove) so it survives.
+    apt-get install -y postgresql-client && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -171,23 +177,6 @@ tiktoken.get_encoding('cl100k_base')"
 
 # Set up application files
 WORKDIR /app
-
-# Craft template setup runs BEFORE the bulk ./onyx copy so its 3-5 min
-# pip/npm install only invalidates on its own inputs, not on every PR.
-COPY --chown=onyx:onyx ./scripts/setup_craft_templates.sh /app/scripts/setup_craft_templates.sh
-RUN chmod +x /app/scripts/setup_craft_templates.sh
-COPY --chown=onyx:onyx \
-    ./onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt \
-    /app/onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt
-COPY --chown=onyx:onyx \
-    ./onyx/server/features/build/sandbox/kubernetes/docker/templates \
-    /app/onyx/server/features/build/sandbox/kubernetes/docker/templates
-RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Running Craft template setup at build time..." && \
-        ENABLE_CRAFT=true /app/scripts/setup_craft_templates.sh; \
-    fi
-ENV OUTPUTS_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs
-ENV VENV_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv
 
 # Enterprise Version Files
 COPY --chown=onyx:onyx ./ee /app/ee

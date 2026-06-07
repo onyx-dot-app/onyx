@@ -14,16 +14,15 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
-from onyx.sandbox_proxy.action_matcher import ActionMatcher
 from onyx.sandbox_proxy.addons.gate import _IdentityResolver
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.identity import ResolvedSandbox
+from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.craft._test_helpers import action_entry
@@ -86,24 +85,22 @@ class _UnusedResolver(_IdentityResolver):
         raise AssertionError("identity.resolve_session_by_id unexpectedly used")
 
 
-class _UnusedMatcher(ActionMatcher):
-    def match(self, request: Any, tenant_id: str) -> Any:  # noqa: ARG002
-        raise AssertionError("action_matcher.match unexpectedly used")
+class _UnusedMatcher(RequestEvaluator):
+    def evaluate(self, request: Any, tenant_id: str, user_id: UUID) -> Any:  # noqa: ARG002
+        raise AssertionError("request_evaluator.evaluate unexpectedly used")
 
 
 def _build_addon() -> GateAddon:
-    """`GateAddon` with only `db_session_factory` wired; the arbiter doesn't
-    touch the others, so they're obvious-fail stubs."""
+    """`GateAddon` for the claim arbiter; it opens its own tenant session via
+    `get_session_with_tenant`, so the identity/matcher/cache deps are
+    obvious-fail stubs the arbiter never touches."""
 
     def _factory_raises(tenant_id: str) -> Any:  # noqa: ARG001
         raise AssertionError("cache_factory unexpectedly used")
 
     return GateAddon(
         identity=_UnusedResolver(),
-        action_matcher=_UnusedMatcher(),
-        db_session_factory=lambda tenant_id: get_session_with_tenant(
-            tenant_id=tenant_id
-        ),
+        request_evaluator=_UnusedMatcher(),
         cache_factory=_factory_raises,
         proxy_instance_id="proxy-test",
         credential_dispatcher=CredentialInjectionDispatcher([]),

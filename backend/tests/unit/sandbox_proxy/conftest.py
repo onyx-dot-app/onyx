@@ -1,7 +1,7 @@
 """Shared stubs and factories for sandbox_proxy unit tests.
 
 - `StaticLookup` — `SandboxIPLookup` stub keyed by source IP.
-- `make_resolved_sandbox` / `make_flow` / `make_request_match` — value
+- `make_resolved_sandbox` / `make_flow` / `make_matched_actions` — value
   + mitmproxy-flow factories.
 - `StubResolver` — identity resolver stub (sandbox + session) for the gate.
 - `RecordingCredentialResolver` — `CredentialResolver` stub recording the
@@ -10,8 +10,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID
@@ -20,8 +18,8 @@ from uuid import uuid4
 from mitmproxy import http
 
 from onyx.db.enums import EndpointPolicy
-from onyx.external_apps.matching.engine import ActionMatch
-from onyx.external_apps.matching.engine import RequestMatch
+from onyx.external_apps.matching.engine import AllMatchedActions
+from onyx.external_apps.matching.engine import MatchedAction
 from onyx.sandbox_proxy.addons.gate import _IdentityResolver
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import InjectionContext
@@ -201,7 +199,7 @@ class RecordingCredentialResolver(CredentialResolver):
         return dict(self._headers)
 
 
-def make_request_match(
+def make_matched_actions(
     *,
     action_type: str = "slack.messages.write",
     display_name: str = "Post a message",
@@ -210,11 +208,11 @@ def make_request_match(
     policy: EndpointPolicy = EndpointPolicy.ASK,
     external_app_id: int = 42,
     app_name: str = "Slack",
-) -> RequestMatch:
-    """Factory for single-action `RequestMatch` test rows."""
-    return RequestMatch(
+) -> AllMatchedActions:
+    """Factory for single-action `AllMatchedActions` test rows."""
+    return AllMatchedActions(
         actions=(
-            ActionMatch(
+            MatchedAction(
                 action_type=action_type,
                 display_name=display_name,
                 description=description,
@@ -225,14 +223,3 @@ def make_request_match(
         external_app_id=external_app_id,
         payload=payload if payload is not None else {},
     )
-
-
-@contextmanager
-def _noop_session(tenant_id: str) -> Iterator[Any]:  # noqa: ARG001
-    raise AssertionError("db factory unexpectedly used")
-    yield  # pragma: no cover
-
-
-def noop_db_factory(tenant_id: str) -> Any:
-    """`DBSessionFactory` whose session never opens."""
-    return _noop_session(tenant_id)

@@ -54,11 +54,16 @@ def _noop_db_factory() -> Any:
     return factory
 
 
+@pytest.fixture(autouse=True)
+def _patch_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The resolver opens its own tenant session via `get_session_with_tenant`;
+    yield a dummy so the patched DB-access functions receive it."""
+    monkeypatch.setattr(onyx_pat_mod, "get_session_with_tenant", _noop_db_factory())
+
+
 def _ctx() -> InjectionContext:
     return InjectionContext(
-        sandbox=_sandbox(tenant_id="tenant-7"),
-        match=None,
-        db_session_factory=_noop_db_factory(),
+        sandbox=_sandbox(tenant_id="tenant-7"), matched_actions=None
     )
 
 

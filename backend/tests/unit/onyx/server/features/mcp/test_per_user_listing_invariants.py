@@ -21,6 +21,7 @@ from unittest.mock import patch
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.server.features.mcp.api import _db_mcp_server_to_api_mcp_server
@@ -54,6 +55,11 @@ def _make_db_server(
     server.admin_connection_config_id = 42 if admin_config is not None else None
     server.status = MCPServerStatus.CONNECTED
     server.last_refreshed_at = None
+    server.oauth_provider_mode = MCPOAuthProviderMode.AUTO_DISCOVERY
+    server.oauth_authorization_endpoint = None
+    server.oauth_token_endpoint = None
+    server.oauth_scopes_override = None
+    server.oauth_additional_auth_params = None
     server.current_actions = []
     return server
 

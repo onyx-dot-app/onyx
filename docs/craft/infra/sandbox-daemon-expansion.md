@@ -197,8 +197,8 @@ All endpoints require an Ed25519 signature over `{timestamp}|{path_or_endpoint}|
 ## Key Files
 
 - `kubernetes/kubernetes_sandbox_manager.py` — all `k8s_stream` calls except ACP get replaced with HTTP; `write_sandbox_file` deleted; `_regenerate_session_config` deleted.
-- `kubernetes/docker/sandbox_daemon/server.py` — new endpoints added here.
-- `kubernetes/docker/sandbox_daemon/extract.py` — existing safe-extract primitives reused; new module for session-rooted path validation.
+- `image/sandbox_daemon/server.py` — new endpoints added here.
+- `image/sandbox_daemon/extract.py` — existing safe-extract primitives reused; new module for session-rooted path validation.
 - `kubernetes/internal/acp_exec_client.py` — stays on `k8s_stream`; health check migrates to daemon `/health`.
 - `base.py` — `write_sandbox_file` abstract method removed.
 - `local/local_sandbox_manager.py` — `write_sandbox_file` impl removed.

@@ -2,23 +2,27 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Text from "@/refresh-components/texts/Text";
-import { InputTypeIn } from "@opal/components";
+import { Button, Divider, InputTypeIn, Text } from "@opal/components";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import { Button, Divider } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { SettingsLayouts, InputVertical } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
+import PreApprovalPicker from "@/app/craft/v1/tasks/components/PreApprovalPicker";
 import {
   compileLocalPayloadToUtcCron,
   localPayloadToUtcPayload,
 } from "@/app/craft/v1/tasks/schedule";
-import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
+import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
-import { detectSlashTrigger, toPickerSkills } from "@/lib/skills/picker";
+import useUserExternalApps from "@/hooks/useUserExternalApps";
+import {
+  detectSlashTrigger,
+  toPickerSections,
+  type PickerEntry,
+} from "@/lib/skills/picker";
 import type {
   EditorMode,
   EditorPayload,
@@ -39,6 +43,7 @@ export interface ScheduleTaskFormInitial {
   prompt: string;
   mode: EditorMode;
   payload: EditorPayload;
+  preApprovedAppIds: number[];
 }
 
 interface ScheduleTaskFormProps {
@@ -65,15 +70,20 @@ export default function ScheduleTaskForm({
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
   const [payload, setPayload] = useState<EditorPayload>(initial.payload);
+  const [preApprovedAppIds, setPreApprovedAppIds] = useState<number[]>(
+    initial.preApprovedAppIds
+  );
   const [saving, setSaving] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [promptTouched, setPromptTouched] = useState(false);
 
-  // `/` skill picker state for the prompt field. Scoped to the trigger
-  // owner's accessible skills (same access query as `GET /skills`).
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: skillsData } = useUserSkills();
-  const pickerSkills = useMemo(() => toPickerSkills(skillsData), [skillsData]);
+  const { data: externalAppsData } = useUserExternalApps();
+  const pickerSections = useMemo(
+    () => toPickerSections(skillsData, externalAppsData),
+    [skillsData, externalAppsData]
+  );
   const [skillPicker, setSkillPicker] = useState<{
     open: boolean;
     anchorRect: DOMRect | null;
@@ -120,10 +130,15 @@ export default function ScheduleTaskForm({
   }, []);
 
   const handleSkillPickerSelect = useCallback(
-    (slug: string) => {
+    (entry: PickerEntry) => {
+      if (entry.kind === "app" && !entry.authenticated) {
+        setSkillPicker((s) => ({ ...s, open: false }));
+        router.push(`/craft/v1/apps?connect=${entry.slug}`);
+        return;
+      }
       setSkillPicker((prev) => {
         if (!prev.open) return prev;
-        const replacement = `/${slug} `;
+        const replacement = `/${entry.slug} `;
         const newPrompt =
           prompt.slice(0, prev.slashIndex) +
           replacement +
@@ -141,7 +156,7 @@ export default function ScheduleTaskForm({
         return { ...prev, open: false };
       });
     },
-    [prompt]
+    [prompt, router]
   );
 
   const compiled = compileLocalPayloadToUtcCron(mode, payload);
@@ -180,6 +195,7 @@ export default function ScheduleTaskForm({
             prompt: trimmedPrompt,
             editor_mode: mode,
             editor_payload: storagePayload,
+            pre_approved_app_ids: preApprovedAppIds,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
@@ -194,6 +210,7 @@ export default function ScheduleTaskForm({
             editor_mode: mode,
             editor_payload: storagePayload,
             run_immediately: runImmediately,
+            pre_approved_app_ids: preApprovedAppIds,
           };
           await createScheduledTask(body);
           toast.success(
@@ -217,6 +234,7 @@ export default function ScheduleTaskForm({
       initial.taskId,
       mode,
       payload,
+      preApprovedAppIds,
       router,
       trimmedName,
       trimmedPrompt,
@@ -292,7 +310,7 @@ export default function ScheduleTaskForm({
               variant={shownNameError ? "error" : undefined}
             />
             {shownNameError && (
-              <Text secondaryBody text03 className="text-status-error-05">
+              <Text font="secondary-body" color="status-error-05">
                 {shownNameError}
               </Text>
             )}
@@ -317,16 +335,16 @@ export default function ScheduleTaskForm({
               data-testid="task-prompt-input"
               variant={shownPromptError ? "error" : undefined}
             />
-            <SkillPickerPopover
+            <EntryPickerPopover
               open={skillPicker.open}
               anchorRect={skillPicker.anchorRect}
               query={skillPicker.query}
-              skills={pickerSkills}
+              sections={pickerSections}
               onSelect={handleSkillPickerSelect}
               onClose={closeSkillPicker}
             />
             {shownPromptError && (
-              <Text secondaryBody text03 className="text-status-error-05">
+              <Text font="secondary-body" color="status-error-05">
                 {shownPromptError}
               </Text>
             )}
@@ -346,6 +364,20 @@ export default function ScheduleTaskForm({
             />
           </InputVertical>
         </GeneralLayouts.Section>
+
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+
+        <GeneralLayouts.Section>
+          <InputVertical
+            title="Pre-approved apps"
+            description="Selected apps can act without pausing for approval while this task runs on its own. Note: an app you don't pre-approve will pause mid-run to ask for your approval. The run may stall or fail if you do not approve an action request."
+          >
+            <PreApprovalPicker
+              selectedIds={preApprovedAppIds}
+              onChange={setPreApprovedAppIds}
+            />
+          </InputVertical>
+        </GeneralLayouts.Section>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
@@ -358,5 +390,6 @@ export function defaultFormInitial(): ScheduleTaskFormInitial {
     prompt: "",
     mode: "interval",
     payload: { unit: "hours", every: 1 },
+    preApprovedAppIds: [],
   };
 }

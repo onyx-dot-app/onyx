@@ -18,10 +18,9 @@ from typing import Protocol
 
 from mitmproxy import http
 
-from onyx.external_apps.matching.engine import RequestMatch
+from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy.errors import http_403
 from onyx.sandbox_proxy.errors import SandboxProxyError
-from onyx.sandbox_proxy.identity import DBSessionFactory
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.utils.logger import setup_logger
 
@@ -36,14 +35,13 @@ class CredentialUnavailableError(Exception):
 class InjectionContext:
     """Per-request inputs every resolver receives.
 
-    `match` is the request-level match (carrying `external_app_id`), or
-    `None` on off-catalog forwards. `sandbox.tenant_id` is what resolvers
-    key their per-tenant lookups by.
+    `matched_actions` is the actions matched for this request (carrying
+    `external_app_id`), or `None` on off-catalog forwards. `sandbox.tenant_id` is
+    what resolvers key their per-tenant lookups by.
     """
 
     sandbox: ResolvedSandbox
-    match: RequestMatch | None
-    db_session_factory: DBSessionFactory
+    matched_actions: AllMatchedActions | None
 
 
 class CredentialResolver(Protocol):
@@ -52,7 +50,7 @@ class CredentialResolver(Protocol):
     def claims(self, request: http.Request, ctx: InjectionContext) -> bool:
         """Cheap predicate: does this resolver own this request?
 
-        Implementations should key off `request.host` (and `ctx.match` /
+        Implementations should key off `request.host` (and `ctx.matched_actions` /
         `ctx.sandbox.tenant_id` for per-context routing); they MUST NOT open
         a DB session — that's `resolve()`'s job.
         """

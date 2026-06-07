@@ -5,7 +5,6 @@ import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { SettingsLayouts } from "@opal/layouts";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { toast } from "@/hooks/useToast";
 import { Button, MessageCard, Text } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
@@ -21,6 +20,7 @@ import {
   SvgUserEdit,
   SvgUserKey,
   SvgUserManage,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -274,7 +274,7 @@ export default function ServiceAccountsPage() {
           divider
         />
         <SettingsLayouts.Body>
-          <SimpleLoader />
+          <SvgSimpleLoader />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );

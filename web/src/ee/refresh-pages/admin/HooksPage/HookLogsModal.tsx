@@ -1,9 +1,8 @@
 "use client";
 
 import { Button, Text } from "@opal/components";
-import { SvgDownload, SvgTextLines } from "@opal/icons";
+import { SvgDownload, SvgTextLines, SvgSimpleLoader } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
@@ -115,7 +114,7 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
         <Modal.Body>
           {isLoading ? (
             <Section justifyContent="center" height="fit" className="py-6">
-              <SimpleLoader />
+              <SvgSimpleLoader />
             </Section>
           ) : error ? (
             <Text font="main-ui-body" color="text-03">

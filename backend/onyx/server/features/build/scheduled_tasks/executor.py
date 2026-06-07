@@ -53,8 +53,8 @@ from onyx.db.scheduled_task import mark_run_status
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.sandbox.event_schema import RequestPermissionRequest
-from onyx.server.features.build.session.manager import BuildStreamingState
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -416,6 +416,7 @@ def _drive_agent(
                     return False
 
                 session_manager._persist_sandbox_event(session_id, state, sandbox_event)
+                db_session.commit()
                 final_event_count += 1
 
             if approval_required:

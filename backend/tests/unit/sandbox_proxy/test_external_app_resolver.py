@@ -15,13 +15,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.external_apps.matching.engine import RequestMatch
+from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
 from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.resolvers import external_app as external_app_mod
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
 from tests.unit.sandbox_proxy.conftest import make_flow as _flow
-from tests.unit.sandbox_proxy.conftest import make_request_match
+from tests.unit.sandbox_proxy.conftest import make_matched_actions
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
 
 
@@ -44,17 +44,9 @@ def _recorder_db_factory(ops: list[str]) -> Any:
     return factory
 
 
-def _ctx(
-    *,
-    match: RequestMatch | None = None,
-    db_factory: Any = None,
-) -> InjectionContext:
+def _ctx(*, matched_actions: AllMatchedActions | None = None) -> InjectionContext:
     return InjectionContext(
-        sandbox=_sandbox(tenant_id="tenant-7"),
-        match=match,
-        db_session_factory=db_factory
-        if db_factory is not None
-        else _recorder_db_factory([]),
+        sandbox=_sandbox(tenant_id="tenant-7"), matched_actions=matched_actions
     )
 
 
@@ -62,8 +54,8 @@ def test_claims_true_iff_match_present() -> None:
     """Host is irrelevant — the matcher has already attributed the request."""
     resolver = ExternalAppResolver()
     req = _flow(host="api.slack.com").request
-    assert resolver.claims(req, _ctx(match=make_request_match())) is True
-    assert resolver.claims(req, _ctx(match=None)) is False
+    assert resolver.claims(req, _ctx(matched_actions=make_matched_actions())) is True
+    assert resolver.claims(req, _ctx(matched_actions=None)) is False
 
 
 def test_resolve_forwards_external_app_id_user_id_and_tenant(
@@ -80,10 +72,13 @@ def test_resolve_forwards_external_app_id_user_id_and_tenant(
         return {"Authorization": "Bearer real"}
 
     monkeypatch.setattr(external_app_mod, "resolve_injection_headers", _fake)
-
-    match = make_request_match(external_app_id=99)
     ops: list[str] = []
-    ctx = _ctx(match=match, db_factory=_recorder_db_factory(ops))
+    monkeypatch.setattr(
+        external_app_mod, "get_session_with_tenant", _recorder_db_factory(ops)
+    )
+
+    matched_actions = make_matched_actions(external_app_id=99)
+    ctx = _ctx(matched_actions=matched_actions)
 
     headers = ExternalAppResolver().resolve(_flow().request, ctx)
 
@@ -97,13 +92,13 @@ def test_resolve_refreshes_token_before_rendering(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The resolver refreshes an expiring OAuth token (via `ensure_fresh_credentials`,
-    handed the session factory + ids) before rendering headers, so the injected
-    `Bearer` is live. The refresh mechanics themselves are pinned in
+    handed the tenant + ids) before rendering headers, so the injected `Bearer` is
+    live. The refresh mechanics themselves are pinned in
     `tests/unit/external_apps/test_token_refresh.py`."""
-    calls: list[tuple[Any, str, int, Any]] = []
+    calls: list[tuple[str, int, Any]] = []
 
-    def _ensure(factory: Any, tenant_id: str, app_id: int, user_id: Any) -> None:
-        calls.append((factory, tenant_id, app_id, user_id))
+    def _ensure(tenant_id: str, app_id: int, user_id: Any) -> None:
+        calls.append((tenant_id, app_id, user_id))
 
     monkeypatch.setattr(external_app_mod, "ensure_fresh_credentials", _ensure)
     monkeypatch.setattr(
@@ -111,20 +106,22 @@ def test_resolve_refreshes_token_before_rendering(
         "resolve_injection_headers",
         lambda *_a, **_k: {"Authorization": "Bearer real"},
     )
+    monkeypatch.setattr(
+        external_app_mod, "get_session_with_tenant", _recorder_db_factory([])
+    )
 
-    factory = _recorder_db_factory([])
-    match = make_request_match(external_app_id=99)
-    ctx = _ctx(match=match, db_factory=factory)
+    matched_actions = make_matched_actions(external_app_id=99)
+    ctx = _ctx(matched_actions=matched_actions)
 
     headers = ExternalAppResolver().resolve(_flow().request, ctx)
 
     assert headers == {"Authorization": "Bearer real"}
-    assert calls == [(factory, "tenant-7", 99, ctx.sandbox.user_id)]
+    assert calls == [("tenant-7", 99, ctx.sandbox.user_id)]
 
 
 def test_resolve_raises_when_match_is_none() -> None:
-    """Contract violation safety net: `claims` guarantees `match` is set, but
+    """Contract violation safety net: `claims` guarantees `matched_actions` is set, but
     a Protocol bug must surface as a 403, not a NoneType crash inside SQL code."""
     resolver = ExternalAppResolver()
     with pytest.raises(CredentialUnavailableError):
-        resolver.resolve(_flow().request, _ctx(match=None))
+        resolver.resolve(_flow().request, _ctx(matched_actions=None))

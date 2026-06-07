@@ -18,8 +18,9 @@ from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.api.models import CreateBuiltInExternalAppRequest
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
-from onyx.server.features.build.api.models import UpsertExternalAppRequest
+from onyx.server.features.build.api.models import UpdateExternalAppRequest
 from onyx.utils.encryption import is_masked_credential
 
 _AUTH_TEMPLATE = {"Authorization": "Bearer {api_key}"}
@@ -60,13 +61,12 @@ def _create(
     organization_credentials: str = json.dumps({"api_key": "sk-test"}),
 ) -> ExternalAppAdminResponse:
     """Create a custom app with a valid default bundle."""
-    return api.upsert_custom_external_app(
+    return api.create_custom_external_app(
         name="My Form Name",
         description="",
         upstream_url_patterns=json.dumps(_UPSTREAM),
         auth_template=auth_template,
         organization_credentials=organization_credentials,
-        app_id=None,
         enabled=True,
         bundle=_upload(f"{slug}.zip"),
         _=test_user,
@@ -115,6 +115,58 @@ def test_create_persists_skill_and_app(
     db_session.commit()
 
 
+def test_custom_app_glob_matches_deep_path(
+    db_session: Session,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Custom apps store their URL patterns as authored globs; the matcher
+    translates them to regexes that cover deep paths (the Discord 401
+    regression — ``/api/*`` must match ``/api/v10/...``)."""
+    from onyx.sandbox_proxy.request_evaluator import resolve_app_for_url
+
+    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
+    slug = f"custom-test-{uuid4().hex[:8]}"
+
+    resp = _create(db_session, test_user, slug)
+    # The glob is stored and round-tripped verbatim — no regex stored at rest.
+    assert resp.upstream_url_patterns == _UPSTREAM
+
+    app = db_session.scalar(select(ExternalApp).where(ExternalApp.id == resp.id))
+    assert app is not None
+    assert list(app.upstream_url_patterns) == _UPSTREAM
+    # The matcher translates the glob, resolving a realistic deep path here.
+    assert resolve_app_for_url("https://api.example.com/v10/users/@me", [app]) is app
+    assert resolve_app_for_url("https://other.example.com/x", [app]) is None
+
+    db_session.execute(delete(Skill).where(Skill.slug == slug))
+    db_session.commit()
+
+
+def test_create_rejects_wildcard_host_glob(
+    db_session: Session,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
+    slug = f"custom-test-{uuid4().hex[:8]}"
+
+    with pytest.raises(OnyxError):
+        api.create_custom_external_app(
+            name="Wildcard Host",
+            description="",
+            upstream_url_patterns=json.dumps(["https://*.example.com/*"]),
+            auth_template=json.dumps(_AUTH_TEMPLATE),
+            organization_credentials=json.dumps({"api_key": "sk-test"}),
+            enabled=True,
+            bundle=_upload(f"{slug}.zip"),
+            _=test_user,
+            db_session=db_session,
+        )
+    # Rejected before persistence — no skill row created.
+    assert db_session.scalar(select(Skill).where(Skill.slug == slug)) is None
+
+
 def test_create_with_no_credentials(
     db_session: Session,
     test_user: User,
@@ -152,16 +204,15 @@ def test_edit_updates_config_and_replaces_bundle(
     assert skill is not None
     original_bundle_id = skill.bundle_file_id
 
-    # Edit: new name, new patterns, and a replacement bundle (different bytes).
-    edited = api.upsert_custom_external_app(
-        name="Renamed App",
-        description="A new description",
-        upstream_url_patterns=json.dumps(["https://api.example.com/v2/*"]),
-        auth_template=json.dumps(_AUTH_TEMPLATE),
-        organization_credentials=json.dumps({}),
-        app_id=created.id,
-        enabled=True,
-        bundle=_upload(f"{slug}.zip", marker="v2"),
+    edited = api.update_external_app_admin(
+        external_app_id=created.id,
+        request=UpdateExternalAppRequest(
+            name="Renamed App",
+            description="A new description",
+            upstream_url_patterns=["https://api.example.com/v2/*"],
+            auth_template=_AUTH_TEMPLATE,
+            organization_credentials={},
+        ),
         _=test_user,
         db_session=db_session,
     )
@@ -171,6 +222,15 @@ def test_edit_updates_config_and_replaces_bundle(
     assert edited.description == "A new description"
     assert edited.upstream_url_patterns == ["https://api.example.com/v2/*"]
     assert edited.organization_credentials == {}
+
+    rebundled = api.replace_custom_app_bundle(
+        external_app_id=created.id,
+        bundle=_upload(f"{slug}.zip", marker="v2"),
+        _=test_user,
+        db_session=db_session,
+    )
+    # Bundle swap preserves the fields set by the PATCH above.
+    assert rebundled.name == "Renamed App"
 
     db_session.expire_all()
     skill = db_session.scalar(select(Skill).where(Skill.slug == slug))
@@ -210,15 +270,14 @@ def test_admin_response_masks_secret_and_edit_preserves_it(
 
     # Edit, echoing the masked value back (the form was populated from the
     # masked response and the admin didn't change it).
-    edited = api.upsert_custom_external_app(
-        name="My Form Name",
-        description="",
-        upstream_url_patterns=json.dumps(_UPSTREAM),
-        auth_template=json.dumps(_AUTH_TEMPLATE),
-        organization_credentials=json.dumps({"api_key": returned}),
-        app_id=created.id,
-        enabled=True,
-        bundle=None,
+    edited = api.update_external_app_admin(
+        external_app_id=created.id,
+        request=UpdateExternalAppRequest(
+            name="My Form Name",
+            upstream_url_patterns=_UPSTREAM,
+            auth_template=_AUTH_TEMPLATE,
+            organization_credentials={"api_key": returned},
+        ),
         _=test_user,
         db_session=db_session,
     )
@@ -245,13 +304,12 @@ def test_create_rejects_bundle_without_skill_md(
     slug = f"custom-test-{uuid4().hex[:8]}"
 
     with pytest.raises(OnyxError):
-        api.upsert_custom_external_app(
+        api.create_custom_external_app(
             name="No Skill",
             description="",
             upstream_url_patterns=json.dumps(_UPSTREAM),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({}),
-            app_id=None,
             enabled=True,
             bundle=_upload(f"{slug}.zip", with_skill_md=False),
             _=test_user,
@@ -268,13 +326,12 @@ def test_create_requires_bundle(
 ) -> None:
     monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
     with pytest.raises(OnyxError):
-        api.upsert_custom_external_app(
+        api.create_custom_external_app(
             name="No Bundle",
             description="",
             upstream_url_patterns=json.dumps(_UPSTREAM),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({}),
-            app_id=None,
             enabled=True,
             bundle=None,
             _=test_user,
@@ -311,11 +368,9 @@ def test_json_admin_apps_rejects_custom(
     db_session: Session,
     test_user: User,
 ) -> None:
-    # The JSON /admin/apps endpoint is built-in only.
     with pytest.raises(OnyxError):
-        api.upsert_external_app(
-            request=UpsertExternalAppRequest(
-                id=None,
+        api.create_built_in_external_app(
+            request=CreateBuiltInExternalAppRequest(
                 name="Nope",
                 description="",
                 enabled=True,

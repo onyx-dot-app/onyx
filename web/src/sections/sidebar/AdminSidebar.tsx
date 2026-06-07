@@ -55,7 +55,6 @@ function buildItems(
   hasSubscription: boolean,
   hooksEnabled: boolean
 ): SidebarItemEntry[] {
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
   const items: SidebarItemEntry[] = [];
 
   const add = (section: string, route: Parameters<typeof sidebarItem>[0]) => {
@@ -95,22 +94,20 @@ function buildItems(
 
   // 2. Agents & Actions
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.AGENTS);
-  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.SKILLS);
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.MCP_ACTIONS);
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.OPENAPI_ACTIONS);
 
   // 3. Documents & Knowledge
-  if (vectorDbEnabled) {
-    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEXING_STATUS);
-    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.ADD_CONNECTOR);
-    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.DOCUMENT_SETS);
-    if (!isCurator) {
-      items.push({
-        ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
-        section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
-        error: settings?.settings.needs_reindexing,
-      });
-    }
+  // Shown even in Lite mode; the pages themselves render a no-indexing notice.
+  add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEXING_STATUS);
+  add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.ADD_CONNECTOR);
+  add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.DOCUMENT_SETS);
+  if (!isCurator) {
+    items.push({
+      ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
+      section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
+      error: settings?.settings.needs_reindexing,
+    });
   }
 
   // 4. Integrations (admin only)
@@ -148,7 +145,10 @@ function buildItems(
   // 7. Usage (admin only)
   if (!isCurator) {
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
-    if (settings?.settings.query_history_type !== "disabled") {
+    if (
+      settings?.settings.query_history_type !== "disabled" &&
+      !settings?.settings.hide_query_history_from_admin_panel
+    ) {
       addGated(SECTIONS.USAGE, ADMIN_ROUTES.QUERY_HISTORY, Tier.BUSINESS);
     }
   }

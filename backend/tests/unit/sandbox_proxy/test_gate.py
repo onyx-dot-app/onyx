@@ -1,7 +1,8 @@
 """Unit tests for the GateAddon mitmproxy addon.
 
-External dependencies (`_IdentityResolver`, `ActionMatcher`, `CacheFactory`,
-`DBSessionFactory`) are stubbed via small Protocol implementations.
+External dependencies (`_IdentityResolver`, `RequestEvaluator`, `CacheFactory`)
+are stubbed via small Protocol implementations; `get_session_with_tenant` is
+patched per test.
 
 The race arbiter (`_claim_expired_or_read_winner`) is covered against a
 real Postgres row in
@@ -25,10 +26,10 @@ import pytest
 from mitmproxy import http
 from redis.exceptions import RedisError
 
+from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
-from onyx.external_apps.matching.engine import RequestMatch
-from onyx.sandbox_proxy.action_matcher import ActionMatcher
+from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy.addons import gate as gate_mod
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.addons.gate import ParkedApprovals
@@ -39,11 +40,11 @@ from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
 from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
+from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from tests.unit.sandbox_proxy.conftest import make_flow as _flow
-from tests.unit.sandbox_proxy.conftest import make_request_match
+from tests.unit.sandbox_proxy.conftest import make_matched_actions
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
-from tests.unit.sandbox_proxy.conftest import noop_db_factory
 from tests.unit.sandbox_proxy.conftest import RecordingCredentialResolver
 from tests.unit.sandbox_proxy.conftest import StubResolver as _StubResolver
 
@@ -52,22 +53,23 @@ from tests.unit.sandbox_proxy.conftest import StubResolver as _StubResolver
 # ---------------------------------------------------------------------------
 
 
-class _StubMatcher(ActionMatcher):
+class _StubMatcher(RequestEvaluator):
     def __init__(
         self,
         *,
-        result: RequestMatch | None = None,
+        result: AllMatchedActions | None = None,
         exc: Exception | None = None,
     ) -> None:
         self._result = result
         self._exc = exc
         self.calls = 0
 
-    def match(
+    def evaluate(
         self,
         request: http.Request,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
-    ) -> RequestMatch | None:
+        user_id: UUID,  # noqa: ARG002
+    ) -> AllMatchedActions | None:
         self.calls += 1
         if self._exc is not None:
             raise self._exc
@@ -94,18 +96,24 @@ def _ctx(
     )
 
 
+@pytest.fixture(autouse=True)
+def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The gate opens tenant sessions via `gate_mod.get_session_with_tenant`.
+    Default it to a dummy MagicMock-yielding session; tests asserting on
+    session-open ordering re-patch it with `_recorder_db_factory(ops)`."""
+    monkeypatch.setattr(gate_mod, "get_session_with_tenant", _recorder_db_factory([]))
+
+
 def _build(
     *,
     resolver: _StubResolver,
     matcher: _StubMatcher,
-    db_factory: Any = noop_db_factory,
     cache_factory: Any = _noop_cache_factory,
     credential_resolvers: list[CredentialResolver] | None = None,
 ) -> GateAddon:
     return GateAddon(
         identity=resolver,
-        action_matcher=matcher,
-        db_session_factory=db_factory,
+        request_evaluator=matcher,
         cache_factory=cache_factory,
         proxy_instance_id="proxy-test",
         credential_dispatcher=CredentialInjectionDispatcher(
@@ -120,14 +128,15 @@ def _assert_403(flow: http.HTTPFlow, expected_code: SandboxProxyError) -> None:
     content = flow.response.content
     assert content is not None
     body = json.loads(content)
-    assert body == {"error": expected_code.value}
+    assert body["error"] == expected_code.value
+    assert body["message"]
 
 
-_MATCH = make_request_match(payload={"text": "hi"})
-_MATCH_ALWAYS = make_request_match(
+_MATCH = make_matched_actions(payload={"text": "hi"})
+_MATCH_ALWAYS = make_matched_actions(
     action_type="slack.channels.read", policy=EndpointPolicy.ALWAYS
 )
-_MATCH_DENY = make_request_match(payload={"text": "hi"}, policy=EndpointPolicy.DENY)
+_MATCH_DENY = make_matched_actions(payload={"text": "hi"}, policy=EndpointPolicy.DENY)
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +241,7 @@ async def test_resolve_and_match_no_tag_fails_closed() -> None:
 @pytest.mark.asyncio
 async def test_resolve_and_match_matcher_returns_none_fails_open() -> None:
     """Non-gated traffic: matcher returns None → forwarded; the off-catalog
-    dispatcher invocation runs with `match=None` so host-only resolvers can
+    dispatcher invocation runs with `matched_actions=None` so host-only resolvers can
     still claim by host."""
     sandbox = _sandbox()
     resolver = _StubResolver(sandbox=sandbox)
@@ -246,10 +255,10 @@ async def test_resolve_and_match_matcher_returns_none_fails_open() -> None:
     assert result is None
     assert flow.response is None  # forwarded
     assert resolver.resolve_session_by_id_calls == []
-    # The off-catalog dispatch IS wired — the resolver was probed with match=None.
+    # The off-catalog dispatch IS wired — the resolver was probed with matched_actions=None.
     assert len(spy.claims_calls) == 1
     _request, ctx = spy.claims_calls[0]
-    assert ctx.match is None
+    assert ctx.matched_actions is None
     assert ctx.sandbox is sandbox
 
 
@@ -269,9 +278,9 @@ async def test_resolve_and_match_matcher_raises_falls_through_as_off_catalog() -
     assert result is None
     assert flow.response is None  # forwarded
     assert resolver.resolve_session_by_id_calls == []
-    # Dispatcher was invoked with match=None (same as a real off-catalog).
+    # Dispatcher was invoked with matched_actions=None (same as a real off-catalog).
     assert len(spy.claims_calls) == 1
-    assert spy.claims_calls[0][1].match is None
+    assert spy.claims_calls[0][1].matched_actions is None
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +297,6 @@ async def test_resolve_and_match_always_forwards_without_session() -> None:
     addon = _build(
         resolver=resolver,
         matcher=_StubMatcher(result=_MATCH_ALWAYS),
-        db_factory=_recorder_db_factory([]),
         # No-claim resolver -> dispatcher returns PASS_THROUGH, leaves the
         # flow forwarded with no response.
         credential_resolvers=[RecordingCredentialResolver(claims_result=False)],
@@ -335,11 +343,11 @@ async def test_resolve_and_match_deny_blocks_with_403() -> None:
 class _PipelineSpy:
     """Records the approval pipeline + dispatcher so a test can read the path."""
 
-    persisted: list[tuple[SessionContext, RequestMatch]]
-    awaited: list[RequestMatch]
-    # (match, sandbox_user_id, sandbox_tenant_id) — captured off the
+    persisted: list[tuple[SessionContext, AllMatchedActions]]
+    awaited: list[AllMatchedActions]
+    # (matched_actions, sandbox_user_id, sandbox_tenant_id) — captured off the
     # InjectionContext the dispatcher was handed.
-    dispatched: list[tuple[RequestMatch | None, UUID, str]]
+    dispatched: list[tuple[AllMatchedActions | None, UUID, str]]
 
     @property
     def approval_ran(self) -> bool:
@@ -360,23 +368,23 @@ def _spy_pipeline(
     """
     spy = _PipelineSpy(persisted=[], awaited=[], dispatched=[])
 
-    def _persist(ctx: SessionContext, match: RequestMatch) -> UUID:
-        spy.persisted.append((ctx, match))
+    def _persist(ctx: SessionContext, matched_actions: AllMatchedActions) -> UUID:
+        spy.persisted.append((ctx, matched_actions))
         return uuid4()
 
     async def _await(
-        _aid: UUID, _ctx: SessionContext, match: RequestMatch
+        _aid: UUID, _ctx: SessionContext, matched_actions: AllMatchedActions
     ) -> ApprovalDecision | None:
-        spy.awaited.append(match)
+        spy.awaited.append(matched_actions)
         return decision
 
     def _dispatch(
         flow: http.HTTPFlow,  # noqa: ARG001
         *,
         sandbox: ResolvedSandbox,
-        match: RequestMatch | None,
+        matched_actions: AllMatchedActions | None,
     ) -> None:
-        spy.dispatched.append((match, sandbox.user_id, sandbox.tenant_id))
+        spy.dispatched.append((matched_actions, sandbox.user_id, sandbox.tenant_id))
 
     monkeypatch.setattr(addon, "_persist_approval_row", _persist)
     monkeypatch.setattr(addon, "_await_decision", _await)
@@ -466,6 +474,211 @@ async def test_ask_denied_blocks(
 
 
 # ---------------------------------------------------------------------------
+# request() — scheduled-task pre-approval short-circuit
+#
+# The grant lookup (`get_live_scheduled_run_grants`) is stubbed here; its
+# SQL is covered against real Postgres in
+# external_dependency_unit/craft/test_scheduled_task_pre_approvals.py.
+# ---------------------------------------------------------------------------
+
+
+_RUN_ID = UUID("55555555-5555-5555-5555-555555555555")
+# make_matched_actions defaults external_app_id=42.
+_GRANTED_APP_ID = 42
+
+
+def _stub_grants(
+    monkeypatch: pytest.MonkeyPatch,
+    result: tuple[UUID, list[int]] | None | Exception,
+) -> list[UUID]:
+    """Stub the gate's grant lookup; returns the recorded session_ids."""
+    calls: list[UUID] = []
+
+    def _lookup(*, db_session: Any, session_id: UUID) -> tuple[UUID, list[int]] | None:  # noqa: ARG001
+        calls.append(session_id)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(gate_mod, "get_live_scheduled_run_grants", _lookup)
+    return calls
+
+
+def _spy_pre_approve_insert(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Capture insert_action_approval kwargs (the DB session is a MagicMock)."""
+    inserted: list[dict[str, Any]] = []
+
+    def _fake_insert(db: Any, **kwargs: Any) -> Any:  # noqa: ARG001
+        inserted.append(kwargs)
+        row = MagicMock()
+        row.approval_id = uuid4()
+        return row
+
+    monkeypatch.setattr(
+        gate_mod.action_approval, "insert_action_approval", _fake_insert
+    )
+    return inserted
+
+
+@pytest.mark.asyncio
+async def test_pre_approved_scheduled_run_skips_park(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Granted app on a RUNNING scheduled run: forwarded immediately with a
+    pre-decided APPROVED row — the park pipeline never runs."""
+    user_id = uuid4()
+    sandbox = _sandbox(user_id=user_id)
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    spy = _spy_pipeline(addon, monkeypatch)
+    _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    inserted = _spy_pre_approve_insert(monkeypatch)
+    notified: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        gate_mod, "create_notification", lambda **kw: notified.append(kw)
+    )
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    assert flow.response is None  # forwarded
+    assert not spy.approval_ran  # park pipeline skipped
+    assert spy.awaited == []
+    assert spy.dispatched == [(_MATCH, user_id, sandbox.tenant_id)]
+    assert len(inserted) == 1
+    assert inserted[0]["decision"] == ApprovalDecision.APPROVED
+    assert inserted[0]["decided_via"] == ApprovalDecidedVia.PRE_APPROVAL
+    assert inserted[0]["external_app_id"] == _GRANTED_APP_ID
+    # Dedup contract: additional_data is exactly the stable (run, app) pair.
+    assert len(notified) == 1
+    assert notified[0]["additional_data"] == {
+        "run_id": str(_RUN_ID),
+        "external_app_id": _GRANTED_APP_ID,
+    }
+
+
+@pytest.mark.asyncio
+async def test_grant_lookup_cached_across_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The per-session grant cache is consulted before Postgres: two gated
+    requests on the same session hit the DB lookup only once."""
+    sandbox = _sandbox()
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    _spy_pipeline(addon, monkeypatch)
+    lookup_calls = _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    _spy_pre_approve_insert(monkeypatch)
+    monkeypatch.setattr(
+        gate_mod,
+        "create_notification",
+        lambda **kw: None,  # noqa: ARG005
+    )
+
+    await addon.request(_flow(proxy_auth=_basic_auth(_TAG_UUID)))
+    await addon.request(_flow(proxy_auth=_basic_auth(_TAG_UUID)))
+
+    assert lookup_calls == [UUID(_TAG_UUID)]  # second request served from cache
+
+
+def test_grant_lookup_cache_keyed_on_session_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The cache key is ``session_id`` alone (not the db handle): the same
+    session re-queried with a fresh db hits cache, a different session misses.
+    Guards the key lambda against leaking one session's grants to another."""
+    addon = _build(
+        resolver=_StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID)),
+        matcher=_StubMatcher(result=_MATCH),
+    )
+    lookup_calls = _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    s1, s2 = uuid4(), uuid4()
+
+    addon._live_grants(MagicMock(), s1)
+    addon._live_grants(MagicMock(), s1)  # same session, different db -> cache hit
+    addon._live_grants(MagicMock(), s2)  # different session -> miss
+
+    assert lookup_calls == [s1, s2]
+
+
+@pytest.mark.asyncio
+async def test_pre_approval_dispatch_failure_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dispatch raising after the APPROVED row is committed blocks (403) — it
+    must not let mitmproxy forward the original request."""
+    resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    _spy_pipeline(addon, monkeypatch)
+    _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    _spy_pre_approve_insert(monkeypatch)
+    monkeypatch.setattr(
+        gate_mod,
+        "create_notification",
+        lambda **kw: None,  # noqa: ARG005
+    )
+
+    def _boom(*args: Any, **kwargs: Any) -> None:  # noqa: ARG001
+        raise RuntimeError("credential refresh failed")
+
+    monkeypatch.setattr(addon, "_dispatch_injection_or_block", _boom)
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.INTERNAL_ERROR)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "grants",
+    [
+        None,  # not a scheduled run (or run not RUNNING)
+        (_RUN_ID, []),  # scheduled run, app not granted
+        (_RUN_ID, [_GRANTED_APP_ID + 1]),  # different app granted
+        RuntimeError("db down"),  # lookup failure → fail-to-ask
+    ],
+    ids=["no_live_run", "no_grants", "other_app", "lookup_error"],
+)
+async def test_no_pre_approval_falls_through_to_park(
+    monkeypatch: pytest.MonkeyPatch,
+    grants: tuple[UUID, list[int]] | None | Exception,
+) -> None:
+    """Every non-granted shape (including a lookup crash) parks as usual."""
+    resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.REJECTED)
+    _stub_grants(monkeypatch, grants)
+    inserted = _spy_pre_approve_insert(monkeypatch)
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    assert spy.approval_ran  # normal park pipeline
+    _assert_403(flow, SandboxProxyError.USER_REJECTED)
+    assert inserted == []  # no pre-decided row minted
+
+
+@pytest.mark.asyncio
+async def test_deny_wins_over_pre_approval_grant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Admin DENY blocks before the grant lookup is ever consulted."""
+    resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH_DENY))
+    spy = _spy_pipeline(addon, monkeypatch)
+    lookup_calls = _stub_grants(monkeypatch, (_RUN_ID, [_GRANTED_APP_ID]))
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.POLICY_DENIED)
+    assert lookup_calls == []  # DENY fires before the short-circuit
+    assert not spy.approval_ran
+    assert spy.dispatched == []
+
+
+# ---------------------------------------------------------------------------
 # _resolve_and_match — happy path
 # ---------------------------------------------------------------------------
 
@@ -483,8 +696,8 @@ async def test_resolve_and_match_happy_path_promotes_session() -> None:
     result = await addon._resolve_and_match(flow)
 
     assert result is not None
-    ctx, match = result
-    assert match is _MATCH
+    ctx, matched_actions = result
+    assert matched_actions is _MATCH
     assert ctx.session_id == session_id
     assert ctx.user_id == user_id
     assert ctx.tenant_id == sandbox.tenant_id
@@ -813,17 +1026,16 @@ def test_dispatch_injection_writes_resolved_headers() -> None:
     flow.request.headers["Authorization"] = "sandbox-placeholder"
     sandbox = _sandbox()
 
-    addon._dispatch_injection_or_block(flow, sandbox=sandbox, match=_MATCH_ALWAYS)
+    addon._dispatch_injection_or_block(
+        flow, sandbox=sandbox, matched_actions=_MATCH_ALWAYS
+    )
 
     assert flow.response is None  # forwarded
     assert flow.request.headers["Authorization"] == "Bearer real-secret"
     assert len(spy.resolve_calls) == 1
     seen = spy.resolve_calls[0]
     assert seen.sandbox is sandbox
-    assert seen.match is _MATCH_ALWAYS
-    # The dispatcher must receive the gate's own session factory — a resolver
-    # that opens its own session would see the wrong tenant schema.
-    assert seen.db_session_factory is addon._db_session_factory
+    assert seen.matched_actions is _MATCH_ALWAYS
 
 
 def test_dispatch_injection_pass_through_forwards_untouched() -> None:
@@ -836,7 +1048,9 @@ def test_dispatch_injection_pass_through_forwards_untouched() -> None:
     flow = _flow()
     flow.request.headers["X-Pod-Side"] = "preserve"
 
-    addon._dispatch_injection_or_block(flow, sandbox=_sandbox(), match=_MATCH_ALWAYS)
+    addon._dispatch_injection_or_block(
+        flow, sandbox=_sandbox(), matched_actions=_MATCH_ALWAYS
+    )
 
     assert flow.response is None
     assert flow.request.headers["X-Pod-Side"] == "preserve"
@@ -857,7 +1071,9 @@ def test_dispatch_injection_credential_unavailable_blocks_with_403() -> None:
     )
     flow = _flow()
 
-    addon._dispatch_injection_or_block(flow, sandbox=_sandbox(), match=_MATCH_ALWAYS)
+    addon._dispatch_injection_or_block(
+        flow, sandbox=_sandbox(), matched_actions=_MATCH_ALWAYS
+    )
 
     _assert_403(flow, SandboxProxyError.CREDENTIAL_ERROR)
 
@@ -873,7 +1089,9 @@ def test_dispatch_injection_resolver_exception_blocks_with_403() -> None:
     )
     flow = _flow()
 
-    addon._dispatch_injection_or_block(flow, sandbox=_sandbox(), match=_MATCH_ALWAYS)
+    addon._dispatch_injection_or_block(
+        flow, sandbox=_sandbox(), matched_actions=_MATCH_ALWAYS
+    )
 
     _assert_403(flow, SandboxProxyError.CREDENTIAL_ERROR)
 
@@ -1048,10 +1266,10 @@ def test_persist_approval_row_commits_announces_notifies(
     )
 
     cache = _RecorderCache(ops)
+    monkeypatch.setattr(gate_mod, "get_session_with_tenant", _recorder_db_factory(ops))
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory(ops),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
 
@@ -1064,6 +1282,7 @@ def test_persist_approval_row_commits_announces_notifies(
         "actions": [a.model_dump(mode="json") for a in _MATCH.actions],
         "app_name": _MATCH.app_name,
         "payload": _MATCH.payload,
+        "external_app_id": _MATCH.external_app_id,
     }
 
     # insert -> commit -> rpush: announce must not precede the commit,
@@ -1101,17 +1320,17 @@ def test_persist_approval_row_announce_failure_is_swallowed(
     )
 
     cache = _RecorderCache(ops, rpush_raises=RedisError("connection refused"))
+    monkeypatch.setattr(gate_mod, "get_session_with_tenant", _recorder_db_factory(ops))
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory(ops),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
 
-    notify_calls: list[tuple[UUID, SessionContext, RequestMatch]] = []
+    notify_calls: list[tuple[UUID, SessionContext, AllMatchedActions]] = []
 
     def _fake_notify(
-        _self: Any, aid: UUID, ctx_arg: SessionContext, match_arg: RequestMatch
+        _self: Any, aid: UUID, ctx_arg: SessionContext, match_arg: AllMatchedActions
     ) -> None:
         notify_calls.append((aid, ctx_arg, match_arg))
 
@@ -1154,7 +1373,6 @@ async def test_await_decision_wake_received_returns_decision(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
     addon._parked.add(ctx.tenant_id, approval_id)
@@ -1184,7 +1402,6 @@ async def test_await_decision_timeout_claims_expired(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
     addon._parked.add(ctx.tenant_id, approval_id)
@@ -1224,7 +1441,6 @@ async def test_await_decision_cancelled_claims_expired_and_reraises(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
     addon._parked.add(ctx.tenant_id, approval_id)
@@ -1266,7 +1482,6 @@ async def test_drain_inflight_walks_parked_per_tenant(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: per_tenant_caches[tenant_id],
     )
 
@@ -1320,7 +1535,6 @@ async def test_drain_inflight_completes_when_inflight_set_empty() -> None:
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=_tracking_cache_factory,
     )
 
@@ -1352,7 +1566,6 @@ def test_terminalize_happy_path_writes_wake(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
 
@@ -1384,7 +1597,6 @@ def test_terminalize_db_failure_skips_wake(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
 
@@ -1417,7 +1629,6 @@ def test_terminalize_wake_failure_swallowed(
     addon = _build(
         resolver=_StubResolver(),
         matcher=_StubMatcher(),
-        db_factory=_recorder_db_factory([]),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
 

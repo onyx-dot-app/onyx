@@ -11,9 +11,14 @@ Non-Craft work can still use the docker-compose deps + vscode debugger path
 described in [CONTRIBUTING.md](/CONTRIBUTING.md); use that when you don't
 need a sandbox.
 
+For iterating on the **docker** sandbox backend specifically
+(`SANDBOX_BACKEND=docker`, the self-host compose path) — typically when
+touching `backend/onyx/sandbox_proxy/` or the docker manager — see
+[local-compose-craft.md](./local-compose-craft.md) instead.
+
 ## Prerequisites
 
-Builds on the CONTRIBUTING.md prereqs (Python 3.11, uv, Node.js 22, the venv,
+Builds on the CONTRIBUTING.md prereqs (Python 3.13, uv, Node.js 22, the venv,
 `.vscode/.env`). Docker Desktop must be running with at least 8 CPU / 16 GB
 allocated.
 
@@ -136,7 +141,7 @@ which is equivalent to:
 
 ```bash
 docker build -t onyxdotapp/sandbox:dev \
-  backend/onyx/server/features/build/sandbox/kubernetes/docker
+  backend/onyx/server/features/build/sandbox/image
 kind load docker-image onyxdotapp/sandbox:dev --name onyx-dev
 ```
 
@@ -284,7 +289,7 @@ Visit `http://localhost:3000` once running.
 | Frontend (`web/`) | ~instant | Next.js HMR. |
 | Helm chart templates / values | 10–30s | Re-run `k8s-up.sh`. |
 | Backend image (`Dockerfile`) | 60–180s | `docker build` → `kind load docker-image` → `kubectl rollout restart`. |
-| Sandbox image (`backend/onyx/server/features/build/sandbox/kubernetes/docker/`) | 60–180s | Same. New sandboxes pick up the new image immediately. |
+| Sandbox image (`backend/onyx/server/features/build/sandbox/image/`) | 60–180s | Same. New sandboxes pick up the new image immediately. |
 
 ### Building and loading local images
 

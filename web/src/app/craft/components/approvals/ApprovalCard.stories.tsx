@@ -40,7 +40,7 @@ const LINEAR_ISSUE_CREATE: ApprovalAction = {
 };
 
 function approval(overrides: Partial<ApprovalView>): ApprovalView {
-  return {
+  const merged = {
     approval_id: "appr-01HX3K9M4Q7W2",
     session_id: "sess-01HX3K9M4Q7W2",
     actions: [SLACK_POST_MESSAGE],
@@ -52,6 +52,8 @@ function approval(overrides: Partial<ApprovalView>): ApprovalView {
     is_live: true,
     ...overrides,
   };
+  // The card renders display_payload; mirror payload unless overridden.
+  return { display_payload: merged.payload, ...merged };
 }
 
 export const Collapsed: Story = {

@@ -161,3 +161,19 @@ export async function startNewChat(page: Page) {
   await page.getByTestId("AppSidebar/new-session").click();
   await expect(page.getByTestId("chat-intro")).toBeVisible();
 }
+
+/**
+ * Mark onboarding as complete by setting a display name, so the onboarding
+ * prompt doesn't block subsequent chat interactions. Reloads so the cleared
+ * onboarding state takes effect.
+ */
+export async function ensureOnboardingComplete(page: Page): Promise<void> {
+  await page.request
+    .patch("/api/user/personalization", { data: { name: "Playwright User" } })
+    .catch((error) => {
+      // Best-effort, but surface the failure so a broken setup is visible.
+      console.warn(`Failed to set display name during onboarding: ${error}`);
+    });
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+}

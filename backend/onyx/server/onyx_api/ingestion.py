@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID
-from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
@@ -88,10 +87,6 @@ def upsert_ingestion_doc(
         doc_info.document.doc_updated_at = datetime.now(tz=timezone.utc)
 
     document = Document.from_base(doc_info.document)
-
-    # TODO once the frontend is updated with this enum, remove this logic
-    if document.source == DocumentSource.INGESTION_API:
-        document.source = DocumentSource.FILE
 
     cc_pair = get_connector_credential_pair_from_id(
         db_session=db_session,
