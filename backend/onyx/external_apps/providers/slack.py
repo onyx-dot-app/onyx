@@ -105,6 +105,7 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                     "im:history",
                     "im:read",
                     "im:write",
+                    "search:read",
                     "users:read",
                 ]
             ),
@@ -141,9 +142,9 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                 "(/craft/v1/apps/oauth/callback) to Redirect URLs, and add the "
                 "User Token Scopes you want the agent to use (channels:history, "
                 "channels:read, chat:write, groups:history, groups:read, "
-                "im:history, im:read, im:write, users:read). No bot user is "
-                "required. Then paste the app's Client ID and Client Secret "
-                "below."
+                "im:history, im:read, im:write, search:read, users:read). No "
+                "bot user is required. Then paste the app's Client ID and "
+                "Client Secret below."
             ),
         ),
         endpoint_catalog=_ENDPOINTS,
