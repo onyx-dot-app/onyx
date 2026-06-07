@@ -226,3 +226,10 @@ repos:
         language: system
         pass_filenames: false
         files: ^(bun\.lock|examples/widget/(.*\.(ts|tsx)|package\.json|tsconfig\.json))$
+
+      - id: shared-typescript-check
+        name: shared TypeScript type check
+        entry: bash -c 'cd web/lib/shared && bunx tsgo --noEmit'
+        language: system
+        pass_filenames: false
+        files: ^web/lib/shared/(.*\.(ts|tsx)|package\.json|tsconfig.*\.json)$

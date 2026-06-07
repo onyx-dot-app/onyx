@@ -45,11 +45,16 @@ source of record for now; this token set is the future cross-platform source.
 
 ```bash
 bun run build       # tokens + TypeScript (tsc) -> dist/
+bun run dev         # watch src/ + tokens/ and rebuild dist/ on save (local dev)
 bun run typecheck   # type-check only
 bun run clean       # remove dist/
 ```
 
 `dist/` is generated and git-ignored; `prepare` rebuilds it on install.
+
+Web consumes the built `dist/`, so edits don't hot-reload until `dist/` is
+rebuilt. Run `bun run dev` here (alongside web's `bun run dev`) so saves
+auto-rebuild `dist/` and the web dev server refreshes.
 
 ## Consuming from web
 
