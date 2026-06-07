@@ -596,6 +596,10 @@ class KubernetesSandboxManager(SandboxManager):
                 ),
                 client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
                 client.V1EnvVar(
+                    name="GH_TOKEN", value=SANDBOX_PROXY_INJECTED_PLACEHOLDER
+                ),
+                client.V1EnvVar(name="GH_NO_UPDATE_NOTIFIER", value="1"),
+                client.V1EnvVar(
                     name=OPENCODE_SERVER_PASSWORD,
                     value_from=client.V1EnvVarSource(
                         secret_key_ref=client.V1SecretKeySelector(
