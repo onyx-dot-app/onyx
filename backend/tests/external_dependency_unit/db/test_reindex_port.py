@@ -482,7 +482,9 @@ def test_copy_present_chunks_to_future_orchestration() -> None:
     with patch.object(
         port_copy,
         "re_embed_chunks",
-        side_effect=lambda chunks, _strategy, _embedder: [f"re:{c}" for c in chunks],
+        side_effect=lambda chunks, _strategy, _embedder, **_kwargs: [
+            f"re:{c}" for c in chunks
+        ],
     ) as mock_reembed:
         written = copy_present_chunks_to_future(
             present_client, future_index, ["d1", "d2"], strategy, embedder

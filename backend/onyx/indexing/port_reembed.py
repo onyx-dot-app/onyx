@@ -12,19 +12,41 @@ Two strategies, chosen by comparing PRESENT vs FUTURE settings:
   swap just that tail back.
 - AUGMENTATION (contextual-RAG toggle or model changed): the enriched text
   itself changes, so we strip the stored augmentation back to the bare chunk
-  text, re-glue under FUTURE settings, then re-embed.
+  text, re-glue under FUTURE settings, then re-embed. Two sub-cases keyed on the
+  FUTURE `enable_contextual_rag`:
+    * FUTURE RAG off — strip the doc summary / chunk context / title / metadata
+      and re-embed the bare chunk (no LLM).
+    * FUTURE RAG on — additionally regenerate the doc summary + chunk context
+      under the FUTURE contextual LLM. The full document text the LLM needs is
+      *reconstructed by concatenating the document's own (bare) chunks* in chunk
+      order; the port never re-fetches the source. This duplicates chunk-overlap
+      regions and loses the original section boundaries, so the reconstructed
+      text is not byte-identical to the source — an accepted imprecision (the LLM
+      truncates to a token budget anyway, and re-fetching the source is the
+      fragility this feature exists to remove).
 
 Only regular chunks are handled (the port reads `max_chunk_size ==
 DEFAULT_MAX_CHUNK_SIZE`); writes are idempotent (external versioning) so we
 re-embed unconditionally rather than diffing content hashes.
 """
 
+from __future__ import annotations
+
 import enum
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.connectors.models import convert_metadata_list_of_strings_to_dict
 from onyx.connectors.models import Document
+from onyx.connectors.models import TextSection
 from onyx.db.models import SearchSettings
+from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
+from onyx.document_index.chunk_content_enrichment import (
+    generate_enriched_content_for_chunk_text,
+)
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 
@@ -35,6 +57,10 @@ from onyx.indexing.chunker import _get_metadata_suffix_for_document_index
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
 
+if TYPE_CHECKING:
+    from onyx.llm.interfaces import LLM
+    from onyx.natural_language_processing.utils import BaseTokenizer
+
 
 class ReembedStrategy(enum.Enum):
     # Only the embedder changed; re-embed the same enriched text (tail swapped).
@@ -43,17 +69,39 @@ class ReembedStrategy(enum.Enum):
     AUGMENTATION = "augmentation"
 
 
+@dataclass
+class AugmentationReembedContext:
+    """Everything the AUGMENTATION path needs beyond the embedder. Built once by
+    the port copier (which holds a DB session); `re_embed_chunks` itself stays
+    DB-free. For the FUTURE-RAG-off (strip) case only `future_enable_contextual_rag`
+    is needed; the LLM/tokenizer/budgets are required only when regenerating."""
+
+    future_enable_contextual_rag: bool
+    llm: "LLM | None" = None
+    tokenizer: "BaseTokenizer | None" = None
+    chunk_token_limit: int = 0
+    contextual_rag_reserved_tokens: int = 0
+
+
 def select_reembed_strategy(
     present_ss: SearchSettings, future_ss: SearchSettings
 ) -> ReembedStrategy:
-    """AUGMENTATION when contextual-RAG settings differ (the embedded text
-    changes), otherwise MODEL_ONLY. Model/prefix/normalize/dimension and
-    multipass changes only alter the vectors (or large/mini chunks the port
-    doesn't read), so they fall through to MODEL_ONLY."""
+    """AUGMENTATION when the contextual-RAG *enrichment* differs (the embedded
+    text changes), otherwise MODEL_ONLY. A change in
+    `contextual_rag_model_configuration_id` only matters when contextual RAG is
+    on in present or future — if it is off in both, no enrichment exists in
+    either index, so a stale model-id difference must not force AUGMENTATION.
+    Model/prefix/normalize/dimension and multipass changes only alter the vectors
+    (or large/mini chunks the port doesn't read), so they fall through to
+    MODEL_ONLY."""
+    rag_relevant = present_ss.enable_contextual_rag or future_ss.enable_contextual_rag
     augmentation_changed = (
         present_ss.enable_contextual_rag != future_ss.enable_contextual_rag
-        or present_ss.contextual_rag_model_configuration_id
-        != future_ss.contextual_rag_model_configuration_id
+        or (
+            rag_relevant
+            and present_ss.contextual_rag_model_configuration_id
+            != future_ss.contextual_rag_model_configuration_id
+        )
     )
     return (
         ReembedStrategy.AUGMENTATION
@@ -92,6 +140,15 @@ def recover_embedding_input(chunk: DocumentChunkWithoutVectors) -> str:
     if without_metadata == chunk.content:
         return chunk.content
     return without_metadata + rebuild_semantic_tail(chunk)
+
+
+def _title_prefix(chunk: DocumentChunkWithoutVectors) -> str:
+    """The title prefix the chunker prepends to content (`extract_blurb(title) +
+    RETURN_SEPARATOR`). Approximated with the full stored title; for very long
+    titles the chunker truncates to BLURB_SIZE tokens, so the rebuilt prefix can
+    be marginally longer — accepted imprecision (the title is also encoded
+    separately as `title_vector`)."""
+    return f"{chunk.title}{RETURN_SEPARATOR}" if chunk.title else ""
 
 
 def _stored_chunk_to_doc_aware(
@@ -139,26 +196,26 @@ def re_embed_chunks(
     stored_chunks: list[DocumentChunkWithoutVectors],
     strategy: ReembedStrategy,
     embedder: IndexingEmbedder,
+    augmentation_ctx: AugmentationReembedContext | None = None,
 ) -> list[DocumentChunk]:
     """Re-embed stored chunks under a prebuilt strategy + embedder (no DB access).
 
-    Returns the whole stored chunks as DocumentChunk, in order, with only
-    content_vector and title_vector recomputed (every other field copied through,
-    so the FUTURE write is a faithful copy with new embeddings). Raises
-    NotImplementedError for AUGMENTATION — only model/prefix/dimension changes are
-    supported today.
+    Returns DocumentChunks ready to write to the FUTURE index. For MODEL_ONLY only
+    `content_vector`/`title_vector` change; every other field is copied through.
+    For AUGMENTATION the stored `content`, `doc_summary` and `chunk_context` are
+    also rebuilt under FUTURE settings (`augmentation_ctx` is required, and for
+    FUTURE-RAG-on must carry the contextual LLM). Chunks may span documents, but
+    each document's chunks must ALL be in the same call — the doc-text
+    reconstruction needs the document complete.
     """
     if not stored_chunks:
         return []
     if strategy is ReembedStrategy.AUGMENTATION:
-        # Augmentation re-embed (strip -> re-glue -> re-embed) is the next
-        # increment; the contextual-RAG-on case additionally needs the source
-        # document text, which the stored chunks don't carry, so the port must
-        # supply it. Fail loudly rather than embed a wrong (un-stripped) input.
-        raise NotImplementedError(
-            "Augmentation-change re-embed (contextual-RAG toggle/model) is not "
-            "yet supported; only model/prefix/dimension changes are."
-        )
+        if augmentation_ctx is None:
+            raise ValueError(
+                "AUGMENTATION re-embed requires an AugmentationReembedContext"
+            )
+        return _augmentation_reembed(stored_chunks, embedder, augmentation_ctx)
 
     embed_inputs = [recover_embedding_input(chunk) for chunk in stored_chunks]
     doc_aware_chunks = [
@@ -181,3 +238,133 @@ def re_embed_chunks(
         )
         for stored, index_chunk in zip(stored_chunks, embedded)
     ]
+
+
+def _bare_contents(stored_chunks: list[DocumentChunkWithoutVectors]) -> list[str]:
+    """Strip every stored chunk back to its original (un-augmented) text via the
+    canonical inverse of the indexing-time enrichment."""
+    # Lazy import: opensearch_document_index is a heavy module and only needed on
+    # the AUGMENTATION path; keeps port_reembed's import surface light + cycle-free.
+    from onyx.document_index.opensearch.opensearch_document_index import (
+        _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned,
+    )
+
+    uncleaned = [
+        _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+            chunk, None, {}
+        )
+        for chunk in stored_chunks
+    ]
+    cleaned = cleanup_content_for_chunks(uncleaned)
+    return [chunk.content for chunk in cleaned]
+
+
+def _reconstruct_source_document(
+    stored_chunks: list[DocumentChunkWithoutVectors], bare_contents: list[str]
+) -> Document:
+    """Rebuild a minimal Document whose get_text_content() returns the document
+    text reconstructed from its bare chunks (chunk-index order). Used by the
+    contextual LLM to regenerate summaries — see the module docstring on the
+    accepted imprecision of concatenating overlapping chunks."""
+    ordered = sorted(
+        zip(stored_chunks, bare_contents), key=lambda pair: pair[0].chunk_index
+    )
+    doc_text = " ".join(bare for _, bare in ordered if bare)
+    first = stored_chunks[0]
+    return Document(
+        id=first.document_id,
+        source=DocumentSource(first.source_type),
+        semantic_identifier=first.semantic_identifier,
+        title=first.title if first.title is not None else "",
+        sections=[TextSection(text=doc_text)],
+        metadata={},
+    )
+
+
+def _augmentation_reembed(
+    stored_chunks: list[DocumentChunkWithoutVectors],
+    embedder: IndexingEmbedder,
+    ctx: AugmentationReembedContext,
+) -> list[DocumentChunk]:
+    bare_contents = _bare_contents(stored_chunks)
+    future_rag_on = ctx.future_enable_contextual_rag
+    reserved = ctx.contextual_rag_reserved_tokens if future_rag_on else 0
+
+    # One reconstructed Document per document_id — the input may span documents,
+    # and each chunk's enrichment must see only its own document's text.
+    pairs_by_doc: dict[str, list[tuple[DocumentChunkWithoutVectors, str]]] = (
+        defaultdict(list)
+    )
+    for chunk, bare in zip(stored_chunks, bare_contents):
+        pairs_by_doc[chunk.document_id].append((chunk, bare))
+    source_documents = {
+        doc_id: _reconstruct_source_document(
+            [chunk for chunk, _ in pairs], [bare for _, bare in pairs]
+        )
+        for doc_id, pairs in pairs_by_doc.items()
+    }
+
+    # Rebuild each chunk from its bare content under FUTURE enrichment settings.
+    # title_prefix + metadata are unchanged by a RAG toggle, so they are restored;
+    # doc_summary/chunk_context start empty and are filled below when RAG is on.
+    doc_aware_chunks = [
+        DocAwareChunk(
+            chunk_id=chunk.chunk_index,
+            blurb=chunk.blurb,
+            content=bare,
+            source_links=None,
+            image_file_id=None,
+            section_continuation=False,
+            source_document=source_documents[chunk.document_id],
+            title_prefix=_title_prefix(chunk),
+            metadata_suffix_semantic=rebuild_semantic_tail(chunk),
+            metadata_suffix_keyword=chunk.metadata_suffix or "",
+            contextual_rag_reserved_tokens=reserved,
+            doc_summary="",
+            chunk_context="",
+            mini_chunk_texts=None,
+            large_chunk_id=None,
+            large_chunk_reference_ids=[],
+        )
+        for chunk, bare in zip(stored_chunks, bare_contents)
+    ]
+
+    if future_rag_on:
+        if ctx.llm is None or ctx.tokenizer is None:
+            raise ValueError(
+                "contextual-RAG-on re-embed requires an LLM + tokenizer in the context"
+            )
+        # Lazy import to avoid an import cycle with the indexing pipeline.
+        from onyx.indexing.indexing_pipeline import add_contextual_summaries
+
+        # Groups by source_document.id internally, so the mixed-doc input is fine.
+        add_contextual_summaries(
+            chunks=doc_aware_chunks,
+            llm=ctx.llm,
+            tokenizer=ctx.tokenizer,
+            chunk_token_limit=ctx.chunk_token_limit,
+        )
+
+    embedded = embedder.embed_chunks(doc_aware_chunks)
+    if len(embedded) != len(stored_chunks):
+        raise RuntimeError(
+            f"Embedder returned {len(embedded)} chunks for {len(stored_chunks)} inputs."
+        )
+
+    results: list[DocumentChunk] = []
+    for stored, doc_aware, index_chunk in zip(
+        stored_chunks, doc_aware_chunks, embedded
+    ):
+        fields = dict(stored)
+        # The stored (BM25) content, rebuilt under FUTURE enrichment.
+        fields["content"] = generate_enriched_content_for_chunk_text(doc_aware)
+        fields["doc_summary"] = doc_aware.doc_summary
+        fields["chunk_context"] = doc_aware.chunk_context
+        results.append(
+            DocumentChunk(
+                **fields,
+                content_vector=index_chunk.embeddings.full_embedding,
+                title_vector=index_chunk.title_embedding,
+            )
+        )
+    return results
