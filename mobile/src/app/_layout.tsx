@@ -16,11 +16,15 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   useEffect(() => {
+    // No async init yet, so hide on the first render.
+    // TODO(Subash-Mohan): once useFonts + @onyx-ai/shared init land, gate this
+    // behind a readiness flag (return null until ready) so text never flashes in
+    // the system font before custom fonts load.
     void SplashScreen.hideAsync();
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView className="flex-1">
       <SafeAreaProvider>
         <PersistQueryClientProvider
           client={queryClient}

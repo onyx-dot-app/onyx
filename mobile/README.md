@@ -24,7 +24,6 @@ dependencies, lockfile, and tooling). Scaffolded with `create-expo-app` (Expo Ro
 ```bash
 bun install
 bunx expo install --fix      # reconcile any deps to SDK 56
-bun run generate:theme       # build src/theme/generated/* from tokens/
 ```
 
 ## Run (iOS simulator)
