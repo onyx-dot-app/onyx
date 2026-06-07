@@ -26,6 +26,8 @@ class LinearAction(ExternalAppAction):
     PROJECTS_READ = "linear.projects.read"
     ISSUES_CREATE = "linear.issues.create"
     COMMENTS_CREATE = "linear.comments.create"
+    PROJECTS_CREATE = "linear.projects.create"
+    PROJECTS_UPDATE = "linear.projects.update"
 
 
 # Linear is a single GraphQL endpoint (POST https://api.linear.app/graphql); the
@@ -74,6 +76,18 @@ _ENDPOINTS: list[EndpointSpec] = [
         normalised_name="Comment on an issue",
         description="Add a comment to an issue.",
         matches=(GraphQLOp(operation_type="mutation", field="commentCreate"),),
+    ),
+    EndpointSpec(
+        id=LinearAction.PROJECTS_CREATE,
+        normalised_name="Create a project",
+        description="Create a new project.",
+        matches=(GraphQLOp(operation_type="mutation", field="projectCreate"),),
+    ),
+    EndpointSpec(
+        id=LinearAction.PROJECTS_UPDATE,
+        normalised_name="Edit a project",
+        description="Update an existing project.",
+        matches=(GraphQLOp(operation_type="mutation", field="projectUpdate"),),
     ),
 ]
 
