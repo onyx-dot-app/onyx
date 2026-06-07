@@ -14,5 +14,7 @@ export function clamp(value: number, min: number, max: number): number {
 /** Round `value` to `decimals` decimal places. */
 export function roundTo(value: number, decimals = 0): number {
   const factor = 10 ** decimals;
-  return Math.round(value * factor) / factor;
+  // Nudge by EPSILON before scaling so values like 1.005 round to 1.01 rather
+  // than 1 (binary float can't represent 1.005 exactly).
+  return Math.round((value + Number.EPSILON) * factor) / factor;
 }

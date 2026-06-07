@@ -6,7 +6,10 @@ const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"] as const;
 
 /** Human-readable byte size, e.g. `formatBytes(1536)` -> `"1.5 KB"`. */
 export function formatBytes(bytes: number, decimals = 1): string {
-  if (bytes <= 0) {
+  if (bytes < 0) {
+    throw new Error(`formatBytes: bytes (${bytes}) must be >= 0`);
+  }
+  if (bytes === 0) {
     return "0 B";
   }
   const exponent = Math.min(
@@ -18,10 +21,16 @@ export function formatBytes(bytes: number, decimals = 1): string {
   return `${rounded} ${BYTE_UNITS[exponent]}`;
 }
 
-/** Truncate `input` to `max` characters, appending an ellipsis when cut. */
+/**
+ * Truncate `input` to at most `max` characters (including the ellipsis).
+ * When `max` is 0 the result is an empty string.
+ */
 export function truncate(input: string, max: number): string {
   if (max < 0) {
     throw new Error(`truncate: max (${max}) must be >= 0`);
   }
-  return input.length <= max ? input : `${input.slice(0, max)}…`;
+  if (input.length <= max) {
+    return input;
+  }
+  return max === 0 ? "" : `${input.slice(0, max - 1)}…`;
 }
