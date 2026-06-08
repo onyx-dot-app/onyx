@@ -1413,6 +1413,7 @@ def _stream_chat_turn(
             try:
                 if (
                     not bypass_acl
+                    and not user.is_anonymous
                     and new_msg_req.internal_search_filters is not None
                     and new_msg_req.internal_search_filters.document_set is not None
                 ):
