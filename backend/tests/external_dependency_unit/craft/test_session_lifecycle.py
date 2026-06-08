@@ -91,6 +91,13 @@ class TestCreateSession:
         # provision() was called exactly once for this first creation.
         assert stub_sandbox_manager.provision_count == 1
         assert build_session.user_id == test_user.id
+        assert build_session.opencode_session_id == "stub-opencode-session"
+        assert stub_sandbox_manager.ensure_opencode_session_count == 1
+        assert stub_sandbox_manager.last_ensure_opencode_session_payload == {
+            "sandbox_id": sandbox_row.id,
+            "session_id": build_session.id,
+            "opencode_session_id": None,
+        }
 
     def test_create_session_reuses_existing_sandbox(
         self,
@@ -121,6 +128,13 @@ class TestCreateSession:
 
         assert stub_sandbox_manager.provision_count == 0
         assert stub_sandbox_manager.health_check_count >= 1
+        assert new_session.opencode_session_id == "stub-opencode-session"
+        assert stub_sandbox_manager.ensure_opencode_session_count == 1
+        assert stub_sandbox_manager.last_ensure_opencode_session_payload == {
+            "sandbox_id": existing_id,
+            "session_id": new_session.id,
+            "opencode_session_id": None,
+        }
 
 
 # =============================================================================
@@ -144,19 +158,30 @@ class TestEmptySessionReuse:
             user_id=test_user.id,
             name="pre-provisioned",
             status=BuildSessionStatus.ACTIVE,
+            opencode_session_id="stale-opencode-session",
         )
         db_session.add(existing_empty)
         db_session.commit()
 
         stub_sandbox_manager.health_check_returns = True
         stub_sandbox_manager.session_workspace_exists_returns = True
+        stub_sandbox_manager.ensure_opencode_session_returns = (
+            "refreshed-opencode-session"
+        )
         stub_sandbox_manager.write_files_to_sandbox_silent = True
 
         sm = session_manager_with_stub
         result = sm.get_or_create_empty_session(user_id=test_user.id)
         db_session.commit()
+        db_session.refresh(result)
 
         assert result.id == existing_empty.id
+        assert result.opencode_session_id == "refreshed-opencode-session"
+        assert stub_sandbox_manager.last_ensure_opencode_session_payload == {
+            "sandbox_id": sandbox_row.id,
+            "session_id": existing_empty.id,
+            "opencode_session_id": "stale-opencode-session",
+        }
         # No new sandbox was provisioned, and only one BuildSession row exists
         # for this user.
         rows = (

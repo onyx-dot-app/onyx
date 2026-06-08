@@ -25,6 +25,7 @@ class SlackAction(ExternalAppAction):
     USERS_READ = "slack.users.read"
     SEARCH_READ = "slack.search.read"
     MESSAGES_WRITE = "slack.messages.write"
+    DM_OPEN = "slack.dm.open"
 
 
 # Slack Web API calls are POST to https://slack.com/api/<method>; the action is
@@ -32,15 +33,23 @@ class SlackAction(ExternalAppAction):
 _ENDPOINTS: list[EndpointSpec] = [
     EndpointSpec(
         id=SlackAction.CHANNELS_READ,
-        normalised_name="List channels",
-        description="List the workspace's channels and conversations.",
-        matches=(RestRoute(method="POST", path="/api/conversations.list"),),
+        normalised_name="View channels & conversations",
+        description=(
+            "List the workspace's channels and conversations and look up a "
+            "single conversation's metadata."
+        ),
+        matches=(
+            RestRoute(method="POST", path="/api/conversations.list"),
+            RestRoute(method="POST", path="/api/conversations.info"),
+        ),
         default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=SlackAction.MESSAGES_READ,
-        normalised_name="Read channel messages",
-        description="Read messages and thread replies in a channel.",
+        normalised_name="Read messages",
+        description=(
+            "Read messages and thread replies in a channel or direct message."
+        ),
         matches=(
             RestRoute(method="POST", path="/api/conversations.history"),
             RestRoute(method="POST", path="/api/conversations.replies"),
@@ -70,6 +79,12 @@ _ENDPOINTS: list[EndpointSpec] = [
         description="Post a message to a channel or conversation.",
         matches=(RestRoute(method="POST", path="/api/chat.postMessage"),),
     ),
+    EndpointSpec(
+        id=SlackAction.DM_OPEN,
+        normalised_name="Open a direct message",
+        description="Open (or resume) a direct message conversation with a user.",
+        matches=(RestRoute(method="POST", path="/api/conversations.open"),),
+    ),
 ]
 
 
@@ -82,13 +97,15 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             token_url="https://slack.com/api/oauth.v2.access",
             scope=",".join(
                 [
-                    "chat:write",
                     "channels:history",
                     "channels:read",
+                    "chat:write",
                     "groups:history",
                     "groups:read",
                     "im:history",
                     "im:read",
+                    "im:write",
+                    "search:read",
                     "users:read",
                 ]
             ),
@@ -123,8 +140,9 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                 "Create a Slack app at api.slack.com/apps. Under OAuth & "
                 "Permissions, add this Onyx instance's callback URL "
                 "(/craft/v1/apps/oauth/callback) to Redirect URLs, and add the "
-                "User Token Scopes you want the agent to use (e.g. chat:write, "
-                "channels:history, channels:read, im:history, users:read). No "
+                "User Token Scopes you want the agent to use (channels:history, "
+                "channels:read, chat:write, groups:history, groups:read, "
+                "im:history, im:read, im:write, search:read, users:read). No "
                 "bot user is required. Then paste the app's Client ID and "
                 "Client Secret below."
             ),

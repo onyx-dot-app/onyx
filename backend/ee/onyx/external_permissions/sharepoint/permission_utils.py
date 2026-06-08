@@ -26,6 +26,7 @@ from onyx.connectors.sharepoint.connector import GRAPH_API_RETRYABLE_STATUSES
 from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP_REVERSE
 from onyx.connectors.sharepoint.connector import sleep_and_retry
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
@@ -71,7 +72,15 @@ def _graph_api_get(
                 resp.status_code in GRAPH_API_RETRYABLE_STATUSES
                 and attempt < GRAPH_API_MAX_RETRIES
             ):
-                wait = min(int(resp.headers.get("Retry-After", str(2**attempt))), 60)
+                parsed_retry_after = parse_retry_after_seconds(
+                    resp.headers.get("Retry-After")
+                )
+                wait = min(
+                    parsed_retry_after
+                    if parsed_retry_after is not None
+                    else float(2**attempt),
+                    60,
+                )
                 logger.warning(
                     "Graph API %s on attempt %s, retrying in %ss: %s",
                     resp.status_code,

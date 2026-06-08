@@ -779,6 +779,29 @@ export async function postApprovalDecision(
   return res.json();
 }
 
+export async function postApprovalSessionGrant(
+  approvalId: string
+): Promise<ApprovalView> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/approvals/${approvalId}/session-grant`,
+    {
+      method: "POST",
+    }
+  );
+
+  if (res.status === 409) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new ApprovalConflictError(body.detail ?? "decision conflict");
+  }
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Failed to approve for session: ${res.status}`
+    );
+  }
+  return res.json();
+}
+
 // =============================================================================
 // User Library API
 // =============================================================================

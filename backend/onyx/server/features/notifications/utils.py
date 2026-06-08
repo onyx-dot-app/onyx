@@ -18,4 +18,5 @@ def ensure_permissions_migration_notification(user: User, db_session: Session) -
             "feature": "permissions_migration_v1",
             "link": "https://docs.onyx.app/admins/permissions/whats_changing",
         },
+        refresh_existing=False,
     )

@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from uuid import UUID
 from uuid import uuid4
 
 import pytest
@@ -14,6 +15,7 @@ import redis
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
+from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.db.models import ActionApproval
@@ -26,12 +28,16 @@ from onyx.server.features.build.approvals.api import DecisionBody
 from onyx.server.features.build.approvals.api import list_live_approvals
 from onyx.server.features.build.approvals.api import list_session_approvals
 from onyx.server.features.build.approvals.api import submit_decision
+from onyx.server.features.build.approvals.api import submit_session_grant
 from onyx.server.features.build.db import action_approval
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import _set_created_at
+from tests.external_dependency_unit.craft._test_helpers import action_entry
 from tests.external_dependency_unit.craft._test_helpers import (
     default_action_entries as _default_actions,
 )
+from tests.external_dependency_unit.craft._test_helpers import make_external_app
+from tests.external_dependency_unit.craft._test_helpers import make_skill
 from tests.external_dependency_unit.craft._test_helpers import make_user
 
 
@@ -524,6 +530,104 @@ def test_submit_decision_pushes_wake_on_redis(
     _key, value = popped
     decoded = value.decode() if isinstance(value, bytes) else value
     assert decoded == ApprovalDecision.APPROVED.value
+
+
+def test_submit_session_grant_approves_matching_pending_rows(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    user = make_user(db_session, email_prefix="session_grant")
+    session = build_session_with_user(user=user)
+    app = make_external_app(db_session, skill=make_skill(db_session), auth_template={})
+    other_app = make_external_app(
+        db_session, skill=make_skill(db_session), auth_template={}
+    )
+    ask_send = action_entry("slack.chat.post")
+    always_read = action_entry("slack.channel.read", policy=EndpointPolicy.ALWAYS)
+    ask_upload = action_entry("slack.files.upload")
+
+    current = action_approval.insert_action_approval(
+        db_session,
+        session_id=session.id,
+        actions=[ask_send, always_read],
+        app_name="Slack",
+        payload={"text": "current"},
+        external_app_id=app.id,
+    )
+    matching = action_approval.insert_action_approval(
+        db_session,
+        session_id=session.id,
+        actions=[ask_send],
+        app_name="Slack",
+        payload={"text": "matching"},
+        external_app_id=app.id,
+    )
+    broader = action_approval.insert_action_approval(
+        db_session,
+        session_id=session.id,
+        actions=[ask_send, ask_upload],
+        app_name="Slack",
+        payload={"text": "broader"},
+        external_app_id=app.id,
+    )
+    other = action_approval.insert_action_approval(
+        db_session,
+        session_id=session.id,
+        actions=[ask_send],
+        app_name="Other",
+        payload={"text": "other"},
+        external_app_id=other_app.id,
+    )
+    db_session.commit()
+
+    wakes: list[tuple[str, ApprovalDecision]] = []
+
+    def _record_wake(
+        approval_id: UUID, decision: ApprovalDecision, *_args: object, **_kwargs: object
+    ) -> None:
+        wakes.append((str(approval_id), decision))
+
+    monkeypatch.setattr(approval_cache, "send_wake", _record_wake)
+
+    response = submit_session_grant(
+        approval_id=current.approval_id,
+        user=user,
+        db_session=db_session,
+    )
+
+    assert response.approval_id == current.approval_id
+    assert response.decision == ApprovalDecision.APPROVED
+
+    db_session.refresh(current)
+    db_session.refresh(matching)
+    db_session.refresh(broader)
+    db_session.refresh(other)
+    assert current.decision == ApprovalDecision.APPROVED
+    assert current.decided_via == ApprovalDecidedVia.SESSION_GRANT
+    assert matching.decision == ApprovalDecision.APPROVED
+    assert matching.decided_via == ApprovalDecidedVia.SESSION_GRANT
+    assert broader.decision is None
+    assert other.decision is None
+    assert wakes == [
+        (str(current.approval_id), ApprovalDecision.APPROVED),
+        (str(matching.approval_id), ApprovalDecision.APPROVED),
+    ]
+
+    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    assert approval_cache.cached_session_grants_cover(
+        session_id=session.id,
+        external_app_id=app.id,
+        action_types=["slack.chat.post"],
+        cache=cache,
+    )
+    assert not approval_cache.cached_session_grants_cover(
+        session_id=session.id,
+        external_app_id=app.id,
+        action_types=["slack.files.upload"],
+        cache=cache,
+    )
 
 
 def test_submit_decision_swallows_transient_wake_failure(

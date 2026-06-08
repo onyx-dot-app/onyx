@@ -372,6 +372,7 @@ class StubSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         session_id: UUID,
+        opencode_session_id: str | None = None,
     ) -> str | None:
         # Override the real _ServeMixin preflight (which POSTs /session over
         # HTTP to a pod) so send_message tests run fully in-memory.
@@ -379,6 +380,7 @@ class StubSandboxManager(SandboxManager):
         self.last_ensure_opencode_session_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
+            "opencode_session_id": opencode_session_id,
         }
         return self.ensure_opencode_session_returns
 
