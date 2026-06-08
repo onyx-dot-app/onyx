@@ -21,6 +21,7 @@ from onyx.db.llm import update_default_contextual_model
 from onyx.db.llm import update_no_default_contextual_rag_provider
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import User
+from onyx.db.port_attempt import cancel_active_port_attempts
 from onyx.db.search_settings import create_search_settings
 from onyx.db.search_settings import delete_search_settings
 from onyx.db.search_settings import get_current_search_settings
@@ -118,6 +119,14 @@ def set_new_search_settings(
             db_session=db_session,
         )
 
+        # Cancel in-flight reindex ports for the superseded FUTURE. After the PAST
+        # flip so check_for_port (which only targets the current secondary) won't
+        # enqueue a replacement; the running port task stops at its next batch
+        # boundary once it sees CANCELED.
+        cancel_active_port_attempts(
+            db_session, search_settings_id=secondary_search_settings.id
+        )
+
     new_search_settings = create_search_settings(
         search_settings=new_search_settings_request, db_session=db_session
     )
@@ -191,6 +200,12 @@ def cancel_new_embedding(
             search_settings=secondary_search_settings,
             new_status=IndexModelStatus.PAST,
             db_session=db_session,
+        )
+
+        # Stop any in-flight reindex port for the canceled FUTURE; the running
+        # task stops at its next batch boundary once it sees CANCELED.
+        cancel_active_port_attempts(
+            db_session, search_settings_id=secondary_search_settings.id
         )
 
         # remove the old index from the vector db
