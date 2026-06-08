@@ -5,16 +5,17 @@ import useSWR, { useSWRConfig } from "swr";
 import useSWRInfinite from "swr/infinite";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import {
+  getNotificationsPageKey,
+  refreshNotificationCaches,
+} from "@/lib/notifications/cache";
 import type {
   Notification,
   NotificationSummary,
   NotificationsResponse,
 } from "@/lib/notifications/interfaces";
 
-const DEFAULT_NOTIFICATIONS_PAGE_SIZE = 25;
-
 interface UseNotificationsOptions {
-  pageSize?: number;
   enabled?: boolean;
 }
 
@@ -54,7 +55,6 @@ export function useNotificationSummary() {
  *   - loadMore: Function to fetch the next page
  */
 export default function useNotifications({
-  pageSize = DEFAULT_NOTIFICATIONS_PAGE_SIZE,
   enabled = true,
 }: UseNotificationsOptions = {}) {
   const { mutate: mutateGlobal } = useSWRConfig();
@@ -66,18 +66,21 @@ export default function useNotifications({
       if (!enabled) return null;
       if (previousPageData && !previousPageData.has_more) return null;
 
-      return SWR_KEYS.notificationsPage(pageIndex, pageSize);
+      return getNotificationsPageKey(pageIndex);
     },
-    [enabled, pageSize]
+    [enabled]
   );
 
-  const { data, error, mutate, size, setSize } =
-    useSWRInfinite<NotificationsResponse>(getKey, errorHandlingFetcher, {
+  const { data, error, size, setSize } = useSWRInfinite<NotificationsResponse>(
+    getKey,
+    errorHandlingFetcher,
+    {
       revalidateOnFocus: false,
       revalidateFirstPage: false,
       revalidateAll: false,
       dedupingInterval: 30000,
-    });
+    }
+  );
 
   const notifications = useMemo<Notification[]>(() => {
     if (!data) return [];
@@ -119,11 +122,12 @@ export default function useNotifications({
   }, [hasMore, isLoadingMore, setSize]);
 
   const refresh = useCallback(() => {
-    void mutateGlobal(SWR_KEYS.notificationsSummary);
-    if (!enabled) return Promise.resolve(undefined);
+    if (!enabled) {
+      return mutateGlobal(SWR_KEYS.notificationsSummary).then(() => undefined);
+    }
 
-    return mutate();
-  }, [enabled, mutate, mutateGlobal]);
+    return refreshNotificationCaches(mutateGlobal);
+  }, [enabled, mutateGlobal]);
 
   return {
     notifications,

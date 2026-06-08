@@ -124,31 +124,31 @@ export default function NotificationsPopover({
   const lastLoadScrollTopRef = useRef<number | null>(null);
   loadMoreRef.current = loadMore;
 
-  const [sessionDismissedLastShownById, setSessionDismissedLastShownById] =
+  const [sessionDismissedVersionById, setSessionDismissedVersionById] =
     useState<Map<number, string>>(new Map());
   const dismissInFlightIdsRef = useRef<Set<number>>(new Set());
 
   const handleDismiss = useCallback(
     async (notification: NotificationData) => {
       const notificationId = notification.id;
-      const expectedLastShown = notification.last_shown;
+      const expectedVersion = notification.version;
       if (dismissInFlightIdsRef.current.has(notificationId)) {
         return;
       }
 
       dismissInFlightIdsRef.current.add(notificationId);
-      setSessionDismissedLastShownById((prev) => {
+      setSessionDismissedVersionById((prev) => {
         const next = new Map(prev);
-        next.set(notificationId, expectedLastShown);
+        next.set(notificationId, expectedVersion);
         return next;
       });
 
       try {
-        await dismissNotification(notificationId, expectedLastShown);
+        await dismissNotification(notificationId, expectedVersion);
         void refresh();
       } catch (error) {
-        setSessionDismissedLastShownById((prev) => {
-          if (prev.get(notificationId) !== expectedLastShown) {
+        setSessionDismissedVersionById((prev) => {
+          if (prev.get(notificationId) !== expectedVersion) {
             return prev;
           }
           const next = new Map(prev);
@@ -165,18 +165,13 @@ export default function NotificationsPopover({
 
   const getState = useCallback(
     (notification: NotificationData): NotificationState => {
-      const dismissedLastShown = sessionDismissedLastShownById.get(
-        notification.id
-      );
-      if (
-        dismissedLastShown === notification.last_shown ||
-        notification.dismissed
-      ) {
+      const dismissedVersion = sessionDismissedVersionById.get(notification.id);
+      if (dismissedVersion === notification.version || notification.dismissed) {
         return "older";
       }
       return "new";
     },
-    [sessionDismissedLastShownById]
+    [sessionDismissedVersionById]
   );
 
   const handleNotificationClick = useCallback(
@@ -229,10 +224,10 @@ export default function NotificationsPopover({
   const handleDismissAll = useCallback(async () => {
     try {
       await dismissAllNotifications();
-      setSessionDismissedLastShownById((prev) => {
+      setSessionDismissedVersionById((prev) => {
         const next = new Map(prev);
         newNotifications.forEach((notification) => {
-          next.set(notification.id, notification.last_shown);
+          next.set(notification.id, notification.version);
         });
         return next;
       });

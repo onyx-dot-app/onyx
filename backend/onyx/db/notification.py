@@ -1,6 +1,7 @@
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import cast as type_cast
 from uuid import UUID
 
 from sqlalchemy import cast
@@ -8,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.sql.elements import ColumnElement
@@ -89,28 +91,17 @@ def create_or_resurface_notification(
     title: str,
     description: str | None = None,
     additional_data: dict[str, Any] | None = None,
-    dedupe_by_additional_data: dict[str, Any] | None = None,
+    identity_data: dict[str, Any] | None = None,
 ) -> Notification:
     """Create a notification or make an existing matching notification visible again.
 
-    `dedupe_by_additional_data` is an optional subset of `additional_data` used
-    to find an existing row before resurfacing. Use it when the display payload
-    can change but the notification identity should stay stable.
+    `identity_data` is the stable lookup identity for a notification whose
+    display payload can change between events.
     """
-    if dedupe_by_additional_data is not None and not dedupe_by_additional_data:
-        raise ValueError("dedupe_by_additional_data must not be empty")
-    if dedupe_by_additional_data is not None and (
-        additional_data is None
-        or any(
-            additional_data.get(key) != value
-            for key, value in dedupe_by_additional_data.items()
-        )
-    ):
-        raise ValueError(
-            "dedupe_by_additional_data must be contained in additional_data"
-        )
+    if identity_data is not None and (not identity_data or additional_data is None):
+        raise ValueError("identity_data requires non-empty additional_data")
 
-    if dedupe_by_additional_data is None:
+    if identity_data is None:
         notification = create_notification(
             user_id=user_id,
             notif_type=notif_type,
@@ -126,18 +117,32 @@ def create_or_resurface_notification(
             else Notification.user_id.is_(None)
         )
 
-        notification = db_session.execute(
+        matching_notifications = db_session.scalars(
             select(Notification)
             .where(
                 user_filter,
                 Notification.notif_type == notif_type,
-                Notification.additional_data.contains(dedupe_by_additional_data),
+                Notification.additional_data.contains(identity_data),
             )
             .order_by(Notification.first_shown.desc(), Notification.id.desc())
-            .limit(1)
-        ).scalar_one_or_none()
+        ).all()
 
-        if notification is None:
+        if matching_notifications:
+            notification = next(
+                (
+                    matching_notification
+                    for matching_notification in matching_notifications
+                    if (matching_notification.additional_data or {})
+                    == (additional_data or {})
+                ),
+                matching_notifications[0],
+            )
+            for duplicate_notification in matching_notifications:
+                if duplicate_notification.id != notification.id:
+                    db_session.delete(duplicate_notification)
+            if len(matching_notifications) > 1:
+                db_session.flush()
+        else:
             notification = create_notification(
                 user_id=user_id,
                 notif_type=notif_type,
@@ -223,9 +228,13 @@ def dismiss_all_notifications(
     notif_type: NotificationType,
     db_session: Session,
 ) -> None:
-    db_session.query(Notification).filter(Notification.notif_type == notif_type).update(
-        {"dismissed": True}
+    stmt = (
+        update(Notification)
+        .where(Notification.notif_type == notif_type)
+        .values(dismissed=True)
+        .execution_options(synchronize_session=False)
     )
+    db_session.execute(stmt)
     db_session.commit()
 
 
@@ -251,18 +260,21 @@ def dismiss_user_notifications(
 
 
 def dismiss_notification(
-    notification: Notification,
+    notification_id: int,
     db_session: Session,
-    expected_last_shown: datetime | None = None,
+    expected_version: datetime | None = None,
 ) -> bool:
-    if (
-        expected_last_shown is not None
-        and notification.last_shown != expected_last_shown
-    ):
-        return False
-    notification.dismissed = True
+    stmt = update(Notification).where(Notification.id == notification_id)
+    if expected_version is not None:
+        stmt = stmt.where(Notification.last_shown == expected_version)
+    result = type_cast(
+        CursorResult[Any],
+        db_session.execute(
+            stmt.values(dismissed=True).execution_options(synchronize_session=False)
+        ),
+    )
     db_session.commit()
-    return True
+    return result.rowcount > 0
 
 
 def batch_dismiss_notifications(

@@ -1,13 +1,23 @@
 import type { ScopedMutator } from "swr";
+import { unstable_serialize } from "swr/infinite";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { NotificationsResponse } from "@/lib/notifications/interfaces";
 
-const INFINITE_NOTIFICATIONS_KEY_PREFIX = `$inf$${SWR_KEYS.notifications}?`;
+export const DEFAULT_NOTIFICATIONS_PAGE_SIZE = 25;
 
-function isNotificationsPageCacheKey(key: unknown): boolean {
-  return (
-    typeof key === "string" &&
-    (key.startsWith(`${SWR_KEYS.notifications}?`) ||
-      key.startsWith(INFINITE_NOTIFICATIONS_KEY_PREFIX))
+export function getNotificationsPageKey(pageIndex: number): string {
+  return SWR_KEYS.notificationsPage(pageIndex, DEFAULT_NOTIFICATIONS_PAGE_SIZE);
+}
+
+export function getNotificationsInfiniteKey(): string {
+  return unstable_serialize(
+    (
+      pageIndex: number,
+      previousPageData: NotificationsResponse | null
+    ): string | null => {
+      if (previousPageData && !previousPageData.has_more) return null;
+      return getNotificationsPageKey(pageIndex);
+    }
   );
 }
 
@@ -16,6 +26,6 @@ export async function refreshNotificationCaches(
 ): Promise<void> {
   await Promise.all([
     mutate(SWR_KEYS.notificationsSummary),
-    mutate((key) => isNotificationsPageCacheKey(key)),
+    mutate(getNotificationsInfiniteKey()),
   ]);
 }

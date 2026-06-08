@@ -956,7 +956,7 @@ class GateAddon:
                     "session_id": session_id,
                     "link": f"/craft/v1?sessionId={session_id}",
                 },
-                dedupe_by_additional_data={"session_id": session_id},
+                identity_data={"session_id": session_id},
             )
             db.commit()
 

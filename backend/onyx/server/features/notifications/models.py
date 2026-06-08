@@ -1,7 +1,10 @@
 from datetime import datetime
+from typing import Any
 
+from pydantic import AliasChoices
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from pydantic import Field
 
 from onyx.configs.constants import NotificationType
 
@@ -13,10 +16,11 @@ class NotificationResponse(BaseModel):
     notif_type: NotificationType
     dismissed: bool
     last_shown: datetime
+    version: datetime = Field(validation_alias="last_shown")
     first_shown: datetime
     title: str
     description: str | None = None
-    additional_data: dict | None = None
+    additional_data: dict[str, Any] | None = None
 
 
 class PaginatedNotifications(BaseModel):
@@ -34,4 +38,7 @@ class NotificationSummary(BaseModel):
 
 
 class DismissNotificationRequest(BaseModel):
-    expected_last_shown: datetime | None = None
+    expected_version: datetime | None = Field(
+        default=None,
+        validation_alias=AliasChoices("expected_version", "expected_last_shown"),
+    )

@@ -167,7 +167,7 @@ def dismiss_notification_endpoint(
         ) from e
 
     dismiss_notification(
-        notification=notification,
+        notification_id=notification.id,
         db_session=db_session,
-        expected_last_shown=request.expected_last_shown if request else None,
+        expected_version=request.expected_version if request else None,
     )

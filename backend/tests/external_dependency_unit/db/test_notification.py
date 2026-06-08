@@ -5,6 +5,7 @@ from datetime import timezone
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import NotificationType
@@ -13,6 +14,7 @@ from onyx.db.models import User
 from onyx.db.notification import count_notifications
 from onyx.db.notification import create_notification
 from onyx.db.notification import create_or_resurface_notification
+from onyx.db.notification import dismiss_notification
 from onyx.db.notification import dismiss_user_notifications
 from onyx.db.notification import get_notifications
 from onyx.server.features.notifications import api as notifications_api
@@ -235,9 +237,7 @@ def test_create_or_resurface_notification_reopens_existing_session(
             "session_id": "11111111-1111-1111-1111-111111111111",
             "link": "/craft/v1?sessionId=11111111-1111-1111-1111-111111111111",
         },
-        dedupe_by_additional_data={
-            "session_id": "11111111-1111-1111-1111-111111111111"
-        },
+        identity_data={"session_id": "11111111-1111-1111-1111-111111111111"},
     )
     db_session.commit()
     db_session.refresh(reopened_notification)
@@ -307,9 +307,7 @@ def test_create_or_resurface_notification_updates_active_existing_without_restar
             "session_id": "22222222-2222-2222-2222-222222222222",
             "link": "/craft/v1?sessionId=22222222-2222-2222-2222-222222222222",
         },
-        dedupe_by_additional_data={
-            "session_id": "22222222-2222-2222-2222-222222222222"
-        },
+        identity_data={"session_id": "22222222-2222-2222-2222-222222222222"},
     )
     db_session.commit()
     db_session.refresh(resurfaced_notification)
@@ -324,6 +322,78 @@ def test_create_or_resurface_notification_updates_active_existing_without_restar
     }
     assert resurfaced_notification.first_shown == original_shown
     assert resurfaced_notification.last_shown != original_shown
+
+
+def test_create_or_resurface_notification_collapses_duplicate_identity_rows(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = create_test_user(db_session, "notification_duplicate_session")
+    first_shown = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    session_id = "33333333-3333-3333-3333-333333333333"
+    older_notification = Notification(
+        user_id=user.id,
+        notif_type=NotificationType.APPROVAL_REQUESTED,
+        dismissed=False,
+        last_shown=first_shown,
+        first_shown=first_shown,
+        title="Old approval",
+        additional_data={
+            "session_id": session_id,
+            "approval_id": "approval-1",
+            "link": "/craft/v1?sessionId=old-link-format",
+        },
+    )
+    newer_notification = Notification(
+        user_id=user.id,
+        notif_type=NotificationType.APPROVAL_REQUESTED,
+        dismissed=True,
+        last_shown=first_shown + timedelta(minutes=1),
+        first_shown=first_shown + timedelta(minutes=1),
+        title="Newer dismissed approval",
+        additional_data={
+            "session_id": session_id,
+            "approval_id": "approval-2",
+            "link": "/craft/v1?sessionId=duplicate-link-format",
+        },
+    )
+    db_session.add_all([older_notification, newer_notification])
+    db_session.commit()
+
+    resurfaced_notification = create_or_resurface_notification(
+        user_id=user.id,
+        notif_type=NotificationType.APPROVAL_REQUESTED,
+        db_session=db_session,
+        title="Latest approval",
+        description="Latest approval details",
+        additional_data={
+            "session_id": session_id,
+            "link": f"/craft/v1?sessionId={session_id}",
+        },
+        identity_data={"session_id": session_id},
+    )
+    db_session.commit()
+
+    matching_notifications = list(
+        db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user.id,
+                Notification.notif_type == NotificationType.APPROVAL_REQUESTED,
+                Notification.additional_data.contains({"session_id": session_id}),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(matching_notifications) == 1
+    assert matching_notifications[0].id == resurfaced_notification.id
+    assert matching_notifications[0].dismissed is False
+    assert matching_notifications[0].title == "Latest approval"
+    assert matching_notifications[0].description == "Latest approval details"
+    assert matching_notifications[0].additional_data == {
+        "session_id": session_id,
+        "link": f"/craft/v1?sessionId={session_id}",
+    }
 
 
 def test_create_or_resurface_notification_is_not_approval_specific(
@@ -357,7 +427,7 @@ def test_create_or_resurface_notification_is_not_approval_specific(
             "feature": "stable-feature",
             "link": "/new-link",
         },
-        dedupe_by_additional_data={"feature": "stable-feature"},
+        identity_data={"feature": "stable-feature"},
     )
     db_session.commit()
     db_session.refresh(resurfaced_notification)
@@ -371,6 +441,32 @@ def test_create_or_resurface_notification_is_not_approval_specific(
         "link": "/new-link",
     }
     assert resurfaced_notification.first_shown != original_shown
+
+
+def test_create_or_resurface_notification_rejects_invalid_identity_data(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = create_test_user(db_session, "notification_identity_validation")
+
+    with pytest.raises(ValueError, match="identity_data requires"):
+        create_or_resurface_notification(
+            user_id=user.id,
+            notif_type=NotificationType.FEATURE_ANNOUNCEMENT,
+            db_session=db_session,
+            title="Empty identity",
+            additional_data={"link": "/new-link"},
+            identity_data={},
+        )
+
+    with pytest.raises(ValueError, match="identity_data requires"):
+        create_or_resurface_notification(
+            user_id=user.id,
+            notif_type=NotificationType.FEATURE_ANNOUNCEMENT,
+            db_session=db_session,
+            title="Missing payload",
+            identity_data={"feature": "stable-feature"},
+        )
 
 
 def test_get_notifications_api_returns_paginated_response(
@@ -404,6 +500,7 @@ def test_get_notifications_api_returns_paginated_response(
     assert response.page_num == 0
     assert response.page_size == 2
     assert response.has_more is True
+    assert response.notifications[0].version == response.notifications[0].last_shown
 
 
 def test_get_notifications_api_runs_ensure_checks_on_first_page(
@@ -621,7 +718,7 @@ def test_notification_summary_and_dismiss_all_api(
     assert other_user_row.dismissed is False
 
 
-def test_dismiss_notification_api_ignores_stale_last_shown(
+def test_dismiss_notification_api_ignores_stale_version(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
@@ -641,7 +738,7 @@ def test_dismiss_notification_api_ignores_stale_last_shown(
     notifications_api.dismiss_notification_endpoint(
         notification_id=notification.id,
         request=notifications_api.DismissNotificationRequest(
-            expected_last_shown=last_shown - timedelta(minutes=1)
+            expected_version=last_shown - timedelta(minutes=1)
         ),
         user=user,
         db_session=db_session,
@@ -652,10 +749,58 @@ def test_dismiss_notification_api_ignores_stale_last_shown(
     notifications_api.dismiss_notification_endpoint(
         notification_id=notification.id,
         request=notifications_api.DismissNotificationRequest(
-            expected_last_shown=last_shown
+            expected_version=last_shown
         ),
         user=user,
         db_session=db_session,
+    )
+    db_session.refresh(notification)
+    assert notification.dismissed is True
+
+
+def test_dismiss_notification_uses_atomic_version_update(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = create_test_user(db_session, "notification_atomic_dismiss")
+    original_last_shown = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    notification = _create_notification(
+        db_session=db_session,
+        user=user,
+        index=1,
+        first_shown=original_last_shown,
+        dismissed=False,
+    )
+    db_session.commit()
+
+    newer_last_shown = original_last_shown + timedelta(minutes=1)
+    db_session.execute(
+        update(Notification)
+        .where(Notification.id == notification.id)
+        .values(last_shown=newer_last_shown, dismissed=False)
+        .execution_options(synchronize_session=False)
+    )
+    db_session.commit()
+
+    assert (
+        dismiss_notification(
+            notification_id=notification.id,
+            db_session=db_session,
+            expected_version=original_last_shown,
+        )
+        is False
+    )
+    db_session.refresh(notification)
+    assert notification.dismissed is False
+    assert notification.last_shown == newer_last_shown
+
+    assert (
+        dismiss_notification(
+            notification_id=notification.id,
+            db_session=db_session,
+            expected_version=newer_last_shown,
+        )
+        is True
     )
     db_session.refresh(notification)
     assert notification.dismissed is True

@@ -305,7 +305,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
     try {
       await dismissNotification(
         buildModeNotification.id,
-        buildModeNotification.last_shown
+        buildModeNotification.version
       );
       mutateNotifications();
     } catch (error) {

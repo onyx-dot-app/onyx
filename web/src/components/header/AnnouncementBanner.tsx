@@ -13,6 +13,10 @@ import { useSWRConfig } from "swr";
 const DISMISSED_NOTIFICATION_COOKIE_PREFIX = "dismissed_notification_";
 const COOKIE_EXPIRY_DAYS = 1;
 
+function dismissedNotificationCookieName(notification: Notification): string {
+  return `${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${notification.id}_${notification.version}`;
+}
+
 export function AnnouncementBanner() {
   const settings = useContext(SettingsContext);
   const { mutate } = useSWRConfig();
@@ -25,9 +29,7 @@ export function AnnouncementBanner() {
       settings?.settings.notifications || []
     ).filter(
       (notification) =>
-        !Cookies.get(
-          `${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${notification.id}`
-        )
+        !Cookies.get(dismissedNotificationCookieName(notification))
     );
     setLocalNotifications(filteredNotifications);
   }, [settings?.settings.notifications]);
@@ -36,12 +38,10 @@ export function AnnouncementBanner() {
 
   const handleDismiss = async (notification: Notification) => {
     try {
-      await dismissNotification(notification.id, notification.last_shown);
-      Cookies.set(
-        `${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${notification.id}`,
-        "true",
-        { expires: COOKIE_EXPIRY_DAYS }
-      );
+      await dismissNotification(notification.id, notification.version);
+      Cookies.set(dismissedNotificationCookieName(notification), "true", {
+        expires: COOKIE_EXPIRY_DAYS,
+      });
       setLocalNotifications((prevNotifications) =>
         prevNotifications.filter(
           (localNotification) => localNotification.id !== notification.id
