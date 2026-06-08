@@ -317,6 +317,22 @@ jobs:
           # Annotation surfaced at the top of the run (newlines encoded as %0A).
           echo "::notice title=Reproduce ${PROVIDER} failure locally::${CMD//$'\n'/%0A}"
 
+          # Persist a Slack-ready snippet so the notify job can inline the command.
+          {
+            echo "*Reproduce \`${PROVIDER}\` failure locally:*"
+            echo '```'
+            echo "${CMD}"
+            echo '```'
+          } > "reproduce-command-${PROVIDER}.txt"
+
+      - name: Upload reproduce command
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: reproduce-command-nightly-${{ matrix.provider }}
+          path: reproduce-command-${{ matrix.provider }}.txt
+          if-no-files-found: ignore
+
       - name: Dump API server logs
         if: always()
         run: |
