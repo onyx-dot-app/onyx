@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
 import { track, AnalyticsEvent } from "@/lib/analytics";
@@ -110,7 +110,14 @@ export default function NotificationsPopover({
     undismissedCount,
     isLoading,
     refresh: mutate,
+    hasMore,
+    isLoadingMore,
+    loadMore,
   } = useNotifications();
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreRef = useRef(loadMore);
+  loadMoreRef.current = loadMore;
 
   // Track IDs dismissed during this session (before popover closes)
   const [sessionDismissedIds, setSessionDismissedIds] = useState<Set<number>>(
@@ -196,13 +203,54 @@ export default function NotificationsPopover({
   );
 
   const handleDismissAll = useCallback(async () => {
-    for (const n of newNotifications) {
-      await handleDismiss(n.id);
+    try {
+      const response = await fetch("/api/notifications/dismiss-all", {
+        method: "POST",
+      });
+      if (response.ok) {
+        setSessionDismissedIds((prev) => {
+          const next = new Set(prev);
+          newNotifications.forEach((notification) => {
+            next.add(notification.id);
+          });
+          return next;
+        });
+        mutate();
+      }
+    } catch (error) {
+      console.error("Error dismissing notifications:", error);
     }
-  }, [newNotifications, handleDismiss]);
+  }, [mutate, newNotifications]);
+
+  useEffect(() => {
+    if (!hasMore || isLoadingMore) return;
+
+    const scrollContainer = scrollContainerRef.current;
+    const sentinel = sentinelRef.current;
+    if (!scrollContainer || !sentinel) return;
+
+    let didRequestLoad = false;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !didRequestLoad) {
+          didRequestLoad = true;
+          observer.disconnect();
+          loadMoreRef.current();
+        }
+      },
+      {
+        root: scrollContainer,
+        rootMargin: "64px 0px",
+        threshold: 0,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore]);
 
   return (
-    <Section gap={0}>
+    <Section gap={0} justifyContent="start" alignItems="stretch">
       <Section flexDirection="row" padding={0.325}>
         <Section flexDirection="row" gap={0.25} justifyContent="start">
           <Button
@@ -247,7 +295,10 @@ export default function NotificationsPopover({
           </Section>
         </div>
       ) : (
-        <div className="max-h-(--notifications-popover) overflow-y-auto flex flex-col gap-1">
+        <div
+          ref={scrollContainerRef}
+          className="h-(--notifications-popover) w-full min-w-0 overflow-y-auto [scrollbar-gutter:stable] flex flex-col gap-1"
+        >
           {newNotifications.length > 0 && (
             <>
               <Divider title="New" />
@@ -280,6 +331,17 @@ export default function NotificationsPopover({
                 ))}
               </div>
             </>
+          )}
+
+          {hasMore && (
+            <div
+              ref={sentinelRef}
+              className="h-8 flex items-center justify-center transition-opacity duration-300"
+            >
+              <SvgSimpleLoader
+                className={isLoadingMore ? "opacity-100" : "opacity-40"}
+              />
+            </div>
           )}
         </div>
       )}

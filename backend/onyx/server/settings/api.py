@@ -24,11 +24,11 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.features.build.utils import is_onyx_craft_enabled
+from onyx.server.features.notifications.models import Notification
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
 )
 from onyx.server.settings.models import DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
-from onyx.server.settings.models import Notification
 from onyx.server.settings.models import Settings
 from onyx.server.settings.models import Tier
 from onyx.server.settings.models import UserSettings
@@ -161,7 +161,9 @@ def get_settings_notifications(user: User, db_session: Session) -> list[Notifica
         notif_type=NotificationType.TRIAL_ENDS_TWO_DAYS,
         db_session=db_session,
     )
-    notifications = [Notification.from_model(product_notif[0])] if product_notif else []
+    notifications = (
+        [Notification.model_validate(product_notif[0])] if product_notif else []
+    )
 
     # Only show reindex notifications to admins
     if not is_user_admin(user):
@@ -199,7 +201,7 @@ def get_settings_notifications(user: User, db_session: Session) -> list[Notifica
         )
 
         db_session.commit()
-        notifications.append(Notification.from_model(reindex_notif))
+        notifications.append(Notification.model_validate(reindex_notif))
         return notifications
     except SQLAlchemyError:
         logger.exception("Error while processing notifications")

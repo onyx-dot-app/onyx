@@ -1,4 +1,3 @@
-from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel
@@ -8,9 +7,8 @@ from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
 from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import MAX_ALLOWED_UPLOAD_SIZE_MB
-from onyx.configs.constants import NotificationType
 from onyx.configs.constants import QueryHistoryType
-from onyx.db.models import Notification as NotificationDBModel
+from onyx.server.features.notifications.models import Notification
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB = 200
@@ -34,30 +32,6 @@ class Tier(str, Enum):
     COMMUNITY = "community"
     BUSINESS = "business"
     ENTERPRISE = "enterprise"
-
-
-class Notification(BaseModel):
-    id: int
-    notif_type: NotificationType
-    dismissed: bool
-    last_shown: datetime
-    first_shown: datetime
-    title: str
-    description: str | None = None
-    additional_data: dict | None = None
-
-    @classmethod
-    def from_model(cls, notif: NotificationDBModel) -> "Notification":
-        return cls(
-            id=notif.id,
-            notif_type=notif.notif_type,
-            dismissed=notif.dismissed,
-            last_shown=notif.last_shown,
-            first_shown=notif.first_shown,
-            title=notif.title,
-            description=notif.description,
-            additional_data=notif.additional_data,
-        )
 
 
 class Settings(BaseModel):
