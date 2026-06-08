@@ -85,9 +85,9 @@ class UserManager:
 
     @staticmethod
     def login_as_user(test_user: DATestUser) -> DATestUser:
-        # httpx encodes dict-shaped `data=` as form-urlencoded itself and
-        # sets the Content-Type header automatically — no need to urlencode
-        # by hand the way the old `requests`-based flow did.
+        # httpx encodes dict-shaped `data=` as form-urlencoded itself and sets
+        # the Content-Type header automatically — no need to urlencode by hand
+        # the way the old `requests`-based flow did.
         headers = test_user.headers.copy()
         headers.pop("Content-Type", None)
 
@@ -104,8 +104,8 @@ class UserManager:
         if not session_cookie:
             raise Exception("Failed to login")
 
-        # Set cookies in the headers. No trailing "; " -- httpx rejects it
-        # as an illegal header value; TestClient is lenient about both.
+        # Set cookies in the headers. No trailing "; " -- httpx rejects it as an
+        # illegal header value; TestClient is lenient about both.
         test_user.headers["Cookie"] = (
             f"{FASTAPI_USERS_AUTH_COOKIE_NAME}={session_cookie}"
         )
@@ -119,7 +119,7 @@ class UserManager:
         # whatever `headers=...` the caller passes.
         client.cookies.clear()
 
-        # Get user role from /me endpoint
+        # Get user role from /me endpoint.
         me_response = client.get(
             url=f"{API_SERVER_URL}/me",
             headers=test_user.headers,
