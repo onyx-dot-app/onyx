@@ -159,5 +159,4 @@ def ensure_build_mode_intro_notification(user: User, db_session: Session) -> Non
         title="Introducing Onyx Craft",
         description="Unleash Onyx to create dashboards, slides, documents, and more with your connected data.",
         additional_data={"feature": BUILD_MODE_FEATURE_ID},
-        refresh_existing=False,
     )

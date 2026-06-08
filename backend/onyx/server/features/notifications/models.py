@@ -31,3 +31,7 @@ class PaginatedNotifications(BaseModel):
 class NotificationSummary(BaseModel):
     total_items: int
     undismissed_count: int
+
+
+class DismissNotificationRequest(BaseModel):
+    expected_last_shown: datetime | None = None

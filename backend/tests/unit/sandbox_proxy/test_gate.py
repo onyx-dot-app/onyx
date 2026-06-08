@@ -1547,12 +1547,10 @@ def test_persist_approval_row_announce_failure_is_swallowed(
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
 
-    notify_calls: list[tuple[UUID, SessionContext, AllMatchedActions]] = []
+    notify_calls: list[SessionContext] = []
 
-    def _fake_notify(
-        _self: Any, aid: UUID, ctx_arg: SessionContext, match_arg: AllMatchedActions
-    ) -> None:
-        notify_calls.append((aid, ctx_arg, match_arg))
+    def _fake_notify(_self: Any, ctx_arg: SessionContext) -> None:
+        notify_calls.append(ctx_arg)
 
     monkeypatch.setattr(GateAddon, "_notify_approval_requested", _fake_notify)
 
@@ -1563,7 +1561,7 @@ def test_persist_approval_row_announce_failure_is_swallowed(
     assert dict(addon._parked.snapshot()) == {"tenant-1": {approval_id}}
 
     # Failed announce must not short-circuit the notify dispatch.
-    assert notify_calls == [(approval_id, ctx, _MATCH)]
+    assert notify_calls == [ctx]
     assert ops.index("insert") < ops.index("commit")
     # rpush raised before recording, so no rpush op is present.
     assert not any(op.startswith("rpush:") for op in ops)

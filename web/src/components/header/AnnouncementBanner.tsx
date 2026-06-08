@@ -6,8 +6,9 @@ import Link from "next/link";
 import type { Route } from "next";
 import Cookies from "js-cookie";
 import { SvgX } from "@opal/icons";
+import type { Notification } from "@/lib/notifications/interfaces";
 import { dismissNotification } from "@/lib/notifications/api";
-import { SWR_KEYS } from "@/lib/swr-keys";
+import { refreshNotificationCaches } from "@/lib/notifications/cache";
 import { useSWRConfig } from "swr";
 const DISMISSED_NOTIFICATION_COOKIE_PREFIX = "dismissed_notification_";
 const COOKIE_EXPIRY_DAYS = 1;
@@ -33,20 +34,20 @@ export function AnnouncementBanner() {
 
   if (!localNotifications || localNotifications.length === 0) return null;
 
-  const handleDismiss = async (notificationId: number) => {
+  const handleDismiss = async (notification: Notification) => {
     try {
-      await dismissNotification(notificationId);
+      await dismissNotification(notification.id, notification.last_shown);
       Cookies.set(
-        `${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${notificationId}`,
+        `${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${notification.id}`,
         "true",
         { expires: COOKIE_EXPIRY_DAYS }
       );
       setLocalNotifications((prevNotifications) =>
         prevNotifications.filter(
-          (notification) => notification.id !== notificationId
+          (localNotification) => localNotification.id !== notification.id
         )
       );
-      void mutate(SWR_KEYS.notificationsSummary);
+      void refreshNotificationCaches(mutate);
     } catch (error) {
       console.error("Error dismissing notification:", error);
     }
@@ -87,7 +88,7 @@ export function AnnouncementBanner() {
                 </p>
               ) : null}
               <button
-                onClick={() => handleDismiss(notification.id)}
+                onClick={() => handleDismiss(notification)}
                 className="absolute top-0 right-0 mt-2 mr-2"
                 aria-label="Dismiss"
               >

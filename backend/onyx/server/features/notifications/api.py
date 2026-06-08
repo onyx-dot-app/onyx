@@ -18,6 +18,7 @@ from onyx.db.notification import get_notifications
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.utils import ensure_build_mode_intro_notification
+from onyx.server.features.notifications.models import DismissNotificationRequest
 from onyx.server.features.notifications.models import NotificationResponse
 from onyx.server.features.notifications.models import NotificationSummary
 from onyx.server.features.notifications.models import PaginatedNotifications
@@ -148,6 +149,7 @@ def dismiss_all_notifications_endpoint(
 @router.post("/{notification_id}/dismiss")
 def dismiss_notification_endpoint(
     notification_id: int,
+    request: DismissNotificationRequest | None = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
@@ -164,4 +166,8 @@ def dismiss_notification_endpoint(
             "Notification not found",
         ) from e
 
-    dismiss_notification(notification, db_session)
+    dismiss_notification(
+        notification=notification,
+        db_session=db_session,
+        expected_last_shown=request.expected_last_shown if request else None,
+    )

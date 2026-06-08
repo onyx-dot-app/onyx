@@ -40,14 +40,12 @@ def create_notification(
     title: str,
     description: str | None = None,
     additional_data: dict[str, Any] | None = None,
-    refresh_existing: bool = True,
 ) -> Notification:
-    """Create one notification identity without committing.
+    """Create a notification if this user/type/data identity does not exist.
 
     The identity matches ix_notification_user_type_data: user, type, and
-    additional_data with NULL treated as '{}'. Dismissed rows are never
-    reopened here; callers that need that behavior should use
-    create_or_resurface_notification.
+    additional_data with NULL treated as '{}'. Existing rows are returned
+    without mutation.
     """
     additional_data_normalized = additional_data if additional_data is not None else {}
     user_filter = (
@@ -67,9 +65,7 @@ def create_notification(
         .limit(1)
     ).scalar_one_or_none()
 
-    if existing_notification:
-        if refresh_existing and not existing_notification.dismissed:
-            existing_notification.last_shown = func.now()
+    if existing_notification is not None:
         return existing_notification
 
     notification = Notification(
@@ -93,25 +89,73 @@ def create_or_resurface_notification(
     title: str,
     description: str | None = None,
     additional_data: dict[str, Any] | None = None,
+    dedupe_by_additional_data: dict[str, Any] | None = None,
 ) -> Notification:
-    """Create a notification or make the existing identity visible again."""
-    notification = create_notification(
-        user_id=user_id,
-        notif_type=notif_type,
-        db_session=db_session,
-        title=title,
-        description=description,
-        additional_data=additional_data,
-        refresh_existing=False,
-    )
+    """Create a notification or make an existing matching notification visible again.
+
+    `dedupe_by_additional_data` is an optional subset of `additional_data` used
+    to find an existing row before resurfacing. Use it when the display payload
+    can change but the notification identity should stay stable.
+    """
+    if dedupe_by_additional_data is not None and not dedupe_by_additional_data:
+        raise ValueError("dedupe_by_additional_data must not be empty")
+    if dedupe_by_additional_data is not None and (
+        additional_data is None
+        or any(
+            additional_data.get(key) != value
+            for key, value in dedupe_by_additional_data.items()
+        )
+    ):
+        raise ValueError(
+            "dedupe_by_additional_data must be contained in additional_data"
+        )
+
+    if dedupe_by_additional_data is None:
+        notification = create_notification(
+            user_id=user_id,
+            notif_type=notif_type,
+            db_session=db_session,
+            title=title,
+            description=description,
+            additional_data=additional_data,
+        )
+    else:
+        user_filter = (
+            Notification.user_id == user_id
+            if user_id is not None
+            else Notification.user_id.is_(None)
+        )
+
+        notification = db_session.execute(
+            select(Notification)
+            .where(
+                user_filter,
+                Notification.notif_type == notif_type,
+                Notification.additional_data.contains(dedupe_by_additional_data),
+            )
+            .order_by(Notification.first_shown.desc(), Notification.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+
+        if notification is None:
+            notification = create_notification(
+                user_id=user_id,
+                notif_type=notif_type,
+                db_session=db_session,
+                title=title,
+                description=description,
+                additional_data=additional_data,
+            )
+
     was_dismissed = notification.dismissed
     notification.title = title
     notification.description = description
     notification.additional_data = additional_data
     notification.dismissed = False
+    shown_at = func.now()
     if was_dismissed:
-        notification.first_shown = func.now()
-    notification.last_shown = func.now()
+        notification.first_shown = shown_at
+    notification.last_shown = shown_at
     return notification
 
 
@@ -206,9 +250,19 @@ def dismiss_user_notifications(
     db_session.commit()
 
 
-def dismiss_notification(notification: Notification, db_session: Session) -> None:
+def dismiss_notification(
+    notification: Notification,
+    db_session: Session,
+    expected_last_shown: datetime | None = None,
+) -> bool:
+    if (
+        expected_last_shown is not None
+        and notification.last_shown != expected_last_shown
+    ):
+        return False
     notification.dismissed = True
     db_session.commit()
+    return True
 
 
 def batch_dismiss_notifications(

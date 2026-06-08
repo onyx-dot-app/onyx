@@ -67,11 +67,6 @@ class _IdentityResolver(Protocol):
 CacheFactory = Callable[[str], CacheBackend]
 
 
-# Relative deep link routed through the Next router by NotificationsPopover.tsx;
-# must mirror the frontend's CRAFT_PATH + sessionId search param.
-_CRAFT_SESSION_LINK_TEMPLATE = "/craft/v1?sessionId={session_id}"
-
-
 @dataclass(frozen=True)
 class _ApprovalGrant:
     """A decision to approve a gated request without parking it.
@@ -712,7 +707,7 @@ class GateAddon:
         )
 
         try:
-            self._notify_approval_requested(ctx, matched_actions)
+            self._notify_approval_requested(ctx)
         except Exception as e:
             logger.warning(
                 "approval.notify_failed approval_id=%s error=%s",
@@ -943,30 +938,25 @@ class GateAddon:
     def _notify_approval_requested(
         self,
         ctx: SessionContext,
-        matched_actions: AllMatchedActions,
     ) -> None:
         """Best-effort APPROVAL_REQUESTED notification dispatch.
 
         Body carries no PII; the full payload lives on the action_approval row,
         which the popover fetches when the chat loads.
         """
-        action_count = len(matched_actions.actions)
         with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
+            session_id = str(ctx.session_id)
             create_or_resurface_notification(
                 user_id=ctx.user_id,
                 notif_type=NotificationType.APPROVAL_REQUESTED,
                 db_session=db,
                 title="Craft is requesting approval",
-                description=(
-                    f"{matched_actions.app_name} needs approval for "
-                    f"{action_count} action{'s' if action_count != 1 else ''}."
-                ),
+                description="This session has pending approvals.",
                 additional_data={
-                    "session_id": str(ctx.session_id),
-                    "link": _CRAFT_SESSION_LINK_TEMPLATE.format(
-                        session_id=ctx.session_id
-                    ),
+                    "session_id": session_id,
+                    "link": f"/craft/v1?sessionId={session_id}",
                 },
+                dedupe_by_additional_data={"session_id": session_id},
             )
             db.commit()
 
