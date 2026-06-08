@@ -33,21 +33,22 @@ import {
   useSettingsContext,
 } from "@/providers/SettingsProvider";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
-import useNotifications from "@/hooks/useNotifications";
+import { useNotificationSummary } from "@/hooks/useNotifications";
 import { SvgOnyxLogo } from "@opal/logos";
 import { markdown } from "@opal/utils";
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
   onOpenNotifications: () => void;
+  undismissedCount: number;
 }
 
 function SettingsPopover({
   onUserSettingsClick,
   onOpenNotifications,
+  undismissedCount,
 }: SettingsPopoverProps) {
   const { user } = useUser();
-  const { undismissedCount } = useNotifications();
   const settings = useSettingsContext();
   const router = useRouter();
   const pathname = usePathname();
@@ -204,7 +205,8 @@ export default function AccountPopover({
   const { user } = useUser();
   const appFocus = useAppFocus();
   const vectorDbEnabled = useVectorDbEnabled();
-  const { undismissedCount } = useNotifications();
+  const { undismissedCount, refresh: refreshNotificationSummary } =
+    useNotificationSummary();
   const userDisplayName = getUserDisplayName(user);
 
   const handlePopoverOpen = (state: boolean) => {
@@ -216,6 +218,7 @@ export default function AccountPopover({
         preload("/api/manage/connector-status", errorHandlingFetcher);
       }
       preload("/api/llm/provider", errorHandlingFetcher);
+      void refreshNotificationSummary();
       setPopupState("Settings");
     } else {
       setPopupState(undefined);
@@ -259,6 +262,7 @@ export default function AccountPopover({
               setPopupState(undefined);
             }}
             onOpenNotifications={() => setPopupState("Notifications")}
+            undismissedCount={undismissedCount}
           />
         )}
         {popupState === "Notifications" && (

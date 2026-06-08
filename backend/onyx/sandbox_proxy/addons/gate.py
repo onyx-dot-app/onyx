@@ -952,7 +952,7 @@ class GateAddon:
                 user_id=ctx.user_id,
                 notif_type=NotificationType.APPROVAL_REQUESTED,
                 db_session=db,
-                title="Craft is awaiting approval",
+                title="Craft is requesting approval",
                 additional_data={
                     "approval_id": str(approval_id),
                     "session_id": str(ctx.session_id),
