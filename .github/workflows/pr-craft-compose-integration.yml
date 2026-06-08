@@ -44,6 +44,14 @@ env:
   POSTGRES_PASSWORD: "password"
   POSTGRES_USER: "postgres"
   IMAGE_TAG: "latest"
+  # Pin to a CI-only tag so the locally-built sandbox image is what compose
+  # passes to api_server, and what DockerSandboxManager.provision then loads
+  # into each sandbox container. Without this, compose falls back to
+  # docker-compose.craft.yml's default version tag (currently v0.1.52); docker
+  # then pulls that published image from Docker Hub and the locally-built image
+  # is dead weight -- the lane silently runs against the public image instead of
+  # the tree under test.
+  SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:ci"
 
 jobs:
   integration:
@@ -76,7 +84,7 @@ jobs:
         with:
           context: ./backend/onyx/server/features/build/sandbox/image
           file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
-          tags: onyxdotapp/sandbox:v0.1.51
+          tags: ${{ env.SANDBOX_CONTAINER_IMAGE }}
           load: true
           build-args: |
             ENABLE_SKILLS=false
