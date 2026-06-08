@@ -205,18 +205,21 @@ def make_future_search_settings(
     db_session: Session,
     *,
     status: IndexModelStatus = IndexModelStatus.FUTURE,
-    use_port_flow: bool | None = None,
+    use_port_flow: bool = False,
 ) -> SearchSettings:
     """An isolated secondary SearchSettings cloned from the live PRESENT row with a
     unique index_name, so the tenant-global port/count/cursor helpers see only this
-    test's rows. `use_port_flow` is left at the row default unless set; pass
-    `status=PAST` for round-trip tests that must not collide with concurrent FUTUREs.
+    test's rows. `use_port_flow` is set explicitly (default False) so the fixture
+    never inherits the live PRESENT row's flag; pass `status=PAST` for round-trip
+    tests that must not collide with concurrent FUTUREs.
     """
     present = get_current_search_settings(db_session)
-    update: dict[str, object] = {"index_name": f"test_future_{uuid4().hex[:8]}"}
-    if use_port_flow is not None:
-        update["use_port_flow"] = use_port_flow
-    saved = SavedSearchSettings.from_db_model(present).model_copy(update=update)
+    saved = SavedSearchSettings.from_db_model(present).model_copy(
+        update={
+            "index_name": f"test_future_{uuid4().hex[:8]}",
+            "use_port_flow": use_port_flow,
+        }
+    )
     return create_search_settings(saved, db_session, status=status)
 
 
