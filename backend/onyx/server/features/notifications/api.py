@@ -1,3 +1,6 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Query
@@ -33,28 +36,40 @@ DEFAULT_NOTIFICATIONS_PAGE_SIZE = 10
 MAX_NOTIFICATIONS_PAGE_SIZE = 50
 
 
+@contextmanager
+def _notification_check_transaction(
+    error_message: str,
+    db_session: Session,
+) -> Iterator[None]:
+    try:
+        yield
+        db_session.commit()
+    except Exception:
+        db_session.rollback()
+        logger.exception(error_message)
+
+
 def _check_for_notifications_to_create(
     user: User,
     db_session: Session,
 ) -> None:
-    try:
+    with _notification_check_transaction(
+        "Failed to check for build mode intro in notifications endpoint",
+        db_session,
+    ):
         ensure_build_mode_intro_notification(user, db_session)
-    except Exception:
-        logger.exception(
-            "Failed to check for build mode intro in notifications endpoint"
-        )
 
-    try:
+    with _notification_check_transaction(
+        "Failed to create permissions_migration_v1 announcement in notifications endpoint",
+        db_session,
+    ):
         ensure_permissions_migration_notification(user, db_session)
-    except Exception:
-        logger.exception(
-            "Failed to create permissions_migration_v1 announcement in notifications endpoint"
-        )
 
-    try:
+    with _notification_check_transaction(
+        "Failed to check for release notes in notifications endpoint",
+        db_session,
+    ):
         ensure_release_notes_fresh_and_notify(db_session)
-    except Exception:
-        logger.exception("Failed to check for release notes in notifications endpoint")
 
 
 @router.get("")

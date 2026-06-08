@@ -27,6 +27,7 @@ from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.db.notification import create_notification
+from onyx.db.notification import create_or_resurface_notification
 from onyx.db.scheduled_task import get_live_scheduled_run_grants
 from onyx.db.scheduled_task import ScheduledRunGrants
 from onyx.external_apps.matching.engine import actions_requiring_approval
@@ -711,7 +712,7 @@ class GateAddon:
         )
 
         try:
-            self._notify_approval_requested(approval_id, ctx, matched_actions)
+            self._notify_approval_requested(ctx, matched_actions)
         except Exception as e:
             logger.warning(
                 "approval.notify_failed approval_id=%s error=%s",
@@ -936,35 +937,38 @@ class GateAddon:
                 db_session=db,
                 title=grant.notification_title,
                 additional_data=grant.notification_data,
-                autocommit=True,
             )
+            db.commit()
 
     def _notify_approval_requested(
-        self, approval_id: UUID, ctx: SessionContext, matched_actions: AllMatchedActions
+        self,
+        ctx: SessionContext,
+        matched_actions: AllMatchedActions,
     ) -> None:
         """Best-effort APPROVAL_REQUESTED notification dispatch.
 
         Body carries no PII; the full payload lives on the action_approval row,
         which the popover fetches when the chat loads.
         """
+        action_count = len(matched_actions.actions)
         with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
-            create_notification(
+            create_or_resurface_notification(
                 user_id=ctx.user_id,
                 notif_type=NotificationType.APPROVAL_REQUESTED,
                 db_session=db,
                 title="Craft is requesting approval",
+                description=(
+                    f"{matched_actions.app_name} needs approval for "
+                    f"{action_count} action{'s' if action_count != 1 else ''}."
+                ),
                 additional_data={
-                    "approval_id": str(approval_id),
                     "session_id": str(ctx.session_id),
-                    "action_type": matched_actions.governing_action.action_type,
-                    "action_count": len(matched_actions.actions),
-                    "app_name": matched_actions.app_name,
                     "link": _CRAFT_SESSION_LINK_TEMPLATE.format(
                         session_id=ctx.session_id
                     ),
                 },
-                autocommit=True,
             )
+            db.commit()
 
     # --------------------------------------------------------------------------
     # internal helpers

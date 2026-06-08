@@ -12,6 +12,7 @@ from onyx.db.models import Notification
 from onyx.db.models import User
 from onyx.db.notification import count_notifications
 from onyx.db.notification import create_notification
+from onyx.db.notification import create_or_resurface_notification
 from onyx.db.notification import dismiss_user_notifications
 from onyx.db.notification import get_notifications
 from onyx.server.features.notifications import api as notifications_api
@@ -156,9 +157,121 @@ def test_create_notification_can_preserve_existing_last_shown(
         additional_data={"test_position": 1},
         refresh_existing=False,
     )
+    db_session.commit()
 
     assert existing_notification.id == notification.id
     assert existing_notification.last_shown == original_last_shown
+
+
+def test_create_notification_does_not_reopen_dismissed_existing(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = create_test_user(db_session, "notification_dismissed_dedupe")
+    original_first_shown = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    notification = Notification(
+        user_id=user.id,
+        notif_type=NotificationType.APPROVAL_REQUESTED,
+        dismissed=True,
+        last_shown=original_first_shown,
+        first_shown=original_first_shown,
+        title="Old approval",
+        additional_data={
+            "session_id": "session-1",
+            "link": "/craft/v1?sessionId=session-1",
+        },
+    )
+    db_session.add(notification)
+    db_session.commit()
+
+    existing_notification = create_notification(
+        user_id=user.id,
+        notif_type=NotificationType.APPROVAL_REQUESTED,
+        db_session=db_session,
+        title="New approval",
+        description="New approval details",
+        additional_data={
+            "session_id": "session-1",
+            "link": "/craft/v1?sessionId=session-1",
+        },
+    )
+    db_session.commit()
+    db_session.refresh(existing_notification)
+
+    assert existing_notification.id == notification.id
+    assert existing_notification.dismissed is True
+    assert existing_notification.title == "Old approval"
+    assert existing_notification.description is None
+    assert existing_notification.first_shown == original_first_shown
+
+
+def test_create_or_resurface_notification_reopens_existing_matching_additional_data(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = create_test_user(db_session, "notification_reopen_session")
+    original_first_shown = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    notification = Notification(
+        user_id=user.id,
+        notif_type=NotificationType.APPROVAL_REQUESTED,
+        dismissed=True,
+        last_shown=original_first_shown,
+        first_shown=original_first_shown,
+        title="Old approval",
+        additional_data={
+            "session_id": "session-1",
+            "link": "/craft/v1?sessionId=session-1",
+        },
+    )
+    db_session.add(notification)
+    db_session.commit()
+
+    reopened_notification = create_or_resurface_notification(
+        user_id=user.id,
+        notif_type=NotificationType.APPROVAL_REQUESTED,
+        db_session=db_session,
+        title="New approval",
+        description="New approval details",
+        additional_data={
+            "session_id": "session-1",
+            "link": "/craft/v1?sessionId=session-1",
+        },
+    )
+    db_session.commit()
+    db_session.refresh(reopened_notification)
+
+    assert reopened_notification.id == notification.id
+    assert reopened_notification.dismissed is False
+    assert reopened_notification.title == "New approval"
+    assert reopened_notification.description == "New approval details"
+    assert reopened_notification.additional_data is not None
+    assert reopened_notification.additional_data == {
+        "session_id": "session-1",
+        "link": "/craft/v1?sessionId=session-1",
+    }
+    assert reopened_notification.first_shown != original_first_shown
+
+    new_session_notification = create_notification(
+        user_id=user.id,
+        notif_type=NotificationType.APPROVAL_REQUESTED,
+        db_session=db_session,
+        title="Different session approval",
+        additional_data={
+            "session_id": "session-2",
+            "link": "/craft/v1?sessionId=session-2",
+        },
+    )
+    db_session.commit()
+    db_session.refresh(new_session_notification)
+
+    assert new_session_notification.id != reopened_notification.id
+    total_items, undismissed_count = count_notifications(
+        user=user,
+        db_session=db_session,
+        notif_type=NotificationType.APPROVAL_REQUESTED,
+    )
+    assert total_items == 2
+    assert undismissed_count == 2
 
 
 def test_get_notifications_api_returns_paginated_response(

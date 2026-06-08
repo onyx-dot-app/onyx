@@ -138,7 +138,6 @@ def _notify(
                 "task_id": str(task_id),
                 "run_id": str(run_id),
             },
-            autocommit=False,
         )
     except Exception:
         logger.exception(

@@ -1,5 +1,6 @@
 from datetime import datetime
 from datetime import timezone
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import cast
@@ -38,39 +39,39 @@ def create_notification(
     db_session: Session,
     title: str,
     description: str | None = None,
-    additional_data: dict | None = None,
-    autocommit: bool = True,
+    additional_data: dict[str, Any] | None = None,
     refresh_existing: bool = True,
 ) -> Notification:
-    # Previously, we only matched the first identical, undismissed notification
-    # Now, we assume some uniqueness to notifications
-    # If we previously issued a notification that was dismissed, we no longer issue a new one
+    """Create one notification identity without committing.
 
-    # Normalize additional_data to match the unique index behavior
-    # The index uses COALESCE(additional_data, '{}'::jsonb)
-    # We need to match this logic in our query
+    The identity matches ix_notification_user_type_data: user, type, and
+    additional_data with NULL treated as '{}'. Dismissed rows are never
+    reopened here; callers that need that behavior should use
+    create_or_resurface_notification.
+    """
     additional_data_normalized = additional_data if additional_data is not None else {}
-
-    existing_notification = (
-        db_session.query(Notification)
-        .filter_by(user_id=user_id, notif_type=notif_type)
-        .filter(
-            func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
-            == additional_data_normalized
-        )
-        .first()
+    user_filter = (
+        Notification.user_id == user_id
+        if user_id is not None
+        else Notification.user_id.is_(None)
     )
 
+    existing_notification = db_session.execute(
+        select(Notification)
+        .where(
+            user_filter,
+            Notification.notif_type == notif_type,
+            func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
+            == additional_data_normalized,
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+
     if existing_notification:
-        # Read-triggered ensure paths should not mutate existing rows: changing
-        # last_shown makes notification GET responses differ on every request.
         if refresh_existing and not existing_notification.dismissed:
             existing_notification.last_shown = func.now()
-            if autocommit:
-                db_session.commit()
         return existing_notification
 
-    # Create a new notification if none exists
     notification = Notification(
         user_id=user_id,
         notif_type=notif_type,
@@ -82,8 +83,35 @@ def create_notification(
         additional_data=additional_data,
     )
     db_session.add(notification)
-    if autocommit:
-        db_session.commit()
+    return notification
+
+
+def create_or_resurface_notification(
+    user_id: UUID | None,
+    notif_type: NotificationType,
+    db_session: Session,
+    title: str,
+    description: str | None = None,
+    additional_data: dict[str, Any] | None = None,
+) -> Notification:
+    """Create a notification or make the existing identity visible again."""
+    notification = create_notification(
+        user_id=user_id,
+        notif_type=notif_type,
+        db_session=db_session,
+        title=title,
+        description=description,
+        additional_data=additional_data,
+        refresh_existing=False,
+    )
+    was_dismissed = notification.dismissed
+    notification.title = title
+    notification.description = description
+    notification.additional_data = additional_data
+    notification.dismissed = False
+    if was_dismissed:
+        notification.first_shown = func.now()
+    notification.last_shown = func.now()
     return notification
 
 
@@ -198,7 +226,7 @@ def batch_create_notifications(
     db_session: Session,
     title: str,
     description: str | None = None,
-    additional_data: dict | None = None,
+    additional_data: dict[str, Any] | None = None,
 ) -> set[UUID]:
     """
     Create notifications for multiple users in a single batch operation.

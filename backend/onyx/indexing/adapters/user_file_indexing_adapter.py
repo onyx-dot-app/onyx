@@ -234,7 +234,6 @@ class UserFileIndexingAdapter:
                                 "persona_id": assistant.id,
                                 "link": f"/assistants/{assistant.id}",
                             },
-                            autocommit=False,
                         )
 
     def post_index(

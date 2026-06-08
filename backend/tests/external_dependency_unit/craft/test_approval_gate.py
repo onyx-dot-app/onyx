@@ -607,7 +607,7 @@ def test_approval_requested_notification_is_created(
             .first()
         )
         if notif is not None and notif.additional_data is not None:
-            if notif.additional_data.get("approval_id") == str(pending.approval_id):
+            if notif.additional_data.get("session_id") == str(session_id):
                 break
         time.sleep(0.5)
 
@@ -615,9 +615,9 @@ def test_approval_requested_notification_is_created(
         f"expected APPROVAL_REQUESTED notification for user {user.id}, got none"
     )
     assert notif.additional_data is not None
-    assert notif.additional_data.get("approval_id") == str(pending.approval_id), (
-        f"notification.additional_data.approval_id should match "
-        f"{pending.approval_id}, got: {notif.additional_data!r}"
+    assert notif.additional_data.get("session_id") == str(session_id), (
+        f"notification.additional_data.session_id should match "
+        f"{session_id}, got: {notif.additional_data!r}"
     )
     # Deep-link spec hardcoded (`/craft/v1?sessionId=<id>`) rather than imported.
     assert notif.additional_data.get("link") == f"/craft/v1?sessionId={session_id}", (
