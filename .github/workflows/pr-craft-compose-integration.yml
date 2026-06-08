@@ -109,6 +109,13 @@ jobs:
       # TODO(ods): Replace with `ods compose --craft` once that flag is
       # added to tools/ods/cmd/compose.go. Today `ods compose` doesn't support
       # the craft overlay, so we drop to raw docker compose.
+      #
+      # Service list: only what the gate + posture tests need. compose's
+      # depends_on graph pulls in relational_db / cache / opensearch / model
+      # servers / minio transitively. Deliberately excludes web_server and
+      # nginx -- the tests hit api_server on localhost:8080 directly, and the
+      # published web-server image's CI healthcheck is flaky enough to break
+      # `--wait` (which fails if ANY listed service is unhealthy).
       - name: Bring up the stack (yml + dev + craft)
         working-directory: deployment/docker_compose
         run: |
@@ -117,7 +124,8 @@ jobs:
             -f docker-compose.dev.yml \
             -f docker-compose.craft.yml \
             --env-file env.template \
-            up -d --wait --wait-timeout 600
+            up -d --wait --wait-timeout 600 \
+            api_server background sandbox-proxy
 
       - name: Sanity check stack health
         # --fail: without it, curl exits 0 on 4xx/5xx and the step would accept
