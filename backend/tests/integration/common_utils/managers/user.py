@@ -106,8 +106,10 @@ class UserManager:
 
         # Set cookies in the headers. No trailing "; " -- httpx rejects it
         # as an illegal header value; TestClient is lenient about both.
-        test_user.headers["Cookie"] = f"fastapiusersauth={session_cookie}"
-        test_user.cookies = {"fastapiusersauth": session_cookie}
+        test_user.headers["Cookie"] = (
+            f"{FASTAPI_USERS_AUTH_COOKIE_NAME}={session_cookie}"
+        )
+        test_user.cookies = {FASTAPI_USERS_AUTH_COOKIE_NAME: session_cookie}
 
         # TestClient shares a single cookie jar across the whole session.
         # Without this, the most recently logged-in user's auth cookie would

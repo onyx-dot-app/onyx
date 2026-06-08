@@ -1,11 +1,11 @@
-# Stands up the full Craft docker-compose stack with the --include-craft
-# overlay once per run and exercises the end-to-end approval-gate flow + the
+# Stands up the full Craft docker-compose stack with the --include-craft overlay
+# once per run and exercises the end-to-end approval-gate flow + the
 # docker-specific posture invariants the K8s lane can't catch by construction
 # (image ENTRYPOINT concat, HOME after setpriv, curl httpoxy on the bridge).
 #
 # Not per-PR -- the standup runs ~10-15 min cold. The narrower
-# pr-craft-compose-tests lane keeps PR feedback fast; this one runs nightly,
-# on every merge to main that touches the relevant paths, and on demand.
+# pr-craft-compose-tests lane keeps PR feedback fast; this one runs nightly, on
+# every merge to main that touches the relevant paths, and on demand.
 
 name: Craft Docker-Compose Integration
 
@@ -28,15 +28,16 @@ on:
       - "deployment/docker_compose/docker-compose.craft.yml"
       - "backend/tests/integration/tests/craft/docker_e2e/**"
       - ".github/workflows/pr-craft-compose-integration.yml"
+      - ".github/actions/setup-python-and-install-dependencies/**"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
-  # Pin S3_ENDPOINT_URL defensively. The runner env is usually clean, but
-  # we hit a leak during local smoke (host shell exported localhost:9004,
-  # compose's ${VAR:-default} picked it over --env-file). Belt-and-braces.
+  # Pin S3_ENDPOINT_URL defensively. The runner env is usually clean, but we hit
+  # a leak during local smoke (host shell exported localhost:9004, compose's
+  # ${VAR:-default} picked it over --env-file). Belt-and-braces.
   S3_ENDPOINT_URL: "http://minio:9000"
   SANDBOX_BACKEND: "docker"
   ENABLE_CRAFT: "true"
@@ -97,9 +98,9 @@ jobs:
           docker network create onyx_craft_sandbox
           docker volume create sandbox_proxy_ca
 
-      # TODO: replace with `ods compose --craft` once that flag is added to
-      # tools/ods/cmd/compose.go. Today `ods compose` doesn't support the
-      # craft overlay, so we drop to raw docker compose.
+      # TODO(ods): Replace with `ods compose --craft` once that flag is
+      # added to tools/ods/cmd/compose.go. Today `ods compose` doesn't support
+      # the craft overlay, so we drop to raw docker compose.
       - name: Bring up the stack (yml + dev + craft)
         working-directory: deployment/docker_compose
         run: |
@@ -111,9 +112,11 @@ jobs:
             up -d --wait --wait-timeout 600
 
       - name: Sanity check stack health
+        # --fail: without it, curl exits 0 on 4xx/5xx and the step would accept
+        # an unhealthy api_server. -w still emits on --fail.
         run: |
           docker ps --format 'table {{.Names}}\t{{.Status}}'
-          curl -sS -o /dev/null -w "api_server /health -> %{http_code}\n" \
+          curl --fail -sS -o /dev/null -w "api_server /health -> %{http_code}\n" \
             http://localhost:8080/health
 
       - name: Run integration tests
@@ -163,8 +166,8 @@ jobs:
 
       # Always tear down. -v removes named volumes inside the compose project
       # but the externally-declared sandbox_proxy_ca + onyx_craft_sandbox
-      # survive (compose down doesn't touch external resources). The runner
-      # is ephemeral so leftover state is moot, but explicit is cleaner.
+      # survive (compose down doesn't touch external resources). The runner is
+      # ephemeral so leftover state is moot, but explicit is cleaner.
       - name: Teardown
         if: always()
         working-directory: deployment/docker_compose

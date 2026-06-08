@@ -126,46 +126,29 @@ def _proxy_session_url(session_id: UUID) -> str:
     return f"http://{session_id}:x@sandbox-proxy:8080"
 
 
-def _post_slack_via_curl(
-    container: str,
-    *,
-    session_id: UUID | None,
-    fake_bearer: str = "xoxb-fake-test-token",
-    text: str = "approval test",
-    max_time_s: int = 240,
-) -> subprocess.CompletedProcess[str]:
-    """Drive a sandbox-side ``curl`` POST against ``chat.postMessage``.
-
-    The bearer is intentionally fake; if the request reaches Slack it 401s.
-    The assertion target is the proxy's behavior (gate parking, decision
-    fan-out), not Slack's. ``session_id=None`` exercises the
-    untagged-fail-closed path.
+def _start_slack_post_via_proxy(
+    container: str, session_id: UUID
+) -> subprocess.Popen[str]:
+    """Start a sandbox-side curl POST to ``chat.postMessage`` through the
+    proxy and return the Popen. The bearer is intentionally fake; if the
+    request reaches Slack it 401s. Caller drives the gate decision via the
+    API while curl is parked, then ``communicate()``s to collect the result.
+    Output body lands at ``/tmp/slack_out`` inside the sandbox.
     """
-    proxy_arg = ["-x", _proxy_session_url(session_id)] if session_id is not None else []
-    body = json.dumps({"channel": "#general", "text": text})
-    return _docker_exec(
-        container,
-        [
-            "curl",
-            "-sS",
-            "-o",
-            "/tmp/slack_body",
-            "-w",
-            "%{http_code}",
-            "--max-time",
-            str(max_time_s),
-            "-X",
-            "POST",
-            "-H",
-            f"Authorization: Bearer {fake_bearer}",
-            "-H",
-            "Content-Type: application/json",
-            "--data",
-            body,
-            *proxy_arg,
-            _SLACK_POST_MESSAGE_URL,
-        ],
-        timeout=max_time_s + 10,
+    cmd = (
+        f"curl -sS -X POST "
+        f"-H 'Authorization: Bearer xoxb-fake' "
+        f"-H 'Content-Type: application/json' "
+        f"--data '{json.dumps({'channel': '#general', 'text': 'hi'})}' "
+        f"-x 'http://{session_id}:x@sandbox-proxy:8080' "
+        f"--max-time 60 "
+        f"-o /tmp/slack_out -w '%{{http_code}}' {_SLACK_POST_MESSAGE_URL}"
+    )
+    return subprocess.Popen(  # noqa: S603
+        ["docker", "exec", container, "sh", "-c", cmd],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
 
 
@@ -505,25 +488,7 @@ def test_approve_decision_forwards_to_slack(
     """
     user, session_id, container = gated_session
 
-    curl_proc = subprocess.Popen(  # noqa: S603
-        [
-            "docker",
-            "exec",
-            container,
-            "sh",
-            "-c",
-            f"curl -sS -X POST "
-            f"-H 'Authorization: Bearer xoxb-fake' "
-            f"-H 'Content-Type: application/json' "
-            f"--data '{json.dumps({'channel': '#general', 'text': 'hi'})}' "
-            f"-x 'http://{session_id}:x@sandbox-proxy:8080' "
-            f"--max-time 60 "
-            f"-o /tmp/slack_out -w '%{{http_code}}' {_SLACK_POST_MESSAGE_URL}",
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    curl_proc = _start_slack_post_via_proxy(container, session_id)
 
     try:
         approval = _wait_for_pending_approval(user, session_id, timeout_s=30.0)
@@ -558,25 +523,7 @@ def test_reject_decision_returns_403_user_rejected(
     """
     user, session_id, container = gated_session
 
-    curl_proc = subprocess.Popen(  # noqa: S603
-        [
-            "docker",
-            "exec",
-            container,
-            "sh",
-            "-c",
-            f"curl -sS -X POST "
-            f"-H 'Authorization: Bearer xoxb-fake' "
-            f"-H 'Content-Type: application/json' "
-            f"--data '{json.dumps({'channel': '#general', 'text': 'hi'})}' "
-            f"-x 'http://{session_id}:x@sandbox-proxy:8080' "
-            f"--max-time 60 "
-            f"-o /tmp/slack_out -w '%{{http_code}}' {_SLACK_POST_MESSAGE_URL}",
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    curl_proc = _start_slack_post_via_proxy(container, session_id)
 
     try:
         approval = _wait_for_pending_approval(user, session_id, timeout_s=30.0)
