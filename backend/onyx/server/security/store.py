@@ -47,6 +47,12 @@ _CACHE_LOCK = threading.RLock()
 _CACHE: TTLCache[str, SecuritySettings] = TTLCache(
     maxsize=10_000, ttl=_CACHE_TTL_SECONDS, timer=time.monotonic
 )
+# Bumped on every invalidation. A cold-miss reader captures the generation
+# before its KV roundtrip; if it changed during the read, we know an
+# invalidation raced us and we MUST NOT write the now-stale value back into
+# the cache. Without this, write→invalidate followed by stale-reader-write
+# would resurrect the pre-write value for up to a full TTL.
+_CACHE_GENERATION = 0
 
 
 def _install_cache_for_test(
@@ -161,12 +167,25 @@ def load_raw_overrides() -> SecuritySettingsOverrides:
         stored = kv.load(KV_SECURITY_SETTINGS_KEY)
     except KvKeyNotFoundError:
         return SecuritySettingsOverrides()
-    if not stored or not isinstance(stored, dict):
+    if not stored:
+        return SecuritySettingsOverrides()
+    if not isinstance(stored, dict):
+        # A non-dict blob is corruption — log loudly so ops sees it instead of
+        # silently masking it behind env defaults.
+        logger.error(
+            "Security overrides blob in KV is not a dict (got %s); "
+            "using env defaults",
+            type(stored).__name__,
+        )
         return SecuritySettingsOverrides()
 
     known_fields = set(SecuritySettingsOverrides.model_fields)
-    filtered: dict[str, Any] = {k: v for k, v in stored.items() if k in known_fields}
-    dropped_keys = sorted(set(stored) - known_fields)
+    filtered: dict[str, Any] = {
+        k: v for k, v in stored.items() if isinstance(k, str) and k in known_fields
+    }
+    dropped_keys = sorted(
+        str(k) for k in stored if not isinstance(k, str) or k not in known_fields
+    )
     if dropped_keys:
         logger.warning(
             "Ignoring unknown key(s) in stored security overrides: %s",
@@ -232,8 +251,10 @@ def _current_tenant_id_or_default() -> str:
 
 
 def invalidate_security_cache(tenant_id: str) -> None:
+    global _CACHE_GENERATION
     with _CACHE_LOCK:
         _CACHE.pop(tenant_id, None)
+        _CACHE_GENERATION += 1
 
 
 def get_security_settings() -> SecuritySettings:
@@ -257,6 +278,7 @@ def get_security_settings() -> SecuritySettings:
 
     with _CACHE_LOCK:
         cached = _CACHE.get(tenant_id)
+        gen_at_miss = _CACHE_GENERATION
     if cached is not None:
         return cached
 
@@ -269,5 +291,10 @@ def get_security_settings() -> SecuritySettings:
         return _build_env_defaults()
 
     with _CACHE_LOCK:
-        _CACHE[tenant_id] = effective
+        # If an invalidation happened between our miss-read and now, a writer
+        # has just persisted a newer value to KV. Don't overwrite the now-empty
+        # cache slot with what we read — that value is potentially stale.
+        # The next caller will re-read fresh from KV.
+        if _CACHE_GENERATION == gen_at_miss:
+            _CACHE[tenant_id] = effective
     return effective

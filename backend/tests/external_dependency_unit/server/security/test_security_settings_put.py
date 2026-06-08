@@ -159,6 +159,27 @@ def test_put_single_tenant_allows_operator_locked_fields() -> None:
     assert result.mask_credential_prefix is False
 
 
+def test_put_rejects_max_length_below_required_classes() -> None:
+    """If max_length < count(required character classes), no password can
+    satisfy the policy — admin must be told instead of silently locking out
+    every signup."""
+    # 3 required classes, max_length=2 → impossible.
+    with pytest.raises(OnyxError) as exc_info:
+        _put(
+            {
+                "password_max_length": 2,
+                "password_require_uppercase": True,
+                "password_require_lowercase": True,
+                "password_require_digit": True,
+            }
+        )
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
+    # Nothing should have persisted — the validation runs after merge, the
+    # store_overrides call is in the try/finally guarded by validate.
+    with pytest.raises(KvKeyNotFoundError):
+        get_kv_store().load(KV_SECURITY_SETTINGS_KEY)
+
+
 # -----------------------------------------------------------------------------
 # Multi-tenant operator-locked rejection
 # -----------------------------------------------------------------------------

@@ -241,6 +241,38 @@ def test_load_raw_overrides_salvages_around_single_bad_value() -> None:
     assert effective.password_min_length == env.password_min_length
 
 
+def test_cache_does_not_repopulate_after_invalidation_race(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Race: a cold-miss reader holds the result of its KV roundtrip; before
+    it can store the result, a concurrent writer invalidates. The reader must
+    NOT write its now-stale value back — otherwise the cache resurrects the
+    pre-write value for up to one full TTL."""
+    # Pre-populate KV so there's something to read on cold miss.
+    store_overrides(SecuritySettingsOverrides(user_directory_admin_only=False))
+    invalidate_security_cache(TEST_TENANT_ID)
+
+    # Simulate the race: while the reader is in the middle of KV roundtrip,
+    # another caller invalidates (e.g. a concurrent successful PUT).
+    real_load = security_store.load_raw_overrides
+
+    def _load_then_race() -> SecuritySettingsOverrides:
+        # The reader's KV read happens normally...
+        result = real_load()
+        # ...but before the reader can write into the cache, an invalidation
+        # races in (this simulates a concurrent successful PUT bumping the
+        # generation counter).
+        invalidate_security_cache(TEST_TENANT_ID)
+        return result
+
+    with patch.object(security_store, "load_raw_overrides", side_effect=_load_then_race):
+        get_security_settings()
+
+    # The reader must NOT have persisted its stale result. Cache stays empty.
+    with security_store._CACHE_LOCK:
+        assert TEST_TENANT_ID not in security_store._CACHE
+
+
 def test_load_raw_overrides_handles_non_dict_blob() -> None:
     """A KV blob that somehow ends up non-dict-shaped must fall back to env
     defaults rather than raise — defends against pre-schema-migration data

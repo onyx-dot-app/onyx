@@ -86,6 +86,26 @@ def _validate_effective(effective: SecuritySettings) -> None:
             "password_min_length must be <= password_max_length",
         )
 
+    # A password must be able to contain one character from each required
+    # class. If max_length is smaller than the number of required classes,
+    # NO valid password exists and every signup/reset would fail — locking
+    # out the entire tenant with no clear admin signal.
+    required_classes = sum(
+        [
+            effective.password_require_uppercase,
+            effective.password_require_lowercase,
+            effective.password_require_digit,
+            effective.password_require_special_char,
+        ]
+    )
+    if required_classes > effective.password_max_length:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"password_max_length ({effective.password_max_length}) must be "
+            f">= number of required character classes ({required_classes}); "
+            f"otherwise no password could ever satisfy the policy",
+        )
+
 
 @admin_router.get("")
 def get_security_settings_endpoint(
