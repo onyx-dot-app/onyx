@@ -39,6 +39,7 @@ from onyx.configs.app_configs import APP_PORT
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.app_configs import ENABLE_PUBLIC_DOCS
 from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
 from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
@@ -457,6 +458,12 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         servers=[
             {"url": f"{WEB_DOMAIN.rstrip('/')}/api", "description": "Onyx API Server"}
         ],
+        # The interactive docs and schema are opt-in (see ENABLE_PUBLIC_DOCS).
+        # When disabled, these routes are not registered at all (404), so the
+        # API surface is not exposed publicly on a default deployment.
+        openapi_url="/openapi.json" if ENABLE_PUBLIC_DOCS else None,
+        docs_url="/docs" if ENABLE_PUBLIC_DOCS else None,
+        redoc_url="/redoc" if ENABLE_PUBLIC_DOCS else None,
         lifespan=lifespan_override or lifespan,
     )
     if SENTRY_DSN:
