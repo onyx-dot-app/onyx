@@ -110,12 +110,10 @@ jobs:
       # added to tools/ods/cmd/compose.go. Today `ods compose` doesn't support
       # the craft overlay, so we drop to raw docker compose.
       #
-      # Service list: only what the gate + posture tests need. compose's
+      # Service list: Only what the gate + posture tests need. compose's
       # depends_on graph pulls in relational_db / cache / opensearch / model
-      # servers / minio transitively. Deliberately excludes web_server and
-      # nginx -- the tests hit api_server on localhost:8080 directly, and the
-      # published web-server image's CI healthcheck is flaky enough to break
-      # `--wait` (which fails if ANY listed service is unhealthy).
+      # servers / minio transitively. Deliberately excludes web_server and nginx
+      # -- the tests hit api_server on localhost:8080 directly.
       - name: Bring up the stack (yml + dev + craft)
         working-directory: deployment/docker_compose
         run: |
