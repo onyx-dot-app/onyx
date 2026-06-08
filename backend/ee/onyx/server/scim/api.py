@@ -479,6 +479,11 @@ def create_user(
         )
 
         try:
+            # A promoted shadow user is now a real STANDARD account and must
+            # land in the Basic default group like any net-new SCIM user
+            # (the shadow EXT_PERM_USER role made this a no-op before).
+            if promote:
+                assign_user_to_default_groups__no_commit(db_session, existing_user)
             dal.create_user_mapping(
                 external_id=external_id,
                 user_id=existing_user.id,
@@ -603,8 +608,9 @@ def replace_user(
         account_type=AccountType.STANDARD if promote else None,
     )
 
-    # Reconcile default-group membership on reactivation
-    if is_reactivation:
+    # Reconcile default-group membership on reactivation or promotion — a
+    # promoted shadow user is now a real account and needs the Basic group.
+    if is_reactivation or promote:
         assign_user_to_default_groups__no_commit(
             db_session, user, is_admin=(user.role == UserRole.ADMIN)
         )
@@ -707,8 +713,9 @@ def patch_user(
         account_type=AccountType.STANDARD if promote else None,
     )
 
-    # Reconcile default-group membership on reactivation
-    if is_reactivation:
+    # Reconcile default-group membership on reactivation or promotion — a
+    # promoted shadow user is now a real account and needs the Basic group.
+    if is_reactivation or promote:
         assign_user_to_default_groups__no_commit(
             db_session, user, is_admin=(user.role == UserRole.ADMIN)
         )

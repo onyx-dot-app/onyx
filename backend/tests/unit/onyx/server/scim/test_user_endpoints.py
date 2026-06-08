@@ -308,17 +308,20 @@ class TestCreateUser:
         mock_dal.create_user_mapping.assert_called_once()
         mock_dal.commit.assert_called_once()
 
+    @patch("ee.onyx.server.scim.api.assign_user_to_default_groups__no_commit")
     @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
     def test_adopting_shadow_ext_perm_user_promotes_to_standard(
         self,
         mock_seats: MagicMock,
+        mock_assign: MagicMock,
         mock_db_session: MagicMock,
         mock_token: MagicMock,
         mock_dal: MagicMock,
         provider: ScimProvider,
     ) -> None:
         """A pre-existing EXT_PERM_USER shadow gets promoted to BASIC/STANDARD,
-        seat-checked even though the user is already active.
+        seat-checked, and added to the Basic default group even though the
+        user is already active.
         """
         existing = make_db_user(
             email="champion@example.com",
@@ -350,6 +353,8 @@ class TestCreateUser:
             account_type=AccountType.STANDARD,
             personal_name="Test User",
         )
+        # Promoted shadow user must land in the Basic default group
+        mock_assign.assert_called_once()
         mock_dal.create_user_mapping.assert_called_once()
         mock_dal.commit.assert_called_once()
 
@@ -524,6 +529,64 @@ class TestReplaceUser:
         assert_scim_error(result, 403)
         mock_seats.assert_called_once()
 
+    @patch("ee.onyx.server.scim.api.assign_user_to_default_groups__no_commit")
+    @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
+    def test_promotes_already_active_shadow_user(
+        self,
+        mock_seats: MagicMock,
+        mock_assign: MagicMock,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """An already-active EXT_PERM_USER re-synced via PUT is promoted to
+        STANDARD, seat-checked, and added to the Basic default group."""
+        user = make_db_user(role=UserRole.EXT_PERM_USER, is_active=True)
+        mock_dal.get_user.return_value = user
+        resource = make_scim_user(active=True)
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result)
+        # Promotion consumes a seat even though the user was already active
+        mock_seats.assert_called_once()
+        _, kwargs = mock_dal.update_user.call_args
+        assert kwargs["role"] == UserRole.BASIC
+        assert kwargs["account_type"] == AccountType.STANDARD
+        mock_assign.assert_called_once()
+
+    @patch("ee.onyx.server.scim.api._check_seat_availability")
+    def test_promotion_respects_seat_limit(
+        self,
+        mock_seats: MagicMock,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """Promoting an already-active shadow user past the cap returns 403."""
+        mock_seats.return_value = "No seats"
+        user = make_db_user(role=UserRole.EXT_PERM_USER, is_active=True)
+        mock_dal.get_user.return_value = user
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=make_scim_user(active=True),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 403)
+        mock_seats.assert_called_once()
+
     def test_syncs_external_id(
         self,
         mock_db_session: MagicMock,
@@ -588,6 +651,46 @@ class TestPatchUser:
 
         parse_scim_user(result)
         mock_dal.update_user.assert_called_once()
+
+    @patch("ee.onyx.server.scim.api.assign_user_to_default_groups__no_commit")
+    @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
+    def test_promotes_already_active_shadow_user(
+        self,
+        mock_seats: MagicMock,
+        mock_assign: MagicMock,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """PATCH on an already-active EXT_PERM_USER promotes it to STANDARD,
+        seat-checks the promotion, and assigns the Basic default group."""
+        user = make_db_user(role=UserRole.EXT_PERM_USER, is_active=True)
+        mock_dal.get_user.return_value = user
+        patch_req = ScimPatchRequest(
+            Operations=[
+                ScimPatchOperation(
+                    op=ScimPatchOperationType.REPLACE,
+                    path="active",
+                    value=True,
+                )
+            ]
+        )
+
+        result = patch_user(
+            user_id=str(user.id),
+            patch_request=patch_req,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result)
+        mock_seats.assert_called_once()
+        _, kwargs = mock_dal.update_user.call_args
+        assert kwargs["role"] == UserRole.BASIC
+        assert kwargs["account_type"] == AccountType.STANDARD
+        mock_assign.assert_called_once()
 
     def test_not_found_returns_404(
         self,
