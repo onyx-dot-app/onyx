@@ -22,6 +22,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.server.security import api as security_api
 from onyx.server.security import store as security_store
 from onyx.server.security.api import put_security_settings_endpoint
 from onyx.server.security.store import _build_env_defaults
@@ -168,9 +169,8 @@ def test_put_multi_tenant_rejects_operator_locked_field(
 ) -> None:
     """Payload containing any operator-locked key returns
     INSUFFICIENT_PERMISSIONS in multi-tenant mode."""
-    import shared_configs.contextvars as ctx
-
-    monkeypatch.setattr(ctx, "MULTI_TENANT", True, raising=False)
+    monkeypatch.setattr(security_api, "MULTI_TENANT", True)
+    monkeypatch.setattr(security_store, "MULTI_TENANT", True)
 
     with pytest.raises(OnyxError) as exc_info:
         _put({"password_min_length": 12})
@@ -185,9 +185,8 @@ def test_put_multi_tenant_accepts_tenant_editable_field(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Payload with only tenant-editable keys succeeds in multi-tenant mode."""
-    import shared_configs.contextvars as ctx
-
-    monkeypatch.setattr(ctx, "MULTI_TENANT", True, raising=False)
+    monkeypatch.setattr(security_api, "MULTI_TENANT", True)
+    monkeypatch.setattr(security_store, "MULTI_TENANT", True)
 
     result = _put({"user_directory_admin_only": True})
     assert result.user_directory_admin_only is True
@@ -303,9 +302,7 @@ def test_store_overrides_strips_operator_locked_in_multi_tenant(
 ) -> None:
     """Even if the API check is bypassed, store_overrides itself must strip
     operator-locked fields when MULTI_TENANT=True."""
-    import shared_configs.contextvars as ctx
-
-    monkeypatch.setattr(ctx, "MULTI_TENANT", True, raising=False)
+    monkeypatch.setattr(security_store, "MULTI_TENANT", True)
 
     from onyx.server.security.models import SecuritySettingsOverrides
 

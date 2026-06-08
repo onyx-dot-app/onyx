@@ -17,12 +17,12 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.models import SecuritySettings
 from onyx.server.security.models import SecuritySettingsOverrides
 from onyx.server.security.store import get_security_settings
-from onyx.server.security.store import is_multi_tenant
 from onyx.server.security.store import load_raw_overrides
 from onyx.server.security.store import merge_with_env
 from onyx.server.security.store import OPERATOR_LOCKED_FIELDS
 from onyx.server.security.store import store_overrides
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -108,7 +108,7 @@ async def put_security_settings_endpoint(
 
     # Operator-locked field rejection — primary boundary. The storage layer
     # also strips these, but failing fast here gives the admin a clear 403.
-    if is_multi_tenant():
+    if MULTI_TENANT:
         locked_in_payload = present_keys & OPERATOR_LOCKED_FIELDS
         if locked_in_payload:
             raise OnyxError(

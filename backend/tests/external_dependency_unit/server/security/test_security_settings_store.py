@@ -163,10 +163,9 @@ def test_pre_tenant_returns_env_defaults_without_raising(
     # Reset the contextvar to "unset" (None) for this test.
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(None)
     try:
-        # Make is_multi_tenant() return True by patching the local binding.
-        import shared_configs.contextvars as ctx
-
-        monkeypatch.setattr(ctx, "MULTI_TENANT", True, raising=False)
+        # Flip the store module's local MULTI_TENANT binding (same pattern the
+        # rest of the codebase uses — see test_telemetry.py).
+        monkeypatch.setattr(security_store, "MULTI_TENANT", True)
 
         with patch.object(security_store, "load_raw_overrides") as spy:
             effective = get_security_settings()

@@ -12,6 +12,7 @@ from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.security.models import SecuritySettings
 from onyx.server.security.models import SecuritySettingsOverrides
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -60,14 +61,6 @@ def _install_cache_for_test(
         _CACHE = TTLCache(maxsize=maxsize, ttl=ttl, timer=timer)
 
 
-def is_multi_tenant() -> bool:
-    # Read lazily so tests can monkeypatch the import-time binding inside
-    # shared_configs.contextvars (which is what get_current_tenant_id uses).
-    from shared_configs import contextvars as _ctx
-
-    return bool(_ctx.MULTI_TENANT)
-
-
 def _build_env_defaults() -> SecuritySettings:
     """Build a SecuritySettings from the current env constants. Reads each
     attribute on the module at call time so tests can monkeypatch.
@@ -93,7 +86,7 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
     is belt-and-braces enforcement in addition to the API-layer rejection.
     """
     env = _build_env_defaults()
-    locked = OPERATOR_LOCKED_FIELDS if is_multi_tenant() else frozenset()
+    locked = OPERATOR_LOCKED_FIELDS if MULTI_TENANT else frozenset()
 
     def pick(field: str, override_value: Any, env_value: Any) -> Any:
         if field in locked:
@@ -181,7 +174,7 @@ def store_overrides(overrides: SecuritySettingsOverrides) -> None:
     persistence — defense in depth against bypasses of the API check.
     """
     payload = overrides.model_dump(exclude_none=True)
-    if is_multi_tenant():
+    if MULTI_TENANT:
         for field in OPERATOR_LOCKED_FIELDS:
             payload.pop(field, None)
     get_kv_store().store(KV_SECURITY_SETTINGS_KEY, payload)
