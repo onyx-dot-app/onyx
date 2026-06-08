@@ -225,7 +225,7 @@ def _check_seat_availability(dal: ScimDAL) -> str | None:
     return None
 
 
-def _is_shadow_user(user: User) -> bool:
+def _is_ext_perm_user(user: User) -> bool:
     """Whether *user* is a shadow ``EXT_PERM_USER`` being adopted into SCIM.
 
     ``EXT_PERM_USER`` accounts are created by external permission sync and do
@@ -463,7 +463,7 @@ def create_user(
         # Becoming an active, seat-counting account consumes a seat — that
         # happens when we reactivate a deactivated user OR promote a shadow
         # EXT_PERM_USER (which doesn't count toward seats) to STANDARD.
-        promote = _is_shadow_user(existing_user)
+        promote = _is_ext_perm_user(existing_user)
         if user_resource.active and (not existing_user.is_active or promote):
             seat_error = _check_seat_availability(dal)
             if seat_error:
@@ -590,7 +590,7 @@ def replace_user(
     # Handle activation (need seat check) / deactivation. Promoting a shadow
     # EXT_PERM_USER also consumes a seat, so self-heal any that the IdP
     # re-syncs after being adopted while still in the shadow role.
-    promote = _is_shadow_user(user)
+    promote = _is_ext_perm_user(user)
     is_reactivation = user_resource.active and not user.is_active
     if user_resource.active and (is_reactivation or promote):
         seat_error = _check_seat_availability(dal)
@@ -682,7 +682,7 @@ def patch_user(
     # Apply changes back to the DB model. A seat is consumed when the user
     # becomes active (reactivation) or when a shadow EXT_PERM_USER is promoted
     # to a real STANDARD account on re-sync.
-    promote = _is_shadow_user(user)
+    promote = _is_ext_perm_user(user)
     is_reactivation = patched.active and not user.is_active
     if patched.active and (patched.active != user.is_active or promote):
         seat_error = _check_seat_availability(dal)
