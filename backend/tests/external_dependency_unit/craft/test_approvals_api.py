@@ -610,10 +610,10 @@ def test_submit_session_grant_approves_matching_pending_rows(
     assert matching.decided_via == ApprovalDecidedVia.SESSION_GRANT
     assert broader.decision is None
     assert other.decision is None
-    assert set(wakes) == {
+    assert wakes == [
         (str(current.approval_id), ApprovalDecision.APPROVED),
         (str(matching.approval_id), ApprovalDecision.APPROVED),
-    }
+    ]
 
     cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
     assert approval_cache.cached_session_grants_cover(

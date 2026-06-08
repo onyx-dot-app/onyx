@@ -237,7 +237,9 @@ def submit_session_grant(
     )
     if current is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "approval request not found")
-    if current.external_app_id is None:
+    session_id = current.session_id
+    external_app_id = current.external_app_id
+    if external_app_id is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "approval request cannot be granted for a session",
@@ -288,11 +290,12 @@ def submit_session_grant(
     approved_ids.append(approval_id)
 
     db_session.commit()
+    _send_wake_best_effort(approval_id, ApprovalDecision.APPROVED)
 
     grant_source_rows = action_approval.list_session_grant_action_approvals(
         db_session,
-        session_id=current.session_id,
-        external_app_id=current.external_app_id,
+        session_id=session_id,
+        external_app_id=external_app_id,
     )
     granted_action_types: set[str] = set()
     for grant_source_row in grant_source_rows:
@@ -304,8 +307,8 @@ def submit_session_grant(
         cache = get_cache_backend(tenant_id=get_current_tenant_id())
         for grant_source_row in grant_source_rows:
             approval_cache.cache_session_grant_actions(
-                session_id=current.session_id,
-                external_app_id=current.external_app_id,
+                session_id=session_id,
+                external_app_id=external_app_id,
                 action_types=actions_requiring_approval(grant_source_row.actions),
                 source_approval_id=grant_source_row.approval_id,
                 cache=cache,
@@ -314,17 +317,17 @@ def submit_session_grant(
         logger.warning(
             "approval.session_grant_cache_failed approval_id=%s session_id=%s error=%s",
             approval_id,
-            current.session_id,
+            session_id,
             str(e),
         )
 
     pending_rows = action_approval.list_session_pending_action_approvals(
-        db_session, current.session_id, created_after=cutoff
+        db_session, session_id, created_after=cutoff
     )
     for row in pending_rows:
         if row.approval_id == approval_id:
             continue
-        if row.external_app_id != current.external_app_id:
+        if row.external_app_id != external_app_id:
             continue
         row_action_types = set(actions_requiring_approval(row.actions))
         covered = bool(row_action_types) and row_action_types.issubset(
@@ -344,15 +347,17 @@ def submit_session_grant(
     db_session.commit()
 
     for approved_id in approved_ids:
+        if approved_id == approval_id:
+            continue
         _send_wake_best_effort(approved_id, ApprovalDecision.APPROVED)
 
     logger.info(
         "approval.session_grant_recorded approval_id=%s session_id=%s "
         "user_id=%s external_app_id=%s action_types=%s approved_count=%s",
         approval_id,
-        current.session_id,
+        session_id,
         user.id,
-        current.external_app_id,
+        external_app_id,
         grant_action_types,
         len(approved_ids),
     )
