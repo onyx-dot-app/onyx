@@ -22,9 +22,7 @@ const sanitizeSchema = {
 const ALLOWED_ELEMENTS = ["p", "br", "a", "strong", "em", "code", "del"];
 
 const INLINE_COMPONENTS = {
-  p: ({ children }: { children?: ReactNode }) => (
-    <span className="block">{children}</span>
-  ),
+  p: ({ children }: { children?: ReactNode }) => <>{children}</>,
   a: ({ children, href }: { children?: ReactNode; href?: string }) => {
     if (!href) return <>{children}</>;
     // rehype-sanitize has already stripped unsafe hrefs — routing decision only.
