@@ -17,6 +17,7 @@ import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import AbstractSet
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID
@@ -30,6 +31,7 @@ from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
 from onyx.external_apps.matching.engine import AllMatchedActions
+from onyx.external_apps.matching.engine import MatchedAction
 from onyx.sandbox_proxy.addons import gate as gate_mod
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.addons.gate import ParkedApprovals
@@ -102,6 +104,11 @@ def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
     Default it to a dummy MagicMock-yielding session; tests asserting on
     session-open ordering re-patch it with `_recorder_db_factory(ops)`."""
     monkeypatch.setattr(gate_mod, "get_session_with_tenant", _recorder_db_factory([]))
+    monkeypatch.setattr(
+        gate_mod.action_approval,
+        "list_session_grant_action_approvals",
+        lambda _db, *, session_id, external_app_id: [],  # noqa: ARG005
+    )
 
 
 def _build(
@@ -133,6 +140,25 @@ def _assert_403(flow: http.HTTPFlow, expected_code: SandboxProxyError) -> None:
 
 
 _MATCH = make_matched_actions(payload={"text": "hi"})
+_MATCH_MULTI_ASK = AllMatchedActions(
+    actions=(
+        MatchedAction(
+            action_type="slack.messages.write",
+            display_name="Post a message",
+            description="Post a message to a channel or conversation.",
+            policy=EndpointPolicy.ASK,
+        ),
+        MatchedAction(
+            action_type="slack.files.upload",
+            display_name="Upload a file",
+            description="Upload a file to a channel or conversation.",
+            policy=EndpointPolicy.ASK,
+        ),
+    ),
+    app_name="Slack",
+    external_app_id=42,
+    payload={"text": "hi"},
+)
 _MATCH_ALWAYS = make_matched_actions(
     action_type="slack.channels.read", policy=EndpointPolicy.ALWAYS
 )
@@ -520,6 +546,44 @@ def _spy_pre_approve_insert(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, A
     return inserted
 
 
+class _SessionGrantCache:
+    def __init__(
+        self,
+        granted: bool | list[bool] = False,
+        *,
+        granted_action_types: AbstractSet[str] | None = None,
+    ) -> None:
+        self._grant_results = [granted] if isinstance(granted, bool) else list(granted)
+        self._granted_action_types = granted_action_types
+        self.get_calls: list[str] = []
+        self.set_calls: list[tuple[str, str | bytes | int | float, int | None]] = []
+        self.expire_calls: list[tuple[str, int]] = []
+
+    def get(self, key: str) -> bytes | None:
+        self.get_calls.append(key)
+        if self._granted_action_types is not None:
+            granted = any(
+                key.endswith(f":{action_type}")
+                for action_type in self._granted_action_types
+            )
+        elif len(self._grant_results) > 1:
+            granted = self._grant_results.pop(0)
+        else:
+            granted = self._grant_results[0]
+        return b"approval-id" if granted else None
+
+    def expire(self, key: str, seconds: int) -> None:
+        self.expire_calls.append((key, seconds))
+
+    def set(
+        self,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> None:
+        self.set_calls.append((key, value, ex))
+
+
 @pytest.mark.asyncio
 async def test_pre_approved_scheduled_run_skips_park(
     monkeypatch: pytest.MonkeyPatch,
@@ -555,6 +619,158 @@ async def test_pre_approved_scheduled_run_skips_park(
         "run_id": str(_RUN_ID),
         "external_app_id": _GRANTED_APP_ID,
     }
+
+
+@pytest.mark.asyncio
+async def test_session_grant_skips_park_without_notification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    sandbox = _sandbox(user_id=user_id)
+    cache = _SessionGrantCache(granted=True)
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=UUID(_TAG_UUID))
+    addon = _build(
+        resolver=resolver,
+        matcher=_StubMatcher(result=_MATCH),
+        cache_factory=lambda tenant_id: cache,  # noqa: ARG005
+    )
+    spy = _spy_pipeline(addon, monkeypatch)
+    _stub_grants(monkeypatch, None)
+    inserted = _spy_pre_approve_insert(monkeypatch)
+    notified: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        gate_mod, "create_notification", lambda **kw: notified.append(kw)
+    )
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    assert flow.response is None
+    assert not spy.approval_ran
+    assert spy.awaited == []
+    assert spy.dispatched == [(_MATCH, user_id, sandbox.tenant_id)]
+    assert len(inserted) == 1
+    assert inserted[0]["decision"] == ApprovalDecision.APPROVED
+    assert inserted[0]["decided_via"] == ApprovalDecidedVia.SESSION_GRANT
+    assert notified == []
+    assert cache.get_calls
+    assert cache.expire_calls
+
+
+@pytest.mark.asyncio
+async def test_session_grant_db_fallback_hydrates_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    sandbox = _sandbox(user_id=user_id)
+    cache = _SessionGrantCache(granted=False)
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=UUID(_TAG_UUID))
+    addon = _build(
+        resolver=resolver,
+        matcher=_StubMatcher(result=_MATCH),
+        cache_factory=lambda tenant_id: cache,  # noqa: ARG005
+    )
+    spy = _spy_pipeline(addon, monkeypatch)
+    _stub_grants(monkeypatch, None)
+    inserted = _spy_pre_approve_insert(monkeypatch)
+    source_approval_id = uuid4()
+    grant_source = MagicMock()
+    grant_source.approval_id = source_approval_id
+    grant_source.actions = [action.model_dump(mode="json") for action in _MATCH.actions]
+
+    monkeypatch.setattr(
+        gate_mod.action_approval,
+        "list_session_grant_action_approvals",
+        lambda _db, *, session_id, external_app_id: [grant_source],  # noqa: ARG005
+    )
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    assert flow.response is None
+    assert not spy.approval_ran
+    assert spy.awaited == []
+    assert spy.dispatched == [(_MATCH, user_id, sandbox.tenant_id)]
+    assert len(inserted) == 1
+    assert inserted[0]["decision"] == ApprovalDecision.APPROVED
+    assert inserted[0]["decided_via"] == ApprovalDecidedVia.SESSION_GRANT
+    assert cache.get_calls
+    assert any(str(source_approval_id) == value for _key, value, _ex in cache.set_calls)
+
+
+@pytest.mark.asyncio
+async def test_partial_session_grant_still_parks_multi_action_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = _SessionGrantCache(granted_action_types={"slack.messages.write"})
+    resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
+    addon = _build(
+        resolver=resolver,
+        matcher=_StubMatcher(result=_MATCH_MULTI_ASK),
+        cache_factory=lambda tenant_id: cache,  # noqa: ARG005
+    )
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.REJECTED)
+    _stub_grants(monkeypatch, None)
+    inserted = _spy_pre_approve_insert(monkeypatch)
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    assert spy.approval_ran
+    assert spy.awaited == [_MATCH_MULTI_ASK]
+    _assert_403(flow, SandboxProxyError.USER_REJECTED)
+    assert inserted == []
+    assert cache.get_calls
+    assert cache.expire_calls == []
+
+
+@pytest.mark.asyncio
+async def test_session_grant_recheck_after_persist_skips_park(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    sandbox = _sandbox(user_id=user_id)
+    cache = _SessionGrantCache(granted=[False, True])
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=UUID(_TAG_UUID))
+    addon = _build(
+        resolver=resolver,
+        matcher=_StubMatcher(result=_MATCH),
+        cache_factory=lambda tenant_id: cache,  # noqa: ARG005
+    )
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.REJECTED)
+    approval_id = uuid4()
+
+    def _persist(ctx: SessionContext, _match: AllMatchedActions) -> UUID:
+        addon._parked.add(ctx.tenant_id, approval_id)
+        return approval_id
+
+    monkeypatch.setattr(addon, "_persist_approval_row", _persist)
+    _stub_grants(monkeypatch, None)
+    decisions: list[dict[str, Any]] = []
+
+    def _record_decision(_db: Any, **kwargs: Any) -> object:
+        decisions.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(
+        gate_mod.action_approval, "try_record_decision", _record_decision
+    )
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    await addon.request(flow)
+
+    assert flow.response is None
+    assert spy.persisted == []
+    assert spy.awaited == []
+    assert spy.dispatched == [(_MATCH, user_id, sandbox.tenant_id)]
+    assert addon._parked.snapshot() == []
+    assert decisions == [
+        {
+            "approval_id": approval_id,
+            "decision": ApprovalDecision.APPROVED,
+            "decided_via": ApprovalDecidedVia.SESSION_GRANT,
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -646,7 +862,11 @@ async def test_no_pre_approval_falls_through_to_park(
 ) -> None:
     """Every non-granted shape (including a lookup crash) parks as usual."""
     resolver = _StubResolver(sandbox=_sandbox(), session_by_id=UUID(_TAG_UUID))
-    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    addon = _build(
+        resolver=resolver,
+        matcher=_StubMatcher(result=_MATCH),
+        cache_factory=lambda tenant_id: _SessionGrantCache(False),  # noqa: ARG005
+    )
     spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.REJECTED)
     _stub_grants(monkeypatch, grants)
     inserted = _spy_pre_approve_insert(monkeypatch)

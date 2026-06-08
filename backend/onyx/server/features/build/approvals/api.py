@@ -30,6 +30,7 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.matching.engine import actions_requiring_approval
 from onyx.external_apps.matching.engine import MatchedAction
 from onyx.external_apps.presentation.decode import decode_payload
 from onyx.sandbox_proxy import approval_cache
@@ -84,6 +85,18 @@ class ApprovalView(BaseModel):
 
 class ApprovalListResponse(BaseModel):
     items: list[ApprovalView]
+
+
+def _send_wake_best_effort(approval_id: UUID, decision: ApprovalDecision) -> None:
+    try:
+        cache = get_cache_backend(tenant_id=get_current_tenant_id())
+        approval_cache.send_wake(approval_id, decision, cache)
+    except CACHE_TRANSIENT_ERRORS as e:
+        logger.warning(
+            "approval.wake_failed approval_id=%s error=%s",
+            approval_id,
+            str(e),
+        )
 
 
 def _existing_decision_response(
@@ -207,14 +220,141 @@ def submit_decision(
         body.decision.value,
     )
 
+    _send_wake_best_effort(approval_id, body.decision)
+
+    return ApprovalView.model_validate(decided)
+
+
+@router.post("/{approval_id}/session-grant")
+def submit_session_grant(
+    approval_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ApprovalView:
+    """Approve this request and similar app/action requests for the session."""
+    current = action_approval.get_action_approval_for_user(
+        db_session, approval_id, user.id
+    )
+    if current is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "approval request not found")
+    if current.external_app_id is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "approval request cannot be granted for a session",
+        )
+    if current.decision is not None:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "approval request already resolved",
+        )
+    cutoff = datetime.now(timezone.utc) - timedelta(
+        seconds=approval_cache.WAIT_TIMEOUT_S
+    )
+    if current.created_at < cutoff:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "approval request is no longer live",
+        )
+
+    grant_action_types = actions_requiring_approval(current.actions)
+    if not grant_action_types:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "approval request has no grantable actions",
+        )
+
+    approved_ids: list[UUID] = []
+    decided_current = action_approval.try_record_decision(
+        db_session,
+        approval_id=approval_id,
+        decision=ApprovalDecision.APPROVED,
+        decided_via=ApprovalDecidedVia.SESSION_GRANT,
+    )
+    if decided_current is None:
+        db_session.expire(current)
+        winner = action_approval.get_action_approval(db_session, approval_id)
+        if winner is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "approval request not found")
+        if winner.decision is None:
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "approval row reverted to pending unexpectedly",
+            )
+        existing = winner.decision.value
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"approval request already resolved ({existing})",
+        )
+    approved_ids.append(approval_id)
+
+    db_session.commit()
+
+    grant_source_rows = action_approval.list_session_grant_action_approvals(
+        db_session,
+        session_id=current.session_id,
+        external_app_id=current.external_app_id,
+    )
+    granted_action_types: set[str] = set()
+    for grant_source_row in grant_source_rows:
+        granted_action_types.update(
+            actions_requiring_approval(grant_source_row.actions)
+        )
+
     try:
         cache = get_cache_backend(tenant_id=get_current_tenant_id())
-        approval_cache.send_wake(approval_id, body.decision, cache)
+        for grant_source_row in grant_source_rows:
+            approval_cache.cache_session_grant_actions(
+                session_id=current.session_id,
+                external_app_id=current.external_app_id,
+                action_types=actions_requiring_approval(grant_source_row.actions),
+                source_approval_id=grant_source_row.approval_id,
+                cache=cache,
+            )
     except CACHE_TRANSIENT_ERRORS as e:
         logger.warning(
-            "approval.wake_failed approval_id=%s error=%s",
+            "approval.session_grant_cache_failed approval_id=%s session_id=%s error=%s",
             approval_id,
+            current.session_id,
             str(e),
         )
 
-    return ApprovalView.model_validate(decided)
+    pending_rows = action_approval.list_session_pending_action_approvals(
+        db_session, current.session_id, created_after=cutoff
+    )
+    for row in pending_rows:
+        if row.approval_id == approval_id:
+            continue
+        if row.external_app_id != current.external_app_id:
+            continue
+        row_action_types = set(actions_requiring_approval(row.actions))
+        covered = bool(row_action_types) and row_action_types.issubset(
+            granted_action_types
+        )
+        if not covered:
+            continue
+        decided = action_approval.try_record_decision(
+            db_session,
+            approval_id=row.approval_id,
+            decision=ApprovalDecision.APPROVED,
+            decided_via=ApprovalDecidedVia.SESSION_GRANT,
+        )
+        if decided is not None:
+            approved_ids.append(row.approval_id)
+
+    db_session.commit()
+
+    for approved_id in approved_ids:
+        _send_wake_best_effort(approved_id, ApprovalDecision.APPROVED)
+
+    logger.info(
+        "approval.session_grant_recorded approval_id=%s session_id=%s "
+        "user_id=%s external_app_id=%s action_types=%s approved_count=%s",
+        approval_id,
+        current.session_id,
+        user.id,
+        current.external_app_id,
+        grant_action_types,
+        len(approved_ids),
+    )
+
+    return ApprovalView.model_validate(decided_current)

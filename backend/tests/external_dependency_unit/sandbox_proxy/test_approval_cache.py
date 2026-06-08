@@ -14,6 +14,8 @@ from onyx.sandbox_proxy import approval_cache as approval_cache_module
 from onyx.sandbox_proxy.approval_cache import _wake_key
 from onyx.sandbox_proxy.approval_cache import announce_approval
 from onyx.sandbox_proxy.approval_cache import announce_key
+from onyx.sandbox_proxy.approval_cache import cache_session_grant_actions
+from onyx.sandbox_proxy.approval_cache import cached_session_grants_cover
 from onyx.sandbox_proxy.approval_cache import pop_announcement
 from onyx.sandbox_proxy.approval_cache import send_wake
 from onyx.sandbox_proxy.approval_cache import wait_for_wake
@@ -113,6 +115,52 @@ def test_send_wake_applies_ttl() -> None:
 
     # Hardcoded spec; the completeness check below pins the constant.
     assert 0 < remaining <= 30
+
+
+# ---------------------------------------------------------------------------
+# Session grants
+# ---------------------------------------------------------------------------
+
+
+def test_cached_session_grants_cover_requires_every_action() -> None:
+    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    session_id = uuid4()
+    approval_id = uuid4()
+    external_app_id = 42
+
+    assert not cached_session_grants_cover(
+        session_id=session_id,
+        external_app_id=external_app_id,
+        action_types=["slack.chat.post"],
+        cache=cache,
+    )
+
+    cache_session_grant_actions(
+        session_id=session_id,
+        external_app_id=external_app_id,
+        action_types=["slack.chat.post"],
+        source_approval_id=approval_id,
+        cache=cache,
+    )
+
+    assert cached_session_grants_cover(
+        session_id=session_id,
+        external_app_id=external_app_id,
+        action_types=["slack.chat.post"],
+        cache=cache,
+    )
+    assert not cached_session_grants_cover(
+        session_id=session_id,
+        external_app_id=external_app_id,
+        action_types=["slack.chat.post", "slack.files.upload"],
+        cache=cache,
+    )
+    assert not cached_session_grants_cover(
+        session_id=session_id,
+        external_app_id=external_app_id + 1,
+        action_types=["slack.chat.post"],
+        cache=cache,
+    )
 
 
 # ---------------------------------------------------------------------------
