@@ -29,10 +29,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
-from onyx.background.celery.tasks.docprocessing import port_task
-from onyx.background.celery.tasks.docprocessing.port_task import run_check_for_port
-from onyx.background.celery.tasks.docprocessing.port_task import run_port_attempt
 from onyx.background.celery.tasks.docprocessing.utils import should_index
+from onyx.background.celery.tasks.port import tasks as port_task
+from onyx.background.celery.tasks.port.tasks import run_check_for_port
+from onyx.background.celery.tasks.port.tasks import run_port_attempt
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -760,7 +760,7 @@ def test_check_for_port_creates_and_enqueues(
         "port_attempt_id": attempts[0].id,
         "tenant_id": get_current_tenant_id(),
     }
-    assert call.kwargs["queue"] == OnyxCeleryQueues.DOCPROCESSING
+    assert call.kwargs["queue"] == OnyxCeleryQueues.PORT
     assert call.kwargs["expires"] == BEAT_EXPIRES_DEFAULT
 
 
@@ -881,6 +881,69 @@ def test_check_for_port_leaves_active_in_progress(
         .count()
         == 1
     )
+
+
+def test_check_for_port_reissues_stale_not_started(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A NOT_STARTED attempt whose enqueued task was lost/expired (created before the
+    TTL window) is re-enqueued in place — not stranded, not duplicated."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    stale = create_port_attempt(db_session, cc_pair.id, future_id)
+    # backdate time_created past the task TTL so its enqueued task is "expired"
+    old = datetime.now(timezone.utc) - timedelta(seconds=BEAT_EXPIRES_DEFAULT + 60)
+    db_session.query(PortAttempt).filter(PortAttempt.id == stale.id).update(
+        {PortAttempt.time_created: old}
+    )
+    db_session.commit()
+
+    result, celery_app = _run_check_for_port(cc_pair, future_id)
+
+    assert result == 1
+    celery_app.send_task.assert_called_once()
+    assert (
+        celery_app.send_task.call_args.kwargs["kwargs"]["port_attempt_id"] == stale.id
+    )
+    # re-issued in place: still the same single attempt, still NOT_STARTED
+    db_session.expire_all()
+    rows = (
+        db_session.query(PortAttempt).filter(PortAttempt.cc_pair_id == cc_pair.id).all()
+    )
+    assert len(rows) == 1 and rows[0].id == stale.id
+    assert rows[0].status == PortAttemptStatus.NOT_STARTED
+
+
+def test_check_for_port_leaves_fresh_not_started(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A recently-created NOT_STARTED attempt (task still in flight, within the TTL)
+    is left alone — not re-enqueued or duplicated."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    fresh = create_port_attempt(db_session, cc_pair.id, future_id)  # time_created = now
+
+    result, celery_app = _run_check_for_port(cc_pair, future_id)
+
+    assert result == 0
+    celery_app.send_task.assert_not_called()
+    db_session.expire_all()
+    assert (
+        db_session.query(PortAttempt)
+        .filter(PortAttempt.cc_pair_id == cc_pair.id)
+        .count()
+        == 1
+    )
+    row = db_session.get(PortAttempt, fresh.id)
+    assert row is not None and row.status == PortAttemptStatus.NOT_STARTED
 
 
 def test_check_for_port_fails_attempt_when_enqueue_raises(

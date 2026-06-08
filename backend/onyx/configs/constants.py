@@ -440,6 +440,10 @@ class OnyxCeleryQueues:
     DOCPROCESSING = "docprocessing"
     CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
 
+    # Reindex port queue (heavy PRESENT -> FUTURE re-embed; kept off the
+    # docprocessing queue so a migration doesn't starve live indexing)
+    PORT = "port"
+
     # Monitoring queue
     MONITORING = "monitoring"
 

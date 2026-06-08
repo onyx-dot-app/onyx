@@ -23,9 +23,9 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from onyx.access.models import DocumentAccess
-from onyx.background.celery.tasks.docprocessing import port_task
-from onyx.background.celery.tasks.docprocessing.port_task import run_check_for_port
-from onyx.background.celery.tasks.docprocessing.port_task import run_port_attempt
+from onyx.background.celery.tasks.port import tasks as port_task
+from onyx.background.celery.tasks.port.tasks import run_check_for_port
+from onyx.background.celery.tasks.port.tasks import run_port_attempt
 from onyx.configs.constants import DocumentSource
 from onyx.configs.model_configs import ASYM_PASSAGE_PREFIX
 from onyx.configs.model_configs import ASYM_QUERY_PREFIX

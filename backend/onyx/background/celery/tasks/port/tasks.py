@@ -240,6 +240,20 @@ def _fail_stalled_port_attempts(
         )
 
 
+def _enqueue_run_port_attempt(
+    celery_app: Celery, port_attempt_id: int, tenant_id: str
+) -> None:
+    """Enqueue run_port_attempt for one attempt. The TTL means a task not consumed
+    within BEAT_EXPIRES_DEFAULT is dropped; check_for_port re-issues it next tick."""
+    celery_app.send_task(
+        OnyxCeleryTask.RUN_PORT_ATTEMPT,
+        kwargs={"port_attempt_id": port_attempt_id, "tenant_id": tenant_id},
+        queue=OnyxCeleryQueues.PORT,
+        priority=OnyxCeleryPriority.MEDIUM,
+        expires=BEAT_EXPIRES_DEFAULT,
+    )
+
+
 def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
     """Lifted out of check_for_port so tests can pass a mock celery app.
 
@@ -274,12 +288,37 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
 
             _fail_stalled_port_attempts(db_session, search_settings_id, lock_beat)
 
+            # A NOT_STARTED attempt older than the task TTL had its enqueued
+            # run_port_attempt dropped (worker down/absent when it was created); it
+            # would otherwise strand forever since it still counts as "active".
+            not_started_expired_before = datetime.now(timezone.utc) - timedelta(
+                seconds=BEAT_EXPIRES_DEFAULT
+            )
+
             for cc_pair_id in cc_pair_ids:
                 lock_beat.reacquire()
-                if (
-                    get_active_port_attempt(db_session, cc_pair_id, search_settings_id)
-                    is not None
-                ):
+                active = get_active_port_attempt(
+                    db_session, cc_pair_id, search_settings_id
+                )
+                if active is not None:
+                    # IN_PROGRESS is the stall watchdog's job; a recent NOT_STARTED is
+                    # still in flight. Only re-issue a NOT_STARTED whose task has
+                    # definitely expired -- idempotent (the run task's terminal-check
+                    # + the active-unique index make a re-send safe, and the original
+                    # task is already gone, so there's no double-run).
+                    if (
+                        active.status == PortAttemptStatus.NOT_STARTED
+                        and active.time_created < not_started_expired_before
+                    ):
+                        try:
+                            _enqueue_run_port_attempt(celery_app, active.id, tenant_id)
+                            tasks_created += 1
+                        except Exception:
+                            task_logger.exception(
+                                "check_for_port: re-enqueue failed for stale "
+                                "NOT_STARTED PortAttempt %s",
+                                active.id,
+                            )
                     continue
                 latest = get_latest_port_attempt(
                     db_session, cc_pair_id, search_settings_id
@@ -306,13 +345,7 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
                     )
                     continue
                 try:
-                    celery_app.send_task(
-                        OnyxCeleryTask.RUN_PORT_ATTEMPT,
-                        kwargs={"port_attempt_id": attempt.id, "tenant_id": tenant_id},
-                        queue=OnyxCeleryQueues.DOCPROCESSING,
-                        priority=OnyxCeleryPriority.MEDIUM,
-                        expires=BEAT_EXPIRES_DEFAULT,
-                    )
+                    _enqueue_run_port_attempt(celery_app, attempt.id, tenant_id)
                 except Exception:
                     # Row is committed; on enqueue failure mark it FAILED so the
                     # next tick recreates it (else an orphaned NOT_STARTED sticks).
