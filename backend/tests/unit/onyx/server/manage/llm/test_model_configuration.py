@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from onyx.db.enums import LLMModelFlowType
+from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationView
 
@@ -191,6 +192,72 @@ class TestModelConfigurationUpsertRequestFromModel:
         req = ModelConfigurationUpsertRequest.from_model(mc)
 
         assert req.supports_reasoning is False
+
+
+# LLMProviderDescriptor.from_model — is_recommended_default marking
+#
+# This flag is the only signal the (non-admin) Craft model picker uses to badge
+# and default-select the provider's recommended model on /llm/provider, so it
+# must be set on exactly the recommended-default model.
+
+
+class TestLLMProviderDescriptorRecommendedDefault:
+    @staticmethod
+    def _provider_model(provider: str = "anthropic") -> MagicMock:
+        m = MagicMock()
+        m.id = 1
+        m.name = provider.title()
+        m.provider = provider
+        m.custom_config = None
+        return m
+
+    @staticmethod
+    def _view(name: str) -> ModelConfigurationView:
+        return ModelConfigurationView(
+            name=name, is_visible=True, supports_image_input=False
+        )
+
+    def _from_model(
+        self,
+        provider_model: MagicMock,
+        views: list[ModelConfigurationView],
+        default: str,
+    ) -> LLMProviderDescriptor:
+        with (
+            patch(
+                "onyx.server.manage.llm.models.filter_model_configurations",
+                return_value=views,
+            ),
+            patch(
+                "onyx.llm.well_known_providers.llm_provider_options."
+                "fetch_default_model_for_provider",
+                return_value=default,
+            ),
+        ):
+            return LLMProviderDescriptor.from_model(provider_model)
+
+    def test_marks_only_the_recommended_default_model(self) -> None:
+        descriptor = self._from_model(
+            self._provider_model(),
+            [self._view("claude-opus-4-8"), self._view("claude-sonnet-4-6")],
+            default="claude-opus-4-8",
+        )
+        flags = {
+            m.name: m.is_recommended_default for m in descriptor.model_configurations
+        }
+        assert flags == {"claude-opus-4-8": True, "claude-sonnet-4-6": False}
+
+    def test_nothing_flagged_when_default_not_among_configured_models(self) -> None:
+        # The recommended default isn't configured → no model flagged (the picker
+        # falls back to the first visible model).
+        descriptor = self._from_model(
+            self._provider_model(),
+            [self._view("claude-sonnet-4-6")],
+            default="claude-opus-4-8",
+        )
+        assert all(
+            not m.is_recommended_default for m in descriptor.model_configurations
+        )
 
 
 def _make_model_config(

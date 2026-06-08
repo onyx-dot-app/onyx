@@ -1,6 +1,6 @@
 {
-  "version": "1.3",
-  "updated_at": "2026-04-28T00:00:00Z",
+  "version": "1.4",
+  "updated_at": "2026-06-04T00:00:00Z",
   "providers": {
     "openai": {
       "default_model": "gpt-5.5",
@@ -11,8 +11,12 @@
       ]
     },
     "anthropic": {
-      "default_model": "claude-opus-4-7",
+      "default_model": "claude-opus-4-8",
       "additional_visible_models": [
+        {
+          "name": "claude-opus-4-8",
+          "display_name": "Claude Opus 4.8"
+        },
         {
           "name": "claude-opus-4-7",
           "display_name": "Claude Opus 4.7"
