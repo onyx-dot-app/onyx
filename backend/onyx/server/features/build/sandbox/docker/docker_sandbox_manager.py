@@ -980,7 +980,14 @@ echo "Session workspace setup complete"
             "Setting up session workspace %s in sandbox %s.", session_id, sandbox_id
         )
         try:
-            run_in_container(container, ["/bin/sh", "-c", setup_script])
+            # user="1000:1000": container's User spec is "0:0" (proxy init needs
+            # root for iptables), so docker exec defaults to root. Without
+            # CAP_DAC_OVERRIDE (cap_drop=ALL), root cannot write to
+            # /workspace/sessions which is owned by sandbox=1000. Exec as
+            # sandbox so the script's mkdir/cp on the session workspace succeed.
+            run_in_container(
+                container, ["/bin/sh", "-c", setup_script], user="1000:1000"
+            )
         except ExecError as e:
             raise RuntimeError(
                 f"Failed to setup session workspace {session_id}: {e}"
