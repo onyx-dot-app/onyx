@@ -137,6 +137,11 @@ def _wait_for(predicate: Any, *, timeout: float = 3.0) -> bool:
     return False
 
 
+def _dispatch_session_idle(bus: PodEventBus, *, scoped: bool = True) -> None:
+    properties = {"sessionID": _SESSION} if scoped else {}
+    bus._dispatch({"type": "session.idle", "properties": properties})
+
+
 # ---------------------------------------------------------------------------
 # Happy path
 # ---------------------------------------------------------------------------
@@ -205,6 +210,7 @@ def test_send_message_yields_text_and_terminator(bus: PodEventBus) -> None:
                 },
             }
         )
+        _dispatch_session_idle(bus)
         assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
     finally:
         t.join(timeout=3.0)
@@ -265,7 +271,7 @@ def test_send_message_routes_reasoning_to_thought_chunks(bus: PodEventBus) -> No
                 },
             }
         )
-        # terminator
+        # Completion metadata arrives before the session-level terminator.
         bus._dispatch(
             {
                 "type": "message.updated",
@@ -280,6 +286,7 @@ def test_send_message_routes_reasoning_to_thought_chunks(bus: PodEventBus) -> No
                 },
             }
         )
+        _dispatch_session_idle(bus)
         assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
     finally:
         t.join(timeout=3.0)
@@ -314,7 +321,7 @@ def test_send_message_threads_model_override_into_prompt_async(
         client, model_provider="anthropic", model_id="claude-opus-4-7"
     )
     try:
-        # Immediately terminate via a completed message.updated.
+        # Completion metadata arrives before the session-level terminator.
         bus._dispatch(
             {
                 "type": "message.updated",
@@ -329,6 +336,7 @@ def test_send_message_threads_model_override_into_prompt_async(
                 },
             }
         )
+        _dispatch_session_idle(bus)
         assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
     finally:
         t.join(timeout=3.0)
@@ -370,6 +378,7 @@ def test_send_message_omits_model_when_override_missing(bus: PodEventBus) -> Non
                 },
             }
         )
+        _dispatch_session_idle(bus)
         assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
     finally:
         t.join(timeout=3.0)
@@ -408,6 +417,7 @@ def test_send_message_omits_model_when_only_one_arg_supplied(
                 },
             }
         )
+        _dispatch_session_idle(bus)
         assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
     finally:
         t.join(timeout=3.0)
@@ -493,6 +503,52 @@ def test_send_message_errors_when_bus_closes_before_terminator(
     errs = [e for e in events if isinstance(e, Error)]
     assert errs
     assert "event bus closed" in errs[0].message
+
+
+def test_send_message_surfaces_unscoped_session_error_as_terminal(
+    bus: PodEventBus,
+) -> None:
+    """Unscoped opencode session.error must end the turn immediately.
+
+    Without bus fanout this event is dropped. Without treating Error as a
+    local terminator, the Error is yielded but the generator keeps waiting for
+    timeout and the UI sees keepalives after the real failure.
+    """
+    transport = httpx.MockTransport(_ok_response)
+    client = _make_client(bus, transport)
+    events, t = _run_send_message(client, timeout=5.0)
+    try:
+        bus._dispatch(
+            {
+                "type": "session.error",
+                "properties": {
+                    "error": {"data": {"message": "upstream connection reset"}}
+                },
+            }
+        )
+        assert _wait_for(lambda: not t.is_alive(), timeout=1.0)
+    finally:
+        t.join(timeout=3.0)
+
+    errs = [e for e in events if isinstance(e, Error)]
+    assert len(errs) == 1
+    assert "upstream connection reset" in errs[0].message
+    assert not any(isinstance(e, PromptResponse) for e in events)
+
+
+def test_send_message_ends_on_unscoped_session_idle(bus: PodEventBus) -> None:
+    """Unscoped session.idle is still a valid directory-scoped turn terminator."""
+    transport = httpx.MockTransport(_ok_response)
+    client = _make_client(bus, transport)
+    events, t = _run_send_message(client, timeout=5.0)
+    try:
+        _dispatch_session_idle(bus, scoped=False)
+        assert _wait_for(lambda: not t.is_alive(), timeout=1.0)
+    finally:
+        t.join(timeout=3.0)
+
+    assert any(isinstance(e, PromptResponse) for e in events)
+    assert not any(isinstance(e, Error) for e in events)
 
 
 def test_send_message_wall_clock_timeout_aborts(bus: PodEventBus) -> None:
@@ -616,6 +672,7 @@ def test_send_message_auto_allows_permission_asks(bus: PodEventBus) -> None:
                 },
             }
         )
+        _dispatch_session_idle(bus)
         assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
     finally:
         t.join(timeout=3.0)
@@ -640,20 +697,7 @@ def test_send_message_unsubscribes_on_clean_exit(bus: PodEventBus) -> None:
     list(
         _gen_to_completion(
             client,
-            terminator=lambda: bus._dispatch(
-                {
-                    "type": "message.updated",
-                    "properties": {
-                        "sessionID": _SESSION,
-                        "info": {
-                            "id": "msg1",
-                            "sessionID": _SESSION,
-                            "role": "assistant",
-                            "time": {"completed": 1},
-                        },
-                    },
-                }
-            ),
+            terminator=lambda: _dispatch_session_idle(bus),
         )
     )
     # After clean exit, no subscription should remain.
