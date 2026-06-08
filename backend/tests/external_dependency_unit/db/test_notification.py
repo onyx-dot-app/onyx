@@ -288,7 +288,9 @@ def test_notification_summary_runs_ensure_checks_before_counting(
 def test_notification_summary_and_dismiss_all_api(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_notification_ensure_checks(monkeypatch)
     user = create_test_user(db_session, "notification_summary")
     other_user = create_test_user(db_session, "notification_summary_other")
     first_shown = datetime(2026, 1, 1, tzinfo=timezone.utc)

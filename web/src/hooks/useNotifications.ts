@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import useSWRInfinite from "swr/infinite";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -104,16 +104,20 @@ export default function useNotifications({
   const isLoading = enabled && !error && !data;
   const isLoadingMore =
     enabled && data !== undefined && size > 0 && data[size - 1] === undefined;
+  const loadMoreInFlightRef = useRef(false);
 
   const loadMore = useCallback(async () => {
-    if (isLoadingMore || !hasMore) {
+    if (loadMoreInFlightRef.current || isLoadingMore || !hasMore) {
       return;
     }
 
+    loadMoreInFlightRef.current = true;
     try {
       await setSize((currentSize) => currentSize + 1);
     } catch (err) {
       console.error("Failed to load more notifications:", err);
+    } finally {
+      loadMoreInFlightRef.current = false;
     }
   }, [hasMore, isLoadingMore, setSize]);
 
