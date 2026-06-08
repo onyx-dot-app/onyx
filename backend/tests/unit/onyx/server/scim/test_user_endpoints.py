@@ -26,6 +26,8 @@ from ee.onyx.server.scim.models import ScimPatchRequest
 from ee.onyx.server.scim.models import ScimUserResource
 from ee.onyx.server.scim.patch import ScimPatchError
 from ee.onyx.server.scim.providers.base import ScimProvider
+from onyx.db.enums import AccountType
+from onyx.db.models import UserRole
 from tests.unit.onyx.server.scim.conftest import assert_scim_error
 from tests.unit.onyx.server.scim.conftest import make_db_user
 from tests.unit.onyx.server.scim.conftest import make_scim_user
@@ -294,13 +296,92 @@ class TestCreateUser:
         assert parsed.userName == "admin@example.com"
         # Should NOT create a new user — reuse existing
         mock_dal.add_user.assert_not_called()
-        # Should sync is_active and personal_name from the SCIM request
+        # Already a real (BASIC) user — synced but NOT re-roled
         mock_dal.update_user.assert_called_once_with(
-            existing, is_active=True, personal_name="Test User"
+            existing,
+            is_active=True,
+            role=None,
+            account_type=None,
+            personal_name="Test User",
         )
         # Should create a SCIM mapping for the existing user
         mock_dal.create_user_mapping.assert_called_once()
         mock_dal.commit.assert_called_once()
+
+    @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
+    def test_adopting_shadow_ext_perm_user_promotes_to_standard(
+        self,
+        mock_seats: MagicMock,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """A pre-existing EXT_PERM_USER shadow gets promoted to BASIC/STANDARD,
+        seat-checked even though the user is already active.
+        """
+        existing = make_db_user(
+            email="champion@example.com",
+            personal_name=None,
+            role=UserRole.EXT_PERM_USER,
+            is_active=True,
+        )
+        mock_dal.get_user_by_email.return_value = existing
+        mock_dal.get_user_mapping_by_user_id.return_value = None
+        resource = make_scim_user(
+            userName="champion@example.com", externalId="ext-champ"
+        )
+
+        result = create_user(
+            user_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result, status=201)
+        mock_dal.add_user.assert_not_called()
+        # Promotion consumes a seat -> seat check runs despite already-active user
+        mock_seats.assert_called_once()
+        mock_dal.update_user.assert_called_once_with(
+            existing,
+            is_active=True,
+            role=UserRole.BASIC,
+            account_type=AccountType.STANDARD,
+            personal_name="Test User",
+        )
+        mock_dal.create_user_mapping.assert_called_once()
+        mock_dal.commit.assert_called_once()
+
+    @patch("ee.onyx.server.scim.api._check_seat_availability")
+    def test_adopting_shadow_ext_perm_user_respects_seat_limit(
+        self,
+        mock_seats: MagicMock,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """Promoting a shadow user that would exceed the seat cap returns 403."""
+        mock_seats.return_value = "Seat limit reached"
+        existing = make_db_user(
+            email="champion@example.com",
+            role=UserRole.EXT_PERM_USER,
+            is_active=True,
+        )
+        mock_dal.get_user_by_email.return_value = existing
+        mock_dal.get_user_mapping_by_user_id.return_value = None
+        resource = make_scim_user(userName="champion@example.com")
+
+        result = create_user(
+            user_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 403)
+        mock_dal.update_user.assert_not_called()
 
     @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
     def test_integrity_error_returns_409(
