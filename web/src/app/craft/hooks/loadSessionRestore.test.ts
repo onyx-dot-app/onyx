@@ -87,6 +87,65 @@ describe("loadSession restore status", () => {
     const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
     expect(session?.sandbox?.status).toBe("running");
   });
+
+  it("restores persisted agent thought packets as collapsed transcript stream items", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    mockedApi.fetchMessages.mockResolvedValue([
+      {
+        id: "user-1",
+        type: "user",
+        content: "Build a dashboard",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Build a dashboard" },
+        },
+      },
+      {
+        id: "thought-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "agent_thought",
+          content: { type: "text", text: "Inspecting available files." },
+        },
+      },
+      {
+        id: "answer-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "agent_message",
+          content: { type: "text", text: "Created the dashboard." },
+        },
+      },
+    ] as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    const assistant = session?.messages.find((message) => {
+      return message.type === "assistant";
+    });
+    const streamItems = assistant?.message_metadata?.streamItems;
+
+    expect(streamItems).toEqual([
+      {
+        type: "thinking",
+        id: "thought-1",
+        content: "Inspecting available files.",
+        isStreaming: false,
+      },
+      {
+        type: "text",
+        id: "answer-1",
+        content: "Created the dashboard.",
+        isStreaming: false,
+      },
+    ]);
+  });
 });
 
 describe("waitForWebappReady", () => {

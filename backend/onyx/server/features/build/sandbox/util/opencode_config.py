@@ -23,7 +23,7 @@ def _model_options(provider: str, model_name: str) -> dict[str, Any]:
         if model_name in _ADAPTIVE_THINKING_MODELS or model_name.startswith(
             tuple(f"{m}-" for m in _ADAPTIVE_THINKING_MODELS)
         ):
-            return {"thinking": {"type": "adaptive"}}
+            return {"thinking": {"type": "adaptive", "display": "summarized"}}
         return {"thinking": {"type": "enabled", "budgetTokens": 16000}}
     if provider == "google":
         return {"thinking_budget": 16000, "thinking_level": "high"}
