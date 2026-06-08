@@ -43,6 +43,7 @@ from onyx.db.document import mark_document_as_modified
 from onyx.db.document import mark_document_as_synced
 from onyx.db.document import mark_document_synced_secondary_pending
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import EmbeddingPrecision
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import PortAttemptStatus
@@ -55,10 +56,10 @@ from onyx.db.index_attempt import get_latest_successful_index_attempt_for_cc_pai
 from onyx.db.index_attempt import mock_successful_index_attempt
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import PortAttempt
 from onyx.db.models import SearchSettings
+from onyx.db.port_attempt import cancel_active_port_attempts
 from onyx.db.port_attempt import commit_port_cursor
 from onyx.db.port_attempt import create_port_attempt
 from onyx.db.port_attempt import get_active_port_attempt
@@ -74,30 +75,12 @@ from onyx.indexing.port_reembed import ReembedStrategy
 from onyx.kg.models import KGStage
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
+from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair_and_future
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
-
-
-def _seed_cc_pair_documents(
-    db_session: Session, cc_pair: ConnectorCredentialPair, count: int
-) -> list[str]:
-    """Create `count` documents linked to the cc_pair; returns their ids, sorted."""
-    doc_ids = [f"portdoc-{i:03d}" for i in range(1, count + 1)]
-    for doc_id in doc_ids:
-        db_session.add(
-            DbDocument(id=doc_id, semantic_id=doc_id, kg_stage=KGStage.NOT_STARTED)
-        )
-    db_session.flush()
-    for doc_id in doc_ids:
-        db_session.add(
-            DocumentByConnectorCredentialPair(
-                id=doc_id,
-                connector_id=cc_pair.connector_id,
-                credential_id=cc_pair.credential_id,
-                has_been_indexed=True,
-            )
-        )
-    db_session.commit()
-    return doc_ids
+from tests.external_dependency_unit.indexing_helpers import make_future_search_settings
+from tests.external_dependency_unit.indexing_helpers import (
+    seed_cc_pair_documents as _seed_cc_pair_documents,
+)
 
 
 def _run_check_for_port(
@@ -302,24 +285,61 @@ def cc_pair_and_future(
     """A cc_pair plus an isolated FUTURE SearchSettings (unique index_name) so the
     global count/cursor helpers see only this test's attempts."""
     pair = make_cc_pair(db_session)
-    present = get_current_search_settings(db_session)
-    saved = SavedSearchSettings.from_db_model(present).model_copy(
-        update={"index_name": f"test_future_{uuid4().hex[:8]}"}
-    )
-    future = create_search_settings(saved, db_session, status=IndexModelStatus.FUTURE)
-    future_id = future.id
+    future_id = make_future_search_settings(db_session).id
     try:
         yield pair, future_id
     finally:
-        db_session.rollback()
-        db_session.query(IndexAttempt).filter(
-            IndexAttempt.connector_credential_pair_id == pair.id
-        ).delete(synchronize_session="fetch")
-        db_session.query(SearchSettings).filter(SearchSettings.id == future_id).delete(
-            synchronize_session="fetch"
+        cleanup_cc_pair_and_future(db_session, pair, future_id)
+
+
+def test_use_port_flow_default_and_round_trip(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """use_port_flow persists as False via the server default when the saved model
+    omits it, and an explicit True round-trips through a fresh read + the
+    SavedSearchSettings mapper the port flow uses. PAST status avoids the
+    PRESENT-uniqueness + concurrent-FUTURE collisions a round-trip test would hit.
+    """
+
+    def _saved() -> SavedSearchSettings:
+        # Minimal explicit settings (not a clone of the polluted live row) so the
+        # omitted use_port_flow falls through to the server default.
+        return SavedSearchSettings(
+            model_name="test-port-flow-model",
+            model_dim=128,
+            normalize=True,
+            query_prefix="",
+            passage_prefix="",
+            provider_type=None,
+            multipass_indexing=False,
+            embedding_precision=EmbeddingPrecision.FLOAT,
+            index_name=f"test_port_flow_{uuid4().hex[:8]}",
+            enable_contextual_rag=False,
         )
+
+    default_id = create_search_settings(
+        _saved(), db_session, status=IndexModelStatus.PAST
+    ).id
+    true_id = create_search_settings(
+        _saved().model_copy(update={"use_port_flow": True}),
+        db_session,
+        status=IndexModelStatus.PAST,
+    ).id
+    try:
+        db_session.expire_all()
+        default_fresh = db_session.get(SearchSettings, default_id)
+        assert default_fresh is not None and default_fresh.use_port_flow is False
+        true_fresh = db_session.get(SearchSettings, true_id)
+        assert true_fresh is not None and true_fresh.use_port_flow is True
+        # Rehydrate through the pydantic mapper the port flow reads through.
+        assert SavedSearchSettings.from_db_model(true_fresh).use_port_flow is True
+    finally:
+        for row_id in (default_id, true_id):
+            row = db_session.get(SearchSettings, row_id)
+            if row is not None:
+                db_session.delete(row)
         db_session.commit()
-        cleanup_cc_pair(db_session, pair)
 
 
 def test_create_synthetic_seed_attempt(
@@ -621,6 +641,46 @@ def test_run_port_attempt_stops_when_canceled(
     assert row.status == PortAttemptStatus.CANCELED
     assert row.last_processed_doc_id == doc_ids[INDEX_BATCH_SIZE - 1]
     assert row.docs_ported == INDEX_BATCH_SIZE
+
+
+def test_cancel_active_port_attempts_on_supersede(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Superseding a FUTURE cancels its active (NOT_STARTED/IN_PROGRESS) port
+    attempts — the running task then stops at its next batch — while terminal
+    attempts are left untouched."""
+    cc_pair, future_id = cc_pair_and_future
+
+    active = create_port_attempt(db_session, cc_pair.id, future_id)
+    mark_port_in_progress(db_session, active.id)
+    # a terminal attempt for the same pair/future must be left alone
+    db_session.add(
+        PortAttempt(
+            cc_pair_id=cc_pair.id,
+            search_settings_id=future_id,
+            status=PortAttemptStatus.SUCCESS,
+        )
+    )
+    db_session.commit()
+
+    canceled = cancel_active_port_attempts(db_session, search_settings_id=future_id)
+    assert canceled == 1
+
+    db_session.expire_all()
+    active_row = db_session.get(PortAttempt, active.id)
+    assert active_row is not None
+    assert active_row.status == PortAttemptStatus.CANCELED
+    assert active_row.time_completed is not None
+    # the terminal SUCCESS is preserved (first-terminal-write-wins)
+    successes = (
+        db_session.query(PortAttempt)
+        .filter(
+            PortAttempt.search_settings_id == future_id,
+            PortAttempt.status == PortAttemptStatus.SUCCESS,
+        )
+        .count()
+    )
+    assert successes == 1
 
 
 def test_run_port_attempt_exits_when_cc_pair_deleting(

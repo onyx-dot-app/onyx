@@ -10,7 +10,6 @@ backlog drains) plus the expires= on every enqueue. The Celery send_task is mock
 
 from collections.abc import Generator
 from unittest.mock import MagicMock
-from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -19,7 +18,6 @@ from onyx.background.celery.tasks.vespa.document_sync import (
     generate_document_sync_tasks,
 )
 from onyx.configs.constants import OnyxCeleryPriority
-from onyx.context.search.models import SavedSearchSettings
 from onyx.db.document import (
     construct_document_id_select_by_needs_sync_or_secondary_pending,
 )
@@ -27,20 +25,16 @@ from onyx.db.document import count_documents_by_needs_sync
 from onyx.db.document import count_documents_by_needs_sync_or_secondary_pending
 from onyx.db.document import mark_document_as_modified
 from onyx.db.document import mark_document_synced_secondary_pending
-from onyx.db.enums import IndexModelStatus
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import PortAttempt
-from onyx.db.models import SearchSettings
 from onyx.db.port_attempt import any_future_port_in_progress
 from onyx.db.port_attempt import create_port_attempt
 from onyx.db.port_attempt import mark_port_in_progress
 from onyx.db.port_attempt import mark_port_succeeded
-from onyx.db.search_settings import create_search_settings
-from onyx.db.search_settings import get_current_search_settings
 from onyx.kg.models import KGStage
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
+from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair_and_future
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from tests.external_dependency_unit.indexing_helpers import make_future_search_settings
 
 _DOC_PREFIX = "syncdoc-"
 
@@ -51,27 +45,11 @@ def cc_pair_and_future(
     tenant_context: None,  # noqa: ARG001
 ) -> Generator[tuple[ConnectorCredentialPair, int], None, None]:
     pair = make_cc_pair(db_session)
-    present = get_current_search_settings(db_session)
-    saved = SavedSearchSettings.from_db_model(present).model_copy(
-        update={"index_name": f"test_future_{uuid4().hex[:8]}"}
-    )
-    future = create_search_settings(saved, db_session, status=IndexModelStatus.FUTURE)
-    future_id = future.id
+    future_id = make_future_search_settings(db_session).id
     try:
         yield pair, future_id
     finally:
-        db_session.rollback()
-        db_session.query(DbDocument).filter(
-            DbDocument.id.like(f"{_DOC_PREFIX}%")
-        ).delete(synchronize_session="fetch")
-        db_session.query(PortAttempt).filter(
-            PortAttempt.search_settings_id == future_id
-        ).delete(synchronize_session="fetch")
-        db_session.query(SearchSettings).filter(SearchSettings.id == future_id).delete(
-            synchronize_session="fetch"
-        )
-        db_session.commit()
-        cleanup_cc_pair(db_session, pair)
+        cleanup_cc_pair_and_future(db_session, pair, future_id, doc_prefix=_DOC_PREFIX)
 
 
 def _make_doc(db_session: Session, doc_id: str) -> None:

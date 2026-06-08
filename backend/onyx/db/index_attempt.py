@@ -168,7 +168,8 @@ def create_synthetic_seed_attempt(
     connector-incremental resumes from there. time_started == time_created (both
     func.now() in one statement) so the swap criterion's "real attempt after the
     port" comparison is well-defined for the run that later supersedes the seed.
-    Excluded from the latest/count helpers via ignore_synthetic_seed."""
+    Excluded from the latest/count helpers via ignore_synthetic_seed. Flushes to
+    populate the returned id but does not commit; the caller commits."""
     db_now = func.now()
     seed = IndexAttempt(
         connector_credential_pair_id=connector_credential_pair_id,
@@ -181,7 +182,7 @@ def create_synthetic_seed_attempt(
         poll_range_end=datetime.fromtimestamp(poll_range_end, tz=timezone.utc),
     )
     db_session.add(seed)
-    db_session.commit()
+    db_session.flush()
     return seed.id
 
 

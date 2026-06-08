@@ -13,6 +13,7 @@ from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import IndexModelStatus
@@ -236,3 +237,24 @@ def _mark_terminal(
     except Exception:
         db_session.rollback()
         raise
+
+
+def cancel_active_port_attempts(db_session: Session, search_settings_id: int) -> int:
+    """Cancel all active (NOT_STARTED / IN_PROGRESS) attempts for a FUTURE that has
+    been superseded by a newer reindex. A running port task re-reads its row each
+    batch and stops once it sees CANCELED; only active rows are touched, preserving
+    first-terminal-write-wins. Returns the number canceled."""
+    result = db_session.execute(
+        update(PortAttempt)
+        .where(
+            PortAttempt.search_settings_id == search_settings_id,
+            PortAttempt.status.in_(_ACTIVE_STATUSES),
+        )
+        .values(
+            status=PortAttemptStatus.CANCELED,
+            time_completed=func.now(),
+            error_msg="Canceled: superseded by a newer reindex",
+        )
+    )
+    db_session.commit()
+    return result.rowcount  # ty: ignore[unresolved-attribute]
