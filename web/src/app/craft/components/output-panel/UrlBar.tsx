@@ -86,6 +86,14 @@ export default function UrlBar({
     };
   }, []);
 
+  React.useEffect(() => {
+    if (copyResetTimeoutRef.current) {
+      clearTimeout(copyResetTimeoutRef.current);
+      copyResetTimeoutRef.current = null;
+    }
+    setCopyState("idle");
+  }, [displayUrl]);
+
   const handleOpenInNewTab = () => {
     if (previewUrl) {
       window.open(previewUrl, "_blank", "noopener,noreferrer");
@@ -95,6 +103,7 @@ export default function UrlBar({
   const handleCopyUrl = async () => {
     if (copyResetTimeoutRef.current) {
       clearTimeout(copyResetTimeoutRef.current);
+      copyResetTimeoutRef.current = null;
     }
 
     try {
@@ -102,6 +111,7 @@ export default function UrlBar({
       setCopyState("copied");
       copyResetTimeoutRef.current = setTimeout(() => {
         setCopyState("idle");
+        copyResetTimeoutRef.current = null;
       }, 1500);
     } catch (err) {
       console.error("Failed to copy URL:", err);
@@ -153,7 +163,10 @@ export default function UrlBar({
           </div>
         )}
         {/* URL display */}
-        <div className="flex-1 min-w-0 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2 min-h-9">
+        <div
+          data-testid="url-bar-pill"
+          className="flex-1 min-w-0 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2 min-h-9"
+        >
           {/* Download raw file button */}
           {onDownloadRaw && (
             <Tooltip tooltip={downloadRawTooltip} delayDuration={200}>
@@ -168,18 +181,12 @@ export default function UrlBar({
           )}
           {/* Open in new tab button - only shown for Preview tab with valid URL */}
           {previewUrl && (
-            <Tooltip
-              tooltip={isUrlCopied ? "Copied URL" : "open in a new tab"}
-              delayDuration={200}
-            >
+            <Tooltip tooltip="open in a new tab" delayDuration={200}>
               <button
                 onClick={handleOpenInNewTab}
                 className="shrink-0 p-0.5 rounded-sm transition-colors hover:bg-background-tint-03 text-text-03"
-                aria-label={
-                  isUrlCopied
-                    ? "Copied URL; open in a new tab"
-                    : "open in a new tab"
-                }
+                aria-label="open in a new tab"
+                data-copy-state={copyState}
               >
                 {isUrlCopied ? (
                   <SvgCheck
@@ -197,7 +204,10 @@ export default function UrlBar({
               </button>
             </Tooltip>
           )}
-          <div className="min-w-0 flex-1 overflow-hidden">
+          <div
+            data-testid="url-text-wrapper"
+            className="min-w-0 flex-1 overflow-hidden"
+          >
             <Tooltip tooltip={displayUrl} side="bottom" delayDuration={200}>
               <button
                 type="button"

@@ -13,6 +13,7 @@ jest.mock("@opal/utils", () => {
 
 describe("UrlBar", () => {
   beforeEach(() => {
+    (copyText as jest.Mock).mockReset();
     (copyText as jest.Mock).mockResolvedValue(undefined);
   });
 
@@ -39,19 +40,23 @@ describe("UrlBar", () => {
     const copyButton = screen.getByRole("button", {
       name: `Copy URL: ${longPreviewUrl}`,
     });
-    const textWrapper = urlText.parentElement;
-    const urlPill = textWrapper?.parentElement?.parentElement;
+    const textWrapper = screen.getByTestId("url-text-wrapper");
+    const urlPill = screen.getByTestId("url-bar-pill");
+    const openButton = screen.getByRole("button", {
+      name: "open in a new tab",
+    });
 
     expect(urlText.tagName).toBe("P");
     expect(urlText).toHaveClass("truncate");
-    expect(copyButton).toHaveClass("cursor-pointer");
-    expect(textWrapper).toHaveClass("block", "w-full", "min-w-0");
-    expect(textWrapper?.parentElement).toHaveClass(
+    expect(copyButton).toHaveClass(
+      "block",
+      "w-full",
       "min-w-0",
-      "flex-1",
-      "overflow-hidden"
+      "cursor-pointer"
     );
+    expect(textWrapper).toHaveClass("min-w-0", "flex-1", "overflow-hidden");
     expect(urlPill).toHaveClass("min-w-0", "flex-1");
+    expect(openButton).toHaveAttribute("data-copy-state", "idle");
     expect(
       screen.getByRole("button", { name: "Share webapp" })
     ).toBeInTheDocument();
@@ -63,8 +68,54 @@ describe("UrlBar", () => {
 
     await user.click(copyButton);
     expect(copyText).toHaveBeenCalledWith(longPreviewUrl);
+    await waitFor(() => {
+      expect(openButton).toHaveAttribute("data-copy-state", "copied");
+    });
     expect(
-      screen.getByRole("button", { name: "Copied URL; open in a new tab" })
+      screen.getByRole("button", { name: "open in a new tab" })
+    ).toBeInTheDocument();
+
+    await user.hover(openButton);
+    await waitFor(() => {
+      expect(screen.getAllByText("open in a new tab").length).toBeGreaterThan(
+        0
+      );
+    });
+    expect(screen.queryByText("Copied URL")).not.toBeInTheDocument();
+  });
+
+  test("resets copy feedback when the displayed URL changes", async () => {
+    const user = setupUser();
+    const firstPreviewUrl = "https://craft-preview.onyx.app/sessions/first";
+    const secondPreviewUrl = "https://craft-preview.onyx.app/sessions/second";
+    const { rerender } = render(
+      <UrlBar displayUrl={firstPreviewUrl} previewUrl={firstPreviewUrl} />
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: `Copy URL: ${firstPreviewUrl}`,
+      })
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "open in a new tab" })
+      ).toHaveAttribute("data-copy-state", "copied");
+    });
+
+    rerender(
+      <UrlBar displayUrl={secondPreviewUrl} previewUrl={secondPreviewUrl} />
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "open in a new tab" })
+      ).toHaveAttribute("data-copy-state", "idle");
+    });
+    expect(
+      screen.getByRole("button", {
+        name: `Copy URL: ${secondPreviewUrl}`,
+      })
     ).toBeInTheDocument();
   });
 });
