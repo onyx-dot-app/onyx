@@ -384,17 +384,15 @@ export function useBuildStreaming() {
                 .map((item) => item.content)
                 .join("");
 
-              if (savedStreamItems.length > 0 || textContent) {
-                appendMessageToSession(sessionId, {
-                  id: genId("agent-msg"),
-                  type: "assistant",
-                  content: textContent,
-                  timestamp: new Date(),
-                  message_metadata: {
-                    streamItems: savedStreamItems,
-                  },
-                });
-              }
+              appendMessageToSession(sessionId, {
+                id: genId("agent-msg"),
+                type: "assistant",
+                content: textContent,
+                timestamp: new Date(),
+                message_metadata: {
+                  streamItems: savedStreamItems,
+                },
+              });
             }
 
             updateSessionData(sessionId, {

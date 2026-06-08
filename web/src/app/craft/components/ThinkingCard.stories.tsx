@@ -11,6 +11,14 @@ const meta: Meta<typeof ThinkingCard> = {
   title: "Apps/Craft/Messages/Thinking Card",
   component: ThinkingCard,
   tags: ["autodocs"],
+  render: (args) => (
+    <ThinkingCard
+      key={`${args.isStreaming ? "live" : "complete"}-${
+        args.defaultOpen ? "open" : "closed"
+      }`}
+      {...args}
+    />
+  ),
   decorators: [
     (Story) => (
       <div className="w-[640px]">

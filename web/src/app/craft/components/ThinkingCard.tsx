@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
@@ -93,10 +93,6 @@ export default function ThinkingCard({
   defaultOpen = false,
 }: ThinkingCardProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
-
-  useEffect(() => {
-    setIsOpen(defaultOpen);
-  }, [defaultOpen]);
 
   if (!content) return null;
 
