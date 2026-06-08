@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import useSWRInfinite from "swr/infinite";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -61,10 +61,6 @@ export default function useNotifications({
   enabled = true,
 }: UseNotificationsOptions = {}) {
   const { mutate: mutateGlobal } = useSWRConfig();
-  const firstPageKey = useMemo(
-    () => SWR_KEYS.notificationsPage(0, pageSize, notificationType),
-    [notificationType, pageSize]
-  );
   const getKey = useCallback(
     (
       pageIndex: number,
@@ -73,14 +69,12 @@ export default function useNotifications({
       if (!enabled) return null;
       if (previousPageData && !previousPageData.has_more) return null;
 
-      if (pageIndex === 0) return firstPageKey;
-
       return SWR_KEYS.notificationsPage(pageIndex, pageSize, notificationType);
     },
-    [enabled, firstPageKey, notificationType, pageSize]
+    [enabled, notificationType, pageSize]
   );
 
-  const { data, error, mutate, setSize } =
+  const { data, error, mutate, size, setSize } =
     useSWRInfinite<NotificationsResponse>(getKey, errorHandlingFetcher, {
       revalidateOnFocus: false,
       revalidateFirstPage: false,
@@ -107,46 +101,21 @@ export default function useNotifications({
   const undismissedCount = firstPage?.undismissed_count ?? 0;
   const totalItems = firstPage?.total_items ?? 0;
   const hasMore = lastPage?.has_more ?? false;
-  const loadedPageCount = data?.length ?? 0;
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const loadedPageCountRef = useRef(loadedPageCount);
-  const hasMoreRef = useRef(hasMore);
-  const requestedPageCountRef = useRef(loadedPageCount);
-  const loadMoreInFlightRef = useRef(false);
-
-  useEffect(() => {
-    loadedPageCountRef.current = loadedPageCount;
-    hasMoreRef.current = hasMore;
-
-    if (loadedPageCount >= requestedPageCountRef.current) {
-      loadMoreInFlightRef.current = false;
-      setIsLoadingMore(false);
-    }
-  }, [hasMore, loadedPageCount]);
+  const isLoading = enabled && !error && !data;
+  const isLoadingMore =
+    enabled && data !== undefined && size > 0 && data[size - 1] === undefined;
 
   const loadMore = useCallback(async () => {
-    const currentLoadedPageCount = loadedPageCountRef.current;
-    if (
-      loadMoreInFlightRef.current ||
-      requestedPageCountRef.current > currentLoadedPageCount ||
-      !hasMoreRef.current
-    ) {
+    if (isLoadingMore || !hasMore) {
       return;
     }
 
-    const nextPageCount = currentLoadedPageCount + 1;
-    requestedPageCountRef.current = nextPageCount;
-    loadMoreInFlightRef.current = true;
-    setIsLoadingMore(true);
     try {
-      await setSize(nextPageCount);
+      await setSize((currentSize) => currentSize + 1);
     } catch (err) {
-      requestedPageCountRef.current = currentLoadedPageCount;
-      loadMoreInFlightRef.current = false;
-      setIsLoadingMore(false);
       console.error("Failed to load more notifications:", err);
     }
-  }, [setSize]);
+  }, [hasMore, isLoadingMore, setSize]);
 
   const refresh = useCallback(() => {
     void mutateGlobal(SWR_KEYS.notificationsSummary);
@@ -159,7 +128,7 @@ export default function useNotifications({
     notifications,
     undismissedCount,
     totalItems,
-    isLoading: enabled && !error && !data,
+    isLoading,
     error,
     refresh,
     hasMore,
