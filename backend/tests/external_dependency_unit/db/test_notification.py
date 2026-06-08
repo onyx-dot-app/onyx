@@ -254,12 +254,50 @@ def test_get_notifications_api_scopes_ensure_checks(
     assert calls == []
 
 
-def test_notification_summary_and_dismiss_all_api(
+def test_notification_summary_runs_ensure_checks_before_counting(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _disable_notification_ensure_checks(monkeypatch)
+    user = create_test_user(db_session, "notification_summary_no_checks")
+    calls: list[str] = []
+
+    def record_call(name: str) -> Callable[..., None]:
+        def _record_call(*_args: object, **_kwargs: object) -> None:
+            calls.append(name)
+
+        return _record_call
+
+    monkeypatch.setattr(
+        notifications_api,
+        "ensure_build_mode_intro_notification",
+        record_call("build"),
+    )
+    monkeypatch.setattr(
+        notifications_api,
+        "ensure_permissions_migration_notification",
+        record_call("permissions"),
+    )
+    monkeypatch.setattr(
+        notifications_api,
+        "ensure_release_notes_fresh_and_notify",
+        record_call("release_notes"),
+    )
+
+    summary = notifications_api.get_notifications_summary_api(
+        user=user,
+        db_session=db_session,
+    )
+
+    assert summary.total_items == 0
+    assert summary.undismissed_count == 0
+    assert calls == ["build", "permissions", "release_notes"]
+
+
+def test_notification_summary_and_dismiss_all_api(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
     user = create_test_user(db_session, "notification_summary")
     other_user = create_test_user(db_session, "notification_summary_other")
     first_shown = datetime(2026, 1, 1, tzinfo=timezone.utc)

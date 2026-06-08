@@ -178,13 +178,14 @@ export default function useNotifications({
   }, [setSize]);
 
   const refresh = useCallback(() => {
-    mutateGlobal(NOTIFICATIONS_SUMMARY_URL);
+    void mutateGlobal(NOTIFICATIONS_SUMMARY_URL);
     if (!enabled) return Promise.resolve(undefined);
 
-    return mutate(undefined, {
-      revalidate: (_pageData, pageArg) => pageArg === firstPageKey,
+    return mutate((currentData) => currentData, {
+      populateCache: false,
+      revalidate: true,
     });
-  }, [enabled, firstPageKey, mutate, mutateGlobal]);
+  }, [enabled, mutate, mutateGlobal]);
 
   return {
     notifications,

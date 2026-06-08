@@ -125,10 +125,6 @@ export default function NotificationsPopover({
     new Set()
   );
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
   const handleDismiss = useCallback(
     async (notificationId: number) => {
       try {
@@ -240,7 +236,14 @@ export default function NotificationsPopover({
       (entries) => {
         if (entries[0]?.isIntersecting && !didRequestLoad) {
           const currentScrollTop = Math.round(scrollContainer.scrollTop);
-          if (lastLoadScrollTopRef.current === currentScrollTop) return;
+          const isScrollable =
+            scrollContainer.scrollHeight > scrollContainer.clientHeight + 1;
+          if (
+            isScrollable &&
+            lastLoadScrollTopRef.current === currentScrollTop
+          ) {
+            return;
+          }
 
           lastLoadScrollTopRef.current = currentScrollTop;
           didRequestLoad = true;

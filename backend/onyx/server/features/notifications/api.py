@@ -127,8 +127,8 @@ def get_notifications_summary_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> NotificationSummary:
-    # Preserve badge behavior from the old mounted list hook: notifications that
-    # are lazily created on read should exist before we compute unread counts.
+    # Preserve app-load notification bootstrap behavior: notifications that are
+    # lazily created on read should exist before we compute badge counts.
     _ensure_notifications_for_type(user, db_session, notif_type=None)
     total_items, undismissed_count = count_notifications(
         user=user,
