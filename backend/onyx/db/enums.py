@@ -303,6 +303,7 @@ class ApprovalDecidedVia(str, PyEnum):
     # NULL on legacy rows and proxy-written EXPIRED claims.
     USER = "USER"
     PRE_APPROVAL = "PRE_APPROVAL"
+    SESSION_GRANT = "SESSION_GRANT"
 
 
 class ScheduledTaskStatus(str, PyEnum):

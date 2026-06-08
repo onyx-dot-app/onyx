@@ -158,3 +158,20 @@ def list_session_pending_action_approvals(
         stmt = stmt.where(ActionApproval.created_at >= created_after)
     stmt = stmt.order_by(ActionApproval.created_at.desc())
     return list(db_session.scalars(stmt))
+
+
+def list_session_grant_action_approvals(
+    db_session: Session,
+    session_id: UUID,
+    external_app_id: int,
+) -> list[ActionApproval]:
+    """Approved rows covered by a durable session-scope grant."""
+    stmt = (
+        select(ActionApproval)
+        .where(ActionApproval.session_id == session_id)
+        .where(ActionApproval.external_app_id == external_app_id)
+        .where(ActionApproval.decision == ApprovalDecision.APPROVED)
+        .where(ActionApproval.decided_via == ApprovalDecidedVia.SESSION_GRANT)
+        .order_by(ActionApproval.decided_at.desc())
+    )
+    return list(db_session.scalars(stmt))
