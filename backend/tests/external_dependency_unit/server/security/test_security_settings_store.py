@@ -241,9 +241,7 @@ def test_load_raw_overrides_salvages_around_single_bad_value() -> None:
     assert effective.password_min_length == env.password_min_length
 
 
-def test_cache_does_not_repopulate_after_invalidation_race(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_cache_does_not_repopulate_after_invalidation_race() -> None:
     """Race: a cold-miss reader holds the result of its KV roundtrip; before
     it can store the result, a concurrent writer invalidates. The reader must
     NOT write its now-stale value back — otherwise the cache resurrects the
@@ -265,7 +263,9 @@ def test_cache_does_not_repopulate_after_invalidation_race(
         invalidate_security_cache(TEST_TENANT_ID)
         return result
 
-    with patch.object(security_store, "load_raw_overrides", side_effect=_load_then_race):
+    with patch.object(
+        security_store, "load_raw_overrides", side_effect=_load_then_race
+    ):
         get_security_settings()
 
     # The reader must NOT have persisted its stale result. Cache stays empty.

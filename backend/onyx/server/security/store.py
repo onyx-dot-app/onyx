@@ -173,8 +173,7 @@ def load_raw_overrides() -> SecuritySettingsOverrides:
         # A non-dict blob is corruption — log loudly so ops sees it instead of
         # silently masking it behind env defaults.
         logger.error(
-            "Security overrides blob in KV is not a dict (got %s); "
-            "using env defaults",
+            "Security overrides blob in KV is not a dict (got %s); using env defaults",
             type(stored).__name__,
         )
         return SecuritySettingsOverrides()
