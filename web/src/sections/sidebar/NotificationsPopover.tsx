@@ -124,26 +124,54 @@ export default function NotificationsPopover({
   const lastLoadScrollTopRef = useRef<number | null>(null);
   loadMoreRef.current = loadMore;
 
-  // Track IDs dismissed during this session (before popover closes)
-  const [sessionDismissedIds, setSessionDismissedIds] = useState<Set<number>>(
-    new Set()
-  );
+  const [sessionDismissedVersionById, setSessionDismissedVersionById] =
+    useState<Map<number, string>>(new Map());
+  const dismissInFlightIdsRef = useRef<Set<number>>(new Set());
 
   const handleDismiss = useCallback(
-    async (notificationId: number) => {
+    async (notification: NotificationData) => {
+      const notificationId = notification.id;
+      const expectedVersion = notification.version;
+      if (dismissInFlightIdsRef.current.has(notificationId)) {
+        return;
+      }
+
+      dismissInFlightIdsRef.current.add(notificationId);
+      setSessionDismissedVersionById((prev) => {
+        const next = new Map(prev);
+        next.set(notificationId, expectedVersion);
+        return next;
+      });
+
       try {
-        await dismissNotification(notificationId);
-        setSessionDismissedIds((prev) => {
-          const next = new Set(prev);
-          next.add(notificationId);
-          return next;
-        });
+        await dismissNotification(notificationId, expectedVersion);
         void refresh();
       } catch (error) {
+        setSessionDismissedVersionById((prev) => {
+          if (prev.get(notificationId) !== expectedVersion) {
+            return prev;
+          }
+          const next = new Map(prev);
+          next.delete(notificationId);
+          return next;
+        });
         console.error("Error dismissing notification:", error);
+      } finally {
+        dismissInFlightIdsRef.current.delete(notificationId);
       }
     },
     [refresh]
+  );
+
+  const getState = useCallback(
+    (notification: NotificationData): NotificationState => {
+      const dismissedVersion = sessionDismissedVersionById.get(notification.id);
+      if (dismissedVersion === notification.version || notification.dismissed) {
+        return "older";
+      }
+      return "new";
+    },
+    [sessionDismissedVersionById]
   );
 
   const handleNotificationClick = useCallback(
@@ -168,29 +196,20 @@ export default function NotificationsPopover({
       }
 
       if (link.startsWith("http://") || link.startsWith("https://")) {
-        if (!notification.dismissed) {
-          handleDismiss(notification.id);
+        if (getState(notification) === "new") {
+          void handleDismiss(notification);
         }
         window.open(link, "_blank", "noopener,noreferrer");
         return;
       }
 
-      if (!notification.dismissed) {
-        handleDismiss(notification.id);
+      if (getState(notification) === "new") {
+        void handleDismiss(notification);
       }
       onNavigate();
       router.push(link as Route);
     },
-    [handleDismiss, onNavigate, onShowBuildIntro, router]
-  );
-
-  const getState = useCallback(
-    (notification: NotificationData): NotificationState => {
-      if (sessionDismissedIds.has(notification.id) || notification.dismissed)
-        return "older";
-      return "new";
-    },
-    [sessionDismissedIds]
+    [getState, handleDismiss, onNavigate, onShowBuildIntro, router]
   );
 
   const newNotifications = useMemo(
@@ -205,10 +224,10 @@ export default function NotificationsPopover({
   const handleDismissAll = useCallback(async () => {
     try {
       await dismissAllNotifications();
-      setSessionDismissedIds((prev) => {
-        const next = new Set(prev);
+      setSessionDismissedVersionById((prev) => {
+        const next = new Map(prev);
         newNotifications.forEach((notification) => {
-          next.add(notification.id);
+          next.set(notification.id, notification.version);
         });
         return next;
       });
@@ -317,7 +336,7 @@ export default function NotificationsPopover({
                     notification={notification}
                     state="new"
                     onClick={() => handleNotificationClick(notification)}
-                    dismiss={() => handleDismiss(notification.id)}
+                    dismiss={() => void handleDismiss(notification)}
                   />
                 ))}
               </div>
@@ -334,7 +353,7 @@ export default function NotificationsPopover({
                     notification={notification}
                     state="older"
                     onClick={() => handleNotificationClick(notification)}
-                    dismiss={() => handleDismiss(notification.id)}
+                    dismiss={() => void handleDismiss(notification)}
                   />
                 ))}
               </div>

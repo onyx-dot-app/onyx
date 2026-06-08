@@ -11,10 +11,13 @@ async function handleNotificationMutation(
 }
 
 export async function dismissNotification(
-  notificationId: number
+  notificationId: number,
+  expectedVersion: string
 ): Promise<void> {
   const response = await fetch(`/api/notifications/${notificationId}/dismiss`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expected_version: expectedVersion }),
   });
   return handleNotificationMutation(response, "Failed to dismiss notification");
 }

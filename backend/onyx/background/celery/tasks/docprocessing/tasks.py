@@ -1031,6 +1031,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                             cc_pair_id=cc_pair.id,
                             status=ConnectorCredentialPairStatus.PAUSED,
                         )
+                    db_session.commit()
 
         # NOTE: At this point, we haven't done heavy checks on whether or not the CC pairs should actually be indexed
         # Heavy check, should_index(), is called in _kickoff_indexing_tasks

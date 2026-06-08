@@ -26,6 +26,7 @@ export interface Notification {
   dismissed: boolean;
   first_shown: string;
   last_shown: string;
+  version: string;
   additional_data?: {
     persona_id?: number;
     link?: string;

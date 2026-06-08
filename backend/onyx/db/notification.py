@@ -1,5 +1,7 @@
 from datetime import datetime
 from datetime import timezone
+from typing import Any
+from typing import cast as type_cast
 from uuid import UUID
 
 from sqlalchemy import cast
@@ -7,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.sql.elements import ColumnElement
@@ -38,39 +41,35 @@ def create_notification(
     db_session: Session,
     title: str,
     description: str | None = None,
-    additional_data: dict | None = None,
-    autocommit: bool = True,
-    refresh_existing: bool = True,
+    additional_data: dict[str, Any] | None = None,
 ) -> Notification:
-    # Previously, we only matched the first identical, undismissed notification
-    # Now, we assume some uniqueness to notifications
-    # If we previously issued a notification that was dismissed, we no longer issue a new one
+    """Create a notification if this user/type/data identity does not exist.
 
-    # Normalize additional_data to match the unique index behavior
-    # The index uses COALESCE(additional_data, '{}'::jsonb)
-    # We need to match this logic in our query
+    The identity matches ix_notification_user_type_data: user, type, and
+    additional_data with NULL treated as '{}'. Existing rows are returned
+    without mutation.
+    """
     additional_data_normalized = additional_data if additional_data is not None else {}
-
-    existing_notification = (
-        db_session.query(Notification)
-        .filter_by(user_id=user_id, notif_type=notif_type)
-        .filter(
-            func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
-            == additional_data_normalized
-        )
-        .first()
+    user_filter = (
+        Notification.user_id == user_id
+        if user_id is not None
+        else Notification.user_id.is_(None)
     )
 
-    if existing_notification:
-        # Read-triggered ensure paths should not mutate existing rows: changing
-        # last_shown makes notification GET responses differ on every request.
-        if refresh_existing and not existing_notification.dismissed:
-            existing_notification.last_shown = func.now()
-            if autocommit:
-                db_session.commit()
+    existing_notification = db_session.execute(
+        select(Notification)
+        .where(
+            user_filter,
+            Notification.notif_type == notif_type,
+            func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
+            == additional_data_normalized,
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+
+    if existing_notification is not None:
         return existing_notification
 
-    # Create a new notification if none exists
     notification = Notification(
         user_id=user_id,
         notif_type=notif_type,
@@ -82,8 +81,86 @@ def create_notification(
         additional_data=additional_data,
     )
     db_session.add(notification)
-    if autocommit:
-        db_session.commit()
+    return notification
+
+
+def create_or_resurface_notification(
+    user_id: UUID | None,
+    notif_type: NotificationType,
+    db_session: Session,
+    title: str,
+    description: str | None = None,
+    additional_data: dict[str, Any] | None = None,
+    identity_data: dict[str, Any] | None = None,
+) -> Notification:
+    """Create a notification or make an existing matching notification visible again.
+
+    `identity_data` is the stable lookup identity for a notification whose
+    display payload can change between events.
+    """
+    if identity_data is not None and (not identity_data or additional_data is None):
+        raise ValueError("identity_data requires non-empty additional_data")
+
+    if identity_data is None:
+        notification = create_notification(
+            user_id=user_id,
+            notif_type=notif_type,
+            db_session=db_session,
+            title=title,
+            description=description,
+            additional_data=additional_data,
+        )
+    else:
+        user_filter = (
+            Notification.user_id == user_id
+            if user_id is not None
+            else Notification.user_id.is_(None)
+        )
+
+        matching_notifications = db_session.scalars(
+            select(Notification)
+            .where(
+                user_filter,
+                Notification.notif_type == notif_type,
+                Notification.additional_data.contains(identity_data),
+            )
+            .order_by(Notification.first_shown.desc(), Notification.id.desc())
+        ).all()
+
+        if matching_notifications:
+            notification = next(
+                (
+                    matching_notification
+                    for matching_notification in matching_notifications
+                    if (matching_notification.additional_data or {})
+                    == (additional_data or {})
+                ),
+                matching_notifications[0],
+            )
+            for duplicate_notification in matching_notifications:
+                if duplicate_notification.id != notification.id:
+                    db_session.delete(duplicate_notification)
+            if len(matching_notifications) > 1:
+                db_session.flush()
+        else:
+            notification = create_notification(
+                user_id=user_id,
+                notif_type=notif_type,
+                db_session=db_session,
+                title=title,
+                description=description,
+                additional_data=additional_data,
+            )
+
+    was_dismissed = notification.dismissed
+    notification.title = title
+    notification.description = description
+    notification.additional_data = additional_data
+    notification.dismissed = False
+    shown_at = func.now()
+    if was_dismissed:
+        notification.first_shown = shown_at
+    notification.last_shown = shown_at
     return notification
 
 
@@ -151,9 +228,13 @@ def dismiss_all_notifications(
     notif_type: NotificationType,
     db_session: Session,
 ) -> None:
-    db_session.query(Notification).filter(Notification.notif_type == notif_type).update(
-        {"dismissed": True}
+    stmt = (
+        update(Notification)
+        .where(Notification.notif_type == notif_type)
+        .values(dismissed=True)
+        .execution_options(synchronize_session=False)
     )
+    db_session.execute(stmt)
     db_session.commit()
 
 
@@ -178,9 +259,22 @@ def dismiss_user_notifications(
     db_session.commit()
 
 
-def dismiss_notification(notification: Notification, db_session: Session) -> None:
-    notification.dismissed = True
+def dismiss_notification(
+    notification_id: int,
+    db_session: Session,
+    expected_version: datetime | None = None,
+) -> bool:
+    stmt = update(Notification).where(Notification.id == notification_id)
+    if expected_version is not None:
+        stmt = stmt.where(Notification.last_shown == expected_version)
+    result = type_cast(
+        CursorResult[Any],
+        db_session.execute(
+            stmt.values(dismissed=True).execution_options(synchronize_session=False)
+        ),
+    )
     db_session.commit()
+    return result.rowcount > 0
 
 
 def batch_dismiss_notifications(
@@ -198,7 +292,7 @@ def batch_create_notifications(
     db_session: Session,
     title: str,
     description: str | None = None,
-    additional_data: dict | None = None,
+    additional_data: dict[str, Any] | None = None,
 ) -> set[UUID]:
     """
     Create notifications for multiple users in a single batch operation.

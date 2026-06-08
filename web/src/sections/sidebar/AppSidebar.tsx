@@ -303,7 +303,10 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
   const dismissBuildModeNotification = useCallback(async () => {
     if (!buildModeNotification) return;
     try {
-      await dismissNotification(buildModeNotification.id);
+      await dismissNotification(
+        buildModeNotification.id,
+        buildModeNotification.version
+      );
       mutateNotifications();
     } catch (error) {
       console.error("Error dismissing notification:", error);

@@ -1,3 +1,6 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Query
@@ -15,6 +18,7 @@ from onyx.db.notification import get_notifications
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.utils import ensure_build_mode_intro_notification
+from onyx.server.features.notifications.models import DismissNotificationRequest
 from onyx.server.features.notifications.models import NotificationResponse
 from onyx.server.features.notifications.models import NotificationSummary
 from onyx.server.features.notifications.models import PaginatedNotifications
@@ -33,28 +37,40 @@ DEFAULT_NOTIFICATIONS_PAGE_SIZE = 10
 MAX_NOTIFICATIONS_PAGE_SIZE = 50
 
 
+@contextmanager
+def _notification_check_transaction(
+    error_message: str,
+    db_session: Session,
+) -> Iterator[None]:
+    try:
+        yield
+        db_session.commit()
+    except Exception:
+        db_session.rollback()
+        logger.exception(error_message)
+
+
 def _check_for_notifications_to_create(
     user: User,
     db_session: Session,
 ) -> None:
-    try:
+    with _notification_check_transaction(
+        "Failed to check for build mode intro in notifications endpoint",
+        db_session,
+    ):
         ensure_build_mode_intro_notification(user, db_session)
-    except Exception:
-        logger.exception(
-            "Failed to check for build mode intro in notifications endpoint"
-        )
 
-    try:
+    with _notification_check_transaction(
+        "Failed to create permissions_migration_v1 announcement in notifications endpoint",
+        db_session,
+    ):
         ensure_permissions_migration_notification(user, db_session)
-    except Exception:
-        logger.exception(
-            "Failed to create permissions_migration_v1 announcement in notifications endpoint"
-        )
 
-    try:
+    with _notification_check_transaction(
+        "Failed to check for release notes in notifications endpoint",
+        db_session,
+    ):
         ensure_release_notes_fresh_and_notify(db_session)
-    except Exception:
-        logger.exception("Failed to check for release notes in notifications endpoint")
 
 
 @router.get("")
@@ -133,6 +149,7 @@ def dismiss_all_notifications_endpoint(
 @router.post("/{notification_id}/dismiss")
 def dismiss_notification_endpoint(
     notification_id: int,
+    request: DismissNotificationRequest | None = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
@@ -149,4 +166,8 @@ def dismiss_notification_endpoint(
             "Notification not found",
         ) from e
 
-    dismiss_notification(notification, db_session)
+    dismiss_notification(
+        notification_id=notification.id,
+        db_session=db_session,
+        expected_version=request.expected_version if request else None,
+    )
