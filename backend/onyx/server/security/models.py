@@ -11,7 +11,12 @@ class SecuritySettingsOverrides(BaseModel):
     absent. extra="forbid" rejects unknown keys.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    # hide_input_in_errors: ValidationError.__str__ is surfaced to callers via
+    # the PUT handler's INVALID_INPUT envelope. The default Pydantic message
+    # includes the offending input_value, which would echo back any sensitive
+    # value an admin sends (today: low-risk bools/ints; future: any added
+    # secret-shaped field). Strip input from error messages so we never leak.
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     user_directory_admin_only: bool | None = None
     track_external_idp_expiry: bool | None = None
