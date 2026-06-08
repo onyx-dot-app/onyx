@@ -69,6 +69,7 @@ def _build_index_filters(
     if (
         base_filters.document_set is not None
         and not bypass_acl
+        and not user.is_anonymous
         and db_session is not None
     ):
         accessible_names = filter_document_set_names_by_user_access(
