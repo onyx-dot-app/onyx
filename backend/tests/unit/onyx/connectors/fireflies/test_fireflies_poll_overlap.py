@@ -22,7 +22,7 @@ def test_poll_source_subtracts_overlap_from_start() -> None:
     end = start + 3600
 
     with patch.object(
-        FirefliesConnector, "_process_transcripts", return_value=iter([])
+        FirefliesConnector, "_process_transcripts", side_effect=lambda *_: iter([])
     ) as mock_proc:
         list(connector.poll_source(start, end))
 
@@ -38,7 +38,7 @@ def test_poll_source_clamps_overlap_at_epoch() -> None:
     connector.load_credentials({"fireflies_api_key": "test-key"})
 
     with patch.object(
-        FirefliesConnector, "_process_transcripts", return_value=iter([])
+        FirefliesConnector, "_process_transcripts", side_effect=lambda *_: iter([])
     ) as mock_proc:
         list(connector.poll_source(100, 200))
 
