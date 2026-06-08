@@ -205,7 +205,8 @@ export default function AccountPopover({
   const { user } = useUser();
   const appFocus = useAppFocus();
   const vectorDbEnabled = useVectorDbEnabled();
-  const { undismissedCount } = useNotificationSummary();
+  const { undismissedCount, refresh: refreshNotificationSummary } =
+    useNotificationSummary();
   const userDisplayName = getUserDisplayName(user);
 
   const handlePopoverOpen = (state: boolean) => {
@@ -217,6 +218,7 @@ export default function AccountPopover({
         preload("/api/manage/connector-status", errorHandlingFetcher);
       }
       preload("/api/llm/provider", errorHandlingFetcher);
+      void refreshNotificationSummary();
       setPopupState("Settings");
     } else {
       setPopupState(undefined);

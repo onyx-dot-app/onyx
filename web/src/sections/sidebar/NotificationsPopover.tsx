@@ -109,7 +109,7 @@ export default function NotificationsPopover({
     notifications,
     undismissedCount,
     isLoading,
-    refresh: mutate,
+    refresh,
     hasMore,
     isLoadingMore,
     loadMore,
@@ -117,12 +117,17 @@ export default function NotificationsPopover({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreRef = useRef(loadMore);
+  const lastLoadScrollTopRef = useRef<number | null>(null);
   loadMoreRef.current = loadMore;
 
   // Track IDs dismissed during this session (before popover closes)
   const [sessionDismissedIds, setSessionDismissedIds] = useState<Set<number>>(
     new Set()
   );
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const handleDismiss = useCallback(
     async (notificationId: number) => {
@@ -137,13 +142,13 @@ export default function NotificationsPopover({
             next.add(notificationId);
             return next;
           });
-          mutate();
+          void refresh();
         }
       } catch (error) {
         console.error("Error dismissing notification:", error);
       }
     },
-    [mutate]
+    [refresh]
   );
 
   const handleNotificationClick = useCallback(
@@ -215,12 +220,12 @@ export default function NotificationsPopover({
           });
           return next;
         });
-        mutate();
+        void refresh();
       }
     } catch (error) {
       console.error("Error dismissing notifications:", error);
     }
-  }, [mutate, newNotifications]);
+  }, [refresh, newNotifications]);
 
   useEffect(() => {
     if (!hasMore || isLoadingMore) return;
@@ -228,11 +233,16 @@ export default function NotificationsPopover({
     const scrollContainer = scrollContainerRef.current;
     const sentinel = sentinelRef.current;
     if (!scrollContainer || !sentinel) return;
+    lastLoadScrollTopRef.current ??= Math.round(scrollContainer.scrollTop);
 
     let didRequestLoad = false;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting && !didRequestLoad) {
+          const currentScrollTop = Math.round(scrollContainer.scrollTop);
+          if (lastLoadScrollTopRef.current === currentScrollTop) return;
+
+          lastLoadScrollTopRef.current = currentScrollTop;
           didRequestLoad = true;
           observer.disconnect();
           loadMoreRef.current();
@@ -297,7 +307,7 @@ export default function NotificationsPopover({
       ) : (
         <div
           ref={scrollContainerRef}
-          className="h-(--notifications-popover) w-full min-w-0 overflow-y-auto [scrollbar-gutter:stable] flex flex-col gap-1"
+          className="h-(--notifications-popover) w-full min-w-0 overflow-y-auto [overflow-anchor:none] [scrollbar-gutter:stable] flex flex-col gap-1"
         >
           {newNotifications.length > 0 && (
             <>

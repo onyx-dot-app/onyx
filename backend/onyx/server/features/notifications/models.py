@@ -6,7 +6,7 @@ from pydantic import ConfigDict
 from onyx.configs.constants import NotificationType
 
 
-class Notification(BaseModel):
+class NotificationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -20,9 +20,14 @@ class Notification(BaseModel):
 
 
 class PaginatedNotifications(BaseModel):
-    notifications: list[Notification]
+    notifications: list[NotificationResponse]
     total_items: int
     undismissed_count: int
     page_num: int
     page_size: int
     has_more: bool
+
+
+class NotificationSummary(BaseModel):
+    total_items: int
+    undismissed_count: int

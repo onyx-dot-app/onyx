@@ -31,7 +31,7 @@ export interface Notification {
     link?: string;
     version?: string; // For release notes notifications
     [key: string]: any;
-  };
+  } | null;
 }
 
 export interface NotificationsResponse {
@@ -41,4 +41,9 @@ export interface NotificationsResponse {
   page_num: number;
   page_size: number;
   has_more: boolean;
+}
+
+export interface NotificationSummary {
+  total_items: number;
+  undismissed_count: number;
 }

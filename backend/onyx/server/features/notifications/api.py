@@ -16,7 +16,8 @@ from onyx.db.notification import get_notifications
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.utils import ensure_build_mode_intro_notification
-from onyx.server.features.notifications.models import Notification as NotificationModel
+from onyx.server.features.notifications.models import NotificationResponse
+from onyx.server.features.notifications.models import NotificationSummary
 from onyx.server.features.notifications.models import PaginatedNotifications
 from onyx.server.features.notifications.utils import (
     ensure_permissions_migration_notification,
@@ -31,6 +32,44 @@ router = APIRouter(prefix="/notifications")
 
 DEFAULT_NOTIFICATIONS_PAGE_SIZE = 10
 MAX_NOTIFICATIONS_PAGE_SIZE = 50
+
+
+def _should_run_notification_check(
+    requested_notif_type: NotificationType | None,
+    check_notif_type: NotificationType,
+) -> bool:
+    return requested_notif_type is None or requested_notif_type == check_notif_type
+
+
+def _ensure_notifications_for_type(
+    user: User,
+    db_session: Session,
+    notif_type: NotificationType | None,
+) -> None:
+    if _should_run_notification_check(
+        notif_type, NotificationType.FEATURE_ANNOUNCEMENT
+    ):
+        try:
+            ensure_build_mode_intro_notification(user, db_session)
+        except Exception:
+            logger.exception(
+                "Failed to check for build mode intro in notifications endpoint"
+            )
+
+        try:
+            ensure_permissions_migration_notification(user, db_session)
+        except Exception:
+            logger.exception(
+                "Failed to create permissions_migration_v1 announcement in notifications endpoint"
+            )
+
+    if _should_run_notification_check(notif_type, NotificationType.RELEASE_NOTES):
+        try:
+            ensure_release_notes_fresh_and_notify(db_session)
+        except Exception:
+            logger.exception(
+                "Failed to check for release notes in notifications endpoint"
+            )
 
 
 @router.get("")
@@ -54,27 +93,7 @@ def get_notifications_api(
     - Explicitly announcing breaking changes
     """
     if page_num == 0:
-        # Background checks that create notifications
-        try:
-            ensure_build_mode_intro_notification(user, db_session)
-        except Exception:
-            logger.exception(
-                "Failed to check for build mode intro in notifications endpoint"
-            )
-
-        try:
-            ensure_release_notes_fresh_and_notify(db_session)
-        except Exception:
-            logger.exception(
-                "Failed to check for release notes in notifications endpoint"
-            )
-
-        try:
-            ensure_permissions_migration_notification(user, db_session)
-        except Exception:
-            logger.exception(
-                "Failed to create permissions_migration_v1 announcement in notifications endpoint"
-            )
+        _ensure_notifications_for_type(user, db_session, notif_type)
 
     total_items, undismissed_count = count_notifications(
         user=user,
@@ -83,7 +102,7 @@ def get_notifications_api(
     )
     offset = page_num * page_size
     notifications = [
-        NotificationModel.model_validate(notif)
+        NotificationResponse.model_validate(notif)
         for notif in get_notifications(
             user=user,
             db_session=db_session,
@@ -100,6 +119,24 @@ def get_notifications_api(
         page_num=page_num,
         page_size=page_size,
         has_more=offset + page_size < total_items,
+    )
+
+
+@router.get("/summary")
+def get_notifications_summary_api(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> NotificationSummary:
+    # Preserve badge behavior from the old mounted list hook: notifications that
+    # are lazily created on read should exist before we compute unread counts.
+    _ensure_notifications_for_type(user, db_session, notif_type=None)
+    total_items, undismissed_count = count_notifications(
+        user=user,
+        db_session=db_session,
+    )
+    return NotificationSummary(
+        total_items=total_items,
+        undismissed_count=undismissed_count,
     )
 
 

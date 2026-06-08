@@ -8,11 +8,12 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   NotificationType,
   Notification,
+  NotificationSummary,
   NotificationsResponse,
 } from "@/lib/notifications/interfaces";
 
 const DEFAULT_NOTIFICATIONS_PAGE_SIZE = 25;
-const NOTIFICATIONS_SUMMARY_PAGE_SIZE = 1;
+const NOTIFICATIONS_SUMMARY_URL = `${SWR_KEYS.notifications}/summary`;
 
 function buildNotificationsUrl({
   pageNum,
@@ -40,16 +41,11 @@ interface UseNotificationsOptions {
 }
 
 export function useNotificationSummary() {
-  const summaryKey = buildNotificationsUrl({
-    pageNum: 0,
-    pageSize: NOTIFICATIONS_SUMMARY_PAGE_SIZE,
-  });
-  const { data, error, isLoading, mutate } = useSWR<NotificationsResponse>(
-    summaryKey,
+  const { data, error, isLoading, mutate } = useSWR<NotificationSummary>(
+    NOTIFICATIONS_SUMMARY_URL,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
-      revalidateIfStale: false,
       dedupingInterval: 30000,
     }
   );
@@ -66,8 +62,7 @@ export function useNotificationSummary() {
 /**
  * Fetches the current user's notifications.
  *
- * The GET endpoint also triggers a server-side refresh if release notes
- * are stale, so simply mounting this hook keeps notifications up to date.
+ * The first page can also trigger server-side checks that create notifications.
  *
  * @returns Object containing:
  *   - notifications: Array of Notification objects (empty array while loading)
@@ -86,6 +81,15 @@ export default function useNotifications({
   enabled = true,
 }: UseNotificationsOptions = {}) {
   const { mutate: mutateGlobal } = useSWRConfig();
+  const firstPageKey = useMemo(
+    () =>
+      buildNotificationsUrl({
+        pageNum: 0,
+        pageSize,
+        notificationType,
+      }),
+    [notificationType, pageSize]
+  );
   const getKey = useCallback(
     (
       pageIndex: number,
@@ -94,28 +98,39 @@ export default function useNotifications({
       if (!enabled) return null;
       if (previousPageData && !previousPageData.has_more) return null;
 
+      if (pageIndex === 0) return firstPageKey;
+
       return buildNotificationsUrl({
         pageNum: pageIndex,
         pageSize,
         notificationType,
       });
     },
-    [enabled, notificationType, pageSize]
+    [enabled, firstPageKey, notificationType, pageSize]
   );
 
   const { data, error, mutate, setSize } =
     useSWRInfinite<NotificationsResponse>(getKey, errorHandlingFetcher, {
       revalidateOnFocus: false,
-      revalidateIfStale: false,
       revalidateFirstPage: false,
       revalidateAll: false,
       dedupingInterval: 30000,
     });
 
-  const notifications = useMemo<Notification[]>(
-    () => (data ? data.flatMap((page) => page.notifications) : []),
-    [data]
-  );
+  const notifications = useMemo<Notification[]>(() => {
+    if (!data) return [];
+
+    const seenNotificationIds = new Set<number>();
+    return data.flatMap((page) =>
+      page.notifications.filter((notification) => {
+        if (seenNotificationIds.has(notification.id)) {
+          return false;
+        }
+        seenNotificationIds.add(notification.id);
+        return true;
+      })
+    );
+  }, [data]);
   const firstPage = data?.[0];
   const lastPage = data?.[data.length - 1];
   const undismissedCount = firstPage?.undismissed_count ?? 0;
@@ -163,20 +178,19 @@ export default function useNotifications({
   }, [setSize]);
 
   const refresh = useCallback(() => {
-    mutateGlobal(
-      buildNotificationsUrl({
-        pageNum: 0,
-        pageSize: NOTIFICATIONS_SUMMARY_PAGE_SIZE,
-      })
-    );
-    return mutate();
-  }, [mutate, mutateGlobal]);
+    mutateGlobal(NOTIFICATIONS_SUMMARY_URL);
+    if (!enabled) return Promise.resolve(undefined);
+
+    return mutate(undefined, {
+      revalidate: (_pageData, pageArg) => pageArg === firstPageKey,
+    });
+  }, [enabled, firstPageKey, mutate, mutateGlobal]);
 
   return {
     notifications,
     undismissedCount,
     totalItems,
-    isLoading: !error && !data,
+    isLoading: enabled && !error && !data,
     error,
     refresh,
     hasMore,

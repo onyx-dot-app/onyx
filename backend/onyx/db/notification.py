@@ -121,6 +121,7 @@ def get_notifications(
     query = query.order_by(
         Notification.dismissed.asc(),
         Notification.first_shown.desc(),
+        Notification.id.desc(),
     )
     if limit is not None:
         query = query.limit(limit).offset(offset)
