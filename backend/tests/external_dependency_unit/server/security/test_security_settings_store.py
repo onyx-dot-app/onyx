@@ -185,3 +185,68 @@ def test_kv_error_falls_back_to_env_defaults() -> None:
         invalidate_security_cache(TEST_TENANT_ID)
         effective = get_security_settings()
         assert effective == _build_env_defaults()
+
+
+# -----------------------------------------------------------------------------
+# Stored-blob drift resilience: schema-evolution must not silently fail-open.
+# -----------------------------------------------------------------------------
+
+
+def test_load_raw_overrides_drops_unknown_keys_keeps_known() -> None:
+    """A field rename or removal in a future PR must NOT cause every tenant's
+    overrides to vanish into env defaults. Unknown keys are ignored; known
+    overrides are preserved."""
+    # Simulate a blob written by a future version with a since-removed key.
+    get_kv_store().store(
+        KV_SECURITY_SETTINGS_KEY,
+        {
+            "user_directory_admin_only": True,
+            "valid_email_domains": ["acme.com"],
+            "definitely_not_a_real_field": "future-or-renamed",
+        },
+    )
+    invalidate_security_cache(TEST_TENANT_ID)
+
+    effective = get_security_settings()
+    # The two real overrides survive.
+    assert effective.user_directory_admin_only is True
+    assert effective.valid_email_domains == ("acme.com",)
+    # All other fields still come from env.
+    env = _build_env_defaults()
+    assert effective.password_min_length == env.password_min_length
+    assert effective.track_external_idp_expiry == env.track_external_idp_expiry
+
+
+def test_load_raw_overrides_salvages_around_single_bad_value() -> None:
+    """One corrupted field must drop only that field, not nuke the entire
+    blob to env defaults. Before this guard, a botched manual write to a
+    single key would silently weaken every other security knob."""
+    get_kv_store().store(
+        KV_SECURITY_SETTINGS_KEY,
+        {
+            "user_directory_admin_only": True,
+            # Wrong type — int field given a non-numeric string.
+            "password_min_length": "not-a-number",
+            "track_external_idp_expiry": True,
+        },
+    )
+    invalidate_security_cache(TEST_TENANT_ID)
+
+    effective = get_security_settings()
+    env = _build_env_defaults()
+    # Good fields survive.
+    assert effective.user_directory_admin_only is True
+    assert effective.track_external_idp_expiry is True
+    # Bad field falls through to env, NOT to "all defaults".
+    assert effective.password_min_length == env.password_min_length
+
+
+def test_load_raw_overrides_handles_non_dict_blob() -> None:
+    """A KV blob that somehow ends up non-dict-shaped must fall back to env
+    defaults rather than raise — defends against pre-schema-migration data
+    or a botched manual KV write."""
+    get_kv_store().store(KV_SECURITY_SETTINGS_KEY, ["not", "a", "dict"])  # type: ignore[arg-type]
+    invalidate_security_cache(TEST_TENANT_ID)
+
+    effective = get_security_settings()
+    assert effective == _build_env_defaults()

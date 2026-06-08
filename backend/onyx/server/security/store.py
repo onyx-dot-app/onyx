@@ -150,19 +150,57 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
 def load_raw_overrides() -> SecuritySettingsOverrides:
     """Uncached read of the raw KV blob. Used by the PUT path inside the
     Redis lock; everyone else should use get_security_settings().
+
+    Lenient on read, strict on write: PUT bodies use extra="forbid" to catch
+    admin typos, but stored blobs tolerate field-set drift so a future
+    rename/removal doesn't silently revert EVERY tenant to env defaults.
+    On a single bad-typed value we drop only that field, not the whole blob.
     """
     kv = get_kv_store()
     try:
         stored = kv.load(KV_SECURITY_SETTINGS_KEY)
     except KvKeyNotFoundError:
         return SecuritySettingsOverrides()
-    if not stored:
+    if not stored or not isinstance(stored, dict):
         return SecuritySettingsOverrides()
+
+    known_fields = set(SecuritySettingsOverrides.model_fields)
+    filtered: dict[str, Any] = {k: v for k, v in stored.items() if k in known_fields}
+    dropped_keys = sorted(set(stored) - known_fields)
+    if dropped_keys:
+        logger.warning(
+            "Ignoring unknown key(s) in stored security overrides: %s",
+            dropped_keys,
+        )
+
     try:
-        return SecuritySettingsOverrides.model_validate(stored)
-    except Exception as e:
-        logger.error("Invalid security overrides blob in KV: %s", e)
-        return SecuritySettingsOverrides()
+        return SecuritySettingsOverrides.model_validate(filtered)
+    except Exception:
+        # Field-by-field salvage: a single bad value must not drop every other
+        # knob to env defaults. Try each field independently and keep whatever
+        # parses. Log loudly so ops actually notices corruption.
+        salvaged: dict[str, Any] = {}
+        invalid_keys: list[str] = []
+        for k, v in filtered.items():
+            try:
+                SecuritySettingsOverrides.model_validate({k: v})
+            except Exception:
+                invalid_keys.append(k)
+                continue
+            salvaged[k] = v
+        logger.exception(
+            "Invalid security overrides blob in KV; dropped key(s): %s",
+            sorted(invalid_keys),
+        )
+        try:
+            return SecuritySettingsOverrides.model_validate(salvaged)
+        except Exception:
+            # Defensive: if a future cross-field validator rejects the
+            # salvaged set, fall back to env defaults rather than 500.
+            logger.exception(
+                "Salvaged security overrides still invalid; using env defaults",
+            )
+            return SecuritySettingsOverrides()
 
 
 def store_overrides(overrides: SecuritySettingsOverrides) -> None:
