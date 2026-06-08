@@ -213,6 +213,7 @@ class _ServeMixin:
         self,
         sandbox_id: UUID,
         session_id: UUID,
+        opencode_session_id: str | None = None,
     ) -> str | None:
         """Idempotent preflight to mint (or look up) the opencode-serve
         session id for this build session. Caller persists it so later
@@ -220,14 +221,15 @@ class _ServeMixin:
         session_path = self._session_directory(session_id)
         logger.info(
             "[SESSION-LIFECYCLE] sandbox.ensure_opencode_session: build_session=%s "
-            "sandbox=%s directory=%s (passing id=None, so client will POST /session)",
+            "sandbox=%s directory=%s caller-supplied opencode_session_id=%s",
             session_id,
             sandbox_id,
             session_path,
+            opencode_session_id,
         )
         with self._build_serve_client(sandbox_id, session_path) as client:
             return client.ensure_session(
-                None,
+                opencode_session_id,
                 directory=session_path,
                 title=f"build-session-{str(session_id)[:8]}",
             )
