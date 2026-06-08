@@ -79,6 +79,7 @@ import { usePostHog } from "posthog-js/react";
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import { motion, AnimatePresence } from "motion/react";
 import { NotificationType } from "@/lib/notifications/interfaces";
+import { dismissNotification } from "@/lib/notifications/api";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -303,9 +304,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
   const dismissBuildModeNotification = useCallback(async () => {
     if (!buildModeNotification) return;
     try {
-      await fetch(`/api/notifications/${buildModeNotification.id}/dismiss`, {
-        method: "POST",
-      });
+      await dismissNotification(buildModeNotification.id);
       mutateNotifications();
     } catch (error) {
       console.error("Error dismissing notification:", error);

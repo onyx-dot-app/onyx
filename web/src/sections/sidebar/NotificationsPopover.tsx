@@ -7,6 +7,10 @@ import { track, AnalyticsEvent } from "@/lib/analytics";
 import type { Notification as NotificationData } from "@/lib/notifications/interfaces";
 import { NotificationType } from "@/lib/notifications/interfaces";
 import { getNotificationIcon } from "@/lib/notifications";
+import {
+  dismissAllNotifications,
+  dismissNotification,
+} from "@/lib/notifications/api";
 import { timeAgo } from "@opal/time";
 import useNotifications from "@/hooks/useNotifications";
 import {
@@ -128,18 +132,13 @@ export default function NotificationsPopover({
   const handleDismiss = useCallback(
     async (notificationId: number) => {
       try {
-        const response = await fetch(
-          `/api/notifications/${notificationId}/dismiss`,
-          { method: "POST" }
-        );
-        if (response.ok) {
-          setSessionDismissedIds((prev) => {
-            const next = new Set(prev);
-            next.add(notificationId);
-            return next;
-          });
-          void refresh();
-        }
+        await dismissNotification(notificationId);
+        setSessionDismissedIds((prev) => {
+          const next = new Set(prev);
+          next.add(notificationId);
+          return next;
+        });
+        void refresh();
       } catch (error) {
         console.error("Error dismissing notification:", error);
       }
@@ -205,19 +204,15 @@ export default function NotificationsPopover({
 
   const handleDismissAll = useCallback(async () => {
     try {
-      const response = await fetch("/api/notifications/dismiss-all", {
-        method: "POST",
-      });
-      if (response.ok) {
-        setSessionDismissedIds((prev) => {
-          const next = new Set(prev);
-          newNotifications.forEach((notification) => {
-            next.add(notification.id);
-          });
-          return next;
+      await dismissAllNotifications();
+      setSessionDismissedIds((prev) => {
+        const next = new Set(prev);
+        newNotifications.forEach((notification) => {
+          next.add(notification.id);
         });
-        void refresh();
-      }
+        return next;
+      });
+      void refresh();
     } catch (error) {
       console.error("Error dismissing notifications:", error);
     }
