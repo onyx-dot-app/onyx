@@ -21,6 +21,12 @@ from onyx.db.enums import PortAttemptStatus
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import PortAttempt
+from onyx.db.port_attempt import commit_port_cursor
+from onyx.db.port_attempt import create_port_attempt
+from onyx.db.port_attempt import get_active_port_attempt
+from onyx.db.port_attempt import mark_port_failed
+from onyx.db.port_attempt import mark_port_in_progress
+from onyx.db.port_attempt import mark_port_succeeded
 from onyx.db.search_settings import get_current_search_settings
 from onyx.kg.models import KGStage
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
@@ -133,3 +139,65 @@ def test_mark_secondary_pending_raises_on_missing_document(
 ) -> None:
     with pytest.raises(ValueError):
         mark_document_synced_secondary_pending("does-not-exist", db_session)
+
+
+def test_port_attempt_lifecycle_helpers(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """create -> in_progress -> cursor commit -> success; get_active tracks the
+    active attempt and stops returning it once the attempt is terminal."""
+    ss = get_current_search_settings(db_session)
+
+    attempt = create_port_attempt(db_session, cc_pair.id, ss.id, celery_task_id="t-1")
+    attempt_id = attempt.id
+    assert attempt.status == PortAttemptStatus.NOT_STARTED
+    assert get_active_port_attempt(db_session, cc_pair.id, ss.id) is not None
+
+    mark_port_in_progress(db_session, attempt_id, celery_task_id="t-1")
+    commit_port_cursor(
+        db_session, attempt_id, last_processed_doc_id="doc-50", docs_ported=50
+    )
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt_id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.IN_PROGRESS
+    assert row.last_processed_doc_id == "doc-50"
+    assert row.docs_ported == 50
+    assert row.time_started is not None and row.last_progress_time is not None
+
+    # a second cursor commit advances the (absolute) cumulative counter
+    commit_port_cursor(
+        db_session, attempt_id, last_processed_doc_id="doc-80", docs_ported=80
+    )
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt_id)
+    assert row is not None
+    assert row.last_processed_doc_id == "doc-80" and row.docs_ported == 80
+
+    mark_port_succeeded(db_session, attempt_id)
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt_id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.SUCCESS
+    assert row.time_completed is not None
+    # terminal attempts are no longer "active"
+    assert get_active_port_attempt(db_session, cc_pair.id, ss.id) is None
+
+
+def test_port_attempt_terminal_is_first_write_wins(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """A terminal attempt ignores later transitions, so a late task SUCCESS can't
+    clobber a watchdog FAILED (the row lock makes this deterministic)."""
+    ss = get_current_search_settings(db_session)
+    attempt = create_port_attempt(db_session, cc_pair.id, ss.id)
+    mark_port_in_progress(db_session, attempt.id)
+
+    mark_port_failed(db_session, attempt.id, error_msg="stalled")
+    mark_port_succeeded(db_session, attempt.id)  # no-op: already terminal
+
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt.id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.FAILED
+    assert row.error_msg == "stalled"

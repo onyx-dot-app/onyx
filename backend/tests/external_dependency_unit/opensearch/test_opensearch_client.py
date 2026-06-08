@@ -2533,3 +2533,177 @@ class TestSearchFailureMetrics:
         assert recorded_search_type == OpenSearchSearchType.KEYWORD
         assert isinstance(recorded_exc, OpenSearchServerSideTimeout)
         assert observe_mock.call_count == 0
+
+    @staticmethod
+    def _index_pit_scan_chunks(
+        client: OpenSearchIndexClient,
+        tenant_state: TenantState,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> tuple[list[str], set[tuple[str, int]]]:
+        """Index 3 docs x 5 regular chunks plus one large chunk (which the scan
+        must exclude). Returns (doc_ids, expected regular (doc_id, chunk_index))."""
+        _patch_global_tenant_state(monkeypatch, False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=False
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        client.create_index(mappings=mappings, settings=settings)
+
+        doc_ids = ["doc-a", "doc-b", "doc-c"]
+        regular = [
+            _create_test_document_chunk(
+                document_id=doc_id,
+                chunk_index=ci,
+                content=f"{doc_id}-{ci}",
+                tenant_state=tenant_state,
+            )
+            for doc_id in doc_ids
+            for ci in range(5)
+        ]
+        expected = {(doc_id, ci) for doc_id in doc_ids for ci in range(5)}
+        # A large chunk (max_chunk_size != 512) shares doc-a/chunk 0 but gets a
+        # distinct _id; the max_chunk_size filter must keep it out of the scan.
+        large = _create_test_document_chunk(
+            document_id="doc-a",
+            chunk_index=0,
+            content="large",
+            tenant_state=tenant_state,
+        ).model_copy(update={"max_chunk_size": 1024})
+        client.bulk_index_documents(
+            documents=regular + [large], tenant_state=tenant_state
+        )
+        client.refresh_index()
+        return doc_ids, expected
+
+    def test_pit_scan_full_coverage_and_order(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Paging the PIT scan covers every regular chunk exactly once, in
+        (document_id, chunk_index) order, excluding the large chunk."""
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        doc_ids, expected = self._index_pit_scan_chunks(
+            test_client, tenant_state, monkeypatch
+        )
+
+        pit_id = test_client.open_pit()
+        seen: list[tuple[str, int]] = []
+        search_after: list[object] | None = None
+        while True:
+            chunks, search_after, pit_id = test_client.fetch_chunks_for_doc_ids(
+                pit_id, doc_ids, search_after=search_after, page_size=4
+            )
+            seen.extend((c.document_id, c.chunk_index) for c in chunks)
+            if search_after is None:
+                break
+        test_client.close_pit(pit_id)
+
+        assert sorted(seen) == sorted(expected)  # every regular chunk, large excluded
+        assert len(seen) == len(expected)  # exactly once, no dupes
+        assert seen == sorted(seen)  # globally non-decreasing order
+
+    def test_pit_scan_reopens_on_expiry(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A PIT deleted mid-scan is transparently re-opened; the scan resumes
+        from the same cursor and still yields full coverage."""
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        doc_ids, expected = self._index_pit_scan_chunks(
+            test_client, tenant_state, monkeypatch
+        )
+
+        stale_pit = test_client.open_pit()
+        chunks, search_after, stale_pit = test_client.fetch_chunks_for_doc_ids(
+            stale_pit, doc_ids, page_size=4
+        )
+        seen: list[tuple[str, int]] = [(c.document_id, c.chunk_index) for c in chunks]
+        assert search_after is not None
+
+        # Force expiry: delete the PIT out from under the scan.
+        test_client.close_pit(stale_pit)
+
+        pit_id = stale_pit
+        while True:
+            chunks, search_after, pit_id = test_client.fetch_chunks_for_doc_ids(
+                pit_id, doc_ids, search_after=search_after, page_size=4
+            )
+            seen.extend((c.document_id, c.chunk_index) for c in chunks)
+            if search_after is None:
+                break
+        test_client.close_pit(pit_id)
+
+        assert pit_id != stale_pit  # transparently re-opened
+        assert sorted(seen) == sorted(expected)  # full coverage across the re-open
+
+    def test_pit_scan_iterator_owns_lifecycle(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """iter_chunks_for_doc_ids yields full coverage and closes its PIT once."""
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        doc_ids, expected = self._index_pit_scan_chunks(
+            test_client, tenant_state, monkeypatch
+        )
+
+        closed: list[str] = []
+        original_close = test_client.close_pit
+
+        def _spy_close(pit_id: str) -> None:
+            closed.append(pit_id)
+            original_close(pit_id)
+
+        monkeypatch.setattr(test_client, "close_pit", _spy_close)
+
+        seen = [
+            (c.document_id, c.chunk_index)
+            for page in test_client.iter_chunks_for_doc_ids(doc_ids, page_size=4)
+            for c in page
+        ]
+
+        assert sorted(seen) == sorted(expected)
+        assert seen == sorted(seen)
+        assert len(closed) == 1  # PIT closed exactly once by the iterator
+
+    def test_pit_scan_retries_reopen_once_then_raises(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A persistently-expiring PIT is retried once (re-open) then the error
+        propagates — no infinite loop."""
+        _patch_global_tenant_state(monkeypatch, False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=False
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+        pit_id = test_client.open_pit()
+
+        expired = NotFoundError(
+            404,
+            "search_phase_execution_exception",
+            {"error": {"root_cause": [{"type": "search_context_missing_exception"}]}},
+        )
+        mock_search = MagicMock(side_effect=expired)
+        monkeypatch.setattr(test_client._client, "search", mock_search)
+
+        with pytest.raises(NotFoundError):
+            test_client.fetch_chunks_for_doc_ids(pit_id, ["doc-a"], page_size=4)
+        assert mock_search.call_count == 2  # original attempt + one reopened retry
+
+    def test_pit_scan_raises_on_server_timeout(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A server-side timeout must raise, not be read as a short (final) page."""
+        _patch_global_tenant_state(monkeypatch, False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=False
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+        pit_id = test_client.open_pit()
+
+        monkeypatch.setattr(
+            test_client._client,
+            "search",
+            MagicMock(return_value={"timed_out": True, "hits": {"hits": []}}),
+        )
+
+        with pytest.raises(OpenSearchServerSideTimeout):
+            test_client.fetch_chunks_for_doc_ids(pit_id, ["doc-a"], page_size=4)
