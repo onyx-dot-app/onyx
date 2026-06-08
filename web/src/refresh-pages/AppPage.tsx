@@ -148,6 +148,17 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // settings are passed in via Context and therefore aren't
   // available in server-side components
   const settings = useSettingsContext();
+
+  useEffect(() => {
+    const appName = settings.enterpriseSettings?.application_name || "Onyx";
+    document.title = currentChatSession?.name
+      ? `${currentChatSession.name} — ${appName}`
+      : appName;
+    return () => {
+      document.title = appName;
+    };
+  }, [currentChatSession?.name, settings.enterpriseSettings?.application_name]);
+
   const vectorDbEnabled = useVectorDbEnabled();
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { tags } = useTags();
