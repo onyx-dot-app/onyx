@@ -16,6 +16,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.teams.models import Message
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
@@ -32,17 +33,16 @@ GRAPH_API_RETRYABLE_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 50
 
 
 def _backoff_seconds(attempt: int, retry_after: str | None) -> float:
-    """Honor a numeric ``Retry-After`` header when the server provides one,
-    otherwise capped exponential backoff (5s, 10s, 20s, capped at 30s) with
-    equal jitter so many concurrent failures don't all retry on the same tick.
+    """Honor a server-provided ``Retry-After`` header (numeric seconds or
+    HTTP-date) when present, otherwise capped exponential backoff (5s, 10s,
+    20s, capped at 30s) with equal jitter so many concurrent failures don't all
+    retry on the same tick.
 
     ``attempt`` is 0-indexed (0 for the first retry).
     """
-    if retry_after:
-        try:
-            return float(retry_after)
-        except ValueError:
-            pass
+    parsed = parse_retry_after_seconds(retry_after)
+    if parsed is not None:
+        return parsed
     base = min(30, (2**attempt) * 5)
     return base / 2 + random.uniform(0, base / 2)
 

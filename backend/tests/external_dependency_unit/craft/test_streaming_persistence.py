@@ -205,7 +205,7 @@ class TestStreamingPersistence:
         assert messages[3].type == MessageType.ASSISTANT
         assert messages[3].message_metadata["content"]["text"] == "Done with tool."
 
-    def test_agent_thought_chunks_persist_as_single_thought_row(
+    def test_agent_thought_chunks_persist_as_single_collapsed_row(
         self,
         db_session: Session,
         test_user: User,
@@ -215,7 +215,7 @@ class TestStreamingPersistence:
         stub_sandbox_manager: StubSandboxManager,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
-        """3 thought chunks → 1 ``agent_thought`` row with concatenated text."""
+        """3 thought chunks stream live, then persist as one ``agent_thought`` row."""
         sandbox(user=test_user)
         stub_sandbox_manager.send_message_events = [
             _thought_chunk("Hmm, "),

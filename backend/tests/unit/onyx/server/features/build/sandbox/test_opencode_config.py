@@ -41,9 +41,23 @@ def test_single_provider_renders_all_required_fields() -> None:
     assert config["enabled_providers"] == ["anthropic"]
     assert config["provider"]["anthropic"]["options"]["apiKey"] == "sk-test"
     # opus-4-7 is in _ADAPTIVE_THINKING_MODELS, so adaptive thinking.
+    # Anthropic defaults adaptive thinking display to "omitted"; explicit
+    # summarized display is required for Craft to receive readable thought text.
     assert config["provider"]["anthropic"]["models"]["claude-opus-4-7"]["options"][
         "thinking"
-    ] == {"type": "adaptive"}
+    ] == {"type": "adaptive", "display": "summarized"}
+
+
+def test_adaptive_anthropic_models_request_readable_thinking_summaries() -> None:
+    config = build_multi_provider_opencode_config(
+        providers=[_cfg("anthropic", "claude-opus-4-8")],
+        default_provider="anthropic",
+        default_model="claude-opus-4-8",
+    )
+
+    assert config["provider"]["anthropic"]["models"]["claude-opus-4-8"]["options"][
+        "thinking"
+    ] == {"type": "adaptive", "display": "summarized"}
 
 
 def test_multi_provider_each_gets_its_own_block() -> None:

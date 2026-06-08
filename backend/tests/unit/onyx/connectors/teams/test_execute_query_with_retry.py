@@ -121,7 +121,13 @@ def test_backoff_falls_back_to_capped_jittered_exponential() -> None:
         assert base / 2 <= delay <= base
 
 
-def test_backoff_ignores_non_numeric_retry_after() -> None:
-    # HTTP-date Retry-After values fall through to jittered exponential backoff.
-    delay = _backoff_seconds(attempt=0, retry_after="Wed, 21 Oct 2026 07:28:00 GMT")
+def test_backoff_honors_http_date_retry_after() -> None:
+    # An already-elapsed HTTP-date Retry-After is honored verbatim (0s wait),
+    # not treated as unparseable.
+    assert _backoff_seconds(attempt=0, retry_after="Wed, 21 Oct 2015 07:28:00 GMT") == 0
+
+
+def test_backoff_ignores_unparseable_retry_after() -> None:
+    # Genuinely unparseable values fall through to jittered exponential backoff.
+    delay = _backoff_seconds(attempt=0, retry_after="not-a-date")
     assert 2.5 <= delay <= 5

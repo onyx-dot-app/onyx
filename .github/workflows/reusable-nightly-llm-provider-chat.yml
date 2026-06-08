@@ -58,35 +58,6 @@ permissions:
   id-token: write
 
 jobs:
-  build-backend-image:
-    runs-on:
-      [
-        runs-on,
-        runner=1cpu-linux-arm64,
-        "run-id=${{ github.run_id }}-build-backend-image",
-        "extras=ecr-cache",
-      ]
-    timeout-minutes: 45
-    environment: ci-protected
-    steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
-
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Build backend image
-        uses: ./.github/actions/build-backend-image
-        with:
-          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
-          ref-name: ${{ github.ref_name }}
-          pr-number: ${{ github.event.pull_request.number }}
-          github-sha: ${{ github.sha }}
-          run-id: ${{ github.run_id }}
-          ecr-registry: ${{ vars.ECR_REGISTRY }}
-          docker-no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' && 'true' || 'false' }}
-
   build-model-server-image:
     runs-on:
       [
@@ -146,7 +117,6 @@ jobs:
   provider-chat-test:
     needs:
       [
-        build-backend-image,
         build-model-server-image,
         build-devcontainer-image,
       ]
@@ -339,6 +309,10 @@ jobs:
           cd deployment/docker_compose
           docker compose logs --no-color api_server > $GITHUB_WORKSPACE/api_server.log || true
 
+      # The api_server runs in-process inside pytest via FastAPI TestClient, so its
+      # logs are captured directly in the test-runner stdout (the workflow log for
+      # the "Run nightly provider chat test" step) — only the supporting containers
+      # need a separate dump here.
       - name: Dump all-container logs
         if: always()
         run: |
@@ -351,7 +325,6 @@ jobs:
         with:
           name: docker-all-logs-nightly-${{ matrix.provider }}-llm-provider
           path: |
-            ${{ github.workspace }}/api_server.log
             ${{ github.workspace }}/docker-compose.log
 
       - name: Stop Docker containers

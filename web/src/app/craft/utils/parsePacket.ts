@@ -25,7 +25,10 @@ import type { TodoItem, TodoStatus } from "../types/displayTypes";
 export function parsePacket(raw: unknown): ParsedPacket {
   if (!raw || typeof raw !== "object") return { type: "unknown" };
   const p = raw as Record<string, unknown>;
-  const packetType = p.type as string | undefined;
+  const packetType =
+    (p.type as string | undefined) ??
+    (p.sessionUpdate as string | undefined) ??
+    (p.session_update as string | undefined);
 
   switch (packetType) {
     case "agent_message_chunk": // Live SSE

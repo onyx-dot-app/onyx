@@ -142,7 +142,7 @@ def create_chat_session_from_request(
 
     persona_id = chat_session_request.persona_id
     if persona_id != DEFAULT_PERSONA_ID:
-        if not user_can_access_persona(
+        if not user.is_anonymous and not user_can_access_persona(
             db_session=db_session,
             persona_id=persona_id,
             user=user,
