@@ -236,6 +236,31 @@ def _is_ext_perm_user(user: User) -> bool:
     return user.role == UserRole.EXT_PERM_USER
 
 
+def _assign_default_groups_or_error(
+    dal: ScimDAL,
+    db_session: Session,
+    user: User,
+    email: str,
+    is_admin: bool = False,
+) -> ScimJSONResponse | None:
+    """Assign *user* to the Basic/Admin default group, or return a SCIM error.
+
+    ``assign_user_to_default_groups__no_commit`` raises (e.g. ``RuntimeError``)
+    if the default group is missing, so failures are rolled back and surfaced
+    as a structured SCIM 500 instead of leaking a raw 500. Returns the error
+    response on failure, else ``None``.
+    """
+    try:
+        assign_user_to_default_groups__no_commit(db_session, user, is_admin=is_admin)
+    except Exception:
+        dal.rollback()
+        logger.exception("Failed to assign SCIM user %s to default groups", email)
+        return _scim_error_response(
+            500, f"Failed to assign user {email} to default group"
+        )
+    return None
+
+
 def _fetch_user_or_404(user_id: str, dal: ScimDAL) -> User | ScimJSONResponse:
     """Parse *user_id* as UUID, look up the user, or return a 404 error."""
     try:
@@ -478,12 +503,17 @@ def create_user(
             **({"personal_name": personal_name} if personal_name else {}),
         )
 
+        # A promoted shadow user is now a real STANDARD account and must land
+        # in the Basic default group like any net-new SCIM user (the shadow
+        # EXT_PERM_USER role made this a no-op before).
+        if promote:
+            error = _assign_default_groups_or_error(
+                dal, db_session, existing_user, email
+            )
+            if error:
+                return error
+
         try:
-            # A promoted shadow user is now a real STANDARD account and must
-            # land in the Basic default group like any net-new SCIM user
-            # (the shadow EXT_PERM_USER role made this a no-op before).
-            if promote:
-                assign_user_to_default_groups__no_commit(db_session, existing_user)
             dal.create_user_mapping(
                 external_id=external_id,
                 user_id=existing_user.id,
@@ -548,14 +578,9 @@ def create_user(
 
     # Assign user to default group BEFORE commit so everything is atomic.
     # If this fails, the entire user creation rolls back and IdP can retry.
-    try:
-        assign_user_to_default_groups__no_commit(db_session, user)
-    except Exception:
-        dal.rollback()
-        logger.exception("Failed to assign SCIM user %s to default groups", email)
-        return _scim_error_response(
-            500, f"Failed to assign user {email} to default group"
-        )
+    error = _assign_default_groups_or_error(dal, db_session, user, email)
+    if error:
+        return error
 
     dal.commit()
 
@@ -611,9 +636,11 @@ def replace_user(
     # Reconcile default-group membership on reactivation or promotion — a
     # promoted shadow user is now a real account and needs the Basic group.
     if is_reactivation or promote:
-        assign_user_to_default_groups__no_commit(
-            db_session, user, is_admin=(user.role == UserRole.ADMIN)
+        error = _assign_default_groups_or_error(
+            dal, db_session, user, user.email, is_admin=(user.role == UserRole.ADMIN)
         )
+        if error:
+            return error
 
     new_external_id = user_resource.externalId
     scim_username = user_resource.userName.strip()
@@ -716,9 +743,11 @@ def patch_user(
     # Reconcile default-group membership on reactivation or promotion — a
     # promoted shadow user is now a real account and needs the Basic group.
     if is_reactivation or promote:
-        assign_user_to_default_groups__no_commit(
-            db_session, user, is_admin=(user.role == UserRole.ADMIN)
+        error = _assign_default_groups_or_error(
+            dal, db_session, user, user.email, is_admin=(user.role == UserRole.ADMIN)
         )
+        if error:
+            return error
 
     # Build updated fields by merging PATCH enterprise data with current values
     cf = current_fields or ScimMappingFields()

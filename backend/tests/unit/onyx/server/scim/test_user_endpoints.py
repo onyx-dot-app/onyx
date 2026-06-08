@@ -388,6 +388,41 @@ class TestCreateUser:
         assert_scim_error(result, 403)
         mock_dal.update_user.assert_not_called()
 
+    @patch(
+        "ee.onyx.server.scim.api.assign_user_to_default_groups__no_commit",
+        side_effect=RuntimeError("Default group 'Basic' not found"),
+    )
+    @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
+    def test_promotion_default_group_failure_returns_500(
+        self,
+        mock_seats: MagicMock,  # noqa: ARG002
+        mock_assign: MagicMock,  # noqa: ARG002
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """If default-group assignment raises during promotion, roll back and
+        return a structured SCIM 500 instead of leaking a raw 500."""
+        existing = make_db_user(
+            email="champion@example.com",
+            role=UserRole.EXT_PERM_USER,
+            is_active=True,
+        )
+        mock_dal.get_user_by_email.return_value = existing
+        mock_dal.get_user_mapping_by_user_id.return_value = None
+
+        result = create_user(
+            user_resource=make_scim_user(userName="champion@example.com"),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 500)
+        mock_dal.rollback.assert_called_once()
+        mock_dal.create_user_mapping.assert_not_called()
+
     @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
     def test_integrity_error_returns_409(
         self,
