@@ -53,6 +53,7 @@ type CardBaseProps = {
    * | `"sm"` | `rounded-08` |
    * | `"md"` | `rounded-12` |
    * | `"lg"` | `rounded-16` |
+   * | `"xl"` | `rounded-20` |
    *
    * In expandable mode when expanded, rounding applies only to the header's
    * top corners and the expandedContent's bottom corners so the two join seamlessly.
