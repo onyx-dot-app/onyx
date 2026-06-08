@@ -20,6 +20,7 @@ Sandbox events (re-emitted from :mod:`sandbox.event_schema`):
 
 Custom Onyx packets (defined here):
 - error: Onyx-specific errors (e.g., session not found)
+- subagent_started: A child opencode session was created under a parent turn
 """
 
 from datetime import datetime
@@ -71,8 +72,16 @@ class ApprovalRequestedPacket(BasePacket):
     session_id: UUID
 
 
+class SubagentStartedPacket(BasePacket):
+    """A child opencode session was created for a parent task tool call."""
+
+    type: Literal["subagent_started"] = "subagent_started"
+    subagent_session_id: str
+    parent_session_id: str
+
+
 # =============================================================================
 # Union Type for Custom Onyx Packets
 # =============================================================================
 
-BuildPacket = ErrorPacket | ApprovalRequestedPacket
+BuildPacket = ErrorPacket | ApprovalRequestedPacket | SubagentStartedPacket

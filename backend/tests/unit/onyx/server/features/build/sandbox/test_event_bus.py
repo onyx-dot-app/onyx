@@ -268,6 +268,34 @@ def test_dispatch_session_created_records_parent_child(bus: PodEventBus) -> None
     assert bus.parent_of("ses_child") == "ses_parent"
 
 
+def test_dispatch_session_created_without_sessionid_delivers_to_parent(
+    bus: PodEventBus,
+) -> None:
+    """opencode's session.created shape identifies the child as info.id, not
+    properties.sessionID. Parent subscribers still need the event immediately
+    so the task card can attach to the live child session."""
+    parent_sub = bus.subscribe("ses_parent")
+    child_sub = bus.subscribe("ses_child")
+
+    bus._dispatch(
+        {
+            "type": "session.created",
+            "properties": {
+                "info": {"id": "ses_child", "parentID": "ses_parent"},
+            },
+        }
+    )
+
+    item = parent_sub.queue.get_nowait()
+    assert item is not None
+    assert item["type"] == "session.created"
+    assert item["properties"]["info"]["id"] == "ses_child"
+    assert bus.list_children("ses_parent") == ["ses_child"]
+    assert bus.parent_of("ses_child") == "ses_parent"
+    with pytest.raises(Empty):
+        child_sub.queue.get_nowait()
+
+
 def test_list_children_preserves_spawn_order(bus: PodEventBus) -> None:
     """``list_children`` returns child sessionIDs in the order opencode
     emitted ``session.created`` — NOT lexicographic. Frontends use this
@@ -394,6 +422,27 @@ def test_subscriber_queue_overflow_does_not_block_other_subscribers(
     bus._dispatch(_make_event("message.part.delta", sessionID="ses_A"))
     assert slow.dropped_count == 1
     assert fast.queue.get_nowait() is not None  # fast still gets the event
+
+
+def test_unscoped_queue_overflow_log_uses_sentinel(
+    bus: PodEventBus,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sub = bus.subscribe("ses_A")
+    for _ in range(sub.queue.maxsize):
+        sub.queue.put_nowait({"filler": True})
+
+    with caplog.at_level("WARNING", logger=event_bus_mod.logger.name):
+        bus._dispatch(
+            {
+                "type": "session.error",
+                "properties": {"error": {"data": {"message": "upstream reset"}}},
+            }
+        )
+
+    assert sub.dropped_count == 1
+    assert "session <unscoped>" in caplog.text
+    assert "session None" not in caplog.text
 
 
 # ---------------------------------------------------------------------------

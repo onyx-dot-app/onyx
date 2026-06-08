@@ -14,4 +14,4 @@ from tests.integration.common_utils.reset import reset_all
 def _module_reset_and_seed() -> None:
     reset_all()
     admin = UserManager.create(name=ADMIN_USER_NAME)
-    LLMProviderManager.create(user_performing_action=admin)
+    LLMProviderManager.create(user_performing_action=admin, api_key="test-api-key")

@@ -40,6 +40,7 @@ import {
   updateSessionName,
   deleteSession as apiDeleteSession,
   fetchMessages,
+  fetchActiveTurn,
   fetchArtifacts,
   fetchWebappInfo,
   restoreSession,
@@ -86,6 +87,9 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
 
     switch (packet.type) {
       case "text_chunk":
+        if (packet.sessionId && packet.parentSessionId) {
+          break;
+        }
         if (packet.text) {
           items.push({
             type: "text",
@@ -97,6 +101,9 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
         break;
 
       case "thinking_chunk":
+        if (packet.sessionId && packet.parentSessionId) {
+          break;
+        }
         if (packet.text) {
           items.push({
             type: "thinking",
@@ -188,7 +195,95 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
  * them, so identifying fields are backfilled without clobbering known values.
  */
 function emptyTurn(prompt = ""): SubagentTurn {
-  return { prompt, toolCalls: [], response: null };
+  return {
+    prompt,
+    toolCalls: [],
+    thinking: null,
+    response: null,
+    streamItems: [],
+  };
+}
+
+function isPlaceholderSubagentLabel(value: string): boolean {
+  return value.trim() === "Spawning subagent";
+}
+
+function settleStreamItems(items: StreamItem[]): StreamItem[] {
+  return items.map((item) =>
+    item.type === "text" || item.type === "thinking"
+      ? { ...item, isStreaming: false }
+      : item
+  );
+}
+
+function upsertToolStreamItem(
+  items: StreamItem[],
+  toolCall: ToolCallState
+): StreamItem[] {
+  const idx = items.findIndex(
+    (item) => item.type === "tool_call" && item.id === toolCall.id
+  );
+  if (idx >= 0) {
+    return items.map((item, i) =>
+      i === idx ? { type: "tool_call", id: toolCall.id, toolCall } : item
+    );
+  }
+  return [...items, { type: "tool_call", id: toolCall.id, toolCall }];
+}
+
+function appendStreamingSubagentChunk(
+  items: StreamItem[],
+  type: "text" | "thinking",
+  text: string
+): StreamItem[] {
+  const last = items[items.length - 1];
+  if (last?.type === type) {
+    return items.map((item, i) =>
+      i === items.length - 1
+        ? { ...last, content: last.content + text, isStreaming: true }
+        : item.type === "text" || item.type === "thinking"
+          ? { ...item, isStreaming: false }
+          : item
+    );
+  }
+  return [
+    ...settleStreamItems(items),
+    {
+      type,
+      id: genId(type),
+      content: text,
+      isStreaming: true,
+    },
+  ];
+}
+
+function replaceOrAppendSettledTextItem(
+  items: StreamItem[],
+  text: string | null
+): StreamItem[] {
+  const settled = settleStreamItems(items);
+  if (!text) {
+    return settled;
+  }
+
+  let lastTextIndex = -1;
+  settled.forEach((item, index) => {
+    if (item.type === "text") {
+      lastTextIndex = index;
+    }
+  });
+
+  if (lastTextIndex === -1) {
+    return settleStreamItems(
+      appendStreamingSubagentChunk(settled, "text", text)
+    );
+  }
+
+  return settled.map((item, index) =>
+    index === lastTextIndex && item.type === "text"
+      ? { ...item, content: text, isStreaming: false }
+      : item
+  );
 }
 
 function buildSubagentsFromMessages(
@@ -225,7 +320,11 @@ function buildSubagentsFromMessages(
       idx >= 0
         ? last.toolCalls.map((tc, i) => (i === idx ? toolCall : tc))
         : [...last.toolCalls, toolCall];
-    turns[turns.length - 1] = { ...last, toolCalls };
+    turns[turns.length - 1] = {
+      ...last,
+      toolCalls,
+      streamItems: upsertToolStreamItem(last.streamItems, toolCall),
+    };
     return turns;
   }
 
@@ -239,21 +338,37 @@ function buildSubagentsFromMessages(
     // Best-effort follow-up response reconstruction: a child agent_message
     // (tagged with _meta.parentSessionId) carries a follow-up turn's response.
     // Follow-up turns do not persist their prompt, so this is the only signal.
-    if (packet.type === "text_chunk") {
-      const meta = (metadata as Record<string, unknown>)._meta as
-        | Record<string, unknown>
-        | undefined;
-      const childSessionId = meta?.sessionId as string | undefined;
-      const parentSessionId = meta?.parentSessionId as string | undefined;
-      if (childSessionId && parentSessionId && packet.text) {
-        const sa = ensure(childSessionId);
+    if (packet.type === "text_chunk" || packet.type === "thinking_chunk") {
+      if (packet.sessionId && packet.parentSessionId && packet.text) {
+        const sa = ensure(packet.sessionId);
         const turns = sa.turns.length > 0 ? [...sa.turns] : [emptyTurn()];
         const last = turns[turns.length - 1] ?? emptyTurn();
-        turns[turns.length - 1] = {
-          ...last,
-          response: (last.response ?? "") + packet.text,
-        };
-        subagents.set(childSessionId, { ...sa, turns });
+        if (packet.type === "text_chunk") {
+          turns[turns.length - 1] = {
+            ...last,
+            response: (last.response ?? "") + packet.text,
+            streamItems: settleStreamItems(
+              appendStreamingSubagentChunk(
+                last.streamItems,
+                "text",
+                packet.text
+              )
+            ),
+          };
+        } else {
+          turns[turns.length - 1] = {
+            ...last,
+            thinking: (last.thinking ?? "") + packet.text,
+            streamItems: settleStreamItems(
+              appendStreamingSubagentChunk(
+                last.streamItems,
+                "thinking",
+                packet.text
+              )
+            ),
+          };
+        }
+        subagents.set(packet.sessionId, { ...sa, turns });
       }
       continue;
     }
@@ -288,6 +403,10 @@ function buildSubagentsFromMessages(
         ...firstTurn,
         prompt: firstTurn.prompt || packet.command,
         response,
+        streamItems: replaceOrAppendSettledTextItem(
+          firstTurn.streamItems,
+          response
+        ),
       };
       subagents.set(cls.subagentSessionId, {
         ...sa,
@@ -320,52 +439,42 @@ function consolidateMessagesIntoTurns(
   const consolidated: BuildMessage[] = [];
   let currentAgentPackets: BuildMessage[] = [];
 
+  function flushCurrentAgentPackets() {
+    if (currentAgentPackets.length === 0) return;
+
+    const streamItems = convertMessagesToStreamItems(currentAgentPackets);
+    const textContent = streamItems
+      .filter((item) => item.type === "text")
+      .map((item) => item.content)
+      .join("");
+
+    if (streamItems.length > 0 || textContent) {
+      consolidated.push({
+        id: currentAgentPackets[0]?.id || genId("agent-msg"),
+        type: "assistant",
+        content: textContent,
+        timestamp: currentAgentPackets[0]?.timestamp || new Date(),
+        turn_index: currentAgentPackets[0]?.turn_index,
+        message_metadata: {
+          streamItems,
+        },
+      });
+    }
+    currentAgentPackets = [];
+  }
+
   for (const message of rawMessages) {
     if (message.type === "user") {
       // If we have accumulated agent packets, consolidate them into one message
-      if (currentAgentPackets.length > 0) {
-        const streamItems = convertMessagesToStreamItems(currentAgentPackets);
-        const textContent = streamItems
-          .filter((item) => item.type === "text")
-          .map((item) => item.content)
-          .join("");
-
-        consolidated.push({
-          id: currentAgentPackets[0]?.id || genId("agent-msg"),
-          type: "assistant",
-          content: textContent,
-          timestamp: currentAgentPackets[0]?.timestamp || new Date(),
-          message_metadata: {
-            streamItems,
-          },
-        });
-        currentAgentPackets = [];
-      }
+      flushCurrentAgentPackets();
       // Add the user message as-is
       consolidated.push(message);
     } else if (message.type === "assistant") {
       // Check if this message already has consolidated streamItems (from new format)
       if (message.message_metadata?.streamItems) {
         // Already consolidated, add as-is
-        if (currentAgentPackets.length > 0) {
-          // Flush any pending packets first
-          const streamItems = convertMessagesToStreamItems(currentAgentPackets);
-          const textContent = streamItems
-            .filter((item) => item.type === "text")
-            .map((item) => item.content)
-            .join("");
-
-          consolidated.push({
-            id: currentAgentPackets[0]?.id || genId("agent-msg"),
-            type: "assistant",
-            content: textContent,
-            timestamp: currentAgentPackets[0]?.timestamp || new Date(),
-            message_metadata: {
-              streamItems,
-            },
-          });
-          currentAgentPackets = [];
-        }
+        // Flush any pending packets first
+        flushCurrentAgentPackets();
         consolidated.push(message);
       } else {
         // Old format - accumulate for consolidation
@@ -375,25 +484,37 @@ function consolidateMessagesIntoTurns(
   }
 
   // Don't forget any trailing agent packets
-  if (currentAgentPackets.length > 0) {
-    const streamItems = convertMessagesToStreamItems(currentAgentPackets);
-    const textContent = streamItems
-      .filter((item) => item.type === "text")
-      .map((item) => item.content)
-      .join("");
-
-    consolidated.push({
-      id: currentAgentPackets[0]?.id || genId("agent-msg"),
-      type: "assistant",
-      content: textContent,
-      timestamp: currentAgentPackets[0]?.timestamp || new Date(),
-      message_metadata: {
-        streamItems,
-      },
-    });
-  }
+  flushCurrentAgentPackets();
 
   return consolidated;
+}
+
+function splitActiveTurnTranscript(
+  messages: BuildMessage[],
+  activeTurnIndex: number | null
+): { messages: BuildMessage[]; streamItems: StreamItem[] } {
+  if (activeTurnIndex === null) {
+    return { messages, streamItems: [] };
+  }
+
+  const activeStreamItems: StreamItem[] = [];
+  const settledMessages: BuildMessage[] = [];
+
+  for (const message of messages) {
+    if (
+      message.type === "assistant" &&
+      message.turn_index === activeTurnIndex
+    ) {
+      const streamItems = message.message_metadata?.streamItems;
+      if (Array.isArray(streamItems)) {
+        activeStreamItems.push(...(streamItems as StreamItem[]));
+      }
+      continue;
+    }
+    settledMessages.push(message);
+  }
+
+  return { messages: settledMessages, streamItems: activeStreamItems };
 }
 
 // Re-export types for consumers
@@ -460,6 +581,12 @@ export interface BuildSessionData {
   artifacts: Artifact[];
   /** Active tool calls for the current response */
   toolCalls: ToolCall[];
+  /** Active backend turn, if this session is currently running. */
+  activeTurnId: string | null;
+  /** The user-message turn index for the active backend turn. */
+  activeTurnIndex: number | null;
+  /** True when this tab created the active turn and already owns its stream. */
+  activeTurnLocalOwner: boolean;
   /**
    * FIFO stream items for the current agent turn.
    * Items are stored in chronological order as they arrive.
@@ -612,7 +739,10 @@ interface BuildSessionStore {
 
   // Actions - Session Lifecycle
   createNewSession: (prompt: string) => Promise<string | null>;
-  loadSession: (sessionId: string) => Promise<void>;
+  loadSession: (
+    sessionId: string,
+    options?: { force?: boolean }
+  ) => Promise<void>;
 
   // Actions - Session History
   refreshSessionHistory: () => Promise<void>;
@@ -703,6 +833,12 @@ interface BuildSessionStore {
     subagentSessionId: string,
     text: string
   ) => void;
+  /** Append streamed thinking text to the LAST turn's thinking stream. */
+  appendSubagentThinkingChunk: (
+    sessionId: string,
+    subagentSessionId: string,
+    text: string
+  ) => void;
 
   // Tab Navigation History Actions
   navigateTabBack: (sessionId: string) => void;
@@ -722,6 +858,9 @@ const createInitialSessionData = (
   messages: [],
   artifacts: [],
   toolCalls: [],
+  activeTurnId: null,
+  activeTurnIndex: null,
+  activeTurnLocalOwner: false,
   streamItems: [],
   queuedMessages: [],
   isInterrupting: false,
@@ -1473,12 +1612,12 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     }
   },
 
-  loadSession: async (sessionId: string) => {
+  loadSession: async (sessionId: string, options?: { force?: boolean }) => {
     const { setCurrentSession, updateSessionData, sessions } = get();
 
     // Check if already loaded in cache
     const existingSession = sessions.get(sessionId);
-    if (existingSession?.isLoaded) {
+    if (existingSession?.isLoaded && options?.force !== true) {
       setCurrentSession(sessionId);
       return;
     }
@@ -1512,14 +1651,22 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       // Messages come from DB and don't need the sandbox running.
       // Artifacts need sandbox filesystem, so skip during restore.
       const messages = await fetchMessages(sessionId);
+      let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
+      try {
+        activeTurn = await fetchActiveTurn(sessionId);
+      } catch (err) {
+        console.warn("Failed to fetch active turn:", err);
+      }
       const artifacts = needsRestore ? [] : await fetchArtifacts(sessionId);
 
       // Preserve optimistic messages if actively streaming (pre-provisioned flow).
       const currentSession = get().sessions.get(sessionId);
-      const isStreaming =
-        (currentSession?.messages?.length ?? 0) > 0 &&
-        (currentSession?.status === "running" ||
-          currentSession?.status === "creating");
+      const currentSessionIsLive =
+        currentSession?.status === "running" ||
+        currentSession?.status === "creating";
+      const hasOptimisticMessages =
+        (currentSession?.messages?.length ?? 0) > 0 && currentSessionIsLive;
+      const isStreaming = hasOptimisticMessages;
 
       // Construct webapp URL
       let webappUrl: string | null = null;
@@ -1530,17 +1677,33 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
       }
 
+      const resolvedActiveTurnId =
+        activeTurn?.turn_id ??
+        (isStreaming ? currentSession!.activeTurnId : null);
+      const resolvedActiveTurnIndex =
+        activeTurn?.turn_index ??
+        (isStreaming ? currentSession!.activeTurnIndex : null);
+
       const status = isStreaming
         ? currentSession!.status
-        : needsRestore
-          ? "creating"
-          : sessionData.status === "active"
-            ? "active"
-            : "idle";
-      const resolvedMessages = isStreaming
+        : activeTurn
+          ? "running"
+          : needsRestore
+            ? "creating"
+            : sessionData.status === "active"
+              ? "active"
+              : "idle";
+      const persistedMessages = isStreaming
         ? currentSession!.messages
         : consolidateMessagesIntoTurns(messages);
-      const streamItems = isStreaming ? currentSession!.streamItems : [];
+      const restoredActiveTurn = isStreaming
+        ? {
+            messages: persistedMessages,
+            streamItems: currentSession!.streamItems,
+          }
+        : splitActiveTurnTranscript(persistedMessages, resolvedActiveTurnIndex);
+      const resolvedMessages = restoredActiveTurn.messages;
+      const streamItems = restoredActiveTurn.streamItems;
       // Reconstruct subagents from the raw (un-consolidated) messages — they
       // carry the per-packet _meta needed for classification. Preserve the
       // live map if actively streaming.
@@ -1562,6 +1725,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox,
         agentProvider: sessionData.agent_provider,
         agentModel: sessionData.agent_model,
+        activeTurnId: resolvedActiveTurnId,
+        activeTurnIndex: resolvedActiveTurnIndex,
+        activeTurnLocalOwner: isStreaming
+          ? currentSession!.activeTurnLocalOwner
+          : false,
         error: null,
         isLoaded: true,
       });
@@ -2252,7 +2420,14 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         tcIndex >= 0
           ? last.toolCalls.map((tc, i) => (i === tcIndex ? toolCall : tc))
           : [...last.toolCalls, toolCall];
-      turns[turns.length - 1] = { ...last, toolCalls };
+      turns[turns.length - 1] = {
+        ...last,
+        toolCalls,
+        streamItems: upsertToolStreamItem(
+          settleStreamItems(last.streamItems),
+          toolCall
+        ),
+      };
 
       const updatedSubagent: SubagentState = {
         ...base,
@@ -2301,18 +2476,28 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         completedAt: null,
       };
 
-      // Ensure turns[0] exists; backfill its prompt without clobbering a
-      // non-empty existing prompt.
+      // Ensure turns[0] exists; backfill its prompt without clobbering real
+      // known prompts. The early task start can only say "Spawning subagent";
+      // replace that placeholder when later task progress carries the prompt.
       const turns = base.turns.length > 0 ? [...base.turns] : [emptyTurn()];
       const firstTurn = turns[0] ?? emptyTurn();
-      turns[0] = { ...firstTurn, prompt: firstTurn.prompt || prompt };
+      turns[0] = {
+        ...firstTurn,
+        prompt:
+          !firstTurn.prompt || isPlaceholderSubagentLabel(firstTurn.prompt)
+            ? prompt
+            : firstTurn.prompt,
+      };
 
       const updatedSubagent: SubagentState = {
         ...base,
-        // Seed/backfill identifying fields; never clobber known values.
+        // Seed/backfill identifying fields; never clobber real known values.
         parentToolCallId: base.parentToolCallId || parentToolCallId,
         subagentType: base.subagentType ?? subagentType,
-        name: base.name || name,
+        name:
+          !base.name || isPlaceholderSubagentLabel(base.name)
+            ? name
+            : base.name,
         turns,
       };
 
@@ -2348,7 +2533,19 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       if (response !== undefined) {
         turns = existing.turns.length > 0 ? [...existing.turns] : [emptyTurn()];
         const last = turns[turns.length - 1] ?? emptyTurn();
-        turns[turns.length - 1] = { ...last, response };
+        turns[turns.length - 1] = {
+          ...last,
+          response,
+          streamItems: replaceOrAppendSettledTextItem(
+            last.streamItems,
+            response
+          ),
+        };
+      } else {
+        turns = existing.turns.map((turn) => ({
+          ...turn,
+          streamItems: settleStreamItems(turn.streamItems),
+        }));
       }
 
       const subagents = new Map(session.subagents);
@@ -2380,18 +2577,78 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       if (!session) return state;
 
       const existing = session.subagents.get(subagentSessionId);
-      if (!existing) return state;
+      const base: SubagentState = existing ?? {
+        sessionId: subagentSessionId,
+        parentToolCallId: "",
+        subagentType: null,
+        name: "",
+        status: "running",
+        turns: [emptyTurn()],
+        startedAt: Date.now(),
+        completedAt: null,
+      };
 
-      const turns =
-        existing.turns.length > 0 ? [...existing.turns] : [emptyTurn()];
+      const turns = base.turns.length > 0 ? [...base.turns] : [emptyTurn()];
       const last = turns[turns.length - 1] ?? emptyTurn();
       turns[turns.length - 1] = {
         ...last,
         response: (last.response ?? "") + text,
+        streamItems: appendStreamingSubagentChunk(
+          last.streamItems,
+          "text",
+          text
+        ),
       };
 
       const subagents = new Map(session.subagents);
-      subagents.set(subagentSessionId, { ...existing, turns });
+      subagents.set(subagentSessionId, { ...base, turns });
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        subagents,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  appendSubagentThinkingChunk: (
+    sessionId: string,
+    subagentSessionId: string,
+    text: string
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const existing = session.subagents.get(subagentSessionId);
+      const base: SubagentState = existing ?? {
+        sessionId: subagentSessionId,
+        parentToolCallId: "",
+        subagentType: null,
+        name: "",
+        status: "running",
+        turns: [emptyTurn()],
+        startedAt: Date.now(),
+        completedAt: null,
+      };
+
+      const turns = base.turns.length > 0 ? [...base.turns] : [emptyTurn()];
+      const last = turns[turns.length - 1] ?? emptyTurn();
+      turns[turns.length - 1] = {
+        ...last,
+        thinking: (last.thinking ?? "") + text,
+        streamItems: appendStreamingSubagentChunk(
+          last.streamItems,
+          "thinking",
+          text
+        ),
+      };
+
+      const subagents = new Map(session.subagents);
+      subagents.set(subagentSessionId, { ...base, turns });
 
       const updatedSession: BuildSessionData = {
         ...session,

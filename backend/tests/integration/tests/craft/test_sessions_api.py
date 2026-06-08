@@ -36,16 +36,16 @@ def _create_session(user: DATestUser) -> dict[str, Any]:
 def _send_one_message(user: DATestUser, session_id: uuid.UUID) -> None:
     """Send a message and wait only until the USER row is persisted.
 
-    The send-message endpoint commits the USER message row BEFORE the SSE
-    stream yields its first ``data:`` packet, so we break out as soon as
-    we receive one packet. Tests using this helper must not depend on
-    assistant-message rows being persisted.
+    The background-turn endpoint commits the USER message row before returning
+    turn metadata. Tests using this helper must not depend on assistant-message
+    rows being persisted.
     """
-    try:
-        for _ in BuildSessionManager.send_message(user, session_id, "hello"):
-            break
-    except httpx.RemoteProtocolError:
-        pass
+    BuildSessionManager.start_turn(
+        user,
+        session_id,
+        "hello",
+        client_request_id=f"session-list-{uuid.uuid4()}",
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 from collections.abc import Generator
 from uuid import UUID
+from uuid import uuid4
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -10,17 +11,35 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.cache.factory import get_cache_backend
+from onyx.configs.constants import MessageType
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import Permission
+from onyx.db.models import BuildMessage
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.api.models import InteractiveTurnResponse
 from onyx.server.features.build.api.models import MessageInterruptResponse
 from onyx.server.features.build.api.models import MessageListResponse
 from onyx.server.features.build.api.models import MessageRequest
 from onyx.server.features.build.api.models import MessageResponse
+from onyx.server.features.build.db.build_session import create_message
+from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.interactive_turns.executor import (
+    start_interactive_turn_runner,
+)
+from onyx.server.features.build.interactive_turns.state import acquire_active_turn_lock
+from onyx.server.features.build.interactive_turns.state import create_interactive_turn
+from onyx.server.features.build.interactive_turns.state import finish_turn
+from onyx.server.features.build.interactive_turns.state import get_active_turn
+from onyx.server.features.build.interactive_turns.state import get_turn_for_request
+from onyx.server.features.build.interactive_turns.state import InteractiveTurnLockError
+from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
 from onyx.server.features.build.session.errors import RateLimitError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.utils.logger import setup_logger
@@ -76,74 +95,102 @@ def send_message(
     session_id: UUID,
     request: MessageRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    _rate_limit_check: None = Depends(check_build_rate_limits),
-) -> StreamingResponse:
-    """
-    Send a message to the CLI agent and stream the response.
+    _rate_limit_check: None = None,
+    db_session: Session = Depends(get_session),
+) -> InteractiveTurnResponse:
+    """Start an interactive Craft turn in the background."""
+    session = get_build_session(session_id, user.id, db_session)
+    if session is None:
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
 
-    Enforces rate limiting before executing the agent (via dependency).
-    Returns a Server-Sent Events (SSE) stream with the agent's response.
+    cache = get_cache_backend()
+    client_request_id = request.client_request_id or str(uuid4())
 
-    Follows the same pattern as /chat/send-chat-message for consistency.
-    """
+    try:
+        lock = acquire_active_turn_lock(cache, session_id)
+    except InteractiveTurnLockError as exc:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "This session is busy with a previous turn.",
+        ) from exc
 
-    def stream_generator() -> Generator[str, None, None]:
-        """Stream generator that manages its own database session.
+    lock_released = False
+    try:
+        existing = get_turn_for_request(
+            cache=cache,
+            session_id=session_id,
+            user_id=user.id,
+            client_request_id=client_request_id,
+        )
+        if existing is not None:
+            return InteractiveTurnResponse.from_turn(existing)
 
-        This is necessary because StreamingResponse consumes the generator
-        AFTER the endpoint returns, at which point FastAPI's dependency-injected
-        db_session has already been closed. By creating a new session inside
-        the generator, we ensure the session remains open for the entire
-        streaming duration.
-        """
-        # Capture user info needed for streaming (user object may not be available
-        # after the endpoint returns due to dependency cleanup)
-        user_id = user.id
-        message_content = request.content
-        events_yielded = 0
+        active = get_active_turn(cache=cache, session_id=session_id, user_id=user.id)
+        if active is not None:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "This session is busy with a previous turn.",
+            )
+
+        check_build_rate_limits(user=user, db_session=db_session)
+
+        turn_index = (
+            db_session.query(BuildMessage)
+            .filter(
+                BuildMessage.session_id == session_id,
+                BuildMessage.type == MessageType.USER,
+            )
+            .count()
+        )
+        if request.provider and request.model:
+            session.agent_provider = request.provider
+            session.agent_model = request.model
+        create_message(
+            session_id=session_id,
+            message_type=MessageType.USER,
+            turn_index=turn_index,
+            message_metadata={
+                "type": "user_message",
+                "content": {"type": "text", "text": request.content},
+            },
+            db_session=db_session,
+        )
+
+        turn = create_interactive_turn(
+            cache=cache,
+            session_id=session_id,
+            user_id=user.id,
+            client_request_id=client_request_id,
+            prompt=request.content,
+            turn_index=turn_index,
+        )
 
         try:
-            with get_session_with_current_tenant() as db_session:
-                # Update sandbox heartbeat - this is the only place we track activity
-                # for determining when a sandbox should be put to sleep
-                sandbox = get_sandbox_by_user_id(db_session, user.id)
-                if sandbox and sandbox.status.is_active():
-                    update_sandbox_heartbeat(db_session, sandbox.id)
-
-                session_manager = SessionManager(db_session)
-                for chunk in session_manager.send_message(
-                    session_id,
-                    user_id,
-                    message_content,
-                    agent_provider=request.provider,
-                    agent_model=request.model,
-                ):
-                    events_yielded += 1
-                    yield chunk
-        except GeneratorExit:
-            logger.warning(
-                "Stream disconnected for session %s after %d events "
-                "(client likely closed connection)",
-                session_id,
-                events_yielded,
-            )
+            db_session.commit()
         except Exception:
-            logger.exception(
-                "Stream error for session %s after %d events",
-                session_id,
-                events_yielded,
+            db_session.rollback()
+            lock.release()
+            lock_released = True
+            finish_turn(
+                cache=cache,
+                turn_id=turn.turn_id,
+                status=TURN_STATUS_FAILED,
+                error_detail="Failed to persist user message.",
             )
+            raise
+    finally:
+        if not lock_released:
+            lock.release()
 
-    # Stream the CLI agent's response
-    return StreamingResponse(
-        stream_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # Disable nginx buffering
-        },
-    )
+    try:
+        start_interactive_turn_runner(turn.turn_id)
+    except Exception:
+        logger.exception(
+            "Failed to start interactive turn %s; attach endpoints will retry",
+            turn.turn_id,
+        )
+
+    return InteractiveTurnResponse.from_turn(turn)
 
 
 @router.post(
@@ -224,8 +271,8 @@ def interrupt_message(
 ) -> MessageInterruptResponse:
     """Interrupt the in-flight agent turn for a session.
 
-    Interrupts the opencode-serve turn inside the sandbox; the corresponding
-    /send-message stream then terminates through its normal completion path.
+    Interrupts the opencode-serve turn inside the sandbox; attached turn-event
+    streams then terminate through their normal completion path.
     """
     session_manager = SessionManager(db_session)
     interrupted = session_manager.interrupt_message(session_id, user.id)
