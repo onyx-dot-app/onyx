@@ -60,7 +60,7 @@ import {
  * The backend stores messages with these packet types in message_metadata:
  * - user_message: {type: "user_message", content: {type: "text", text: "..."}}
  * - agent_message: {type: "agent_message", content: {type: "text", text: "..."}}
- * - agent_thought: {type: "agent_thought", content: {type: "text", text: "..."}}
+ * - agent_thought: DB-stored thinking rows restored as collapsed stream items
  * - tool_call_progress: Full tool call data with status="completed"
  * - agent_plan_update: Plan entries (not rendered as stream items)
  *

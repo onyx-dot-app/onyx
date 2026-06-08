@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { cn } from "@opal/utils";
-import { Tag, Text } from "@opal/components";
+import { Text } from "@opal/components";
 import { SvgBubbleText, SvgChevronDown } from "@opal/icons";
 import {
   Collapsible,
@@ -68,22 +68,35 @@ const THINKING_MARKDOWN_OVERRIDES = {
 interface ThinkingCardProps {
   content: string;
   isStreaming: boolean;
+  defaultOpen?: boolean;
 }
 
-function formatTokenCount(chars: number): string {
-  // ~4 chars per token; coarse but consistent with Claude/OpenAI's "Thought for Ns"
-  // approximations when wall-clock timing isn't tracked.
-  const tokens = Math.round(chars / 4);
-  if (tokens < 1000) return `${tokens} tokens`;
-  return `${(tokens / 1000).toFixed(1)}k tokens`;
+function ThinkingActivityIcon({ isStreaming }: { isStreaming: boolean }) {
+  if (!isStreaming) {
+    return <SvgBubbleText className="size-4 shrink-0 stroke-text-03" />;
+  }
+
+  return (
+    <span
+      aria-hidden
+      className="relative flex size-4 shrink-0 items-center justify-center"
+    >
+      <span className="absolute size-3 rounded-full bg-status-info-03 opacity-35 motion-safe:animate-ping motion-reduce:hidden" />
+      <span className="size-1.5 rounded-full bg-status-info-05" />
+    </span>
+  );
 }
 
 export default function ThinkingCard({
   content,
   isStreaming,
+  defaultOpen = false,
 }: ThinkingCardProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const chip = useMemo(() => formatTokenCount(content.length), [content]);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  useEffect(() => {
+    setIsOpen(defaultOpen);
+  }, [defaultOpen]);
 
   if (!content) return null;
 
@@ -92,23 +105,18 @@ export default function ThinkingCard({
       <CollapsibleTrigger asChild>
         <button
           className={cn(
-            "group w-full text-left px-3 py-2 rounded-md transition-colors",
-            "hover:bg-background-tint-02"
+            "group w-full text-left px-3 py-1.5 rounded-md transition-colors duration-200",
+            "hover:bg-background-tint-02 motion-reduce:transition-none"
           )}
         >
           <div className="flex items-center gap-2 min-w-0 w-full">
-            <SvgBubbleText className="size-4 shrink-0 stroke-text-03" />
+            <ThinkingActivityIcon isStreaming={isStreaming} />
             <Text font="main-ui-muted" color="text-04" nowrap>
-              {isStreaming ? "Thinking" : "Thought"}
+              {isStreaming ? "Thinking..." : "Thinking"}
             </Text>
-            {!isStreaming && (
-              <span className="shrink-0">
-                <Tag title={chip} size="sm" color="gray" />
-              </span>
-            )}
             <SvgChevronDown
               className={cn(
-                "size-4 stroke-text-03 transition-all duration-150 shrink-0 ml-auto",
+                "size-4 stroke-text-03 transition-all duration-150 shrink-0 ml-auto motion-reduce:transition-none",
                 "group-hover:stroke-text-05",
                 !isOpen && "-rotate-90"
               )}

@@ -373,25 +373,28 @@ export function useBuildStreaming() {
               .sessions.get(sessionId);
 
             if (session && session.streamItems.length > 0) {
+              const savedStreamItems = session.streamItems.map((item) => ({
+                ...item,
+                ...(item.type === "text" || item.type === "thinking"
+                  ? { isStreaming: false }
+                  : {}),
+              }));
               const textContent = session.streamItems
                 .filter((item) => item.type === "text")
                 .map((item) => item.content)
                 .join("");
 
-              appendMessageToSession(sessionId, {
-                id: genId("agent-msg"),
-                type: "assistant",
-                content: textContent,
-                timestamp: new Date(),
-                message_metadata: {
-                  streamItems: session.streamItems.map((item) => ({
-                    ...item,
-                    ...(item.type === "text" || item.type === "thinking"
-                      ? { isStreaming: false }
-                      : {}),
-                  })),
-                },
-              });
+              if (savedStreamItems.length > 0 || textContent) {
+                appendMessageToSession(sessionId, {
+                  id: genId("agent-msg"),
+                  type: "assistant",
+                  content: textContent,
+                  timestamp: new Date(),
+                  message_metadata: {
+                    streamItems: savedStreamItems,
+                  },
+                });
+              }
             }
 
             updateSessionData(sessionId, {

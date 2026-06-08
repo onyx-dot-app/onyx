@@ -431,6 +431,8 @@ def translate_opencode_event(
         msg_id = props.get("messageID")
         if not isinstance(delta, str) or not isinstance(part_id, str):
             return
+        if not delta:
+            return
         # Assistant-only filter. Deltas race ~300ms ahead of message.updated;
         # _is_assistant_message hydrates via REST when the role is unknown.
         if not _is_assistant_message(state, msg_id, fetch_message):
