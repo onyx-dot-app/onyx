@@ -34,42 +34,35 @@ DEFAULT_NOTIFICATIONS_PAGE_SIZE = 10
 MAX_NOTIFICATIONS_PAGE_SIZE = 50
 
 
-def _should_run_notification_check(
-    requested_notif_type: NotificationType | None,
-    check_notif_type: NotificationType,
-) -> bool:
-    return requested_notif_type is None or requested_notif_type == check_notif_type
-
-
-def _ensure_notifications_for_type(
+def _ensure_feature_announcement_notifications(
     user: User,
     db_session: Session,
-    notif_type: NotificationType | None,
 ) -> None:
-    if _should_run_notification_check(
-        notif_type, NotificationType.FEATURE_ANNOUNCEMENT
-    ):
-        try:
-            ensure_build_mode_intro_notification(user, db_session)
-        except Exception:
-            logger.exception(
-                "Failed to check for build mode intro in notifications endpoint"
-            )
+    try:
+        ensure_build_mode_intro_notification(user, db_session)
+    except Exception:
+        logger.exception(
+            "Failed to check for build mode intro in notifications endpoint"
+        )
 
-        try:
-            ensure_permissions_migration_notification(user, db_session)
-        except Exception:
-            logger.exception(
-                "Failed to create permissions_migration_v1 announcement in notifications endpoint"
-            )
+    try:
+        ensure_permissions_migration_notification(user, db_session)
+    except Exception:
+        logger.exception(
+            "Failed to create permissions_migration_v1 announcement in notifications endpoint"
+        )
 
-    if _should_run_notification_check(notif_type, NotificationType.RELEASE_NOTES):
-        try:
-            ensure_release_notes_fresh_and_notify(db_session)
-        except Exception:
-            logger.exception(
-                "Failed to check for release notes in notifications endpoint"
-            )
+
+def _ensure_release_note_notifications(db_session: Session) -> None:
+    try:
+        ensure_release_notes_fresh_and_notify(db_session)
+    except Exception:
+        logger.exception("Failed to check for release notes in notifications endpoint")
+
+
+def _ensure_app_load_notifications(user: User, db_session: Session) -> None:
+    _ensure_feature_announcement_notifications(user, db_session)
+    _ensure_release_note_notifications(db_session)
 
 
 @router.get("")
@@ -93,7 +86,12 @@ def get_notifications_api(
     - Explicitly announcing breaking changes
     """
     if page_num == 0:
-        _ensure_notifications_for_type(user, db_session, notif_type)
+        if notif_type is None:
+            _ensure_app_load_notifications(user, db_session)
+        elif notif_type == NotificationType.FEATURE_ANNOUNCEMENT:
+            _ensure_feature_announcement_notifications(user, db_session)
+        elif notif_type == NotificationType.RELEASE_NOTES:
+            _ensure_release_note_notifications(db_session)
 
     total_items, undismissed_count = count_notifications(
         user=user,
@@ -129,7 +127,7 @@ def get_notifications_summary_api(
 ) -> NotificationSummary:
     # Preserve app-load notification bootstrap behavior: notifications that are
     # lazily created on read should exist before we compute badge counts.
-    _ensure_notifications_for_type(user, db_session, notif_type=None)
+    _ensure_app_load_notifications(user, db_session)
     total_items, undismissed_count = count_notifications(
         user=user,
         db_session=db_session,

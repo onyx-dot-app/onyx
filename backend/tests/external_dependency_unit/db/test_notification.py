@@ -245,6 +245,16 @@ def test_get_notifications_api_scopes_ensure_checks(
 
     calls.clear()
     notifications_api.get_notifications_api(
+        page_num=0,
+        page_size=2,
+        notif_type=NotificationType.RELEASE_NOTES,
+        user=user,
+        db_session=db_session,
+    )
+    assert calls == ["release_notes"]
+
+    calls.clear()
+    notifications_api.get_notifications_api(
         page_num=1,
         page_size=2,
         notif_type=None,
