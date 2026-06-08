@@ -273,26 +273,18 @@ jobs:
           API_BASE: ${{ matrix.api_base }}
           API_VERSION: ${{ matrix.api_version }}
           DEPLOYMENT_NAME: ${{ matrix.deployment_name }}
-          USES_API_KEY: ${{ matrix.api_key_env != '' }}
-          USES_CUSTOM_CONFIG: ${{ matrix.custom_config_env != '' }}
           STRICT: ${{ inputs.strict && 'true' || 'false' }}
         run: |
           set -uo pipefail
 
           TEST_PATH="backend/tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py"
 
-          # Build the env-var prefix, omitting unset optional values. Secrets are
-          # shown as placeholders so the developer supplies their own credentials.
+          # Build the env-var prefix, omitting unset optional values. Credentials
+          # (NIGHTLY_LLM_API_KEY / NIGHTLY_LLM_CUSTOM_CONFIG_JSON) are intentionally
+          # left out — supply your own when running locally.
           lines=()
-          lines+=("INTEGRATION_TESTS_MODE=true")
           lines+=("NIGHTLY_LLM_PROVIDER='${PROVIDER}'")
           lines+=("NIGHTLY_LLM_MODELS='${MODELS}'")
-          if [ "${USES_API_KEY}" = "true" ]; then
-            lines+=("NIGHTLY_LLM_API_KEY='<your-${PROVIDER}-api-key>'")
-          fi
-          if [ "${USES_CUSTOM_CONFIG}" = "true" ]; then
-            lines+=("NIGHTLY_LLM_CUSTOM_CONFIG_JSON='<your-${PROVIDER}-custom-config-json>'")
-          fi
           if [ -n "${API_BASE}" ]; then
             lines+=("NIGHTLY_LLM_API_BASE='${API_BASE}'")
           fi
