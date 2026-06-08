@@ -1,4 +1,5 @@
 import React from "react";
+import { fireEvent } from "@testing-library/react";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { copyText } from "@opal/utils";
 import UrlBar from "./UrlBar";
@@ -71,6 +72,12 @@ describe("UrlBar", () => {
     await waitFor(() => {
       expect(openButton).toHaveAttribute("data-copy-state", "copied");
     });
+    const copiedIcon = openButton.querySelector("svg");
+    expect(copiedIcon).toBeInTheDocument();
+    fireEvent.animationEnd(copiedIcon!);
+    await waitFor(() => {
+      expect(openButton).toHaveAttribute("data-copy-state", "idle");
+    });
     expect(
       screen.getByRole("button", { name: "open in a new tab" })
     ).toBeInTheDocument();
@@ -118,4 +125,17 @@ describe("UrlBar", () => {
       })
     ).toBeInTheDocument();
   });
+
+  test.each(["no-sandbox://", "artifacts://"])(
+    "does not copy internal display URL %s",
+    async (internalUrl) => {
+      render(<UrlBar displayUrl={internalUrl} />);
+
+      expect(screen.getByText(internalUrl)).toHaveClass("truncate");
+      expect(
+        screen.queryByRole("button", { name: `Copy URL: ${internalUrl}` })
+      ).not.toBeInTheDocument();
+      expect(copyText).not.toHaveBeenCalled();
+    }
+  );
 });

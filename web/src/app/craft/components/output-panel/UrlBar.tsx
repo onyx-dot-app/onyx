@@ -72,26 +72,20 @@ export default function UrlBar({
   sharingScope = "private",
   onScopeChange,
 }: UrlBarProps) {
-  const [copyState, setCopyState] = React.useState<"idle" | "copied">("idle");
-  const copyResetTimeoutRef = React.useRef<ReturnType<
-    typeof setTimeout
-  > | null>(null);
-  const isUrlCopied = copyState === "copied";
-
-  React.useEffect(() => {
-    return () => {
-      if (copyResetTimeoutRef.current) {
-        clearTimeout(copyResetTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  React.useEffect(() => {
-    if (copyResetTimeoutRef.current) {
-      clearTimeout(copyResetTimeoutRef.current);
-      copyResetTimeoutRef.current = null;
+  const [copiedUrl, setCopiedUrl] = React.useState<string | null>(null);
+  const [copyFeedbackKey, setCopyFeedbackKey] = React.useState(0);
+  const isDisplayUrlCopyable = React.useMemo(() => {
+    try {
+      const { protocol } = new URL(displayUrl);
+      return protocol === "http:" || protocol === "https:";
+    } catch {
+      return false;
     }
-    setCopyState("idle");
+  }, [displayUrl]);
+  const isUrlCopied = copiedUrl === displayUrl;
+
+  React.useEffect(() => {
+    setCopiedUrl(null);
   }, [displayUrl]);
 
   const handleOpenInNewTab = () => {
@@ -101,23 +95,25 @@ export default function UrlBar({
   };
 
   const handleCopyUrl = async () => {
-    if (copyResetTimeoutRef.current) {
-      clearTimeout(copyResetTimeoutRef.current);
-      copyResetTimeoutRef.current = null;
+    if (!isDisplayUrlCopyable) {
+      return;
     }
 
     try {
       await copyText(displayUrl);
-      setCopyState("copied");
-      copyResetTimeoutRef.current = setTimeout(() => {
-        setCopyState("idle");
-        copyResetTimeoutRef.current = null;
-      }, 1500);
+      setCopiedUrl(displayUrl);
+      setCopyFeedbackKey((key) => key + 1);
     } catch (err) {
       console.error("Failed to copy URL:", err);
-      setCopyState("idle");
+      setCopiedUrl(null);
     }
   };
+
+  const urlText = (
+    <Text as="p" font="secondary-body" color="text-03" maxLines={1}>
+      {displayUrl}
+    </Text>
+  );
 
   return (
     <div className="px-3 pb-2">
@@ -186,13 +182,20 @@ export default function UrlBar({
                 onClick={handleOpenInNewTab}
                 className="shrink-0 p-0.5 rounded-sm transition-colors hover:bg-background-tint-03 text-text-03"
                 aria-label="open in a new tab"
-                data-copy-state={copyState}
+                data-copy-state={isUrlCopied ? "copied" : "idle"}
               >
                 {isUrlCopied ? (
                   <SvgCheck
-                    key="copied"
+                    key={`copied-${copyFeedbackKey}`}
                     size={14}
-                    className="animate-in fade-in-0 zoom-in-95 duration-200 stroke-status-success-05"
+                    className="animate-in fade-in-0 zoom-in-95 duration-500 stroke-status-success-05"
+                    onAnimationEnd={() => {
+                      setCopiedUrl((currentCopiedUrl) =>
+                        currentCopiedUrl === displayUrl
+                          ? null
+                          : currentCopiedUrl
+                      );
+                    }}
                   />
                 ) : (
                   <SvgExternalLink
@@ -209,16 +212,18 @@ export default function UrlBar({
             className="min-w-0 flex-1 overflow-hidden"
           >
             <Tooltip tooltip={displayUrl} side="bottom" delayDuration={200}>
-              <button
-                type="button"
-                onClick={handleCopyUrl}
-                className="block w-full min-w-0 cursor-pointer text-left focus:outline-hidden"
-                aria-label={`Copy URL: ${displayUrl}`}
-              >
-                <Text as="p" font="secondary-body" color="text-03" maxLines={1}>
-                  {displayUrl}
-                </Text>
-              </button>
+              {isDisplayUrlCopyable ? (
+                <button
+                  type="button"
+                  onClick={handleCopyUrl}
+                  className="block w-full min-w-0 cursor-pointer text-left focus:outline-hidden"
+                  aria-label={`Copy URL: ${displayUrl}`}
+                >
+                  {urlText}
+                </button>
+              ) : (
+                <div className="block w-full min-w-0 text-left">{urlText}</div>
+              )}
             </Tooltip>
           </div>
         </div>
