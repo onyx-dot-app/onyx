@@ -234,6 +234,81 @@ jobs:
           docker-username: ${{ env.DOCKER_USERNAME }}
           docker-token: ${{ env.DOCKER_TOKEN }}
 
+      - name: Print local reproduce command on failure
+        if: failure()
+        shell: bash
+        env:
+          PROVIDER: ${{ matrix.provider }}
+          MODELS: ${{ matrix.models }}
+          API_BASE: ${{ matrix.api_base }}
+          API_VERSION: ${{ matrix.api_version }}
+          DEPLOYMENT_NAME: ${{ matrix.deployment_name }}
+          STRICT: ${{ inputs.strict && 'true' || 'false' }}
+        run: |
+          set -uo pipefail
+
+          TEST_PATH="backend/tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py"
+
+          # Build the env-var prefix, omitting unset optional values. Credentials
+          # (NIGHTLY_LLM_API_KEY / NIGHTLY_LLM_CUSTOM_CONFIG_JSON) are intentionally
+          # left out — supply your own when running locally.
+          lines=()
+          lines+=("NIGHTLY_LLM_PROVIDER='${PROVIDER}'")
+          lines+=("NIGHTLY_LLM_MODELS='${MODELS}'")
+          if [ -n "${API_BASE}" ]; then
+            lines+=("NIGHTLY_LLM_API_BASE='${API_BASE}'")
+          fi
+          if [ -n "${API_VERSION}" ]; then
+            lines+=("NIGHTLY_LLM_API_VERSION='${API_VERSION}'")
+          fi
+          if [ -n "${DEPLOYMENT_NAME}" ]; then
+            lines+=("NIGHTLY_LLM_DEPLOYMENT_NAME='${DEPLOYMENT_NAME}'")
+          fi
+          lines+=("NIGHTLY_LLM_STRICT='${STRICT}'")
+
+          # Compose the command: one env var per line, then the pytest invocation.
+          CMD=""
+          for line in "${lines[@]}"; do
+            CMD="${CMD}${line} \\"$'\n'
+          done
+          CMD="${CMD}uv run pytest ${TEST_PATH}"
+
+          # Rich, copy-pasteable block in the job summary.
+          {
+            echo "### 🔁 Reproduce \`${PROVIDER}\` failure locally"
+            echo ""
+            echo "From the Onyx dev container (all services running), supply your own credentials and run:"
+            echo ""
+            echo '```bash'
+            echo "${CMD}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Annotation surfaced at the top of the run (newlines encoded as %0A).
+          echo "::notice title=Reproduce ${PROVIDER} failure locally::${CMD//$'\n'/%0A}"
+
+          # Persist a Slack-ready snippet so the notify job can inline the command.
+          {
+            echo "*Reproduce \`${PROVIDER}\` failure locally:*"
+            echo '```'
+            echo "${CMD}"
+            echo '```'
+          } > "reproduce-command-${PROVIDER}.txt"
+
+      - name: Upload reproduce command
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: reproduce-command-nightly-${{ matrix.provider }}
+          path: reproduce-command-${{ matrix.provider }}.txt
+          if-no-files-found: ignore
+
+      - name: Dump API server logs
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose logs --no-color api_server > $GITHUB_WORKSPACE/api_server.log || true
+
       # The api_server runs in-process inside pytest via FastAPI TestClient, so its
       # logs are captured directly in the test-runner stdout (the workflow log for
       # the "Run nightly provider chat test" step) — only the supporting containers
