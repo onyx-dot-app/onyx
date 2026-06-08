@@ -15,6 +15,24 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
 FROM ${BASE_IMAGE_REGISTRY}/peakcom/s5cmd:v2.3.0@sha256:2ff939e2ee3c76adcadd78dbfc3e2569b18a3743ed9dcfccb1ec589af7fb9903 AS s5cmd_source
 
+# GitHub CLI (gh): downloaded + checksum-verified in its own stage (arch-matched
+# via buildx's TARGETARCH) so only the binary lands in the final image.
+FROM ${BASE_IMAGE_REGISTRY}/library/node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS gh_source
+ARG GH_CLI_VERSION=2.93.0
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    arch="${TARGETARCH:-amd64}"; \
+    tarball="gh_${GH_CLI_VERSION}_linux_${arch}.tar.gz"; \
+    base="https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}"; \
+    cd /tmp; \
+    curl -fsSL -o "${tarball}" "${base}/${tarball}"; \
+    curl -fsSL -o checksums.txt "${base}/gh_${GH_CLI_VERSION}_checksums.txt"; \
+    grep " ${tarball}\$" checksums.txt | sha256sum -c -; \
+    tar -xzf "${tarball}"; \
+    install -m 0755 "gh_${GH_CLI_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh
+
 FROM ${BASE_IMAGE_REGISTRY}/library/node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
 
 # Set ENABLE_SKILLS=false in dev/CI to skip skill-runtime deps (LibreOffice,
@@ -96,6 +114,14 @@ RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
 # bun + s5cmd copied from the binary-source stages defined at the top of this file.
 COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=s5cmd_source /s5cmd /usr/local/bin/s5cmd
+COPY --from=gh_source /usr/local/bin/gh /usr/local/bin/gh
+
+# Default gh config for the sandbox user: HTTPS git remotes (the proxy is
+# HTTP/HTTPS only, so SSH is unreachable) and no interactive prompts.
+RUN mkdir -p /home/sandbox/.config/gh \
+    && printf 'git_protocol: https\nprompt: disabled\n' \
+    > /home/sandbox/.config/gh/config.yml \
+    && chown -R sandbox:sandbox /home/sandbox/.config
 
 USER sandbox
 RUN curl -fsSL https://opencode.ai/install \

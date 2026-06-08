@@ -1,14 +1,14 @@
 """Module-level proxy to the active FastAPI ``TestClient``.
 
-The integration ``conftest.py`` builds one ``TestClient`` per test session
-and registers it via :func:`set_test_client`. Test code imports ``client``
-from this module and calls it like a normal ``TestClient`` /
-``httpx.Client``: ``client.get("/foo")``, ``client.post("/foo", json=...)``,
-``with client.stream("GET", "/sse") as r: ...``.
+The integration ``conftest.py`` builds one ``TestClient`` per test session and
+registers it via :func:`set_test_client`. Test code imports ``client`` from this
+module and calls it like a normal ``TestClient`` / ``httpx.Client``:
+``client.get("/foo")``, ``client.post("/foo", json=...)``, ``with
+client.stream("GET", "/sse") as r: ...``.
 
-The indirection (proxy instead of the bare TestClient) exists because the
-client is created lazily by a session-scoped fixture, after test modules
-have already been imported and bound their ``client`` reference.
+The indirection (proxy instead of the bare TestClient) exists because the client
+is created lazily by a session-scoped fixture, after test modules have already
+been imported and bound their ``client`` reference.
 """
 
 from __future__ import annotations
@@ -50,7 +50,9 @@ client = _TestClientProxy()
 
 
 def request_status(headers: dict[str, str], route: tuple[str, str]) -> int:
-    """Issue ``route`` (method, path) with ``headers`` and return the status code."""
+    """
+    Issues ``route`` (method, path) with ``headers`` and return the status code.
+    """
     method, path = route
     return client.request(
         method, f"{API_SERVER_URL}{path}", headers=headers, timeout=30

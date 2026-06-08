@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.17
+version: 0.5.18
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,11 +16,12 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: fixed
-      description: Grant the scheduled-tasks worker the same sandbox access as the
-        api_server (it provisions sandboxes headlessly). Inject the restricted
-        `sandboxPushSecret` (`ONYX_SANDBOX_PUSH_PRIVATE_KEY`) into the worker and
-        allow its pods as an ingress source in the sandbox-push NetworkPolicy.
+    - kind: added
+      description: '`auth.metricsAuth` bearer token guarding the API server''s
+        /metrics endpoint. /metrics returns 401 by default until you enable
+        auth.metricsAuth (injects `METRICS_AUTH_TOKEN`, and the api ServiceMonitor
+        scrapes with `Authorization: Bearer <token>`) or explicitly opt out via
+        configMap.DISABLE_METRICS_AUTH=true.'
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0

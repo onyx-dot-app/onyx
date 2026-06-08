@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { cn } from "@opal/utils";
+import { AnimatePresence, motion } from "motion/react";
 import Logo from "@/refresh-components/Logo";
 import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
@@ -83,25 +84,24 @@ export default function BuildMessageList({
 
   const renderStreamItems = (
     rawItems: StreamItem[],
-    opts: { isCurrentStream: boolean; extractLatestTodo: boolean }
+    opts: {
+      isCurrentStream: boolean;
+      extractLatestTodo: boolean;
+    }
   ): { nodes: React.ReactNode[]; pinnedTodo: TodoListState | null } => {
     // Render items in stream order (tools, text, thinking interleaved).
     //
     // Filtering rules that apply first:
     // - Only the LATEST todo_list is kept (either pinned via extractLatestTodo
     //   or rendered inline at its original position).
-    // - Thinking is ephemeral: the card shows only while the model is actively
-    //   thinking and disappears once that block settles.
+    // - Thinking remains as a collapsed transcript row so users have a durable
+    //   signal that the model spent time reasoning without opening by default.
     let latestTodoIdx = -1;
     rawItems.forEach((it, idx) => {
       if (it.type === "todo_list") latestTodoIdx = idx;
     });
 
     const items = rawItems.filter((it, idx) => {
-      // Drop settled thinking entirely — it's only shown live, in progress.
-      if (it.type === "thinking" && !it.isStreaming) {
-        return false;
-      }
       // Collapse to one todo_list per turn.
       if (it.type === "todo_list" && idx !== latestTodoIdx) {
         return false;
@@ -179,12 +179,21 @@ export default function BuildMessageList({
           );
         case "thinking":
           return (
-            <div key={item.id} className={cn(topMargin)}>
+            <motion.div
+              key={item.id}
+              className={cn(topMargin)}
+              initial={
+                opts.isCurrentStream ? { opacity: 0, y: -4, height: 0 } : false
+              }
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -6, height: 0, marginTop: 0 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            >
               <ThinkingCard
                 content={item.content}
                 isStreaming={item.isStreaming}
               />
-            </div>
+            </motion.div>
           );
         case "todo_list":
           return (
@@ -217,6 +226,10 @@ export default function BuildMessageList({
             extractLatestTodo: true,
           })
         : null;
+    const visibleSavedRender =
+      savedRender && (savedRender.pinnedTodo || savedRender.nodes.length > 0)
+        ? savedRender
+        : null;
 
     return (
       <div key={message.id} className="flex items-start gap-3 py-4">
@@ -224,17 +237,17 @@ export default function BuildMessageList({
           <Logo onyxBranded folded size={24} />
         </div>
         <div className="flex-1 flex flex-col gap-2 min-w-0">
-          {savedRender ? (
+          {visibleSavedRender ? (
             <>
-              {savedRender.pinnedTodo && (
+              {visibleSavedRender.pinnedTodo && (
                 <div>
                   <TodoListCard
-                    todoList={savedRender.pinnedTodo}
-                    defaultOpen={savedRender.pinnedTodo.isOpen}
+                    todoList={visibleSavedRender.pinnedTodo}
+                    defaultOpen={visibleSavedRender.pinnedTodo.isOpen}
                   />
                 </div>
               )}
-              {savedRender.nodes}
+              {visibleSavedRender.nodes}
             </>
           ) : (
             <TextChunk content={message.content} />
@@ -303,7 +316,9 @@ export default function BuildMessageList({
                   <BlinkingBar />
                 </div>
               ) : (
-                streamRender?.nodes
+                <AnimatePresence initial={false}>
+                  {streamRender?.nodes}
+                </AnimatePresence>
               )}
               {trailingAssistantSlot}
             </div>

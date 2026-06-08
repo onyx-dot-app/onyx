@@ -2,7 +2,6 @@ import "./globals.css";
 
 import { GTM_ENABLED, MODAL_ROOT_ID } from "@/lib/constants";
 import { Metadata } from "next";
-
 import AppProvider from "@/providers/AppProvider";
 import DynamicMetadata from "@/providers/DynamicMetadata";
 import { PHProvider } from "./providers";

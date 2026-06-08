@@ -6,11 +6,13 @@ import { Disabled } from "@opal/core";
 import { Text, Tooltip } from "@opal/components";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import {
-  BUILD_MODE_PROVIDERS as PROVIDERS,
+  CRAFT_PROVIDERS,
+  craftModelName,
   type ProviderKey,
 } from "@/app/craft/onboarding/constants";
+import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
+import { getProvider } from "@/lib/languageModels";
 
-export { PROVIDERS };
 export type { ProviderKey };
 
 interface SelectableButtonProps {
@@ -136,21 +138,29 @@ export default function OnboardingLlmSetup({
   onConnectionStatusChange,
   onErrorMessageChange,
 }: OnboardingLlmSetupProps) {
-  const currentProviderConfig = PROVIDERS.find(
-    (p) => p.key === selectedProvider
-  )!;
+  const { llmProviderOptions } = useLLMProviderOptions();
 
-  const isProviderConfigured = (providerName: string) => {
-    return llmProviders?.some((p) => p.provider === providerName) ?? false;
+  const knownModelsFor = (providerType: string) =>
+    llmProviderOptions?.find((o) => o.name === providerType)?.known_models ??
+    [];
+  // Recommended default first; stable sort keeps the rest in provider order.
+  const currentModels = knownModelsFor(selectedProvider)
+    .filter((m) => m.is_visible)
+    .sort(
+      (a, b) =>
+        Number(b.is_recommended_default) - Number(a.is_recommended_default)
+    );
+
+  const isProviderConfigured = (providerType: string) => {
+    return llmProviders?.some((p) => p.provider === providerType) ?? false;
   };
 
   const handleProviderChange = (provider: ProviderKey) => {
-    const providerConfig = PROVIDERS.find((p) => p.key === provider)!;
     // Don't allow selecting already-configured providers
-    if (isProviderConfigured(providerConfig.providerName)) return;
+    if (isProviderConfigured(provider)) return;
 
     onProviderChange(provider);
-    onModelChange(providerConfig.models[0]?.name || "");
+    onModelChange(craftModelName(knownModelsFor(provider)) ?? "");
     onConnectionStatusChange("idle");
     onErrorMessageChange("");
   };
@@ -182,17 +192,17 @@ export default function OnboardingLlmSetup({
           Provider
         </Text>
         <div className="flex justify-center gap-3 w-full max-w-md">
-          {PROVIDERS.map((provider) => {
-            const isConfigured = isProviderConfigured(provider.providerName);
+          {CRAFT_PROVIDERS.map(({ key, recommended }) => {
+            const isConfigured = isProviderConfigured(key);
             return (
-              <div key={provider.key} className="flex-1">
+              <div key={key} className="flex-1">
                 <SelectableButton
-                  selected={selectedProvider === provider.key}
-                  onClick={() => handleProviderChange(provider.key)}
+                  selected={selectedProvider === key}
+                  onClick={() => handleProviderChange(key)}
                   subtext={
                     isConfigured
                       ? "Already configured"
-                      : provider.recommended
+                      : recommended
                         ? "Recommended"
                         : undefined
                   }
@@ -203,7 +213,7 @@ export default function OnboardingLlmSetup({
                       : undefined
                   }
                 >
-                  {provider.label}
+                  {getProvider(key).companyName}
                 </SelectableButton>
               </div>
             );
@@ -217,13 +227,13 @@ export default function OnboardingLlmSetup({
           Default Model
         </Text>
         <div className="flex justify-center gap-3 flex-wrap w-full max-w-md">
-          {currentProviderConfig.models.map((model) => (
+          {currentModels.map((model) => (
             <div key={model.name} className="flex-1 min-w-0">
               <ModelSelectButton
                 selected={selectedModel === model.name}
                 onClick={() => handleModelChange(model.name)}
-                label={model.label}
-                recommended={model.recommended}
+                label={model.display_name || model.name}
+                recommended={model.is_recommended_default}
                 disabled={connectionStatus === "testing"}
               />
             </div>
@@ -242,7 +252,10 @@ export default function OnboardingLlmSetup({
               type="password"
               value={apiKey}
               onChange={(e) => handleApiKeyChange(e.target.value)}
-              placeholder={currentProviderConfig.apiKeyPlaceholder}
+              placeholder={
+                CRAFT_PROVIDERS.find((p) => p.key === selectedProvider)
+                  ?.apiKeyPlaceholder
+              }
               disabled={connectionStatus === "testing"}
               className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-hidden"
             />

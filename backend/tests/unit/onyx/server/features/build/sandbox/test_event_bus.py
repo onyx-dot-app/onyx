@@ -186,6 +186,50 @@ def test_dispatch_drops_global_events_without_sessionid(bus: PodEventBus) -> Non
         sub.queue.get_nowait()
 
 
+def test_dispatch_fans_out_unscoped_session_error(bus: PodEventBus) -> None:
+    """opencode can publish terminal session events without sessionID. Since the
+    bus is directory-scoped, deliver those to active subscribers instead of
+    dropping them and leaving send-message to emit keepalives until timeout."""
+    sub_a = bus.subscribe("ses_A")
+    sub_b = bus.subscribe("ses_B")
+
+    bus._dispatch(
+        {
+            "type": "session.error",
+            "properties": {"error": {"data": {"message": "upstream reset"}}},
+        }
+    )
+
+    item_a = sub_a.queue.get_nowait()
+    item_b = sub_b.queue.get_nowait()
+    assert item_a is not None
+    assert item_b is not None
+    assert item_a["type"] == "session.error"
+    assert item_b["type"] == "session.error"
+    assert item_a["properties"]["error"]["data"]["message"] == "upstream reset"
+
+
+def test_dispatch_fans_out_unscoped_idle_status(bus: PodEventBus) -> None:
+    sub = bus.subscribe("ses_A")
+
+    bus._dispatch(
+        {"type": "session.status", "properties": {"status": {"type": "idle"}}}
+    )
+
+    item = sub.queue.get_nowait()
+    assert item is not None
+    assert item["type"] == "session.status"
+
+
+def test_dispatch_drops_unscoped_non_terminal_event(bus: PodEventBus) -> None:
+    sub = bus.subscribe("ses_A")
+
+    bus._dispatch({"type": "session.updated", "properties": {}})
+
+    with pytest.raises(Empty):
+        sub.queue.get_nowait()
+
+
 def test_dispatch_extracts_sessionid_from_nested_info(bus: PodEventBus) -> None:
     """``message.updated`` puts sessionID on the inner Message object."""
     sub = bus.subscribe("ses_A")

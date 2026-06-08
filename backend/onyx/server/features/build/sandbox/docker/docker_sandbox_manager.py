@@ -350,6 +350,8 @@ def _proxy_env_vars(
         "AWS_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
         "CURL_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
         "GIT_SSL_CAINFO": _PROXY_CA_BUNDLE_FILE,
+        "GH_TOKEN": SANDBOX_PROXY_INJECTED_PLACEHOLDER,
+        "GH_NO_UPDATE_NOTIFIER": "1",
     }
 
 
@@ -978,12 +980,11 @@ echo "Session workspace setup complete"
             "Setting up session workspace %s in sandbox %s.", session_id, sandbox_id
         )
         try:
-            # user="1000:1000": container's User spec is "0:0" (proxy init
-            # needs root for iptables), so docker exec defaults to root.
-            # Without CAP_DAC_OVERRIDE (cap_drop=ALL), root cannot write to
+            # user="1000:1000": container's User spec is "0:0" (proxy init needs
+            # root for iptables), so docker exec defaults to root. Without
+            # CAP_DAC_OVERRIDE (cap_drop=ALL), root cannot write to
             # /workspace/sessions which is owned by sandbox=1000. Exec as
-            # sandbox so the script's mkdir/cp on the session workspace
-            # succeed.
+            # sandbox so the script's mkdir/cp on the session workspace succeed.
             run_in_container(
                 container, ["/bin/sh", "-c", setup_script], user="1000:1000"
             )

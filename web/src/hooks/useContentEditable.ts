@@ -19,6 +19,8 @@ import {
   SKILL_TILE_TYPE,
 } from "@/lib/richInputTile";
 
+type PasteTileData = { text: string; tile: HTMLElement };
+
 export interface UseContentEditableOptions {
   initialContent?: string;
   wrapperRef: React.RefObject<HTMLDivElement | null>;
@@ -38,10 +40,13 @@ export interface UseContentEditableReturn {
   handleCompositionStart: () => void;
   handleCompositionEnd: () => void;
   insertTextAtCursor: (text: string) => void;
-  insertTileAtCursor: (text: string) => void;
+  insertTileAtCursor: (text: string) => HTMLElement | null;
+  expandTile: (tile: HTMLElement) => void;
   /** Insert a skill tile, replacing `beforeToken` (the `/<query>` before the caret). */
   insertSkillTile: (slug: string, name: string, beforeToken: string) => boolean;
   pasteText: (text: string) => void;
+  /** Whether to show the "paste again to expand" hint — true while a paste tile exists. */
+  pasteExpandHintVisible: boolean;
   handleCopy: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   handleCut: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   setCursorToEnd: () => void;
@@ -49,7 +54,7 @@ export interface UseContentEditableReturn {
   handleTileMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
   handleTileClick: (event: React.MouseEvent<HTMLDivElement>) => void;
   handleTileKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => boolean;
-  tilePopover: { text: string; tile: HTMLElement } | null;
+  tilePopover: PasteTileData | null;
   dismissTilePopover: () => void;
   updateTileText: (newText: string) => void;
 }
@@ -71,10 +76,9 @@ export function useContentEditable({
   const rafRef = useRef<number | null>(null);
   const wrapperPaddingYRef = useRef(0);
   const selectedTileRef = useRef<HTMLElement | null>(null);
-  const [tilePopover, setTilePopover] = useState<{
-    text: string;
-    tile: HTMLElement;
-  } | null>(null);
+  const plainPasteRef = useRef(false);
+  const [tilePopover, setTilePopover] = useState<PasteTileData | null>(null);
+  const [pasteExpandHintVisible, setPasteExpandHintVisible] = useState(false);
 
   useEffect(() => {
     onContentChangeRef.current = onContentChange;
@@ -162,6 +166,9 @@ export function useContentEditable({
     const text = getTextContent(el);
     messageRef.current = text;
     setMessageState(text);
+    setPasteExpandHintVisible(
+      !!el.querySelector('[data-rich-tile][data-tile-type="paste"]')
+    );
     onContentChangeRef.current?.(text);
     return text;
   }, []);
@@ -198,6 +205,7 @@ export function useContentEditable({
 
   const handleCompositionEnd = useCallback(() => {
     isComposingRef.current = false;
+    plainPasteRef.current = false;
     syncFromDOM();
     resize();
   }, [syncFromDOM, resize]);
@@ -213,6 +221,7 @@ export function useContentEditable({
 
       clearTileSelection();
       setTilePopover(null);
+      setPasteExpandHintVisible(false);
 
       ref.current.textContent = text;
       messageRef.current = text;
@@ -241,6 +250,7 @@ export function useContentEditable({
 
     clearTileSelection();
     setTilePopover(null);
+    setPasteExpandHintVisible(false);
 
     ref.current.innerHTML = "";
     messageRef.current = "";
@@ -260,8 +270,8 @@ export function useContentEditable({
   );
 
   const insertTileAtCursor = useCallback(
-    (text: string) => {
-      if (!ref.current) return;
+    (text: string): HTMLElement | null => {
+      if (!ref.current) return null;
       const tile = createRichInputTileNode({
         type: "paste",
         text,
@@ -270,6 +280,45 @@ export function useContentEditable({
       });
       insertNodeAtCursorUtil(ref.current, tile);
       setCursorAfterNode(tile);
+
+      syncFromDOM();
+      resize();
+      return tile;
+    },
+    [syncFromDOM, resize]
+  );
+
+  const expandTile = useCallback(
+    (tile: HTMLElement) => {
+      const el = ref.current;
+      if (!el || !el.contains(tile)) return;
+
+      const sel = window.getSelection();
+      const caret =
+        sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
+
+      const textNode = document.createTextNode(
+        tile.getAttribute("data-text") ?? ""
+      );
+      tile.replaceWith(textNode);
+
+      if (selectedTileRef.current === tile) selectedTileRef.current = null;
+      setTilePopover(null);
+
+      el.focus();
+      // Restore the caret if it's still in the input; a caret on the now-detached
+      // tile (or in the popover) fails this and falls back to the text end.
+      if (
+        caret &&
+        el.contains(caret.startContainer) &&
+        el.contains(caret.endContainer)
+      ) {
+        sel!.removeAllRanges();
+        sel!.addRange(caret);
+      } else {
+        setCursorAfterNode(textNode);
+        el.normalize();
+      }
 
       syncFromDOM();
       resize();
@@ -301,15 +350,46 @@ export function useContentEditable({
     [syncFromDOM, resize]
   );
 
+  const findMatchingPasteTile = useCallback(
+    (text: string): HTMLElement | null => {
+      const el = ref.current;
+      if (!el) return null;
+      const tiles = Array.from(
+        el.querySelectorAll<HTMLElement>("[data-rich-tile]")
+      );
+      return (
+        tiles.find(
+          (tile) =>
+            !isSkillTile(tile) && tile.getAttribute("data-text") === text
+        ) ?? null
+      );
+    },
+    []
+  );
+
   const pasteText = useCallback(
     (text: string) => {
-      if (pasteTilesEnabled && shouldCreatePasteTile(text)) {
+      const plainPaste = plainPasteRef.current;
+      plainPasteRef.current = false;
+
+      if (pasteTilesEnabled && !plainPaste && shouldCreatePasteTile(text)) {
+        const existing = findMatchingPasteTile(text);
+        if (existing) {
+          expandTile(existing);
+          return;
+        }
         insertTileAtCursor(text);
       } else {
         insertTextAtCursor(text);
       }
     },
-    [pasteTilesEnabled, insertTileAtCursor, insertTextAtCursor]
+    [
+      pasteTilesEnabled,
+      insertTileAtCursor,
+      insertTextAtCursor,
+      expandTile,
+      findMatchingPasteTile,
+    ]
   );
 
   const handleTileMouseDown = useCallback(
@@ -416,6 +496,21 @@ export function useContentEditable({
 
   const handleTileKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>): boolean => {
+      const isModifier =
+        event.key === "Control" ||
+        event.key === "Meta" ||
+        event.key === "Shift" ||
+        event.key === "Alt";
+      const isPasteShortcut =
+        (event.ctrlKey || event.metaKey) &&
+        (event.key === "v" || event.key === "V");
+      // Arm plain paste on Ctrl/Cmd+Shift+V; any other key disarms a stale flag.
+      if (isPasteShortcut) {
+        plainPasteRef.current = event.shiftKey;
+      } else if (!isModifier) {
+        plainPasteRef.current = false;
+      }
+
       const isNav = event.key === "ArrowLeft" || event.key === "ArrowRight";
       const isDelete = event.key === "Backspace" || event.key === "Delete";
 
@@ -566,6 +661,7 @@ export function useContentEditable({
       event.clipboardData.setData("text/plain", getTextContent(temp));
 
       range.deleteContents();
+      selectedTileRef.current = null;
       syncFromDOM();
       resize();
     },
@@ -587,8 +683,10 @@ export function useContentEditable({
     handleCompositionEnd,
     insertTextAtCursor,
     insertTileAtCursor,
+    expandTile,
     insertSkillTile,
     pasteText,
+    pasteExpandHintVisible,
     handleCopy,
     handleCut,
     setCursorToEnd,

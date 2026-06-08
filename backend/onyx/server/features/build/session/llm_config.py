@@ -8,8 +8,10 @@ restart.
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.well_known_providers.llm_provider_options import (
+    fetch_default_model_for_provider,
+)
 from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
-from onyx.server.features.build.configs import BUILD_MODE_RECOMMENDED_MODEL_BY_TYPE
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
@@ -18,15 +20,12 @@ logger = setup_logger()
 
 
 def _recommended_model(provider: LLMProviderView) -> str | None:
-    """The Craft-recommended model for ``provider``: the type's recommended
-    model if defined, else the first visible model. ``None`` if the provider
-    has no usable (visible) model."""
+    """Recommended model for ``provider``: the type's default from the shared
+    config, else the first visible model. ``None`` if no visible model."""
     visible_models = [m for m in provider.model_configurations if m.is_visible]
     if not visible_models:
         return None
-    return BUILD_MODE_RECOMMENDED_MODEL_BY_TYPE.get(
-        provider.provider, visible_models[0].name
-    )
+    return fetch_default_model_for_provider(provider.provider) or visible_models[0].name
 
 
 def _config_from_provider(

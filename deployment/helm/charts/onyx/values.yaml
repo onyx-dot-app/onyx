@@ -1342,6 +1342,28 @@ auth:
     # If not set, helm install/upgrade will fail when auth.userauth.enabled=true.
     values:
       user_auth_secret: ""
+  metricsAuth:
+    # -- Bearer token guarding the API server's /metrics endpoint. /metrics
+    # returns 401 by default until you either enable this (provide a token) or
+    # explicitly opt out via configMap.DISABLE_METRICS_AUTH="true". When enabled,
+    # scrapers must send the token as `Authorization: Bearer <token>` (Prometheus
+    # scrape config: `authorization`), and the api ServiceMonitor below is wired
+    # to send it automatically.
+    enabled: false
+    # -- Only inject the token into pods that serve the protected /metrics (the
+    # API server), not every backend pod. Routes through onyx.envSecretsRestricted.
+    allPods: false
+    # -- Overwrite the default secret name, ignored if existingSecret is defined
+    secretName: 'onyx-metrics-auth'
+    # -- Use a secret specified elsewhere
+    existingSecret: ""
+    # -- This defines the env var to secret map
+    secretKeys:
+      METRICS_AUTH_TOKEN: metrics_auth_token
+    # -- Secret value. Required when this secret is enabled - generate with: openssl rand -hex 32
+    # If not set, helm install/upgrade will fail when auth.metricsAuth.enabled=true.
+    values:
+      metrics_auth_token: ""
   # Ed25519 private key for sandbox push auth (only the public key reaches sandbox pods).
   # Generate with: python3 -c "import base64; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey as K; from cryptography.hazmat.primitives.serialization import *; print(base64.b64encode(K.generate().private_bytes(Encoding.Raw,PrivateFormat.Raw,NoEncryption())).decode())"
   sandboxPushSecret:
@@ -1384,6 +1406,10 @@ configMap:
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check
   VALID_EMAIL_DOMAINS: ""
+  # /metrics requires a bearer token by default and returns 401 until one is set
+  # (enable auth.metricsAuth) OR you explicitly opt out here. Set to "true" to
+  # expose /metrics with NO authentication.
+  DISABLE_METRICS_AUTH: ""
   # For sending verification emails, true or false
   REQUIRE_EMAIL_VERIFICATION: ""
   # If unspecified then defaults to 'smtp.gmail.com'
