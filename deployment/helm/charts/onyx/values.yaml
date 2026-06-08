@@ -1410,6 +1410,10 @@ configMap:
   # (enable auth.metricsAuth) OR you explicitly opt out here. Set to "true" to
   # expose /metrics with NO authentication.
   DISABLE_METRICS_AUTH: ""
+  # The interactive API docs and schema (/openapi.json, /docs, /redoc) are off by
+  # default and the routes are not registered (404). Set to "true" to expose them
+  # publicly with NO authentication.
+  ENABLE_PUBLIC_DOCS: ""
   # For sending verification emails, true or false
   REQUIRE_EMAIL_VERIFICATION: ""
   # If unspecified then defaults to 'smtp.gmail.com'
