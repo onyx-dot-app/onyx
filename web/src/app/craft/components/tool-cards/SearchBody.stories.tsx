@@ -48,14 +48,12 @@ web/src/app/craft/components/approvals/PayloadView.tsx:8:interface PayloadViewPr
 export const GrepDenseHits: Story = {
   args: {
     toolCall: search({
-      description: "trailingAssistantSlot",
-      rawOutput: `web/src/app/craft/components/BuildMessageList.tsx:28:   * Trailing content attached to the last assistant block — either the
-web/src/app/craft/components/BuildMessageList.tsx:34:  trailingAssistantSlot?: React.ReactNode;
-web/src/app/craft/components/BuildMessageList.tsx:53:  trailingAssistantSlot,
-web/src/app/craft/components/BuildMessageList.tsx:228:          {trailing}
-web/src/app/craft/components/BuildMessageList.tsx:294:              {trailingAssistantSlot}
-web/src/app/craft/components/ChatPanel.tsx:36:import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsRegion";
-web/src/app/craft/components/ChatPanel.tsx:411:              trailingAssistantSlot={`,
+      description: "aboveInputSlot",
+      rawOutput: `web/src/sections/input/BaseInputBar.tsx:68:  aboveInputSlot?: ReactNode;
+web/src/sections/input/BaseInputBar.tsx:278:          {aboveInputSlot}
+web/src/app/craft/components/CraftInputBar.tsx:60:  aboveInputSlot?: ReactNode;
+web/src/app/craft/components/CraftInputBar.tsx:262:            aboveInputSlot={aboveInputSlot}
+web/src/app/craft/components/ChatPanel.tsx:679:                    aboveInputSlot={`,
     }),
   },
 };

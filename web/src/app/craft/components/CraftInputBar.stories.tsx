@@ -4,6 +4,7 @@ import { UserProvider } from "@/providers/UserProvider";
 import { UploadFilesProvider } from "@/app/craft/contexts/UploadFilesContext";
 import CraftInputBar from "@/app/craft/components/CraftInputBar";
 import type { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
+import ApprovalCard from "@/app/craft/components/approvals/ApprovalCard";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   appFixture,
@@ -14,6 +15,8 @@ import type { SkillsList } from "@/refresh-pages/admin/SkillsPage/interfaces";
 import type { PickerEntry } from "@/lib/skills/picker";
 import type { ExternalAppType } from "@/app/craft/v1/apps/registry";
 import type { LibraryEntry } from "@/app/craft/types/user-library";
+import type { QueuedMessage } from "@/app/app/interfaces";
+import type { ApprovalAction, ApprovalView } from "@/app/craft/types/approvals";
 
 const SWR_NO_FETCH = {
   provider: () => new Map(),
@@ -83,6 +86,48 @@ const appEntry = (
   authenticated: true,
 });
 
+const queuedMessages: QueuedMessage[] = [
+  { id: 1, text: "Then add a loading state to the deployment button" },
+  { id: 2, text: "After that, write a Playwright smoke test" },
+];
+
+const slackPostMessage: ApprovalAction = {
+  action_type: "slack.messages.write",
+  display_name: "Post a message",
+  description: "Post a message to a channel or conversation.",
+  policy: "ASK",
+};
+
+const approval: ApprovalView = {
+  approval_id: "appr-input-story",
+  session_id: "sess-input-story",
+  actions: [slackPostMessage],
+  app_name: "Slack",
+  payload: {
+    channel: "#eng-craft",
+    text: "The preview deployment is ready for review.",
+  },
+  display_payload: {
+    channel: "#eng-craft",
+    text: "The preview deployment is ready for review.",
+  },
+  created_at: "2026-05-28T15:42:11Z",
+  decision: null,
+  decided_at: null,
+  is_live: true,
+};
+
+function ApprovalAboveQueueSlot() {
+  return (
+    <div
+      data-testid="storybook-approval-stack"
+      className="flex flex-col pb-1.5"
+    >
+      <ApprovalCard approval={approval} />
+    </div>
+  );
+}
+
 const meta: Meta<typeof CraftInputBar> = {
   title: "Apps/Craft/Input Bar/Craft Input Bar",
   component: CraftInputBar,
@@ -122,6 +167,18 @@ export const Running: Story = {
     queuedMessages: [],
     onQueueMessage: (text: string) => console.log("queue", text),
     onRemoveQueuedMessage: (index: number) => console.log("remove", index),
+  },
+};
+
+/** Approval cards render above queued messages in the pre-input stack. */
+export const WithApprovalAndQueuedMessages: Story = {
+  args: {
+    isRunning: true,
+    aboveInputSlot: <ApprovalAboveQueueSlot />,
+    queuedMessages,
+    onQueueMessage: (text: string) => console.log("queue", text),
+    onRemoveQueuedMessage: (index: number) => console.log("remove", index),
+    onInterrupt: () => console.log("interrupt"),
   },
 };
 

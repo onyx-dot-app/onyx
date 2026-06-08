@@ -58,8 +58,8 @@ Steps:
 1. git reset --hard origin/main
 2. Add types/approvals.ts, hooks/useLiveApprovals.ts, components/approvals/* (clean adds)
 3. Append fetchLiveApprovals + postApprovalDecision + ApprovalConflictError to apiServices.ts
-4. Re-implement trailingAssistantSlot in main's BuildMessageList.tsx
-5. Wire LiveApprovalsRegion into ChatPanel.tsx on main's structure
+4. Add aboveInputSlot to the shared input bar stack
+5. Wire LiveApprovalsRegion through CraftInputBar above queued messages
 6. Re-apply backend K8S_CONTEXT env support to k8s_client.py + env template
 7. Type-check + lint, commit as single feat
 

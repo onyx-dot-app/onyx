@@ -64,6 +64,8 @@ export interface BaseInputBarProps {
   bottomLeftSlot?: ReactNode;
   /** Rendered in the right control group, left of Stop/Send (e.g. a mic button). */
   bottomRightSlot?: ReactNode;
+  /** Rendered above the composer stack, outside the input disabled state. */
+  aboveInputSlot?: ReactNode;
 
   /** Return true to consume the pasted text (skips pasteText). */
   onPasteText?: (text: string) => boolean;
@@ -93,6 +95,7 @@ const BaseInputBar = memo(
         topSlot,
         bottomLeftSlot,
         bottomRightSlot,
+        aboveInputSlot,
         onPasteText,
         onPasteFiles,
         onInputCallback,
@@ -271,138 +274,143 @@ const BaseInputBar = memo(
       }, [interruptible, isInterrupting, onInterrupt]);
 
       return (
-        <Disabled disabled={disabled}>
-          {queueEnabled && (
-            <QueuedMessageBar
-              messages={queue}
-              highlightedIndex={queueNav.highlightedIndex}
-              awaitingPreferredSelection={false}
-              onDiscard={(index) => onRemoveQueuedMessage?.(index)}
-              onHighlight={queueNav.setHighlightedIndex}
-            />
-          )}
-          <div
-            className={cn(
-              "w-full flex flex-col shadow-01 bg-background-neutral-00",
-              noBottomRounding ? "rounded-t-16 rounded-b-none" : "rounded-16"
-            )}
-          >
-            {/* Slot owns its own padding so it can animate (e.g. collapse). */}
-            {topSlot}
-
-            <div ref={inputWrapperRef} className="flex-1 overflow-hidden">
-              <div
-                ref={inputRef}
-                contentEditable={!disabled}
-                suppressContentEditableWarning
-                onPaste={handlePaste}
-                onInput={handleInput}
-                onCompositionStart={handleCompositionStart}
-                onCompositionEnd={handleCompositionEnd}
-                onKeyDown={handleKeyDown}
-                onKeyUp={handleSelectionChange}
-                onMouseUp={handleSelectionChange}
-                onBlur={() => queueNav.setHighlightedIndex(null)}
-                className={cn(
-                  "w-full h-full min-h-[44px] outline-hidden bg-transparent",
-                  "whitespace-pre-wrap wrap-break-word overscroll-contain",
-                  "overflow-y-auto px-3 pb-2 pt-3"
-                )}
-                tabIndex={disabled ? -1 : 0}
-                style={{
-                  scrollbarWidth: "thin",
-                  scrollbarColor: "var(--border-02) transparent",
-                }}
-                role="textbox"
-                aria-label="Message input"
-                aria-multiline={true}
-                aria-disabled={disabled}
-                aria-placeholder={placeholder}
-                data-placeholder={placeholder}
-                data-empty={!message ? "" : undefined}
-                onCopy={handleCopy}
-                onCut={handleCut}
-                onMouseDown={handleTileMouseDown}
-                onClick={handleTileClick}
+        <>
+          {aboveInputSlot}
+          <Disabled disabled={disabled}>
+            {queueEnabled && (
+              <QueuedMessageBar
+                messages={queue}
+                highlightedIndex={queueNav.highlightedIndex}
+                awaitingPreferredSelection={false}
+                onDiscard={(index) => onRemoveQueuedMessage?.(index)}
+                onHighlight={queueNav.setHighlightedIndex}
               />
-            </div>
+            )}
+            <div
+              className={cn(
+                "w-full flex flex-col shadow-01 bg-background-neutral-00",
+                noBottomRounding ? "rounded-t-16 rounded-b-none" : "rounded-16"
+              )}
+            >
+              {/* Slot owns its own padding so it can animate (e.g. collapse). */}
+              {topSlot}
 
-            <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
-              <div className="flex flex-row items-center gap-2">
-                {bottomLeftSlot}
-                {pasteExpandHintVisible ? (
-                  <div className="flex items-center gap-1 select-none">
-                    <Text font="secondary-body" color="text-02">
-                      Paste again to expand
-                    </Text>
-                  </div>
-                ) : (
-                  !message &&
-                  queueEnabled &&
-                  queue.length > 0 && (
-                    <div className="flex items-center gap-1 select-none">
-                      <Keycap>↑</Keycap>
-                      <Text font="secondary-body" color="text-02">
-                        to edit queued messages
-                      </Text>
-                    </div>
-                  )
-                )}
-              </div>
-              <div className="flex flex-row items-center gap-1">
-                {bottomRightSlot}
+              <div ref={inputWrapperRef} className="flex-1 overflow-hidden">
                 <div
+                  ref={inputRef}
+                  contentEditable={!disabled}
+                  suppressContentEditableWarning
+                  onPaste={handlePaste}
+                  onInput={handleInput}
+                  onCompositionStart={handleCompositionStart}
+                  onCompositionEnd={handleCompositionEnd}
+                  onKeyDown={handleKeyDown}
+                  onKeyUp={handleSelectionChange}
+                  onMouseUp={handleSelectionChange}
+                  onBlur={() => queueNav.setHighlightedIndex(null)}
                   className={cn(
-                    "overflow-hidden transition-[width,opacity] duration-150 ease-out motion-reduce:transition-none",
-                    interruptible
-                      ? "w-9 opacity-100"
-                      : "w-0 opacity-0 pointer-events-none"
+                    "w-full h-full min-h-[44px] outline-hidden bg-transparent",
+                    "whitespace-pre-wrap wrap-break-word overscroll-contain",
+                    "overflow-y-auto px-3 pb-2 pt-3"
                   )}
-                >
-                  <IconButton
-                    main
-                    tertiary
-                    icon={isInterrupting ? SvgLoader : SvgStop}
-                    iconClassName={isInterrupting ? "animate-spin" : undefined}
-                    className={cn(
-                      "border-[1.5px] border-border-02",
-                      stopArmed && "bg-background-tint-02!"
-                    )}
-                    disabled={!interruptible || isInterrupting}
-                    onClick={handleInterrupt}
-                    tooltip="Stop · esc esc"
-                    aria-label="Stop generating"
-                  />
-                </div>
-                <IconButton
-                  icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
-                  onClick={handleSubmit}
-                  disabled={!canSubmit}
-                  tooltip={
-                    sandboxInitializing
-                      ? "Initializing sandbox..."
-                      : isRunning
-                        ? "Queue message"
-                        : "Send"
-                  }
-                  aria-label={isRunning ? "Queue message" : "Send"}
-                  iconClassName={
-                    sandboxInitializing ? "animate-spin" : undefined
-                  }
+                  tabIndex={disabled ? -1 : 0}
+                  style={{
+                    scrollbarWidth: "thin",
+                    scrollbarColor: "var(--border-02) transparent",
+                  }}
+                  role="textbox"
+                  aria-label="Message input"
+                  aria-multiline={true}
+                  aria-disabled={disabled}
+                  aria-placeholder={placeholder}
+                  data-placeholder={placeholder}
+                  data-empty={!message ? "" : undefined}
+                  onCopy={handleCopy}
+                  onCut={handleCut}
+                  onMouseDown={handleTileMouseDown}
+                  onClick={handleTileClick}
                 />
               </div>
+
+              <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
+                <div className="flex flex-row items-center gap-2">
+                  {bottomLeftSlot}
+                  {pasteExpandHintVisible ? (
+                    <div className="flex items-center gap-1 select-none">
+                      <Text font="secondary-body" color="text-02">
+                        Paste again to expand
+                      </Text>
+                    </div>
+                  ) : (
+                    !message &&
+                    queueEnabled &&
+                    queue.length > 0 && (
+                      <div className="flex items-center gap-1 select-none">
+                        <Keycap>↑</Keycap>
+                        <Text font="secondary-body" color="text-02">
+                          to edit queued messages
+                        </Text>
+                      </div>
+                    )
+                  )}
+                </div>
+                <div className="flex flex-row items-center gap-1">
+                  {bottomRightSlot}
+                  <div
+                    className={cn(
+                      "overflow-hidden transition-[width,opacity] duration-150 ease-out motion-reduce:transition-none",
+                      interruptible
+                        ? "w-9 opacity-100"
+                        : "w-0 opacity-0 pointer-events-none"
+                    )}
+                  >
+                    <IconButton
+                      main
+                      tertiary
+                      icon={isInterrupting ? SvgLoader : SvgStop}
+                      iconClassName={
+                        isInterrupting ? "animate-spin" : undefined
+                      }
+                      className={cn(
+                        "border-[1.5px] border-border-02",
+                        stopArmed && "bg-background-tint-02!"
+                      )}
+                      disabled={!interruptible || isInterrupting}
+                      onClick={handleInterrupt}
+                      tooltip="Stop · esc esc"
+                      aria-label="Stop generating"
+                    />
+                  </div>
+                  <IconButton
+                    icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
+                    onClick={handleSubmit}
+                    disabled={!canSubmit}
+                    tooltip={
+                      sandboxInitializing
+                        ? "Initializing sandbox..."
+                        : isRunning
+                          ? "Queue message"
+                          : "Send"
+                    }
+                    aria-label={isRunning ? "Queue message" : "Send"}
+                    iconClassName={
+                      sandboxInitializing ? "animate-spin" : undefined
+                    }
+                  />
+                </div>
+              </div>
             </div>
-          </div>
-          {tilePopover && (
-            <PasteTilePopover
-              text={tilePopover.text}
-              tileElement={tilePopover.tile}
-              onDismiss={dismissTilePopover}
-              onTextChange={updateTileText}
-              onExpand={() => expandTile(tilePopover.tile)}
-            />
-          )}
-        </Disabled>
+            {tilePopover && (
+              <PasteTilePopover
+                text={tilePopover.text}
+                tileElement={tilePopover.tile}
+                onDismiss={dismissTilePopover}
+                onTextChange={updateTileText}
+                onExpand={() => expandTile(tilePopover.tile)}
+              />
+            )}
+          </Disabled>
+        </>
       );
     }
   )

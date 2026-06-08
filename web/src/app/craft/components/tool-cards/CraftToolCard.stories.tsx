@@ -141,9 +141,9 @@ export const SearchGrep: Story = {
       kind: "search",
       toolName: "grep",
       title: "Searching content",
-      description: "trailingAssistantSlot",
+      description: "aboveInputSlot",
       rawOutput:
-        "web/src/app/craft/components/BuildMessageList.tsx:34:  trailingAssistantSlot?: React.ReactNode;\nweb/src/app/craft/components/ChatPanel.tsx:411:              trailingAssistantSlot={",
+        "web/src/sections/input/BaseInputBar.tsx:68:  aboveInputSlot?: ReactNode;\nweb/src/app/craft/components/ChatPanel.tsx:679:                    aboveInputSlot={",
     }),
   },
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { cn } from "@opal/utils";
 import { AnimatePresence, motion } from "motion/react";
 import Logo from "@/refresh-components/Logo";
@@ -38,13 +38,6 @@ interface BuildMessageListProps {
    * rather than via scrollIntoView, which scrolls every ancestor.
    */
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
-  /**
-   * Trailing content attached to the last assistant block — either the
-   * in-progress streaming area (if visible) or the last saved assistant
-   * message. Used to render the approval cards inline so they read as
-   * part of the agent's last turn instead of a separate message.
-   */
-  trailingAssistantSlot?: React.ReactNode;
 }
 
 /**
@@ -62,7 +55,6 @@ export default function BuildMessageList({
   isStreaming = false,
   autoScrollEnabled = true,
   scrollContainerRef,
-  trailingAssistantSlot,
 }: BuildMessageListProps) {
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -212,10 +204,7 @@ export default function BuildMessageList({
     return { nodes, pinnedTodo };
   };
 
-  const renderAgentMessage = (
-    message: BuildMessage,
-    trailing?: React.ReactNode
-  ) => {
+  const renderAgentMessage = (message: BuildMessage) => {
     const savedStreamItems = message.message_metadata?.streamItems as
       | StreamItem[]
       | undefined;
@@ -252,22 +241,10 @@ export default function BuildMessageList({
           ) : (
             <TextChunk content={message.content} />
           )}
-          {trailing}
         </div>
       </div>
     );
   };
-
-  // Index of the last saved assistant message — used to anchor the
-  // trailingAssistantSlot (e.g. approval cards) when no streaming
-  // response is currently in-flight. When streaming, the slot rides
-  // along with the streaming area instead.
-  const lastAssistantIndex = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i]?.type === "assistant") return i;
-    }
-    return -1;
-  }, [messages]);
 
   const streamRender = hasStreamItems
     ? renderStreamItems(streamItems, {
@@ -284,15 +261,7 @@ export default function BuildMessageList({
             return <UserMessage key={message.id} content={message.content} />;
           }
           if (message.type === "assistant") {
-            // Anchor the trailing slot (e.g. approval cards) under the
-            // last saved assistant message — but only when there's no
-            // live streaming area, since that case has its own anchor
-            // below.
-            const trailing =
-              !showStreamingArea && idx === lastAssistantIndex
-                ? trailingAssistantSlot
-                : null;
-            return renderAgentMessage(message, trailing);
+            return renderAgentMessage(message);
           }
           return null;
         })}
@@ -320,7 +289,6 @@ export default function BuildMessageList({
                   {streamRender?.nodes}
                 </AnimatePresence>
               )}
-              {trailingAssistantSlot}
             </div>
           </div>
         )}
