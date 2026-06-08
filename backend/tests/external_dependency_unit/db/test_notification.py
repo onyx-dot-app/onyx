@@ -182,7 +182,6 @@ def test_get_notifications_api_returns_paginated_response(
     response = notifications_api.get_notifications_api(
         page_num=0,
         page_size=2,
-        notif_type=NotificationType.APPROVAL_REQUESTED,
         user=user,
         db_session=db_session,
     )
@@ -228,7 +227,6 @@ def test_get_notifications_api_runs_ensure_checks_on_first_page(
     notifications_api.get_notifications_api(
         page_num=0,
         page_size=2,
-        notif_type=NotificationType.APPROVAL_REQUESTED,
         user=user,
         db_session=db_session,
     )
@@ -238,7 +236,6 @@ def test_get_notifications_api_runs_ensure_checks_on_first_page(
     notifications_api.get_notifications_api(
         page_num=1,
         page_size=2,
-        notif_type=None,
         user=user,
         db_session=db_session,
     )

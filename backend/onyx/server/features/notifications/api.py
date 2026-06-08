@@ -4,7 +4,6 @@ from fastapi import Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -64,7 +63,6 @@ def get_notifications_api(
     page_size: int = Query(
         DEFAULT_NOTIFICATIONS_PAGE_SIZE, ge=1, le=MAX_NOTIFICATIONS_PAGE_SIZE
     ),
-    notif_type: NotificationType | None = Query(default=None),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PaginatedNotifications:
@@ -84,7 +82,6 @@ def get_notifications_api(
     total_items, undismissed_count = count_notifications(
         user=user,
         db_session=db_session,
-        notif_type=notif_type,
     )
     offset = page_num * page_size
     notifications = [
@@ -92,7 +89,6 @@ def get_notifications_api(
         for notif in get_notifications(
             user=user,
             db_session=db_session,
-            notif_type=notif_type,
             include_dismissed=True,
             limit=page_size,
             offset=offset,

@@ -6,7 +6,6 @@ import useSWRInfinite from "swr/infinite";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
-  NotificationType,
   Notification,
   NotificationSummary,
   NotificationsResponse,
@@ -16,7 +15,6 @@ const DEFAULT_NOTIFICATIONS_PAGE_SIZE = 25;
 
 interface UseNotificationsOptions {
   pageSize?: number;
-  notificationType?: NotificationType;
   enabled?: boolean;
 }
 
@@ -57,7 +55,6 @@ export function useNotificationSummary() {
  */
 export default function useNotifications({
   pageSize = DEFAULT_NOTIFICATIONS_PAGE_SIZE,
-  notificationType,
   enabled = true,
 }: UseNotificationsOptions = {}) {
   const { mutate: mutateGlobal } = useSWRConfig();
@@ -69,9 +66,9 @@ export default function useNotifications({
       if (!enabled) return null;
       if (previousPageData && !previousPageData.has_more) return null;
 
-      return SWR_KEYS.notificationsPage(pageIndex, pageSize, notificationType);
+      return SWR_KEYS.notificationsPage(pageIndex, pageSize);
     },
-    [enabled, notificationType, pageSize]
+    [enabled, pageSize]
   );
 
   const { data, error, mutate, size, setSize } =

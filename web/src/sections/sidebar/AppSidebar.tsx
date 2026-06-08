@@ -256,7 +256,6 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
 
   // Fetch notifications for build mode intro
   const { notifications, refresh: mutateNotifications } = useNotifications({
-    notificationType: NotificationType.FEATURE_ANNOUNCEMENT,
     enabled: isOnyxCraftEnabled,
   });
 
