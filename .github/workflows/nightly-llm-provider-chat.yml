@@ -47,6 +47,8 @@ jobs:
         uses: ./.github/actions/slack-notify
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-          failed-jobs: provider-chat-test
+          details: |
+            *Failed job:* provider-chat-test
+            Each failed provider job's *Summary* tab (and its annotations) includes a copy-paste command to reproduce the failure locally.
           title: "🚨 Scheduled LLM Provider Chat Tests failed!"
           ref-name: ${{ github.ref_name }}
