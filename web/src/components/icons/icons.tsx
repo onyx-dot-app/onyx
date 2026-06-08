@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { StaticImageData } from "next/image";
 import googleCloudStorageIcon from "@public/GoogleCloudStorage.png";
-import highspotIcon from "@public/Highspot.png";
 import openSourceIcon from "@public/OpenSource.png";
 import r2Icon from "@public/r2.png";
 import s3Icon from "@public/S3.png";
@@ -11,7 +10,6 @@ import boxIcon from "@public/Box.png";
 import trelloIcon from "@public/Trello.png";
 import serviceNowIcon from "@public/Servicenow.png";
 import zAIIcon from "@public/Z_AI.png";
-import loopioIcon from "@public/Loopio.png";
 
 export interface IconProps {
   size?: number;
@@ -21,8 +19,8 @@ export interface LogoIconProps extends IconProps {
   src: string | StaticImageData;
 }
 
-export const defaultTailwindCSS = "my-auto flex flex-shrink-0 text-default";
-export const defaultTailwindCSSBlue = "my-auto flex flex-shrink-0 text-link";
+export const defaultTailwindCSS = "my-auto flex shrink-0 text-default";
+export const defaultTailwindCSSBlue = "my-auto flex shrink-0 text-link";
 
 export const LogoIcon = ({
   size = 16,
@@ -137,7 +135,7 @@ const createLogoIcon = (
 // ============================================================================
 export const MacIcon = ({
   size = 16,
-  className = "my-auto flex flex-shrink-0 ",
+  className = "my-auto flex shrink-0 ",
 }: IconProps) => {
   return (
     <svg
@@ -212,7 +210,7 @@ export const OnyxLogoTypeIcon = ({
 };
 export const WindowsIcon = ({
   size = 16,
-  className = "my-auto flex flex-shrink-0 ",
+  className = "my-auto flex shrink-0 ",
 }: IconProps) => {
   return (
     <svg
@@ -240,8 +238,6 @@ export const GoogleStorageIcon = createLogoIcon(googleCloudStorageIcon, {
   sizeAdjustment: 4,
   classNameAddition: "-m-0.5",
 });
-export const HighspotIcon = createLogoIcon(highspotIcon);
-export const LoopioIcon = createLogoIcon(loopioIcon, { monochromatic: true });
 export const OpenSourceIcon = createLogoIcon(openSourceIcon);
 export const R2Icon = createLogoIcon(r2Icon);
 export const S3Icon = createLogoIcon(s3Icon);

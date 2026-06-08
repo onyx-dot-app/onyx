@@ -11,6 +11,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.search_settings import get_current_search_settings
+from shared_configs.configs import MULTI_TENANT
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.api_key import APIKeyManager
@@ -22,6 +23,7 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.user import build_email
 from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.reset import _seed_dev_license_if_set
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.reset import reset_all_multitenant
 from tests.integration.common_utils.test_models import DATestAPIKey
@@ -43,6 +45,20 @@ def initialize_db() -> None:
         pool_size=10,
         max_overflow=5,
     )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def seed_dev_license_for_session(initialize_db: None) -> None:  # noqa: ARG001
+    # ``reset_postgres`` re-seeds the dev license after every wipe, but tests
+    # that don't take the ``reset`` fixture would otherwise hit Business-tier
+    # endpoints (e.g. /admin/api-key) with no License row and 402. Seed once at
+    # session start; no-op when ONYX_DEV_LICENSE is unset. Skip in multi-tenant
+    # mode: License rows live in tenant schemas, and the public-schema session
+    # here would seed into the wrong place.
+    if MULTI_TENANT:
+        return
+    with get_session_with_current_tenant() as db_session:
+        _seed_dev_license_if_set(db_session)
 
 
 def load_env_vars(env_file: str = ".env") -> None:
@@ -180,6 +196,11 @@ def reset_multitenant() -> None:
 @pytest.fixture
 def llm_provider(admin_user: DATestUser) -> DATestLLMProvider:
     return LLMProviderManager.create(user_performing_action=admin_user)
+
+
+@pytest.fixture
+def api_key(admin_user: DATestUser) -> DATestAPIKey:
+    return APIKeyManager.create(user_performing_action=admin_user)
 
 
 @pytest.fixture

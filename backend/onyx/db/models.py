@@ -33,7 +33,6 @@ from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
@@ -79,10 +78,15 @@ from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.enums import OpenSearchDocumentMigrationStatus
 from onyx.db.enums import OpenSearchTenantMigrationStatus
+from onyx.db.enums import PatType
 from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.enums import ProcessingMode
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import ScheduledTaskRunStatus
+from onyx.db.enums import ScheduledTaskStatus
+from onyx.db.enums import ScheduledTaskTriggerSource
+from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
 from onyx.db.enums import SwitchoverType
 from onyx.db.enums import SyncStatus
@@ -90,6 +94,7 @@ from onyx.db.enums import SyncType
 from onyx.db.enums import TaskStatus
 from onyx.db.enums import ThemePreference
 from onyx.db.enums import UserFileStatus
+from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType
 from onyx.db.pydantic_type import PydanticType
 from onyx.file_store.models import FileDescriptor
@@ -273,7 +278,7 @@ class NullFilteredString(TypeDecorator):
         dialect: Dialect,  # noqa: ARG002
     ) -> str | None:
         if value is not None and "\x00" in value:
-            logger.warning(f"NUL characters found in value: {value}")
+            logger.warning("NUL characters found in value: %s", value)
             return value.replace("\x00", "")
         return value
 
@@ -378,6 +383,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     default_model: Mapped[str] = mapped_column(Text, nullable=True)
     # organized in typical structured fashion
     # formatted as `displayName__provider__modelName`
+
+    # Input preferences
+    paste_as_tile: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Voice preferences
     voice_auto_send: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -521,6 +529,12 @@ class PersonalAccessToken(Base):
     is_revoked: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false"), nullable=False
     )  # True if user explicitly revoked (vs naturally expired)
+
+    pat_type: Mapped[PatType] = mapped_column(
+        Enum(PatType, native_enum=False),
+        nullable=False,
+        server_default=PatType.USER.value,
+    )
 
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
 
@@ -961,6 +975,11 @@ class Document(Base):
     # Number of chunks in the document (in Vespa)
     # Only null for documents indexed prior to this change
     chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # MD5 hash of title + section text at last successful index.
+    # Used to skip re-indexing when content hasn't changed.
+    # Null for documents indexed before this column was added.
+    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # last time any vespa relevant row metadata or the doc changed.
     # does not include last_synced
@@ -2069,9 +2088,12 @@ class SearchSettings(Base):
         Enum(SwitchoverType, native_enum=False), default=SwitchoverType.REINDEX
     )
 
-    # allows for quantization -> less memory usage for a small performance hit
+    # allows for quantization -> less memory usage for a small performance hit.
+    # Defaults to FLOAT (float32). OpenSearch ignores this field and stores
+    # vectors as float32 regardless; BFLOAT16 is only honored by Vespa.
     embedding_precision: Mapped[EmbeddingPrecision] = mapped_column(
-        Enum(EmbeddingPrecision, native_enum=False)
+        Enum(EmbeddingPrecision, native_enum=False),
+        default=EmbeddingPrecision.FLOAT,
     )
 
     # can be used to reduce dimensionality of vectors and save memory with
@@ -2088,10 +2110,9 @@ class SearchSettings(Base):
     # Contextual RAG
     enable_contextual_rag: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Contextual RAG LLM
-    contextual_rag_llm_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    contextual_rag_llm_provider: Mapped[str | None] = mapped_column(
-        String, nullable=True
+    # Contextual RAG LLM — FK to model_configuration (replaces deprecated string columns)
+    contextual_rag_model_configuration_id: Mapped[int | None] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="SET NULL"), nullable=True
     )
 
     cloud_provider: Mapped["CloudEmbeddingProvider"] = relationship(
@@ -2180,6 +2201,114 @@ class SearchSettings(Base):
         )
 
 
+class TargetedReindexJob(Base):
+    """
+    One row per user-initiated reindex request. Gives the FE a stable handle
+    to poll for aggregate status across a request that may span multiple
+    `(cc_pair, search_settings)` tuples. The per-doc work list lives in
+    `targeted_reindex_job_target`.
+    """
+
+    __tablename__ = "targeted_reindex_job"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    requested_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    requested_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[IndexingStatus] = mapped_column(
+        Enum(IndexingStatus, native_enum=False),
+        nullable=False,
+        default=IndexingStatus.NOT_STARTED,
+        index=True,
+    )
+    # Pre-allocated celery task UUID. Written before `apply_async` so the
+    # orphan-detector can clean up if enqueue fails after INSERT, and so
+    # cancellation has a handle to revoke.
+    celery_task_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    resolved_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    still_failing_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    skipped_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+
+    # Snapshot of resolved error rows captured at completion. Outlives later
+    # cleanup of the underlying `index_attempt_errors` rows.
+    resolved_summary: Mapped[list[dict[str, Any]]] = mapped_column(
+        PGJSONB, nullable=False, default=list, server_default="[]"
+    )
+
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    targets: Mapped[list["TargetedReindexJobTarget"]] = relationship(
+        "TargetedReindexJobTarget",
+        back_populates="job",
+        cascade="all, delete-orphan",
+    )
+    index_attempts: Mapped[list["IndexAttempt"]] = relationship(
+        "IndexAttempt",
+        back_populates="targeted_reindex_job",
+        primaryjoin="TargetedReindexJob.id == IndexAttempt.targeted_reindex_job_id",
+    )
+
+
+class TargetedReindexJobTarget(Base):
+    """
+    One row per doc a reindex job will touch. Separate table (not JSONB on
+    the job) so each row can FK to its source `IndexAttemptError` for clean
+    resolution tracking and FK to its `cc_pair` for cascade cleanup. NULL
+    `source_error_id` means an arbitrary reindex with no failure context.
+    """
+
+    __tablename__ = "targeted_reindex_job_target"
+
+    targeted_reindex_job_id: Mapped[int] = mapped_column(
+        ForeignKey("targeted_reindex_job.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    document_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    source_error_id: Mapped[int | None] = mapped_column(
+        ForeignKey("index_attempt_errors.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_targeted_reindex_job_target_cc_pair_doc",
+            "cc_pair_id",
+            "document_id",
+        ),
+    )
+
+    job: Mapped["TargetedReindexJob"] = relationship(
+        "TargetedReindexJob", back_populates="targets"
+    )
+    source_error: Mapped["IndexAttemptError | None"] = relationship(
+        "IndexAttemptError",
+        primaryjoin="TargetedReindexJobTarget.source_error_id == IndexAttemptError.id",
+    )
+
+
 class IndexAttempt(Base):
     """
     Represents an attempt to index a group of 0 or more documents from a
@@ -2201,6 +2330,20 @@ class IndexAttempt(Base):
     # This is only for attempts that are explicitly marked as from the start via
     # the run once API
     from_beginning: Mapped[bool] = mapped_column(Boolean)
+    # NULL on full-run attempts. Set on synthetic attempts spawned by a
+    # targeted reindex; links back to the `targeted_reindex_job` row.
+    # Consumer query sites that only care about full runs filter
+    # `WHERE targeted_reindex_job_id IS NULL`.
+    targeted_reindex_job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("targeted_reindex_job.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    targeted_reindex_job: Mapped["TargetedReindexJob | None"] = relationship(
+        "TargetedReindexJob",
+        back_populates="index_attempts",
+        primaryjoin="IndexAttempt.targeted_reindex_job_id == TargetedReindexJob.id",
+    )
     status: Mapped[IndexingStatus] = mapped_column(
         Enum(IndexingStatus, native_enum=False, index=True)
     )
@@ -2283,6 +2426,12 @@ class IndexAttempt(Base):
 
     error_rows = relationship(
         "IndexAttemptError",
+        back_populates="index_attempt",
+        cascade="all, delete-orphan",
+    )
+
+    stage_metrics: Mapped[list["IndexAttemptStageMetric"]] = relationship(
+        "IndexAttemptStageMetric",
         back_populates="index_attempt",
         cascade="all, delete-orphan",
     )
@@ -2431,6 +2580,67 @@ class IndexAttemptError(Base):
     index_attempt = relationship("IndexAttempt", back_populates="error_rows")
 
 
+class IndexAttemptStageMetric(Base):
+    """Per-stage timing aggregate for an `IndexAttempt`.
+
+    One row per `(index_attempt_id, stage)` pair. The row holds running
+    aggregates (count, sum, min, max, and Welford/Chan M2 accumulator) so we
+    can derive average and standard deviation at read time without storing
+    individual samples. See `plans/index-attempt-stage-metrics.md` for the
+    write-path SQL and `onyx.db.index_attempt_metrics_models.STAGE_SCOPE`
+    for the per-stage display scope.
+    """
+
+    __tablename__ = "index_attempt_stage_metric"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    index_attempt_id: Mapped[int] = mapped_column(
+        ForeignKey("index_attempt.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    stage: Mapped[IndexAttemptStage] = mapped_column(
+        Enum(IndexAttemptStage, native_enum=False, length=40),
+        nullable=False,
+    )
+
+    event_count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    total_duration_ms: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
+    # Welford / Chan running sum of squared deviations from the mean. Stored
+    # as Float (DOUBLE PRECISION on PostgreSQL) so the SQL upsert can apply
+    # Chan's parallel-combination formula without rounding drift.
+    m2_duration_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    min_duration_ms: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, default=None
+    )
+    max_duration_ms: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, default=None
+    )
+
+    time_first_event: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    time_last_event: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+    index_attempt: Mapped["IndexAttempt"] = relationship(
+        "IndexAttempt", back_populates="stage_metrics"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "index_attempt_id",
+            "stage",
+            name="uq_index_attempt_stage_metric_attempt_stage",
+        ),
+    )
+
+
 class SyncRecord(Base):
     """
     Represents the status of a "sync" operation (e.g. document set, user group, deletion).
@@ -2494,6 +2704,7 @@ class HierarchyNodeByConnectorCredentialPair(Base):
                 "connector_credential_pair.credential_id",
             ],
             ondelete="CASCADE",
+            onupdate="CASCADE",
         ),
         Index(
             "ix_hierarchy_node_cc_pair_connector_credential",
@@ -2957,7 +3168,7 @@ class LLMProvider(Base):
     __tablename__ = "llm_provider"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String, unique=True)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
     provider: Mapped[str] = mapped_column(String)
     api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
@@ -3038,6 +3249,10 @@ class ModelConfiguration(Base):
     # For static providers (OpenAI, Anthropic), this may be null and will fall back to LiteLLM.
     display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Admin-specified override for the display name. When set, this takes precedence
+    # over both display_name and the LiteLLM-derived name everywhere in the UI.
+    custom_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",
@@ -3098,9 +3313,6 @@ class ImageGenerationConfig(Base):
         nullable=False,
     )
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    groups: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=False, default=list)
-    personas: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=False, default=list)
 
     model_configuration: Mapped["ModelConfiguration"] = relationship(
         "ModelConfiguration"
@@ -3473,19 +3685,18 @@ class Persona(Base):
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(String)
 
-    # Allows the persona to specify a specific default LLM model
-    # NOTE: only is applied on the actual response generation - is not used for things like
-    # auto-detected time filters, relevance filters, etc.
-    llm_model_provider_override: Mapped[str | None] = mapped_column(
-        String, nullable=True
-    )
-    llm_model_version_override: Mapped[str | None] = mapped_column(
-        String, nullable=True
-    )
+    # Canonical FK encoding both provider and model for the persona's LLM override.
+    # NOTE: only applied on actual response generation — not used for auto-detected
+    # time filters, relevance filters, etc.
     default_model_configuration_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("model_configuration.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    default_model_configuration: Mapped["ModelConfiguration | None"] = relationship(
+        "ModelConfiguration",
+        foreign_keys=[default_model_configuration_id],
+        lazy="select",
     )
 
     starter_messages: Mapped[list[StarterMessage] | None] = mapped_column(
@@ -3971,6 +4182,61 @@ class FileContent(Base):
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
+class Skill(Base):
+    """A custom (admin-uploaded) skill.
+
+    Skill metadata is shared schema state. Group-based grants use user_group,
+    which is available in the base migration chain even though its ORM model
+    currently lives in the Enterprise Edition section below.
+    """
+
+    __tablename__ = "skill"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+
+    # Admin-controlled metadata (editable post-creation via PATCH).
+    slug: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Bundle bytes (single, replaced on re-upload).
+    bundle_file_id: Mapped[str] = mapped_column(String, nullable=False)
+    bundle_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    author_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    author: Mapped[User | None] = relationship(
+        "User",
+        foreign_keys=[author_user_id],
+    )
+
+    groups: Mapped[list["UserGroup"]] = relationship(
+        "UserGroup",
+        secondary="skill__user_group",
+        viewonly=True,
+    )
+
+    __table_args__ = (UniqueConstraint("slug", name="uq_skill_slug"),)
+
+
 """
 ************************************************************************
 Enterprise Edition Models
@@ -4096,6 +4362,21 @@ class Persona__UserGroup(Base):
     )
 
 
+class Skill__UserGroup(Base):
+    __tablename__ = "skill__user_group"
+
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("skill.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("user_group.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+
 class LLMProvider__Persona(Base):
     """Association table restricting LLM providers to specific personas.
 
@@ -4186,6 +4467,11 @@ class UserGroup(Base):
     personas: Mapped[list[Persona]] = relationship(
         "Persona",
         secondary=Persona__UserGroup.__table__,
+        viewonly=True,
+    )
+    skills: Mapped[list[Skill]] = relationship(
+        "Skill",
+        secondary=Skill__UserGroup.__table__,
         viewonly=True,
     )
     document_sets: Mapped[list[DocumentSet]] = relationship(
@@ -4782,8 +5068,9 @@ class DocPermissionSyncAttempt(Base):
     total_docs_synced: Mapped[int | None] = mapped_column(Integer, default=0)
     docs_with_permission_errors: Mapped[int | None] = mapped_column(Integer, default=0)
 
-    # Error message if sync fails
+    # Error information if sync fails
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
+    full_exception_trace: Mapped[str | None] = mapped_column(Text, default=None)
 
     # Timestamps
     time_created: Mapped[datetime.datetime] = mapped_column(
@@ -4851,8 +5138,9 @@ class ExternalGroupPermissionSyncAttempt(Base):
         Integer, default=0
     )
 
-    # Error message if sync fails
+    # Error information if sync fails
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
+    full_exception_trace: Mapped[str | None] = mapped_column(Text, default=None)
 
     # Timestamps
     time_created: Mapped[datetime.datetime] = mapped_column(
@@ -4983,14 +5271,20 @@ class BuildSession(Base):
         nullable=False,
     )
     nextjs_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    demo_data_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true")
-    )
     sharing_scope: Mapped[SharingScope] = mapped_column(
         String,
         nullable=False,
         default=SharingScope.PRIVATE,
         server_default="private",
+    )
+    # Distinguishes user-initiated sessions from sessions created by the
+    # scheduled-tasks executor (or any future non-interactive caller). The
+    # Craft sidebar filters on origin == INTERACTIVE.
+    origin: Mapped[SessionOrigin] = mapped_column(
+        Enum(SessionOrigin, native_enum=False, name="sessionorigin"),
+        nullable=False,
+        default=SessionOrigin.INTERACTIVE,
+        server_default="INTERACTIVE",
     )
 
     # Relationships
@@ -5006,7 +5300,15 @@ class BuildSession(Base):
     )
 
     __table_args__ = (
-        Index("ix_build_session_user_created", "user_id", desc("created_at")),
+        # Composite index supports the Craft sidebar query:
+        #   user_id = ? AND origin = ? ORDER BY created_at DESC LIMIT ?
+        # Replaces the original (user_id, created_at desc) index.
+        Index(
+            "ix_build_session_user_origin_created",
+            "user_id",
+            "origin",
+            desc("created_at"),
+        ),
         Index("ix_build_session_status", "status"),
     )
 
@@ -5036,6 +5338,10 @@ class Sandbox(Base):
     )
     last_heartbeat: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+    encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
     )
 
     # Relationships
@@ -5158,6 +5464,160 @@ class BuildMessage(Base):
         Index(
             "ix_build_message_session_turn", "session_id", "turn_index", "created_at"
         ),
+    )
+
+
+class ScheduledTask(Base):
+    """A user-defined recurring Craft prompt + schedule.
+
+    Each fire spawns a fresh `BuildSession` (via the executor) and records a
+    `ScheduledTaskRun` row pointing back at the session. Soft-deleted tasks
+    are excluded from dispatch but retained so users can still open past
+    runs.
+    """
+
+    __tablename__ = "scheduled_task"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Canonical 5-field cron expression. The three UI editor modes (interval,
+    # daily/weekly, advanced) all compile to this string on save.
+    cron_expression: Mapped[str] = mapped_column(String, nullable=False)
+    # IANA timezone name (e.g. "America/Los_Angeles"). ZoneInfo handles DST.
+    timezone: Mapped[str] = mapped_column(String, nullable=False)
+    # UI hint for which editor mode produced this schedule; the cron string
+    # is the source of truth for execution.
+    editor_mode: Mapped[str] = mapped_column(String, nullable=False)
+
+    status: Mapped[ScheduledTaskStatus] = mapped_column(
+        Enum(ScheduledTaskStatus, native_enum=False, name="scheduledtaskstatus"),
+        nullable=False,
+        default=ScheduledTaskStatus.ACTIVE,
+        server_default="ACTIVE",
+    )
+    # The dispatcher's only read field. NULL when paused; recomputed on
+    # every fire and every schedule/timezone edit. Stored UTC.
+    next_run_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    runs: Mapped[list["ScheduledTaskRun"]] = relationship(
+        "ScheduledTaskRun",
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        # Dispatcher hot path: WHERE status='active' AND deleted=false
+        #                       AND next_run_at <= now() ORDER BY next_run_at
+        Index("ix_scheduled_task_dispatch", "status", "deleted", "next_run_at"),
+        # User-scoped list query, newest first.
+        Index("ix_scheduled_task_user_created", "user_id", desc("created_at")),
+    )
+
+
+class ScheduledTaskRun(Base):
+    """One firing of a ScheduledTask.
+
+    `session_id` is nullable for the brief window between the dispatcher
+    inserting this row and the executor creating the BuildSession. On
+    session delete the FK is cleared (SET NULL) so the run row survives
+    as part of the task's run history.
+    """
+
+    __tablename__ = "scheduled_task_run"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    session_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("build_session.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    status: Mapped[ScheduledTaskRunStatus] = mapped_column(
+        Enum(
+            ScheduledTaskRunStatus,
+            native_enum=False,
+            name="scheduledtaskrunstatus",
+        ),
+        nullable=False,
+        default=ScheduledTaskRunStatus.QUEUED,
+        server_default="QUEUED",
+    )
+    trigger_source: Mapped[ScheduledTaskTriggerSource] = mapped_column(
+        Enum(
+            ScheduledTaskTriggerSource,
+            native_enum=False,
+            name="scheduledtasktriggersource",
+        ),
+        nullable=False,
+    )
+
+    # Populated when the dispatcher writes a `skipped` row because a prior
+    # run was still in flight, or by the stuck-run sweeper for stuck rows.
+    skip_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    # On `failed`: short classifier (e.g. "executor_crash", "budget",
+    # "acp_error", "stuck"). Full traceback / message lives in error_detail.
+    error_class: Mapped[str | None] = mapped_column(String, nullable=True)
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    started_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    finished_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # ~120-char snippet of the final agent message, surfaced in the run
+    # history table.
+    summary: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Relationships
+    task: Mapped[ScheduledTask] = relationship("ScheduledTask", back_populates="runs")
+    session: Mapped[BuildSession | None] = relationship(
+        "BuildSession", foreign_keys=[session_id]
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_scheduled_task_run_task_started",
+            "task_id",
+            desc("started_at"),
+        ),
+        Index("ix_scheduled_task_run_status", "status"),
+        # Session-view banner lookup: get_scheduled_run_context filters by
+        # session_id on every session open.
+        Index("ix_scheduled_task_run_session", "session_id"),
     )
 
 

@@ -24,8 +24,7 @@ def upgrade() -> None:
     # This upgrades existing users without ordered assistant
     # to have default assistants set to visible assistants which are
     # accessible by them.
-    op.execute(
-        """
+    op.execute("""
         UPDATE "user" u
         SET chosen_assistants = (
             SELECT jsonb_agg(
@@ -42,8 +41,7 @@ def upgrade() -> None:
         OR chosen_assistants = 'null'
         OR jsonb_typeof(chosen_assistants) = 'null'
         OR (jsonb_typeof(chosen_assistants) = 'string' AND chosen_assistants = '"null"')
-    """
-    )
+    """)
 
     # Step 2: Alter the column to make it non-nullable
     op.alter_column(

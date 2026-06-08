@@ -1,4 +1,5 @@
 import copy
+import re
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timedelta
@@ -18,6 +19,10 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.access import get_all_space_permissions
 from onyx.connectors.confluence.access import get_page_restrictions
+from onyx.connectors.confluence.access import (
+    get_page_restrictions_with_per_ancestor_fetch,
+)
+from onyx.connectors.confluence.onyx_confluence import Confcloud77618Error
 from onyx.connectors.confluence.onyx_confluence import extract_text_from_confluence_html
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.confluence.utils import build_confluence_document_id
@@ -40,6 +45,7 @@ from onyx.connectors.interfaces import ConnectorFailure
 from onyx.connectors.interfaces import CredentialsConnector
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.interfaces import Resolver
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
@@ -72,6 +78,8 @@ _ATTACHMENT_EXPANSION_FIELDS = [
     "space",
     "metadata.labels",
 ]
+# Fast path: page + ancestor restrictions inlined. Subject to
+# CONFCLOUD-77618 / 76424 on draft/trashed/outdated ancestors.
 _RESTRICTIONS_EXPANSION_FIELDS = [
     "space",
     "restrictions.read.restrictions.user",
@@ -79,8 +87,29 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
     "ancestors.restrictions.read.restrictions.user",
     "ancestors.restrictions.read.restrictions.group",
 ]
+# CONFCLOUD-77618 fallback: bare ancestors only; EE resolver fetches
+# each ancestor's restrictions via `restriction/byOperation`.
+_PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS = [
+    "space",
+    "restrictions.read.restrictions.user",
+    "restrictions.read.restrictions.group",
+    "ancestors",
+]
+# Pruning needs `space` + `ancestors` to populate hierarchy nodes and
+# parent ids; skipping them would flatten the graph. No restrictions
+# expand here, so CONFCLOUD-77618 can't fire.
+_PRUNING_EXPANSION_FIELDS = ["space", "ancestors"]
 
 _SLIM_DOC_BATCH_SIZE = 5000
+
+# Confluence document_id is the page URL. Reindex inputs come from
+# IndexAttemptError rows (also URLs). Two URL shapes show up in the wild:
+#   - /spaces/KEY/pages/<id>/Title-slug  (Cloud + modern Server/DC)
+#   - /pages/viewpage.action?pageId=<id> (legacy Server)
+_PAGE_ID_FROM_URL_PATTERNS = [
+    re.compile(r"/pages/(\d+)(?:/|$)"),
+    re.compile(r"[?&]pageId=(\d+)"),
+]
 
 ONE_HOUR = 3600
 ONE_DAY = ONE_HOUR * 24
@@ -98,11 +127,20 @@ class ConfluenceCheckpoint(ConnectorCheckpoint):
     next_page_url: str | None
 
 
+def _extract_page_id_from_url(doc_id: str) -> str | None:
+    for pat in _PAGE_ID_FROM_URL_PATTERNS:
+        match = pat.search(doc_id)
+        if match:
+            return match.group(1)
+    return None
+
+
 class ConfluenceConnector(
     CheckpointedConnector[ConfluenceCheckpoint],
     SlimConnector,
     SlimConnectorWithPermSync,
     CredentialsConnector,
+    Resolver,
 ):
     def __init__(
         self,
@@ -186,7 +224,7 @@ class ConfluenceConnector(
         self.continue_on_failure = continue_on_failure
 
     def set_allow_images(self, value: bool) -> None:
-        logger.info(f"Setting allow_images to {value}.")
+        logger.info("Setting allow_images to %s.", value)
         self.allow_images = value
 
     def _yield_space_hierarchy_nodes(
@@ -470,7 +508,7 @@ class ConfluenceConnector(
             # Extract basic page information
             page_id = _get_page_id(page)
             page_title = page["title"]
-            logger.info(f"Converting page {page_title} to document")
+            logger.info("Converting page %s to document", page_title)
             page_url = build_confluence_document_id(
                 self.wiki_base, page["_links"]["webui"], self.is_cloud
             )
@@ -532,7 +570,7 @@ class ConfluenceConnector(
                 parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
             )
         except Exception as e:
-            logger.error(f"Error converting page {page.get('id', 'unknown')}: {e}")
+            logger.error("Error converting page %s: %s", page.get("id", "unknown"), e)
             if is_atlassian_date_error(e):  # propagate error to be caught and retried
                 raise
             return ConnectorFailure(
@@ -579,7 +617,8 @@ class ConfluenceConnector(
                 if not self.allow_images:
                     if media_type.startswith("image/"):
                         logger.info(
-                            f"Skipping attachment because allow images is False: {attachment['title']}"
+                            "Skipping attachment because allow images is False: %s",
+                            attachment["title"],
                         )
                         continue
 
@@ -587,12 +626,15 @@ class ConfluenceConnector(
                     attachment,
                 ):
                     logger.info(
-                        f"Skipping attachment because it is not an accepted file type: {attachment['title']}"
+                        "Skipping attachment because it is not an accepted file type: %s",
+                        attachment["title"],
                     )
                     continue
 
                 logger.info(
-                    f"Processing attachment: {attachment['title']} attached to page {page['title']}"
+                    "Processing attachment: %s attached to page %s",
+                    attachment["title"],
+                    page["title"],
                 )
                 # Attachment document id: use the download URL for stable identity
                 try:
@@ -601,9 +643,9 @@ class ConfluenceConnector(
                     )
                 except Exception as e:
                     logger.warning(
-                        f"Invalid attachment url for id {attachment['id']}, skipping"
+                        "Invalid attachment url for id %s, skipping", attachment["id"]
                     )
-                    logger.debug(f"Error building attachment url: {e}")
+                    logger.debug("Error building attachment url: %s", e)
                     continue
                 try:
                     response = convert_attachment_to_content(
@@ -611,6 +653,7 @@ class ConfluenceConnector(
                         attachment=attachment,
                         page_id=_get_page_id(page),
                         allow_images=self.allow_images,
+                        is_cloud=self.is_cloud,
                     )
                     if response is None:
                         continue
@@ -691,7 +734,8 @@ class ConfluenceConnector(
                     attachment_docs.append(attachment_doc)
                 except Exception as e:
                     logger.error(
-                        f"Failed to extract/summarize attachment {attachment['title']}",
+                        "Failed to extract/summarize attachment %s",
+                        attachment["title"],
                         exc_info=e,
                     )
                     if is_atlassian_date_error(e):
@@ -773,7 +817,7 @@ class ConfluenceConnector(
         page_query_url = checkpoint.next_page_url or self._build_page_retrieval_url(
             start_ts, end, self.batch_size
         )
-        logger.debug(f"page_query_url: {page_query_url}")
+        logger.debug("page_query_url: %s", page_query_url)
 
         # store the next page start for confluence server, cursor for confluence cloud
         def store_next_page_url(next_page_url: str) -> None:
@@ -842,9 +886,8 @@ class ConfluenceConnector(
         except Exception as e:
             if is_atlassian_date_error(e) and start is not None:
                 logger.warning(
-                    "Confluence says we provided an invalid 'updated' field. This may indicate"
-                    "a real issue, but can also appear during edge cases like daylight"
-                    f"savings time changes. Retrying with a 1 hour offset. Error: {e}"
+                    "Confluence says we provided an invalid 'updated' field. This may indicatea real issue, but can also appear during edge cases like daylightsavings time changes. Retrying with a 1 hour offset. Error: %s",
+                    e,
                 )
                 return self._fetch_document_batches(checkpoint, start - ONE_HOUR, end)
             raise
@@ -858,6 +901,110 @@ class ConfluenceConnector(
         return ConfluenceCheckpoint.model_validate_json(checkpoint_json)
 
     @override
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        url_to_page_id: dict[str, str] = {}
+        for failure in errors:
+            if failure.failed_document is None:
+                continue
+            doc_id = failure.failed_document.document_id
+            page_id = _extract_page_id_from_url(doc_id)
+            if page_id is None:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=doc_id,
+                        document_link=doc_id,
+                    ),
+                    failure_message=(
+                        "Cannot extract page id from doc URL '%s'; targeted reindex "
+                        "supports /pages/<id>/ and pageId=<id> URL shapes." % doc_id
+                    ),
+                )
+                continue
+            url_to_page_id[doc_id] = page_id
+
+        if not url_to_page_id:
+            return
+
+        yield from self._yield_space_hierarchy_nodes()
+
+        space_level_access: dict[str, ExternalAccess] = (
+            get_all_space_permissions(
+                self.confluence_client, self.is_cloud, add_prefix=True
+            )
+            if include_permissions
+            else {}
+        )
+
+        expand_fields = list(_PAGE_EXPANSION_FIELDS)
+        if include_permissions:
+            expand_fields.extend(_RESTRICTIONS_EXPANSION_FIELDS)
+
+        # TODO(nikg): chunk this into multiple CQL queries once
+        # MAX_TARGETS_PER_REQUEST grows past Confluence's URL length /
+        # IN-clause practical limits. Bounded at 100 ids today.
+        quoted_ids = ",".join("'%s'" % pid for pid in url_to_page_id.values())
+        cql = "type=page and id IN (%s)" % quoted_ids
+
+        seen_page_ids: set[str] = set()
+        for page in self.confluence_client.paginated_cql_retrieval(
+            cql=cql,
+            expand=",".join(expand_fields),
+        ):
+            seen_page_ids.add(_get_page_id(page, allow_missing=True))
+            yield from self._yield_ancestor_hierarchy_nodes(page)
+            doc_or_failure = self._convert_page_to_document(page)
+            if isinstance(doc_or_failure, ConnectorFailure):
+                # _convert_page_to_document keys its DocumentFailure on the
+                # numeric page id. Targeted reindex callers do set-difference
+                # against the URL doc_ids that came in via `errors`, so we
+                # rewrite the failure to use the URL.
+                webui = page.get("_links", {}).get("webui")
+                page_url = (
+                    build_confluence_document_id(self.wiki_base, webui, self.is_cloud)
+                    if webui
+                    else None
+                )
+                if page_url:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=page_url,
+                            document_link=page_url,
+                        ),
+                        failure_message=doc_or_failure.failure_message,
+                        exception=doc_or_failure.exception,
+                    )
+                else:
+                    yield doc_or_failure
+                continue
+            if include_permissions:
+                space_key = page.get("space", {}).get("key") or ""
+                doc_or_failure.external_access = get_page_restrictions(
+                    self.confluence_client,
+                    doc_or_failure.id,
+                    page.get("restrictions") or {},
+                    page.get("ancestors", []),
+                    add_prefix=True,
+                ) or space_level_access.get(space_key)
+            yield doc_or_failure
+
+        for doc_id, page_id in url_to_page_id.items():
+            if page_id not in seen_page_ids:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=doc_id,
+                        document_link=doc_id,
+                    ),
+                    failure_message=(
+                        "Confluence returned no page for id=%s during targeted "
+                        "reindex (deleted, moved, or no longer accessible)." % page_id
+                    ),
+                )
+
+    @override
     def retrieve_all_slim_docs(
         self,
         start: SecondsSinceUnixEpoch | None = None,
@@ -869,6 +1016,7 @@ class ConfluenceConnector(
             end=end,
             callback=callback,
             include_permissions=False,
+            expand_per_page=False,
         )
 
     def retrieve_all_slim_docs_perm_sync(
@@ -877,15 +1025,35 @@ class ConfluenceConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        """
-        Return 'slim' docs (IDs + minimal permission data).
-        Does not fetch actual text. Used primarily for incremental permission sync.
-        """
-        return self._retrieve_all_slim_docs(
+        """Yield slim docs for permission sync. Tries the fast path
+        with ancestor restrictions inlined; on CONFCLOUD-77618 restarts
+        the run with per-page restriction lookups. Re-yielding docs
+        from the partial first attempt is safe -- the consumer's
+        `upsert_document_external_perms` is idempotent on `doc_id`."""
+        try:
+            yield from self._retrieve_all_slim_docs(
+                start=start,
+                end=end,
+                callback=callback,
+                include_permissions=True,
+                expand_per_page=False,
+            )
+            return
+        except Confcloud77618Error as e:
+            logger.warning(
+                "CONFCLOUD-77618: ancestor-restrictions expand 404'd "
+                "(URL=%s); restarting Confluence permission sync with "
+                "per-page restriction lookups. Already-yielded docs "
+                "will be re-yielded; DB writes are idempotent.",
+                e.url,
+            )
+
+        yield from self._retrieve_all_slim_docs(
             start=start,
             end=end,
             callback=callback,
             include_permissions=True,
+            expand_per_page=True,
         )
 
     def _retrieve_all_slim_docs(
@@ -894,9 +1062,18 @@ class ConfluenceConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
         include_permissions: bool = True,
+        expand_per_page: bool = False,
     ) -> GenerateSlimDocumentOutput:
         doc_metadata_list: list[SlimDocument | HierarchyNode] = []
-        restrictions_expand = ",".join(_RESTRICTIONS_EXPANSION_FIELDS)
+
+        # Pruning skips the restrictions expand (the CONFCLOUD-77618
+        # trigger) but still needs space + ancestors for hierarchy.
+        if not include_permissions:
+            restrictions_expand = ",".join(_PRUNING_EXPANSION_FIELDS)
+        elif expand_per_page:
+            restrictions_expand = ",".join(_PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS)
+        else:
+            restrictions_expand = ",".join(_RESTRICTIONS_EXPANSION_FIELDS)
 
         space_level_access_info: dict[str, ExternalAccess] = {}
         if include_permissions:
@@ -908,12 +1085,30 @@ class ConfluenceConnector(
         for node in self._yield_space_hierarchy_nodes():
             doc_metadata_list.append(node)
 
+        # Per-page mode only: collapse shared ancestors to one GET each.
+        ancestor_restrictions_cache: dict[str, dict[str, Any] | None] = {}
+
         def get_external_access(
-            doc_id: str, restrictions: dict[str, Any], ancestors: list[dict[str, Any]]
+            doc_id: str,
+            restrictions: dict[str, Any],
+            ancestors: list[dict[str, Any]],
+            space_key: str | None,
         ) -> ExternalAccess | None:
-            return get_page_restrictions(
-                self.confluence_client, doc_id, restrictions, ancestors
-            ) or space_level_access_info.get(page_space_key)
+            if expand_per_page:
+                resolved = get_page_restrictions_with_per_ancestor_fetch(
+                    self.confluence_client,
+                    doc_id,
+                    restrictions,
+                    ancestors,
+                    ancestor_restrictions_cache,
+                )
+            else:
+                resolved = get_page_restrictions(
+                    self.confluence_client, doc_id, restrictions, ancestors
+                )
+            return resolved or (
+                space_level_access_info.get(space_key) if space_key else None
+            )
 
         # Query pages (with optional time filtering for indexing_start)
         page_query = self._construct_page_cql_query(start, end)
@@ -926,7 +1121,6 @@ class ConfluenceConnector(
             for node in self._yield_ancestor_hierarchy_nodes(page):
                 doc_metadata_list.append(node)
 
-            page_id = _get_page_id(page)
             page_restrictions = page.get("restrictions") or {}
             page_space_key = page.get("space", {}).get("key")
             page_ancestors = page.get("ancestors", [])
@@ -938,7 +1132,12 @@ class ConfluenceConnector(
                 SlimDocument(
                     id=page_id,
                     external_access=(
-                        get_external_access(page_id, page_restrictions, page_ancestors)
+                        get_external_access(
+                            page_id,
+                            page_restrictions,
+                            page_ancestors,
+                            page_space_key,
+                        )
                         if include_permissions
                         else None
                     ),
@@ -948,7 +1147,8 @@ class ConfluenceConnector(
                 )
             )
 
-            # Query attachments for each page
+            # Attachments resolve from inline `restrictions` only; no
+            # ancestor walk, so per-page mode is a no-op for them.
             page_hierarchy_node_yielded = False
             attachment_query = self._construct_attachment_query(
                 _get_page_id(page), start, end
@@ -958,8 +1158,13 @@ class ConfluenceConnector(
                 expand=restrictions_expand,
                 limit=_SLIM_DOC_BATCH_SIZE,
             ):
-                # If you skip images, you'll skip them in the permission sync
-                attachment["metadata"].get("mediaType", "")
+                # If you skip images in the main indexing pass (allow_images
+                # is False), skip them here too. Otherwise the slim path emits
+                # a SlimDocument for an attachment the main path never produces
+                # a Document for, leaving a permanent chunk_count IS NULL row.
+                media_type = attachment.get("metadata", {}).get("mediaType", "")
+                if not self.allow_images and media_type.startswith("image/"):
+                    continue
                 if not validate_attachment_filetype(
                     attachment,
                 ):
@@ -991,7 +1196,10 @@ class ConfluenceConnector(
                         id=attachment_id,
                         external_access=(
                             get_external_access(
-                                attachment_id, attachment_restrictions, []
+                                attachment_id,
+                                attachment_restrictions,
+                                [],
+                                attachment_space_key,
                             )
                             if include_permissions
                             else None
@@ -1050,6 +1258,66 @@ class ConfluenceConnector(
                 raise ConnectorValidationError(
                     "Invalid Confluence space key provided"
                 ) from e
+
+    def probe_rest_space_permissions_admin_access(self) -> None:
+        """For Confluence DC 9.1+, probe the REST space-permissions endpoint
+        to surface "bot account is not a Confluence/space admin" at perm-sync
+        validation time rather than mid-sync per-space.
+
+        The motivating quirk is CONFSERVER-99908: that endpoint returns 500
+        (instead of 403) for non-admin callers, so a regular permission-sync
+        run produces an unactionable 500-bubble-up instead of a clear
+        "you need admin rights" signal. This probe intentionally lives in
+        validate_perm_sync (not validate_connector_settings) so that
+        connectors without permission sync don't have admin rights forced
+        on them.
+
+        No-ops for Cloud (different API surface) and for DC < 9.1.0 (no
+        REST endpoint -- the legacy JSON-RPC path is on a different
+        permission model and is validated via its own failure modes
+        during sync).
+        """
+        client = self.low_timeout_confluence_client
+        if not client.supports_rest_space_permissions():
+            return
+
+        # Pick any visible space; the 500-vs-200 distinction is global to
+        # the credential, not per-space, so the cheapest visible space works.
+        try:
+            spaces_iter = client.retrieve_confluence_spaces(limit=1)
+            first_space = next(spaces_iter, None)
+        except Exception as e:
+            logger.warning(
+                "Skipping REST space-permissions admin probe; could not "
+                "list any space to probe against: %s",
+                e,
+            )
+            return
+        if not first_space:
+            return
+        first_space_key = first_space.get("key")
+        if not first_space_key:
+            return
+
+        try:
+            # InsufficientPermissionsError on 500 (CONFSERVER-99908); we
+            # let it propagate -- that *is* the validation failure we want.
+            client.get_all_space_permissions_server_rest(
+                space_key=first_space_key,
+            )
+        except InsufficientPermissionsError:
+            raise
+        except Exception as e:
+            # Any other failure here is unexpected but not necessarily a
+            # blocker for setup. Log it and let the sync surface the real
+            # error if there is one; we don't want a flaky network call to
+            # block connector creation.
+            logger.warning(
+                "REST space-permissions admin probe against space %s "
+                "failed with non-permission error: %s. Skipping.",
+                first_space_key,
+                e,
+            )
 
 
 if __name__ == "__main__":

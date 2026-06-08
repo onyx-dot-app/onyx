@@ -51,7 +51,7 @@ from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import model_to_dict
 from onyx.db.utils import SortOrder
-from onyx.document_index.interfaces import DocumentMetadata
+from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
@@ -170,7 +170,6 @@ def get_documents_for_connector_credential_pair_limited_columns(
     credential_id: int,
     sort_order: SortOrder | None = None,
 ) -> Sequence[DocumentRow]:
-
     doc_ids_subquery = select(DocumentByConnectorCredentialPair.id).where(
         and_(
             DocumentByConnectorCredentialPair.connector_id == connector_id,
@@ -831,6 +830,19 @@ def update_docs_chunk_count__no_commit(
         doc.chunk_count = doc_id_to_chunk_count[doc.id]
 
 
+def update_docs_content_hash__no_commit(
+    ids_to_new_hash: dict[str, str],
+    db_session: Session,
+) -> None:
+    documents_to_update = (
+        db_session.query(DbDocument)
+        .filter(DbDocument.id.in_(ids_to_new_hash.keys()))
+        .all()
+    )
+    for doc in documents_to_update:
+        doc.content_hash = ids_to_new_hash[doc.id]
+
+
 def mark_document_as_modified(
     document_id: str,
     db_session: Session,
@@ -1110,20 +1122,33 @@ def prepare_to_modify_documents(
 
     lock_acquired = False
     for i in range(_NUM_LOCK_ATTEMPTS):
+        yielded = False
         try:
             with db_session.begin() as transaction:
                 lock_acquired = acquire_document_locks(
                     db_session=db_session, document_ids=document_ids
                 )
                 if lock_acquired:
+                    yielded = True
                     yield transaction
-                    break
-        except OperationalError as e:
+                    return
+        except Exception as e:
+            if yielded:
+                # Exception came from the caller's body (after yield), not from
+                # lock acquisition. Re-raise regardless of type so the generator
+                # terminates — looping would cause a second yield and
+                # "RuntimeError: generator didn't stop after throw()".
+                raise
+            if not isinstance(e, OperationalError):
+                raise
             logger.warning(
-                f"Failed to acquire locks for documents on attempt {i}, retrying. Error: {e}"
+                "Failed to acquire locks for documents on attempt %s, retrying. Error: %s",
+                i,
+                e,
             )
 
-        time.sleep(retry_delay)
+        if i < _NUM_LOCK_ATTEMPTS - 1:
+            time.sleep(retry_delay)
 
     if not lock_acquired:
         raise RuntimeError(

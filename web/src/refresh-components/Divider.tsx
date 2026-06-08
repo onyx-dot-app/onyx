@@ -1,14 +1,16 @@
 "use client";
 
 import React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgChevronRight, SvgChevronDown, SvgInfoSmall } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import Truncated from "./texts/Truncated";
 
-export interface DividerProps
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, "title"> {
+export interface DividerProps extends Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  "title"
+> {
   /** Ref to the root element */
   ref?: React.Ref<HTMLDivElement>;
   /** Show title content instead of simple line */

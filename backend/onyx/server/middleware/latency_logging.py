@@ -17,7 +17,10 @@ def add_latency_logging_middleware(app: FastAPI, logger: logging.LoggerAdapter) 
         response = await call_next(request)
         process_time = time.monotonic() - start_time
         logger.debug(
-            f"Path: {request.url.path} - Method: {request.method} - "
-            f"Status Code: {response.status_code} - Time: {process_time:.4f} secs"
+            "Path: %s - Method: %s - Status Code: %s - Time: %s secs",
+            request.url.path,
+            request.method,
+            response.status_code,
+            format(process_time, ".4f"),
         )
         return response

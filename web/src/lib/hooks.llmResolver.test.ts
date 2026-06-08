@@ -2,8 +2,8 @@ import {
   getDefaultLlmDescriptor,
   getValidLlmDescriptorForProviders,
 } from "@/lib/hooks";
-import { structureValue } from "@/lib/llmConfig/utils";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { structureValue } from "@/lib/languageModels/utils";
+import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 
 describe("LLM resolver helpers", () => {

@@ -25,10 +25,11 @@ import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
 import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { Button, Checkbox } from "@opal/components";
 
 import { Section } from "@/layouts/general-layouts";
-import { cn, transformLinkUri } from "@/lib/utils";
+import { transformLinkUri } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
 import InputDatePicker from "@/refresh-components/inputs/InputDatePicker";
 import { RichTextSubtext } from "./RichTextSubtext";
@@ -39,13 +40,12 @@ import {
   FILE_TYPE_DEFINITIONS,
 } from "@/lib/connectors/fileTypes";
 import Text from "@/refresh-components/texts/Text";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 import { Tooltip } from "@opal/components";
 import InputTextArea, {
   InputTextAreaProps,
 } from "@/refresh-components/inputs/InputTextArea";
-import { SvgEye, SvgEyeClosed } from "@opal/icons";
+import { SvgEye, SvgEyeClosed, SvgPlusCircle } from "@opal/icons";
 
 export function SectionHeader({
   children,
@@ -344,7 +344,7 @@ export function TextFormField({
             placeholder:font-description
             placeholder:${sizeClass.placeholder}
             caret-accent
-            focus-visible:outline-none
+            focus-visible:outline-hidden
             focus-visible:ring-1
             focus-visible:ring-lighter-agent
             focus-visible:ring-offset-1
@@ -644,7 +644,7 @@ export const MarkdownFormField = ({
           <button
             type="button"
             onClick={togglePreview}
-            className="text-sm font-semibold text-text-04 hover:text-text-05 focus:outline-none"
+            className="text-sm font-semibold text-text-04 hover:text-text-05 focus:outline-hidden"
           >
             {isPreviewOpen ? "Write" : "Preview"}
           </button>
@@ -850,7 +850,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
                     <div className="my-auto">
                       {index >= minFields ? (
                         <FiX
-                          className="my-auto w-10 h-10 cursor-pointer hover:bg-background-neutral-02 rounded p-2"
+                          className="my-auto w-10 h-10 cursor-pointer hover:bg-background-neutral-02 rounded-sm p-2"
                           onClick={() => {
                             if (!disabled) {
                               arrayHelpers.remove(index);
@@ -870,7 +870,9 @@ export function TextArrayField<T extends Yup.AnyObject>({
                 </div>
               ))}
 
-            <CreateButton
+            <Button
+              icon={SvgPlusCircle}
+              prominence="secondary"
               onClick={() => {
                 if (!disabled) {
                   arrayHelpers.push("");
@@ -880,7 +882,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
               disabled={disabled}
             >
               Add New
-            </CreateButton>
+            </Button>
           </div>
         )}
       />

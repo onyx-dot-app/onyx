@@ -183,7 +183,7 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
             # detect it before raise_for_status so callers can restart the workspace.
             if cursor and "cursor has expired" in response.text.lower():
                 raise _CursorExpiredError(response.text)
-            logger.error(f"Error fetching transcripts: {response.text}")
+            logger.error("Error fetching transcripts: %s", response.text)
             response.raise_for_status()
 
         data = response.json()
@@ -248,7 +248,7 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
         for workspace in self.workspaces:
             workspace_id = workspace_map.get(workspace)
             if not workspace_id:
-                logger.error(f"Invalid Gong workspace: {workspace}")
+                logger.error("Invalid Gong workspace: %s", workspace)
                 continue
             resolved.append(workspace_id)
 
@@ -304,12 +304,15 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
         call_time_str = call_metadata["started"]
         call_title = call_metadata["title"]
         logger.info(
-            f"Indexing Gong call id {call_id} from {call_time_str.split('T', 1)[0]}: {call_title}"
+            "Indexing Gong call id %s from %s: %s",
+            call_id,
+            call_time_str.split("T", 1)[0],
+            call_title,
         )
 
         call_parties = cast(list[dict] | None, call_details.get("parties"))
         if call_parties is None:
-            logger.error(f"Couldn't get parties for Call ID: {call_id}")
+            logger.error("Couldn't get parties for Call ID: %s", call_id)
             call_parties = []
 
         id_to_name_map = self._parse_parties(call_parties)
@@ -395,9 +398,8 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
 
         if newly_stashed:
             logger.warning(
-                f"Gong call details not yet available (race condition); "
-                f"deferring to next checkpoint invocation: "
-                f"call_ids={newly_stashed}"
+                "Gong call details not yet available (race condition); deferring to next checkpoint invocation: call_ids=%s",
+                newly_stashed,
             )
             # First attempt on any newly-stashed transcripts counts as attempt #1.
             # pending_call_details_attempts is guaranteed 0 here because
@@ -467,8 +469,11 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
             start, end
         )
         logger.info(
-            f"Fetching Gong calls between {start_time} and {end_time} "
-            f"(workspace {checkpoint.workspace_index + 1}/{len(workspace_ids)})"
+            "Fetching Gong calls between %s and %s (workspace %s/%s)",
+            start_time,
+            end_time,
+            checkpoint.workspace_index + 1,
+            len(workspace_ids),
         )
 
         workspace_id = workspace_ids[checkpoint.workspace_index]
@@ -488,9 +493,9 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
             # Document upserts are idempotent (keyed by call_id) so
             # reprocessing is safe.
             logger.warning(
-                f"Gong pagination cursor expired for workspace "
-                f"{checkpoint.workspace_index + 1}/{len(workspace_ids)}; "
-                f"restarting workspace from beginning of time range."
+                "Gong pagination cursor expired for workspace %s/%s; restarting workspace from beginning of time range.",
+                checkpoint.workspace_index + 1,
+                len(workspace_ids),
             )
             checkpoint.cursor = None
             checkpoint.has_more = True
@@ -560,17 +565,17 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
 
         checkpoint.pending_call_details_attempts += 1
         logger.warning(
-            f"Gong call details still missing after "
-            f"{checkpoint.pending_call_details_attempts}/"
-            f"{self.MAX_CALL_DETAILS_ATTEMPTS} attempts: "
-            f"missing_call_ids={list(checkpoint.pending_transcripts.keys())}"
+            "Gong call details still missing after %s/%s attempts: missing_call_ids=%s",
+            checkpoint.pending_call_details_attempts,
+            self.MAX_CALL_DETAILS_ATTEMPTS,
+            list(checkpoint.pending_transcripts.keys()),
         )
 
         if checkpoint.pending_call_details_attempts >= self.MAX_CALL_DETAILS_ATTEMPTS:
             logger.error(
-                f"Giving up on missing Gong call details after "
-                f"{self.MAX_CALL_DETAILS_ATTEMPTS} attempts: "
-                f"missing_call_ids={list(checkpoint.pending_transcripts.keys())}"
+                "Giving up on missing Gong call details after %s attempts: missing_call_ids=%s",
+                self.MAX_CALL_DETAILS_ATTEMPTS,
+                list(checkpoint.pending_transcripts.keys()),
             )
             for call_id in list(checkpoint.pending_transcripts.keys()):
                 yield ConnectorFailure(

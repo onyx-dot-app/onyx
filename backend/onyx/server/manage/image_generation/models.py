@@ -23,7 +23,7 @@ class TestImageGenerationRequest(BaseModel):
     2. From existing provider: Provide source_llm_provider_id (backend fetches API key)
     """
 
-    model_name: str  # e.g., "gpt-image-1", "dall-e-3"
+    model_name: str  # e.g., "gpt-image-1"
 
     # Option 1: Direct API key
     provider: str | None = None  # e.g., "openai", "azure"
@@ -55,7 +55,7 @@ class ImageGenerationConfigCreate(BaseModel):
 
     # Required for both modes
     image_provider_id: str  # Static unique key (e.g., "openai_gpt_image_1")
-    model_name: str  # e.g., "gpt-image-1", "dall-e-3"
+    model_name: str  # e.g., "gpt-image-1"
 
     # Option 1: Clone mode - use credentials from existing provider
     source_llm_provider_id: int | None = None
@@ -68,11 +68,6 @@ class ImageGenerationConfigCreate(BaseModel):
     deployment_name: str | None = None
     custom_config: dict[str, str] | None = None
 
-    # Group access control
-    is_public: bool = True
-    groups: list[int] | None = None
-    personas: list[int] | None = None
-
     is_default: bool = False
 
 
@@ -84,7 +79,7 @@ class ImageGenerationConfigUpdate(BaseModel):
     """
 
     # Required
-    model_name: str  # e.g., "gpt-image-1", "dall-e-3"
+    model_name: str  # e.g., "gpt-image-1"
     # Note: image_provider_id cannot be changed during update
 
     # Option 1: Clone mode - use credentials from existing provider
@@ -98,11 +93,6 @@ class ImageGenerationConfigUpdate(BaseModel):
     deployment_name: str | None = None
     custom_config: dict[str, str] | None = None
 
-    # Group access control
-    is_public: bool = True
-    groups: list[int] | None = None
-    personas: list[int] | None = None
-
     # If False and using new credentials mode, preserve existing API key from DB
     api_key_changed: bool = False
 
@@ -114,11 +104,8 @@ class ImageGenerationConfigView(BaseModel):
     model_configuration_id: int
     model_name: str  # From model_configuration.name
     llm_provider_id: int  # From model_configuration.llm_provider_id
-    llm_provider_name: str  # From model_configuration.llm_provider.name
+    llm_provider_name: str | None  # From model_configuration.llm_provider.name
     is_default: bool
-    is_public: bool
-    groups: list[int]
-    personas: list[int]
 
     @classmethod
     def from_model(
@@ -132,9 +119,6 @@ class ImageGenerationConfigView(BaseModel):
             llm_provider_id=config.model_configuration.llm_provider_id,
             llm_provider_name=config.model_configuration.llm_provider.name,
             is_default=config.is_default,
-            is_public=config.is_public,
-            groups=config.groups,
-            personas=config.personas,
         )
 
 

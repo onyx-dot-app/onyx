@@ -23,12 +23,14 @@ class SessionCreateRequest(BaseModel):
     """Request to create a new build session."""
 
     name: str | None = None  # Optional session name
-    demo_data_enabled: bool = True  # Whether to enable demo org_info data in sandbox
     user_work_area: str | None = None  # User's work area (e.g., "engineering")
     user_level: str | None = None  # User's level (e.g., "ic", "manager")
     # LLM selection from user's cookie
     llm_provider_type: str | None = None  # Provider type (e.g., "anthropic", "openai")
     llm_model_name: str | None = None  # Model name (e.g., "claude-opus-4-5")
+    # Skip Next.js dev server startup. Used by integration tests that don't
+    # exercise the webapp proxy and don't want to pay the ~20s startup wait.
+    headless: bool = False
 
 
 class SessionUpdateRequest(BaseModel):
@@ -287,38 +289,6 @@ class PreProvisionedCheckResponse(BaseModel):
 
     valid: bool  # True if session exists and has no messages
     session_id: str | None = None  # Session ID if valid, None otherwise
-
-
-# ===== Build Connector Models =====
-class BuildConnectorStatus(str, Enum):
-    """Status of a build connector."""
-
-    NOT_CONNECTED = "not_connected"
-    CONNECTED = "connected"
-    CONNECTED_WITH_ERRORS = "connected_with_errors"
-    INDEXING = "indexing"
-    ERROR = "error"
-    DELETING = "deleting"
-
-
-class BuildConnectorInfo(BaseModel):
-    """Simplified connector info for build admin panel."""
-
-    cc_pair_id: int
-    connector_id: int
-    credential_id: int
-    source: str
-    name: str
-    status: BuildConnectorStatus
-    docs_indexed: int
-    last_indexed: datetime | None
-    error_message: str | None = None
-
-
-class BuildConnectorListResponse(BaseModel):
-    """List of build connectors."""
-
-    connectors: list[BuildConnectorInfo]
 
 
 # ===== Suggestion Bubble Models =====

@@ -18,7 +18,7 @@ import {
   MAX_MEMORY_COUNT,
   LocalMemory,
 } from "@/hooks/useMemoryManager";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import type { MemoryItem } from "@/lib/types";
@@ -278,7 +278,7 @@ export default function MemoriesModal({
               onChange={(e) => setSearchQuery(e.target.value)}
               leftSearchIcon
               showClearButton={false}
-              className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
+              className="w-full bg-transparent! border-transparent! [:hover,:active,:focus,:focus-within]:bg-background-neutral-00! [:hover]:border-border-01! [:focus,:focus-within]:shadow-none!"
             />
             <Button
               disabled={!canAddMemory}

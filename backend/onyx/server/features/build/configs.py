@@ -25,18 +25,22 @@ PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
     "PERSISTENT_DOCUMENT_STORAGE_PATH", "/app/file-system"
 )
 
-# Demo Data Path
-# Local: Source tree path (relative to this file)
-# Kubernetes: Baked into container image at /workspace/demo_data
 _THIS_FILE = Path(__file__)
-DEMO_DATA_PATH = str(
-    _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "demo_data"
-)
 
 # Sandbox filesystem paths
-SANDBOX_BASE_PATH = os.environ.get("SANDBOX_BASE_PATH", "/tmp/onyx-sandboxes")
+# TODO(security): the sandbox base path holds user-supplied code; the `/tmp`
+# default is fine for dev but production should override via env (or we should
+# pick a non-world-writable default like `/var/lib/onyx-sandboxes`).
+SANDBOX_BASE_PATH = os.environ.get("SANDBOX_BASE_PATH", "/tmp/onyx-sandboxes")  # noqa: S108
 OUTPUTS_TEMPLATE_PATH = os.environ.get("OUTPUTS_TEMPLATE_PATH", "/templates/outputs")
 VENV_TEMPLATE_PATH = os.environ.get("VENV_TEMPLATE_PATH", "/templates/venv")
+# "copy" (default, safe for production where the agent may pip install) or
+# "symlink" (CI-only: node_modules + venv become symlinks to the template,
+# saving ~45s of per-session copytree).
+SANDBOX_TEMPLATE_MODE = os.environ.get("SANDBOX_TEMPLATE_MODE", "copy").lower()
+SKILLS_TEMPLATE_PATH = str(
+    _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "skills"
+)
 
 # Sandbox agent configuration
 SANDBOX_AGENT_COMMAND = os.environ.get("SANDBOX_AGENT_COMMAND", "opencode").split()
@@ -86,9 +90,9 @@ ATTACHMENTS_DIRECTORY = "attachments"
 SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 
 # Container image for sandbox pods
-# Should include Next.js template, opencode CLI, and demo_data zip
+# Should include Next.js template, opencode CLI, and agent skills
 SANDBOX_CONTAINER_IMAGE = os.environ.get(
-    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.5"
+    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.44"
 )
 
 # S3 bucket for sandbox file storage (snapshots, knowledge files, uploads)
@@ -97,17 +101,16 @@ SANDBOX_CONTAINER_IMAGE = os.environ.get(
 #                 s3://{bucket}/{tenant_id}/uploads/{session_id}/
 SANDBOX_S3_BUCKET = os.environ.get("SANDBOX_S3_BUCKET", "onyx-sandbox-files")
 
-# Service account for sandbox pods (NO IRSA - no AWS API access)
+# Service account for sandbox pods (needs IRSA for S3 snapshot access)
 SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get(
-    "SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox-runner"
-)
-
-# Service account for init container (has IRSA for S3 access)
-SANDBOX_FILE_SYNC_SERVICE_ACCOUNT = os.environ.get(
-    "SANDBOX_FILE_SYNC_SERVICE_ACCOUNT", "sandbox-file-sync"
+    "SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox-file-sync"
 )
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
+
+# Internal URL the sandbox uses to reach the Onyx API server.
+# Must be set when SANDBOX_BACKEND=kubernetes (no default — varies per deployment).
+SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
 
 # ============================================================================
 # SSE Streaming Configuration

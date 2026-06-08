@@ -1,3 +1,5 @@
+import hashlib
+import json
 import sys
 from collections.abc import Sequence
 from datetime import datetime
@@ -280,6 +282,39 @@ class DocumentBase(BaseModel):
 
     def get_text_content(self) -> str:
         return " ".join([section.text for section in self.sections if section.text])
+
+    def content_hash(self) -> str:
+        """MD5 fingerprint of indexable content.
+
+        Used as a fallback dedup gate for connectors that don't supply doc_updated_at
+        (e.g. web connector). Computed before image summarization runs, so LLM-generated
+        image summaries are intentionally excluded — they are non-deterministic and
+        unavailable at this point in the pipeline.
+
+        Covers: title, text section bodies, image_file_ids (connector-assigned, stable),
+        doc_metadata (sorted keys), primary and secondary owners (sorted by email).
+        Excludes: semantic_identifier (deterministically derived from other fields).
+        """
+        parts = []
+        for s in self.sections:
+            if isinstance(s, TextSection) and s.text:
+                parts.append(s.text)
+            elif isinstance(s, ImageSection) and s.image_file_id:
+                parts.append(f"[img:{s.image_file_id}]")
+
+        def _owner_key(o: BasicExpertInfo) -> str:
+            return o.email or o.display_name or o.first_name or ""
+
+        owners = json.dumps(
+            [o.model_dump() for o in sorted(self.primary_owners or [], key=_owner_key)]
+            + [
+                o.model_dump()
+                for o in sorted(self.secondary_owners or [], key=_owner_key)
+            ]
+        )
+        meta = json.dumps(self.doc_metadata or {}, sort_keys=True)
+        raw = f"{self.title or ''}||{' '.join(parts)}||{meta}||{owners}"
+        return hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
 
 
 def convert_metadata_dict_to_list_of_strings(

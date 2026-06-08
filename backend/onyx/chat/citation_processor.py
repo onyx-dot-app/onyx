@@ -179,9 +179,9 @@ class DynamicCitationProcessor:
         self.citation_mode = citation_mode
 
         # Citation tracking
-        self.cited_documents_in_order: list[SearchDoc] = (
-            []
-        )  # SearchDocs in citation order
+        self.cited_documents_in_order: list[
+            SearchDoc
+        ] = []  # SearchDocs in citation order
         self.cited_document_ids: set[str] = set()  # all cited document_ids
         self.recent_cited_documents: set[str] = (
             set()
@@ -191,7 +191,19 @@ class DynamicCitationProcessor:
         # Citation patterns
         # Matches potential incomplete citations: '[', '[[', '[1', '[[1', '[1,', '[1, ', etc.
         # Also matches unicode bracket variants: 【, ［
-        self.possible_citation_pattern = re.compile(r"([\[【［]+(?:\d+,? ?)*$)")
+        #
+        # NOTE: the inner group is written as `\d+(?:, ?\d+)*` (comma-separated runs of
+        # digits) rather than `(?:\d+,? ?)*`. The latter nests an unbounded quantifier
+        # (`\d+`) inside another unbounded quantifier (`(?:...)*`) with optional
+        # separators, which makes a solid run of digits ambiguous to parse. When the
+        # match ultimately fails the trailing `$` anchor, the engine backtracks through
+        # exponentially many ways of splitting the digits (O(2^n)), pinning a CPU core.
+        # The comma-separated form has exactly one way to parse a digit run, so it stays
+        # linear. This must mirror `citation_pattern` below, which already requires
+        # commas between numbers, so no real (closeable) citation is missed.
+        self.possible_citation_pattern = re.compile(
+            r"([\[【［]+(?:\d+(?:, ?\d+)*(?:, ?)?)?$)"
+        )
 
         # Matches complete citations:
         # group 1: '[[1]]', [[2]], etc. (also matches 【【1】】, ［［1］］, 【1】, ［1］)
@@ -466,13 +478,15 @@ class DynamicCitationProcessor:
                 num = int(num_str)
             except ValueError:
                 # Invalid citation, skip it
-                logger.warning(f"Invalid citation number format: {num_str}")
+                logger.warning("Invalid citation number format: %s", num_str)
                 continue
 
             # Check if we have a mapping for this citation number
             if num not in self.citation_to_doc:
                 logger.warning(
-                    f"Citation number {num} not found in mapping. Available: {list(self.citation_to_doc.keys())}"
+                    "Citation number %s not found in mapping. Available: %s",
+                    num,
+                    list(self.citation_to_doc.keys()),
                 )
                 continue
 

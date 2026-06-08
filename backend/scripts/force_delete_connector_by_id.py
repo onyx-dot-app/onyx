@@ -9,7 +9,6 @@ from onyx.db.document import delete_documents_complete__no_commit
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tag import delete_orphan_tags__no_commit
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 # Modify sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -38,7 +37,7 @@ from onyx.db.permission_sync_attempt import (
     delete_external_group_permission_sync_attempts__no_commit,
 )
 from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
@@ -75,9 +74,8 @@ def _unsafe_deletion(
 
         for document in documents:
             for document_index in document_indices:
-                document_index.delete_single(
-                    doc_id=document.id,
-                    tenant_id=POSTGRES_DEFAULT_SCHEMA,
+                document_index.delete(
+                    document.id,
                     chunk_count=document.chunk_count,
                 )
 
@@ -138,8 +136,10 @@ def _unsafe_deletion(
     db_session.commit()
 
     logger.notice(
-        "Successfully deleted connector_credential_pair with connector_id:"
-        f" '{connector_id}' and credential_id: '{credential_id}'. Deleted {num_docs_deleted} docs."
+        "Successfully deleted connector_credential_pair with connector_id: '%s' and credential_id: '%s'. Deleted %s docs.",
+        connector_id,
+        credential_id,
+        num_docs_deleted,
     )
     return num_docs_deleted
 
@@ -151,7 +151,7 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
         Are you SURE you want to continue? (enter 'Y' to continue): "
     )
     if user_input != "Y":
-        logger.notice(f"You entered {user_input}. Exiting!")
+        logger.notice("You entered %s. Exiting!", user_input)
         return
 
     logger.notice("Getting connector credential pair")
@@ -161,13 +161,13 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
     )
 
     if not cc_pair:
-        logger.error(f"Connector credential pair with ID {cc_pair_id} not found")
+        logger.error("Connector credential pair with ID %s not found", cc_pair_id)
         return
 
     if cc_pair.status == ConnectorCredentialPairStatus.ACTIVE:
         logger.error(
-            f"Connector {cc_pair.connector.name} is active, cannot continue. \
-            Please navigate to the connector and pause before attempting again"
+            "Connector %s is active, cannot continue.             Please navigate to the connector and pause before attempting again",
+            cc_pair.connector.name,
         )
         return
 
@@ -176,8 +176,9 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
 
     if cc_pair is None:
         logger.error(
-            f"Connector with ID '{connector_id}' and credential ID "
-            f"'{credential_id}' does not exist. Has it already been deleted?",
+            "Connector with ID '%s' and credential ID '%s' does not exist. Has it already been deleted?",
+            connector_id,
+            credential_id,
         )
         return
 
@@ -194,8 +195,9 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
 
     if not validated_cc_pair:
         logger.error(
-            f"Cannot run deletion attempt - connector_credential_pair with Connector ID: "
-            f"{connector_id} and Credential ID: {credential_id} does not exist."
+            "Cannot run deletion attempt - connector_credential_pair with Connector ID: %s and Credential ID: %s does not exist.",
+            connector_id,
+            credential_id,
         )
 
     file_ids: list[str] = (
@@ -219,16 +221,16 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
             cc_pair=cc_pair,
             pair_id=cc_pair_id,
         )
-        logger.notice(f"Deleted {files_deleted_count} files!")
+        logger.notice("Deleted %s files!", files_deleted_count)
 
     except Exception as e:
-        logger.error(f"Failed to delete connector due to {e}")
+        logger.error("Failed to delete connector due to %s", e)
 
     if file_ids:
         logger.notice("Deleting stored files!")
         file_store = get_default_file_store()
         for file_id in file_ids:
-            logger.notice(f"Deleting file {file_id}")
+            logger.notice("Deleting file %s", file_id)
             file_store.delete_file(file_id)
 
     db_session.commit()

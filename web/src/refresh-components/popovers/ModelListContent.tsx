@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import { PopoverMenu } from "@/refresh-components/Popover";
+import { PopoverMenu } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Button, LineItemButton, Text } from "@opal/components";
 import { SvgCheck, SvgChevronRight } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { LLMOption } from "./interfaces";
 import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import {
   Collapsible,
   CollapsibleContent,
@@ -126,7 +126,9 @@ export default function ModelListContent({
         onClick={() => onSelect(option)}
         rightChildren={
           selected ? (
-            <SvgCheck className="text-action-link-05" size={16} />
+            <div className="flex h-5 items-center">
+              <SvgCheck className="text-action-link-05" size={16} />
+            </div>
           ) : null
         }
         sizePreset="main-ui"
@@ -184,7 +186,7 @@ export default function ModelListContent({
                               <ContentAction
                                 sizePreset="secondary"
                                 variant="body"
-                                prominence="muted"
+                                color="muted"
                                 icon={group.Icon}
                                 title={group.displayName}
                                 padding="fit"
@@ -206,6 +208,7 @@ export default function ModelListContent({
                                     />
                                   </Section>
                                 }
+                                center
                               />
                             </div>
                           </Interactive.Container>

@@ -201,7 +201,9 @@ def _pretty_print_event(event: Any) -> str:
                     lines.append(f"{prefix}  [{i}]:")
                     for k, v in item.items():
                         _format_value(
-                            k, v, indent + 2  # ty: ignore[invalid-argument-type]
+                            k,  # ty: ignore[invalid-argument-type]
+                            v,
+                            indent + 2,
                         )
                 else:
                     lines.append(f"{prefix}  [{i}]: {item}")

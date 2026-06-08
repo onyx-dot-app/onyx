@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm@sha256:9c6f90801e6b68e772b7c0ca74260cbf7af9f320acec894e26fccdaccfbe3b47
+FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
@@ -76,7 +76,8 @@ ENV PATH="/root/.opencode/bin:${PATH}"
 # Remove py which is pulled in by retry, py is not needed and is a CVE
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
-RUN uv pip install --system --no-cache-dir --upgrade \
+# TODO: drop --no-deps once we upgrade to a litellm version with looser dependencies.
+RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
     pip uninstall -y py && \
@@ -92,10 +93,7 @@ RUN uv pip install --system --no-cache-dir --upgrade \
     apt-get update && \
     apt-get remove -y --allow-remove-essential \
         perl-base \
-        xserver-common \
-        xvfb \
         cmake \
-        libldap-2.5-0 \
         libxmlsec1-dev \
         pkg-config \
         gcc && \
@@ -105,6 +103,9 @@ RUN uv pip install --system --no-cache-dir --upgrade \
         # Install postgresql-client for easy manual tests
         postgresql-client && \
     apt-get autoremove -y && \
+    # Re-run after autoremove to restore any chromium runtime libs
+    # (libnss3, libnspr4, etc.) that got swept up by the cascade.
+    playwright install-deps chromium && \
     rm -rf /var/lib/apt/lists/* && \
     rm -rf ~/.cache/uv /tmp/*.txt && \
     rm -f /usr/local/lib/python3.11/site-packages/tornado/test/test.key
@@ -126,6 +127,23 @@ tiktoken.get_encoding('cl100k_base')"
 # Set up application files
 WORKDIR /app
 
+# Craft template setup runs BEFORE the bulk ./onyx copy so its 3-5 min
+# pip/npm install only invalidates on its own inputs, not on every PR.
+COPY --chown=onyx:onyx ./scripts/setup_craft_templates.sh /app/scripts/setup_craft_templates.sh
+RUN chmod +x /app/scripts/setup_craft_templates.sh
+COPY --chown=onyx:onyx \
+    ./onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt \
+    /app/onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt
+COPY --chown=onyx:onyx \
+    ./onyx/server/features/build/sandbox/kubernetes/docker/templates \
+    /app/onyx/server/features/build/sandbox/kubernetes/docker/templates
+RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
+        echo "Running Craft template setup at build time..." && \
+        ENABLE_CRAFT=true /app/scripts/setup_craft_templates.sh; \
+    fi
+ENV OUTPUTS_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs
+ENV VENV_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv
+
 # Enterprise Version Files
 COPY --chown=onyx:onyx ./ee /app/ee
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
@@ -144,21 +162,10 @@ COPY --chown=onyx:onyx ./keys /app/keys
 COPY --chown=onyx:onyx ./scripts/debugging /app/scripts/debugging
 COPY --chown=onyx:onyx ./scripts/force_delete_connector_by_id.py /app/scripts/force_delete_connector_by_id.py
 COPY --chown=onyx:onyx ./scripts/supervisord_entrypoint.sh /app/scripts/supervisord_entrypoint.sh
-COPY --chown=onyx:onyx ./scripts/setup_craft_templates.sh /app/scripts/setup_craft_templates.sh
 COPY --chown=onyx:onyx ./scripts/reencrypt_secrets.py /app/scripts/reencrypt_secrets.py
-RUN chmod +x /app/scripts/supervisord_entrypoint.sh /app/scripts/setup_craft_templates.sh
-
-# Run Craft template setup at build time when ENABLE_CRAFT=true
-# This pre-bakes demo data, Python venv, and npm dependencies into the image
-RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Running Craft template setup at build time..." && \
-        ENABLE_CRAFT=true /app/scripts/setup_craft_templates.sh; \
-    fi
-
-# Set Craft template paths to the in-image locations
-# These match the paths where setup_craft_templates.sh creates the templates
-ENV OUTPUTS_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs
-ENV VENV_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv
+COPY --chown=onyx:onyx ./scripts/rotate_llm_provider_keys.py /app/scripts/rotate_llm_provider_keys.py
+COPY --chown=onyx:onyx ./scripts/seed_dev_license.py /app/scripts/seed_dev_license.py
+RUN chmod +x /app/scripts/supervisord_entrypoint.sh
 
 # Put logo in assets
 COPY --chown=onyx:onyx ./assets /app/assets

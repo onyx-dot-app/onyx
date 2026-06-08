@@ -2,6 +2,8 @@ from typing import Any
 
 import requests
 
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+
 
 class BookStackClientRequestFailedError(ConnectionError):
     def __init__(self, status: int, error: str) -> None:
@@ -28,7 +30,9 @@ class BookStackApiClient:
     def get(self, endpoint: str, params: dict[str, str]) -> dict[str, Any]:
         url: str = self._build_url(endpoint)
         headers = self._build_headers()
-        response = requests.get(url, headers=headers, params=params)
+        response = requests.get(
+            url, headers=headers, params=params, timeout=REQUEST_TIMEOUT_SECONDS
+        )
 
         try:
             json = response.json()

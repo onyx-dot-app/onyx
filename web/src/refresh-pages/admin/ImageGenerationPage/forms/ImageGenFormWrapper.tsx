@@ -167,10 +167,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
             customConfig: payload.customConfig,
-            // Access control - use defaults from payload or fallback to public
-            isPublic: payload.isPublic ?? true,
-            groups: payload.groups ?? [],
-            personas: payload.personas ?? [],
           });
         } else {
           await createImageGenerationConfig({
@@ -182,10 +178,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
             deploymentName: payload.deploymentName,
             customConfig: payload.customConfig,
             isDefault: true,
-            // Access control - use defaults from payload or fallback to public
-            isPublic: payload.isPublic ?? true,
-            groups: payload.groups ?? [],
-            personas: payload.personas ?? [],
           });
         }
       } else {
@@ -223,10 +215,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
             deploymentName: payload.deploymentName,
             customConfig: payload.customConfig,
             apiKeyChanged,
-            // Access control - use defaults from payload or fallback to public
-            isPublic: payload.isPublic ?? true,
-            groups: payload.groups ?? [],
-            personas: payload.personas ?? [],
           });
         } else {
           await createImageGenerationConfig({
@@ -239,10 +227,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
             deploymentName: payload.deploymentName,
             customConfig: payload.customConfig,
             isDefault: true,
-            // Access control - use defaults from payload or fallback to public
-            isPublic: payload.isPublic ?? true,
-            groups: payload.groups ?? [],
-            personas: payload.personas ?? [],
           });
         }
       }

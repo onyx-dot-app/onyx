@@ -67,16 +67,14 @@ def _force_drop_schema(engine: Engine, schema: str) -> None:
         try:
             with engine.connect() as conn:
                 conn.execute(
-                    text(
-                        """
+                    text("""
                         SELECT pg_terminate_backend(l.pid)
                         FROM pg_locks l
                         JOIN pg_class c ON c.oid = l.relation
                         JOIN pg_namespace n ON n.oid = c.relnamespace
                         WHERE n.nspname = :schema
                           AND l.pid != pg_backend_pid()
-                        """
-                    ),
+                        """),
                     {"schema": schema},
                 )
                 conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
@@ -113,9 +111,9 @@ def current_head_rev() -> str:
         text=True,
         env={**os.environ, "PYTHONPATH": _BACKEND_DIR},
     )
-    assert (
-        result.returncode == 0
-    ), f"alembic heads failed (exit {result.returncode}):\n{result.stdout}\n{result.stderr}"
+    assert result.returncode == 0, (
+        f"alembic heads failed (exit {result.returncode}):\n{result.stdout}\n{result.stderr}"
+    )
     # Output looks like "d5c86e2c6dc6 (head)\n"
     rev = result.stdout.strip().split()[0]
     assert len(rev) > 0
@@ -127,7 +125,7 @@ def tenant_schema_at_head(
     engine: Engine, current_head_rev: str
 ) -> Generator[str, None, None]:
     """Create a temporary tenant schema whose alembic_version is at head."""
-    schema = f"tenant_test_{uuid.uuid4().hex[:12]}"
+    schema = f"tenant_{uuid.uuid4()}"
     with engine.connect() as conn:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
         conn.execute(
@@ -153,7 +151,7 @@ def tenant_schema_empty(engine: Engine) -> Generator[str, None, None]:
     Alembic will treat it as a fresh schema and run every migration from base
     to head.
     """
-    schema = f"tenant_test_{uuid.uuid4().hex[:12]}"
+    schema = f"tenant_{uuid.uuid4()}"
     with engine.connect() as conn:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
         conn.commit()
@@ -168,7 +166,7 @@ def tenant_schema_bad_rev(engine: Engine) -> Generator[str, None, None]:
     """Create a tenant schema whose alembic_version points to a non-existent
     revision.  Alembic cannot find a migration path from this revision, so
     it will fail."""
-    schema = f"tenant_test_{uuid.uuid4().hex[:12]}"
+    schema = f"tenant_{uuid.uuid4()}"
     with engine.connect() as conn:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
         conn.execute(

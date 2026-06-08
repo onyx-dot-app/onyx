@@ -14,21 +14,14 @@ import {
 } from "@/refresh-pages/admin/ImageGenerationPage/forms/types";
 import { ImageGenerationCredentials } from "@/refresh-pages/admin/ImageGenerationPage/svc";
 import { ImageProvider } from "@/refresh-pages/admin/ImageGenerationPage/constants";
-import { ModelAccessField } from "@/sections/modals/llmConfig/shared";
 
-// OpenAI form values - API key + access control
+// OpenAI form values - just API key
 interface OpenAIFormValues {
   api_key: string;
-  is_public: boolean;
-  groups: number[];
-  personas: number[];
 }
 
 const initialValues: OpenAIFormValues = {
   api_key: "",
-  is_public: true,
-  groups: [],
-  personas: [],
 };
 
 const validationSchema = Yup.object().shape({
@@ -48,76 +41,73 @@ function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
   } = props;
 
   return (
-    <>
-      <FormikField<string>
-        name="api_key"
-        render={(field, helper, meta, state) => (
-          <FormField
-            name="api_key"
-            state={apiStatus === "error" ? "error" : state}
-            className="w-full"
-          >
-            <FormField.Label>API Key</FormField.Label>
-            <FormField.Control>
-              {apiKeyOptions.length > 0 ? (
-                <InputComboBox
-                  value={field.value}
-                  onChange={(e) => {
-                    helper.setValue(e.target.value);
-                    resetApiState();
-                  }}
-                  onValueChange={(value) => {
-                    helper.setValue(value);
-                    resetApiState();
-                  }}
-                  onBlur={field.onBlur}
-                  options={apiKeyOptions}
-                  placeholder={
-                    isLoadingCredentials
-                      ? "Loading..."
-                      : "Enter new API key or select existing provider"
-                  }
-                  disabled={disabled}
-                  isError={apiStatus === "error"}
-                />
-              ) : (
-                <PasswordInputTypeIn
-                  {...field}
-                  onChange={(e) => {
-                    field.onChange(e);
-                    resetApiState();
-                  }}
-                  placeholder={
-                    isLoadingCredentials ? "Loading..." : "Enter your API key"
-                  }
-                  showClearButton={false}
-                  disabled={disabled}
-                  error={apiStatus === "error"}
-                />
-              )}
-            </FormField.Control>
-            {showApiMessage ? (
-              <FormField.APIMessage
-                state={apiStatus}
-                messages={{
-                  loading: `Testing API key with ${imageProvider.title}...`,
-                  success: "API key is valid. Configuration saved.",
-                  error: errorMessage || "Invalid API key",
+    <FormikField<string>
+      name="api_key"
+      render={(field, helper, meta, state) => (
+        <FormField
+          name="api_key"
+          state={apiStatus === "error" ? "error" : state}
+          className="w-full"
+        >
+          <FormField.Label>API Key</FormField.Label>
+          <FormField.Control>
+            {apiKeyOptions.length > 0 ? (
+              <InputComboBox
+                value={field.value}
+                onChange={(e) => {
+                  helper.setValue(e.target.value);
+                  resetApiState();
                 }}
+                onValueChange={(value) => {
+                  helper.setValue(value);
+                  resetApiState();
+                }}
+                onBlur={field.onBlur}
+                options={apiKeyOptions}
+                placeholder={
+                  isLoadingCredentials
+                    ? "Loading..."
+                    : "Enter new API key or select existing provider"
+                }
+                disabled={disabled}
+                isError={apiStatus === "error"}
               />
             ) : (
-              <FormField.Message
-                messages={{
-                  idle: "Enter a new API key or select an existing provider.",
-                  error: meta.error,
+              <PasswordInputTypeIn
+                {...field}
+                onChange={(e) => {
+                  field.onChange(e);
+                  resetApiState();
                 }}
+                placeholder={
+                  isLoadingCredentials ? "Loading..." : "Enter your API key"
+                }
+                showClearButton={false}
+                disabled={disabled}
+                error={apiStatus === "error"}
               />
             )}
-          </FormField>
-        )}
-      />
-      <ModelAccessField />
-    </>
+          </FormField.Control>
+          {showApiMessage ? (
+            <FormField.APIMessage
+              state={apiStatus}
+              messages={{
+                loading: `Testing API key with ${imageProvider.title}...`,
+                success: "API key is valid. Configuration saved.",
+                error: errorMessage || "Invalid API key",
+              }}
+            />
+          ) : (
+            <FormField.Message
+              messages={{
+                idle: "Enter a new API key or select an existing provider.",
+                error: meta.error,
+              }}
+            />
+          )}
+        </FormField>
+      )}
+    />
   );
 }
 
@@ -127,11 +117,6 @@ function getInitialValuesFromCredentials(
 ): Partial<OpenAIFormValues> {
   return {
     api_key: credentials.api_key || "",
-    // Note: Access control fields are not returned by the credentials endpoint
-    // Use defaults when editing - user can adjust via ModelAccessField
-    is_public: true,
-    groups: [],
-    personas: [],
   };
 }
 
@@ -144,9 +129,6 @@ function transformValues(
     imageProviderId: imageProvider.image_provider_id,
     provider: "openai",
     apiKey: values.api_key,
-    isPublic: values.is_public,
-    groups: values.groups,
-    personas: values.personas,
   };
 }
 

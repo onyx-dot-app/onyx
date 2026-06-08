@@ -23,6 +23,8 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptError
 from onyx.db.models import SearchSettings
+from onyx.redis.redis_docprocessing import RedisDocprocessing
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import optional_telemetry
@@ -35,16 +37,15 @@ def get_last_attempt_for_cc_pair(
     cc_pair_id: int,
     search_settings_id: int,
     db_session: Session,
+    ignore_targeted_reindex: bool = True,
 ) -> IndexAttempt | None:
-    return (
-        db_session.query(IndexAttempt)
-        .filter(
-            IndexAttempt.connector_credential_pair_id == cc_pair_id,
-            IndexAttempt.search_settings_id == search_settings_id,
-        )
-        .order_by(IndexAttempt.time_updated.desc())
-        .first()
+    query = db_session.query(IndexAttempt).filter(
+        IndexAttempt.connector_credential_pair_id == cc_pair_id,
+        IndexAttempt.search_settings_id == search_settings_id,
     )
+    if ignore_targeted_reindex:
+        query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    return query.order_by(IndexAttempt.time_updated.desc()).first()
 
 
 def get_recent_completed_attempts_for_cc_pair(
@@ -52,21 +53,19 @@ def get_recent_completed_attempts_for_cc_pair(
     search_settings_id: int,
     limit: int,
     db_session: Session,
+    ignore_targeted_reindex: bool = True,
 ) -> list[IndexAttempt]:
     """Most recent to least recent."""
-    return (
-        db_session.query(IndexAttempt)
-        .filter(
-            IndexAttempt.connector_credential_pair_id == cc_pair_id,
-            IndexAttempt.search_settings_id == search_settings_id,
-            IndexAttempt.status.notin_(
-                [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-            ),
-        )
-        .order_by(IndexAttempt.time_updated.desc())
-        .limit(limit)
-        .all()
+    query = db_session.query(IndexAttempt).filter(
+        IndexAttempt.connector_credential_pair_id == cc_pair_id,
+        IndexAttempt.search_settings_id == search_settings_id,
+        IndexAttempt.status.notin_(
+            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+        ),
     )
+    if ignore_targeted_reindex:
+        query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    return query.order_by(IndexAttempt.time_updated.desc()).limit(limit).all()
 
 
 def get_recent_attempts_for_cc_pair(
@@ -74,18 +73,16 @@ def get_recent_attempts_for_cc_pair(
     search_settings_id: int,
     limit: int,
     db_session: Session,
+    ignore_targeted_reindex: bool = True,
 ) -> list[IndexAttempt]:
     """Most recent to least recent."""
-    return (
-        db_session.query(IndexAttempt)
-        .filter(
-            IndexAttempt.connector_credential_pair_id == cc_pair_id,
-            IndexAttempt.search_settings_id == search_settings_id,
-        )
-        .order_by(IndexAttempt.time_updated.desc())
-        .limit(limit)
-        .all()
+    query = db_session.query(IndexAttempt).filter(
+        IndexAttempt.connector_credential_pair_id == cc_pair_id,
+        IndexAttempt.search_settings_id == search_settings_id,
     )
+    if ignore_targeted_reindex:
+        query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    return query.order_by(IndexAttempt.time_updated.desc()).limit(limit).all()
 
 
 def get_index_attempt(
@@ -109,6 +106,24 @@ def get_index_attempt(
     if eager_load_search_settings:
         stmt = stmt.options(joinedload(IndexAttempt.search_settings))
     return db_session.scalars(stmt).first()
+
+
+def get_stale_not_started_index_attempts(
+    db_session: Session,
+    cutoff: datetime,
+) -> list[IndexAttempt]:
+    """Returns NOT_STARTED attempts with a task ID that were created before cutoff."""
+    return list(
+        db_session.execute(
+            select(IndexAttempt).where(
+                IndexAttempt.status == IndexingStatus.NOT_STARTED,
+                IndexAttempt.celery_task_id.isnot(None),
+                IndexAttempt.time_created < cutoff,
+            )
+        )
+        .scalars()
+        .all()
+    )
 
 
 def count_error_rows_for_index_attempt(
@@ -291,6 +306,16 @@ def mark_attempt_succeeded(
                 "cc_pair_id": attempt.connector_credential_pair_id,
             },
         )
+        # Stale counter keys left by a failed cleanup() are harmless: the monitor
+        # skips attempts that are already in a terminal state before reading Redis.
+        try:
+            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+        except Exception:
+            logger.debug(
+                "Failed to clean up docprocessing counters for attempt %s",
+                index_attempt_id,
+                exc_info=True,
+            )
         return attempt
     except Exception:
         db_session.rollback()
@@ -321,6 +346,16 @@ def mark_attempt_partially_succeeded(
                 "cc_pair_id": attempt.connector_credential_pair_id,
             },
         )
+        # Stale counter keys left by a failed cleanup() are harmless: the monitor
+        # skips attempts that are already in a terminal state before reading Redis.
+        try:
+            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+        except Exception:
+            logger.debug(
+                "Failed to clean up docprocessing counters for attempt %s",
+                index_attempt_id,
+                exc_info=True,
+            )
         return attempt
     except Exception:
         db_session.rollback()
@@ -354,6 +389,16 @@ def mark_attempt_canceled(
                 "cc_pair_id": attempt.connector_credential_pair_id,
             },
         )
+        # Stale counter keys left by a failed cleanup() are harmless: the monitor
+        # skips attempts that are already in a terminal state before reading Redis.
+        try:
+            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+        except Exception:
+            logger.debug(
+                "Failed to clean up docprocessing counters for attempt %s",
+                index_attempt_id,
+                exc_info=True,
+            )
     except Exception:
         db_session.rollback()
         raise
@@ -389,6 +434,16 @@ def mark_attempt_failed(
                 "cc_pair_id": attempt.connector_credential_pair_id,
             },
         )
+        # Stale counter keys left by a failed cleanup() are harmless: the monitor
+        # skips attempts that are already in a terminal state before reading Redis.
+        try:
+            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+        except Exception:
+            logger.debug(
+                "Failed to clean up docprocessing counters for attempt %s",
+                index_attempt_id,
+                exc_info=True,
+            )
     except Exception:
         db_session.rollback()
         raise
@@ -429,6 +484,7 @@ def get_last_attempt(
     credential_id: int,
     search_settings_id: int | None,
     db_session: Session,
+    ignore_targeted_reindex: bool = True,
 ) -> IndexAttempt | None:
     stmt = (
         select(IndexAttempt)
@@ -439,6 +495,8 @@ def get_last_attempt(
             IndexAttempt.search_settings_id == search_settings_id,
         )
     )
+    if ignore_targeted_reindex:
+        stmt = stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
 
     # Note, the below is using time_created instead of time_updated
     stmt = stmt.order_by(desc(IndexAttempt.time_created))
@@ -450,13 +508,14 @@ def get_latest_index_attempts_by_status(
     secondary_index: bool,
     db_session: Session,
     status: IndexingStatus,
+    ignore_targeted_reindex: bool = True,
 ) -> Sequence[IndexAttempt]:
     """
     Retrieves the most recent index attempt with the specified status for each connector_credential_pair.
     Filters attempts based on the secondary_index flag to get either future or present index attempts.
     Returns a sequence of IndexAttempt objects, one for each unique connector_credential_pair.
     """
-    latest_failed_attempts = (
+    latest_filter_stmt = (
         select(
             IndexAttempt.connector_credential_pair_id,
             func.max(IndexAttempt.id).label("max_failed_id"),
@@ -469,9 +528,14 @@ def get_latest_index_attempts_by_status(
             ),
             IndexAttempt.status == status,
         )
-        .group_by(IndexAttempt.connector_credential_pair_id)
-        .subquery()
     )
+    if ignore_targeted_reindex:
+        latest_filter_stmt = latest_filter_stmt.where(
+            IndexAttempt.targeted_reindex_job_id.is_(None)
+        )
+    latest_failed_attempts = latest_filter_stmt.group_by(
+        IndexAttempt.connector_credential_pair_id
+    ).subquery()
 
     stmt = select(IndexAttempt).join(
         latest_failed_attempts,
@@ -501,6 +565,7 @@ def get_latest_index_attempts(
     db_session: Session,
     eager_load_cc_pair: bool = False,
     only_finished: bool = False,
+    ignore_targeted_reindex: bool = True,
 ) -> Sequence[IndexAttempt]:
     ids_stmt = select(
         IndexAttempt.connector_credential_pair_id,
@@ -509,6 +574,8 @@ def get_latest_index_attempts(
 
     status = IndexModelStatus.FUTURE if secondary_index else IndexModelStatus.PRESENT
     ids_stmt = ids_stmt.where(SearchSettings.status == status)
+    if ignore_targeted_reindex:
+        ids_stmt = ids_stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
 
     if only_finished:
         ids_stmt = _add_only_finished_clause(ids_stmt)
@@ -545,13 +612,18 @@ def get_latest_index_attempts_parallel(
     secondary_index: bool,
     eager_load_cc_pair: bool = False,
     only_finished: bool = False,
+    ignore_targeted_reindex: bool = True,
 ) -> Sequence[IndexAttempt]:
+    # The session closes before returning, so only set eager_load_cc_pair=True if the
+    # caller actually accesses those relationships — otherwise it loads data for nothing
+    # and error_rows in particular can be very expensive on large deployments.
     with get_session_with_current_tenant() as db_session:
         return get_latest_index_attempts(
             secondary_index,
             db_session,
             eager_load_cc_pair,
             only_finished,
+            ignore_targeted_reindex=ignore_targeted_reindex,
         )
 
 
@@ -560,11 +632,14 @@ def get_latest_index_attempt_for_cc_pair_id(
     connector_credential_pair_id: int,
     secondary_index: bool,
     only_finished: bool = True,
+    ignore_targeted_reindex: bool = True,
 ) -> IndexAttempt | None:
     stmt = select(IndexAttempt)
     stmt = stmt.where(
         IndexAttempt.connector_credential_pair_id == connector_credential_pair_id,
     )
+    if ignore_targeted_reindex:
+        stmt = stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
     if only_finished:
         stmt = _add_only_finished_clause(stmt)
 
@@ -579,20 +654,22 @@ def get_latest_successful_index_attempt_for_cc_pair_id(
     db_session: Session,
     connector_credential_pair_id: int,
     secondary_index: bool = False,
+    ignore_targeted_reindex: bool = True,
 ) -> IndexAttempt | None:
     """Returns the most recent successful index attempt for the given cc pair,
     filtered to the current (or future) search settings.
     Uses MAX(id) semantics to match get_latest_index_attempts_by_status."""
     status = IndexModelStatus.FUTURE if secondary_index else IndexModelStatus.PRESENT
+    stmt = select(IndexAttempt).where(
+        IndexAttempt.connector_credential_pair_id == connector_credential_pair_id,
+        IndexAttempt.status.in_(
+            [IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS]
+        ),
+    )
+    if ignore_targeted_reindex:
+        stmt = stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
     stmt = (
-        select(IndexAttempt)
-        .where(
-            IndexAttempt.connector_credential_pair_id == connector_credential_pair_id,
-            IndexAttempt.status.in_(
-                [IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS]
-            ),
-        )
-        .join(SearchSettings)
+        stmt.join(SearchSettings)
         .where(SearchSettings.status == status)
         .order_by(desc(IndexAttempt.id))
         .limit(1)
@@ -602,6 +679,7 @@ def get_latest_successful_index_attempt_for_cc_pair_id(
 
 def get_latest_successful_index_attempts_parallel(
     secondary_index: bool = False,
+    ignore_targeted_reindex: bool = True,
 ) -> Sequence[IndexAttempt]:
     """Batch version: returns the latest successful index attempt per cc pair.
     Covers both SUCCESS and COMPLETED_WITH_ERRORS (matching is_successful())."""
@@ -621,9 +699,14 @@ def get_latest_successful_index_attempts_parallel(
                     [IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS]
                 ),
             )
-            .group_by(IndexAttempt.connector_credential_pair_id)
-            .subquery()
         )
+        if ignore_targeted_reindex:
+            latest_ids = latest_ids.where(
+                IndexAttempt.targeted_reindex_job_id.is_(None)
+            )
+        latest_ids = latest_ids.group_by(
+            IndexAttempt.connector_credential_pair_id
+        ).subquery()
 
         stmt = select(IndexAttempt).join(
             latest_ids,
@@ -641,10 +724,13 @@ def count_index_attempts_for_cc_pair(
     cc_pair_id: int,
     only_current: bool = True,
     disinclude_finished: bool = False,
+    ignore_targeted_reindex: bool = True,
 ) -> int:
     stmt = select(IndexAttempt).where(
-        IndexAttempt.connector_credential_pair_id == cc_pair_id
+        IndexAttempt.connector_credential_pair_id == cc_pair_id,
     )
+    if ignore_targeted_reindex:
+        stmt = stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
     if disinclude_finished:
         stmt = stmt.where(
             IndexAttempt.status.in_(
@@ -668,10 +754,13 @@ def get_paginated_index_attempts_for_cc_pair_id(
     page_size: int,
     only_current: bool = True,
     disinclude_finished: bool = False,
+    ignore_targeted_reindex: bool = True,
 ) -> list[IndexAttempt]:
     stmt = select(IndexAttempt).where(
-        IndexAttempt.connector_credential_pair_id == cc_pair_id
+        IndexAttempt.connector_credential_pair_id == cc_pair_id,
     )
+    if ignore_targeted_reindex:
+        stmt = stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
     if disinclude_finished:
         stmt = stmt.where(
             IndexAttempt.status.in_(
@@ -696,6 +785,7 @@ def get_index_attempts_for_cc_pair(
     cc_pair_identifier: ConnectorCredentialPairIdentifier,
     only_current: bool = True,
     disinclude_finished: bool = False,
+    ignore_targeted_reindex: bool = True,
 ) -> Sequence[IndexAttempt]:
     stmt = (
         select(IndexAttempt)
@@ -708,6 +798,8 @@ def get_index_attempts_for_cc_pair(
             )
         )
     )
+    if ignore_targeted_reindex:
+        stmt = stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
     if disinclude_finished:
         stmt = stmt.where(
             IndexAttempt.status.in_(
@@ -839,33 +931,34 @@ def cancel_indexing_attempts_for_search_settings(
 def count_unique_cc_pairs_with_successful_index_attempts(
     search_settings_id: int | None,
     db_session: Session,
+    ignore_targeted_reindex: bool = True,
 ) -> int:
     """Collect all of the Index Attempts that are successful and for the specified embedding model
     Then do distinct by connector_id and credential_id which is equivalent to the cc-pair. Finally,
     do a count to get the total number of unique cc-pairs with successful attempts"""
-    unique_pairs_count = (
+    query = (
         db_session.query(IndexAttempt.connector_credential_pair_id)
         .join(ConnectorCredentialPair)
         .filter(
             IndexAttempt.search_settings_id == search_settings_id,
             IndexAttempt.status == IndexingStatus.SUCCESS,
         )
-        .distinct()
-        .count()
     )
-
-    return unique_pairs_count
+    if ignore_targeted_reindex:
+        query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    return query.distinct().count()
 
 
 def count_unique_active_cc_pairs_with_successful_index_attempts(
     search_settings_id: int | None,
     db_session: Session,
+    ignore_targeted_reindex: bool = True,
 ) -> int:
     """Collect all of the Index Attempts that are successful and for the specified embedding model,
     but only for non-paused connector-credential pairs. Then do distinct by connector_id and credential_id
     which is equivalent to the cc-pair. Finally, do a count to get the total number of unique non-paused
     cc-pairs with successful attempts."""
-    unique_pairs_count = (
+    query = (
         db_session.query(IndexAttempt.connector_credential_pair_id)
         .join(ConnectorCredentialPair)
         .filter(
@@ -873,11 +966,10 @@ def count_unique_active_cc_pairs_with_successful_index_attempts(
             IndexAttempt.status == IndexingStatus.SUCCESS,
             ConnectorCredentialPair.status != ConnectorCredentialPairStatus.PAUSED,
         )
-        .distinct()
-        .count()
     )
-
-    return unique_pairs_count
+    if ignore_targeted_reindex:
+        query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    return query.distinct().count()
 
 
 def create_index_attempt_error(

@@ -1,4 +1,5 @@
 import os
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -7,6 +8,29 @@ MODIFIED_FIELD = "LastModifiedDate"
 ID_FIELD = "Id"
 ACCOUNT_OBJECT_TYPE = "Account"
 USER_OBJECT_TYPE = "User"
+
+# Salesforce object and field API names must start with a letter and contain
+# only letters, digits, and underscores (custom objects/fields end in `__c`,
+# namespaces use `__`). This regex covers all valid SF identifiers and rejects
+# the characters needed for SOQL injection (`'`, `"`, `;`, whitespace, etc.).
+_SF_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+
+
+def is_valid_sf_identifier(name: str) -> bool:
+    """True iff `name` is a syntactically valid Salesforce object/field name.
+
+    SOQL has no way to bind table/column identifiers, so any identifier that
+    is interpolated into a query string must be validated against this pattern
+    first to prevent SOQL injection.
+    """
+    return bool(_SF_IDENTIFIER_PATTERN.match(name))
+
+
+def validate_sf_identifier(name: str) -> str:
+    """Return `name` if it is a valid SF identifier, else raise ValueError."""
+    if not is_valid_sf_identifier(name):
+        raise ValueError(f"Invalid Salesforce identifier: {name!r}")
+    return name
 
 
 @dataclass

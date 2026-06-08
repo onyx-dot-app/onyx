@@ -12,6 +12,7 @@ from onyx.chat.citation_processor import CitationMode
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
+from onyx.chat.llm_step import _looks_like_xml_tool_call_payload
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.chat.llm_step import run_llm_step
 from onyx.chat.models import ChatMessageSimple
@@ -24,6 +25,7 @@ from onyx.chat.prompt_utils import build_reminder_message
 from onyx.chat.prompt_utils import build_system_prompt
 from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
+from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
@@ -133,18 +135,6 @@ def _build_empty_llm_response_error(
     )
 
 
-def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
-    """Detect XML-style marshaled tool calls emitted as plain text."""
-    if not text:
-        return False
-    lowered = text.lower()
-    return (
-        "<function_calls" in lowered
-        and "<invoke" in lowered
-        and "<parameter" in lowered
-    )
-
-
 def _try_fallback_tool_extraction(
     llm_step_result: LlmStepResult,
     tool_choice: ToolChoiceOptions,
@@ -218,7 +208,8 @@ def _try_fallback_tool_extraction(
         )
     if extracted_tool_calls:
         logger.info(
-            f"Extracted {len(extracted_tool_calls)} tool call(s) from response text as fallback"
+            "Extracted %s tool call(s) from response text as fallback",
+            len(extracted_tool_calls),
         )
         return (
             LlmStepResult(
@@ -233,14 +224,15 @@ def _try_fallback_tool_extraction(
     return llm_step_result, True
 
 
-# Hardcoded oppinionated value, might breaks down to something like:
+# Default 6 covers the common search → open_url pattern:
 # Cycle 1: Calls web_search for something
 # Cycle 2: Calls open_url for some results
 # Cycle 3: Calls web_search for some other aspect of the question
 # Cycle 4: Calls open_url for some results
 # Cycle 5: Maybe call open_url for some additional results or because last set failed
 # Cycle 6: No more tools available, forced to answer
-MAX_LLM_CYCLES = 6
+# Override via the MAX_LLM_CYCLES env var when running with tool-heavy MCPs
+# that legitimately need more turns. Imported from chat_configs.
 
 
 def _build_context_file_citation_mapping(
@@ -457,7 +449,8 @@ def construct_message_history(
         ]
         if forgotten_meta:
             logger.debug(
-                f"FileReader: building forgotten-files message for {[(m.file_id, m.filename) for m in forgotten_meta]}"
+                "FileReader: building forgotten-files message for %s",
+                [(m.file_id, m.filename) for m in forgotten_meta],
             )
             forgotten_files_message = _create_file_tool_metadata_message(
                 forgotten_meta, token_counter
@@ -480,16 +473,6 @@ def construct_message_history(
                     forgotten_files_message = _create_file_tool_metadata_message(
                         forgotten_meta, token_counter
                     )
-
-    # Attach project images to the last user message
-    if context_files and context_files.image_files:
-        existing_images = last_user_message.image_files or []
-        last_user_message = ChatMessageSimple(
-            message=last_user_message.message,
-            token_count=last_user_message.token_count,
-            message_type=last_user_message.message_type,
-            image_files=existing_images + context_files.image_files,
-        )
 
     # Build the final message list according to README ordering:
     # [system], [history_before_last_user], [custom_agent], [context_files],
@@ -644,6 +627,7 @@ def run_llm_loop(
         metadata={
             "tenant_id": get_current_tenant_id(),
             "chat_session_id": chat_session_id,
+            "user_id": user_identity.user_id if user_identity else None,
         },
     ):
         # Fix some LiteLLM issues,

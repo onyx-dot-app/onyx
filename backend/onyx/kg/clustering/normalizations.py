@@ -267,7 +267,7 @@ def normalize_entities(
             )
             normalized_map[entity] = format_entity_id_for_models(normalized_entity)
         else:
-            logger.warning(f"No normalized entity found for {entity}")
+            logger.warning("No normalized entity found for %s", entity)
             normalized_map[entity] = format_entity_id_for_models(entity)
 
     return NormalizedEntities(
@@ -308,7 +308,7 @@ def normalize_relationships(
         norm_target = entity_normalization_map.get(target)
 
         if norm_source is None or norm_target is None:
-            logger.warning(f"No normalized entities found for {raw_rel}")
+            logger.warning("No normalized entities found for %s", raw_rel)
             continue
 
         # 2. Find candidate normalized relationships
@@ -325,7 +325,7 @@ def normalize_relationships(
             ]
 
         if not candidate_rels:
-            logger.warning(f"No candidate relationships found for {raw_rel}")
+            logger.warning("No candidate relationships found for %s", raw_rel)
             continue
 
         # 3. Encode and find best match

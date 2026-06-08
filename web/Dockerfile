@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:24-alpine@sha256:d1b3b4da11eefd5941e7f0b9cf17783fc99d9c6fc34884a665f40a06dbdfc94f AS base
 
 LABEL com.onyx.maintainer="founders@onyx.app"
 LABEL com.onyx.description="This image is the web/frontend container of Onyx which \
@@ -13,15 +13,18 @@ FROM base AS builder
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Copy package files first for better layer caching
-# This layer will be cached unless package.json or package-lock.json changes
-COPY package.json package-lock.json ./
-COPY lib/opal/package.json ./lib/opal/
+# Copy package files + the full opal workspace source so that opal's `prepare`
+# lifecycle hook (which runs during `npm ci` for workspace packages) can build
+# `dist/` artifacts before Next.js resolves package exports. opal's tsconfig
+# extends web's `tsconfig.json`, so that file must also be present at install
+# time for the DTS build to succeed.
+COPY package.json package-lock.json tsconfig.json ./
+COPY lib/opal/ ./lib/opal/
 
-# Install dependencies
+# Install dependencies. opal's `prepare` script builds dist/ as part of install.
 RUN npm ci
 
-# pull in source code / package.json / package-lock.json
+# pull in remaining source code
 COPY . .
 
 # needed to get the `standalone` dir we expect later
@@ -34,11 +37,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # https://github.com/vercel/next.js/discussions/14030
 # NOTE: if you add something here, make sure to add it to the runner as well
 
-ARG NEXT_PUBLIC_BASE_URL
-ENV NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
-
-ARG NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 ARG NEXT_PUBLIC_THEME
 ENV NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME}
@@ -126,12 +124,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 
 # allow user to specify custom feedback options
-ARG NEXT_PUBLIC_BASE_URL
-ENV NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
-
-ARG NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-
 ARG NEXT_PUBLIC_THEME
 ENV NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME}
 
@@ -173,7 +165,7 @@ ENV NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${NEXT_PUBLIC_RECAPTCHA_SITE_KEY}
 ARG SENTRY_RELEASE
 ENV SENTRY_RELEASE=${SENTRY_RELEASE}
 
-# Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
+# Default ONYX_VERSION, typically overridden during builds by GitHub Actions.
 ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION}
 

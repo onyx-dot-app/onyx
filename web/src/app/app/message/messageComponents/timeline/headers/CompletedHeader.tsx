@@ -73,7 +73,7 @@ function MemoryTagWithTooltip({
                 sizePreset="secondary"
                 padding="sm"
                 variant="body"
-                prominence="muted"
+                color="muted"
                 rightChildren={
                   <Button
                     prominence="tertiary"
@@ -131,7 +131,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
   if (isMemoryOnly) {
     return (
       <div className="flex w-full justify-between">
-        <div className="flex items-center px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
+        <div className="flex items-center px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
           <MemoryTagWithTooltip
             memoryText={memoryText}
             memoryOperation={memoryOperation}
@@ -172,9 +172,9 @@ export const CompletedHeader = React.memo(function CompletedHeader({
       onClick={onToggle}
       className="flex items-center justify-between w-full"
     >
-      <div className="flex items-center gap-2 px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
+      <div className="flex items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
         <Text as="p" mainUiAction text03>
-          {isExpanded ? durationText : imageText ?? durationText}
+          {isExpanded ? durationText : (imageText ?? durationText)}
         </Text>
         {memoryOperation && !isExpanded && (
           <MemoryTagWithTooltip

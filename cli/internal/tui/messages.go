@@ -34,3 +34,8 @@ type AgentsLoadedMsg struct {
 	Agents []models.AgentSummary
 	Err    error
 }
+
+// ConfigTestResultMsg carries the result of an async connection test during /configure.
+type ConfigTestResultMsg struct {
+	Err error
+}

@@ -20,7 +20,7 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
 
   // Click on user dropdown and open settings (same pattern as other tests)
   await page.locator("#onyx-user-dropdown").click();
-  await page.getByText("User Settings").first().click();
+  await page.getByText("Settings").first().click();
 
   // Wait for settings modal to appear (first page has "Full Name" section)
   await expect(page.getByText("Full Name")).toBeVisible();
@@ -68,8 +68,8 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
   // Grant clipboard permissions before copying
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
 
-  // Copy the newly created token (button is inside .code-copy-button)
-  await page.locator(".code-copy-button button").click();
+  // Copy the newly created token via the footer "Copy Token" button
+  await page.getByRole("button", { name: "Copy Token" }).click();
 
   // Wait a moment for clipboard to be written and verify
   await page.waitForTimeout(500);
@@ -78,7 +78,8 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
   );
   expect(clipboardText).toBe(tokenValue);
 
-  await page.locator('button:has-text("Done")').first().click();
+  // Close the modal
+  await page.keyboard.press("Escape");
   await expect(page.getByText(tokenName).first()).toBeVisible({
     timeout: 5000,
   });
@@ -146,7 +147,7 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
 
   // Click on user dropdown and open settings (same pattern as other tests)
   await page.locator("#onyx-user-dropdown").click();
-  await page.getByText("User Settings").first().click();
+  await page.getByText("Settings").first().click();
 
   // Wait for settings modal to appear (first page has "Full Name" section)
   await expect(page.getByText("Full Name")).toBeVisible();
@@ -198,8 +199,8 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
       .first()
       .waitFor({ state: "visible", timeout: 5000 });
 
-    // Close the modal by clicking "Done"
-    await page.locator('button:has-text("Done")').first().click();
+    // Close the modal
+    await page.keyboard.press("Escape");
 
     // Wait for token to appear in the list
     await expect(page.getByText(token.name).first()).toBeVisible({

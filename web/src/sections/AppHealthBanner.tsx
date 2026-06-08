@@ -22,8 +22,12 @@ export default function AppHealthBanner() {
   const [expired, setExpired] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const pathname = usePathname();
-  const expirationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const refreshIntervalRef = useRef<NodeJS.Timer | null>(null);
+  const expirationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
   // Latches true once we see an authed user — separates mid-session logout
   // from a fresh unauth load.
   const hasSeenAuthenticatedUserRef = useRef(false);
@@ -216,7 +220,7 @@ export default function AppHealthBanner() {
     return null;
   } else {
     return (
-      <div className="fixed top-0 left-0 z-[101] w-full bg-status-error-01 p-3">
+      <div className="fixed top-0 left-0 z-101 w-full bg-status-error-01 p-3">
         <Content
           icon={SvgAlertTriangle}
           title="The backend is currently unavailable"

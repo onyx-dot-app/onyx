@@ -22,9 +22,6 @@ def create_image_generation_config__no_commit(
     image_provider_id: str,
     model_configuration_id: int,
     is_default: bool = False,
-    is_public: bool = True,
-    groups: list[int] | None = None,
-    personas: list[int] | None = None,
 ) -> ImageGenerationConfig:
     """Create a new image generation config."""
     # If setting as default, clear ALL existing defaults in a single atomic update
@@ -40,9 +37,6 @@ def create_image_generation_config__no_commit(
         image_provider_id=image_provider_id,
         model_configuration_id=model_configuration_id,
         is_default=is_default,
-        is_public=is_public,
-        groups=groups if groups is not None else [],
-        personas=personas if personas is not None else [],
     )
     db_session.add(new_config)
     db_session.flush()
@@ -239,13 +233,13 @@ def create_default_image_gen_config_from_api_key(
 
         db_session.commit()
 
-        logger.info(f"Created default image generation config: {image_provider_id}")
+        logger.info("Created default image generation config: %s", image_provider_id)
 
         return config
 
     except Exception:
         db_session.rollback()
         logger.exception(
-            f"Failed to create default image generation config {image_provider_id}"
+            "Failed to create default image generation config %s", image_provider_id
         )
         return None

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import ActionCardHeader from "@/sections/actions/ActionCardHeader";
 import ToolsSection from "@/sections/actions/ToolsSection";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { ActionStatus } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
 import { SvgServer } from "@opal/icons";

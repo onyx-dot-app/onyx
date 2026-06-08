@@ -1,6 +1,6 @@
 import { FormikProps } from "formik";
 import { ImageProvider } from "@/refresh-pages/admin/ImageGenerationPage/constants";
-import { LLMProviderView } from "@/interfaces/llm";
+import { LLMProviderView } from "@/lib/languageModels/types";
 import {
   ImageGenerationConfigView,
   ImageGenerationCredentials,
@@ -22,8 +22,9 @@ export interface ImageGenFormBaseProps {
 export type FormValues = Record<string, any>;
 
 // Props for the generic wrapper component
-export interface ImageGenFormWrapperProps<T extends FormValues>
-  extends ImageGenFormBaseProps {
+export interface ImageGenFormWrapperProps<
+  T extends FormValues,
+> extends ImageGenFormBaseProps {
   title: string;
   description: string;
   initialValues: T;
@@ -70,9 +71,4 @@ export interface ImageGenSubmitPayload {
   apiVersion?: string;
   deploymentName?: string;
   customConfig?: Record<string, string>;
-
-  // Access control
-  isPublic?: boolean;
-  groups?: number[];
-  personas?: number[];
 }

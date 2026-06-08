@@ -54,13 +54,13 @@ class DiscordCacheManager:
                     try:
                         guild_ids, api_key = await self._load_tenant_data(tenant_id)
                         if not guild_ids:
-                            logger.debug(f"No guilds found for tenant {tenant_id}")
+                            logger.debug("No guilds found for tenant %s", tenant_id)
                             continue
 
                         if not api_key:
                             logger.warning(
-                                "Discord service API key missing for tenant that has registered guilds. "
-                                f"{tenant_id} will not be handled in this refresh cycle."
+                                "Discord service API key missing for tenant that has registered guilds. %s will not be handled in this refresh cycle.",
+                                tenant_id,
                             )
                             continue
 
@@ -69,7 +69,7 @@ class DiscordCacheManager:
 
                         new_api_keys[tenant_id] = api_key
                     except Exception as e:
-                        logger.warning(f"Failed to refresh tenant {tenant_id}: {e}")
+                        logger.warning("Failed to refresh tenant %s: %s", tenant_id, e)
                     finally:
                         CURRENT_TENANT_ID_CONTEXTVAR.reset(context_token)
 
@@ -78,17 +78,21 @@ class DiscordCacheManager:
                 self._initialized = True
 
                 logger.info(
-                    f"Cache refresh complete: {len(new_guild_tenants)} guilds, {len(new_api_keys)} tenants"
+                    "Cache refresh complete: %s guilds, %s tenants",
+                    len(new_guild_tenants),
+                    len(new_api_keys),
                 )
 
             except Exception as e:
-                logger.error(f"Cache refresh failed: {e}")
+                logger.error("Cache refresh failed: %s", e)
                 raise CacheError(f"Failed to refresh cache: {e}") from e
 
     async def refresh_guild(self, guild_id: int, tenant_id: str) -> None:
         """Add a single guild to cache after registration."""
         async with self._lock:
-            logger.info(f"Refreshing cache for guild {guild_id} (tenant: {tenant_id})")
+            logger.info(
+                "Refreshing cache for guild %s (tenant: %s)", guild_id, tenant_id
+            )
 
             guild_ids, api_key = await self._load_tenant_data(tenant_id)
 
@@ -96,9 +100,9 @@ class DiscordCacheManager:
                 self._guild_tenants[guild_id] = tenant_id
                 if api_key:
                     self._api_keys[tenant_id] = api_key
-                logger.info(f"Cache updated for guild {guild_id}")
+                logger.info("Cache updated for guild %s", guild_id)
             else:
-                logger.warning(f"Guild {guild_id} not found or disabled")
+                logger.warning("Guild %s not found or disabled", guild_id)
 
     async def _load_tenant_data(self, tenant_id: str) -> tuple[list[int], str | None]:
         """Load guild IDs and provision API key if needed.

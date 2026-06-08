@@ -119,11 +119,10 @@ export function computeMaskedInputChange(
   return { newValue: previousValue, cursorPosition };
 }
 
-export interface PasswordInputTypeInProps
-  extends Omit<
-    InputTypeInProps,
-    "type" | "rightSection" | "leftSearchIcon" | "variant"
-  > {
+export interface PasswordInputTypeInProps extends Omit<
+  InputTypeInProps,
+  "type" | "rightSection" | "leftSearchIcon" | "variant"
+> {
   /**
    * Ref to the input element.
    */

@@ -6,22 +6,21 @@ import type {
   RichStr,
   WithoutStyles,
 } from "@opal/types";
-import type { TagProps } from "@opal/components/tag/components";
 import { Text, Divider } from "@opal/components";
+import type { TagProps } from "@opal/components";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useContext } from "react";
 import { useField, FormikContext } from "formik";
-import { Section } from "@/layouts/general-layouts";
+import { Section } from "@opal/layouts/general/components";
 import { Content, ContentAction } from "@opal/layouts";
 
 // ---------------------------------------------------------------------------
 // Label
 // ---------------------------------------------------------------------------
 
-interface LabelProps
-  extends WithoutStyles<
-    Omit<React.LabelHTMLAttributes<HTMLLabelElement>, "htmlFor">
-  > {
+interface LabelProps extends WithoutStyles<
+  Omit<React.LabelHTMLAttributes<HTMLLabelElement>, "htmlFor">
+> {
   /** Sets `htmlFor` on the `<label>` to associate it with a form element by id. */
   label?: string;
   /** Switches cursor from `pointer` to `not-allowed`. */

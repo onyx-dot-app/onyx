@@ -2,8 +2,8 @@ import { IconFunctionComponent } from "@opal/types";
 import {
   SvgActions,
   SvgActivity,
-  SvgArrowExchange,
   SvgAudio,
+  SvgBlocks,
   SvgShareWebhook,
   SvgBarChart,
   SvgBookOpen,
@@ -22,6 +22,7 @@ import {
   SvgPaintBrush,
   SvgProgressBars,
   SvgSearchMenu,
+  SvgShield,
   SvgTerminal,
   SvgThumbsUp,
   SvgUploadCloud,
@@ -82,6 +83,12 @@ export const ADMIN_ROUTES = {
     icon: SvgOnyxOctagon,
     title: "Agents",
     sidebarLabel: "Agents",
+  },
+  SKILLS: {
+    path: "/admin/skills",
+    icon: SvgBlocks,
+    title: "Skills",
+    sidebarLabel: "Skills",
   },
   SLACK_BOTS: {
     path: "/admin/bots",
@@ -156,7 +163,7 @@ export const ADMIN_ROUTES = {
     sidebarLabel: "Code Interpreter",
   },
   INDEX_SETTINGS: {
-    path: "/admin/configuration/search",
+    path: "/admin/configuration/index-settings",
     icon: SvgSearchMenu,
     title: "Index Settings",
     sidebarLabel: "Index Settings",
@@ -215,12 +222,6 @@ export const ADMIN_ROUTES = {
     title: "Plans & Billing",
     sidebarLabel: "Plans & Billing",
   },
-  INDEX_MIGRATION: {
-    path: "/admin/document-index-migration",
-    icon: SvgArrowExchange,
-    title: "Document Index Migration",
-    sidebarLabel: "Document Index Migration",
-  },
   HOOKS: {
     path: "/admin/hooks",
     icon: SvgShareWebhook,
@@ -238,6 +239,12 @@ export const ADMIN_ROUTES = {
     icon: SvgDownload,
     title: "Debug Logs",
     sidebarLabel: "Debug Logs",
+  },
+  SECURITY_HARDENING: {
+    path: "/admin/security",
+    icon: SvgShield,
+    title: "Security and Hardening",
+    sidebarLabel: "Security and Hardening",
   },
   // Prefix-only entries used for layout matching — not rendered as sidebar
   // items or page headers.

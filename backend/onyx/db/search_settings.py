@@ -1,5 +1,6 @@
 from sqlalchemy import and_
 from sqlalchemy import delete
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,6 +20,11 @@ from shared_configs.configs import PRESERVED_SEARCH_FIELDS
 from shared_configs.enums import EmbeddingProvider
 
 logger = setup_logger()
+
+# search_settings columns that are NOT NULL but whose Pydantic source fields are
+# typed str | None. Registry-less cloud providers (e.g. Bedrock/LiteLLM/Azure)
+# can arrive without prefixes; coerce None -> "" to avoid a NotNullViolation.
+_NOT_NULL_STR_FIELDS = {"query_prefix", "passage_prefix"}
 
 
 class ActiveSearchSettings:
@@ -41,8 +47,9 @@ def create_search_settings(
         model_name=search_settings.model_name,
         model_dim=search_settings.model_dim,
         normalize=search_settings.normalize,
-        query_prefix=search_settings.query_prefix,
-        passage_prefix=search_settings.passage_prefix,
+        # See _NOT_NULL_STR_FIELDS: coerce None -> "" to avoid a NotNullViolation.
+        query_prefix=search_settings.query_prefix or "",
+        passage_prefix=search_settings.passage_prefix or "",
         status=status,
         index_name=search_settings.index_name,
         provider_type=search_settings.provider_type,
@@ -50,8 +57,7 @@ def create_search_settings(
         embedding_precision=search_settings.embedding_precision,
         reduced_dimension=search_settings.reduced_dimension,
         enable_contextual_rag=search_settings.enable_contextual_rag,
-        contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
-        contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
+        contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         switchover_type=search_settings.switchover_type,
     )
 
@@ -180,8 +186,13 @@ def update_search_settings(
     updated_settings: SavedSearchSettings,
     preserved_fields: list[str],
 ) -> None:
+    mapped_columns = {c.key for c in sa_inspect(SearchSettings).mapper.columns}
     for field, value in updated_settings.model_dump().items():
-        if field not in preserved_fields:
+        if field not in preserved_fields and field in mapped_columns:
+            # A client that explicitly sends null for a NOT NULL prefix column
+            # must not write NULL (NotNullViolation). See _NOT_NULL_STR_FIELDS.
+            if value is None and field in _NOT_NULL_STR_FIELDS:
+                value = ""
             setattr(current_settings, field, value)
 
 

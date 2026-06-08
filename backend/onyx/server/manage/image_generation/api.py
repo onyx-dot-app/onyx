@@ -12,9 +12,7 @@ from onyx.db.image_generation import get_all_image_generation_configs
 from onyx.db.image_generation import get_image_generation_config
 from onyx.db.image_generation import set_default_image_generation_config
 from onyx.db.image_generation import unset_default_image_generation_config
-from onyx.db.llm import remove_llm_provider__no_commit
-from onyx.db.llm import update_group_llm_provider_relationships__no_commit
-from onyx.db.llm import update_llm_provider_persona_relationships__no_commit
+from onyx.db.llm import remove_llm_provider
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration
 from onyx.db.models import User
@@ -41,16 +39,13 @@ admin_router = APIRouter(prefix="/admin/image-generation")
 def _get_test_quality_for_model(model_name: str) -> str | None:
     """Returns the fastest quality setting for credential testing.
 
-    - gpt-image-1: 'low' (fastest)
-    - dall-e-3: 'standard' (faster than 'hd')
+    - gpt-image-*: 'low' (fastest)
     - Other models: None (use API default)
     """
     model_lower = model_name.lower()
 
-    if "gpt-image-1" in model_lower:
+    if "gpt-image-" in model_lower:
         return "low"
-    elif "dall-e-3" in model_lower or "dalle-3" in model_lower:
-        return "standard"
     return None
 
 
@@ -65,9 +60,6 @@ def _build_llm_provider_request(
     api_version: str | None,
     deployment_name: str | None,
     custom_config: dict[str, str] | None,
-    is_public: bool = True,
-    groups: list[int] | None = None,
-    personas: list[int] | None = None,
 ) -> LLMProviderUpsertRequest:
     """Build LLM provider request for image generation config.
 
@@ -104,9 +96,8 @@ def _build_llm_provider_request(
             api_base=api_base,  # From request
             api_version=api_version,  # From request
             deployment_name=deployment_name,  # From request
-            is_public=is_public,
-            groups=groups if groups is not None else [],
-            personas=personas if personas is not None else [],
+            is_public=True,
+            groups=[],
             model_configurations=[
                 ModelConfigurationUpsertRequest(
                     name=model_name,
@@ -143,9 +134,8 @@ def _build_llm_provider_request(
         api_base=api_base,
         api_version=api_version,
         deployment_name=deployment_name,
-        is_public=is_public,
-        groups=groups if groups is not None else [],
-        personas=personas if personas is not None else [],
+        is_public=True,
+        groups=[],
         model_configurations=[
             ModelConfigurationUpsertRequest(
                 name=model_name,
@@ -180,38 +170,6 @@ def _create_image_gen_llm_provider__no_commit(
     )
     db_session.add(new_provider)
     db_session.flush()  # Get the ID
-
-    # Create model configuration
-    max_input_tokens = get_max_input_tokens(
-        model_name=model_name,
-        model_provider=provider_request.provider,
-    )
-
-    model_config = ModelConfiguration(
-        llm_provider_id=new_provider.id,
-        name=model_name,
-        is_visible=True,
-        max_input_tokens=max_input_tokens,
-    )
-    db_session.add(model_config)
-    db_session.flush()
-
-    # Update group and persona relationships if provided
-    if provider_request.groups:
-        update_group_llm_provider_relationships__no_commit(
-            db_session=db_session,
-            llm_provider_id=new_provider.id,
-            group_ids=provider_request.groups,
-        )
-
-    if provider_request.personas:
-        update_llm_provider_persona_relationships__no_commit(
-            db_session=db_session,
-            llm_provider_id=new_provider.id,
-            persona_ids=provider_request.personas,
-        )
-
-    return model_config.id
 
     # Create model configuration
     max_input_tokens = get_max_input_tokens(
@@ -321,7 +279,7 @@ def test_image_generation(
     except Exception as e:
         # Log only exception type to avoid exposing sensitive data
         # (LiteLLM errors may contain URLs with API keys or auth tokens)
-        logger.warning(f"Image generation test failed: {type(e).__name__}")
+        logger.warning("Image generation test failed: %s", type(e).__name__)
         raise HTTPException(
             status_code=400,
             detail=f"Image generation test failed: {type(e).__name__}",
@@ -367,9 +325,6 @@ def create_config(
             api_version=config_create.api_version,
             deployment_name=config_create.deployment_name,
             custom_config=config_create.custom_config,
-            is_public=config_create.is_public,
-            groups=config_create.groups,
-            personas=config_create.personas,
         )
 
         model_configuration_id = _create_image_gen_llm_provider__no_commit(
@@ -384,9 +339,6 @@ def create_config(
             image_provider_id=config_create.image_provider_id,
             model_configuration_id=model_configuration_id,
             is_default=config_create.is_default,
-            is_public=config_create.is_public,
-            groups=config_create.groups,
-            personas=config_create.personas,
         )
         db_session.commit()
         db_session.refresh(config)
@@ -500,9 +452,6 @@ def update_config(
             api_version=config_update.api_version,
             deployment_name=config_update.deployment_name,
             custom_config=config_update.custom_config,
-            is_public=config_update.is_public,
-            groups=config_update.groups,
-            personas=config_update.personas,
         )
 
         new_model_config_id = _create_image_gen_llm_provider__no_commit(
@@ -511,14 +460,11 @@ def update_config(
             model_name=config_update.model_name,
         )
 
-        # 4. Update the ImageGenerationConfig to point to new model config and update access control
+        # 4. Update the ImageGenerationConfig to point to new model config
         existing_config.model_configuration_id = new_model_config_id
-        existing_config.is_public = config_update.is_public
-        existing_config.groups = config_update.groups if config_update.groups is not None else []
-        existing_config.personas = config_update.personas if config_update.personas is not None else []
 
         # 5. Delete old LLM provider (safe now - nothing references it)
-        remove_llm_provider__no_commit(db_session, old_llm_provider_id)
+        remove_llm_provider(db_session, old_llm_provider_id, commit=False)
 
         db_session.commit()
         db_session.refresh(existing_config)
@@ -552,7 +498,7 @@ def delete_config(
         delete_image_generation_config__no_commit(db_session, image_provider_id)
 
         # Clean up the orphaned LLM provider (it was exclusively for image gen)
-        remove_llm_provider__no_commit(db_session, llm_provider_id)
+        remove_llm_provider(db_session, llm_provider_id, commit=False)
 
         db_session.commit()
     except HTTPException:

@@ -22,7 +22,7 @@ def _get_sitemap_locations_from_robots(base_url: str) -> Set[str]:
                     sitemap_url = line.split(":", 1)[1].strip()
                     sitemap_urls.add(sitemap_url)
     except Exception as e:
-        logger.warning(f"Error fetching robots.txt: {e}")
+        logger.warning("Error fetching robots.txt: %s", e)
     return sitemap_urls
 
 
@@ -34,7 +34,11 @@ def _extract_urls_from_sitemap(sitemap_url: str) -> Set[str]:
         if resp.status_code != 200:
             return urls
 
-        root = ET.fromstring(resp.content)
+        # TODO(security): switch to defusedxml.ElementTree. Modern xml.etree
+        # disables DTD/external-entity processing by default, but element-
+        # expansion (billion-laughs) DoS is still possible on attacker-
+        # controlled sitemap content.
+        root = ET.fromstring(resp.content)  # noqa: S314
 
         # Handle both regular sitemaps and sitemap indexes
         # Remove namespace for easier parsing
@@ -54,7 +58,7 @@ def _extract_urls_from_sitemap(sitemap_url: str) -> Set[str]:
                     urls.add(url.text)
 
     except Exception as e:
-        logger.warning(f"Error processing sitemap {sitemap_url}: {e}")
+        logger.warning("Error processing sitemap %s: %s", sitemap_url, e)
 
     return urls
 

@@ -63,15 +63,19 @@ def redis_shared_lock(
             yield lock.local.token
     finally:
         if acquired:
-            assert (
-                lock is not None
-            ), "[BUG] Redis lock should have been initialized by now."
+            assert lock is not None, (
+                "Bug: Redis lock should have been initialized by now."
+            )
             if lock.owned():
                 lock.release()
                 logger.debug(
-                    f"Redis lock {lock_name} released after {time.monotonic() - start_time:.3f} seconds."
+                    "Redis lock %s released after %s seconds.",
+                    lock_name,
+                    format(time.monotonic() - start_time, ".3f"),
                 )
             else:
                 logger.warning(
-                    f"Redis lock {lock_name} was not owned on exit. The lock context manager took {time.monotonic() - start_time:.3f} seconds."
+                    "Redis lock %s was not owned on exit. The lock context manager took %s seconds.",
+                    lock_name,
+                    format(time.monotonic() - start_time, ".3f"),
                 )

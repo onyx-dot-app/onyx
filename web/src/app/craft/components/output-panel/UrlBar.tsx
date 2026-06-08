@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import {
@@ -122,13 +122,13 @@ export default function UrlBar({
           </div>
         )}
         {/* URL display */}
-        <div className="flex-1 min-w-0 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2 min-h-[2.25rem]">
+        <div className="flex-1 min-w-0 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2 min-h-9">
           {/* Download raw file button */}
           {onDownloadRaw && (
             <Tooltip tooltip={downloadRawTooltip} delayDuration={200}>
               <button
                 onClick={onDownloadRaw}
-                className="flex-shrink-0 p-0.5 rounded transition-colors hover:bg-background-tint-03 text-text-03"
+                className="shrink-0 p-0.5 rounded-sm transition-colors hover:bg-background-tint-03 text-text-03"
                 aria-label={downloadRawTooltip}
               >
                 <SvgDownloadCloud size={14} />
@@ -140,7 +140,7 @@ export default function UrlBar({
             <Tooltip tooltip="open in a new tab" delayDuration={200}>
               <button
                 onClick={handleOpenInNewTab}
-                className="flex-shrink-0 p-0.5 rounded transition-colors hover:bg-background-tint-03 text-text-03"
+                className="shrink-0 p-0.5 rounded-sm transition-colors hover:bg-background-tint-03 text-text-03"
                 aria-label="open in a new tab"
               >
                 <SvgExternalLink size={14} />

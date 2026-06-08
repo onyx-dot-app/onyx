@@ -4,7 +4,7 @@
  * Provides:
  * - Authenticated admin page
  * - Stateful mock for the SCIM token endpoint
- *   (GET starts as 404; POST creates a token and flips GET to 200)
+ *   (GET starts as 200+null; POST creates a token and GET returns it)
  */
 
 import { test as base, expect, Page } from "@playwright/test";
@@ -75,11 +75,7 @@ export const test = base.extend<{
         const method = route.request().method();
 
         if (method === "GET") {
-          if (currentToken) {
-            await route.fulfill(jsonResponse(currentToken));
-          } else {
-            await route.fulfill(jsonResponse({ detail: "Not found" }, 404));
-          }
+          await route.fulfill(jsonResponse(currentToken));
         } else if (method === "POST") {
           const { token, rawToken } = makeToken();
           currentToken = token;

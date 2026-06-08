@@ -130,7 +130,7 @@ async function exitAdminToChat(page: Page): Promise<void> {
   await page.goto("/app");
   await page.waitForURL("**/app**");
   await page
-    .locator("#onyx-chat-input-textarea")
+    .locator("#onyx-chat-input-textbox")
     .waitFor({ state: "visible", timeout: 15000 });
 }
 
@@ -439,7 +439,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
     await page
-      .locator("#onyx-chat-input-textarea")
+      .locator("#onyx-chat-input-textbox")
       .waitFor({ state: "visible", timeout: 15000 });
 
     await expect
@@ -451,7 +451,11 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await navigateToAdminLlmPageFromChat(page);
 
     const editModal = await openProviderEditModal(page, providerName);
-    await editModal.getByText(modelToEnable, { exact: true }).click();
+    await editModal
+      .locator(`[data-model-name="${modelToEnable}"]`)
+      .locator("button")
+      .first()
+      .click();
 
     const updateButton = editModal.getByRole("button", { name: "Update" });
     const providerUpdateResponsePromise = page.waitForResponse(
@@ -503,7 +507,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
     await page
-      .locator("#onyx-chat-input-textarea")
+      .locator("#onyx-chat-input-textbox")
       .waitFor({ state: "visible", timeout: 15000 });
 
     await expect
@@ -515,7 +519,11 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await navigateToAdminLlmPageFromChat(page);
 
     const editModal = await openProviderEditModal(page, providerName);
-    await editModal.getByText(modelToDisable, { exact: true }).click();
+    await editModal
+      .locator(`[data-model-name="${modelToDisable}"]`)
+      .locator("button")
+      .first()
+      .click();
 
     const updateButton = editModal.getByRole("button", { name: "Update" });
     const providerUpdateResponsePromise = page.waitForResponse(

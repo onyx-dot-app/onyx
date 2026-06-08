@@ -106,9 +106,9 @@ def _get_hybrid_search_normalization_weights() -> list[float]:
             f"Bug: Unhandled hybrid search subquery configuration: {HYBRID_SEARCH_SUBQUERY_CONFIGURATION}."
         )
 
-    assert (
-        sum(hybrid_search_normalization_weights) == 1.0
-    ), "Bug: Hybrid search normalization weights do not sum to 1.0."
+    assert sum(hybrid_search_normalization_weights) == 1.0, (
+        "Bug: Hybrid search normalization weights do not sum to 1.0."
+    )
 
     return hybrid_search_normalization_weights
 

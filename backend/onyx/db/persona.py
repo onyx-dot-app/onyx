@@ -107,9 +107,11 @@ def _add_user_filters(
     - if we are not editing, we return all Personas directly connected to the user
     """
 
-    # Anonymous users only see public Personas
+    # Anonymous users only see public, listed Personas
     if user.is_anonymous:
-        where_clause = Persona.is_public == True  # noqa: E712
+        where_clause = (Persona.is_public == True) & (  # noqa: E712
+            Persona.is_listed == True  # noqa: E712
+        )
         return stmt.where(where_clause)
 
     # If curator ownership restriction is enabled, curators can only access their own assistants
@@ -127,21 +129,25 @@ def _add_user_filters(
         user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
         if user.role == UserRole.CURATOR:
             user_groups = user_groups.where(User__UG.is_curator == True)  # noqa: E712
-        where_clause &= (
-            ~exists()
-            .where(Persona__UG.persona_id == Persona.id)
-            .where(~Persona__UG.user_group_id.in_(user_groups))
-            .correlate(Persona)
-        )
+        where_clause &= ~exists().where(Persona__UG.persona_id == Persona.id).where(
+            ~Persona__UG.user_group_id.in_(user_groups)
+        ).correlate(Persona)
     else:
-        # Group the public persona conditions
-        public_condition = (Persona.is_public == True) & (  # noqa: E712
-            Persona.is_listed == True  # noqa: E712
-        )
+        listed = Persona.is_listed == True  # noqa: E712
+
+        # Group membership — only listed agents
+        where_clause &= listed
+
+        # Public agents — must be listed
+        public_condition = (Persona.is_public == True) & listed  # noqa: E712
+
+        # Directly shared — only listed agents
+        shared_condition = (Persona__User.user_id == user.id) & listed
 
         where_clause |= public_condition
-        where_clause |= Persona__User.user_id == user.id
+        where_clause |= shared_condition
 
+    # Owner always sees their own agents (regardless of is_listed)
     where_clause |= Persona.user_id == user.id
 
     return stmt.where(where_clause)
@@ -297,8 +303,7 @@ def create_update_persona(
             document_set_ids=create_persona_request.document_set_ids,
             tool_ids=create_persona_request.tool_ids,
             is_public=create_persona_request.is_public,
-            llm_model_provider_override=create_persona_request.llm_model_provider_override,
-            llm_model_version_override=create_persona_request.llm_model_version_override,
+            default_model_configuration_id=create_persona_request.default_model_configuration_id,
             starter_messages=create_persona_request.starter_messages,
             system_prompt=create_persona_request.system_prompt,
             task_prompt=create_persona_request.task_prompt,
@@ -904,8 +909,6 @@ def upsert_persona(
     user: User | None,
     name: str,
     description: str,
-    llm_model_provider_override: str | None,
-    llm_model_version_override: str | None,
     starter_messages: list[StarterMessage] | None,
     # Embedded prompt fields
     system_prompt: str | None,
@@ -913,6 +916,7 @@ def upsert_persona(
     datetime_aware: bool | None,
     is_public: bool,
     db_session: Session,
+    default_model_configuration_id: int | None = None,
     document_set_ids: list[int] | None = None,
     tool_ids: list[int] | None = None,
     persona_id: int | None = None,
@@ -1039,8 +1043,7 @@ def upsert_persona(
         # `default` and `built-in` properties can only be set when creating a persona.
         existing_persona.name = name
         existing_persona.description = description
-        existing_persona.llm_model_provider_override = llm_model_provider_override
-        existing_persona.llm_model_version_override = llm_model_version_override
+        existing_persona.default_model_configuration_id = default_model_configuration_id
         existing_persona.starter_messages = starter_messages
         existing_persona.deleted = False  # Un-delete if previously deleted
         existing_persona.is_public = is_public
@@ -1112,8 +1115,7 @@ def upsert_persona(
             datetime_aware=(datetime_aware if datetime_aware is not None else True),
             replace_base_system_prompt=replace_base_system_prompt,
             document_sets=document_sets or [],
-            llm_model_provider_override=llm_model_provider_override,
-            llm_model_version_override=llm_model_version_override,
+            default_model_configuration_id=default_model_configuration_id,
             starter_messages=starter_messages,
             tools=tools or [],
             uploaded_image_id=uploaded_image_id,

@@ -137,6 +137,19 @@ export class OnyxApiClient {
   }
 
   /**
+   * Generic PATCH request to the API.
+   *
+   * @param endpoint - API endpoint path (e.g., "/paste-as-tile?paste_as_tile=true")
+   * @param data - Optional request body data
+   * @returns The API response
+   */
+  private async patch(endpoint: string, data?: any): Promise<APIResponse> {
+    return await this.request.patch(`${this.baseUrl}${endpoint}`, {
+      data,
+    });
+  }
+
+  /**
    * Handle API response - parse JSON and handle errors.
    *
    * @param response - The API response to handle
@@ -725,7 +738,11 @@ export class OnyxApiClient {
     is_public: boolean;
     users: Array<{ id: string }>;
     groups: number[];
-    tools: Array<{ id: number; mcp_server_id?: number | null }>;
+    tools: Array<{
+      id: number;
+      in_code_tool_id?: string | null;
+      mcp_server_id?: number | null;
+    }>;
   }> {
     const response = await this.get(`/persona/${agentId}`);
     return await this.handleResponse(
@@ -926,20 +943,20 @@ export class OnyxApiClient {
    * API: POST /api/admin/image-generation/config
    * Schema (ImageGenerationConfigCreate):
    *   - image_provider_id: string (required) - unique key
-   *   - model_name: string (required) - e.g., "dall-e-3"
+   *   - model_name: string (required) - e.g., "gpt-image-1"
    *   - provider: string - e.g., "openai"
    *   - api_key: string
    *   - is_default: boolean
    *
    * @param imageProviderId - Unique identifier for the image generation config
-   * @param modelName - Model name (defaults to "dall-e-3")
+   * @param modelName - Model name (defaults to "gpt-image-1")
    * @param provider - Provider name (defaults to "openai")
    * @param isDefault - Whether this should be the default config (defaults to true)
    * @returns The image_provider_id
    */
   async createImageGenerationConfig(
     imageProviderId: string,
-    modelName: string = "dall-e-3",
+    modelName: string = "gpt-image-1",
     provider: string = "openai",
     isDefault: boolean = true
   ): Promise<string> {
@@ -1298,5 +1315,21 @@ export class OnyxApiClient {
       `Failed to set default app mode to ${mode}`
     );
     this.log(`Set default app mode: ${mode}`);
+  }
+
+  /**
+   * Enables or disables the paste-as-tile user preference.
+   *
+   * @param enabled - Whether paste-as-tile should be enabled
+   */
+  async setPasteTileSetting(enabled: boolean): Promise<void> {
+    const response = await this.patch(
+      `/paste-as-tile?paste_as_tile=${enabled}`
+    );
+    await this.handleResponse(
+      response,
+      `Failed to set paste_as_tile to ${enabled}`
+    );
+    this.log(`Set paste_as_tile: ${enabled}`);
   }
 }

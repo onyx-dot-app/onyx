@@ -22,7 +22,7 @@ def _build_group_member_email_map(
 ) -> dict[str, set[str]]:
     group_member_emails: dict[str, set[str]] = {}
     for user in confluence_client.paginated_cql_user_retrieval():
-        logger.info(f"Processing groups for user: {user}")
+        logger.info("Processing groups for user: %s", user)
 
         email = user.email
         if not email:
@@ -35,7 +35,7 @@ def _build_group_member_email_map(
                     user_name=user_name,
                 )
             else:
-                logger.error(f"user result missing username field: {user}")
+                logger.error("user result missing username field: %s", user)
 
         if not email:
             # If we still don't have an email, skip this user
@@ -59,7 +59,9 @@ def _build_group_member_email_map(
             emit_background_error(msg, cc_pair_id=cc_pair_id)
             logger.error(msg)
         else:
-            logger.debug(f"Found groups {all_users_groups} for user with email {email}")
+            logger.debug(
+                "Found groups %s for user with email %s", all_users_groups, email
+            )
 
     if not group_member_emails:
         msg = "No groups found for any users."
@@ -91,13 +93,13 @@ def _build_group_member_email_map_from_onyx_users(
 
     group_member_emails: dict[str, set[str]] = {}
     for email in user_emails:
-        logger.info(f"Processing groups for user with email: {email}")
+        logger.info("Processing groups for user with email: %s", email)
         try:
             user_name = _infer_username_from_email(email)
             response = confluence_client.get_user_details_by_username(user_name)
             user_key = response.get("userKey")
             if not user_key:
-                logger.error(f"User key not found for user with email {email}")
+                logger.error("User key not found for user with email %s", email)
                 continue
 
             all_users_groups: set[str] = set()
@@ -112,10 +114,10 @@ def _build_group_member_email_map_from_onyx_users(
                 logger.error(msg)
             else:
                 logger.info(
-                    f"Found groups {all_users_groups} for user with email {email}"
+                    "Found groups %s for user with email %s", all_users_groups, email
                 )
         except Exception:
-            logger.exception(f"Error getting user details for user with email {email}")
+            logger.exception("Error getting user details for user with email %s", email)
 
     return group_member_emails
 

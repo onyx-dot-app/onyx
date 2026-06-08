@@ -28,7 +28,9 @@ from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import Persona
 from onyx.db.models import SearchDoc as DbSearchDoc
+from onyx.db.models import User
 from onyx.db.models import UserFile
+from onyx.db.persona import user_can_access_persona
 from onyx.db.projects import check_project_ownership
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
@@ -111,34 +113,47 @@ def build_file_context(
 
 def create_chat_session_from_request(
     chat_session_request: ChatSessionCreationRequest,
-    user_id: UUID | None,
+    user: User,
     db_session: Session,
 ) -> ChatSession:
     """Create a chat session from a ChatSessionCreationRequest.
 
-    Includes project ownership validation when project_id is provided.
+    Includes project ownership and persona access validation.
 
     Args:
         chat_session_request: The request containing persona_id, description, and project_id
-        user_id: The ID of the user creating the session (can be None for anonymous)
+        user: The user creating the session. Anonymous users are represented as a
+            User with is_anonymous=True (never None); the access-check helpers
+            handle that case. A real User is required so the persona access check
+            always runs — do not introduce a None-tolerant caller.
         db_session: The database session
 
     Returns:
         The newly created ChatSession
 
     Raises:
-        ValueError: If user lacks access to the specified project
+        ValueError: If user lacks access to the specified project or persona
         Exception: If the persona is invalid
     """
     project_id = chat_session_request.project_id
     if project_id:
-        if not check_project_ownership(project_id, user_id, db_session):
+        if not check_project_ownership(project_id, user.id, db_session):
             raise ValueError("User does not have access to project")
+
+    persona_id = chat_session_request.persona_id
+    if persona_id != DEFAULT_PERSONA_ID:
+        if not user_can_access_persona(
+            db_session=db_session,
+            persona_id=persona_id,
+            user=user,
+            get_editable=False,
+        ):
+            raise ValueError("User does not have access to persona")
 
     return create_chat_session(
         db_session=db_session,
         description=chat_session_request.description or "",
-        user_id=user_id,
+        user_id=user.id,
         persona_id=chat_session_request.persona_id,
         project_id=chat_session_request.project_id,
     )
@@ -148,6 +163,7 @@ def create_chat_history_chain(
     chat_session_id: UUID,
     db_session: Session,
     prefetch_top_two_level_tool_calls: bool = True,
+    prefetch_message_details: bool = False,
     # Optional id at which we finish processing
     stop_at_message_id: int | None = None,
 ) -> list[ChatMessage]:
@@ -160,6 +176,7 @@ def create_chat_history_chain(
         db_session=db_session,
         skip_permission_check=True,
         prefetch_top_two_level_tool_calls=prefetch_top_two_level_tool_calls,
+        prefetch_message_details=prefetch_message_details,
     )
 
     if not all_chat_messages:
@@ -367,12 +384,17 @@ def _get_or_extract_plaintext(
         plaintext_io = file_store.read_file(plaintext_key, mode="b")
         return plaintext_io.read().decode("utf-8")
     except Exception:
-        logger.info(f"Cache miss for file with id={file_id}")
+        logger.info("Cache miss for file with id=%s", file_id)
 
-    # Cache miss — extract and store.
+    # Cache miss — extract and store.  We cache the result unconditionally
+    # (including the empty string) so that files we cannot extract text from
+    # (e.g. .zip, or any extension without a handler in extract_file_text)
+    # don't get re-fetched from object storage and re-attempted on every
+    # subsequent chat turn.  Transient extraction errors surface as raised
+    # exceptions, not empty returns, so they propagate without poisoning the
+    # cache.
     content_text = extract_fn()
-    if content_text:
-        store_plaintext(file_id, content_text)
+    store_plaintext(file_id, content_text)
     return content_text
 
 
@@ -380,22 +402,38 @@ def _get_or_extract_plaintext(
 def load_chat_file(
     file_descriptor: FileDescriptor, db_session: Session
 ) -> ChatLoadedFile:
-    file_io = get_default_file_store().read_file(file_descriptor["id"], mode="b")
-    content = file_io.read()
+    """Build a ChatLoadedFile whose raw ``content`` bytes are loaded lazily.
 
-    # Extract text content if it's a text file type (not an image)
-    content_text = None
+    Chat sessions accumulate hundreds of files over time, and a new message
+    sent in such a session previously triggered an unbounded parallel fan-out
+    of full-bytes-into-memory reads, the vast majority of which were
+    immediately discarded by chat-history truncation. We now defer the raw
+    bytes read until something downstream actually accesses ``.content`` —
+    typically only a handful of files survive truncation per turn.
+
+    ``content_text`` (used for LLM context injection) and ``token_count``
+    remain eager because they're cheap: the cached-plaintext store hit avoids
+    reading the original bytes entirely on the common path, and token_count
+    is a single DB lookup.
+    """
+    file_id = file_descriptor["id"]
     # `FileDescriptor` is often JSON-roundtripped (e.g. JSONB / API), so `type`
     # may arrive as a raw string value instead of a `ChatFileType`.
     file_type = ChatFileType(file_descriptor["type"])
+    filename = file_descriptor.get("name")
 
+    # Extract text content if it's a text file type (not an image). The
+    # cached-plaintext path avoids reading the original bytes on the steady
+    # state; only the cache miss branch opens the binary stream.
+    content_text: str | None = None
     if file_type.is_text_file():
-        file_id = file_descriptor["id"]
 
         def _extract() -> str:
+            # Only invoked on cache miss; bytes-read happens here, not upfront.
+            file_io = get_default_file_store().read_file(file_id, mode="b")
             return extract_file_text(
                 file=file_io,
-                file_name=file_descriptor.get("name") or "",
+                file_name=filename or "",
                 break_on_unprocessable=False,
             )
 
@@ -409,7 +447,9 @@ def load_chat_file(
             content_text = _get_or_extract_plaintext(cache_key, _extract)
         except Exception as e:
             logger.warning(
-                f"Failed to retrieve content for file {file_descriptor['id']}: {str(e)}"
+                "Failed to retrieve content for file %s: %s",
+                file_id,
+                str(e),
             )
 
     # Get token count from UserFile if available
@@ -424,25 +464,32 @@ def load_chat_file(
             if user_file and user_file.token_count:
                 token_count = user_file.token_count
         except (ValueError, TypeError) as e:
-            logger.warning(
-                f"Failed to get token count for file {file_descriptor['id']}: {e}"
-            )
+            logger.warning("Failed to get token count for file %s: %s", file_id, e)
 
-    return ChatLoadedFile(
-        file_id=file_descriptor["id"],
-        content=content,
+    def _load_content() -> bytes:
+        return get_default_file_store().read_file(file_id, mode="b").read()
+
+    return ChatLoadedFile.lazy_loaded(
+        file_id=file_id,
         file_type=file_type,
-        filename=file_descriptor.get("name"),
+        filename=filename,
         content_text=content_text,
         token_count=token_count,
+        loader=_load_content,
     )
+
+
+_MAX_PARALLEL_CHAT_FILE_LOADS = 16
 
 
 def load_all_chat_files(
     chat_messages: list[ChatMessage],
     db_session: Session,
 ) -> list[ChatLoadedFile]:
-    # TODO There is likely a more efficient/standard way to load the files here.
+    # Returns lazy ChatLoadedFile instances — raw bytes are not read here.
+    # Defense-in-depth: even though per-file work is now cheap (DB lookup +
+    # optional cached-plaintext fetch), cap fan-out so no future regression
+    # can re-introduce a 500-thread storm.
     file_descriptors_for_history: list[FileDescriptor] = []
     for chat_message in chat_messages:
         if chat_message.files:
@@ -454,7 +501,8 @@ def load_all_chat_files(
             [
                 (load_chat_file, (file, db_session))
                 for file in file_descriptors_for_history
-            ]
+            ],
+            max_workers=_MAX_PARALLEL_CHAT_FILE_LOADS,
         ),
     )
     return files
@@ -887,7 +935,7 @@ def build_python_chat_files_from_search_docs(
             record = file_store.read_file_record(doc.file_id)
         except Exception as e:
             logger.warning(
-                f"file_id={doc.file_id!r} not found in file store ({e}); skipping."
+                "file_id=%r not found in file store (%s); skipping.", doc.file_id, e
             )
             continue
 
@@ -896,8 +944,9 @@ def build_python_chat_files_from_search_docs(
             FileOrigin.CONNECTOR_FILE_UPLOAD,
         ):
             logger.warning(
-                f"file_id={doc.file_id!r} has origin={record.file_origin!r}, "
-                "not eligible for code-interpreter staging; skipping."
+                "file_id=%r has origin=%r, not eligible for code-interpreter staging; skipping.",
+                doc.file_id,
+                record.file_origin,
             )
             continue
 
@@ -905,7 +954,7 @@ def build_python_chat_files_from_search_docs(
             content = file_store.read_file(doc.file_id, mode="b").read()
         except Exception as e:
             logger.warning(
-                f"Failed to read bytes for file_id={doc.file_id!r}: {e}; skipping."
+                "Failed to read bytes for file_id=%r: %s; skipping.", doc.file_id, e
             )
             continue
 

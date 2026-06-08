@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
@@ -16,8 +9,8 @@ import { useSidebarFolded } from "@/layouts/sidebar-layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { CombinedSettings } from "@/interfaces/settings";
+import { CombinedSettings, Tier } from "@/interfaces/settings";
+import { tierAtLeast } from "@/lib/tiers";
 import { Divider, SidebarTab } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Spacer from "@/refresh-components/Spacer";
@@ -28,9 +21,12 @@ import {
   hasActiveSubscription,
 } from "@/lib/billing";
 import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
+import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { markdown } from "@opal/utils";
 
 const SECTIONS = {
   UNLABELED: "",
@@ -49,12 +45,13 @@ interface SidebarItemEntry {
   link: string;
   error?: boolean;
   disabled?: boolean;
+  requiredTier?: Tier;
 }
 
 function buildItems(
   isCurator: boolean,
   enableCloud: boolean,
-  enableEnterprise: boolean,
+  tier: Tier | undefined,
   settings: CombinedSettings | null,
   customAnalyticsEnabled: boolean,
   hasSubscription: boolean,
@@ -67,12 +64,17 @@ function buildItems(
     items.push({ ...sidebarItem(route), section });
   };
 
-  const addDisabled = (
+  const addGated = (
     section: string,
     route: Parameters<typeof sidebarItem>[0],
-    isDisabled: boolean
+    requiredTier: Tier
   ) => {
-    items.push({ ...sidebarItem(route), section, disabled: isDisabled });
+    items.push({
+      ...sidebarItem(route),
+      section,
+      disabled: !tierAtLeast(tier, requiredTier),
+      requiredTier,
+    });
   };
 
   // 1. No header — core configuration (admin only)
@@ -85,16 +87,17 @@ function buildItems(
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.CHAT_PREFERENCES);
 
     if (!enableCloud && customAnalyticsEnabled) {
-      addDisabled(
+      addGated(
         SECTIONS.UNLABELED,
         ADMIN_ROUTES.CUSTOM_ANALYTICS,
-        !enableEnterprise
+        Tier.ENTERPRISE
       );
     }
   }
 
   // 2. Agents & Actions
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.AGENTS);
+  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.SKILLS);
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.MCP_ACTIONS);
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.OPENAPI_ACTIONS);
 
@@ -103,34 +106,31 @@ function buildItems(
     add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEXING_STATUS);
     add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.ADD_CONNECTOR);
     add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.DOCUMENT_SETS);
-    if (!isCurator && !enableCloud) {
+    if (!isCurator) {
       items.push({
         ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
         section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
         error: settings?.settings.needs_reindexing,
       });
     }
-    if (!isCurator && settings?.settings.opensearch_indexing_enabled) {
-      add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEX_MIGRATION);
-    }
   }
 
   // 4. Integrations (admin only)
   if (!isCurator) {
-    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.API_KEYS);
+    addGated(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.API_KEYS, Tier.BUSINESS);
     add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.SLACK_BOTS);
     add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.DISCORD_BOTS);
     if (hooksEnabled) {
-      add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.HOOKS);
+      addGated(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.HOOKS, Tier.ENTERPRISE);
     }
   }
 
   // 5. Permissions
   if (!isCurator) {
     add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.USERS);
-    addDisabled(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS, !enableEnterprise);
-    addDisabled(SECTIONS.PERMISSIONS, ADMIN_ROUTES.SCIM, !enableEnterprise);
-  } else if (enableEnterprise) {
+    addGated(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS, Tier.BUSINESS);
+    addGated(SECTIONS.PERMISSIONS, ADMIN_ROUTES.SCIM, Tier.ENTERPRISE);
+  } else if (tierAtLeast(tier, Tier.BUSINESS)) {
     add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS);
   }
 
@@ -139,23 +139,19 @@ function buildItems(
     if (hasSubscription) {
       add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
     }
-    addDisabled(
+    addGated(
       SECTIONS.ORGANIZATION,
       ADMIN_ROUTES.TOKEN_RATE_LIMITS,
-      !enableEnterprise
+      Tier.ENTERPRISE
     );
-    addDisabled(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, !enableEnterprise);
+    addGated(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, Tier.BUSINESS);
   }
 
   // 7. Usage (admin only)
   if (!isCurator) {
-    addDisabled(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, !enableEnterprise);
+    addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
     if (settings?.settings.query_history_type !== "disabled") {
-      addDisabled(
-        SECTIONS.USAGE,
-        ADMIN_ROUTES.QUERY_HISTORY,
-        !enableEnterprise
-      );
+      addGated(SECTIONS.USAGE, ADMIN_ROUTES.QUERY_HISTORY, Tier.BUSINESS);
     }
   }
 
@@ -186,21 +182,8 @@ function groupBySection(items: SidebarItemEntry[]) {
   return groups;
 }
 
-interface AdminSidebarProps {
-  enableCloudSS: boolean;
-  folded: boolean;
-  onFoldChange: Dispatch<SetStateAction<boolean>>;
-}
-
-interface AdminSidebarInnerProps {
-  enableCloudSS: boolean;
-  onFoldChange: Dispatch<SetStateAction<boolean>>;
-}
-
-function AdminSidebarInner({
-  enableCloudSS,
-  onFoldChange,
-}: AdminSidebarInnerProps) {
+function AdminSidebarInner() {
+  const { setFolded } = useSidebarState();
   const folded = useSidebarFolded();
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusSearch, setFocusSearch] = useState(false);
@@ -215,7 +198,7 @@ function AdminSidebarInner({
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
   const settings = useSettingsContext();
-  const enableEnterprise = usePaidEnterpriseFeaturesEnabled();
+  const tier = settings?.settings.tier;
   const { data: billingData, isLoading: billingLoading } =
     useBillingInformation();
   const { data: licenseData, isLoading: licenseLoading } = useLicense();
@@ -227,15 +210,17 @@ function AdminSidebarInner({
       ? true
       : Boolean(
           (billingData && hasActiveSubscription(billingData)) ||
-            licenseData?.has_license
+          licenseData?.has_license
         );
+  // Hooks are ENTERPRISE-only and only available for self-hosted single-tenant.
   const hooksEnabled =
-    enableEnterprise && (settings?.settings.hooks_enabled ?? false);
+    tierAtLeast(tier, Tier.ENTERPRISE) &&
+    (settings?.settings.hooks_enabled ?? false);
 
   const allItems = buildItems(
     isCurator,
-    enableCloudSS,
-    enableEnterprise,
+    NEXT_PUBLIC_CLOUD_ENABLED,
+    tier,
     settings,
     customAnalyticsEnabled,
     hasSubscriptionOrLicense,
@@ -259,7 +244,7 @@ function AdminSidebarInner({
             icon={SvgSearch}
             folded
             onClick={() => {
-              onFoldChange(false);
+              setFolded(false);
               setFocusSearch(true);
             }}
           >
@@ -309,8 +294,17 @@ function AdminSidebarInner({
             title={group.section}
             disabled
           >
-            {group.items.map(({ link, icon, name }) => (
-              <SidebarTab key={link} disabled icon={icon}>
+            {group.items.map(({ link, icon, name, requiredTier }) => (
+              <SidebarTab
+                key={link}
+                disabled
+                icon={icon}
+                tooltip={markdown(
+                  requiredTier === Tier.ENTERPRISE
+                    ? "This feature is available on the [Enterprise version of Onyx](/admin/billing) only."
+                    : "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
+                )}
+              >
                 {name}
               </SidebarTab>
             ))}
@@ -339,17 +333,10 @@ function AdminSidebarInner({
   );
 }
 
-export default function AdminSidebar({
-  enableCloudSS,
-  folded,
-  onFoldChange,
-}: AdminSidebarProps) {
+export default function AdminSidebar() {
   return (
-    <SidebarLayouts.Root folded={folded} onFoldChange={onFoldChange}>
-      <AdminSidebarInner
-        enableCloudSS={enableCloudSS}
-        onFoldChange={onFoldChange}
-      />
+    <SidebarLayouts.Root>
+      <AdminSidebarInner />
     </SidebarLayouts.Root>
   );
 }

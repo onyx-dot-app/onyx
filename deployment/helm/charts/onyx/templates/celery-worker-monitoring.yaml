@@ -65,7 +65,9 @@ spec:
               "-A",
               "onyx.background.celery.versioned_apps.monitoring",
               "worker",
-              {{ printf "--loglevel=%s" .Values.celery_worker_monitoring.logLevel | quote }},
+              {{- with .Values.celery_worker_monitoring.logLevel }}
+              {{ printf "--loglevel=%s" . | quote }},
+              {{- end }}
               "--hostname=monitoring@%n",
               "-Q",
               "monitoring",
@@ -81,6 +83,9 @@ spec:
                 name: {{ .Values.config.envConfigMapName }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- with .Values.celery_worker_monitoring.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- with .Values.celery_worker_monitoring.volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}

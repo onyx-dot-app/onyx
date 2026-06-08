@@ -28,9 +28,9 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { PageSelector } from "@/components/PageSelector";
 import { Divider } from "@opal/components";
 import { DateRangePickerValue } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import Calendar from "@/refresh-components/Calendar";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Spinner } from "@/components/Spinner";
 import { SvgCalendar, SvgDownloadCloud } from "@opal/icons";
 

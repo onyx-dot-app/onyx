@@ -4,8 +4,8 @@ import { loginAsRandomUser } from "../utils/auth";
 import { expectElementScreenshot } from "../utils/visualRegression";
 
 async function sendMessageAndWaitForChat(page: Page, message: string) {
-  await page.locator("#onyx-chat-input-textarea").click();
-  await page.locator("#onyx-chat-input-textarea").fill(message);
+  await page.locator("#onyx-chat-input-textbox").click();
+  await page.locator("#onyx-chat-input-textbox").fill(message);
   await page.locator("#onyx-chat-input-send-button").click();
 
   await page.waitForFunction(
@@ -51,7 +51,8 @@ test.describe("Share Chat Session Modal", () => {
     await expect(privateOption.locator("svg").last()).toBeVisible();
 
     const submitButton = dialog.locator('[aria-label="share-modal-submit"]');
-    await expect(submitButton).toHaveText("Done");
+    await expect(submitButton).toHaveText("Create Share Link");
+    await expect(submitButton).toBeDisabled();
 
     const cancelButton = dialog.locator('[aria-label="share-modal-cancel"]');
     await expect(cancelButton).toBeVisible();

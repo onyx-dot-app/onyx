@@ -75,11 +75,10 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
         user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
         if user.role == UserRole.CURATOR:
             user_groups = user_groups.where(User__UG.is_curator == True)  # noqa: E712
-        where_clause &= (
-            ~exists()
-            .where(DocumentSet__UG.document_set_id == DocumentSetDBModel.id)
-            .where(~DocumentSet__UG.user_group_id.in_(user_groups))
-            .correlate(DocumentSetDBModel)
+        where_clause &= ~exists().where(
+            DocumentSet__UG.document_set_id == DocumentSetDBModel.id
+        ).where(~DocumentSet__UG.user_group_id.in_(user_groups)).correlate(
+            DocumentSetDBModel
         )
         where_clause |= DocumentSetDBModel.user_id == user.id
     else:
@@ -123,11 +122,7 @@ def get_document_set_by_id_for_user(
     user: User,
     get_editable: bool = True,
 ) -> DocumentSetDBModel | None:
-    stmt = (
-        select(DocumentSetDBModel)
-        .distinct()
-        .options(selectinload(DocumentSetDBModel.federated_connectors))
-    )
+    stmt = select(DocumentSetDBModel).distinct()
     stmt = stmt.where(DocumentSetDBModel.id == document_set_id)
     stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
     return db_session.scalar(stmt)
@@ -136,8 +131,14 @@ def get_document_set_by_id_for_user(
 def get_document_set_by_id(
     db_session: Session,
     document_set_id: int,
+    prefetch_relationships: bool = False,
 ) -> DocumentSetDBModel | None:
     stmt = select(DocumentSetDBModel).distinct()
+    if prefetch_relationships:
+        stmt = stmt.options(
+            selectinload(DocumentSetDBModel.connector_credential_pairs),
+            selectinload(DocumentSetDBModel.federated_connectors),
+        )
     stmt = stmt.where(DocumentSetDBModel.id == document_set_id)
     return db_session.scalar(stmt)
 
@@ -158,6 +159,24 @@ def get_document_sets_by_name(
             DocumentSetDBModel.name.in_(document_set_names)
         )
     ).all()
+
+
+def filter_document_set_names_by_user_access(
+    db_session: Session,
+    document_set_names: list[str],
+    user: User,
+) -> set[str]:
+    """Return the subset of ``document_set_names`` the user has view access to.
+
+    Names that don't match an existing document set are omitted from the result.
+    """
+    if not document_set_names:
+        return set()
+    stmt = select(DocumentSetDBModel.name).where(
+        DocumentSetDBModel.name.in_(document_set_names)
+    )
+    stmt = _add_user_filters(stmt, user, get_editable=False)
+    return set(db_session.scalars(stmt).all())
 
 
 def get_document_sets_by_ids(
@@ -289,7 +308,7 @@ def insert_document_set(
         db_session.commit()
     except Exception as e:
         db_session.rollback()
-        logger.error(f"Error creating document set: {e}")
+        logger.error("Error creating document set: %s", e)
         raise
 
     return new_document_set_row, ds_cc_pairs
@@ -386,7 +405,7 @@ def update_document_set(
             )
 
         db_session.commit()
-    except:
+    except Exception:
         db_session.rollback()
         raise
 
@@ -469,7 +488,7 @@ def mark_document_set_as_to_be_deleted(
         # are no more relationships to cc pairs
         document_set_row.is_up_to_date = False
         db_session.commit()
-    except:
+    except Exception:
         db_session.rollback()
         raise
 
@@ -698,9 +717,7 @@ def fetch_document_sets_for_documents(
     valid_cc_pairs_subquery = aliased(
         ConnectorCredentialPair,
         select(ConnectorCredentialPair)
-        .where(
-            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING
-        )  # noqa: E712
+        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)  # noqa: E712
         .subquery(),
     )
 

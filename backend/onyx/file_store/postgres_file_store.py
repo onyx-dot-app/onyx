@@ -167,7 +167,9 @@ class PostgresBackedFileStore(FileStore):
                         _delete_large_object(raw_conn, old_oid)
                     except Exception:
                         logger.warning(
-                            f"Failed to unlink old large object {old_oid} for file {file_id}"
+                            "Failed to unlink old large object %s for file %s",
+                            old_oid,
+                            file_id,
                         )
 
                 session.commit()
@@ -178,7 +180,7 @@ class PostgresBackedFileStore(FileStore):
                         _delete_large_object(raw_conn, oid)
                 except Exception:
                     logger.exception(
-                        f"Failed to delete large object {oid} for file {file_id}"
+                        "Failed to delete large object %s for file %s", oid, file_id
                     )
                 raise e
 
@@ -219,7 +221,7 @@ class PostgresBackedFileStore(FileStore):
                 )
                 return record.file_size
         except Exception as e:
-            logger.warning(f"Error getting file size for {file_id}: {e}")
+            logger.warning("Error getting file size for %s: %s", file_id, e)
             return None
 
     def delete_file(
@@ -245,7 +247,9 @@ class PostgresBackedFileStore(FileStore):
                     _delete_large_object(raw_conn, file_content.lobj_oid)
                 except Exception:
                     logger.warning(
-                        f"Large object {file_content.lobj_oid} for file {file_id} not found, cleaning up records only."
+                        "Large object %s for file %s not found, cleaning up records only.",
+                        file_content.lobj_oid,
+                        file_id,
                     )
 
                 delete_file_content_by_file_id(file_id=file_id, db_session=session)
@@ -309,7 +313,10 @@ class PostgresBackedFileStore(FileStore):
             except Exception as e:
                 session.rollback()
                 logger.exception(
-                    f"Failed to change file ID from {old_file_id} to {new_file_id}: {e}"
+                    "Failed to change file ID from %s to %s: %s",
+                    old_file_id,
+                    new_file_id,
+                    e,
                 )
                 raise
 

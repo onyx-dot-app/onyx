@@ -2,7 +2,8 @@ import React from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 export interface StoppedHeaderProps {
   totalSteps: number;
@@ -30,7 +31,7 @@ export const StoppedHeader = React.memo(function StoppedHeader({
       )}
       aria-disabled={isInteractive ? undefined : true}
     >
-      <div className="px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
+      <div className="px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
         <Text as="p" mainUiAction text03>
           Interrupted Thinking
         </Text>

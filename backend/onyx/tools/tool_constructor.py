@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
-from onyx.auth.schemas import UserRole
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
@@ -17,11 +16,8 @@ from onyx.db.enums import MCPAuthenticationType
 from onyx.db.mcp import get_all_mcp_tools_for_server
 from onyx.db.mcp import get_mcp_server_by_id
 from onyx.db.mcp import get_user_connection_config
-from onyx.db.llm import can_user_access_llm_provider
-from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Persona
 from onyx.db.models import User
-from onyx.db.image_generation import get_default_image_generation_config
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
@@ -34,6 +30,9 @@ from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import SearchToolUsage
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentTool,
+)
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
@@ -164,7 +163,10 @@ def _construct_tools_impl(
     # Log which tools are attached to the persona for debugging
     persona_tool_names = [t.name for t in persona.tools]
     logger.debug(
-        f"Constructing tools for persona '{persona.name}' (id={persona.id}): {persona_tool_names}"
+        "Constructing tools for persona '%s' (id=%s): %s",
+        persona.name,
+        persona.id,
+        persona_tool_names,
     )
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
@@ -238,52 +240,8 @@ def _construct_tools_impl(
 
             # Handle Image Generation Tool
             elif tool_cls.__name__ == ImageGenerationTool.__name__:
-                # Fetch the default image generation config
-                img_gen_config = get_default_image_generation_config(db_session)
-                if (
-                    not img_gen_config
-                    or not img_gen_config.model_configuration
-                    or not img_gen_config.model_configuration.llm_provider
-                ):
-                    logger.debug(
-                        "Skipping ImageGenerationTool: no default config found"
-                    )
-                    continue
-
-                # Check group-based access to the underlying LLM provider
-                llm_provider = img_gen_config.model_configuration.llm_provider
-                user_group_ids = fetch_user_group_ids(db_session, user)
-                is_admin = user.role == UserRole.ADMIN
-
-                if not can_user_access_llm_provider(
-                    provider=llm_provider,
-                    user_group_ids=user_group_ids,
-                    persona=persona,
-                    is_admin=is_admin,
-                ):
-                    logger.debug(
-                        "Skipping ImageGenerationTool: user '%s' lacks access "
-                        "to LLM provider '%s'",
-                        user.email,
-                        llm_provider.name,
-                    )
-                    continue
-
-                # Build LLMConfig (same logic as _get_image_generation_config)
-                img_generation_llm_config = LLMConfig(
-                    model_provider=llm_provider.provider,
-                    model_name=img_gen_config.model_configuration.name,
-                    temperature=GEN_AI_TEMPERATURE,
-                    api_key=(
-                        llm_provider.api_key.get_value(apply_mask=False)
-                        if llm_provider.api_key
-                        else None
-                    ),
-                    api_base=llm_provider.api_base,
-                    api_version=llm_provider.api_version,
-                    deployment_name=llm_provider.deployment_name,
-                    max_input_tokens=llm.config.max_input_tokens,
-                    custom_config=llm_provider.custom_config,
+                img_generation_llm_config = _get_image_generation_config(
+                    llm, db_session
                 )
 
                 tool_dict[db_tool_model.id] = [
@@ -312,7 +270,7 @@ def _construct_tools_impl(
                         WebSearchTool(tool_id=db_tool_model.id, emitter=emitter)
                     ]
                 except ValueError as e:
-                    logger.error(f"Failed to initialize Internet Search Tool: {e}")
+                    logger.error("Failed to initialize Internet Search Tool: %s", e)
                     raise ValueError(
                         "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
                     )
@@ -329,7 +287,7 @@ def _construct_tools_impl(
                         )
                     ]
                 except RuntimeError as e:
-                    logger.error(f"Failed to initialize Open URL Tool: {e}")
+                    logger.error("Failed to initialize Open URL Tool: %s", e)
                     raise ValueError(
                         "Open URL tool requires a web content provider, please contact your Onyx admin to get it configured!"
                     )
@@ -338,6 +296,16 @@ def _construct_tools_impl(
             elif tool_cls.__name__ == PythonTool.__name__:
                 tool_dict[db_tool_model.id] = [
                     PythonTool(tool_id=db_tool_model.id, emitter=emitter)
+                ]
+
+            # Handle Coding Agent Tool
+            elif tool_cls.__name__ == CodingAgentTool.__name__:
+                tool_dict[db_tool_model.id] = [
+                    CodingAgentTool(
+                        tool_id=db_tool_model.id,
+                        emitter=emitter,
+                        llm=llm,
+                    )
                 ]
 
             # Handle File Reader Tool
@@ -383,7 +351,7 @@ def _construct_tools_impl(
             if db_tool_model.oauth_config_id:
                 if user.is_anonymous:
                     logger.warning(
-                        f"Anonymous user cannot use OAuth tool {db_tool_model.id}"
+                        "Anonymous user cannot use OAuth tool %s", db_tool_model.id
                     )
                     continue
                 oauth_config = get_oauth_config(
@@ -394,15 +362,17 @@ def _construct_tools_impl(
                     oauth_token_for_tool = token_manager.get_valid_access_token()
                     if not oauth_token_for_tool:
                         logger.warning(
-                            f"No valid OAuth token found for tool {db_tool_model.id} "
-                            f"with OAuth config {db_tool_model.oauth_config_id}"
+                            "No valid OAuth token found for tool %s with OAuth config %s",
+                            db_tool_model.id,
+                            db_tool_model.oauth_config_id,
                         )
 
             # Priority 2: Passthrough auth (user's login OAuth token)
             elif db_tool_model.passthrough_auth:
                 if user.is_anonymous:
                     logger.warning(
-                        f"Anonymous user cannot use passthrough auth tool {db_tool_model.id}"
+                        "Anonymous user cannot use passthrough auth tool %s",
+                        db_tool_model.id,
                     )
                     continue
                 oauth_token_for_tool = user_oauth_token
@@ -416,6 +386,8 @@ def _construct_tools_impl(
                     dynamic_schema_info=DynamicSchemaInfo(
                         chat_session_id=custom_tool_config.chat_session_id,
                         message_id=custom_tool_config.message_id,
+                        user_id=user.id,
+                        user_email="anonymous" if user.is_anonymous else user.email,
                     ),
                     custom_headers=(db_tool_model.custom_headers or [])
                     + (
@@ -446,7 +418,8 @@ def _construct_tools_impl(
                 # Pass-through OAuth: use the user's login OAuth token
                 if user.is_anonymous:
                     logger.warning(
-                        f"Anonymous user cannot use PT_OAUTH MCP server {mcp_server.id}"
+                        "Anonymous user cannot use PT_OAUTH MCP server %s",
+                        mcp_server.id,
                     )
                     continue
                 mcp_user_oauth_token = user_oauth_token
@@ -497,7 +470,9 @@ def _construct_tools_impl(
                     tool_dict[saved_tool.id] = [cast(Tool, mcp_tool)]
             if db_tool_model.id not in tool_dict:
                 logger.warning(
-                    f"Tool '{expected_tool_name}' not found in MCP server '{mcp_server.name}'"
+                    "Tool '%s' not found in MCP server '%s'",
+                    expected_tool_name,
+                    mcp_server.name,
                 )
 
     if (

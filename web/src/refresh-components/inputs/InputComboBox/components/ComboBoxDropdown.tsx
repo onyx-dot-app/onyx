@@ -1,6 +1,6 @@
 import React, { useEffect, forwardRef } from "react";
 import { createPortal } from "react-dom";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { OptionsList } from "./OptionsList";
 import { ComboBoxOption } from "../types";
 
@@ -107,7 +107,7 @@ export const ComboBoxDropdown = forwardRef<
         role="listbox"
         aria-label={placeholder}
         className={cn(
-          "z-[10000] bg-background-neutral-00 border border-border-02 rounded-12 shadow-02 overflow-y-auto overflow-x-hidden p-1 pointer-events-auto touch-auto",
+          "z-10000 bg-background-neutral-00 border border-border-02 rounded-12 shadow-02 overflow-y-auto overflow-x-hidden p-1 pointer-events-auto touch-auto",
           !dropdownMaxHeight && "max-h-60"
         )}
         style={{

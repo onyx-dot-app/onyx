@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from requests.exceptions import HTTPError
 from typing_extensions import override
 
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.app_configs import ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
@@ -70,7 +71,10 @@ def request_with_rate_limit(
     )
     def make_request(endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
         response = requests.get(
-            f"{client.base_url}/{endpoint}", auth=client.auth, params=params
+            f"{client.base_url}/{endpoint}",
+            auth=client.auth,
+            params=params,
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
         if response.status_code == 429:

@@ -23,22 +23,22 @@ import {
 } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
-import { parseLlmDescriptor } from "./llmConfig/utils";
+import { parseLlmDescriptor } from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/providers/SettingsProvider";
+import { MinimalAgent } from "@/lib/agents/types";
 import {
-  MinimalPersonaSnapshot,
-  PersonaLabel,
-} from "@/app/admin/agents/interfaces";
-import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
-import { isAnthropic } from "@/lib/llmConfig/svc";
+  DefaultModel,
+  LLMProviderDescriptor,
+} from "@/lib/languageModels/types";
+import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
-import { useLLMProviders } from "@/hooks/useLLMProviders";
+import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const usePublicCredentials = () => {
@@ -250,85 +250,6 @@ export const useFederatedConnectors = () => {
   };
 };
 
-export const useLabels = () => {
-  const { mutate } = useSWRConfig();
-  const { data: labels, error } = useSWR<PersonaLabel[]>(
-    SWR_KEYS.personaLabels,
-    errorHandlingFetcher
-  );
-
-  const refreshLabels = async () => {
-    return mutate(SWR_KEYS.personaLabels);
-  };
-
-  const createLabel = async (name: string): Promise<PersonaLabel | null> => {
-    const response = await fetch(SWR_KEYS.personaLabels, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const newLabel: PersonaLabel = await response.json();
-    mutate(
-      SWR_KEYS.personaLabels,
-      (currentLabels: PersonaLabel[] | undefined) => [
-        ...(currentLabels || []),
-        newLabel,
-      ],
-      false
-    );
-    return newLabel;
-  };
-
-  const updateLabel = async (id: number, name: string) => {
-    const response = await fetch(`/api/admin/persona/label/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label_name: name }),
-    });
-
-    if (response.ok) {
-      mutate(
-        SWR_KEYS.personaLabels,
-        labels?.map((label) => (label.id === id ? { ...label, name } : label)),
-        false
-      );
-    }
-
-    return response;
-  };
-
-  const deleteLabel = async (id: number) => {
-    const response = await fetch(`/api/admin/persona/label/${id}`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-    });
-
-    if (response.ok) {
-      mutate(
-        SWR_KEYS.personaLabels,
-        labels?.filter((label) => label.id !== id),
-        false
-      );
-    }
-
-    return response;
-  };
-
-  return {
-    labels,
-    error,
-    refreshLabels,
-    createLabel,
-    updateLabel,
-    deleteLabel,
-  };
-};
-
 export const useTimeRange = (initialValue?: DateRangePickerValue) => {
   return useState<DateRangePickerValue | null>(null);
 };
@@ -488,7 +409,7 @@ export interface LlmManager {
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
-  liveAgent: MinimalPersonaSnapshot | null;
+  liveAgent: MinimalAgent | null;
   maxTemperature: number;
   llmProviders: LLMProviderDescriptor[] | undefined;
   isLoadingProviders: boolean;
@@ -544,7 +465,7 @@ export function getDefaultLlmDescriptor(
     const provider = llmProviders.find((p) => p.id === defaultText.provider_id);
     if (provider) {
       return {
-        name: provider.name,
+        name: provider.name ?? "",
         provider: provider.provider,
         modelName: defaultText.model_name,
       };
@@ -559,7 +480,7 @@ export function getDefaultLlmDescriptor(
       (m) => m.is_visible
     );
     return {
-      name: firstLlmProvider.name,
+      name: firstLlmProvider.name ?? "",
       provider: firstLlmProvider.provider,
       modelName: firstModel?.name ?? "",
     };
@@ -589,7 +510,7 @@ export function getValidLlmDescriptorForProviders(
       if (provider) {
         return {
           modelName: modelName,
-          name: provider.name,
+          name: provider.name ?? "",
           provider: provider.provider,
         };
       }
@@ -612,7 +533,7 @@ export function getValidLlmDescriptorForProviders(
       if (matchingProvider) {
         return {
           ...model,
-          name: matchingProvider.name,
+          name: matchingProvider.name ?? "",
           provider: matchingProvider.provider,
         };
       }
@@ -626,7 +547,11 @@ export function getValidLlmDescriptorForProviders(
       );
 
       if (provider) {
-        return { ...model, provider: provider.provider, name: provider.name };
+        return {
+          ...model,
+          provider: provider.provider,
+          name: provider.name ?? "",
+        };
       }
     }
   }
@@ -643,7 +568,7 @@ export function getValidLlmDescriptorForProviders(
 
 export function useLlmManager(
   currentChatSession?: ChatSession,
-  liveAgent?: MinimalPersonaSnapshot
+  liveAgent?: MinimalAgent
 ): LlmManager {
   const { user } = useUser();
 
@@ -743,11 +668,6 @@ export function useLlmManager(
         currentChatSession.current_alternate_model,
         llmProviders
       );
-    } else if (liveAgent?.llm_model_version_override) {
-      resolved = getValidLlmDescriptorForProviders(
-        liveAgent.llm_model_version_override,
-        llmProviders
-      );
     } else if (user?.preferences?.default_model) {
       resolved = getValidLlmDescriptorForProviders(
         user.preferences.default_model,
@@ -772,7 +692,6 @@ export function useLlmManager(
     llmProviders,
     defaultText,
     currentChatSession,
-    liveAgent?.llm_model_version_override,
     userHasManuallyOverriddenLLM,
     manualLlm,
     user?.preferences?.default_model,

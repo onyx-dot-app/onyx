@@ -3,19 +3,20 @@ import {
   type InteractiveStatefulInteraction,
   type InteractiveStatefulProps,
 } from "@opal/core";
-import { Text, Tooltip, type TooltipSide } from "@opal/components";
+import { Text, Tooltip, Button, type TooltipSide } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { SvgX } from "@opal/icons";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
-import { Button } from "@opal/components/buttons/button/components";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface FilterButtonProps
-  extends Omit<InteractiveStatefulProps, "variant" | "state" | "children"> {
+interface FilterButtonProps extends Omit<
+  InteractiveStatefulProps,
+  "variant" | "state" | "children"
+> {
   /** Left icon — always visible. */
   icon: IconFunctionComponent;
 

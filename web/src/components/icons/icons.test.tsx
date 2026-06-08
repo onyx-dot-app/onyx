@@ -58,16 +58,11 @@ describe("Logo Icons", () => {
 
   test("renders the Bifrost icon with theme-aware colors", () => {
     const { container } = render(
-      <SvgBifrost size={32} className="custom text-red-500 dark:text-black" />
+      <SvgBifrost size={32} className="custom dark:text-black" />
     );
     const icon = container.querySelector("svg");
 
     expect(icon).toBeInTheDocument();
-    expect(icon).toHaveClass(
-      "custom",
-      "text-red-500",
-      "dark:text-black",
-      "!text-[#33C19E]"
-    );
+    expect(icon).toHaveClass("custom", "dark:text-black", "text-[#33C19E]!");
   });
 });

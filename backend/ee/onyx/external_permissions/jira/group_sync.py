@@ -73,7 +73,7 @@ def _get_group_member_emails(
         try:
             page = _fetch_group_member_page(jira_client, group_name, start_at)
         except Exception as e:
-            logger.error(f"Error fetching members for group {group_name}: {e}")
+            logger.error("Error fetching members for group %s: %s", group_name, e)
             raise
 
         members: list[dict[str, Any]] = page.get("values", [])
@@ -89,7 +89,9 @@ def _get_group_member_emails(
                 emails.add(email)
             else:
                 logger.warning(
-                    f"Atlassian user {member.get('accountId', 'unknown')} in group {group_name} has no visible email address"
+                    "Atlassian user %s in group %s has no visible email address",
+                    member.get("accountId", "unknown"),
+                    group_name,
                 )
 
         if page.get("isLast", True) or not members:
@@ -130,7 +132,7 @@ def jira_group_sync(
     if not group_names:
         raise ValueError(f"No groups found for cc_pair_id={cc_pair.id}")
 
-    logger.info(f"Found {len(group_names)} groups in Jira")
+    logger.info("Found %s groups in Jira", len(group_names))
 
     for group_name in group_names:
         if not group_name:
@@ -141,10 +143,10 @@ def jira_group_sync(
             group_name=group_name,
         )
         if not member_emails:
-            logger.debug(f"No members found for group {group_name}")
+            logger.debug("No members found for group %s", group_name)
             continue
 
-        logger.debug(f"Found {len(member_emails)} members for group {group_name}")
+        logger.debug("Found %s members for group %s", len(member_emails), group_name)
         yield ExternalUserGroup(
             id=group_name,
             user_emails=list(member_emails),

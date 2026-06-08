@@ -81,11 +81,6 @@ def ensure_full_deployment_setup(
             ok = setup_document_indices(
                 document_indices=document_indices,
                 index_setting=IndexingSetting.from_db_model(active.primary),
-                secondary_index_setting=(
-                    IndexingSetting.from_db_model(active.secondary)
-                    if active.secondary
-                    else None
-                ),
             )
             if not ok:
                 raise RuntimeError(

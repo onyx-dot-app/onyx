@@ -93,19 +93,19 @@ def test_api_key_limited_service_account(reset: None) -> None:  # noqa: ARG001
 
     # Verify account_type
     account_type = _get_service_account_account_type(admin_user, api_key.user_id)
-    assert (
-        account_type == AccountType.SERVICE_ACCOUNT
-    ), f"Expected account_type={AccountType.SERVICE_ACCOUNT}, got {account_type}"
+    assert account_type == AccountType.SERVICE_ACCOUNT, (
+        f"Expected account_type={AccountType.SERVICE_ACCOUNT}, got {account_type}"
+    )
 
     # Verify no group membership
     admin_ids, basic_ids = _get_default_group_user_ids(admin_user)
     user_id_str = str(api_key.user_id)
-    assert (
-        user_id_str not in admin_ids
-    ), "LIMITED API key should NOT be in Admin default group"
-    assert (
-        user_id_str not in basic_ids
-    ), "LIMITED API key should NOT be in Basic default group"
+    assert user_id_str not in admin_ids, (
+        "LIMITED API key should NOT be in Admin default group"
+    )
+    assert user_id_str not in basic_ids, (
+        "LIMITED API key should NOT be in Basic default group"
+    )
 
 
 def test_api_key_basic_service_account(reset: None) -> None:  # noqa: ARG001
@@ -119,17 +119,17 @@ def test_api_key_basic_service_account(reset: None) -> None:  # noqa: ARG001
 
     # Verify account_type
     account_type = _get_service_account_account_type(admin_user, api_key.user_id)
-    assert (
-        account_type == AccountType.SERVICE_ACCOUNT
-    ), f"Expected account_type={AccountType.SERVICE_ACCOUNT}, got {account_type}"
+    assert account_type == AccountType.SERVICE_ACCOUNT, (
+        f"Expected account_type={AccountType.SERVICE_ACCOUNT}, got {account_type}"
+    )
 
     # Verify Basic group membership
     admin_ids, basic_ids = _get_default_group_user_ids(admin_user)
     user_id_str = str(api_key.user_id)
     assert user_id_str in basic_ids, "BASIC API key should be in Basic default group"
-    assert (
-        user_id_str not in admin_ids
-    ), "BASIC API key should NOT be in Admin default group"
+    assert user_id_str not in admin_ids, (
+        "BASIC API key should NOT be in Admin default group"
+    )
 
 
 def test_api_key_admin_service_account(reset: None) -> None:  # noqa: ARG001
@@ -143,17 +143,17 @@ def test_api_key_admin_service_account(reset: None) -> None:  # noqa: ARG001
 
     # Verify account_type
     account_type = _get_service_account_account_type(admin_user, api_key.user_id)
-    assert (
-        account_type == AccountType.SERVICE_ACCOUNT
-    ), f"Expected account_type={AccountType.SERVICE_ACCOUNT}, got {account_type}"
+    assert account_type == AccountType.SERVICE_ACCOUNT, (
+        f"Expected account_type={AccountType.SERVICE_ACCOUNT}, got {account_type}"
+    )
 
     # Verify Admin group membership
     admin_ids, basic_ids = _get_default_group_user_ids(admin_user)
     user_id_str = str(api_key.user_id)
     assert user_id_str in admin_ids, "ADMIN API key should be in Admin default group"
-    assert (
-        user_id_str not in basic_ids
-    ), "ADMIN API key should NOT be in Basic default group"
+    assert user_id_str not in basic_ids, (
+        "ADMIN API key should NOT be in Basic default group"
+    )
 
 
 def test_limited_key_blocked_by_current_user(reset: None) -> None:  # noqa: ARG001
@@ -171,18 +171,18 @@ def test_limited_key_blocked_by_current_user(reset: None) -> None:  # noqa: ARG0
         f"{API_SERVER_URL}/persona/0",
         headers=limited_key.headers,
     )
-    assert (
-        resp.status_code == 200
-    ), f"Limited key should access /persona/0, got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 200, (
+        f"Limited key should access /persona/0, got {resp.status_code}: {resp.text}"
+    )
 
     # current_user endpoint → should be blocked
     resp = requests.get(
         f"{API_SERVER_URL}/query/valid-tags",
         headers=limited_key.headers,
     )
-    assert (
-        resp.status_code == 403
-    ), f"Limited key should be blocked from /query/valid-tags, got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 403, (
+        f"Limited key should be blocked from /query/valid-tags, got {resp.status_code}: {resp.text}"
+    )
 
 
 def test_basic_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
@@ -198,9 +198,9 @@ def test_basic_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
         f"{API_SERVER_URL}/query/valid-tags",
         headers=basic_key.headers,
     )
-    assert (
-        resp.status_code == 200
-    ), f"Basic key should access /query/valid-tags, got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 200, (
+        f"Basic key should access /query/valid-tags, got {resp.status_code}: {resp.text}"
+    )
 
 
 def test_admin_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
@@ -216,6 +216,6 @@ def test_admin_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
         f"{API_SERVER_URL}/query/valid-tags",
         headers=admin_key.headers,
     )
-    assert (
-        resp.status_code == 200
-    ), f"Admin key should access /query/valid-tags, got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 200, (
+        f"Admin key should access /query/valid-tags, got {resp.status_code}: {resp.text}"
+    )

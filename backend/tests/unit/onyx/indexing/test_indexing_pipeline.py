@@ -1,4 +1,8 @@
+import random
 import threading
+import time
+from datetime import datetime
+from datetime import timezone
 from typing import Any
 from typing import cast
 from typing import List
@@ -8,7 +12,6 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentSource
 from onyx.connectors.models import ImageSection
@@ -22,6 +25,7 @@ from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import _apply_document_ingestion_hook
 from onyx.indexing.indexing_pipeline import add_contextual_summaries
 from onyx.indexing.indexing_pipeline import filter_documents
+from onyx.indexing.indexing_pipeline import get_docs_to_update
 from onyx.indexing.indexing_pipeline import process_image_sections
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_response import Choice
@@ -52,35 +56,43 @@ def test_filter_documents_empty_title_and_content() -> None:
     doc = create_test_document(
         title="", semantic_id="", sections=[TextSection(text="", link="test_link")]
     )
-    result = filter_documents([doc])
-    assert len(result) == 0
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 0
+    assert len(failures) == 0
 
 
 def test_filter_documents_empty_title_with_content() -> None:
     doc = create_test_document(
         title="", sections=[TextSection(text="Valid content", link="test_link")]
     )
-    result = filter_documents([doc])
-    assert len(result) == 1
-    assert result[0].id == "test_id"
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 1
+    assert docs[0].id == "test_id"
+    assert len(failures) == 0
 
 
 def test_filter_documents_empty_content_with_title() -> None:
     doc = create_test_document(
         title="Valid Title", sections=[TextSection(text="", link="test_link")]
     )
-    result = filter_documents([doc])
-    assert len(result) == 1
-    assert result[0].id == "test_id"
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 1
+    assert docs[0].id == "test_id"
+    assert len(failures) == 0
 
 
 def test_filter_documents_exceeding_max_chars() -> None:
-    if not MAX_DOCUMENT_CHARS:  # Skip if no max chars configured
-        return
-    long_text = "a" * (MAX_DOCUMENT_CHARS + 1)
+    limit = 100
+    long_text = "a" * (limit + 1)
     doc = create_test_document(sections=[TextSection(text=long_text, link="test_link")])
-    result = filter_documents([doc])
-    assert len(result) == 0
+    with patch("onyx.indexing.indexing_pipeline.MAX_DOCUMENT_CHARS", limit):
+        docs, failures = filter_documents([doc])
+    assert len(docs) == 0
+    assert len(failures) == 1
+    assert failures[0].failed_document is not None
+    assert failures[0].failed_document.document_id == "test_id"
+    assert "too large to index" in failures[0].failure_message
+    assert "MAX_DOCUMENT_CHARS" in failures[0].failure_message
 
 
 def test_filter_documents_valid_document() -> None:
@@ -88,10 +100,11 @@ def test_filter_documents_valid_document() -> None:
         title="Valid Title",
         sections=[TextSection(text="Valid content", link="test_link")],
     )
-    result = filter_documents([doc])
-    assert len(result) == 1
-    assert result[0].id == "test_id"
-    assert result[0].title == "Valid Title"
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 1
+    assert docs[0].id == "test_id"
+    assert docs[0].title == "Valid Title"
+    assert len(failures) == 0
 
 
 def test_filter_documents_whitespace_only() -> None:
@@ -100,8 +113,9 @@ def test_filter_documents_whitespace_only() -> None:
         semantic_id="  ",
         sections=[TextSection(text="   ", link="test_link")],
     )
-    result = filter_documents([doc])
-    assert len(result) == 0
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 0
+    assert len(failures) == 0
 
 
 def test_filter_documents_semantic_id_no_title() -> None:
@@ -110,9 +124,10 @@ def test_filter_documents_semantic_id_no_title() -> None:
         semantic_id="Valid Semantic ID",
         sections=[TextSection(text="Valid content", link="test_link")],
     )
-    result = filter_documents([doc])
-    assert len(result) == 1
-    assert result[0].semantic_identifier == "Valid Semantic ID"
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 1
+    assert docs[0].semantic_identifier == "Valid Semantic ID"
+    assert len(failures) == 0
 
 
 def test_filter_documents_multiple_sections() -> None:
@@ -123,27 +138,30 @@ def test_filter_documents_multiple_sections() -> None:
             TextSection(text="Content 3", link="test_link"),
         ]
     )
-    result = filter_documents([doc])
-    assert len(result) == 1
-    assert len(result[0].sections) == 3
+    docs, failures = filter_documents([doc])
+    assert len(docs) == 1
+    assert len(docs[0].sections) == 3
+    assert len(failures) == 0
 
 
 def test_filter_documents_multiple_documents() -> None:
-    docs = [
+    docs_input = [
         create_test_document(doc_id="1", title="Title 1"),
         create_test_document(
             doc_id="2", title="", sections=[TextSection(text="", link="test_link")]
-        ),  # Should be filtered
+        ),  # Should be filtered (empty, no failure)
         create_test_document(doc_id="3", title="Title 3"),
     ]
-    result = filter_documents(docs)
-    assert len(result) == 2
-    assert {doc.id for doc in result} == {"1", "3"}
+    docs, failures = filter_documents(docs_input)
+    assert len(docs) == 2
+    assert {doc.id for doc in docs} == {"1", "3"}
+    assert len(failures) == 0
 
 
 def test_filter_documents_empty_batch() -> None:
-    result = filter_documents([])
-    assert len(result) == 0
+    docs, failures = filter_documents([])
+    assert len(docs) == 0
+    assert len(failures) == 0
 
 
 @patch("onyx.llm.utils.GEN_AI_MAX_TOKENS", 4096)
@@ -180,8 +198,9 @@ def test_contextual_rag(
     counter_lock = threading.Lock()
 
     def mock_llm_invoke(
-        *args: Any, **kwargs: Any  # noqa: ARG001
-    ) -> ModelResponse:  # noqa: ARG001
+        *args: Any,  # noqa: ARG001
+        **kwargs: Any,  # noqa: ARG001
+    ) -> ModelResponse:
         nonlocal mock_llm_invoke_count
         with counter_lock:
             mock_llm_invoke_count += 1
@@ -236,6 +255,7 @@ def test_contextual_rag(
 # ---------------------------------------------------------------------------
 
 _PATCH_EXECUTE_HOOK = "onyx.indexing.indexing_pipeline.execute_hook"
+_PATCH_GET_SESSION = "onyx.indexing.indexing_pipeline.get_session_with_current_tenant"
 
 
 def _make_doc(
@@ -254,62 +274,202 @@ def _make_doc(
     )
 
 
+# ---------------------------------------------------------------------------
+# _maybe_push_documents
+# ---------------------------------------------------------------------------
+
+_PATCH_MULTI_TENANT = "onyx.indexing.indexing_pipeline.MULTI_TENANT"
+_PATCH_GET_CC_PAIR = "onyx.indexing.indexing_pipeline.get_connector_credential_pair"
+_PATCH_GET_SESSION_AW = (
+    "onyx.indexing.indexing_pipeline.get_session_with_current_tenant"
+)
+_PATCH_EXECUTE_HOOK = "onyx.indexing.indexing_pipeline.execute_hook"
+
+
+def _make_adapter(connector_id: int = 1, credential_id: int = 1) -> MagicMock:
+    adapter = MagicMock()
+    adapter.connector_id = connector_id
+    adapter.credential_id = credential_id
+    return adapter
+
+
+def _make_cc_pair(is_public: bool) -> MagicMock:
+    from onyx.db.enums import AccessType
+
+    cc_pair = MagicMock()
+    cc_pair.access_type = AccessType.PUBLIC if is_public else AccessType.PRIVATE
+    return cc_pair
+
+
+def _make_insertion_records(doc_ids: list[str]) -> list[Any]:
+    from onyx.document_index.interfaces_new import DocumentInsertionRecord
+
+    return [
+        DocumentInsertionRecord(document_id=d, already_existed=False) for d in doc_ids
+    ]
+
+
+def _make_ctx() -> MagicMock:
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=MagicMock())
+    ctx.__exit__ = MagicMock(return_value=False)
+    return ctx
+
+
+def test_document_push_skipped_in_multi_tenant_mode() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, True),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+    mock_hook.assert_not_called()
+
+
+def test_document_push_skipped_when_no_insertion_records() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], [])
+    mock_hook.assert_not_called()
+
+
+def test_document_push_skipped_for_non_public_connector() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=False)),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+    mock_hook.assert_not_called()
+
+
+def test_document_push_fires_execute_hook_for_public_doc() -> None:
+    from onyx.db.enums import HookPoint
+    from onyx.hooks.points.document_push import DocumentPushResponse
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+    mock_hook.assert_called_once()
+    call_kwargs = mock_hook.call_args.kwargs
+    assert call_kwargs["hook_point"] == HookPoint.DOCUMENT_PUSH
+    assert call_kwargs["response_type"] is DocumentPushResponse
+    payload = call_kwargs["payload"]
+    assert payload["document_id"] == "doc1"
+    assert payload["content"] == "Hello"
+
+
+def test_document_push_hook_exception_propagates() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(_PATCH_EXECUTE_HOOK, side_effect=RuntimeError("hard fail")),
+        pytest.raises(RuntimeError, match="hard fail"),
+    ):
+        # Fail strategy is the executor's responsibility — exceptions must propagate.
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+
 def test_document_ingestion_hook_skipped_passes_through() -> None:
     doc = _make_doc()
-    with patch(_PATCH_EXECUTE_HOOK, return_value=HookSkipped()):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+    with (
+        patch(_PATCH_EXECUTE_HOOK, return_value=HookSkipped()),
+        patch(_PATCH_GET_SESSION),
+    ):
+        result = _apply_document_ingestion_hook([doc])
     assert result == [doc]
 
 
 def test_document_ingestion_hook_soft_failed_passes_through() -> None:
     doc = _make_doc()
-    with patch(_PATCH_EXECUTE_HOOK, return_value=HookSoftFailed()):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+    with (
+        patch(_PATCH_EXECUTE_HOOK, return_value=HookSoftFailed()),
+        patch(_PATCH_GET_SESSION),
+    ):
+        result = _apply_document_ingestion_hook([doc])
     assert result == [doc]
 
 
 def test_document_ingestion_hook_none_sections_drops_document() -> None:
     doc = _make_doc()
-    with patch(
-        _PATCH_EXECUTE_HOOK,
-        return_value=DocumentIngestionResponse(
-            sections=None, rejection_reason="PII detected"
+    with (
+        patch(
+            _PATCH_EXECUTE_HOOK,
+            return_value=DocumentIngestionResponse(
+                sections=None, rejection_reason="PII detected"
+            ),
         ),
+        patch(_PATCH_GET_SESSION),
     ):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+        result = _apply_document_ingestion_hook([doc])
     assert result == []
 
 
 def test_document_ingestion_hook_all_invalid_sections_drops_document() -> None:
     """A non-empty list where every section has neither text nor image_file_id drops the doc."""
     doc = _make_doc()
-    with patch(
-        _PATCH_EXECUTE_HOOK,
-        return_value=DocumentIngestionResponse(sections=[DocumentIngestionSection()]),
+    with (
+        patch(
+            _PATCH_EXECUTE_HOOK,
+            return_value=DocumentIngestionResponse(
+                sections=[DocumentIngestionSection()]
+            ),
+        ),
+        patch(_PATCH_GET_SESSION),
     ):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+        result = _apply_document_ingestion_hook([doc])
     assert result == []
 
 
 def test_document_ingestion_hook_empty_sections_drops_document() -> None:
     doc = _make_doc()
-    with patch(
-        _PATCH_EXECUTE_HOOK,
-        return_value=DocumentIngestionResponse(sections=[]),
+    with (
+        patch(
+            _PATCH_EXECUTE_HOOK,
+            return_value=DocumentIngestionResponse(sections=[]),
+        ),
+        patch(_PATCH_GET_SESSION),
     ):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+        result = _apply_document_ingestion_hook([doc])
     assert result == []
 
 
 def test_document_ingestion_hook_rewrites_text_sections() -> None:
     doc = _make_doc(sections=[TextSection(text="original", link="http://a.com")])
-    with patch(
-        _PATCH_EXECUTE_HOOK,
-        return_value=DocumentIngestionResponse(
-            sections=[DocumentIngestionSection(text="rewritten", link="http://b.com")]
+    with (
+        patch(
+            _PATCH_EXECUTE_HOOK,
+            return_value=DocumentIngestionResponse(
+                sections=[
+                    DocumentIngestionSection(text="rewritten", link="http://b.com")
+                ]
+            ),
         ),
+        patch(_PATCH_GET_SESSION),
     ):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+        result = _apply_document_ingestion_hook([doc])
     assert len(result) == 1
     assert len(result[0].sections) == 1
     section = result[0].sections[0]
@@ -325,16 +485,19 @@ def test_document_ingestion_hook_preserves_image_section_order() -> None:
         sections=[TextSection(text="original", link=None), image],
     )
     # Hook moves the image before the text section
-    with patch(
-        _PATCH_EXECUTE_HOOK,
-        return_value=DocumentIngestionResponse(
-            sections=[
-                DocumentIngestionSection(image_file_id="img-1", link=None),
-                DocumentIngestionSection(text="rewritten", link=None),
-            ]
+    with (
+        patch(
+            _PATCH_EXECUTE_HOOK,
+            return_value=DocumentIngestionResponse(
+                sections=[
+                    DocumentIngestionSection(image_file_id="img-1", link=None),
+                    DocumentIngestionSection(text="rewritten", link=None),
+                ]
+            ),
         ),
+        patch(_PATCH_GET_SESSION),
     ):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+        result = _apply_document_ingestion_hook([doc])
     assert len(result) == 1
     sections = result[0].sections
     assert len(sections) == 2
@@ -360,10 +523,11 @@ def test_document_ingestion_hook_mixed_batch() -> None:
             )
         return HookSkipped()
 
-    with patch(_PATCH_EXECUTE_HOOK, side_effect=_side_effect):
-        result = _apply_document_ingestion_hook(
-            [doc_drop, doc_rewrite, doc_skip], MagicMock()
-        )
+    with (
+        patch(_PATCH_EXECUTE_HOOK, side_effect=_side_effect),
+        patch(_PATCH_GET_SESSION),
+    ):
+        result = _apply_document_ingestion_hook([doc_drop, doc_rewrite, doc_skip])
 
     assert len(result) == 2
     ids = {d.id for d in result}
@@ -371,3 +535,464 @@ def test_document_ingestion_hook_mixed_batch() -> None:
     rewritten = next(d for d in result if d.id == "rewrite")
     assert isinstance(rewritten.sections[0], TextSection)
     assert rewritten.sections[0].text == "new text"
+
+
+# ---------------------------------------------------------------------------
+# process_image_sections
+# ---------------------------------------------------------------------------
+
+_PATCH_PREFIX = "onyx.indexing.indexing_pipeline"
+
+
+def _mock_file_store(image_map: dict[str, bytes]) -> MagicMock:
+    """Build a fake file store that serves images from a dict."""
+    store = MagicMock()
+
+    def _read_file_record(file_id: str) -> MagicMock | None:
+        if file_id not in image_map:
+            return None
+        record = MagicMock()
+        record.display_name = file_id
+        return record
+
+    def _read_file(file_id: str) -> MagicMock:
+        data = MagicMock()
+        data.read.return_value = image_map[file_id]
+        return data
+
+    store.read_file_record = _read_file_record
+    store.read_file = _read_file
+    return store
+
+
+def _make_image_doc(
+    doc_id: str,
+    sections: list[TextSection | ImageSection],
+) -> Document:
+    return Document(
+        id=doc_id,
+        title=f"Doc {doc_id}",
+        semantic_identifier=doc_id,
+        sections=sections,
+        source=DocumentSource.FILE,
+        metadata={},
+    )
+
+
+class TestProcessImageSections:
+    """Validate that parallel image summarization places results in the
+    correct section positions — especially under concurrent execution."""
+
+    def _run(
+        self,
+        documents: list[Document],
+        image_map: dict[str, bytes],
+        summarize_side_effect: Any = None,
+    ) -> list[Any]:
+        """Helper that patches all external deps and calls process_image_sections."""
+        if summarize_side_effect is None:
+
+            def summarize_side_effect(
+                **kwargs: Any,
+            ) -> str:
+                return f"summary-of-{kwargs['context_name']}"
+
+        with (
+            patch(
+                f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+                return_value=True,
+            ),
+            patch(
+                f"{_PATCH_PREFIX}.get_default_llm_with_vision",
+                return_value=MagicMock(),
+            ),
+            patch(
+                f"{_PATCH_PREFIX}.get_default_file_store",
+                return_value=_mock_file_store(image_map),
+            ),
+            patch(
+                f"{_PATCH_PREFIX}.summarize_image_with_error_handling",
+                side_effect=summarize_side_effect,
+            ),
+        ):
+            return process_image_sections(documents)
+
+    def test_interleaved_sections_preserve_order(self) -> None:
+        """Text and image sections must stay in their original positions."""
+        doc = _make_image_doc(
+            "doc1",
+            [
+                TextSection(text="text-0", link="link-0"),
+                ImageSection(image_file_id="img-A"),
+                TextSection(text="text-2", link="link-2"),
+                ImageSection(image_file_id="img-B"),
+                TextSection(text="text-4", link="link-4"),
+            ],
+        )
+        image_map = {"img-A": b"aa", "img-B": b"bb"}
+        result = self._run([doc], image_map)
+
+        sections = result[0].processed_sections
+        assert len(sections) == 5
+        assert sections[0].text == "text-0"
+        assert sections[1].text == "summary-of-img-A"
+        assert sections[1].image_file_id == "img-A"
+        assert sections[2].text == "text-2"
+        assert sections[3].text == "summary-of-img-B"
+        assert sections[3].image_file_id == "img-B"
+        assert sections[4].text == "text-4"
+
+    def test_multiple_documents_preserve_order(self) -> None:
+        """Each document's sections must be independent and correctly ordered."""
+        doc1 = _make_image_doc(
+            "doc1",
+            [
+                ImageSection(image_file_id="img-1"),
+                TextSection(text="middle", link=None),
+                ImageSection(image_file_id="img-2"),
+            ],
+        )
+        doc2 = _make_image_doc(
+            "doc2",
+            [
+                TextSection(text="start", link=None),
+                ImageSection(image_file_id="img-3"),
+            ],
+        )
+        image_map = {"img-1": b"a", "img-2": b"b", "img-3": b"c"}
+        result = self._run([doc1, doc2], image_map)
+
+        s1 = result[0].processed_sections
+        assert len(s1) == 3
+        assert s1[0].text == "summary-of-img-1"
+        assert s1[1].text == "middle"
+        assert s1[2].text == "summary-of-img-2"
+
+        s2 = result[1].processed_sections
+        assert len(s2) == 2
+        assert s2[0].text == "start"
+        assert s2[1].text == "summary-of-img-3"
+
+    def test_ordering_under_varied_latency(self) -> None:
+        """Simulate threads finishing in random order — results must still
+        land in the correct section positions."""
+        num_images = 10
+        sections: list[TextSection | ImageSection] = []
+        image_map: dict[str, bytes] = {}
+        for i in range(num_images):
+            fid = f"img-{i}"
+            sections.append(TextSection(text=f"text-{i}", link=None))
+            sections.append(ImageSection(image_file_id=fid))
+            image_map[fid] = f"data-{i}".encode()
+
+        doc = _make_image_doc("doc1", sections)
+
+        def _slow_summarize(**kwargs: Any) -> str:
+            time.sleep(random.uniform(0.001, 0.02))
+            return f"summary-of-{kwargs['context_name']}"
+
+        result = self._run([doc], image_map, summarize_side_effect=_slow_summarize)
+
+        ps = result[0].processed_sections
+        assert len(ps) == num_images * 2
+        for i in range(num_images):
+            assert ps[i * 2].text == f"text-{i}"
+            assert ps[i * 2 + 1].text == f"summary-of-img-{i}"
+            assert ps[i * 2 + 1].image_file_id == f"img-{i}"
+
+    def test_text_only_document_unchanged(self) -> None:
+        doc = _make_image_doc(
+            "doc1",
+            [
+                TextSection(text="hello", link="a"),
+                TextSection(text="world", link="b"),
+            ],
+        )
+        result = self._run([doc], {})
+
+        sections = result[0].processed_sections
+        assert len(sections) == 2
+        assert sections[0].text == "hello"
+        assert sections[1].text == "world"
+
+    def test_missing_file_record_does_not_corrupt_order(self) -> None:
+        """An image whose file record is missing should get a placeholder
+        without shifting other sections."""
+        doc = _make_image_doc(
+            "doc1",
+            [
+                ImageSection(image_file_id="exists"),
+                ImageSection(image_file_id="missing"),
+                TextSection(text="after", link=None),
+            ],
+        )
+        image_map = {"exists": b"data"}
+        result = self._run([doc], image_map)
+
+        sections = result[0].processed_sections
+        assert len(sections) == 3
+        assert sections[0].text == "summary-of-exists"
+        assert sections[1].text == "[Image could not be processed]"
+        assert sections[2].text == "after"
+
+    def test_summarization_failure_does_not_corrupt_order(self) -> None:
+        """If one summarization fails, other sections must be unaffected."""
+        doc = _make_image_doc(
+            "doc1",
+            [
+                ImageSection(image_file_id="ok"),
+                ImageSection(image_file_id="fail"),
+                ImageSection(image_file_id="ok2"),
+            ],
+        )
+        image_map = {"ok": b"a", "fail": b"b", "ok2": b"c"}
+
+        def _sometimes_fail(**kwargs: Any) -> str | None:
+            if kwargs["context_name"] == "fail":
+                raise ValueError("boom")
+            return f"summary-of-{kwargs['context_name']}"
+
+        result = self._run([doc], image_map, summarize_side_effect=_sometimes_fail)
+
+        sections = result[0].processed_sections
+        assert len(sections) == 3
+        assert sections[0].text == "summary-of-ok"
+        # allow_failures=True → None result → fallback text
+        assert sections[1].text == "[Error processing image]"
+        assert sections[2].text == "summary-of-ok2"
+
+
+# ---------------------------------------------------------------------------
+# content_hash
+# ---------------------------------------------------------------------------
+
+
+def _doc_with_text(title: str | None, *texts: str) -> Document:
+    return Document(
+        id="x",
+        title=title,
+        semantic_identifier="x",
+        sections=[TextSection(text=t, link=None) for t in texts],
+        source=DocumentSource.WEB,
+        metadata={},
+    )
+
+
+def test_content_hash_is_stable() -> None:
+    doc = _doc_with_text("Title", "Hello world")
+    assert doc.content_hash() == doc.content_hash()
+
+
+def test_content_hash_changes_with_text() -> None:
+    doc1 = _doc_with_text("Title", "Hello world")
+    doc2 = _doc_with_text("Title", "Hello world CHANGED")
+    assert doc1.content_hash() != doc2.content_hash()
+
+
+def test_content_hash_changes_with_title() -> None:
+    doc1 = _doc_with_text("Title A", "Same content")
+    doc2 = _doc_with_text("Title B", "Same content")
+    assert doc1.content_hash() != doc2.content_hash()
+
+
+def test_content_hash_none_title_treated_as_empty() -> None:
+    doc_none = _doc_with_text(None, "content")
+    doc_empty = _doc_with_text("", "content")
+    assert doc_none.content_hash() == doc_empty.content_hash()
+
+
+def test_content_hash_changes_with_metadata() -> None:
+    doc1 = _doc_with_text("T", "content")
+    doc1.doc_metadata = {"author": "Alice"}
+    doc2 = _doc_with_text("T", "content")
+    doc2.doc_metadata = {"author": "Bob"}
+    assert doc1.content_hash() != doc2.content_hash()
+
+
+def test_content_hash_metadata_key_order_is_irrelevant() -> None:
+    doc1 = _doc_with_text("T", "content")
+    doc1.doc_metadata = {"a": "1", "b": "2"}
+    doc2 = _doc_with_text("T", "content")
+    doc2.doc_metadata = {"b": "2", "a": "1"}
+    assert doc1.content_hash() == doc2.content_hash()
+
+
+def test_content_hash_ignores_semantic_identifier() -> None:
+    doc1 = Document(
+        id="x",
+        title="T",
+        semantic_identifier="old-name",
+        sections=[TextSection(text="content", link=None)],
+        source=DocumentSource.WEB,
+        metadata={},
+    )
+    doc2 = Document(
+        id="x",
+        title="T",
+        semantic_identifier="new-name",
+        sections=[TextSection(text="content", link=None)],
+        source=DocumentSource.WEB,
+        metadata={},
+    )
+    assert doc1.content_hash() == doc2.content_hash()
+
+
+def test_content_hash_changes_with_owners() -> None:
+    from onyx.connectors.models import BasicExpertInfo
+
+    doc1 = _doc_with_text("T", "content")
+    doc1.primary_owners = [BasicExpertInfo(email="alice@example.com")]
+    doc2 = _doc_with_text("T", "content")
+    doc2.primary_owners = [BasicExpertInfo(email="bob@example.com")]
+    assert doc1.content_hash() != doc2.content_hash()
+
+
+def test_content_hash_owner_order_is_irrelevant() -> None:
+    from onyx.connectors.models import BasicExpertInfo
+
+    alice = BasicExpertInfo(email="alice@example.com")
+    bob = BasicExpertInfo(email="bob@example.com")
+    doc1 = _doc_with_text("T", "content")
+    doc1.primary_owners = [alice, bob]
+    doc2 = _doc_with_text("T", "content")
+    doc2.primary_owners = [bob, alice]
+    assert doc1.content_hash() == doc2.content_hash()
+
+
+def test_content_hash_includes_image_file_id() -> None:
+    doc_text_only = _doc_with_text("T", "text")
+    doc_with_image = Document(
+        id="x",
+        title="T",
+        semantic_identifier="x",
+        sections=[
+            TextSection(text="text", link=None),
+            ImageSection(image_file_id="img-1"),
+        ],
+        source=DocumentSource.WEB,
+        metadata={},
+    )
+    assert doc_text_only.content_hash() != doc_with_image.content_hash()
+
+
+def test_content_hash_changes_when_image_file_id_changes() -> None:
+    def _image_doc(file_id: str) -> Document:
+        return Document(
+            id="x",
+            title="T",
+            semantic_identifier="x",
+            sections=[ImageSection(image_file_id=file_id)],
+            source=DocumentSource.WEB,
+            metadata={},
+        )
+
+    assert _image_doc("img-v1").content_hash() != _image_doc("img-v2").content_hash()
+
+
+# ---------------------------------------------------------------------------
+# get_docs_to_update — content hash skip
+# ---------------------------------------------------------------------------
+
+
+def _make_db_doc(
+    doc_id: str,
+    content_hash: str | None = None,
+    doc_updated_at: datetime | None = None,
+) -> MagicMock:
+    db_doc = MagicMock()
+    db_doc.id = doc_id
+    db_doc.content_hash = content_hash
+    db_doc.doc_updated_at = doc_updated_at
+    return db_doc
+
+
+def test_get_docs_to_update_new_doc_always_included() -> None:
+    doc = _doc_with_text("Title", "content")
+    doc.id = "new-doc"
+    docs, hashes = get_docs_to_update([doc], db_docs=[])
+    assert len(docs) == 1
+    assert "new-doc" in hashes
+
+
+def test_get_docs_to_update_hash_match_skips_doc_without_timestamp() -> None:
+    """Hash skip applies only when doc_updated_at is absent (e.g. web connector)."""
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.doc_updated_at = None
+    stored_hash = doc.content_hash()
+    db_doc = _make_db_doc("doc1", content_hash=stored_hash)
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    assert docs == []
+    assert hashes == {}
+
+
+def test_get_docs_to_update_hash_not_consulted_when_timestamp_available() -> None:
+    """When doc_updated_at advances, the document must be re-indexed even if the
+    hash matches — e.g. GDrive in-place image replacement keeps image_file_id
+    the same but the image bytes changed."""
+    old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    new_time = datetime(2021, 1, 1, tzinfo=timezone.utc)
+    doc = _doc_with_text("Title", "same text")
+    doc.id = "doc1"
+    doc.doc_updated_at = new_time
+    stored_hash = doc.content_hash()  # hash matches — text unchanged
+    db_doc = _make_db_doc("doc1", content_hash=stored_hash, doc_updated_at=old_time)
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    assert len(docs) == 1  # timestamp advanced → must re-index despite hash match
+    assert "doc1" in hashes
+
+
+def test_get_docs_to_update_hash_mismatch_includes_doc() -> None:
+    doc = _doc_with_text("Title", "new content")
+    doc.id = "doc1"
+    db_doc = _make_db_doc("doc1", content_hash="stale_hash_abc123")
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    assert len(docs) == 1
+    assert docs[0].id == "doc1"
+    assert hashes["doc1"] == doc.content_hash()
+
+
+def test_get_docs_to_update_null_hash_always_included() -> None:
+    """Null hash (pre-migration doc) must be indexed to populate the hash."""
+    doc = _doc_with_text("Title", "content")
+    doc.id = "doc1"
+    db_doc = _make_db_doc("doc1", content_hash=None)
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    assert len(docs) == 1
+    assert "doc1" in hashes
+
+
+def test_get_docs_to_update_time_skip_still_works() -> None:
+    """The existing doc_updated_at skip should still apply before the hash check."""
+    doc = _doc_with_text("Title", "content")
+    doc.id = "doc1"
+    old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    doc.doc_updated_at = old_time
+    db_doc = _make_db_doc("doc1", content_hash=None, doc_updated_at=old_time)
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    assert docs == []
+    assert hashes == {}
+
+
+def test_get_docs_to_update_mixed_batch() -> None:
+    """Unchanged doc is skipped; changed doc is included."""
+    doc_unchanged = _doc_with_text("T", "same")
+    doc_unchanged.id = "unchanged"
+    doc_changed = _doc_with_text("T", "different now")
+    doc_changed.id = "changed"
+
+    db_unchanged = _make_db_doc("unchanged", content_hash=doc_unchanged.content_hash())
+    db_changed = _make_db_doc("changed", content_hash="old_hash")
+
+    docs, hashes = get_docs_to_update(
+        [doc_unchanged, doc_changed], db_docs=[db_unchanged, db_changed]
+    )
+    assert len(docs) == 1
+    assert docs[0].id == "changed"
+    assert "changed" in hashes
+    assert "unchanged" not in hashes

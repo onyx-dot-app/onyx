@@ -1,3 +1,27 @@
+/* Soft fade-in for KaTeX math elements that mount during streaming. The
+   `.streaming-katex` wrapper is only applied to the in-flight markdown
+   subtree, so the fade fires when a `$$...$$` flips from streamed
+   plain-text source to a rendered formula — and never on already-loaded
+   chats, search panels, or route navigations. */
+@keyframes onyx-math-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.streaming-katex .katex {
+  animation: onyx-math-appear 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-katex .katex {
+    animation: none;
+  }
+}
+
 /* Map Tailwind Typography prose variables to the project's color tokens.
    These auto-switch for dark mode via colors.css — no dark: modifier needed.
    Note: text-05 = highest contrast, text-01 = lowest. */

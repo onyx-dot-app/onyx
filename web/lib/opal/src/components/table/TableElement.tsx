@@ -3,7 +3,7 @@
 import React from "react";
 import { cn } from "@opal/utils";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
-import type { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 import type { ExtremaSizeVariants, SizeVariants } from "@opal/types";
 
 // ---------------------------------------------------------------------------
@@ -14,8 +14,9 @@ type TableSize = Extract<SizeVariants, "md" | "lg">;
 type TableVariant = "rows" | "cards";
 type SelectionBehavior = "no-select" | "single-select" | "multi-select";
 
-interface TableProps
-  extends WithoutStyles<React.TableHTMLAttributes<HTMLTableElement>> {
+interface TableProps extends WithoutStyles<
+  React.TableHTMLAttributes<HTMLTableElement>
+> {
   ref?: React.Ref<HTMLTableElement>;
   /** Visual row variant. @default "cards" */
   variant?: TableVariant;

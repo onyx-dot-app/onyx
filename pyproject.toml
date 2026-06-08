@@ -12,12 +12,15 @@ dependencies = [
     "cohere==5.6.1",
     "fastapi==0.133.1",
     "google-genai==1.52.0",
-    "litellm[google]==1.81.6",
+    "litellm[google]==1.83.14",
     "openai==2.14.0",
     "pydantic==2.11.7",
+    # Shared so structured JSON logging (LOG_FORMAT=json) works in the
+    # model_server image too, not just the backend.
+    "python-json-logger==4.1.0",
     "prometheus_client>=0.21.1",
     "prometheus_fastapi_instrumentator==7.1.0",
-    "retry==0.9.2", # This pulls in py which is in CVE-2022-42969, must remove py from image
+    "retry==0.9.2",                             # This pulls in py which is in CVE-2022-42969, must remove py from image
     "sentry-sdk==2.14.0",
     "uvicorn==0.35.0",
     "voyageai==0.2.3",
@@ -29,7 +32,6 @@ dependencies = [
 ]
 
 [dependency-groups]
-# Main backend application dependencies
 backend = [
     "aiohttp==3.13.4",
     "alembic==1.18.4",
@@ -42,6 +44,8 @@ backend = [
     "celery==5.5.1",
     "chardet==5.2.0",
     "chonkie==1.0.10",
+    "croniter==6.2.2",
+    "cron-descriptor==2.0.8",
     "dask==2026.1.1",
     "discord.py==2.4.0",
     "distributed==2026.1.1",
@@ -53,22 +57,22 @@ backend = [
     "google-api-python-client==2.86.0",
     "google-auth-httplib2==0.1.0",
     "google-auth-oauthlib==1.0.0",
+    "google-cloud-storage>=3.0.0,<4.0.0",
     # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
     # will reintroduce this when library version catches up
     # "gpt4all==2.0.2",
     "httpcore==1.0.9",
     "httpx[http2]==0.28.1",
     "httpx-oauth==0.15.1",
-    "huggingface-hub==1.10.2",
     "inflection==0.5.1",
     "jira==3.10.5",
     "jsonref==1.1.0",
     "kubernetes==31.0.0",
     "trafilatura==1.12.2",
-    "langchain-core==1.2.28",
+    "langchain-core==1.3.3",
     "lazy_imports==1.0.1",
-    "lxml==5.3.0",
-    "Mako==1.3.11",
+    "lxml==6.1.0",
+    "Mako==1.3.12",
     # NOTE: Do not update without understanding the patching behavior in
     # get_markitdown_converter in
     # backend/onyx/file_processing/extract_file_text.py and what impacts
@@ -91,7 +95,7 @@ backend = [
     "pycryptodome==3.19.1",
     "PyGithub==2.5.0",
     "pympler==1.1",
-    "python-dateutil==2.8.2",
+    "python-dateutil==2.9.0.post0",
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
     "pypandoc_binary==1.16.2",
@@ -100,7 +104,7 @@ backend = [
     "pytest-playwright==0.7.2",
     "python-docx==1.1.2",
     "python-dotenv==1.2.2",
-    "python-multipart==0.0.26",
+    "python-multipart==0.0.27",
     "pywikibot==9.0.0",
     "redis==5.0.8",
     "requests==2.33.0",
@@ -111,7 +115,7 @@ backend = [
     "SQLAlchemy==2.0.15",
     "starlette==0.49.3",
     "supervisor==4.3.0",
-    "RapidFuzz==3.13.0",
+    "RapidFuzz==3.14.5",
     "tiktoken==0.7.0",
     "timeago==1.0.16",
     "types-openpyxl==3.0.4.7",
@@ -123,8 +127,8 @@ backend = [
     "dropbox==12.0.2",
     "shapely==2.0.6",
     "stripe==10.12.0",
-    "urllib3==2.6.3",
-    "mistune==3.2.0",
+    "urllib3==2.7.0",
+    "mistune==3.2.1",
     "sendgrid==6.12.5",
     "exa_py==1.15.4",
     "braintrust==0.3.9",
@@ -133,12 +137,11 @@ backend = [
     "openinference-instrumentation==0.1.42",
     "opentelemetry-proto>=1.39.0",
     "python3-saml==1.15.0",
-    "xmlsec==1.3.14",
+    "xmlsec==1.3.17",
 ]
 
 # Dev tools
 dev = [
-    "black==26.3.1",
     "celery-types==0.19.0",
     "faker==40.1.2",
     "hatchling==1.28.0",
@@ -146,7 +149,7 @@ dev = [
     "manygo==0.2.0",
     "matplotlib==3.10.8",
     "ty==0.0.31",
-    "onyx-devtools==0.7.5",
+    "onyx-devtools==0.7.7",
     "openapi-generator-cli==7.17.0",
     "pandas-stubs~=2.3.3",
     "pre-commit==3.2.2",
@@ -157,7 +160,6 @@ dev = [
     "pytest-xdist==3.8.0",
     "pytest==9.0.3",
     "release-tag==0.5.2",
-    "reorder-python-imports-black==3.14.0",
     "ruff==0.12.0",
     "types-beautifulsoup4==4.12.0.3",
     "types-html5lib==1.1.11.13",
@@ -177,9 +179,7 @@ dev = [
 ]
 
 # Enterprise Edition features
-ee = [
-    "posthog==3.7.4",
-]
+ee = ["posthog==3.7.4"]
 
 # Model server specific dependencies (ML packages)
 model_server = [
@@ -189,12 +189,40 @@ model_server = [
     "safetensors==0.5.3",
     "sentence-transformers==5.4.1",
     "torch==2.9.1",
-    "transformers==5.5.4",
+    # Do NOT upgrade to >=5 without addressing the `from_pretrained()` buffer
+    # corruption bug: persistent=False buffers (notably RoPE `inv_freq`) are
+    # loaded with garbage memory, producing all-NaN embeddings.
+    # See https://github.com/huggingface/transformers/issues/44534 and
+    # https://github.com/huggingface/transformers/issues/43950 (both closed
+    # wontfix upstream).
+    "transformers==4.57.6",
     "sentry-sdk[fastapi,celery,starlette]==2.14.0",
 ]
 
 [tool.uv]
 default-groups = ["backend", "dev", "ee", "model_server"]
+
+# litellm >=1.83.x switched from loose ranges to exact `==` pins on its
+# transitive dependencies (see https://github.com/BerriAI/litellm/issues/25280),
+# which forces downgrades of packages we already pin to newer versions and
+# regressions on transitively resolved packages. Replace those exact pins with
+# the loose ranges litellm declared prior to 1.83.1 so that uv's resolver is
+# free to pick versions consistent with our top-level pins (or newer).
+override-dependencies = [
+    "aiohttp>=3.10",
+    "click",
+    "fastuuid>=0.13.0",
+    "httpx[http2]>=0.23.0",
+    "importlib-metadata>=6.8.0",
+    "jinja2>=3.1.2,<4.0.0",
+    "jsonschema>=4.23.0,<5.0.0",
+    "openai",
+    "pydantic",
+    "python-dotenv",
+    "tiktoken",
+    "tokenizers",
+    "google-cloud-aiplatform>=1.38.0",
+]
 
 [tool.ty.environment]
 python-version = "3.11"
@@ -205,6 +233,7 @@ include = ["backend"]
 exclude = [
     "**/generated/**",
     "**/.venv/**",
+    "**/onyx/server/features/build/sandbox/kubernetes/docker/daemon/**",
     "**/onyx/server/features/build/sandbox/kubernetes/docker/skills/**",
     "**/onyx/server/features/build/sandbox/kubernetes/docker/templates/**",
 ]
@@ -220,7 +249,12 @@ members = ["tools/ods"]
 
 [tool.basedpyright]
 include = ["backend"]
-exclude = ["backend/generated", "backend/onyx/server/features/build/sandbox/kubernetes/docker/skills/pptx", "backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv"]
+exclude = [
+    "backend/generated",
+    "backend/onyx/server/features/build/sandbox/kubernetes/docker/daemon",
+    "backend/onyx/server/features/build/sandbox/kubernetes/docker/skills/pptx",
+    "backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv",
+]
 typeCheckingMode = "off"
 
 [tool.ruff]
@@ -229,16 +263,22 @@ target-version = "py311"
 
 [tool.ruff.lint]
 ignore = [
-  "E501", # Long lines are handled by Black.
+    "E501", # Long lines are handled by `ruff format`.
+    # flake8-bandit (S) rules ignored as noisy / low-signal:
+    "S101", # `assert` — used heavily in pytest and as runtime invariant checks.
+    "S105", # Hardcoded password string — very high false-positive rate.
+    "S106", # Hardcoded password func arg — very high false-positive rate.
+    "S107", # Hardcoded password default — very high false-positive rate.
+    "S110", # try/except/pass — intentional pattern.
+    "S112", # try/except/continue — intentional pattern.
+    "S311", # Non-crypto random — used for jitter/sampling/non-security purposes.
+    "S603", # subprocess without shell=True — this is the *correct* invocation form.
+    "S607", # Start-process with partial path — common and low signal.
+    # Tracked in kanban ticket #491 — to be removed once existing violations are
+    # cleaned up:
+    "S113", # request-without-timeout (~463 existing violations).
 ]
-select = [
-  "ARG",
-  "E",
-  "F",
-  "I",
-  "S324",
-  "W",
-]
+select = ["ARG", "E", "F", "I", "S", "W"]
 
 [tool.ruff.lint.isort]
 force-single-line = true
@@ -246,10 +286,20 @@ order-by-type = false
 known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 
 [tool.ruff.lint.per-file-ignores]
-# alembic has a folder named `alembic` in backend/ which confuses import sorters
-"backend/alembic/**" = ["I"]
-"backend/alembic_tenants/**" = ["I"]
+# alembic has a folder named `alembic` in backend/ which confuses import sorters.
+# Migrations write raw DDL, so S608 (hardcoded-sql) is unavoidable.
+"backend/alembic/**" = ["I", "S608"]
+"backend/alembic_tenants/**" = ["I", "S608"]
+# Tests use asserts, mock credentials, and lots of patterns the bandit rules
+# flag as suspicious. Disable the full S rule set in tests.
+"backend/tests/**" = ["S"]
+# Ops and developer scripts run by humans (kubectl exec payloads, one-off
+# data dumps, manual tenant cleanup) commonly use `/tmp/...` script payloads,
+# pipe shell commands, and build ad-hoc SQL against trusted internal inputs
+# (tenant IDs, schema names). Other S rules still apply.
+"backend/scripts/**" = ["S108", "S602", "S608"]
 
 [tool.setuptools.packages.find]
 where = ["backend"]
 include = ["onyx*", "tests*"]
+# Main backend application dependencies

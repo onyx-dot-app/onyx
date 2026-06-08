@@ -18,12 +18,12 @@ MIGRATION_TASK_TIME_LIMIT_S = 60 * 6  # 6 minutes.
 # The maximum time the lock can be held for. Will automatically be released
 # after this time.
 MIGRATION_TASK_LOCK_TIMEOUT_S = 60 * 7  # 7 minutes.
-assert (
-    MIGRATION_TASK_SOFT_TIME_LIMIT_S < MIGRATION_TASK_TIME_LIMIT_S
-), "The soft time limit must be less than the time limit."
-assert (
-    MIGRATION_TASK_TIME_LIMIT_S < MIGRATION_TASK_LOCK_TIMEOUT_S
-), "The time limit must be less than the lock timeout."
+assert MIGRATION_TASK_SOFT_TIME_LIMIT_S < MIGRATION_TASK_TIME_LIMIT_S, (
+    "The soft time limit must be less than the time limit."
+)
+assert MIGRATION_TASK_TIME_LIMIT_S < MIGRATION_TASK_LOCK_TIMEOUT_S, (
+    "The time limit must be less than the lock timeout."
+)
 # Time to wait to acquire the lock.
 MIGRATION_TASK_LOCK_BLOCKING_TIMEOUT_S = 60 * 2  # 2 minutes.
 

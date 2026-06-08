@@ -40,6 +40,8 @@ from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
+from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
@@ -73,6 +75,7 @@ from onyx.server.documents.connector import router as connector_router
 from onyx.server.documents.credential import router as credential_router
 from onyx.server.documents.document import router as document_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
+from onyx.server.documents.targeted_reindex import router as targeted_reindex_router
 from onyx.server.features.build.api.api import public_build_router
 from onyx.server.features.build.api.api import router as build_router
 from onyx.server.features.default_assistant.api import (
@@ -97,6 +100,9 @@ from onyx.server.features.persona.api import admin_router as admin_persona_route
 from onyx.server.features.persona.api import agents_router
 from onyx.server.features.persona.api import basic_router as persona_router
 from onyx.server.features.projects.api import router as projects_router
+from onyx.server.features.search.api import router as search_api_router
+from onyx.server.features.skill.api import admin_router as skill_admin_router
+from onyx.server.features.skill.api import user_router as skill_router
 from onyx.server.features.tool.api import admin_router as admin_tool_router
 from onyx.server.features.tool.api import router as tool_router
 from onyx.server.features.user_oauth_token.api import router as user_oauth_token_router
@@ -146,6 +152,7 @@ from onyx.server.token_rate_limits.api import router as token_rate_limit_setting
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx
+from onyx.skills.builtins import register_builtin_skills
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.client_ip import ClientIPMiddleware
 from onyx.utils.logger import setup_logger
@@ -155,6 +162,7 @@ from onyx.utils.middleware import add_onyx_request_id_middleware
 from onyx.utils.telemetry import get_or_generate_uuid
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from onyx.utils.variable_functionality import global_version
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
@@ -184,19 +192,19 @@ setup_uvicorn_logger(shared_file_handlers=file_handlers)
 def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     if not isinstance(exc, RequestValidationError):
         logger.error(
-            f"Unexpected exception type in validation_exception_handler - {type(exc)}"
+            "Unexpected exception type in validation_exception_handler - %s", type(exc)
         )
         raise exc
 
     exc_str = f"{exc}".replace("\n", " ").replace("   ", " ")
-    logger.exception(f"{request}: {exc_str}")
+    logger.exception("%s: %s", request, exc_str)
     content = {"status_code": 422, "message": exc_str, "data": None}
     return JSONResponse(content=content, status_code=422)
 
 
 def value_error_handler(_: Request, exc: Exception) -> JSONResponse:
     if not isinstance(exc, ValueError):
-        logger.error(f"Unexpected exception type in value_error_handler - {type(exc)}")
+        logger.error("Unexpected exception type in value_error_handler - %s", type(exc))
         raise exc
 
     try:
@@ -311,7 +319,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     # Set recursion limit
     if SYSTEM_RECURSION_LIMIT is not None:
         sys.setrecursionlimit(SYSTEM_RECURSION_LIMIT)
-        logger.notice(f"System recursion limit set to {SYSTEM_RECURSION_LIMIT}")
+        logger.notice("System recursion limit set to %s", SYSTEM_RECURSION_LIMIT)
 
     SqlEngine.set_app_name(POSTGRES_WEB_APP_NAME)
 
@@ -337,6 +345,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         },
     )
 
+    # Self-hosted license seat + expiry gauges on /metrics (EE-only, no-op on CE)
+    fetch_ee_implementation_or_noop(
+        "onyx.server.metrics.license_metrics", "register_license_metrics"
+    )()
+
     verify_auth = fetch_versioned_implementation(
         "onyx.auth.users", "verify_auth_setting"
     )
@@ -352,6 +365,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
     # fill up Postgres connection pools
     await warm_up_connections()
+
+    # Tenant-agnostic; sits outside the multi-tenant fork below.
+    register_builtin_skills()
 
     if not MULTI_TENANT:
         # We cache this at the beginning so there is no delay in the first telemetry
@@ -402,11 +418,11 @@ def log_http_error(request: Request, exc: Exception) -> JSONResponse:
     if isinstance(exc, BasicAuthenticationError):
         # For BasicAuthenticationError, just log a brief message without stack trace
         # (almost always spammy)
-        logger.debug(f"Authentication failed: {str(exc)}")
+        logger.debug("Authentication failed: %s", str(exc))
 
     elif status_code == 404 and request.url.path == "/metrics":
         # Log 404 errors for the /metrics endpoint with debug level
-        logger.debug(f"404 error for /metrics endpoint: {str(exc)}")
+        logger.debug("404 error for /metrics endpoint: %s", str(exc))
 
     elif status_code >= 400:
         error_msg = f"{str(exc)}\n"
@@ -466,11 +482,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, input_prompt_router)
     include_router_with_global_prefix_prepended(application, admin_input_prompt_router)
     include_router_with_global_prefix_prepended(application, cc_pair_router)
+    include_router_with_global_prefix_prepended(application, targeted_reindex_router)
     include_router_with_global_prefix_prepended(application, projects_router)
     include_router_with_global_prefix_prepended(application, public_build_router)
     include_router_with_global_prefix_prepended(application, build_router)
     include_router_with_global_prefix_prepended(application, document_set_router)
     include_router_with_global_prefix_prepended(application, hierarchy_router)
+    include_router_with_global_prefix_prepended(application, search_api_router)
     include_router_with_global_prefix_prepended(application, search_settings_router)
     include_router_with_global_prefix_prepended(
         application, slack_bot_management_router
@@ -518,6 +536,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, federated_router)
     include_router_with_global_prefix_prepended(application, mcp_router)
     include_router_with_global_prefix_prepended(application, mcp_admin_router)
+    include_router_with_global_prefix_prepended(application, skill_router)
+    include_router_with_global_prefix_prepended(application, skill_admin_router)
 
     include_router_with_global_prefix_prepended(application, pat_router)
     include_router_with_global_prefix_prepended(application, captcha_router)
@@ -556,10 +576,14 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     if AUTH_TYPE == AuthType.GOOGLE_OAUTH or (
         AUTH_TYPE == AuthType.BASIC and OAUTH_ENABLED
     ):
+        google_login_scopes = list(
+            GOOGLE_OAUTH_SCOPE_OVERRIDE or GOOGLE_LOGIN_BASE_SCOPES
+        )
+
         oauth_client = GoogleOAuth2(
             OAUTH_CLIENT_ID,
             OAUTH_CLIENT_SECRET,
-            scopes=["openid", "email", "profile"],
+            scopes=google_login_scopes,
         )
         include_auth_router_with_prefix(
             application,
@@ -589,7 +613,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             if "offline_access" not in oidc_scopes:
                 oidc_scopes.append("offline_access")
         except Exception as e:
-            logger.warning(f"Error configuring OIDC scopes: {e}")
+            logger.warning("Error configuring OIDC scopes: %s", e)
             # Fall back to default scopes if there's an error
             oidc_scopes = BASE_SCOPES
 
@@ -694,7 +718,10 @@ app = fetch_versioned_implementation(module="onyx.main", attribute="get_applicat
 
 if __name__ == "__main__":
     logger.notice(
-        f"Starting Onyx Backend version {__version__} on http://{APP_HOST}:{str(APP_PORT)}/"
+        "Starting Onyx Backend version %s on http://%s:%s/",
+        __version__,
+        APP_HOST,
+        str(APP_PORT),
     )
 
     if global_version.is_ee_version():

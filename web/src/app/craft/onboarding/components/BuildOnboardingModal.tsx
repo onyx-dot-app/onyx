@@ -7,7 +7,7 @@ import {
   LLMProviderConfiguredSource,
 } from "@/lib/analytics";
 import { SvgArrowRight, SvgArrowLeft, SvgX } from "@opal/icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import {
   BuildUserInfo,
@@ -22,9 +22,9 @@ import {
   getBuildLlmSelection,
   getDefaultLlmSelection,
 } from "@/app/craft/onboarding/constants";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
-import { testApiKeyHelper } from "@/sections/modals/llmConfig/svc";
+import { LLMProviderDescriptor } from "@/lib/languageModels/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { testApiKeyHelper } from "@/sections/modals/languageModels/svc";
 import OnboardingInfoPages from "@/app/craft/onboarding/components/OnboardingInfoPages";
 import OnboardingUserInfo from "@/app/craft/onboarding/components/OnboardingUserInfo";
 import OnboardingLlmSetup, {
@@ -90,7 +90,7 @@ function getStepsForMode(
 
       return steps;
 
-    case "edit-persona":
+    case "edit-user-info":
       return ["user-info"];
 
     case "add-llm":
@@ -249,7 +249,7 @@ export default function BuildOnboardingModal({
 
     try {
       const response = await fetch(
-        `${LLM_PROVIDERS_ADMIN_URL}?is_creation=true`,
+        `${SWR_KEYS.adminLlmProviders}?is_creation=true`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -268,9 +268,12 @@ export default function BuildOnboardingModal({
       if (!llmProviders || llmProviders.length === 0) {
         const newProvider = await response.json();
         if (newProvider?.id) {
-          await fetch(`${LLM_PROVIDERS_ADMIN_URL}/${newProvider.id}/default`, {
-            method: "POST",
-          });
+          await fetch(
+            `${SWR_KEYS.adminLlmProviders}/${newProvider.id}/default`,
+            {
+              method: "POST",
+            }
+          );
         }
       }
 
@@ -373,7 +376,7 @@ export default function BuildOnboardingModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" />
 
       {/* Modal */}
       <div className="relative z-10 w-full max-w-xl mx-4 bg-background-tint-01 rounded-16 shadow-lg border border-border-01">
@@ -420,13 +423,7 @@ export default function BuildOnboardingModal({
           )}
 
           {/* Page 1 - What is Onyx Craft? */}
-          {currentStep === "page1" && (
-            <OnboardingInfoPages
-              step="page1"
-              workArea={workArea}
-              level={level}
-            />
-          )}
+          {currentStep === "page1" && <OnboardingInfoPages step="page1" />}
 
           {/* Navigation buttons */}
           <div className="relative flex justify-between items-center pt-2">

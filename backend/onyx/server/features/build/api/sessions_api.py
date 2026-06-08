@@ -1,5 +1,6 @@
 """API endpoints for Build Mode session management."""
 
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -8,6 +9,7 @@ from fastapi import File
 from fastapi import HTTPException
 from fastapi import Response
 from fastapi import UploadFile
+from pydantic import BaseModel
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
@@ -18,6 +20,9 @@ from onyx.db.enums import Permission
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildMessage
 from onyx.db.models import User
+from onyx.db.scheduled_task import get_scheduled_run_context
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import ArtifactResponse
 from onyx.server.features.build.api.models import DetailedSessionResponse
@@ -51,6 +56,8 @@ from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.manager import UploadLimitExceededError
 from onyx.server.features.build.utils import sanitize_filename
 from onyx.server.features.build.utils import validate_file
+from onyx.skills.push import build_user_skills_payload
+from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -127,13 +134,11 @@ def create_session(
         session_manager = SessionManager(db_session)
         build_session = session_manager.get_or_create_empty_session(
             user.id,
-            user_work_area=(
-                request.user_work_area if request.demo_data_enabled else None
-            ),
-            user_level=request.user_level if request.demo_data_enabled else None,
+            user_work_area=request.user_work_area,
+            user_level=request.user_level,
             llm_provider_type=request.llm_provider_type,
             llm_model_name=request.llm_model_name,
-            demo_data_enabled=request.demo_data_enabled,
+            headless=request.headless,
         )
         db_session.commit()
 
@@ -148,7 +153,7 @@ def create_session(
         raise HTTPException(status_code=429, detail=str(e))
     except Exception as e:
         db_session.rollback()
-        logger.error(f"Session creation failed: {e}")
+        logger.error("Session creation failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Session creation failed: {e}")
     finally:
         if lock.owned():
@@ -341,7 +346,7 @@ def delete_session(
     except Exception as e:
         # Sandbox termination failed - rollback to preserve session
         db_session.rollback()
-        logger.error(f"Failed to delete session {session_id}: {e}")
+        logger.error("Failed to delete session %s: %s", session_id, e)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete session: {e}",
@@ -418,7 +423,8 @@ def restore_session(
 
             if not is_healthy:
                 logger.warning(
-                    f"Sandbox {sandbox.id} marked as RUNNING but pod is unhealthy/missing. Entering recovery mode."
+                    "Sandbox %s marked as RUNNING but pod is unhealthy/missing. Entering recovery mode.",
+                    sandbox.id,
                 )
                 # Terminate to clean up any lingering K8s resources
                 sandbox_manager.terminate(sandbox.id)
@@ -472,6 +478,9 @@ def restore_session(
                 if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
                     snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
+                skills_section, skills_files = build_user_skills_payload(
+                    user, db_session
+                )
                 if snapshot:
                     try:
                         sandbox_manager.restore_snapshot(
@@ -479,15 +488,15 @@ def restore_session(
                             session_id=session_id,
                             snapshot_storage_path=snapshot.storage_path,
                             tenant_id=tenant_id,
-                            nextjs_port=session.nextjs_port,  # ty: ignore[invalid-argument-type]
+                            nextjs_port=session.nextjs_port,
                             llm_config=llm_config,
-                            use_demo_data=session.demo_data_enabled,
+                            skills_section=skills_section,
                         )
                         session.status = BuildSessionStatus.ACTIVE
                         db_session.commit()
                     except Exception as e:
                         logger.error(
-                            f"Snapshot restore failed for session {session_id}: {e}"
+                            "Snapshot restore failed for session %s: %s", session_id, e
                         )
                         session.nextjs_port = None
                         db_session.commit()
@@ -498,17 +507,31 @@ def restore_session(
                         sandbox_id=sandbox.id,
                         session_id=session_id,
                         llm_config=llm_config,
-                        nextjs_port=session.nextjs_port,  # ty: ignore[invalid-argument-type]
+                        nextjs_port=session.nextjs_port,
+                        skills_section=skills_section,
                     )
                     session.status = BuildSessionStatus.ACTIVE
                     db_session.commit()
+
+                try:
+                    hydrate_sandbox_skills(
+                        sandbox.id, user, db_session, files=skills_files
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to push skills to sandbox %s",
+                        sandbox.id,
+                        exc_info=True,
+                    )
         else:
             logger.warning(
-                f"Sandbox {sandbox.id} status is {sandbox.status} after re-provision, expected RUNNING"
+                "Sandbox %s status is %s after re-provision, expected RUNNING",
+                sandbox.id,
+                sandbox.status,
             )
 
     except Exception as e:
-        logger.error(f"Failed to restore session {session_id}: {e}", exc_info=True)
+        logger.error("Failed to restore session %s: %s", session_id, e, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to restore session: {e}",
@@ -881,3 +904,44 @@ def delete_file_endpoint(
         raise HTTPException(status_code=404, detail="File not found")
 
     return Response(status_code=204)
+
+
+# =============================================================================
+# Scheduled Task — session-view banner
+# =============================================================================
+
+
+class ScheduledRunContextResponse(BaseModel):
+    """Context surfaced by the session-view banner when a session came from a
+    scheduled run. Returned by ``GET /sessions/{id}/scheduled-run-context``.
+    """
+
+    task_id: str
+    task_name: str
+    started_at: datetime
+
+
+@router.get("/{session_id}/scheduled-run-context")
+def get_session_scheduled_run_context(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ScheduledRunContextResponse:
+    """Return the scheduled-task context for a session, if any.
+
+    The web UI calls this on every session view; a 200 response means
+    "render the banner above the transcript and hide the chat input". A
+    404 means "this is an interactive session, behave normally".
+    """
+    context = get_scheduled_run_context(
+        db_session=db_session,
+        session_id=session_id,
+        user_id=user.id,
+    )
+    if context is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session has no scheduled-run context")
+    return ScheduledRunContextResponse(
+        task_id=str(context["task_id"]),
+        task_name=context["task_name"],
+        started_at=context["started_at"],
+    )

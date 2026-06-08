@@ -4,7 +4,7 @@ import React, { useMemo, useCallback } from "react";
 import { StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState, RenderType } from "../interfaces";
 import { TurnGroup } from "./transformers";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { useTimelineExpansion } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineExpansion";
@@ -144,6 +144,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastTurnGroup,
     lastStep,
     lastStepIsResearchAgent,
+    lastStepIsCodingAgent,
     lastStepSupportsCollapsedStreaming,
   } = useTimelineMetrics(turnGroups, userStopped);
 
@@ -247,9 +248,10 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   // Determine render type override for collapsed streaming view
   const collapsedRenderTypeOverride = useMemo(() => {
     if (lastStepIsResearchAgent) return RenderType.HIGHLIGHT;
+    if (lastStepIsCodingAgent) return RenderType.HIGHLIGHT;
     if (lastStepIsSearchTool) return RenderType.INLINE;
     return RenderType.COMPACT;
-  }, [lastStepIsResearchAgent, lastStepIsSearchTool]);
+  }, [lastStepIsResearchAgent, lastStepIsCodingAgent, lastStepIsSearchTool]);
 
   // Header selection based on UI state
   const renderHeader = useCallback(() => {
@@ -345,7 +347,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       <TimelineContainer
         agent={chatState.agent}
         headerContent={
-          <div className="flex w-full h-full items-center pl-[var(--timeline-header-padding-left)] pr-[var(--timeline-header-padding-right)]">
+          <div className="flex w-full h-full items-center pl-(--timeline-header-padding-left) pr-(--timeline-header-padding-right)">
             <Text as="p" mainUiAction text03 className="shimmer-text">
               {headerText}
             </Text>

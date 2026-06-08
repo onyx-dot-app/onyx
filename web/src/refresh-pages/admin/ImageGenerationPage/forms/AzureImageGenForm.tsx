@@ -19,23 +19,16 @@ import {
   parseAzureTargetUri,
   isValidAzureTargetUri,
 } from "@/lib/azureTargetUri";
-import { ModelAccessField } from "@/sections/modals/llmConfig/shared";
 
-// Azure form values - target URI, API key, and access control
+// Azure form values - target URI and API key
 interface AzureFormValues {
   target_uri: string;
   api_key: string;
-  is_public: boolean;
-  groups: number[];
-  personas: number[];
 }
 
 const initialValues: AzureFormValues = {
   target_uri: "",
   api_key: "",
-  is_public: true,
-  groups: [],
-  personas: [],
 };
 
 const validationSchema = Yup.object().shape({
@@ -183,7 +176,6 @@ function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
           </FormField>
         )}
       />
-      <ModelAccessField />
     </>
   );
 }
@@ -202,11 +194,6 @@ function getInitialValuesFromCredentials(
   return {
     api_key: credentials.api_key || "",
     target_uri: targetUri,
-    // Note: Access control fields are not returned by the credentials endpoint
-    // Use defaults when editing - user can adjust via ModelAccessField
-    is_public: true,
-    groups: [],
-    personas: [],
   };
 }
 
@@ -241,9 +228,6 @@ function transformValues(
     apiBase,
     apiVersion,
     deploymentName,
-    isPublic: values.is_public,
-    groups: values.groups,
-    personas: values.personas,
   };
 }
 
