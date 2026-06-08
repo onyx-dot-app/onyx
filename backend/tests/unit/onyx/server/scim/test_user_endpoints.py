@@ -622,6 +622,39 @@ class TestReplaceUser:
         assert_scim_error(result, 403)
         mock_seats.assert_called_once()
 
+    @patch("ee.onyx.server.scim.api.assign_user_to_default_groups__no_commit")
+    @patch("ee.onyx.server.scim.api._check_seat_availability")
+    def test_deactivating_shadow_user_does_not_promote(
+        self,
+        mock_seats: MagicMock,
+        mock_assign: MagicMock,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """A deactivating PUT for a shadow EXT_PERM_USER just deactivates — it
+        must not rewrite the role, assign default groups, or seat-check."""
+        user = make_db_user(role=UserRole.EXT_PERM_USER, is_active=True)
+        mock_dal.get_user.return_value = user
+        resource = make_scim_user(active=False)
+
+        result = replace_user(
+            user_id=str(user.id),
+            user_resource=resource,
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        parse_scim_user(result)
+        mock_seats.assert_not_called()
+        mock_assign.assert_not_called()
+        _, kwargs = mock_dal.update_user.call_args
+        assert kwargs["role"] is None
+        assert kwargs["account_type"] is None
+        assert kwargs["is_active"] is False
+
     def test_syncs_external_id(
         self,
         mock_db_session: MagicMock,

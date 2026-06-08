@@ -487,8 +487,10 @@ def create_user(
         # Adopt pre-existing user into SCIM management.
         # Becoming an active, seat-counting account consumes a seat — that
         # happens when we reactivate a deactivated user OR promote a shadow
-        # EXT_PERM_USER (which doesn't count toward seats) to STANDARD.
-        promote = _is_ext_perm_user(existing_user)
+        # EXT_PERM_USER (which doesn't count toward seats) to STANDARD. Only
+        # promote when the request keeps the user active — a deactivating
+        # request should just deactivate, not rewrite the role on the way out.
+        promote = _is_ext_perm_user(existing_user) and user_resource.active
         if user_resource.active and (not existing_user.is_active or promote):
             seat_error = _check_seat_availability(dal)
             if seat_error:
@@ -614,8 +616,9 @@ def replace_user(
 
     # Handle activation (need seat check) / deactivation. Promoting a shadow
     # EXT_PERM_USER also consumes a seat, so self-heal any that the IdP
-    # re-syncs after being adopted while still in the shadow role.
-    promote = _is_ext_perm_user(user)
+    # re-syncs after being adopted while still in the shadow role. Gate on
+    # active so a deactivating PUT just deactivates rather than rewriting role.
+    promote = _is_ext_perm_user(user) and user_resource.active
     is_reactivation = user_resource.active and not user.is_active
     if user_resource.active and (is_reactivation or promote):
         seat_error = _check_seat_availability(dal)
@@ -708,8 +711,9 @@ def patch_user(
 
     # Apply changes back to the DB model. A seat is consumed when the user
     # becomes active (reactivation) or when a shadow EXT_PERM_USER is promoted
-    # to a real STANDARD account on re-sync.
-    promote = _is_ext_perm_user(user)
+    # to a real STANDARD account on re-sync. Gate promotion on active so a
+    # deactivating PATCH just deactivates rather than rewriting role.
+    promote = _is_ext_perm_user(user) and patched.active
     is_reactivation = patched.active and not user.is_active
     if patched.active and (patched.active != user.is_active or promote):
         seat_error = _check_seat_availability(dal)
