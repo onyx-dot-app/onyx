@@ -34,39 +34,28 @@ DEFAULT_NOTIFICATIONS_PAGE_SIZE = 10
 MAX_NOTIFICATIONS_PAGE_SIZE = 50
 
 
-def _run_read_triggered_notification_checks(
+def _check_for_notifications_to_create(
     user: User,
     db_session: Session,
-    requested_notif_type: NotificationType | None,
 ) -> None:
-    if (
-        requested_notif_type is None
-        or requested_notif_type == NotificationType.FEATURE_ANNOUNCEMENT
-    ):
-        try:
-            ensure_build_mode_intro_notification(user, db_session)
-        except Exception:
-            logger.exception(
-                "Failed to check for build mode intro in notifications endpoint"
-            )
+    try:
+        ensure_build_mode_intro_notification(user, db_session)
+    except Exception:
+        logger.exception(
+            "Failed to check for build mode intro in notifications endpoint"
+        )
 
-        try:
-            ensure_permissions_migration_notification(user, db_session)
-        except Exception:
-            logger.exception(
-                "Failed to create permissions_migration_v1 announcement in notifications endpoint"
-            )
+    try:
+        ensure_permissions_migration_notification(user, db_session)
+    except Exception:
+        logger.exception(
+            "Failed to create permissions_migration_v1 announcement in notifications endpoint"
+        )
 
-    if (
-        requested_notif_type is None
-        or requested_notif_type == NotificationType.RELEASE_NOTES
-    ):
-        try:
-            ensure_release_notes_fresh_and_notify(db_session)
-        except Exception:
-            logger.exception(
-                "Failed to check for release notes in notifications endpoint"
-            )
+    try:
+        ensure_release_notes_fresh_and_notify(db_session)
+    except Exception:
+        logger.exception("Failed to check for release notes in notifications endpoint")
 
 
 @router.get("")
@@ -90,7 +79,7 @@ def get_notifications_api(
     - Explicitly announcing breaking changes
     """
     if page_num == 0:
-        _run_read_triggered_notification_checks(user, db_session, notif_type)
+        _check_for_notifications_to_create(user, db_session)
 
     total_items, undismissed_count = count_notifications(
         user=user,
@@ -126,11 +115,7 @@ def get_notifications_summary_api(
 ) -> NotificationSummary:
     # Preserve app-load notification bootstrap behavior: notifications that are
     # lazily created on read should exist before we compute badge counts.
-    _run_read_triggered_notification_checks(
-        user=user,
-        db_session=db_session,
-        requested_notif_type=None,
-    )
+    _check_for_notifications_to_create(user=user, db_session=db_session)
     total_items, undismissed_count = count_notifications(
         user=user,
         db_session=db_session,

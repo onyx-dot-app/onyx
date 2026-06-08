@@ -195,12 +195,12 @@ def test_get_notifications_api_returns_paginated_response(
     assert response.has_more is True
 
 
-def test_get_notifications_api_scopes_ensure_checks(
+def test_get_notifications_api_runs_ensure_checks_on_first_page(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    user = create_test_user(db_session, "notification_api_scoped_checks")
+    user = create_test_user(db_session, "notification_api_ensure_checks")
     calls: list[str] = []
 
     def record_call(name: str) -> Callable[..., None]:
@@ -232,26 +232,7 @@ def test_get_notifications_api_scopes_ensure_checks(
         user=user,
         db_session=db_session,
     )
-    assert calls == []
-
-    notifications_api.get_notifications_api(
-        page_num=0,
-        page_size=2,
-        notif_type=NotificationType.FEATURE_ANNOUNCEMENT,
-        user=user,
-        db_session=db_session,
-    )
-    assert calls == ["build", "permissions"]
-
-    calls.clear()
-    notifications_api.get_notifications_api(
-        page_num=0,
-        page_size=2,
-        notif_type=NotificationType.RELEASE_NOTES,
-        user=user,
-        db_session=db_session,
-    )
-    assert calls == ["release_notes"]
+    assert calls == ["build", "permissions", "release_notes"]
 
     calls.clear()
     notifications_api.get_notifications_api(
