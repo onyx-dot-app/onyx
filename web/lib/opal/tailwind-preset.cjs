@@ -229,6 +229,7 @@ module.exports = {
         "08": "var(--radius-08)",
         12: "var(--radius-12)",
         16: "var(--radius-16)",
+        20: "var(--radius-20)",
         full: "var(--radius-round)",
       },
       fontSize: {

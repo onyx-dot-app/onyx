@@ -148,6 +148,7 @@ const paddingYVariants: Record<PaddingVariants, string> = {
 };
 
 const cardRoundingVariants: Record<RoundingVariants, string> = {
+  xl: "rounded-20",
   lg: "rounded-16",
   md: "rounded-12",
   sm: "rounded-08",
@@ -155,6 +156,7 @@ const cardRoundingVariants: Record<RoundingVariants, string> = {
 };
 
 const cardTopRoundingVariants: Record<RoundingVariants, string> = {
+  xl: "rounded-t-20",
   lg: "rounded-t-16",
   md: "rounded-t-12",
   sm: "rounded-t-08",
@@ -162,6 +164,7 @@ const cardTopRoundingVariants: Record<RoundingVariants, string> = {
 };
 
 const cardBottomRoundingVariants: Record<RoundingVariants, string> = {
+  xl: "rounded-b-20",
   lg: "rounded-b-16",
   md: "rounded-b-12",
   sm: "rounded-b-08",
