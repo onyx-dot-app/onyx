@@ -275,11 +275,11 @@ class PodEventBus:
         self._auth = new_auth
         logger.info("PodEventBus reloaded auth after 401 on %s/event", self._base_url)
 
-    def _dispatch(self, evt: dict[str, Any]) -> None:
-        etype = evt.get("type")
-        props = evt.get("properties") or {}
+    def _dispatch(self, event: dict[str, Any]) -> None:
+        event_type = event.get("type")
+        props = event.get("properties") or {}
 
-        if etype == "session.created":
+        if event_type == "session.created":
             info = props.get("info") if isinstance(props, dict) else None
             if isinstance(info, dict):
                 child_id = info.get("id")
@@ -302,49 +302,54 @@ class PodEventBus:
                                 parent_id,
                             )
 
-        sid = _extract_session_id(evt)
+        session_id = _extract_session_id(event)
+        log_session_id = session_id or "<unscoped>"
 
-        # Deliver to sid's own subscribers AND to every ancestor's subscribers
+        # Deliver to session_id's own subscribers AND to every ancestor's subscribers
         # so a turn subscribed only to the parent session also sees descendant
         # (subagent) events. Walk _child_to_parent up to the root, deduping so
         # no subscriber receives the event twice.
         with self._lock:
-            queues: list[_Subscription] = []
-            seen_subs: set[int] = set()
-            if sid is None:
-                if not _is_unscoped_terminal_event(evt):
+            target_subscriptions: list[_Subscription] = []
+            seen_subscriptions: set[int] = set()
+            if session_id is None:
+                if not _is_unscoped_terminal_event(event):
                     return
                 # Some opencode terminal events are published without a
                 # sessionID. The bus is directory-scoped, so active subscribers
                 # are the only consumers that can observe that turn ending.
                 subscriber_groups = self._subscribers.values()
             else:
-                target_sids = [sid]
-                ancestor = self._child_to_parent.get(sid)
-                seen_sids = {sid}
-                while ancestor is not None and ancestor not in seen_sids:
-                    target_sids.append(ancestor)
-                    seen_sids.add(ancestor)
+                target_session_ids = [session_id]
+                ancestor = self._child_to_parent.get(session_id)
+                seen_session_ids = {session_id}
+                while ancestor is not None and ancestor not in seen_session_ids:
+                    target_session_ids.append(ancestor)
+                    seen_session_ids.add(ancestor)
                     ancestor = self._child_to_parent.get(ancestor)
                 subscriber_groups = (
-                    self._subscribers.get(target_sid, ()) for target_sid in target_sids
+                    self._subscribers.get(target_session_id, ())
+                    for target_session_id in target_session_ids
                 )
-            for subs in subscriber_groups:
-                for sub in subs:
-                    if id(sub) not in seen_subs:
-                        seen_subs.add(id(sub))
-                        queues.append(sub)
-        for sub in queues:
+            for subscribers in subscriber_groups:
+                for subscription in subscribers:
+                    if id(subscription) not in seen_subscriptions:
+                        seen_subscriptions.add(id(subscription))
+                        target_subscriptions.append(subscription)
+        for subscription in target_subscriptions:
             try:
-                sub.queue.put_nowait(evt)
+                subscription.queue.put_nowait(event)
             except Full:
-                sub.dropped_count += 1
-                if sub.dropped_count == 1 or sub.dropped_count % 50 == 0:
+                subscription.dropped_count += 1
+                if (
+                    subscription.dropped_count == 1
+                    or subscription.dropped_count % 50 == 0
+                ):
                     logger.warning(
                         "PodEventBus dropped event for session %s "
                         "(queue full; total dropped=%d)",
-                        sid,
-                        sub.dropped_count,
+                        log_session_id,
+                        subscription.dropped_count,
                     )
 
 
@@ -378,13 +383,13 @@ def _extract_session_id(evt: dict[str, Any]) -> str | None:
     return None
 
 
-def _is_unscoped_terminal_event(evt: dict[str, Any]) -> bool:
-    etype = evt.get("type")
-    if etype in ("session.error", "session.idle"):
+def _is_unscoped_terminal_event(event: dict[str, Any]) -> bool:
+    event_type = event.get("type")
+    if event_type in ("session.error", "session.idle"):
         return True
-    if etype != "session.status":
+    if event_type != "session.status":
         return False
-    props = evt.get("properties")
+    props = event.get("properties")
     if not isinstance(props, dict):
         return False
     status = props.get("status")
