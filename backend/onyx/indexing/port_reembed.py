@@ -32,7 +32,7 @@ from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 # replicated) so the rebuilt semantic tail is byte-identical to what indexing
 # produced; replicating it would risk silent drift in the embedding input.
 from onyx.indexing.chunker import _get_metadata_suffix_for_document_index
-from onyx.indexing.embedder import DefaultIndexingEmbedder
+from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
 
 
@@ -135,24 +135,21 @@ def _stored_chunk_to_doc_aware(
     )
 
 
-def re_embed_for_future(
+def re_embed_chunks(
     stored_chunks: list[DocumentChunkWithoutVectors],
-    present_ss: SearchSettings,
-    future_ss: SearchSettings,
+    strategy: ReembedStrategy,
+    embedder: IndexingEmbedder,
 ) -> list[DocumentChunk]:
-    """Re-embed PRESENT chunks under FUTURE settings (see module docstring).
+    """Re-embed stored chunks under a prebuilt strategy + embedder (no DB access).
 
     Returns the whole stored chunks as DocumentChunk, in order, with only
-    content_vector and title_vector recomputed (every other field — content,
-    title, metadata, ACL, boost, last_updated, ... — copied through, so the
-    FUTURE write is a faithful copy with new embeddings). Raises
-    NotImplementedError for the AUGMENTATION strategy (see below) — only
-    model/prefix/dimension changes are supported today.
+    content_vector and title_vector recomputed (every other field copied through,
+    so the FUTURE write is a faithful copy with new embeddings). Raises
+    NotImplementedError for AUGMENTATION — only model/prefix/dimension changes are
+    supported today.
     """
     if not stored_chunks:
         return []
-
-    strategy = select_reembed_strategy(present_ss, future_ss)
     if strategy is ReembedStrategy.AUGMENTATION:
         # Augmentation re-embed (strip -> re-glue -> re-embed) is the next
         # increment; the contextual-RAG-on case additionally needs the source
@@ -168,7 +165,6 @@ def re_embed_for_future(
         _stored_chunk_to_doc_aware(chunk, embed_input)
         for chunk, embed_input in zip(stored_chunks, embed_inputs)
     ]
-    embedder = DefaultIndexingEmbedder.from_db_search_settings(future_ss)
     embedded = embedder.embed_chunks(doc_aware_chunks)
 
     # Sanity: the embedder must return chunks 1:1 with what it was given.

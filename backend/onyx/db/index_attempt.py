@@ -157,6 +157,34 @@ def create_index_attempt(
     return new_attempt.id
 
 
+def create_synthetic_seed_attempt(
+    connector_credential_pair_id: int,
+    search_settings_id: int,
+    poll_range_end: float,
+    db_session: Session,
+) -> int:
+    """Insert a SUCCESS IndexAttempt with no connector run (the reindex port's
+    resume marker). It carries PRESENT's poll cursor so the FUTURE
+    connector-incremental resumes from there. time_started == time_created (both
+    func.now() in one statement) so the swap criterion's "real attempt after the
+    port" comparison is well-defined for the run that later supersedes the seed.
+    Excluded from the latest/count helpers via ignore_synthetic_seed."""
+    db_now = func.now()
+    seed = IndexAttempt(
+        connector_credential_pair_id=connector_credential_pair_id,
+        search_settings_id=search_settings_id,
+        from_beginning=True,
+        status=IndexingStatus.SUCCESS,
+        is_synthetic_seed=True,
+        time_started=db_now,
+        time_updated=db_now,
+        poll_range_end=datetime.fromtimestamp(poll_range_end, tz=timezone.utc),
+    )
+    db_session.add(seed)
+    db_session.commit()
+    return seed.id
+
+
 def delete_index_attempt(db_session: Session, index_attempt_id: int) -> None:
     index_attempt = get_index_attempt(db_session, index_attempt_id)
     if index_attempt:
@@ -655,6 +683,7 @@ def get_latest_successful_index_attempt_for_cc_pair_id(
     connector_credential_pair_id: int,
     secondary_index: bool = False,
     ignore_targeted_reindex: bool = True,
+    ignore_synthetic_seed: bool = True,
 ) -> IndexAttempt | None:
     """Returns the most recent successful index attempt for the given cc pair,
     filtered to the current (or future) search settings.
@@ -668,6 +697,8 @@ def get_latest_successful_index_attempt_for_cc_pair_id(
     )
     if ignore_targeted_reindex:
         stmt = stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
+    if ignore_synthetic_seed:
+        stmt = stmt.where(IndexAttempt.is_synthetic_seed.is_(False))
     stmt = (
         stmt.join(SearchSettings)
         .where(SearchSettings.status == status)
@@ -680,6 +711,7 @@ def get_latest_successful_index_attempt_for_cc_pair_id(
 def get_latest_successful_index_attempts_parallel(
     secondary_index: bool = False,
     ignore_targeted_reindex: bool = True,
+    ignore_synthetic_seed: bool = True,
 ) -> Sequence[IndexAttempt]:
     """Batch version: returns the latest successful index attempt per cc pair.
     Covers both SUCCESS and COMPLETED_WITH_ERRORS (matching is_successful())."""
@@ -704,6 +736,8 @@ def get_latest_successful_index_attempts_parallel(
             latest_ids = latest_ids.where(
                 IndexAttempt.targeted_reindex_job_id.is_(None)
             )
+        if ignore_synthetic_seed:
+            latest_ids = latest_ids.where(IndexAttempt.is_synthetic_seed.is_(False))
         latest_ids = latest_ids.group_by(
             IndexAttempt.connector_credential_pair_id
         ).subquery()
@@ -932,6 +966,7 @@ def count_unique_cc_pairs_with_successful_index_attempts(
     search_settings_id: int | None,
     db_session: Session,
     ignore_targeted_reindex: bool = True,
+    ignore_synthetic_seed: bool = True,
 ) -> int:
     """Collect all of the Index Attempts that are successful and for the specified embedding model
     Then do distinct by connector_id and credential_id which is equivalent to the cc-pair. Finally,
@@ -946,6 +981,8 @@ def count_unique_cc_pairs_with_successful_index_attempts(
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    if ignore_synthetic_seed:
+        query = query.filter(IndexAttempt.is_synthetic_seed.is_(False))
     return query.distinct().count()
 
 
@@ -953,6 +990,7 @@ def count_unique_active_cc_pairs_with_successful_index_attempts(
     search_settings_id: int | None,
     db_session: Session,
     ignore_targeted_reindex: bool = True,
+    ignore_synthetic_seed: bool = True,
 ) -> int:
     """Collect all of the Index Attempts that are successful and for the specified embedding model,
     but only for non-paused connector-credential pairs. Then do distinct by connector_id and credential_id
@@ -969,6 +1007,8 @@ def count_unique_active_cc_pairs_with_successful_index_attempts(
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    if ignore_synthetic_seed:
+        query = query.filter(IndexAttempt.is_synthetic_seed.is_(False))
     return query.distinct().count()
 
 

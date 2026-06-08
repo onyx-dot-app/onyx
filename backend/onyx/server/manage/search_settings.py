@@ -9,9 +9,13 @@ from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
+from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
 from onyx.db.connector_credential_pair import resync_cc_pair
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import Permission
+from onyx.db.enums import SwitchoverType
+from onyx.db.index_attempt import create_synthetic_seed_attempt
 from onyx.db.index_attempt import expire_index_attempts
 from onyx.db.llm import update_default_contextual_model
 from onyx.db.llm import update_no_default_contextual_rag_provider
@@ -137,6 +141,33 @@ def set_new_search_settings(
             resync_cc_pair(
                 cc_pair=cc_pair,
                 search_settings_id=new_search_settings.id,
+                db_session=db_session,
+            )
+
+    # Seed the port flow: one SUCCESS synthetic IndexAttempt per in-scope cc_pair
+    # carrying PRESENT's poll cursor, so the FUTURE connector-incremental resumes
+    # from there rather than re-scanning. INSTANT swaps immediately (nothing to
+    # poll), so it is not seeded. Scope mirrors the swap criterion: ACTIVE_ONLY
+    # seeds active cc_pairs only; otherwise all non-deleting.
+    if (
+        new_search_settings.use_port_flow
+        and new_search_settings.switchover_type != SwitchoverType.INSTANT
+    ):
+        active_only = new_search_settings.switchover_type == SwitchoverType.ACTIVE_ONLY
+        for cc_pair in get_connector_credential_pairs(db_session):
+            if active_only and not cc_pair.status.is_active():
+                continue
+            if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+                continue
+            indexing_start = cc_pair.connector.indexing_start
+            earliest_index = indexing_start.timestamp() if indexing_start else 0.0
+            poll_range_end = get_last_successful_attempt_poll_range_end(
+                cc_pair.id, earliest_index, search_settings, db_session
+            )
+            create_synthetic_seed_attempt(
+                connector_credential_pair_id=cc_pair.id,
+                search_settings_id=new_search_settings.id,
+                poll_range_end=poll_range_end,
                 db_session=db_session,
             )
 
