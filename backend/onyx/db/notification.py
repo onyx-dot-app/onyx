@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import cast
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -161,14 +162,19 @@ def dismiss_user_notifications(
     db_session: Session,
     notif_type: NotificationType | None = None,
 ) -> None:
-    query = db_session.query(Notification).filter(
-        *_notification_filters(
-            user=user,
-            notif_type=notif_type,
-            include_dismissed=False,
+    stmt = (
+        update(Notification)
+        .where(
+            *_notification_filters(
+                user=user,
+                notif_type=notif_type,
+                include_dismissed=False,
+            )
         )
+        .values(dismissed=True)
+        .execution_options(synchronize_session=False)
     )
-    query.update({"dismissed": True}, synchronize_session=False)
+    db_session.execute(stmt)
     db_session.commit()
 
 
