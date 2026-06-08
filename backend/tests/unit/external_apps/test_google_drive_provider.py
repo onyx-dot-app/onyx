@@ -17,6 +17,7 @@ _READ_ACTIONS = {
     GoogleDriveAction.FILES_READ,
     GoogleDriveAction.FILES_EXPORT,
     GoogleDriveAction.DRIVES_READ,
+    GoogleDriveAction.DOCS_READ,
 }
 
 
@@ -34,11 +35,14 @@ def test_registered_as_managed_drive_provider() -> None:
 
 def test_scope_and_patterns_cover_read_and_upload() -> None:
     spec = _provider().spec
+    # The single `auth/drive` scope also authorizes the Google Docs API.
     assert spec.oauth.scope == "https://www.googleapis.com/auth/drive"
-    # The /upload host path is required for content uploads to be token-injected.
+    # The /upload host path is required for content uploads to be token-injected;
+    # the Docs API lives on its own `docs.googleapis.com` host.
     assert spec.descriptor.upstream_url_patterns == [
         "https://www\\.googleapis\\.com/drive/.*",
         "https://www\\.googleapis\\.com/upload/drive/.*",
+        "https://docs\\.googleapis\\.com/.*",
     ]
     assert spec.descriptor.auth_template == {"Authorization": "Bearer {access_token}"}
 
@@ -82,6 +86,9 @@ def test_catalog_recognises_helper_request_paths() -> None:
         ("PATCH", "/drive/v3/files/ABC123"),  # update metadata / trash
         ("PATCH", "/upload/drive/v3/files/ABC123"),  # replace content
         ("DELETE", "/drive/v3/files/ABC123"),  # delete
+        ("GET", "/v1/documents/ABC123"),  # read a Google Doc (Docs API)
+        ("POST", "/v1/documents"),  # create a Google Doc
+        ("POST", "/v1/documents/ABC123:batchUpdate"),  # edit a Google Doc
     ]
     for method, path in helper_calls:
         matched = [r for r in routes if r[0] == method and path_matches(r[1], path)]
