@@ -1261,7 +1261,7 @@ class OpencodeServeClient:
                 parent_resolver=parent_resolver,
                 children_resolver=children_resolver,
             ):
-                if isinstance(sandbox_event, PromptResponse):
+                if isinstance(sandbox_event, (Error, PromptResponse)):
                     terminated_locally = True
                 yield sandbox_event
 

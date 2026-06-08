@@ -303,25 +303,34 @@ class PodEventBus:
                             )
 
         sid = _extract_session_id(evt)
-        if sid is None:
-            return
 
         # Deliver to sid's own subscribers AND to every ancestor's subscribers
         # so a turn subscribed only to the parent session also sees descendant
         # (subagent) events. Walk _child_to_parent up to the root, deduping so
         # no subscriber receives the event twice.
         with self._lock:
-            target_sids = [sid]
-            ancestor = self._child_to_parent.get(sid)
-            seen_sids = {sid}
-            while ancestor is not None and ancestor not in seen_sids:
-                target_sids.append(ancestor)
-                seen_sids.add(ancestor)
-                ancestor = self._child_to_parent.get(ancestor)
             queues: list[_Subscription] = []
             seen_subs: set[int] = set()
-            for target_sid in target_sids:
-                for sub in self._subscribers.get(target_sid, ()):
+            if sid is None:
+                if not _is_unscoped_terminal_event(evt):
+                    return
+                # Some opencode terminal events are published without a
+                # sessionID. The bus is directory-scoped, so active subscribers
+                # are the only consumers that can observe that turn ending.
+                subscriber_groups = self._subscribers.values()
+            else:
+                target_sids = [sid]
+                ancestor = self._child_to_parent.get(sid)
+                seen_sids = {sid}
+                while ancestor is not None and ancestor not in seen_sids:
+                    target_sids.append(ancestor)
+                    seen_sids.add(ancestor)
+                    ancestor = self._child_to_parent.get(ancestor)
+                subscriber_groups = (
+                    self._subscribers.get(target_sid, ()) for target_sid in target_sids
+                )
+            for subs in subscriber_groups:
+                for sub in subs:
                     if id(sub) not in seen_subs:
                         seen_subs.add(id(sub))
                         queues.append(sub)
@@ -367,6 +376,19 @@ def _extract_session_id(evt: dict[str, Any]) -> str | None:
         if isinstance(nested, str) and nested:
             return nested
     return None
+
+
+def _is_unscoped_terminal_event(evt: dict[str, Any]) -> bool:
+    etype = evt.get("type")
+    if etype in ("session.error", "session.idle"):
+        return True
+    if etype != "session.status":
+        return False
+    props = evt.get("properties")
+    if not isinstance(props, dict):
+        return False
+    status = props.get("status")
+    return isinstance(status, dict) and status.get("type") == "idle"
 
 
 def _parse_sse_block(block: str) -> dict[str, Any] | None:
