@@ -301,7 +301,7 @@ jobs:
           for line in "${lines[@]}"; do
             CMD="${CMD}${line} \\"$'\n'
           done
-          CMD="${CMD}uv run pytest -v --tb=short -rs ${TEST_PATH}"
+          CMD="${CMD}uv run pytest ${TEST_PATH}"
 
           # Rich, copy-pasteable block in the job summary.
           {
