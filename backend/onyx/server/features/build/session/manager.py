@@ -771,9 +771,9 @@ class SessionManager:
         Sets the interrupt fence and returns. The active stream's consume loop
         polls the fence (~1/s) and self-terminates — aborting opencode and
         emitting its own ``PromptResponse`` rather than waiting on a
-        ``session.idle`` that may never arrive after an abort. Setting a flag
-        (vs. a direct abort) is also what survives the first-turn race, where
-        the opencode session id isn't minted until inside the stream.
+        ``session.idle`` that may never arrive after an abort. A flag-based
+        approach (vs. a direct abort) is safe to call at any point in the turn
+        lifecycle, including before the stream has started consuming events.
         """
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
