@@ -44,6 +44,8 @@ services:
       - EMAIL_FROM=${EMAIL_FROM:-}
       - OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID:-}
       - OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET:-}
+      # Mobile Google OAuth callback origin; defaults to WEB_DOMAIN (set to the backend, e.g. http://localhost:8080, for local dev).
+      - MOBILE_OAUTH_REDIRECT_BASE=${MOBILE_OAUTH_REDIRECT_BASE:-}
       - OPENID_CONFIG_URL=${OPENID_CONFIG_URL:-}
       - TRACK_EXTERNAL_IDP_EXPIRY=${TRACK_EXTERNAL_IDP_EXPIRY:-}
       - CORS_ALLOWED_ORIGIN=${CORS_ALLOWED_ORIGIN:-}

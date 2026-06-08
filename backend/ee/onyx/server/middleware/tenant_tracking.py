@@ -14,11 +14,13 @@ from ee.onyx.configs.multi_tenant_gating_config import (
     MULTI_TENANT_GATING_ALLOWED_PREFIXES,
 )
 from ee.onyx.server.tenants.product_gating import is_tenant_gated
+from onyx.auth.constants import BEARER_PREFIX
 from onyx.auth.utils import extract_tenant_from_auth_header
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.redis.redis_pool import retrieve_auth_token_data
 from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -102,20 +104,51 @@ def _is_path_allowed(path: str) -> bool:
     )
 
 
+async def _tenant_from_bearer_session_token(request: Request) -> str | None:
+    """Resolve tenant_id from an opaque Redis session token in the Authorization
+    header (native mobile clients have no cookie jar). Mirrors the cookie path's
+    Redis lookup. Valid API keys / PATs never reach here — their inline tenant is
+    resolved earlier by extract_tenant_from_auth_header in the caller.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith(BEARER_PREFIX):
+        return None
+
+    token = auth_header[len(BEARER_PREFIX) :].strip()
+    token_data = await retrieve_auth_token_data(token)
+    if not token_data:
+        return None
+
+    tenant_id = token_data.get("tenant_id")
+    if not tenant_id:
+        return None
+
+    tenant_id = str(tenant_id)
+    if not is_valid_schema_name(tenant_id):
+        raise HTTPException(status_code=400, detail="Invalid tenant ID format")
+    return tenant_id
+
+
 async def _get_tenant_id_from_request(
     request: Request, logger: logging.LoggerAdapter
 ) -> str:
     """
     Attempt to extract tenant_id from:
     1) The API key or PAT (Personal Access Token) header
-    2) The Redis-based token (stored in Cookie: fastapiusersauth)
-    3) The anonymous user cookie
+    2) The opaque Redis session token in the Authorization header (native mobile)
+    3) The Redis-based token (stored in Cookie: fastapiusersauth)
+    4) The anonymous user cookie
     Fallback: POSTGRES_DEFAULT_SCHEMA
     """
     # Check for API key or PAT in Authorization header
     tenant_id = extract_tenant_from_auth_header(request)
     if tenant_id is not None:
         return tenant_id
+
+    # Opaque Redis session token in the Authorization header (native mobile).
+    bearer_tenant_id = await _tenant_from_bearer_session_token(request)
+    if bearer_tenant_id is not None:
+        return bearer_tenant_id
 
     try:
         # Look up token data in Redis

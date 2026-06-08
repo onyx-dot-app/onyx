@@ -1454,6 +1454,8 @@ configMap:
   LOG_ONYX_MODEL_INTERACTIONS: ""
   # Shared or Non-backend Related
   WEB_DOMAIN: "http://localhost:3000"
+  # Native-mobile Google OAuth callback origin; defaults to WEB_DOMAIN.
+  # MOBILE_OAUTH_REDIRECT_BASE: ""
   # DOMAIN used by nginx
   DOMAIN: "localhost"
   # Chat Configs

@@ -1,0 +1,823 @@
+// Mirrors web useChatSessionStore; the only change is layering zustand `persist`
+// to persist a slim slice to MMKV (see ./persist.ts).
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import {
+  ChatState,
+  RegenerationState,
+  ChatSessionSharedStatus,
+  BackendChatSession,
+  FeedbackType,
+  QueuedMessage,
+  SelectedModel,
+} from "@/lib/types";
+import {
+  getLatestMessageChain,
+  getMessageByMessageId,
+  MessageTreeState,
+} from "./messageTree";
+import { chatPersistStorage, PERSIST_VERSION } from "./persist";
+import { createInitialSessionData } from "./sessionDefaults";
+import { useMemo } from "react";
+
+// Placeholder id for a not-yet-created (draft) chat; the composer keys its
+// pre-session state under this until the first message creates the real backend
+// session. Never sent to the backend.
+export const DRAFT_SESSION_ID = "draft";
+
+interface ChatSessionData {
+  sessionId: string;
+  messageTree: MessageTreeState;
+  chatState: ChatState;
+  regenerationState: RegenerationState | null;
+  canContinue: boolean;
+  submittedMessage: string;
+  maxTokens: number;
+  chatSessionSharedStatus: ChatSessionSharedStatus;
+  selectedNodeIdForDocDisplay: number | null; // should be the node ID, not the message ID
+  abortController: AbortController;
+  hasPerformedInitialScroll: boolean;
+  documentSidebarVisible: boolean;
+  hasSentLocalUserMessage: boolean;
+
+  // Session-specific state (previously global)
+  isFetchingChatMessages: boolean;
+  uncaughtError: string | null;
+  loadingError: string | null;
+  isReady: boolean;
+
+  // Session metadata
+  lastAccessed: Date;
+  isLoaded: boolean;
+  description?: string;
+  personaId?: number;
+
+  // Input-bar model for this session, sent as llm_override per message. In-memory
+  // only (not persisted to the backend session in v1). Undefined → default model.
+  selectedModel?: SelectedModel;
+
+  // Streaming duration tracking
+  streamingStartTime?: number;
+
+  // Queued messages
+  queuedMessages: QueuedMessage[];
+
+  // True once the latest assistant message has fully rendered to the
+  // user (backend stream done AND smooth-streaming typewriter caught up).
+  // Gates queued-message dispatch so a follow-up isn't sent while the
+  // previous answer is still drawing on screen.
+  latestMessageRenderComplete: boolean;
+
+  // True while the smooth-streaming typewriter is running its post-finish
+  // adaptive drain. Auto-scroll pauses during this window so the page
+  // doesn't yank as the typewriter speeds up — the user is reading at
+  // this point, not watching new content arrive.
+  isStreamDraining: boolean;
+}
+
+interface ChatSessionStore {
+  // Session management
+  currentSessionId: string | null;
+  sessions: Map<string, ChatSessionData>;
+
+  // Wipe all in-memory session state (used on sign-out so the next user starts clean).
+  reset: () => void;
+
+  // Actions - Session Management
+  setCurrentSession: (sessionId: string | null) => void;
+  createSession: (
+    sessionId: string,
+    initialData?: Partial<ChatSessionData>
+  ) => void;
+  removeSession: (sessionId: string) => void;
+  updateSessionData: (
+    sessionId: string,
+    updates: Partial<ChatSessionData>
+  ) => void;
+  updateSessionMessageTree: (
+    sessionId: string,
+    messageTree: MessageTreeState
+  ) => void;
+  updateSessionAndMessageTree: (
+    sessionId: string,
+    messageTree: MessageTreeState
+  ) => void;
+
+  // Actions - Message Management
+  updateChatState: (sessionId: string, chatState: ChatState) => void;
+  updateRegenerationState: (
+    sessionId: string,
+    state: RegenerationState | null
+  ) => void;
+  updateCanContinue: (sessionId: string, canContinue: boolean) => void;
+  updateSubmittedMessage: (sessionId: string, message: string) => void;
+  updateSelectedModel: (sessionId: string, model: SelectedModel) => void;
+  updateMessageFeedback: (
+    sessionId: string,
+    messageId: number,
+    feedback: string | null
+  ) => void;
+  updateCurrentMessageFeedback: (
+    messageId: number,
+    feedback: string | null
+  ) => void;
+  updateSelectedNodeForDocDisplay: (
+    sessionId: string,
+    selectedMessageForDocDisplay: number | null
+  ) => void;
+  updateHasPerformedInitialScroll: (
+    sessionId: string,
+    hasPerformedInitialScroll: boolean
+  ) => void;
+  updateDocumentSidebarVisible: (
+    sessionId: string,
+    documentSidebarVisible: boolean
+  ) => void;
+  updateCurrentDocumentSidebarVisible: (
+    documentSidebarVisible: boolean
+  ) => void;
+  updateHasSentLocalUserMessage: (
+    sessionId: string,
+    hasSentLocalUserMessage: boolean
+  ) => void;
+  updateCurrentHasSentLocalUserMessage: (
+    hasSentLocalUserMessage: boolean
+  ) => void;
+
+  // Convenience functions that automatically use current session ID
+  updateCurrentSelectedNodeForDocDisplay: (
+    selectedNodeForDocDisplay: number | null
+  ) => void;
+  updateCurrentChatSessionSharedStatus: (
+    chatSessionSharedStatus: ChatSessionSharedStatus
+  ) => void;
+  updateCurrentChatState: (chatState: ChatState) => void;
+  updateCurrentRegenerationState: (
+    regenerationState: RegenerationState | null
+  ) => void;
+  updateCurrentCanContinue: (canContinue: boolean) => void;
+  updateCurrentSubmittedMessage: (submittedMessage: string) => void;
+
+  // Actions - Session-specific State (previously global)
+  setIsFetchingChatMessages: (sessionId: string, fetching: boolean) => void;
+  setUncaughtError: (sessionId: string, error: string | null) => void;
+  setLoadingError: (sessionId: string, error: string | null) => void;
+  setIsReady: (sessionId: string, ready: boolean) => void;
+
+  // Actions - Streaming Duration
+  setStreamingStartTime: (sessionId: string, time: number | null) => void;
+  getStreamingStartTime: (sessionId: string) => number | undefined;
+
+  // Actions - Queued Messages
+  enqueueMessage: (sessionId: string, message: string) => void;
+  removeQueuedMessage: (sessionId: string, index: number) => void;
+  enqueueCurrentMessage: (message: string) => void;
+  removeCurrentQueuedMessage: (index: number) => void;
+
+  // Actions - Render completion
+  setLatestMessageRenderComplete: (
+    sessionId: string,
+    complete: boolean
+  ) => void;
+  setIsStreamDraining: (sessionId: string, draining: boolean) => void;
+
+  // Actions - Abort Controllers
+  setAbortController: (sessionId: string, controller: AbortController) => void;
+  abortSession: (sessionId: string) => void;
+  abortAllSessions: () => void;
+
+  // Utilities
+  initializeSession: (
+    sessionId: string,
+    backendSession?: BackendChatSession
+  ) => void;
+  cleanupOldSessions: (maxSessions?: number) => void;
+}
+
+let nextQueuedMessageId = 0;
+
+export const useChatSessionStore = create<ChatSessionStore>()(
+  persist(
+    (set, get) => ({
+      // Initial state
+      currentSessionId: null,
+      sessions: new Map<string, ChatSessionData>(),
+
+      // Reset to initial state (set() merges, so the action methods are preserved).
+      reset: () =>
+        set({
+          currentSessionId: null,
+          sessions: new Map<string, ChatSessionData>(),
+        }),
+
+      // Session Management Actions
+      setCurrentSession: (sessionId: string | null) => {
+        set((state) => {
+          if (sessionId && !state.sessions.has(sessionId)) {
+            // Create new session if it doesn't exist
+            const newSession = createInitialSessionData(sessionId);
+            const newSessions = new Map(state.sessions);
+            newSessions.set(sessionId, newSession);
+
+            return {
+              currentSessionId: sessionId,
+              sessions: newSessions,
+            };
+          }
+
+          // Update last accessed for the new current session
+          if (sessionId && state.sessions.has(sessionId)) {
+            const session = state.sessions.get(sessionId)!;
+            const updatedSession = { ...session, lastAccessed: new Date() };
+            const newSessions = new Map(state.sessions);
+            newSessions.set(sessionId, updatedSession);
+
+            return {
+              currentSessionId: sessionId,
+              sessions: newSessions,
+            };
+          }
+
+          return { currentSessionId: sessionId };
+        });
+      },
+
+      createSession: (
+        sessionId: string,
+        initialData?: Partial<ChatSessionData>
+      ) => {
+        set((state) => {
+          const newSession = createInitialSessionData(sessionId, initialData);
+          const newSessions = new Map(state.sessions);
+          newSessions.set(sessionId, newSession);
+
+          return { sessions: newSessions };
+        });
+      },
+
+      // Drop a session entry (e.g. the "draft" placeholder once its real session
+      // exists). Clears current if it was current.
+      removeSession: (sessionId: string) => {
+        set((state) => {
+          if (!state.sessions.has(sessionId)) return state;
+          const newSessions = new Map(state.sessions);
+          newSessions.delete(sessionId);
+          return {
+            sessions: newSessions,
+            currentSessionId:
+              state.currentSessionId === sessionId
+                ? null
+                : state.currentSessionId,
+          };
+        });
+      },
+
+      updateSessionData: (
+        sessionId: string,
+        updates: Partial<ChatSessionData>
+      ) => {
+        set((state) => {
+          const session = state.sessions.get(sessionId);
+          const updatedSession = {
+            ...(session || createInitialSessionData(sessionId)),
+            ...updates,
+            lastAccessed: new Date(),
+          };
+          const newSessions = new Map(state.sessions);
+          newSessions.set(sessionId, updatedSession);
+
+          return { sessions: newSessions };
+        });
+      },
+
+      updateSessionMessageTree: (
+        sessionId: string,
+        messageTree: MessageTreeState
+      ) => {
+        get().updateSessionData(sessionId, { messageTree });
+      },
+
+      updateSessionAndMessageTree: (
+        sessionId: string,
+        messageTree: MessageTreeState
+      ) => {
+        set((state) => {
+          // Ensure session exists
+          const existingSession = state.sessions.get(sessionId);
+          const session =
+            existingSession || createInitialSessionData(sessionId);
+
+          // Update session with new message tree
+          const updatedSession = {
+            ...session,
+            messageTree,
+            lastAccessed: new Date(),
+          };
+
+          const newSessions = new Map(state.sessions);
+          newSessions.set(sessionId, updatedSession);
+
+          // Return both updates in a single state change
+          return {
+            currentSessionId: sessionId,
+            sessions: newSessions,
+          };
+        });
+      },
+
+      // Message Management Actions
+      updateChatState: (sessionId: string, chatState: ChatState) => {
+        get().updateSessionData(sessionId, { chatState });
+      },
+
+      updateRegenerationState: (
+        sessionId: string,
+        regenerationState: RegenerationState | null
+      ) => {
+        get().updateSessionData(sessionId, { regenerationState });
+      },
+
+      updateCanContinue: (sessionId: string, canContinue: boolean) => {
+        get().updateSessionData(sessionId, { canContinue });
+      },
+
+      updateSubmittedMessage: (sessionId: string, submittedMessage: string) => {
+        get().updateSessionData(sessionId, { submittedMessage });
+      },
+
+      updateSelectedModel: (sessionId: string, selectedModel: SelectedModel) => {
+        get().updateSessionData(sessionId, { selectedModel });
+      },
+
+      updateMessageFeedback: (
+        sessionId: string,
+        messageId: number,
+        feedback: string | null
+      ) => {
+        set((state) => {
+          const session = state.sessions.get(sessionId);
+          if (!session) {
+            console.warn(`Session ${sessionId} not found`);
+            return state;
+          }
+
+          const message = getMessageByMessageId(session.messageTree, messageId);
+          if (!message) {
+            console.warn(
+              `Message ${messageId} not found in session ${sessionId}`
+            );
+            return state;
+          }
+
+          // Create new message object with updated feedback (immutable update)
+          const updatedMessage = {
+            ...message,
+            currentFeedback: feedback as FeedbackType | null,
+          };
+
+          // Create new messageTree Map with updated message
+          const newMessageTree = new Map(session.messageTree);
+          newMessageTree.set(message.nodeId, updatedMessage);
+
+          // Create new session object with new messageTree
+          const updatedSession = {
+            ...session,
+            messageTree: newMessageTree,
+            lastAccessed: new Date(),
+          };
+
+          const newSessions = new Map(state.sessions);
+          newSessions.set(sessionId, updatedSession);
+
+          return { sessions: newSessions };
+        });
+      },
+
+      updateCurrentMessageFeedback: (
+        messageId: number,
+        feedback: string | null
+      ) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateMessageFeedback(currentSessionId, messageId, feedback);
+        }
+      },
+
+      updateSelectedNodeForDocDisplay: (
+        sessionId: string,
+        selectedMessageForDocDisplay: number | null
+      ) => {
+        get().updateSessionData(sessionId, {
+          selectedNodeIdForDocDisplay: selectedMessageForDocDisplay,
+        });
+      },
+
+      updateHasPerformedInitialScroll: (
+        sessionId: string,
+        hasPerformedInitialScroll: boolean
+      ) => {
+        get().updateSessionData(sessionId, { hasPerformedInitialScroll });
+      },
+
+      updateDocumentSidebarVisible: (
+        sessionId: string,
+        documentSidebarVisible: boolean
+      ) => {
+        get().updateSessionData(sessionId, { documentSidebarVisible });
+      },
+
+      updateCurrentDocumentSidebarVisible: (documentSidebarVisible: boolean) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateDocumentSidebarVisible(
+            currentSessionId,
+            documentSidebarVisible
+          );
+        }
+      },
+
+      updateHasSentLocalUserMessage: (
+        sessionId: string,
+        hasSentLocalUserMessage: boolean
+      ) => {
+        get().updateSessionData(sessionId, { hasSentLocalUserMessage });
+      },
+
+      updateCurrentHasSentLocalUserMessage: (
+        hasSentLocalUserMessage: boolean
+      ) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateHasSentLocalUserMessage(
+            currentSessionId,
+            hasSentLocalUserMessage
+          );
+        }
+      },
+
+      // Convenience functions that automatically use current session ID
+      updateCurrentSelectedNodeForDocDisplay: (
+        selectedNodeForDocDisplay: number | null
+      ) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateSelectedNodeForDocDisplay(
+            currentSessionId,
+            selectedNodeForDocDisplay
+          );
+        }
+      },
+
+      updateCurrentChatSessionSharedStatus: (
+        chatSessionSharedStatus: ChatSessionSharedStatus
+      ) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateSessionData(currentSessionId, {
+            chatSessionSharedStatus,
+          });
+        }
+      },
+
+      updateCurrentChatState: (chatState: ChatState) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateChatState(currentSessionId, chatState);
+        }
+      },
+
+      updateCurrentRegenerationState: (
+        regenerationState: RegenerationState | null
+      ) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateRegenerationState(currentSessionId, regenerationState);
+        }
+      },
+
+      updateCurrentCanContinue: (canContinue: boolean) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateCanContinue(currentSessionId, canContinue);
+        }
+      },
+
+      updateCurrentSubmittedMessage: (submittedMessage: string) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateSubmittedMessage(currentSessionId, submittedMessage);
+        }
+      },
+
+      // Session-specific State Actions (previously global)
+      setIsFetchingChatMessages: (
+        sessionId: string,
+        isFetchingChatMessages: boolean
+      ) => {
+        get().updateSessionData(sessionId, { isFetchingChatMessages });
+      },
+
+      setUncaughtError: (sessionId: string, uncaughtError: string | null) => {
+        get().updateSessionData(sessionId, { uncaughtError });
+      },
+
+      setLoadingError: (sessionId: string, loadingError: string | null) => {
+        get().updateSessionData(sessionId, { loadingError });
+      },
+
+      setIsReady: (sessionId: string, isReady: boolean) => {
+        get().updateSessionData(sessionId, { isReady });
+      },
+
+      // Streaming Duration Actions
+      setStreamingStartTime: (sessionId: string, time: number | null) => {
+        get().updateSessionData(sessionId, {
+          streamingStartTime: time ?? undefined,
+        });
+      },
+
+      getStreamingStartTime: (sessionId: string) => {
+        return get().sessions.get(sessionId)?.streamingStartTime;
+      },
+
+      // Queued Messages Actions
+      enqueueMessage: (sessionId: string, message: string) => {
+        set((state) => {
+          const session = state.sessions.get(sessionId);
+          if (!session || session.queuedMessages.length >= 5) {
+            return state;
+          }
+          const updatedSession = {
+            ...session,
+            queuedMessages: [
+              ...session.queuedMessages,
+              { id: nextQueuedMessageId++, text: message },
+            ],
+          };
+          const newSessions = new Map(state.sessions);
+          newSessions.set(sessionId, updatedSession);
+          return { sessions: newSessions };
+        });
+      },
+
+      removeQueuedMessage: (sessionId: string, index: number) => {
+        set((state) => {
+          const session = state.sessions.get(sessionId);
+          if (!session) {
+            return state;
+          }
+          const updatedSession = {
+            ...session,
+            queuedMessages: session.queuedMessages.filter(
+              (_, i) => i !== index
+            ),
+          };
+          const newSessions = new Map(state.sessions);
+          newSessions.set(sessionId, updatedSession);
+          return { sessions: newSessions };
+        });
+      },
+
+      enqueueCurrentMessage: (message: string) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().enqueueMessage(currentSessionId, message);
+        }
+      },
+
+      removeCurrentQueuedMessage: (index: number) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().removeQueuedMessage(currentSessionId, index);
+        }
+      },
+
+      setLatestMessageRenderComplete: (
+        sessionId: string,
+        complete: boolean
+      ) => {
+        const session = get().sessions.get(sessionId);
+        if (!session || session.latestMessageRenderComplete === complete)
+          return;
+        get().updateSessionData(sessionId, {
+          latestMessageRenderComplete: complete,
+        });
+      },
+
+      setIsStreamDraining: (sessionId: string, draining: boolean) => {
+        const session = get().sessions.get(sessionId);
+        if (!session || session.isStreamDraining === draining) return;
+        get().updateSessionData(sessionId, { isStreamDraining: draining });
+      },
+
+      // Abort Controller Actions
+      setAbortController: (
+        sessionId: string,
+        controller: AbortController
+      ) => {
+        get().updateSessionData(sessionId, { abortController: controller });
+      },
+
+      abortSession: (sessionId: string) => {
+        const session = get().sessions.get(sessionId);
+        if (session?.abortController) {
+          session.abortController.abort();
+          get().updateSessionData(sessionId, {
+            abortController: new AbortController(),
+          });
+        }
+      },
+
+      abortAllSessions: () => {
+        const { sessions } = get();
+        sessions.forEach((session, sessionId) => {
+          if (session.abortController) {
+            session.abortController.abort();
+            get().updateSessionData(sessionId, {
+              abortController: new AbortController(),
+            });
+          }
+        });
+      },
+
+      // Utilities
+      initializeSession: (
+        sessionId: string,
+        backendSession?: BackendChatSession
+      ) => {
+        const initialData: Partial<ChatSessionData> = {
+          isLoaded: true,
+          description: backendSession?.description,
+          personaId: backendSession?.persona_id,
+        };
+
+        const existingSession = get().sessions.get(sessionId);
+        if (existingSession) {
+          get().updateSessionData(sessionId, initialData);
+        } else {
+          get().createSession(sessionId, initialData);
+        }
+      },
+
+      cleanupOldSessions: (maxSessions: number = 10) => {
+        set((state) => {
+          const sortedSessions = Array.from(state.sessions.entries()).sort(
+            ([, a], [, b]) => b.lastAccessed.getTime() - a.lastAccessed.getTime()
+          );
+
+          if (sortedSessions.length <= maxSessions) {
+            return state;
+          }
+
+          const sessionsToKeep = sortedSessions.slice(0, maxSessions);
+          const sessionsToRemove = sortedSessions.slice(maxSessions);
+
+          // Abort controllers for sessions being removed
+          sessionsToRemove.forEach(([, session]) => {
+            if (session.abortController) {
+              session.abortController.abort();
+            }
+          });
+
+          const newSessions = new Map(sessionsToKeep);
+
+          return {
+            sessions: newSessions,
+          };
+        });
+      },
+    }),
+    chatPersistStorage(PERSIST_VERSION)
+  )
+);
+
+export const useCurrentMessageTree = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.messageTree;
+  });
+
+export const useCurrentMessageHistory = () => {
+  const messageTree = useCurrentMessageTree();
+  return useMemo(() => {
+    if (!messageTree) {
+      return [];
+    }
+    return getLatestMessageChain(messageTree);
+  }, [messageTree]);
+};
+
+export const useCurrentChatState = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.chatState || "input";
+  });
+
+export const useCurrentPersonaId = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.personaId;
+  });
+
+export const useUncaughtError = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.uncaughtError || null;
+  });
+
+export const useLoadingError = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.loadingError || null;
+  });
+
+export const useIsReady = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.isReady ?? true;
+  });
+
+export const useDocumentSidebarVisible = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.documentSidebarVisible || false;
+  });
+
+export const useSelectedNodeForDocDisplay = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.selectedNodeIdForDocDisplay || null;
+  });
+
+export const useHasSentLocalUserMessage = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.hasSentLocalUserMessage || false;
+  });
+
+export const useStreamingStartTime = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.streamingStartTime;
+  });
+
+const EMPTY_QUEUED_MESSAGES: QueuedMessage[] = [];
+export const useCurrentQueuedMessages = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
+  });
+
+export const useCurrentLatestMessageRenderComplete = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.latestMessageRenderComplete ?? true;
+  });
+
+export const useCurrentIsStreamDraining = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.isStreamDraining ?? false;
+  });
+
+// Re-export the type so the persist slice (and other consumers) can reference it.
+export type { ChatSessionData };
