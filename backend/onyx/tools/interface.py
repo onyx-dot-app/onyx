@@ -18,6 +18,8 @@ class Tool(abc.ABC, Generic[TOverride]):
     def __init__(self, emitter: Emitter | None = None):
         """Initialize tool with optional emitter. Emitter can be set later via set_emitter()."""
         self._emitter = emitter
+        # When set, overrides the name sent to the LLM (see set_llm_name_override).
+        self._llm_name_override: str | None = None
 
     @property
     def emitter(self) -> Emitter:
@@ -27,6 +29,17 @@ class Tool(abc.ABC, Generic[TOverride]):
                 f"Emitter not set on tool {self.name}. Call set_emitter() first."
             )
         return self._emitter
+
+    def set_llm_name_override(self, name: str | None) -> None:
+        """Override the name presented to the LLM for this tool.
+
+        Used to disambiguate tools whose names would otherwise collide within a
+        single request (some providers, e.g. Gemini, reject duplicate function
+        declarations). Subclasses that support overriding must consult
+        ``self._llm_name_override`` from their ``name`` property. The user-facing
+        ``display_name`` is intentionally left unchanged.
+        """
+        self._llm_name_override = name
 
     @property
     @abc.abstractmethod

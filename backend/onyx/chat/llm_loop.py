@@ -63,6 +63,7 @@ from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.tools.tool_name import disambiguate_tool_names
 from onyx.tools.tool_runner import run_tool_calls
 from onyx.tracing.framework.create import trace
 from onyx.utils.logger import setup_logger
@@ -636,6 +637,13 @@ def run_llm_loop(
         )  # Here for lazy load LiteLLM
 
         initialize_litellm()
+
+        # Ensure tool names sent to the LLM are unique. Multiple MCP servers can
+        # expose tools with the same name (e.g. "search"), which produces
+        # duplicate function declarations that some providers (e.g. Gemini)
+        # reject. This renames only the colliding MCP tools and leaves their
+        # user-facing display names untouched.
+        disambiguate_tool_names(tools)
 
         # Normalize chat_files to a mutable list so we can extend it mid-loop
         # when a search hit carries an attached file the Python tool should

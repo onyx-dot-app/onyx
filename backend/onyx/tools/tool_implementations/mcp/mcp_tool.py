@@ -79,7 +79,6 @@ class MCPTool(Tool[None]):
         self._tool_definition = tool_definition
         self._description = tool_description
         self._display_name = tool_definition.get("displayName", tool_name)
-        self._llm_name = f"mcp:{mcp_server.name}:{tool_name}"
 
     @property
     def id(self) -> int:
@@ -87,7 +86,12 @@ class MCPTool(Tool[None]):
 
     @property
     def name(self) -> str:
-        return self._name
+        # Honor a disambiguation override (set when this tool's name would
+        # collide with another tool in the same request). Falls back to the
+        # raw MCP tool name. This is the single name used both in the LLM tool
+        # definition and for dispatching the resulting tool call, so the two
+        # always stay in sync.
+        return self._llm_name_override or self._name
 
     @property
     def description(self) -> str:
@@ -97,17 +101,15 @@ class MCPTool(Tool[None]):
     def display_name(self) -> str:
         return self._display_name
 
-    @property
-    def llm_name(self) -> str:
-        return self._llm_name
-
     def tool_definition(self) -> dict:
         """Return the tool definition from the MCP server"""
-        # Convert MCP tool definition to OpenAI function calling format
+        # Convert MCP tool definition to OpenAI function calling format.
+        # Use self.name (not self._name) so any disambiguation override is
+        # reflected in the function name presented to the LLM.
         return {
             "type": "function",
             "function": {
-                "name": self._name,
+                "name": self.name,
                 "description": self._description,
                 "parameters": _normalize_parameters_schema(self._tool_definition),
             },
