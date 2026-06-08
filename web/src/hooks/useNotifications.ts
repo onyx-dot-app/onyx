@@ -181,10 +181,7 @@ export default function useNotifications({
     void mutateGlobal(NOTIFICATIONS_SUMMARY_URL);
     if (!enabled) return Promise.resolve(undefined);
 
-    return mutate((currentData) => currentData, {
-      populateCache: false,
-      revalidate: true,
-    });
+    return mutate();
   }, [enabled, mutate, mutateGlobal]);
 
   return {
