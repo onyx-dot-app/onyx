@@ -243,6 +243,11 @@ module.exports = {
         "02": "var(--backdrop-blur-02)",
         "03": "var(--backdrop-blur-03)",
       },
+      zIndex: {
+        "settings-header": "var(--z-settings-header)",
+        popover: "var(--z-popover)",
+        tooltip: "var(--z-tooltip)",
+      },
     },
   },
 };
