@@ -13,26 +13,6 @@ import type {
 } from "@/lib/notifications/interfaces";
 
 const DEFAULT_NOTIFICATIONS_PAGE_SIZE = 25;
-const NOTIFICATIONS_SUMMARY_URL = `${SWR_KEYS.notifications}/summary`;
-
-function buildNotificationsUrl({
-  pageNum,
-  pageSize,
-  notificationType,
-}: {
-  pageNum: number;
-  pageSize: number;
-  notificationType?: NotificationType;
-}): string {
-  const params = new URLSearchParams({
-    page_num: pageNum.toString(),
-    page_size: pageSize.toString(),
-  });
-  if (notificationType) {
-    params.set("notif_type", notificationType);
-  }
-  return `${SWR_KEYS.notifications}?${params.toString()}`;
-}
 
 interface UseNotificationsOptions {
   pageSize?: number;
@@ -42,7 +22,7 @@ interface UseNotificationsOptions {
 
 export function useNotificationSummary() {
   const { data, error, isLoading, mutate } = useSWR<NotificationSummary>(
-    NOTIFICATIONS_SUMMARY_URL,
+    SWR_KEYS.notificationsSummary,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
@@ -82,12 +62,7 @@ export default function useNotifications({
 }: UseNotificationsOptions = {}) {
   const { mutate: mutateGlobal } = useSWRConfig();
   const firstPageKey = useMemo(
-    () =>
-      buildNotificationsUrl({
-        pageNum: 0,
-        pageSize,
-        notificationType,
-      }),
+    () => SWR_KEYS.notificationsPage(0, pageSize, notificationType),
     [notificationType, pageSize]
   );
   const getKey = useCallback(
@@ -100,11 +75,7 @@ export default function useNotifications({
 
       if (pageIndex === 0) return firstPageKey;
 
-      return buildNotificationsUrl({
-        pageNum: pageIndex,
-        pageSize,
-        notificationType,
-      });
+      return SWR_KEYS.notificationsPage(pageIndex, pageSize, notificationType);
     },
     [enabled, firstPageKey, notificationType, pageSize]
   );
@@ -178,7 +149,7 @@ export default function useNotifications({
   }, [setSize]);
 
   const refresh = useCallback(() => {
-    void mutateGlobal(NOTIFICATIONS_SUMMARY_URL);
+    void mutateGlobal(SWR_KEYS.notificationsSummary);
     if (!enabled) return Promise.resolve(undefined);
 
     return mutate();

@@ -1,3 +1,5 @@
+import type { NotificationType } from "@/lib/notifications/interfaces";
+
 /**
  * Centralized SWR cache key registry.
  *
@@ -83,6 +85,21 @@ export const SWR_KEYS = {
   userPats: "/api/user/pats",
   userPatScopes: "/api/user/pats/scopes",
   notifications: "/api/notifications",
+  notificationsSummary: "/api/notifications/summary",
+  notificationsPage: (
+    pageNum: number,
+    pageSize: number,
+    notificationType?: NotificationType
+  ) => {
+    const params = new URLSearchParams({
+      page_num: pageNum.toString(),
+      page_size: pageSize.toString(),
+    });
+    if (notificationType) {
+      params.set("notif_type", notificationType);
+    }
+    return `/api/notifications?${params.toString()}`;
+  },
 
   // ── Users ─────────────────────────────────────────────────────────────────
   acceptedUsers: "/api/manage/users/accepted/all",
