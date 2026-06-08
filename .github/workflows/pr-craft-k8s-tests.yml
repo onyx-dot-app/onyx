@@ -15,6 +15,7 @@ on:
     branches: [main]
     paths:
       - "backend/onyx/server/features/build/sandbox/**"
+      - "backend/onyx/server/features/build/approvals/**"
       - "backend/onyx/skills/**"
       - "backend/onyx/sandbox_proxy/**"
       - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py"

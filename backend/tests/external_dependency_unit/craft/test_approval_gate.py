@@ -2,10 +2,10 @@
 
 Gated to the K8s CI lane via ``pytestmark`` — never run locally (touches the
 real cluster). Each test provisions a sandbox pod, seeds a User + BuildSession,
-drives a real sandbox-side curl against slack.com tagged with the session id
-(as the opencode plugin does in production), and asserts the ApprovalDecision
-flow. Complements the in-process ``test_approvals_api.py`` by exercising the
-real proxy/Redis/SIGTERM-drain paths.
+drives a real sandbox-side curl against slack.com tagged with the session id (as
+the opencode plugin does in production), and asserts the ApprovalDecision flow.
+Complements the in-process ``test_approvals_api.py`` by exercising the real
+proxy/Redis/SIGTERM-drain paths.
 
 Run with::
 
@@ -85,16 +85,17 @@ _WAIT_TIMEOUT_S_SPEC = 180
 
 @pytest.fixture(scope="module", autouse=True)
 def _seed_slack_external_app() -> Generator[None, None, None]:
-    """Seed an enabled Slack ``external_app`` so the matcher claims
+    """
+    Seeds an enabled Slack ``external_app`` so the matcher claims
     ``chat.postMessage``. The K8s lane doesn't auto-provision
-    (``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS`` defaults off and only fires in
-    MT tenant provisioning), so without this row every test below would 404
-    the matcher and never park an approval.
+    (``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS`` defaults off and only fires in MT
+    tenant provisioning), so without this row every test below would 404 the
+    matcher and never park an approval.
 
-    Survives the per-test ``_isolate_skill_tables`` snapshot/restore because
-    it commits before the first test in this module runs -- the isolation
-    fixture's baseline captures it and restores it after each test.
-    Idempotent: skips if a Slack row already exists.
+    Survives the per-test ``_isolate_skill_tables`` snapshot/restore because it
+    commits before the first test in this module runs -- the isolation fixture's
+    baseline captures it and restores it after each test. Idempotent: skips if a
+    Slack row already exists.
     """
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
@@ -130,11 +131,11 @@ def _post_slack_via_curl(
     max_time_s: int = 240,
     session_id: UUID | None = None,
 ) -> None:
-    """Drive a sandbox-side curl against Slack's chat.postMessage.
+    """Drives a sandbox-side curl against Slack's chat.postMessage.
 
     The bearer is intentionally fake — Slack responds ``invalid_auth`` if the
-    request reaches it (relied on by the APPROVED test). ``session_id`` tags
-    the egress so the gate resolves the session; omit it for the untagged
+    request reaches it (relied on by the APPROVED test). ``session_id`` tags the
+    egress so the gate resolves the session; omit it for the untagged
     fail-closed path.
     """
     pod_exec_async(
@@ -156,7 +157,8 @@ def _post_slack_via_curl(
 def _wait_for_pending_approval(
     db_session: Session, session_id: UUID, timeout_s: float = 30
 ) -> ActionApproval:
-    """Poll until a pending (``decision IS NULL``) row exists for ``session_id``.
+    """
+    Polls until a pending (``decision IS NULL``) row exists for ``session_id``.
 
     The proxy commits the row asynchronously, so we must observe it before
     submitting a decision.
@@ -181,7 +183,8 @@ def _wait_for_pending_approval(
 
 
 def _approval_count_for_user(db_session: Session, user_id: UUID) -> int:
-    """Count approvals across every session owned by ``user_id``.
+    """
+    Counts approvals across every session owned by ``user_id``.
 
     Wider than per-session so a gate bug minting under a different session_id
     still trips the assertion.
@@ -196,7 +199,7 @@ def _approval_count_for_user(db_session: Session, user_id: UUID) -> int:
 
 
 def _find_proxy_pod_name(k8s: client.CoreV1Api) -> str:
-    """Return the name of one running sandbox-proxy pod.
+    """Returns the name of one running sandbox-proxy pod.
 
     Assumes ``replicas == 1`` (helm chart default). If scaled higher we return
     an arbitrary ``items[0]``, and the SIGTERM-drain test would only drain that
@@ -216,7 +219,7 @@ def _find_proxy_pod_name(k8s: client.CoreV1Api) -> str:
 
 
 def _find_proxy_pod_ip(k8s: client.CoreV1Api) -> str:
-    """Return the pod IP of one running sandbox-proxy pod.
+    """Returns the pod IP of one running sandbox-proxy pod.
 
     The rogue pod in test_unidentified_sandbox_403_from_non_sandbox_pod needs
     this — it can't resolve the ``sandbox-proxy`` host alias the real sandbox
@@ -236,10 +239,13 @@ def _find_proxy_pod_ip(k8s: client.CoreV1Api) -> str:
 
 
 def _assert_403_error_code(body: str, expected_code: str) -> None:
-    """Assert a 403 body carries the expected error code, ignoring JSON whitespace."""
+    """
+    Asserts a 403 body carries the expected error code, ignoring JSON
+    whitespace.
+    """
     normalized = body.replace(" ", "")
     assert f'"error":"{expected_code}"' in normalized, (
-        f"expected error_code={expected_code!r} in body, got: {body!r}"
+        f"Expected error_code={expected_code!r} in body, got: {body!r}"
     )
 
 
@@ -248,7 +254,7 @@ def gated_session(
     db_session: Session,
     live_pod: tuple[UUID, UUID, str],
 ) -> Generator[tuple[User, UUID, str], None, None]:
-    """Seed an ACTIVE ``BuildSession`` matching ``live_pod``'s ids.
+    """Seeds an ACTIVE ``BuildSession`` matching ``live_pod``'s ids.
 
     ``live_pod`` provisions a sandbox backed by committed ``User`` + ``Sandbox``
     rows (see ``_provisioned_sandbox``), so the owner is read from the sandbox
@@ -256,9 +262,9 @@ def gated_session(
     ``ondelete=CASCADE`` drops the related build_session / action_approval /
     notification rows, so this fixture has nothing to tear down.
 
-    No explicit ``tenant_context`` dependency: ``k8s_manager`` (via ``live_pod``)
-    already sets ``CURRENT_TENANT_ID_CONTEXTVAR`` before this body runs. If that
-    behaviour is removed this fixture breaks silently.
+    No explicit ``tenant_context`` dependency: ``k8s_manager`` (via
+    ``live_pod``) already sets ``CURRENT_TENANT_ID_CONTEXTVAR`` before this body
+    runs. If that behaviour is removed this fixture breaks silently.
     """
     sandbox_id, session_id, pod_name = live_pod
 
@@ -357,7 +363,7 @@ def test_approved_decision_forwards_to_slack(
         k8s_client, pod_name, output_path, timeout_s=45
     )
     assert status_code == 200, (
-        f"forwarded request should hit Slack and return 200 (Slack will say "
+        f"Forwarded request should hit Slack and return 200 (Slack will say "
         f"invalid_auth in the body). Got {status_code}: {body!r}"
     )
     assert "invalid_auth" in body.strip(), (
@@ -431,8 +437,8 @@ def test_sigterm_drain_unblocks_parked_request(
 
     _wait_for_pending_approval(db_session, session_id)
 
-    # Don't wait for graceful termination — the proxy's SIGTERM drain
-    # coroutine is what should fire the wakes.
+    # Don't wait for graceful termination — the proxy's SIGTERM drain coroutine
+    # is what should fire the wakes.
     proxy_pod_name = _find_proxy_pod_name(k8s_client)
     logger.info("test deleting proxy pod %s", proxy_pod_name)
     k8s_client.delete_namespaced_pod(
@@ -456,9 +462,9 @@ def test_sigterm_drain_unblocks_parked_request(
             .filter(ActionApproval.session_id == session_id)
             .all()
         )
-        assert rows, "expected an approval row to exist after drain"
+        assert rows, "Expected an approval row to exist after drain."
         assert all(r.decision == ApprovalDecision.EXPIRED for r in rows), (
-            f"all approval rows for the session should be EXPIRED after drain: "
+            f"All approval rows for the session should be EXPIRED after drain: "
             f"{[(r.approval_id, r.decision) for r in rows]}"
         )
     finally:
@@ -502,12 +508,12 @@ def test_non_gated_egress_works_without_active_session(
         k8s_client, pod_name, output_path, timeout_s=90
     )
     assert status_code == 200, (
-        f"non-gated egress to npm registry should return 200 even without an "
+        f"Non-gated egress to npm registry should return 200 even without an "
         f"active session, got {status_code}"
     )
 
     assert _approval_count_for_user(db_session, user.id) == 0, (
-        "non-gated egress must not mint an approval row (under ANY session id)"
+        "Non-gated egress must not mint an approval row (under ANY session id)"
     )
 
 
@@ -531,7 +537,7 @@ def test_gated_egress_without_session_tag_fails_closed(
         k8s_client, pod_name, output_path, timeout_s=30
     )
     assert status_code == 403, (
-        f"gated request without a session tag should return 403, "
+        f"Gated request without a session tag should return 403, "
         f"got {status_code}: {body!r}"
     )
     _assert_403_error_code(body, "no_active_session")
@@ -610,7 +616,7 @@ def test_body_too_large_returns_403(
         k8s_client, pod_name, output_path, timeout_s=60
     )
     assert status_code == 403, (
-        f"oversize body should return 403, got {status_code}: {body!r}"
+        f"Oversize body should return 403, got {status_code}: {body!r}"
     )
     _assert_403_error_code(body, "body_too_large")
 
@@ -635,8 +641,8 @@ def test_approval_requested_notification_is_created(
 
     pending = _wait_for_pending_approval(db_session, session_id)
 
-    # Poll under cluster load; the notification commits in the same
-    # transaction as the approval row.
+    # Poll under cluster load; the notification commits in the same transaction
+    # as the approval row.
     notif: Notification | None = None
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
@@ -657,14 +663,15 @@ def test_approval_requested_notification_is_created(
         time.sleep(0.5)
 
     assert notif is not None, (
-        f"expected APPROVAL_REQUESTED notification for user {user.id}, got none"
+        f"Expected APPROVAL_REQUESTED notification for user {user.id}, got none."
     )
     assert notif.additional_data is not None
     assert notif.additional_data.get("approval_id") == str(pending.approval_id), (
         f"notification.additional_data.approval_id should match "
         f"{pending.approval_id}, got: {notif.additional_data!r}"
     )
-    # Deep-link spec hardcoded (`/craft/v1?sessionId=<id>`) rather than imported.
+    # Deep-link spec hardcoded (`/craft/v1?sessionId=<id>`) rather than
+    # imported.
     assert notif.additional_data.get("link") == f"/craft/v1?sessionId={session_id}", (
         f"notification.additional_data.link should deep-link to the session, "
         f"got: {notif.additional_data!r}"
@@ -746,11 +753,11 @@ def test_list_live_excludes_aged_pending_rows(
     )
     boundary_ids = {item.approval_id for item in boundary.items}
     assert just_live_id in boundary_ids, (
-        f"row created {_WAIT_TIMEOUT_S_SPEC - 5}s ago should be live "
+        f"Row created {_WAIT_TIMEOUT_S_SPEC - 5}s ago should be live "
         f"(cutoff edge), got: {boundary_ids}"
     )
     assert just_expired_id not in boundary_ids, (
-        f"row created {_WAIT_TIMEOUT_S_SPEC + 5}s ago should be excluded "
+        f"Row created {_WAIT_TIMEOUT_S_SPEC + 5}s ago should be excluded "
         f"(just past cutoff), got: {boundary_ids}"
     )
 
@@ -794,8 +801,8 @@ def test_row_missing_on_claim_returns_expired(
 
     Exercises the row-missing branch of ``_claim_expired_or_read_winner``:
     deleting the BuildSession cascades the action_approval row away while the
-    proxy is parked, so the post-timeout claim finds nothing to UPDATE.
-    Slow: waits out the full ~180s park window.
+    proxy is parked, so the post-timeout claim finds nothing to UPDATE. Slow:
+    waits out the full ~180s park window.
     """
     user, session_id, pod_name = gated_session
 
@@ -835,7 +842,7 @@ def test_row_missing_on_claim_returns_expired(
             select(ActionApproval).where(ActionApproval.approval_id == approval_id)
         )
         is None
-    ), "FK cascade from build_session should have dropped the action_approval row"
+    ), "FK cascade from build_session should have dropped the action_approval row."
 
     # User survives: cascade only crossed build_session → action_approval.
     assert db_session.get(User, user.id) is not None
@@ -851,8 +858,8 @@ def test_post_decision_after_proxy_claimed_expired_returns_conflict(
     """``submit_decision`` after the proxy already claimed EXPIRED → CONFLICT.
 
     Exercises ``_existing_decision_response``'s CONFLICT path: the recorded
-    decision (EXPIRED) differs from the requested one (REJECTED). Slow: only
-    K8s coverage of the real wait-timeout claim race; waits the full ~180s.
+    decision (EXPIRED) differs from the requested one (REJECTED). Slow: only K8s
+    coverage of the real wait-timeout claim race; waits the full ~180s.
     """
     user, session_id, pod_name = gated_session
 
@@ -873,7 +880,7 @@ def test_post_decision_after_proxy_claimed_expired_returns_conflict(
         k8s_client, pod_name, output_path, timeout_s=_WAIT_TIMEOUT_S_SPEC + 30
     )
     assert status_code == 403, (
-        f"expected 403 after wait-timeout, got {status_code}: {body!r}"
+        f"Expected 403 after wait-timeout, got {status_code}: {body!r}"
     )
     _assert_403_error_code(body, "not_authorized")
 
@@ -882,7 +889,7 @@ def test_post_decision_after_proxy_claimed_expired_returns_conflict(
     refreshed = db_session.get(ActionApproval, pending.approval_id)
     assert refreshed is not None
     assert refreshed.decision == ApprovalDecision.EXPIRED, (
-        f"proxy should have claimed EXPIRED, got: {refreshed.decision}"
+        f"Proxy should have claimed EXPIRED, got: {refreshed.decision}"
     )
 
     with pytest.raises(OnyxError) as exc_info:
@@ -906,8 +913,8 @@ def test_unidentified_sandbox_403_from_non_sandbox_pod(
 
     Such a pod isn't in the informer cache, so the gate returns 403
     ``unidentified_sandbox`` before matcher logic runs. We hand-build a minimal
-    curl pod (the standard helpers would attach the managed-by label) pointed
-    at the proxy's pod IP and read its logs.
+    curl pod (the standard helpers would attach the managed-by label) pointed at
+    the proxy's pod IP and read its logs.
     """
     rogue_pod_name = f"rogue-curl-{uuid4().hex[:8]}"
     proxy_ip = _find_proxy_pod_ip(k8s_client)
@@ -940,8 +947,8 @@ def test_unidentified_sandbox_403_from_non_sandbox_pod(
         metadata=client.V1ObjectMeta(
             name=rogue_pod_name,
             namespace=SANDBOX_NAMESPACE,
-            # No managed-by / sandbox-id labels — that's the point: the
-            # informer cache won't have an entry for this pod IP.
+            # No managed-by / sandbox-id labels — that's the point: the informer
+            # cache won't have an entry for this pod IP.
             labels={"app": "rogue-test"},
         ),
         spec=client.V1PodSpec(
@@ -970,14 +977,14 @@ def test_unidentified_sandbox_403_from_non_sandbox_pod(
                 break
             time.sleep(2)
         assert phase in ("Succeeded", "Failed"), (
-            f"rogue pod {rogue_pod_name} did not terminate within 90s, phase={phase!r}"
+            f"Rogue pod {rogue_pod_name} did not terminate within 90s, phase={phase!r}"
         )
 
         logs = k8s_client.read_namespaced_pod_log(
             name=rogue_pod_name, namespace=SANDBOX_NAMESPACE
         )
         assert "HTTP_STATUS:403" in logs, (
-            f"expected 403 from gate for unidentified sandbox, got logs: {logs!r}"
+            f"Expected 403 from gate for unidentified sandbox, got logs: {logs!r}"
         )
         _assert_403_error_code(logs, "unidentified_sandbox")
     finally:
