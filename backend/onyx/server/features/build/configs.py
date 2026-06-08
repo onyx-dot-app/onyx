@@ -66,15 +66,10 @@ SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get(
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
-# Keep in sync with BUILD_MODE_PROVIDERS in
-# web/src/app/craft/onboarding/constants.ts; enforced by
-# test_build_mode_provider_types_sync.py.
+
+# Provider types Craft supports. The recommended models per type come from the
+# shared recommended-models config (served via /build/recommended-models).
 BUILD_MODE_ALLOWED_PROVIDER_TYPES = ["anthropic", "openai", "openrouter"]
-BUILD_MODE_RECOMMENDED_MODEL_BY_TYPE = {
-    "anthropic": "claude-opus-4-8",
-    "openai": "gpt-5.5",
-    "openrouter": "minimax/minimax-m3",
-}
 
 # Dev/debug-only: exposes an SSE endpoint that tails the sandbox pod's
 # opencode-serve container logs. Never enable in prod — the logs include LLM I/O

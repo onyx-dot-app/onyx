@@ -143,10 +143,10 @@ class BuildStreamingState:
         """Build a synthetic packet with accumulated thought text.
 
         ``routing_meta`` (when set) is merged into the packet's ACP ``_meta``
-        field.
+        field so a persisted subagent follow-up reloads under its subagent.
 
         Returns:
-            A synthetic agent_thought packet or None if no chunks accumulated
+            A synthetic agent_thought packet or None if no chunks accumulated.
         """
         if not self.thought_chunks:
             return None
@@ -316,7 +316,7 @@ def _save_pending_chunks(
     state: BuildStreamingState,
     routing_meta: dict[str, Any] | None = None,
 ) -> None:
-    """Flush any pending accumulated message/thought chunks to the DB.
+    """Flush pending message/thought chunks to the DB.
 
     Called when the next sandbox event is of a different type than the chunks
     currently being accumulated, and once more at end of stream.
@@ -506,8 +506,10 @@ def persist_sandbox_event(
 
     Behavior matches the pre-refactor interactive path exactly:
     - SSEKeepalive: no-op (handled by callers).
-    - agent_message_chunk / agent_thought_chunk: accumulated; flushed
-      when a non-chunk event arrives or at end of stream.
+    - agent_message_chunk: accumulated; flushed when a non-chunk event arrives
+      or at end of stream.
+    - agent_thought_chunk: accumulated; flushed when a non-chunk event arrives
+      or at end of stream.
     - tool_call_start: no-op (only completed tool calls persist).
     - tool_call_progress: TodoWrite saves every progress update; other
       tools save only on `status == "completed"`. Completed Task

@@ -113,6 +113,7 @@ const BaseInputBar = memo(
         handleCompositionStart,
         handleCompositionEnd,
         pasteText,
+        pasteExpandHintVisible,
         handleCopy,
         handleCut,
         setCursorToEnd,
@@ -122,6 +123,7 @@ const BaseInputBar = memo(
         tilePopover,
         dismissTilePopover,
         updateTileText,
+        expandTile,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
         pasteTilesEnabled,
@@ -328,13 +330,23 @@ const BaseInputBar = memo(
             <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
               <div className="flex flex-row items-center gap-2">
                 {bottomLeftSlot}
-                {!message && queueEnabled && queue.length > 0 && (
+                {pasteExpandHintVisible ? (
                   <div className="flex items-center gap-1 select-none">
-                    <Keycap>↑</Keycap>
                     <Text font="secondary-body" color="text-02">
-                      to edit queued messages
+                      Paste again to expand
                     </Text>
                   </div>
+                ) : (
+                  !message &&
+                  queueEnabled &&
+                  queue.length > 0 && (
+                    <div className="flex items-center gap-1 select-none">
+                      <Keycap>↑</Keycap>
+                      <Text font="secondary-body" color="text-02">
+                        to edit queued messages
+                      </Text>
+                    </div>
+                  )
                 )}
               </div>
               <div className="flex flex-row items-center gap-1">
@@ -387,6 +399,7 @@ const BaseInputBar = memo(
               tileElement={tilePopover.tile}
               onDismiss={dismissTilePopover}
               onTextChange={updateTileText}
+              onExpand={() => expandTile(tilePopover.tile)}
             />
           )}
         </Disabled>

@@ -32,11 +32,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   openssh-client \
   pkg-config \
   postgresql-client \
-  python3-venv \
   ripgrep \
   socat \
   sudo \
-  supervisor \
   unzip \
   wget \
   zsh \
@@ -120,11 +118,11 @@ RUN apt-get update \
 
 # Install Python 3.13 via uv into a stable, image-level path so venvs
 # created in bind-mounted workspaces survive across `docker run`s.
-# Ubuntu 26.04's system Python is 3.14, but onnxruntime only ships
-# cp311–cp313 wheels, so the repo pins 3.13 (the top of that range)
-# via .python-version.
 ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
-RUN uv python install 3.13
+RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
+  && ln -s python3.13 /usr/local/bin/python3 \
+  && ln -s python3.13 /usr/local/bin/python \
+  && python --version
 
 # Create non-root dev user with passwordless sudo
 RUN useradd -m -s /bin/zsh dev && \

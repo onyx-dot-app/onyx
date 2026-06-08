@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import field_validator
 from pydantic import InstanceOf
 
 from onyx.db.enums import EndpointPolicy
@@ -26,7 +27,9 @@ class RestRoute(BaseModel):
 
     ``path`` is a template compared segment-by-segment against the request path
     (see ``path_matches``): a ``{name}`` segment matches exactly one path
-    segment (a resource id), literal segments must match verbatim, and a single
+    segment (a resource id), a trailing ``{name...}`` segment matches one or
+    more remaining segments (for slash-bearing tails like a file path or a
+    ``heads/feature/x`` ref), literal segments must match verbatim, and a single
     trailing slash is ignored. Placeholders name the resource for readability;
     the decision uses only the matched action, not the captured value."""
 
@@ -37,24 +40,52 @@ class RestRoute(BaseModel):
     path: str
     resource_type: str | None = None
 
+    @field_validator("path")
+    @classmethod
+    def _wildcard_must_be_trailing(cls, path: str) -> str:
+        # `path_matches` only honours a `{name...}` wildcard in the last segment;
+        # reject it elsewhere at catalog-load time instead of mis-matching silently.
+        if any(seg.endswith("...}") for seg in path.rstrip("/").split("/")[:-1]):
+            raise ValueError(
+                f"'{{name...}}' wildcard must be the last segment: {path!r}"
+            )
+        return path
+
+
+def _segment_matches(expected: str, actual: str) -> bool:
+    """One template segment vs one path segment: a ``{name}`` placeholder
+    matches any single non-empty segment, a literal must match exactly."""
+    if expected.startswith("{") and expected.endswith("}"):
+        return bool(actual)  # a placeholder requires a non-empty segment
+    return expected == actual
+
 
 def path_matches(template: str, path: str) -> bool:
     """Whether request ``path`` matches a ``RestRoute.path`` template.
 
     Segments (split on ``/``) are compared positionally: a ``{name}`` segment
     matches any single non-empty segment, a literal segment must match exactly.
-    A single trailing slash on either side is ignored."""
+    A trailing ``{name...}`` segment matches one *or more* remaining segments,
+    for tails that are themselves slash-bearing (a ``contents`` file path, a
+    ``heads/feature/x`` ref). A single trailing slash on either side is ignored.
+    """
     expected_segments = template.rstrip("/").split("/")
     actual_segments = path.rstrip("/").split("/")
+
+    last = expected_segments[-1]
+    if last.startswith("{") and last.endswith("...}"):
+        prefix = expected_segments[:-1]
+        tail: list[str] = actual_segments[len(prefix) :]
+        # Wildcard must swallow >=1 segment and reject empties (`//`), like `{name}`.
+        if not tail or not all(tail):
+            return False
+        return all(_segment_matches(e, a) for e, a in zip(prefix, actual_segments))
+
     if len(expected_segments) != len(actual_segments):
         return False
-    for expected, actual in zip(expected_segments, actual_segments):
-        if expected.startswith("{") and expected.endswith("}"):
-            if not actual:  # a placeholder requires a non-empty segment
-                return False
-        elif expected != actual:
-            return False
-    return True
+    return all(
+        _segment_matches(e, a) for e, a in zip(expected_segments, actual_segments)
+    )
 
 
 class GraphQLOp(BaseModel):

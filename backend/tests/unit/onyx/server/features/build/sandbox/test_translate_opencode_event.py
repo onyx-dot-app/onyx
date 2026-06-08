@@ -139,6 +139,32 @@ def test_reasoning_delta_yields_agent_thought_chunk() -> None:
     assert isinstance(out[0], AgentThoughtChunk)
 
 
+def test_empty_reasoning_delta_is_ignored() -> None:
+    """Anthropic can emit an empty reasoning delta when adaptive thinking
+    display is omitted. Empty thought packets should not be surfaced to Craft."""
+    s = _assistant_state()
+    s.part_types["p1"] = "reasoning"
+
+    out = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.part.delta",
+                "properties": {
+                    "sessionID": SESS,
+                    "messageID": "msg_assistant",
+                    "partID": "p1",
+                    "field": "text",
+                    "delta": "",
+                },
+            },
+            s,
+        )
+    )
+
+    assert out == []
+    assert "p1" not in s.local_text
+
+
 def test_reasoning_part_type_recorded_from_part_updated() -> None:
     """A ``message.part.updated`` with ``type=reasoning`` should register
     the part's type so subsequent deltas route to AgentThoughtChunk."""

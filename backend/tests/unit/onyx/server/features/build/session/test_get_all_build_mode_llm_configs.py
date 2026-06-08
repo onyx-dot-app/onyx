@@ -9,6 +9,7 @@ pre-registered when the pod was created.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import cast
@@ -16,6 +17,7 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
@@ -28,6 +30,25 @@ from onyx.server.features.build.session.llm_config import get_all_build_mode_llm
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationView
+
+# The recommended default model per provider type is sourced from the shared
+# recommended-models config (GitHub-or-bundled) at runtime. Stub it here so
+# these unit tests are deterministic and don't hit the network.
+_TEST_RECOMMENDED_BY_TYPE = {
+    "anthropic": "claude-opus-4-8",
+    "openai": "gpt-5.5",
+    "openrouter": "minimax/minimax-m3",
+}
+
+
+@pytest.fixture(autouse=True)
+def _stub_recommended_default() -> Iterator[None]:
+    with patch(
+        "onyx.server.features.build.session.llm_config."
+        "fetch_default_model_for_provider",
+        side_effect=lambda provider_name: _TEST_RECOMMENDED_BY_TYPE.get(provider_name),
+    ):
+        yield
 
 
 def _model(name: str, is_visible: bool = True) -> ModelConfigurationView:

@@ -9,6 +9,9 @@ from onyx.llm.model_name_parser import parse_litellm_model_name
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import model_is_reasoning_model
+from onyx.llm.well_known_providers.llm_provider_options import (
+    fetch_default_model_for_provider,
+)
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -70,6 +73,8 @@ def assert_response_is_equivalent(
                 req.name, provider_name
             ),
             "supports_reasoning": model_is_reasoning_model(req.name, provider_name),
+            "is_recommended_default": req.name
+            == fetch_default_model_for_provider(provider_name),
             "display_name": display_name,
             "provider_display_name": parsed.provider_display_name,
             "vendor": parsed.vendor,

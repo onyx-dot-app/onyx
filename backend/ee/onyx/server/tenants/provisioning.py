@@ -46,7 +46,6 @@ from onyx.db.models import AvailableTenant
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
 from onyx.db.models import UserTenantMapping
-from onyx.external_apps.providers.registry import build_action_policies
 from onyx.external_apps.providers.registry import fetch_onyx_managed_built_in_apps
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
@@ -593,7 +592,7 @@ def provision_built_in_external_apps(db_session: Session) -> None:
                 organization_credentials=credentials or {},
                 enabled=False,
                 is_public=True,
-                action_policies=build_action_policies(app_type, None, {}),
+                action_policies=None,
             )
             # create_external_app flushes only; commit the seeded row.
             db_session.commit()
