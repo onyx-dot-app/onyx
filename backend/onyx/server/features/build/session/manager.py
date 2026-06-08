@@ -57,6 +57,7 @@ from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.user_library import build_user_library_fileset
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session import sandbox_lifecycle as _sandbox
 from onyx.server.features.build.session import streaming as _streaming
@@ -71,6 +72,8 @@ from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.skills.push import build_user_skills_payload
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import FunctionCall
+from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -195,18 +198,30 @@ class SessionManager:
         return get_user_build_sessions(user_id, self._db_session)
 
     def _hydrate_skills(
-        self, sandbox_id: UUID, user: User, files: FileSet | None = None
+        self, sandbox_id: UUID, user_id: UUID, files: FileSet | None = None
     ) -> None:
         try:
+            # When the caller prebuilt ``files`` (e.g. the parallel create-session
+            # warm-up) we never touch the ORM, so this is thread-safe.
+            user = (
+                None
+                if files is not None
+                else fetch_user_by_id(self._db_session, user_id)
+            )
+            if files is None and user is None:
+                logger.warning("Cannot push skills: user %s not found", user_id)
+                return
             hydrate_sandbox_skills(sandbox_id, user, self._db_session, files=files)
         except Exception:
             logger.warning(
                 "Failed to push skills to sandbox %s", sandbox_id, exc_info=True
             )
 
-    def _hydrate_user_library(self, sandbox_id: UUID, user_id: UUID) -> None:
+    def _hydrate_user_library(
+        self, sandbox_id: UUID, user_id: UUID, files: FileSet | None = None
+    ) -> None:
         try:
-            hydrate_user_library(sandbox_id, user_id, self._db_session)
+            hydrate_user_library(sandbox_id, user_id, self._db_session, files=files)
         except Exception:
             logger.warning(
                 "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
@@ -253,7 +268,7 @@ class SessionManager:
         if user is None:
             raise ValueError(f"User {user_id} not found")
         _, all_llm_configs = self.build_llm_configs(user)
-        return _sandbox.ensure_sandbox_ready(
+        sandbox = _sandbox.ensure_sandbox_ready(
             self._db_session,
             self._sandbox_manager,
             user_id,
@@ -262,6 +277,13 @@ class SessionManager:
             provisioning_wait_seconds=provisioning_wait_seconds,
             user=user,
         )
+        # Headless callers send a prompt right after; block until opencode-serve
+        # answers (create overlaps this wait, but here there's nothing to overlap).
+        if not self._sandbox_manager.wait_for_serve_ready(sandbox.id):
+            raise RuntimeError(
+                f"opencode-serve never became ready for sandbox {sandbox.id}"
+            )
+        return sandbox
 
     def create_session__no_commit(
         self,
@@ -337,8 +359,9 @@ class SessionManager:
 
         # Ensure the user's sandbox is RUNNING. Interactive callers can't
         # afford to wait through a concurrent provisioner, so we use the
-        # FAIL policy (raise RuntimeError if another request is mid-
-        # provision).
+        # FAIL policy (raise RuntimeError if another request is mid-provision).
+        # The pod is Ready on return; the opencode-serve wait runs below,
+        # concurrently with workspace setup + hydration.
         sandbox = _sandbox.ensure_sandbox_ready(
             self._db_session,
             self._sandbox_manager,
@@ -348,25 +371,70 @@ class SessionManager:
             user=user,
         )
 
-        # Set up session workspace within the sandbox
         logger.info(
             "Setting up session workspace %s in sandbox %s", session_id, sandbox.id
         )
         user_name = user.personal_name
 
+        # Prebuild filesets (DB reads) on this thread so the pushes can run
+        # off-thread without touching db_session. Capture ids as primitives too,
+        # so the worker threads never touch a (non-thread-safe) ORM attribute.
         skills_section, skills_files = build_user_skills_payload(user, self._db_session)
+        user_library_files = build_user_library_fileset(user_id, self._db_session)
+        sandbox_id = sandbox.id
+        build_session_id = build_session.id
 
-        self._sandbox_manager.setup_session_workspace(
-            sandbox_id=sandbox.id,
-            session_id=build_session.id,
-            llm_config=llm_config,
-            nextjs_port=nextjs_port,
-            skills_section=skills_section,
-            snapshot_path=None,  # TODO: Support restoring from snapshot
-            user_name=user_name,
-        )
-        self._hydrate_skills(sandbox.id, user, files=skills_files)
-        self._hydrate_user_library(sandbox.id, user_id)
+        # opencode-serve binding, workspace setup (bun install + Next.js), and
+        # the managed-dir pushes share no ordering — only a Ready pod. Fan them
+        # out so the slowest, not their sum, sets the wall-clock.
+        # run_functions_in_parallel propagates contextvars (tenant id, tracing)
+        # and re-raises the first failure.
+        def _wait_serve() -> None:
+            if not self._sandbox_manager.wait_for_serve_ready(sandbox_id):
+                raise RuntimeError(
+                    f"opencode-serve never became ready for sandbox {sandbox_id}"
+                )
+
+        def _setup_workspace() -> None:
+            self._sandbox_manager.setup_session_workspace(
+                sandbox_id=sandbox_id,
+                session_id=build_session_id,
+                llm_config=llm_config,
+                nextjs_port=nextjs_port,
+                skills_section=skills_section,
+                snapshot_path=None,  # TODO: Support restoring from snapshot
+                user_name=user_name,
+            )
+
+        try:
+            run_functions_in_parallel(
+                [
+                    FunctionCall(_wait_serve),
+                    FunctionCall(_setup_workspace),
+                    FunctionCall(
+                        self._hydrate_skills, (sandbox_id, user_id, skills_files)
+                    ),
+                    FunctionCall(
+                        self._hydrate_user_library,
+                        (sandbox_id, user_id, user_library_files),
+                    ),
+                ]
+            )
+        except Exception:
+            # A failed warm-up (e.g. serve never bound) can leave a partial
+            # workspace + Next.js dev server holding nextjs_port. Tear it down so
+            # the rolled-back nextjs_port can be reused without colliding.
+            try:
+                self._sandbox_manager.cleanup_session_workspace(
+                    sandbox_id, build_session_id, nextjs_port
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to clean up partial workspace for session %s",
+                    build_session_id,
+                    exc_info=True,
+                )
+            raise
 
         logger.info(
             "Successfully created session %s with workspace in sandbox %s",
@@ -423,11 +491,7 @@ class SessionManager:
                     )
                 )
                 if is_healthy and workspace_exists:
-                    user = fetch_user_by_id(self._db_session, user_id)
-                    if user is None:
-                        logger.warning("Cannot push skills: user %s not found", user_id)
-                    else:
-                        self._hydrate_skills(sandbox.id, user)
+                    self._hydrate_skills(sandbox.id, user_id)
                     self._hydrate_user_library(sandbox.id, user_id)
                     logger.info(
                         "Returning existing empty session %s for user %s",

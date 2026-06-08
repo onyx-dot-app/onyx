@@ -49,9 +49,14 @@ def hydrate_user_library(
     sandbox_id: UUID,
     user_id: UUID,
     db_session: Session,
+    files: FileSet | None = None,
 ) -> PushResult:
-    """Push all user library files to a single sandbox (cold-start hydration)."""
-    files = build_user_library_fileset(user_id, db_session)
+    """Push all user library files to a single sandbox (cold-start hydration).
+
+    ``files`` lets the caller prebuild the fileset (a DB read) on its own thread
+    so the push can run off-thread without touching ``db_session``."""
+    if files is None:
+        files = build_user_library_fileset(user_id, db_session)
     return get_sandbox_manager().push_to_sandbox(
         sandbox_id=sandbox_id,
         mount_path=USER_LIBRARY_MOUNT_PATH,

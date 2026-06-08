@@ -92,6 +92,47 @@ class TestCreateSession:
         assert stub_sandbox_manager.provision_count == 1
         assert build_session.user_id == test_user.id
 
+    def test_create_session_waits_for_serve_once(
+        self,
+        test_user: User,
+        session_manager_with_stub: SessionManager,
+        stub_sandbox_manager: StubSandboxManager,
+    ) -> None:
+        # provision() hands back at pod-Ready; create waits for opencode-serve
+        # separately (overlapped with workspace setup + hydration).
+        stub_sandbox_manager.provision_returns = SandboxInfo(
+            sandbox_id=uuid4(),
+            directory_path="/tmp/sandbox",
+            status=SandboxStatus.RUNNING,
+            last_heartbeat=None,
+        )
+        stub_sandbox_manager.setup_session_workspace_silent = True
+        stub_sandbox_manager.write_files_to_sandbox_silent = True
+
+        session_manager_with_stub.create_session__no_commit(user_id=test_user.id)
+
+        assert stub_sandbox_manager.provision_count == 1
+        assert stub_sandbox_manager.wait_for_serve_ready_count == 1
+
+    def test_create_session_raises_when_serve_never_ready(
+        self,
+        test_user: User,
+        session_manager_with_stub: SessionManager,
+        stub_sandbox_manager: StubSandboxManager,
+    ) -> None:
+        stub_sandbox_manager.provision_returns = SandboxInfo(
+            sandbox_id=uuid4(),
+            directory_path="/tmp/sandbox",
+            status=SandboxStatus.RUNNING,
+            last_heartbeat=None,
+        )
+        stub_sandbox_manager.setup_session_workspace_silent = True
+        stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.wait_for_serve_ready_returns = False
+
+        with pytest.raises(RuntimeError, match="never became ready"):
+            session_manager_with_stub.create_session__no_commit(user_id=test_user.id)
+
     def test_create_session_reuses_existing_sandbox(
         self,
         db_session: Session,

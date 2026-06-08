@@ -58,6 +58,9 @@ def provision_sandbox(
     provider pre-loaded so per-prompt model overrides can cross providers
     without a pod restart. ``all_llm_configs[0]`` is the default.
 
+    Returns once the pod is Ready; opencode-serve readiness is the caller's
+    concern (see ``SandboxManager.wait_for_serve_ready``).
+
     Updates the sandbox row's status to whatever the manager returns.
     Caller is responsible for committing.
     """
@@ -137,7 +140,8 @@ def ensure_sandbox_ready(
     user: User | None = None,
 ) -> Sandbox:
     """Return a ``RUNNING`` sandbox for ``user_id``, creating, waking, or
-    recovering as needed.
+    recovering as needed. The pod is Ready on return; opencode-serve readiness
+    is the caller's concern (``SandboxManager.wait_for_serve_ready``).
 
     Branches by current sandbox status:
     - No sandbox row: create + provision.

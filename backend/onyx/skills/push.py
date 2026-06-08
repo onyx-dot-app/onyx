@@ -160,12 +160,17 @@ def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, Fil
 
 def hydrate_sandbox_skills(
     sandbox_id: UUID,
-    user: User,
+    user: User | None,
     db_session: Session,
     files: FileSet | None = None,
 ) -> PushResult:
-    """Push all visible skills to a single sandbox (cold-start hydration)."""
+    """Push all visible skills to a single sandbox (cold-start hydration).
+
+    ``user`` is only needed to build the fileset; pass ``files`` to skip that
+    (and ``user`` may then be ``None``)."""
     if files is None:
+        if user is None:
+            raise ValueError("hydrate_sandbox_skills requires user when files is None")
         files = build_skills_fileset_for_user(user, db_session)
     return get_sandbox_manager().push_to_sandbox(
         sandbox_id=sandbox_id,

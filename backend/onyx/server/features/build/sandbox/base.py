@@ -127,6 +127,11 @@ class SandboxManager(_ServeMixin, ABC):
         so per-prompt model overrides can cross providers without restarting
         the pod. Defaults to ``[llm_config]`` (single-provider, back-compat).
 
+        Returns once the pod/container is Ready. opencode-serve binds a few
+        seconds later — callers that need to talk to it must
+        ``wait_for_serve_ready()`` first (create overlaps that wait with
+        workspace setup; other flows call it inline).
+
         Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces
 
@@ -320,6 +325,12 @@ class SandboxManager(_ServeMixin, ABC):
             True if sandbox is healthy, False otherwise
         """
         ...
+
+    def wait_for_serve_ready(self, sandbox_id: UUID) -> bool:
+        """Block until opencode-serve answers. Split out of ``provision()`` so
+        the create-session flow can overlap it with workspace setup + skill
+        hydration (all only need the pod to be Ready)."""
+        return self._wait_for_opencode_serve_ready(sandbox_id)
 
     def send_message(
         self,

@@ -128,6 +128,7 @@ class StubSandboxManager(SandboxManager):
 
         # Return-value hooks.
         self.provision_returns: SandboxInfo | None = None
+        self.wait_for_serve_ready_returns: bool = True
         self.health_check_returns: bool | None = None
         self.session_workspace_exists_returns: bool | None = None
         self.create_snapshot_returns: SnapshotResult | None | object = _UNSET
@@ -161,6 +162,8 @@ class StubSandboxManager(SandboxManager):
 
         # Observable state: scoped counters and last-payload snapshots.
         self.provision_count: int = 0
+        self.wait_for_serve_ready_count: int = 0
+        self.last_wait_for_serve_ready_sandbox_id: UUID | None = None
         self.terminate_count: int = 0
         self.setup_session_workspace_count: int = 0
         self.cleanup_session_workspace_count: int = 0
@@ -253,6 +256,11 @@ class StubSandboxManager(SandboxManager):
         if self.provision_returns is None:
             raise _not_configured("provision")
         return self.provision_returns
+
+    def wait_for_serve_ready(self, sandbox_id: UUID) -> bool:
+        self.wait_for_serve_ready_count += 1
+        self.last_wait_for_serve_ready_sandbox_id = sandbox_id
+        return self.wait_for_serve_ready_returns
 
     def terminate(self, sandbox_id: UUID) -> None:
         self.terminate_count += 1

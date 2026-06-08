@@ -778,11 +778,6 @@ class DockerSandboxManager(SandboxManager):
                 f"Timeout waiting for sandbox container {container.name} to be running."
             )
 
-        if not self._wait_for_opencode_serve_ready(sandbox_id):
-            raise RuntimeError(
-                f"opencode-serve never became ready in sandbox container {container.name}."
-            )
-
         logger.info(
             "Provisioned Docker sandbox %s, container=%s.", sandbox_id, container.name
         )
