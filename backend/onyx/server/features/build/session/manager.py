@@ -212,6 +212,33 @@ class SessionManager:
                 "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
             )
 
+    def _prewarm_opencode_session(
+        self, sandbox_id: UUID, session: BuildSession
+    ) -> None:
+        """Mint and persist the opencode-serve session before the first prompt.
+
+        The caller owns the surrounding transaction. This keeps the empty Craft
+        session's frontend-ready state aligned with the agent runtime being
+        ready to accept the first user message.
+        """
+        opencode_session_id = self._sandbox_manager.ensure_opencode_session(
+            sandbox_id=sandbox_id,
+            session_id=session.id,
+            opencode_session_id=session.opencode_session_id,
+        )
+        if opencode_session_id is None:
+            raise RuntimeError(
+                f"Failed to prewarm opencode session for build session {session.id}"
+            )
+        if session.opencode_session_id != opencode_session_id:
+            logger.info(
+                "Prewarmed opencode session %s for build session %s",
+                opencode_session_id,
+                session.id,
+            )
+            session.opencode_session_id = opencode_session_id
+            self._db_session.flush()
+
     def ensure_sandbox_running(
         self,
         user_id: UUID,
@@ -367,6 +394,7 @@ class SessionManager:
         )
         self._hydrate_skills(sandbox.id, user, files=skills_files)
         self._hydrate_user_library(sandbox.id, user_id)
+        self._prewarm_opencode_session(sandbox.id, build_session)
 
         logger.info(
             "Successfully created session %s with workspace in sandbox %s",
@@ -429,6 +457,7 @@ class SessionManager:
                     else:
                         self._hydrate_skills(sandbox.id, user)
                     self._hydrate_user_library(sandbox.id, user_id)
+                    self._prewarm_opencode_session(sandbox.id, existing)
                     logger.info(
                         "Returning existing empty session %s for user %s",
                         existing.id,
