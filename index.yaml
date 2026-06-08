@@ -4,6 +4,64 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: added
+          description: '`configMap.ENABLE_PUBLIC_DOCS` flag (default off) gating the
+            interactive API docs and schema. When unset, /openapi.json, /docs, and
+            /redoc are not registered (404); set to "true" to expose them publicly
+            with no authentication.'
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+    apiVersion: v2
+    appVersion: latest
+    created: "2026-06-08T23:08:33.231752266Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.3
+    description: A Helm chart for Kubernetes
+    digest: 63068023462bd41b42f67f9661fe80dd200c6092523fc540d7c78b360bf6f8ac
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://onyx-dot-app.github.io/onyx/onyx-0.5.19.tgz
+    version: 0.5.19
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
           description: '`auth.metricsAuth` bearer token guarding the API server''s
             /metrics endpoint. /metrics returns 401 by default until you enable
             auth.metricsAuth (injects `METRICS_AUTH_TOKEN`, and the api ServiceMonitor
@@ -4443,4 +4501,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-06-08T23:00:21.775669947Z"
+generated: "2026-06-08T23:08:33.20379014Z"
