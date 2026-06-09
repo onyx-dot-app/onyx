@@ -30,6 +30,17 @@ CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
 LLM_SOCKET_READ_TIMEOUT = int(
     os.environ.get("LLM_SOCKET_READ_TIMEOUT") or "60"
 )  # 60 seconds
+# Interval between chat-level heartbeat packets emitted during long internal LLM
+# generations, to keep idle-proxy connections (nginx 300s, customer ALBs 60s) alive.
+CHAT_HEARTBEAT_INTERVAL_S = int(os.environ.get("CHAT_HEARTBEAT_INTERVAL_S") or "15")
+# Max EXTRA attempts to re-issue a streaming completion when the provider raises a
+# timeout/connection error BEFORE any chunk has been yielded. Never retried once any
+# chunk is consumed downstream.
+LLM_FIRST_CHUNK_MAX_RETRIES = int(os.environ.get("LLM_FIRST_CHUNK_MAX_RETRIES") or "2")
+# Socket-read timeout (max gap between chunks) for deep-research report LLM calls.
+# 60s still permits arbitrarily long generations; combined with first-chunk retry a
+# zero-chunk stall costs <=60s per attempt instead of a fatal 300s.
+DR_REPORT_LLM_TIMEOUT_S = int(os.environ.get("DR_REPORT_LLM_TIMEOUT_S") or "60")
 # Weighting factor between vector and keyword Search; 1 for completely vector
 # search, 0 for keyword. Enforces a valid range of [0, 1]. A supplied value from
 # the env outside of this range will be clipped to the respective end of the

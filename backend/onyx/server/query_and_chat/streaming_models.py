@@ -18,6 +18,7 @@ class StreamingType(Enum):
     STOP = "stop"
     TOP_LEVEL_BRANCHING = "top_level_branching"
     ERROR = "error"
+    CHAT_HEARTBEAT = "chat_heartbeat"
 
     MESSAGE_START = "message_start"
     MESSAGE_DELTA = "message_delta"
@@ -93,6 +94,12 @@ class PacketException(BaseObj):
 
     exception: Exception = Field(exclude=True)
     model_config = {"arbitrary_types_allowed": True}
+
+
+# Generic chat-level heartbeat: emitted during long internal LLM generations
+# to keep the SSE connection alive past idle-proxy timeouts. Carries no payload.
+class ChatHeartbeat(BaseObj):
+    type: Literal["chat_heartbeat"] = StreamingType.CHAT_HEARTBEAT.value
 
 
 ################################################
@@ -421,6 +428,7 @@ PacketObj = Union[
     SectionEnd,
     TopLevelBranching,
     PacketException,
+    ChatHeartbeat,
     # Agent Response Packets
     AgentResponseStart,
     AgentResponseDelta,
