@@ -20,6 +20,15 @@ from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
 
 logging.addLevelName(logging.INFO + 5, "NOTICE")
 
+NOISY_THIRD_PARTY_LOGGER_PREFIXES = (
+    "googleapiclient",
+    "httpcore",
+    "httpx",
+    "kubernetes",
+    "slack_sdk",
+    "urllib3",
+)
+
 pruning_ctx: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
     "pruning_ctx", default=dict()
 )
@@ -48,6 +57,28 @@ def get_log_level_from_str(log_level_str: str = LOG_LEVEL) -> int:
     }
 
     return log_level_dict.get(log_level_str.upper(), logging.INFO)
+
+
+def configure_noisy_dependency_loggers(log_level: int = logging.WARNING) -> None:
+    """Keep verbose dependency internals out of container stdout.
+
+    In debug environments, SDK-level request/response logging can rotate
+    Kubernetes container logs before Onyx application logs are useful.
+    """
+    for logger_prefix in NOISY_THIRD_PARTY_LOGGER_PREFIXES:
+        logging.getLogger(logger_prefix).setLevel(log_level)
+
+    for logger_name, candidate_logger in list(
+        logging.Logger.manager.loggerDict.items()
+    ):
+        if not isinstance(candidate_logger, logging.Logger):
+            continue
+
+        if any(
+            logger_name.startswith(f"{logger_prefix}.")
+            for logger_prefix in NOISY_THIRD_PARTY_LOGGER_PREFIXES
+        ):
+            candidate_logger.setLevel(log_level)
 
 
 class OnyxRequestIDFilter(logging.Filter):
@@ -261,6 +292,8 @@ def setup_logger(
     extra: MutableMapping[str, Any] | None = None,
     propagate: bool = True,
 ) -> OnyxLoggingAdapter:
+    configure_noisy_dependency_loggers()
+
     logger = logging.getLogger(name)
 
     # If the logger already has handlers, assume it was already configured and return it.

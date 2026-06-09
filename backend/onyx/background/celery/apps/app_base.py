@@ -49,6 +49,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.logger import ColoredFormatter
+from onyx.utils.logger import configure_noisy_dependency_loggers
 from onyx.utils.logger import get_json_formatter
 from onyx.utils.logger import get_log_level_from_str
 from onyx.utils.logger import LoggerContextVars
@@ -527,6 +528,7 @@ def on_setup_logging(
         root_logger.addHandler(root_file_handler)
 
     root_logger.setLevel(effective_loglevel)
+    configure_noisy_dependency_loggers()
 
     # Emit the diagnostic after the root logger is configured so it goes through
     # the fresh handler at the level we just chose. (Before this point Python's
