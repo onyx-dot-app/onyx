@@ -11,7 +11,6 @@ from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import user_needs_to_be_verified
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import OAUTH_ENABLED
-from onyx.configs.app_configs import PASSWORD_MIN_LENGTH
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import DEV_VERSION_PATTERN
 from onyx.configs.constants import PUBLIC_API_TAGS
@@ -22,6 +21,7 @@ from onyx.server.manage.models import AuthTypeResponse
 from onyx.server.manage.models import ContainerVersions
 from onyx.server.manage.models import VersionResponse
 from onyx.server.models import StatusResponse
+from onyx.server.security.store import get_security_settings
 
 router = APIRouter()
 
@@ -53,7 +53,7 @@ async def get_auth_type(response: Response) -> AuthTypeResponse:
         auth_type=AUTH_TYPE,
         requires_verification=user_needs_to_be_verified(),
         anonymous_user_enabled=anonymous_user_enabled(),
-        password_min_length=PASSWORD_MIN_LENGTH,
+        password_min_length=get_security_settings().password_min_length,
         has_users=has_users,
         oauth_enabled=OAUTH_ENABLED,
     )

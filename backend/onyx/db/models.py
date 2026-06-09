@@ -4096,14 +4096,10 @@ class KVStore(Base):
 
 
 class SecuritySettings(Base):
-    """Per-tenant runtime overrides for the env-derived security settings.
+    """Per-tenant runtime overrides for env-derived security settings.
 
-    Singleton: one row per tenant schema, enforced by a boolean primary key
-    pinned to ``true`` via a CHECK constraint. Every column is an *override* —
-    ``None`` means "fall back to the env-derived default" — so this is the
-    typed, relational counterpart of the ``SecuritySettingsOverrides`` wire
-    shape (absent field == env default). Replaces the prior
-    ``onyx_security_settings`` JSONB blob in ``key_value_store``.
+    Singleton row (boolean PK pinned to ``true`` via CHECK). Every column is
+    an override — ``None`` == "fall back to env default".
     """
 
     __tablename__ = "security_settings"
@@ -4145,9 +4141,8 @@ class SecuritySettings(Base):
 
     __table_args__ = (
         CheckConstraint("id = true", name="ck_security_settings_singleton"),
-        # Only constrains rows where both bounds are explicitly overridden; a
-        # bound left NULL falls back to its env default, which this CHECK can't
-        # see. App-layer validation still guards the mixed (override + env) case.
+        # Only catches min > max when both are explicitly overridden; the
+        # mixed-with-env case is enforced at the application layer.
         CheckConstraint(
             "password_min_length IS NULL "
             "OR password_max_length IS NULL "
