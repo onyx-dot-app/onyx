@@ -6,10 +6,12 @@ default instead of a dangling provider reference.
 
 from uuid import uuid4
 
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import upsert_llm_provider
+from onyx.db.models import User
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
@@ -60,3 +62,8 @@ def test_remove_llm_provider_clears_matching_user_defaults(
         assert unaffected_user.default_model == kept_default
     finally:
         remove_llm_provider(db_session, provider_to_keep.id)
+        # Bulk delete to avoid loading the users' relationship graph
+        db_session.execute(
+            delete(User).where(User.id.in_([affected_user.id, unaffected_user.id]))
+        )
+        db_session.commit()

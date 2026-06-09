@@ -684,10 +684,15 @@ def remove_llm_provider(
     # Clear personal default models referencing this provider. They are stored
     # as "<provider display name>__<provider type>__<model name>" strings, so
     # they'd otherwise dangle forever and silently resolve to an arbitrary
-    # provider in the UI instead of the global default.
+    # provider in the UI instead of the global default. Display names are not
+    # unique at the DB level, so include the provider type in the match.
     db_session.execute(
         update(User)
-        .where(User.default_model.startswith(f"{provider.name}__", autoescape=True))
+        .where(
+            User.default_model.startswith(
+                f"{provider.name or ''}__{provider.provider}__", autoescape=True
+            )
+        )
         .values(default_model=None)
     )
 
