@@ -192,58 +192,28 @@ def test_proxy_strips_set_cookie_header(admin_user: DATestUser) -> None:
     assert "set-cookie" not in {k.lower() for k in response.headers}
 
 
-def test_proxy_rewrites_nextjs_asset_paths_in_html(
+def test_proxy_offline_html_does_not_leak_nextjs_asset_paths(
     admin_user: DATestUser,
 ) -> None:
-    """Asset-path rewriting is invoked on HTML responses.
-
-    Without a live upstream, every HTML response we can observe from
-    this layer is the branded offline page. ``_rewrite_asset_paths`` is
-    only triggered when ``_proxy_request`` succeeds, so a true end-to-end
-    rewrite assertion belongs in Playwright / the dedicated unit test in
-    ``tests/unit/build/test_rewrite_asset_paths.py`` (which the master
-    plan calls out as "KEEP"). What we can assert at
-    *this* layer is that the proxy returns HTML when invoked, the route
-    resolves, and the offline page does not leak any unprefixed Next.js
-    asset URL.
-    """
+    """The offline fallback must not leak root-scoped Next.js asset URLs."""
     session = _create_session(admin_user)
     session_id = UUID(session["id"])
 
     response = _auth_get(admin_user, session_id, follow_redirects=False)
     assert "text/html" in response.headers.get("content-type", "").lower()
-    # If a real upstream were live, any rewritten URL would carry the
-    # session-scoped proxy prefix. The offline page contains no
-    # ``/_next/`` references at all, so by negation no leaked
-    # root-scoped ``/_next/...`` URL is present.
     body = response.text
     assert '"/_next/' not in body
     assert "'/_next/" not in body
 
 
-def test_proxy_injects_hmr_shim_in_html_response(
+def test_proxy_offline_html_does_not_include_hmr_shim(
     admin_user: DATestUser,
 ) -> None:
-    """HMR shim injection runs on HTML proxy responses.
-
-    Same upstream-availability caveat as the rewrite test above: the
-    shim is injected by ``_inject_hmr_fixer`` only on a successful
-    upstream HTML proxy. The unit test in
-    ``tests/unit/build/test_rewrite_asset_paths.py`` (KEEP per master
-    plan) asserts the shim contents. At this layer we assert
-    that no shim injection mistakenly happens on the offline page —
-    i.e. the offline page is what it should be, and the shim path is
-    only reached when a live upstream returns HTML.
-    """
+    """The offline fallback should stay independent of Next.js dev HMR."""
     session = _create_session(admin_user)
     session_id = UUID(session["id"])
 
     response = _auth_get(admin_user, session_id, follow_redirects=False)
-    # The injection logic only runs when the upstream returns text/html
-    # and a 2xx — the offline page does not include the shim script tag
-    # in any of its content. Verifies the shim is not accidentally
-    # injected on the offline fallback (would expose the proxy base
-    # path to authenticated clients).
     body = response.text
     assert "__WEBAPP_BASE__" not in body
 
