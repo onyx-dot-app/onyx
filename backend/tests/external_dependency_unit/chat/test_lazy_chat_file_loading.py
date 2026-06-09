@@ -299,6 +299,28 @@ class TestLoadChatFileLazy:
         assert loaded.content == b"sentinel-bytes"
         assert read_counter.hits_for(file_id) == 1
 
+    def test_deleted_file_yields_empty_content(
+        self,
+        read_counter: _ReadCounter,  # noqa: ARG002 — keeps store fixtures live
+        db_session: Session,
+    ) -> None:
+        """A file referenced in chat history but deleted from the file store
+        (user-file deletion doesn't scrub chat-message ``files`` references)
+        must degrade to empty content on ``.content`` access — not raise and
+        kill the send-message flow."""
+        file_id = _write_file(b"doomed-bytes", file_type="image/png")
+
+        loaded = load_chat_file(
+            {"id": file_id, "type": ChatFileType.IMAGE, "name": "gone.png"},
+            db_session,
+        )
+
+        # Delete the underlying file after construction but before the lazy
+        # bytes read — simulates user-file deletion racing chat history use.
+        get_default_file_store().delete_file(file_id)
+
+        assert loaded.content == b""
+
 
 class TestLoadAllChatFilesLazy:
     def test_returns_lazy_files_for_history(

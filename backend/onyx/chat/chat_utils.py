@@ -467,7 +467,22 @@ def load_chat_file(
             logger.warning("Failed to get token count for file %s: %s", file_id, e)
 
     def _load_content() -> bytes:
-        return get_default_file_store().read_file(file_id, mode="b").read()
+        # Chat messages keep file references in their JSONB `files` column, but
+        # user-file deletion does not scrub those references — a file in the
+        # history may no longer exist in the file store. Since this loader runs
+        # lazily (on first `.content` access, often mid-LLM-flow), a raised
+        # exception here would kill the whole send-message request, so degrade
+        # to empty content instead.
+        try:
+            return get_default_file_store().read_file(file_id, mode="b").read()
+        except Exception:
+            logger.warning(
+                "Failed to load content for chat file %s (file may have been "
+                "deleted); substituting empty content",
+                file_id,
+                exc_info=True,
+            )
+            return b""
 
     return ChatLoadedFile.lazy_loaded(
         file_id=file_id,
