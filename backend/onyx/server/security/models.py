@@ -34,7 +34,7 @@ class SecuritySettingsOverrides(BaseModel):
     def _normalize_domains(cls, v: list[str] | None) -> list[str] | None:
         if v is None:
             return None
-        # Match backend/onyx/configs/app_configs.py:174-185 env-parse behavior
+        # Mirror the env-parse behavior for VALID_EMAIL_DOMAINS in app_configs
         # exactly: strip, lowercase, drop empties. NO dedup (env parser does
         # not dedupe). Order preserved.
         return [d.strip().lower() for d in v if d.strip()]
