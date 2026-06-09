@@ -19,7 +19,12 @@ function isBodyInit(body: unknown): body is BodyInit {
     body instanceof FormData ||
     body instanceof URLSearchParams ||
     body instanceof Blob ||
-    body instanceof ArrayBuffer
+    body instanceof ArrayBuffer ||
+    // Typed arrays / DataView (Uint8Array, etc.) — without this they'd be
+    // JSON.stringified into `{"0":1,...}` and sent as application/json,
+    // silently corrupting binary uploads. (ReadableStream is intentionally
+    // omitted: RN's fetch doesn't support streamed request bodies.)
+    ArrayBuffer.isView(body)
   );
 }
 
@@ -136,13 +141,19 @@ export async function apiFetch<T>(
   // SyntaxError that escapes ApiError normalization (and gets needlessly retried).
   try {
     return JSON.parse(text) as T;
-  } catch {
+  } catch (parseError) {
+    // Keep the user-facing detail clean, but preserve the original parser error
+    // + raw text on `body` for observability (these would otherwise be lost).
     throw new ApiError({
       status: res.status,
       detail: `Expected a JSON response but received ${
         res.headers.get("content-type") ?? "an unknown content type"
       }.`,
-      body: text,
+      body: {
+        responseText: text,
+        parseError:
+          parseError instanceof Error ? parseError.message : String(parseError),
+      },
     });
   }
 }
