@@ -96,20 +96,20 @@ export default function CreateCustomAppModal({
 
   // Headers and org credentials are optional; name + at least one upstream
   // pattern are required. A bundle is required only on create (optional on edit).
-  const canSave =
-    name.trim().length > 0 &&
-    upstreamPatterns.length > 0 &&
-    (isEdit || file !== null) &&
-    !isSaving;
-  const disabledCreateReason = isSaving
-    ? "Save is already in progress."
-    : name.trim().length === 0
-      ? "Enter a name before creating this custom app."
-      : upstreamPatterns.length === 0
-        ? "Add at least one upstream URL pattern. Type a pattern and press Enter."
-        : !isEdit && file === null
-          ? "Upload a bundle .zip file before creating this custom app."
-          : null;
+  const disabledCreateReason = (() => {
+    if (isSaving) return "Save is already in progress.";
+    if (name.trim().length === 0) {
+      return "Enter a name before creating this custom app.";
+    }
+    if (upstreamPatterns.length === 0) {
+      return "Add at least one upstream URL pattern. Type a pattern and press Enter.";
+    }
+    if (!isEdit && file === null) {
+      return "Upload a bundle .zip file before creating this custom app.";
+    }
+    return null;
+  })();
+  const canSave = disabledCreateReason === null;
   const createButton = (
     <Button onClick={save} disabled={!canSave}>
       {isSaving
