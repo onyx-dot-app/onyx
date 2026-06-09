@@ -8,7 +8,7 @@ import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SvgSidebar, SvgSimpleLoader } from "@opal/icons";
-import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { useSidebarState } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { isVectorDbRequiredRoute } from "@/lib/admin-routes";
 import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";

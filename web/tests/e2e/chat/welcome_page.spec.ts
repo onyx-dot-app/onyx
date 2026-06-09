@@ -52,10 +52,7 @@ for (const theme of THEMES) {
     // ── Sidebar element screenshot ────────────────────────────────────
 
     test("sidebar element snapshot", async ({ page }) => {
-      // SidebarWrapper renders a div with `group/SidebarWrapper` Tailwind
-      // group class — this is the most stable identifier for the sidebar
-      // container element.
-      const sidebar = page.locator(".group\\/SidebarWrapper");
+      const sidebar = page.locator(".opal-sidebar-wrapper__inner");
       await sidebar.waitFor({ state: "visible", timeout: 10000 });
 
       await expectElementScreenshot(sidebar, {
