@@ -86,11 +86,19 @@ export type ToolName =
 export interface ParsedTextChunk {
   type: "text_chunk";
   text: string;
+  /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
+  sessionId: string | null;
+  /** Non-null only for subagent child events — the parent opencode session. */
+  parentSessionId: string | null;
 }
 
 export interface ParsedThinkingChunk {
   type: "thinking_chunk";
   text: string;
+  /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
+  sessionId: string | null;
+  /** Non-null only for subagent child events — the parent opencode session. */
+  parentSessionId: string | null;
 }
 
 export interface ParsedToolCallStart {
@@ -101,6 +109,12 @@ export interface ParsedToolCallStart {
   isTodo: boolean;
   /** Best-effort title resolved from toolName/kind, shown until progress arrives. */
   title: string;
+  /** Display description resolved from rawInput, used before progress arrives. */
+  description: string;
+  /** Command or task prompt resolved from rawInput, used before progress arrives. */
+  command: string;
+  /** For task tool calls: the subagent type, when provided. */
+  subagentType: string | null;
   /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
   sessionId: string | null;
   /** Non-null only for subagent child events — the parent opencode session. */
@@ -166,6 +180,12 @@ export interface ParsedApprovalRequested {
   sessionId: string;
 }
 
+export interface ParsedSubagentStarted {
+  type: "subagent_started";
+  subagentSessionId: string;
+  parentSessionId: string | null;
+}
+
 export interface ParsedUnknown {
   type: "unknown";
 }
@@ -178,5 +198,6 @@ export type ParsedPacket =
   | ParsedPromptResponse
   | ParsedArtifact
   | ParsedApprovalRequested
+  | ParsedSubagentStarted
   | ParsedError
   | ParsedUnknown;

@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import base64
 from collections.abc import Callable
+from types import SimpleNamespace
 from typing import Any
+from typing import cast
 from unittest.mock import MagicMock
 from unittest.mock import patch
 from uuid import UUID
@@ -89,6 +91,13 @@ def _make_manager(*, pod_read_exc: Exception | None = None) -> KubernetesSandbox
     else:
         pod_obj = MagicMock()
         pod_obj.status.pod_ip = "10.0.0.1"
+        pod_obj.status.container_statuses = [
+            SimpleNamespace(
+                name="sandbox",
+                ready=True,
+                state=SimpleNamespace(running=object(), terminated=None),
+            )
+        ]
         core_api.read_namespaced_pod.return_value = pod_obj
 
     mgr._core_api = core_api  # type: ignore[attr-defined]
@@ -110,11 +119,13 @@ def _mock_httpx_client(
     client_instance = MagicMock()
     if raise_exc is not None:
         client_instance.post.side_effect = raise_exc
+        client_instance.get.side_effect = raise_exc
     else:
         resp = MagicMock()
         resp.status_code = response_status
         resp.text = response_text
         client_instance.post.return_value = resp
+        client_instance.get.return_value = resp
 
     ctx = MagicMock()
     ctx.__enter__ = MagicMock(return_value=client_instance)
@@ -261,6 +272,36 @@ def test_health_check_returns_false_on_remote_protocol_error() -> None:
     with patch(_HTTPX_CLIENT_PATH, factory):
         # Bool contract: any transport failure becomes False.
         assert mgr.health_check(_sandbox_id(), timeout=1.0) is False
+
+
+def test_health_check_returns_false_when_sandbox_container_terminated() -> None:
+    """The sidecar can stay alive after the agent container is OOMKilled.
+
+    Restore must treat that sandbox as unhealthy so the recovery path
+    reprovisions it before exec'ing into the session workspace.
+    """
+    mgr = _make_manager()
+    core_api = cast(Any, mgr)._core_api
+    pod = core_api.read_namespaced_pod.return_value
+    pod.status.container_statuses = [
+        SimpleNamespace(
+            name="sandbox",
+            ready=False,
+            state=SimpleNamespace(
+                running=None, terminated=SimpleNamespace(reason="OOMKilled")
+            ),
+        ),
+        SimpleNamespace(
+            name="sidecar",
+            ready=True,
+            state=SimpleNamespace(running=object(), terminated=None),
+        ),
+    ]
+    factory = _mock_httpx_client(response_status=200, response_text="ok")
+
+    with patch(_HTTPX_CLIENT_PATH, factory):
+        assert mgr.health_check(_sandbox_id(), timeout=1.0) is False
+    factory.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

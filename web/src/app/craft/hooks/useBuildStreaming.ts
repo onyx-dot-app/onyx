@@ -10,7 +10,8 @@ import {
 } from "@/app/craft/types/streamingTypes";
 
 import {
-  sendMessageStream,
+  createTurn,
+  fetchTurnEventStream,
   interruptMessageStream,
   processSSEStream,
   fetchSession,
@@ -19,17 +20,64 @@ import {
 } from "@/app/craft/services/apiServices";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
-import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
-import { StreamItem } from "@/app/craft/types/displayTypes";
+import {
+  useBuildSessionStore,
+  type BuildSessionData,
+} from "@/app/craft/hooks/useBuildSessionStore";
+import { StreamItem, ToolCallState } from "@/app/craft/types/displayTypes";
 
 import { genId } from "@/app/craft/utils/streamItemHelpers";
 import { parsePacket } from "@/app/craft/utils/parsePacket";
 import {
   classifySubagentEvent,
   toolCallStateFromProgress,
+  toolCallStateFromStart,
   subagentNameFromTask,
+  subagentNameFromToolCall,
   cleanTaskOutput,
 } from "@/app/craft/utils/subagentRouting";
+
+function promptFromToolCall(toolCall: ToolCallState): string {
+  const prompt = toolCall.command || toolCall.description || "";
+  return prompt.replace(/^Spawning subagent:\s*/, "").trim();
+}
+
+function findParentTaskToolCall(
+  session: BuildSessionData,
+  subagentSessionId: string
+): ToolCallState | null {
+  const streamItems = [
+    ...session.messages.flatMap((message) => {
+      const items = message.message_metadata?.streamItems;
+      return Array.isArray(items) ? (items as StreamItem[]) : [];
+    }),
+    ...session.streamItems,
+  ];
+  const currentParent =
+    session.subagents.get(subagentSessionId)?.parentToolCallId ?? "";
+  if (currentParent) {
+    const parentItem = streamItems.find(
+      (item) => item.type === "tool_call" && item.toolCall.id === currentParent
+    );
+    return parentItem?.type === "tool_call" ? parentItem.toolCall : null;
+  }
+
+  const linkedParentIds = new Set(
+    Array.from(session.subagents.values())
+      .map((subagent) => subagent.parentToolCallId)
+      .filter(Boolean)
+  );
+  for (const item of [...streamItems].reverse()) {
+    if (item.type !== "tool_call") continue;
+    if (item.toolCall.kind !== "task" && item.toolCall.toolName !== "task") {
+      continue;
+    }
+    if (linkedParentIds.has(item.toolCall.id)) continue;
+    return item.toolCall;
+  }
+
+  return null;
+}
 
 /**
  * Hook for handling message streaming in build sessions.
@@ -96,6 +144,12 @@ export function useBuildStreaming() {
   const markSubagentComplete = useBuildSessionStore(
     (state) => state.markSubagentComplete
   );
+  const appendSubagentResponseChunk = useBuildSessionStore(
+    (state) => state.appendSubagentResponseChunk
+  );
+  const appendSubagentThinkingChunk = useBuildSessionStore(
+    (state) => state.appendSubagentThinkingChunk
+  );
 
   // ── Output file detector registry ──────────────────────────────────────
   // Ordered by priority — first match wins.
@@ -129,10 +183,38 @@ export function useBuildStreaming() {
   );
 
   const createStreamPacketProcessor = useCallback(
-    (sessionId: string, options?: { onPromptResponse?: () => void }) => {
+    (
+      sessionId: string,
+      options?: { onPromptResponse?: () => void; expectedTurnId?: string }
+    ) => {
       let accumulatedText = "";
       let accumulatedThinking = "";
       let lastItemType: "text" | "thinking" | "tool" | null = null;
+      const currentItems =
+        useBuildSessionStore.getState().sessions.get(sessionId)?.streamItems ??
+        [];
+      const lastCurrentItem = currentItems[currentItems.length - 1];
+      if (lastCurrentItem?.type === "text") {
+        accumulatedText = lastCurrentItem.content;
+        lastItemType = "text";
+        if (!lastCurrentItem.isStreaming) {
+          useBuildSessionStore
+            .getState()
+            .updateStreamItem(sessionId, lastCurrentItem.id, {
+              isStreaming: true,
+            });
+        }
+      } else if (lastCurrentItem?.type === "thinking") {
+        accumulatedThinking = lastCurrentItem.content;
+        lastItemType = "thinking";
+        if (!lastCurrentItem.isStreaming) {
+          useBuildSessionStore
+            .getState()
+            .updateStreamItem(sessionId, lastCurrentItem.id, {
+              isStreaming: true,
+            });
+        }
+      }
 
       const finalizeStreaming = () => {
         const session = useBuildSessionStore.getState().sessions.get(sessionId);
@@ -153,12 +235,77 @@ export function useBuildStreaming() {
         }
       };
 
+      const appendErrorItem = (message: string) => {
+        const content = message || "Turn failed.";
+        const session = useBuildSessionStore.getState().sessions.get(sessionId);
+        const lastItem = session?.streamItems[session.streamItems.length - 1];
+
+        finalizeStreaming();
+        if (lastItem?.type === "error" && lastItem.content === content) {
+          return;
+        }
+
+        appendStreamItem(sessionId, {
+          type: "error",
+          id: genId("error"),
+          content,
+        });
+      };
+
+      const seedFromParentTask = (subagentSessionId: string): string => {
+        const session = useBuildSessionStore.getState().sessions.get(sessionId);
+        const parentToolCall = session
+          ? findParentTaskToolCall(session, subagentSessionId)
+          : null;
+        const existing = session?.subagents.get(subagentSessionId);
+        const parentToolCallId =
+          parentToolCall?.id ?? existing?.parentToolCallId ?? "";
+
+        if (parentToolCallId || parentToolCall) {
+          seedSubagentMeta(
+            sessionId,
+            subagentSessionId,
+            parentToolCallId,
+            parentToolCall?.subagentType ?? null,
+            parentToolCall ? subagentNameFromToolCall(parentToolCall) : "",
+            parentToolCall ? promptFromToolCall(parentToolCall) : ""
+          );
+        }
+
+        return parentToolCallId;
+      };
+
       return (rawPacket: unknown) => {
         const parsed = parsePacket(rawPacket);
+        if (options?.expectedTurnId && parsed.type !== "approval_requested") {
+          const currentTurnId = useBuildSessionStore
+            .getState()
+            .sessions.get(sessionId)?.activeTurnId;
+          if (currentTurnId !== options.expectedTurnId) {
+            if (parsed.type === "prompt_response") {
+              options.onPromptResponse?.();
+            }
+            return;
+          }
+        }
 
         switch (parsed.type) {
           case "text_chunk": {
             if (!parsed.text) break;
+
+            if (parsed.parentSessionId !== null && parsed.sessionId !== null) {
+              finalizeStreaming();
+              accumulatedText = "";
+              accumulatedThinking = "";
+              lastItemType = null;
+              seedFromParentTask(parsed.sessionId);
+              appendSubagentResponseChunk(
+                sessionId,
+                parsed.sessionId,
+                parsed.text
+              );
+              break;
+            }
 
             accumulatedText += parsed.text;
 
@@ -182,6 +329,20 @@ export function useBuildStreaming() {
           case "thinking_chunk": {
             if (!parsed.text) break;
 
+            if (parsed.parentSessionId !== null && parsed.sessionId !== null) {
+              finalizeStreaming();
+              accumulatedText = "";
+              accumulatedThinking = "";
+              lastItemType = null;
+              seedFromParentTask(parsed.sessionId);
+              appendSubagentThinkingChunk(
+                sessionId,
+                parsed.sessionId,
+                parsed.text
+              );
+              break;
+            }
+
             accumulatedThinking += parsed.text;
 
             if (lastItemType === "thinking") {
@@ -201,16 +362,48 @@ export function useBuildStreaming() {
             break;
           }
 
+          case "subagent_started": {
+            if (!parsed.subagentSessionId) break;
+            seedFromParentTask(parsed.subagentSessionId);
+            break;
+          }
+
           case "tool_call_start": {
             finalizeStreaming();
             accumulatedText = "";
             accumulatedThinking = "";
 
             // Child (subagent-internal) start: do not add to main transcript.
-            // The subagent pill is created from its progress events.
+            // Record it in the subagent stream immediately so in-progress
+            // tools show before their first progress packet arrives.
             if (parsed.parentSessionId !== null && parsed.sessionId !== null) {
+              const parentToolCallId = seedFromParentTask(parsed.sessionId);
+              recordSubagentToolCall(
+                sessionId,
+                parsed.sessionId,
+                parentToolCallId,
+                toolCallStateFromStart(parsed),
+                parsed.subagentType,
+                ""
+              );
               lastItemType = "tool";
               break;
+            }
+
+            const startedToolCall = toolCallStateFromStart(parsed);
+
+            // Parent `task` start packets can carry the spawned child session
+            // before any progress packet arrives. Seed immediately so the task
+            // row has a click target while the subagent is still running.
+            if (parsed.subagentSessionId !== null) {
+              seedSubagentMeta(
+                sessionId,
+                parsed.subagentSessionId,
+                parsed.toolCallId,
+                parsed.subagentType,
+                subagentNameFromToolCall(startedToolCall),
+                promptFromToolCall(startedToolCall)
+              );
             }
 
             // Skip tool_call_start for TodoWrite; pill is created on progress.
@@ -222,20 +415,7 @@ export function useBuildStreaming() {
             appendStreamItem(sessionId, {
               type: "tool_call",
               id: parsed.toolCallId,
-              toolCall: {
-                id: parsed.toolCallId,
-                kind: parsed.kind,
-                toolName: parsed.toolName,
-                title: parsed.title,
-                status: "pending",
-                description: "",
-                command: "",
-                rawOutput: "",
-                subagentType: undefined,
-                isNewFile: true,
-                oldContent: "",
-                newContent: "",
-              },
+              toolCall: startedToolCall,
             });
             lastItemType = "tool";
             break;
@@ -247,10 +427,13 @@ export function useBuildStreaming() {
             // Child (subagent-internal) event: route to the subagent's own
             // tool-call list, not the main transcript.
             if (subagentClass.kind === "child") {
+              const parentToolCallId = seedFromParentTask(
+                subagentClass.subagentSessionId
+              );
               recordSubagentToolCall(
                 sessionId,
                 subagentClass.subagentSessionId,
-                "",
+                parentToolCallId,
                 toolCallStateFromProgress(parsed),
                 null,
                 ""
@@ -293,6 +476,30 @@ export function useBuildStreaming() {
                   subagentClass.subagentSessionId,
                   "failed",
                   cleanTaskOutput(parsed.taskOutput)
+                );
+              }
+            }
+
+            if (
+              subagentClass.kind === "normal" &&
+              (parsed.kind === "task" || parsed.toolName === "task")
+            ) {
+              const session = useBuildSessionStore
+                .getState()
+                .sessions.get(sessionId);
+              const subagent = Array.from(
+                session?.subagents.values() ?? []
+              ).find((candidate) => {
+                return candidate.parentToolCallId === parsed.toolCallId;
+              });
+              if (subagent) {
+                seedSubagentMeta(
+                  sessionId,
+                  subagent.sessionId,
+                  parsed.toolCallId,
+                  parsed.subagentType,
+                  subagentNameFromTask(parsed),
+                  parsed.command
                 );
               }
             }
@@ -389,6 +596,7 @@ export function useBuildStreaming() {
                 type: "assistant",
                 content: textContent,
                 timestamp: new Date(),
+                turn_index: session.activeTurnIndex ?? undefined,
                 message_metadata: {
                   streamItems: savedStreamItems,
                 },
@@ -399,6 +607,9 @@ export function useBuildStreaming() {
               status: "active",
               streamItems: [],
               isInterrupting: false,
+              activeTurnId: null,
+              activeTurnIndex: null,
+              activeTurnLocalOwner: false,
             });
             options?.onPromptResponse?.();
             break;
@@ -410,10 +621,14 @@ export function useBuildStreaming() {
           }
 
           case "error": {
+            appendErrorItem(parsed.message);
             updateSessionData(sessionId, {
               status: "failed",
               error: parsed.message,
               isInterrupting: false,
+              activeTurnId: null,
+              activeTurnIndex: null,
+              activeTurnLocalOwner: false,
             });
             break;
           }
@@ -437,11 +652,139 @@ export function useBuildStreaming() {
       recordSubagentToolCall,
       seedSubagentMeta,
       markSubagentComplete,
+      appendSubagentResponseChunk,
+      appendSubagentThinkingChunk,
     ]
   );
 
   /**
-   * Stream a message to the given session and process the SSE response.
+   * Attach to a background turn's live event stream.
+   */
+  const streamTurnEvents = useCallback(
+    async (
+      sessionId: string,
+      turnId: string,
+      signal: AbortSignal,
+      onSettled?: () => void
+    ): Promise<void> => {
+      const existingSession = useBuildSessionStore
+        .getState()
+        .sessions.get(sessionId);
+      if (
+        existingSession?.activeTurnId === turnId &&
+        existingSession.activeTurnLocalOwner &&
+        existingSession.abortController.signal !== signal
+      ) {
+        return;
+      }
+
+      updateSessionData(sessionId, {
+        status: "running",
+        isInterrupting: false,
+        activeTurnId: turnId,
+      });
+      if (existingSession?.activeTurnId !== turnId) {
+        clearStreamItems(sessionId);
+      }
+
+      let settledFromPromptResponse = false;
+      let transportError = false;
+      const processor = createStreamPacketProcessor(sessionId, {
+        expectedTurnId: turnId,
+        onPromptResponse: () => {
+          settledFromPromptResponse = true;
+          onSettled?.();
+        },
+      });
+      const clearTurnIfCurrent = (
+        updates: Partial<{
+          status: "active" | "failed";
+          error: string;
+          isInterrupting: boolean;
+        }>
+      ) => {
+        const currentSession = useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId);
+        if (currentSession?.activeTurnId !== turnId) {
+          return;
+        }
+        updateSessionData(sessionId, {
+          ...updates,
+          activeTurnId: null,
+          activeTurnIndex: null,
+          activeTurnLocalOwner: false,
+        });
+      };
+
+      try {
+        const response = await fetchTurnEventStream(sessionId, turnId, signal);
+        if (!response) {
+          clearTurnIfCurrent({
+            status: "active",
+            isInterrupting: false,
+          });
+          return;
+        }
+        await processSSEStream(response, processor);
+      } catch (err) {
+        if ((err as Error).name === "AbortError") {
+          const currentSession = useBuildSessionStore
+            .getState()
+            .sessions.get(sessionId);
+          if (currentSession?.activeTurnId === turnId) {
+            updateSessionData(sessionId, { isInterrupting: false });
+          }
+          return;
+        }
+
+        transportError = true;
+        console.warn("[Streaming] Turn attach stream error:", err);
+        const currentSession = useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId);
+        if (currentSession?.activeTurnId === turnId) {
+          updateSessionData(sessionId, {
+            status: "running",
+            isInterrupting: false,
+          });
+        }
+      } finally {
+        if (!signal.aborted) {
+          const currentSession = useBuildSessionStore
+            .getState()
+            .sessions.get(sessionId);
+          if (
+            !transportError &&
+            currentSession?.status === "running" &&
+            currentSession?.activeTurnId === turnId
+          ) {
+            clearTurnIfCurrent({
+              status: "active",
+            });
+          }
+          const settledStatus = useBuildSessionStore
+            .getState()
+            .sessions.get(sessionId)?.status;
+          if (settledStatus !== "failed") {
+            await useBuildSessionStore
+              .getState()
+              .loadSession(sessionId, { force: true })
+              .catch((err) =>
+                console.warn("[Streaming] Failed to reload settled turn:", err)
+              );
+          }
+          if (!settledFromPromptResponse) {
+            onSettled?.();
+          }
+        }
+      }
+    },
+    [updateSessionData, clearStreamItems, createStreamPacketProcessor]
+  );
+
+  /**
+   * Start an interactive backend turn, then attach to its event stream.
    * Populates streamItems in FIFO order as packets arrive.
    */
   const streamMessage = useCallback(
@@ -463,21 +806,27 @@ export function useBuildStreaming() {
       updateSessionData(sessionId, {
         status: "running",
         isInterrupting: false,
+        activeTurnId: null,
+        activeTurnIndex: null,
+        activeTurnLocalOwner: true,
       });
       clearStreamItems(sessionId);
 
       try {
-        const response = await sendMessageStream(
+        const turn = await createTurn(
           sessionId,
           content,
+          crypto.randomUUID(),
           controller.signal,
           model
         );
+        updateSessionData(sessionId, {
+          activeTurnId: turn.turn_id,
+          activeTurnIndex: turn.turn_index,
+          activeTurnLocalOwner: true,
+        });
 
-        await processSSEStream(
-          response,
-          createStreamPacketProcessor(sessionId)
-        );
+        await streamTurnEvents(sessionId, turn.turn_id, controller.signal);
       } catch (err) {
         if ((err as Error).name === "AbortError") {
           updateSessionData(sessionId, { isInterrupting: false });
@@ -487,6 +836,9 @@ export function useBuildStreaming() {
             status: "active",
             error: SessionErrorCode.RATE_LIMIT_EXCEEDED,
             isInterrupting: false,
+            activeTurnId: null,
+            activeTurnIndex: null,
+            activeTurnLocalOwner: false,
           });
         } else {
           console.error("[Streaming] Stream error:", err);
@@ -494,18 +846,16 @@ export function useBuildStreaming() {
             status: "failed",
             error: (err as Error).message,
             isInterrupting: false,
+            activeTurnId: null,
+            activeTurnIndex: null,
+            activeTurnLocalOwner: false,
           });
         }
       } finally {
         setAbortController(sessionId, new AbortController());
       }
     },
-    [
-      setAbortController,
-      updateSessionData,
-      clearStreamItems,
-      createStreamPacketProcessor,
-    ]
+    [setAbortController, updateSessionData, clearStreamItems, streamTurnEvents]
   );
 
   /**
@@ -587,12 +937,14 @@ export function useBuildStreaming() {
       streamMessage,
       interruptStreaming,
       streamScheduledRunEvents,
+      streamTurnEvents,
       abortStream: abortCurrentSession,
     }),
     [
       streamMessage,
       interruptStreaming,
       streamScheduledRunEvents,
+      streamTurnEvents,
       abortCurrentSession,
     ]
   );

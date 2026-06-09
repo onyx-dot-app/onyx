@@ -33,11 +33,19 @@ export function parsePacket(raw: unknown): ParsedPacket {
   switch (packetType) {
     case "agent_message_chunk": // Live SSE
     case "agent_message": // DB-stored format
-      return { type: "text_chunk", text: extractText(p.content) };
+      return {
+        type: "text_chunk",
+        text: extractText(p.content),
+        ...extractRoutingMeta(p),
+      };
 
     case "agent_thought_chunk": // Live SSE
     case "agent_thought": // DB-stored format
-      return { type: "thinking_chunk", text: extractText(p.content) };
+      return {
+        type: "thinking_chunk",
+        text: extractText(p.content),
+        ...extractRoutingMeta(p),
+      };
 
     case "tool_call_start":
       return parseToolCallStart(p);
@@ -58,12 +66,34 @@ export function parsePacket(raw: unknown): ParsedPacket {
         sessionId: (p.session_id ?? "") as string,
       };
 
+    case "subagent_started":
+      return {
+        type: "subagent_started",
+        subagentSessionId: (p.subagent_session_id ??
+          p.subagentSessionId ??
+          "") as string,
+        parentSessionId: (p.parent_session_id ?? p.parentSessionId ?? null) as
+          | string
+          | null,
+      };
+
     case "error":
       return { type: "error", message: (p.message ?? "") as string };
 
     default:
       return { type: "unknown" };
   }
+}
+
+function extractRoutingMeta(p: Record<string, unknown>): {
+  sessionId: string | null;
+  parentSessionId: string | null;
+} {
+  const meta = (p._meta as Record<string, unknown> | undefined) ?? {};
+  return {
+    sessionId: (meta.sessionId as string | undefined) ?? null,
+    parentSessionId: (meta.parentSessionId as string | undefined) ?? null,
+  };
 }
 
 // ─── Skill Detection ──────────────────────────────────────────────
@@ -131,6 +161,7 @@ function resolveToolName(p: Record<string, unknown>): ToolName {
   if (rawKind === "edit" || rawKind === "delete" || rawKind === "move")
     return "edit";
   if (rawKind === "search") return "glob";
+  if (rawKind === "task") return "task";
   if (rawKind === "fetch") return "webfetch";
 
   return "unknown";
@@ -283,8 +314,10 @@ function buildDescription(
 ): string {
   // Task tool: spawns a subagent. Read as "Spawning subagent: <description>".
   if (toolName === "task") {
-    return rawDescription
-      ? `Spawning subagent: ${rawDescription}`
+    const taskDescription =
+      rawDescription || (typeof ri?.prompt === "string" ? ri.prompt : "");
+    return taskDescription
+      ? `Spawning subagent: ${sanitizePathsInText(taskDescription)}`
       : "Spawning subagent";
   }
   // Read/edit: show file path. For new-file writes, append a line count
@@ -478,6 +511,19 @@ function extractTaskOutput(ro: Record<string, unknown> | null): string | null {
   );
 }
 
+function extractTaskSessionId(
+  ro: Record<string, unknown> | null
+): string | null {
+  if (!ro?.output || typeof ro.output !== "string") return null;
+  const text = ro.output;
+  const taskIdMatch = text.match(/^task_id:\s*([^\s(]+)/m);
+  if (taskIdMatch?.[1]) return taskIdMatch[1];
+  const metadataMatch = text.match(
+    /<task_metadata>[\s\S]*?(?:session_id|task_id):\s*([^\s<]+)[\s\S]*?<\/task_metadata>/i
+  );
+  return metadataMatch?.[1] ?? null;
+}
+
 // ─── Artifact Parsing ─────────────────────────────────────────────
 
 function parseArtifact(p: Record<string, unknown>): ParsedArtifact {
@@ -500,7 +546,17 @@ function parseToolCallStart(p: Record<string, unknown>): ParsedToolCallStart {
   const toolName = resolveToolName(p);
   const rawKind = p.kind as string | null;
   const kind = resolveKind(toolName, rawKind);
+  const ri = getRawInput(p);
   const meta = (p._meta as Record<string, unknown> | undefined) ?? {};
+  const rawCommand = (ri?.command ??
+    (toolName === "task" ? ri?.prompt : undefined) ??
+    "") as string;
+  const rawDescription = (ri?.description ?? "") as string;
+  const rawFilePath = (ri?.file_path ??
+    ri?.filePath ??
+    ri?.path ??
+    "") as string;
+  const filePath = rawFilePath ? stripSessionPrefix(rawFilePath) : "";
   return {
     type: "tool_call_start",
     toolCallId: getToolCallId(p),
@@ -508,6 +564,11 @@ function parseToolCallStart(p: Record<string, unknown>): ParsedToolCallStart {
     kind,
     isTodo: toolName === "todowrite",
     title: buildTitle(toolName, kind, true),
+    description: buildDescription(toolName, kind, filePath, ri, rawDescription),
+    command: sanitizePathsInText(rawCommand),
+    subagentType: (ri?.subagent_type ?? ri?.subagentType ?? null) as
+      | string
+      | null,
     sessionId: (meta.sessionId as string | undefined) ?? null,
     parentSessionId: (meta.parentSessionId as string | undefined) ?? null,
     subagentSessionId: (meta.subagentSessionId as string | undefined) ?? null,
@@ -616,7 +677,8 @@ function parseToolCallProgress(
   const sessionId = (meta.sessionId as string | undefined) ?? null;
   const parentSessionId = (meta.parentSessionId as string | undefined) ?? null;
   const subagentSessionId =
-    (meta.subagentSessionId as string | undefined) ?? null;
+    (meta.subagentSessionId as string | undefined) ??
+    (toolName === "task" ? extractTaskSessionId(ro) : null);
 
   return {
     type: "tool_call_progress",

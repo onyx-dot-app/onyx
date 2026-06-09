@@ -32,6 +32,7 @@ from onyx.server.features.build.api.messages_api import router as messages_route
 from onyx.server.features.build.api.models import RateLimitResponse
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
+from onyx.server.features.build.api.turns_api import router as turns_router
 from onyx.server.features.build.api.user_library import router as user_library_router
 from onyx.server.features.build.approvals.api import router as approvals_router
 from onyx.server.features.build.db.build_session import get_webapp_access_async
@@ -93,6 +94,7 @@ router = APIRouter(prefix="/build", dependencies=[Depends(require_onyx_craft_ena
 # Include sub-routers for sessions, messages, and user library
 router.include_router(sessions_router, tags=["build"])
 router.include_router(messages_router, tags=["build"])
+router.include_router(turns_router, tags=["build"])
 router.include_router(user_library_router, tags=["build"])
 router.include_router(scheduled_tasks_router, tags=["build"])
 router.include_router(external_apps_router, tags=["build"])

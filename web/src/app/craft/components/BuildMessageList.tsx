@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { cn } from "@opal/utils";
+import { SvgAlertCircle } from "@opal/icons";
 import { AnimatePresence, motion } from "motion/react";
 import Logo from "@/refresh-components/Logo";
 import TextChunk from "@/app/craft/components/TextChunk";
@@ -80,7 +81,8 @@ export default function BuildMessageList({
   const lastMessage = messages[messages.length - 1];
   const lastMessageIsUser = lastMessage?.type === "user";
   const showStreamingArea =
-    hasStreamItems || (isStreaming && lastMessageIsUser);
+    hasStreamItems ||
+    (isStreaming && (lastMessageIsUser || messages.length === 0));
 
   const renderStreamItems = (
     rawItems: StreamItem[],
@@ -202,6 +204,20 @@ export default function BuildMessageList({
                 todoList={item.todoList}
                 defaultOpen={item.todoList.isOpen}
               />
+            </div>
+          );
+        case "error":
+          return (
+            <div
+              key={item.id}
+              className={cn(
+                topMargin,
+                "flex items-start gap-2 rounded-08 border border-status-error-02 bg-status-error-00 px-3 py-2 text-sm text-status-error-05"
+              )}
+              role="alert"
+            >
+              <SvgAlertCircle className="mt-0.5 size-4 shrink-0 stroke-status-error-05" />
+              <span className="min-w-0 break-words">{item.content}</span>
             </div>
           );
         default:
