@@ -644,7 +644,7 @@ export default function BuildChatPanel({
                   )}
                   {/* Model is locked once the session starts — show the picker
                   only before the first message. */}
-                  {session?.messages.length === 0 && (
+                  {session?.isLoaded && session.messages.length === 0 && (
                     <div className="flex justify-end pb-2">
                       <ModelPickerButton
                         selection={selectedModel}
