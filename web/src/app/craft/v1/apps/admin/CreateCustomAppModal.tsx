@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import Modal from "@/refresh-components/Modal";
-import { Button, InputTypeIn, MessageCard, Text } from "@opal/components";
+import {
+  Button,
+  InputTypeIn,
+  MessageCard,
+  Text,
+  Tooltip,
+} from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
 import InputKeyValue, {
@@ -90,11 +96,30 @@ export default function CreateCustomAppModal({
 
   // Headers and org credentials are optional; name + at least one upstream
   // pattern are required. A bundle is required only on create (optional on edit).
-  const canSave =
-    name.trim().length > 0 &&
-    upstreamPatterns.length > 0 &&
-    (isEdit || file !== null) &&
-    !isSaving;
+  const disabledCreateReason = (() => {
+    if (isSaving) return "Save is already in progress.";
+    if (name.trim().length === 0) {
+      return "Enter a name before creating this custom app.";
+    }
+    if (upstreamPatterns.length === 0) {
+      return "Add at least one upstream URL pattern. Type a pattern and press Enter.";
+    }
+    if (!isEdit && file === null) {
+      return "Upload a bundle .zip file before creating this custom app.";
+    }
+    return null;
+  })();
+  const createButton = (
+    <Button onClick={save} disabled={disabledCreateReason !== null}>
+      {isSaving
+        ? isEdit
+          ? "Saving…"
+          : "Creating…"
+        : isEdit
+          ? "Save"
+          : "Create"}
+    </Button>
+  );
 
   async function save() {
     setIsSaving(true);
@@ -283,15 +308,13 @@ export default function CreateCustomAppModal({
             >
               Cancel
             </Button>
-            <Button onClick={save} disabled={!canSave}>
-              {isSaving
-                ? isEdit
-                  ? "Saving…"
-                  : "Creating…"
-                : isEdit
-                  ? "Save"
-                  : "Create"}
-            </Button>
+            {disabledCreateReason ? (
+              <Tooltip tooltip={disabledCreateReason}>
+                <span className="inline-flex">{createButton}</span>
+              </Tooltip>
+            ) : (
+              createButton
+            )}
           </div>
         </Modal.Footer>
       </Modal.Content>
