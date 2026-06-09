@@ -37,6 +37,7 @@ const originalLoadSession = useBuildSessionStore.getState().loadSession;
 describe("useBuildStreaming thinking packets", () => {
   beforeEach(() => {
     jest.useFakeTimers();
+    jest.clearAllMocks();
     useBuildSessionStore.setState({
       currentSessionId: null,
       sessions: new Map(),
@@ -54,6 +55,7 @@ describe("useBuildStreaming thinking packets", () => {
       turn_index: 0,
     });
     jest.mocked(fetchTurnEventStream).mockResolvedValue({} as Response);
+    jest.mocked(interruptMessageStream).mockResolvedValue();
     jest
       .mocked(processSSEStream)
       .mockImplementation(async (_response, onPacket) => {
@@ -904,6 +906,118 @@ describe("useBuildStreaming thinking packets", () => {
       content: "Partial answer",
       turn_index: 2,
     });
+  });
+
+  it("marks the latest in-flight tool call as cancelled when interrupting", async () => {
+    const { result } = renderHook(() => useBuildStreaming());
+
+    act(() => {
+      useBuildSessionStore.getState().updateSessionData(sessionId, {
+        status: "running",
+      });
+      useBuildSessionStore.getState().appendStreamItem(sessionId, {
+        type: "tool_call",
+        id: "tool-finished",
+        toolCall: {
+          id: "tool-finished",
+          kind: "read",
+          toolName: "read",
+          title: "Reading",
+          description: "finished.ts",
+          command: "",
+          status: "completed",
+          rawOutput: "",
+        },
+      });
+      useBuildSessionStore.getState().appendStreamItem(sessionId, {
+        type: "tool_call",
+        id: "tool-active",
+        toolCall: {
+          id: "tool-active",
+          kind: "execute",
+          toolName: "bash",
+          title: "Running command",
+          description: "long-running command",
+          command: "sleep 30",
+          status: "in_progress",
+          rawOutput: "",
+        },
+      });
+    });
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    const toolStatuses = session?.streamItems
+      .filter((item) => item.type === "tool_call")
+      .map((item) => item.toolCall.status);
+
+    expect(interruptMessageStream).toHaveBeenCalledWith(sessionId);
+    expect(session?.isInterrupting).toBe(true);
+    expect(toolStatuses).toEqual(["completed", "cancelled"]);
+  });
+
+  it("persists an interrupted in-flight tool call as cancelled on prompt_response", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({
+          type: "tool_call_start",
+          tool_call_id: "tool-active",
+          kind: "execute",
+          title: "Running command",
+          content: null,
+          locations: null,
+          raw_input: null,
+          raw_output: null,
+          status: "pending",
+          timestamp: "2026-01-01T00:00:00Z",
+        });
+        useBuildSessionStore.getState().updateSessionData(sessionId, {
+          isInterrupting: true,
+        });
+        onPacket({
+          type: "tool_call_progress",
+          tool_call_id: "tool-active",
+          kind: "execute",
+          raw_input: { command: "sleep 30" },
+          raw_output: null,
+          status: "in_progress",
+          timestamp: "2026-01-01T00:00:00.500Z",
+        });
+        onPacket({
+          type: "prompt_response",
+          timestamp: "2026-01-01T00:00:01Z",
+        });
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "build the app");
+    });
+
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    const assistantMessage = session?.messages.find(
+      (message) => message.type === "assistant"
+    );
+    const metadata = assistantMessage?.message_metadata as
+      | { streamItems?: StreamItem[] }
+      | undefined;
+
+    expect(session?.streamItems).toEqual([]);
+    expect(session?.isInterrupting).toBe(false);
+    expect(metadata?.streamItems).toEqual([
+      expect.objectContaining({
+        type: "tool_call",
+        toolCall: expect.objectContaining({
+          id: "tool-active",
+          status: "cancelled",
+        }),
+      }),
+    ]);
   });
 
   it("does not clear a newer turn when an older attach emits prompt_response late", async () => {
