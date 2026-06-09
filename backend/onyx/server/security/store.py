@@ -6,9 +6,9 @@ from typing import Any
 from cachetools import TTLCache
 
 from onyx.configs import app_configs as _cfg
-from onyx.configs.constants import KV_SECURITY_SETTINGS_KEY
-from onyx.key_value_store.factory import get_kv_store
-from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.security_settings import load_overrides as _db_load_overrides
+from onyx.db.security_settings import upsert_overrides as _db_upsert_overrides
 from onyx.server.security.models import SecuritySettings
 from onyx.server.security.models import SecuritySettingsOverrides
 from onyx.utils.logger import setup_logger
@@ -48,7 +48,7 @@ _CACHE: TTLCache[str, SecuritySettings] = TTLCache(
     maxsize=10_000, ttl=_CACHE_TTL_SECONDS, timer=time.monotonic
 )
 # Bumped on every invalidation. A cold-miss reader captures the generation
-# before its KV roundtrip; if it changed during the read, we know an
+# before its DB roundtrip; if it changed during the read, we know an
 # invalidation raced us and we MUST NOT write the now-stale value back into
 # the cache. Without this, write→invalidate followed by stale-reader-write
 # would resurrect the pre-write value for up to a full TTL.
@@ -154,86 +154,29 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
 
 
 def load_raw_overrides() -> SecuritySettingsOverrides:
-    """Uncached read of the raw KV blob. Used by the PUT path inside the
-    Redis lock; everyone else should use get_security_settings().
+    """Uncached read of the persisted overrides. Used by the PUT path inside
+    the Redis lock; everyone else should use get_security_settings().
 
-    Lenient on read, strict on write: PUT bodies use extra="forbid" to catch
-    admin typos, but stored blobs tolerate field-set drift so a future
-    rename/removal doesn't silently revert EVERY tenant to env defaults.
-    On a single bad-typed value we drop only that field, not the whole blob.
+    Returns an empty overrides object (all-None) when no row exists for this
+    tenant — the loader treats that as "all env defaults".
     """
-    kv = get_kv_store()
-    try:
-        stored = kv.load(KV_SECURITY_SETTINGS_KEY)
-    except KvKeyNotFoundError:
-        return SecuritySettingsOverrides()
-    if not stored:
-        return SecuritySettingsOverrides()
-    if not isinstance(stored, dict):
-        # A non-dict blob is corruption — log loudly so ops sees it instead of
-        # silently masking it behind env defaults.
-        logger.error(
-            "Security overrides blob in KV is not a dict (got %s); using env defaults",
-            type(stored).__name__,
-        )
-        return SecuritySettingsOverrides()
-
-    known_fields = set(SecuritySettingsOverrides.model_fields)
-    filtered: dict[str, Any] = {
-        k: v for k, v in stored.items() if isinstance(k, str) and k in known_fields
-    }
-    dropped_keys = sorted(
-        str(k) for k in stored if not isinstance(k, str) or k not in known_fields
-    )
-    if dropped_keys:
-        logger.warning(
-            "Ignoring unknown key(s) in stored security overrides: %s",
-            dropped_keys,
-        )
-
-    try:
-        return SecuritySettingsOverrides.model_validate(filtered)
-    except Exception:
-        # Field-by-field salvage: a single bad value must not drop every other
-        # knob to env defaults. Try each field independently and keep whatever
-        # parses. Log loudly so ops actually notices corruption.
-        salvaged: dict[str, Any] = {}
-        invalid_keys: list[str] = []
-        for k, v in filtered.items():
-            try:
-                SecuritySettingsOverrides.model_validate({k: v})
-            except Exception:
-                invalid_keys.append(k)
-                continue
-            salvaged[k] = v
-        logger.exception(
-            "Invalid security overrides blob in KV; dropped key(s): %s",
-            sorted(invalid_keys),
-        )
-        try:
-            return SecuritySettingsOverrides.model_validate(salvaged)
-        except Exception:
-            # Defensive: if a future cross-field validator rejects the
-            # salvaged set, fall back to env defaults rather than 500.
-            logger.exception(
-                "Salvaged security overrides still invalid; using env defaults",
-            )
-            return SecuritySettingsOverrides()
+    with get_session_with_current_tenant() as db_session:
+        return _db_load_overrides(db_session)
 
 
 def store_overrides(overrides: SecuritySettingsOverrides) -> None:
-    """Persist overrides to KV (absent fields stay absent via exclude_none)
-    and invalidate the current tenant's local cache entry. Caller must
-    hold the Redis lock.
+    """Persist overrides as the singleton row and invalidate the current
+    tenant's local cache entry. Caller must hold the Redis lock.
 
-    In multi-tenant mode, operator-locked fields are stripped before
-    persistence — defense in depth against bypasses of the API check.
+    In multi-tenant mode, operator-locked fields are forced to ``None``
+    before persistence — defense in depth against bypasses of the API check.
     """
-    payload = overrides.model_dump(exclude_none=True)
     if MULTI_TENANT:
-        for field in OPERATOR_LOCKED_FIELDS:
-            payload.pop(field, None)
-    get_kv_store().store(KV_SECURITY_SETTINGS_KEY, payload)
+        overrides = overrides.model_copy(
+            update={field: None for field in OPERATOR_LOCKED_FIELDS}
+        )
+    with get_session_with_current_tenant() as db_session:
+        _db_upsert_overrides(db_session, overrides)
     invalidate_security_cache(_current_tenant_id_or_default())
 
 
@@ -260,10 +203,10 @@ def get_security_settings() -> SecuritySettings:
     """Effective, env-merged, immutable settings for the current tenant.
 
     - Cache hit: process-local memory access (TTLCache under an RLock), no IO.
-    - Cache miss: one sync KV roundtrip via get_kv_store().load(...).
+    - Cache miss: one sync DB roundtrip via the security_settings table.
     - Pre-tenant safe: when the tenant contextvar is unset in multi-tenant,
       returns a fresh env-defaults SecuritySettings (never cached) without
-      touching KV. Avoids the stack-trace cost of get_current_tenant_id()'s
+      touching the DB. Avoids the stack-trace cost of get_current_tenant_id()'s
       RuntimeError on hot unauth paths like /auth/type.
     - Thread-safe via an RLock around the TTLCache.
     - Result is frozen; callers cannot mutate the cached value.
@@ -285,15 +228,15 @@ def get_security_settings() -> SecuritySettings:
         overrides = load_raw_overrides()
         effective = merge_with_env(overrides)
     except Exception as e:
-        # Never brick the auth path on a KV outage.
+        # Never brick the auth path on a DB outage.
         logger.error("Failed to load security settings, using env defaults: %s", e)
         return _build_env_defaults()
 
     with _CACHE_LOCK:
         # If an invalidation happened between our miss-read and now, a writer
-        # has just persisted a newer value to KV. Don't overwrite the now-empty
-        # cache slot with what we read — that value is potentially stale.
-        # The next caller will re-read fresh from KV.
+        # has just persisted a newer value to the DB. Don't overwrite the
+        # now-empty cache slot with what we read — that value is potentially
+        # stale. The next caller will re-read fresh from the DB.
         if _CACHE_GENERATION == gen_at_miss:
             _CACHE[tenant_id] = effective
     return effective

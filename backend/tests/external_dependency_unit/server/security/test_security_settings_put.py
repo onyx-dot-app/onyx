@@ -1,9 +1,9 @@
 """Tests for the PUT /admin/security route handler.
 
 Invokes ``put_security_settings_endpoint`` directly with a minimal Request
-shim. Each test runs with a real Postgres-backed KV store and a real Redis
-lock so the merge / serialization semantics are exercised end-to-end (sans
-HTTP framing).
+shim. Each test runs against the real Postgres-backed singleton row plus a
+real Redis lock so the merge / serialization semantics are exercised
+end-to-end (sans HTTP framing).
 """
 
 import asyncio
@@ -15,16 +15,19 @@ from typing import cast
 
 import pytest
 from fastapi import Request
+from sqlalchemy import delete
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from onyx.configs.constants import KV_SECURITY_SETTINGS_KEY
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import SecuritySettings as SecuritySettingsRow
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.key_value_store.factory import get_kv_store
-from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.security import api as security_api
 from onyx.server.security import store as security_store
 from onyx.server.security.api import put_security_settings_endpoint
+from onyx.server.security.models import SecuritySettingsOverrides
 from onyx.server.security.store import _build_env_defaults
 from onyx.server.security.store import _install_cache_for_test
 from onyx.server.security.store import invalidate_security_cache
@@ -55,24 +58,39 @@ def _put(body: dict[str, Any] | bytes) -> Any:
     return asyncio.run(put_security_settings_endpoint(request, _=_PLACEHOLDER_USER))
 
 
+def _load_row_as_dict() -> dict[str, Any] | None:
+    """Read the singleton row and return non-None columns as a dict.
+
+    Mimics the prior ``KV_SECURITY_SETTINGS_KEY`` blob shape so existing test
+    assertions can stay readable: only explicitly-set overrides appear. A
+    missing row returns None.
+    """
+    with get_session_with_current_tenant() as session:
+        row = session.execute(select(SecuritySettingsRow)).scalar_one_or_none()
+    if row is None:
+        return None
+    overrides = SecuritySettingsOverrides.model_validate(row, from_attributes=True)
+    return overrides.model_dump(exclude_none=True)
+
+
+def _delete_security_settings_row() -> None:
+    with get_session_with_current_tenant() as session:
+        session.execute(delete(SecuritySettingsRow))
+        session.commit()
+
+
 @pytest.fixture(autouse=True)
-def _clean_kv_and_cache(
+def _clean_db_and_cache(
+    db_session: Session,  # noqa: ARG001 — fixture requested only for its side-effect (SQL engine init); pytest binds by name
     tenant_context: None,  # noqa: ARG001 — requested for tenant-contextvar side effect
 ) -> Generator[None, None, None]:
-    kv = get_kv_store()
-    try:
-        kv.delete(KV_SECURITY_SETTINGS_KEY)
-    except KvKeyNotFoundError:
-        pass
+    _delete_security_settings_row()
     invalidate_security_cache(TEST_TENANT_ID)
     import time as _time
 
     _install_cache_for_test(ttl=10.0, timer=_time.monotonic)
     yield
-    try:
-        kv.delete(KV_SECURITY_SETTINGS_KEY)
-    except KvKeyNotFoundError:
-        pass
+    _delete_security_settings_row()
     invalidate_security_cache(TEST_TENANT_ID)
 
 
@@ -82,23 +100,20 @@ def _clean_kv_and_cache(
 
 
 def test_put_writes_only_explicit_fields() -> None:
-    """Absent fields must not appear in the persisted KV blob."""
+    """Absent fields must not appear as non-null columns in the row."""
     _put({"user_directory_admin_only": True})
 
-    stored = get_kv_store().load(KV_SECURITY_SETTINGS_KEY)
-    assert stored == {"user_directory_admin_only": True}
+    assert _load_row_as_dict() == {"user_directory_admin_only": True}
 
 
 def test_put_explicit_null_clears_previously_set_field() -> None:
-    """An explicit null in PATCH semantics removes the key from KV."""
+    """An explicit null in PATCH semantics resets the column to NULL (= env)."""
     _put({"user_directory_admin_only": True})
-    assert get_kv_store().load(KV_SECURITY_SETTINGS_KEY) == {
-        "user_directory_admin_only": True
-    }
+    assert _load_row_as_dict() == {"user_directory_admin_only": True}
 
     _put({"user_directory_admin_only": None})
-    stored = get_kv_store().load(KV_SECURITY_SETTINGS_KEY)
-    assert stored == {}
+    # Row may still exist but every column is NULL → empty dict.
+    assert _load_row_as_dict() == {}
 
 
 def test_put_cross_field_validation_against_effective_state(
@@ -117,8 +132,7 @@ def test_put_cross_field_validation_against_effective_state(
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
     # Nothing should have been persisted.
-    with pytest.raises(KvKeyNotFoundError):
-        get_kv_store().load(KV_SECURITY_SETTINGS_KEY)
+    assert _load_row_as_dict() is None
 
 
 def test_put_accepts_password_min_length_zero() -> None:
@@ -127,8 +141,7 @@ def test_put_accepts_password_min_length_zero() -> None:
     result = _put({"password_min_length": 0})
     assert result.password_min_length == 0
 
-    stored = get_kv_store().load(KV_SECURITY_SETTINGS_KEY)
-    assert stored == {"password_min_length": 0}
+    assert _load_row_as_dict() == {"password_min_length": 0}
 
 
 def test_put_extra_field_rejected_as_invalid_input() -> None:
@@ -174,10 +187,8 @@ def test_put_rejects_max_length_below_required_classes() -> None:
             }
         )
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
-    # Nothing should have persisted — the validation runs after merge, the
-    # store_overrides call is in the try/finally guarded by validate.
-    with pytest.raises(KvKeyNotFoundError):
-        get_kv_store().load(KV_SECURITY_SETTINGS_KEY)
+    # Nothing should have persisted — the validation runs after merge.
+    assert _load_row_as_dict() is None
 
 
 # -----------------------------------------------------------------------------
@@ -198,8 +209,7 @@ def test_put_multi_tenant_rejects_operator_locked_field(
     assert exc_info.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
     # Nothing should have been persisted.
-    with pytest.raises(KvKeyNotFoundError):
-        get_kv_store().load(KV_SECURITY_SETTINGS_KEY)
+    assert _load_row_as_dict() is None
 
 
 def test_put_multi_tenant_accepts_tenant_editable_field(
@@ -212,8 +222,7 @@ def test_put_multi_tenant_accepts_tenant_editable_field(
     result = _put({"user_directory_admin_only": True})
     assert result.user_directory_admin_only is True
 
-    stored = get_kv_store().load(KV_SECURITY_SETTINGS_KEY)
-    assert stored == {"user_directory_admin_only": True}
+    assert _load_row_as_dict() == {"user_directory_admin_only": True}
 
 
 # -----------------------------------------------------------------------------
@@ -250,8 +259,7 @@ def test_concurrent_puts_disjoint_fields_both_land() -> None:
     t2.join()
 
     assert errors == []
-    stored = get_kv_store().load(KV_SECURITY_SETTINGS_KEY)
-    assert stored == {
+    assert _load_row_as_dict() == {
         "user_directory_admin_only": True,
         "track_external_idp_expiry": True,
     }
@@ -262,8 +270,8 @@ def test_concurrent_puts_under_invariant_pressure_never_corrupt(
 ) -> None:
     """When two writers race on fields whose combination could violate the
     min<=max invariant, the lock serializes them and the later one is
-    rejected by the post-merge validator. The KV blob must never reflect an
-    invalid state."""
+    rejected by the post-merge validator. The persisted row must never
+    reflect an invalid state."""
     # Pin env so that the natural defaults won't accidentally satisfy a bad
     # ordering of writes.
     from onyx.configs import app_configs
@@ -296,17 +304,10 @@ def test_concurrent_puts_under_invariant_pressure_never_corrupt(
     assert len(rejections) == 1
     assert len(errors) == 1
 
-    # The persisted blob must reflect exactly one of the two writes, with the
+    # The persisted state must reflect exactly one of the two writes, with the
     # other field falling back to env defaults — never a min/max pair that
     # violates the invariant.
-    stored: dict[str, Any] = {}
-    try:
-        loaded = get_kv_store().load(KV_SECURITY_SETTINGS_KEY)
-    except KvKeyNotFoundError:
-        loaded = None
-    if isinstance(loaded, dict):
-        stored = cast(dict[str, Any], loaded)
-
+    stored = _load_row_as_dict() or {}
     env = _build_env_defaults()
     effective_min = stored.get("password_min_length", env.password_min_length)
     effective_max = stored.get("password_max_length", env.password_max_length)
@@ -325,8 +326,6 @@ def test_store_overrides_strips_operator_locked_in_multi_tenant(
     operator-locked fields when MULTI_TENANT=True."""
     monkeypatch.setattr(security_store, "MULTI_TENANT", True)
 
-    from onyx.server.security.models import SecuritySettingsOverrides
-
     security_store.store_overrides(
         SecuritySettingsOverrides(
             user_directory_admin_only=True,
@@ -335,5 +334,4 @@ def test_store_overrides_strips_operator_locked_in_multi_tenant(
         )
     )
 
-    stored = get_kv_store().load(KV_SECURITY_SETTINGS_KEY)
-    assert stored == {"user_directory_admin_only": True}
+    assert _load_row_as_dict() == {"user_directory_admin_only": True}

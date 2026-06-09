@@ -1,7 +1,7 @@
 """Tests for the runtime security settings loader.
 
 Exercises cache behavior, env fallback, multi-tenant pre-tenant safety, and
-KV-failure resilience using a real KV backend (Postgres-backed). The store
+DB-failure resilience using the real Postgres-backed singleton row. The store
 exposes _install_cache_for_test for fake-clock TTL testing.
 """
 
@@ -12,10 +12,11 @@ from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import delete
+from sqlalchemy.orm import Session
 
-from onyx.configs.constants import KV_SECURITY_SETTINGS_KEY
-from onyx.key_value_store.factory import get_kv_store
-from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import SecuritySettings as SecuritySettingsRow
 from onyx.server.security import store as security_store
 from onyx.server.security.models import SecuritySettingsOverrides
 from onyx.server.security.store import _build_env_defaults
@@ -27,41 +28,41 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 
+def _delete_security_settings_row() -> None:
+    with get_session_with_current_tenant() as session:
+        session.execute(delete(SecuritySettingsRow))
+        session.commit()
+
+
 @pytest.fixture(autouse=True)
-def _clean_kv_and_cache(
+def _clean_db_and_cache(
+    db_session: Session,  # noqa: ARG001 — fixture requested only for its side-effect (SQL engine init); pytest binds by name
     tenant_context: None,  # noqa: ARG001 — requested for tenant-contextvar side effect
 ) -> Generator[None, None, None]:
     """Clean state before and after each test:
-    - Wipe any KV blob for this tenant.
+    - Wipe the security_settings singleton row for this tenant.
     - Invalidate the in-process cache entry.
     - Reinstall a fresh TTLCache to clear any prior fake-clock state.
     """
-    kv = get_kv_store()
-    try:
-        kv.delete(KV_SECURITY_SETTINGS_KEY)
-    except KvKeyNotFoundError:
-        pass
+    _delete_security_settings_row()
     invalidate_security_cache(TEST_TENANT_ID)
     # Reinstall a stock cache so tests using a fake clock don't leak state.
     import time as _time
 
     _install_cache_for_test(ttl=10.0, timer=_time.monotonic)
     yield
-    try:
-        kv.delete(KV_SECURITY_SETTINGS_KEY)
-    except KvKeyNotFoundError:
-        pass
+    _delete_security_settings_row()
     invalidate_security_cache(TEST_TENANT_ID)
 
 
-def test_empty_kv_returns_env_defaults() -> None:
-    """When no KV blob exists, every field must match the env-derived default."""
+def test_empty_db_returns_env_defaults() -> None:
+    """When no row exists, every field must match the env-derived default."""
     effective = get_security_settings()
     env = _build_env_defaults()
     assert effective == env
 
 
-def test_partial_kv_only_overrides_specified_fields() -> None:
+def test_partial_overrides_only_overrides_specified_fields() -> None:
     """Setting one field via the store must not perturb the others."""
     store_overrides(SecuritySettingsOverrides(user_directory_admin_only=True))
     effective = get_security_settings()
@@ -77,8 +78,8 @@ def test_partial_kv_only_overrides_specified_fields() -> None:
     assert effective.password_require_uppercase == env.password_require_uppercase
 
 
-def test_cache_hits_avoid_kv_reads() -> None:
-    """Repeated loader calls within the TTL must hit KV once."""
+def test_cache_hits_avoid_db_reads() -> None:
+    """Repeated loader calls within the TTL must hit the DB once."""
     get_security_settings()  # warm cache
 
     with patch.object(
@@ -90,7 +91,7 @@ def test_cache_hits_avoid_kv_reads() -> None:
 
 
 def test_store_overrides_invalidates_cache() -> None:
-    """After a write, the next load must re-read KV (cache invalidated)."""
+    """After a write, the next load must re-read the DB (cache invalidated)."""
     get_security_settings()  # warm cache
 
     with patch.object(
@@ -98,13 +99,13 @@ def test_store_overrides_invalidates_cache() -> None:
     ) as spy:
         store_overrides(SecuritySettingsOverrides(user_directory_admin_only=True))
         get_security_settings()
-        # First call is from inside store_overrides? No, store_overrides only writes.
-        # The first KV read after invalidation should be by get_security_settings.
+        # store_overrides only writes; the read after invalidation is the
+        # only call that hits load_raw_overrides.
         assert spy.call_count == 1
 
 
 def test_cache_ttl_expiry_triggers_reload() -> None:
-    """Advancing the fake clock past the TTL must force a KV re-read."""
+    """Advancing the fake clock past the TTL must force a DB re-read."""
     fake_now = [0.0]
 
     def fake_timer() -> float:
@@ -120,7 +121,7 @@ def test_cache_ttl_expiry_triggers_reload() -> None:
         fake_now[0] = 4.0
         get_security_settings()
         assert spy.call_count == 0
-        # Past TTL → cache miss → KV read.
+        # Past TTL → cache miss → DB read.
         fake_now[0] = 6.0
         get_security_settings()
         assert spy.call_count == 1
@@ -159,7 +160,7 @@ def test_pre_tenant_returns_env_defaults_without_raising(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """In multi-tenant mode with no tenant contextvar, loader must return env
-    defaults without raising and without touching KV."""
+    defaults without raising and without touching the DB."""
     # Reset the contextvar to "unset" (None) for this test.
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(None)
     try:
@@ -175,87 +176,33 @@ def test_pre_tenant_returns_env_defaults_without_raising(
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
-def test_kv_error_falls_back_to_env_defaults() -> None:
-    """An unexpected KV exception must not brick auth — fall back to env."""
+def test_db_error_falls_back_to_env_defaults() -> None:
+    """An unexpected DB exception must not brick auth — fall back to env."""
     with patch.object(
         security_store,
         "load_raw_overrides",
-        side_effect=RuntimeError("simulated KV outage"),
+        side_effect=RuntimeError("simulated DB outage"),
     ):
         invalidate_security_cache(TEST_TENANT_ID)
         effective = get_security_settings()
         assert effective == _build_env_defaults()
 
 
-# -----------------------------------------------------------------------------
-# Stored-blob drift resilience: schema-evolution must not silently fail-open.
-# -----------------------------------------------------------------------------
-
-
-def test_load_raw_overrides_drops_unknown_keys_keeps_known() -> None:
-    """A field rename or removal in a future PR must NOT cause every tenant's
-    overrides to vanish into env defaults. Unknown keys are ignored; known
-    overrides are preserved."""
-    # Simulate a blob written by a future version with a since-removed key.
-    get_kv_store().store(
-        KV_SECURITY_SETTINGS_KEY,
-        {
-            "user_directory_admin_only": True,
-            "valid_email_domains": ["acme.com"],
-            "definitely_not_a_real_field": "future-or-renamed",
-        },
-    )
-    invalidate_security_cache(TEST_TENANT_ID)
-
-    effective = get_security_settings()
-    # The two real overrides survive.
-    assert effective.user_directory_admin_only is True
-    assert effective.valid_email_domains == ("acme.com",)
-    # All other fields still come from env.
-    env = _build_env_defaults()
-    assert effective.password_min_length == env.password_min_length
-    assert effective.track_external_idp_expiry == env.track_external_idp_expiry
-
-
-def test_load_raw_overrides_salvages_around_single_bad_value() -> None:
-    """One corrupted field must drop only that field, not nuke the entire
-    blob to env defaults. Before this guard, a botched manual write to a
-    single key would silently weaken every other security knob."""
-    get_kv_store().store(
-        KV_SECURITY_SETTINGS_KEY,
-        {
-            "user_directory_admin_only": True,
-            # Wrong type — int field given a non-numeric string.
-            "password_min_length": "not-a-number",
-            "track_external_idp_expiry": True,
-        },
-    )
-    invalidate_security_cache(TEST_TENANT_ID)
-
-    effective = get_security_settings()
-    env = _build_env_defaults()
-    # Good fields survive.
-    assert effective.user_directory_admin_only is True
-    assert effective.track_external_idp_expiry is True
-    # Bad field falls through to env, NOT to "all defaults".
-    assert effective.password_min_length == env.password_min_length
-
-
 def test_cache_does_not_repopulate_after_invalidation_race() -> None:
-    """Race: a cold-miss reader holds the result of its KV roundtrip; before
+    """Race: a cold-miss reader holds the result of its DB roundtrip; before
     it can store the result, a concurrent writer invalidates. The reader must
     NOT write its now-stale value back — otherwise the cache resurrects the
     pre-write value for up to one full TTL."""
-    # Pre-populate KV so there's something to read on cold miss.
+    # Pre-populate the row so there's something to read on cold miss.
     store_overrides(SecuritySettingsOverrides(user_directory_admin_only=False))
     invalidate_security_cache(TEST_TENANT_ID)
 
-    # Simulate the race: while the reader is in the middle of KV roundtrip,
+    # Simulate the race: while the reader is in the middle of the DB roundtrip,
     # another caller invalidates (e.g. a concurrent successful PUT).
     real_load = security_store.load_raw_overrides
 
     def _load_then_race() -> SecuritySettingsOverrides:
-        # The reader's KV read happens normally...
+        # The reader's DB read happens normally...
         result = real_load()
         # ...but before the reader can write into the cache, an invalidation
         # races in (this simulates a concurrent successful PUT bumping the
@@ -271,14 +218,3 @@ def test_cache_does_not_repopulate_after_invalidation_race() -> None:
     # The reader must NOT have persisted its stale result. Cache stays empty.
     with security_store._CACHE_LOCK:
         assert TEST_TENANT_ID not in security_store._CACHE
-
-
-def test_load_raw_overrides_handles_non_dict_blob() -> None:
-    """A KV blob that somehow ends up non-dict-shaped must fall back to env
-    defaults rather than raise — defends against pre-schema-migration data
-    or a botched manual KV write."""
-    get_kv_store().store(KV_SECURITY_SETTINGS_KEY, ["not", "a", "dict"])  # type: ignore[arg-type]
-    invalidate_security_cache(TEST_TENANT_ID)
-
-    effective = get_security_settings()
-    assert effective == _build_env_defaults()
