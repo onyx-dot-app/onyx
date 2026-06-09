@@ -7,17 +7,19 @@ import {
   useEffect,
   useRef,
   useLayoutEffect,
+  useMemo,
   type Dispatch,
   type SetStateAction,
 } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@opal/utils";
+import { Button } from "@opal/components";
+import { SvgSidebar } from "@opal/icons";
 import {
   RootLayoutFoldedContext,
   useSidebarFolded,
 } from "@opal/layouts/root/components";
 import useScreenSize from "@opal/hooks/useScreenSize";
-import SidebarWrapper from "@opal/layouts/sidebar/SidebarWrapper";
 export { useSidebarFolded } from "@opal/layouts/root/components";
 
 // ---------------------------------------------------------------------------
@@ -54,13 +56,27 @@ function SidebarStateProvider({
 }: SidebarStateProviderProps) {
   const [folded, setFoldedInternal] = useState(defaultFolded);
 
+  // Keep a ref so the effect below always sees the latest callback without
+  // needing it as a dependency (avoids unnecessary effect re-runs).
+  const onFoldedChangeRef = useRef(onFoldedChange);
+  onFoldedChangeRef.current = onFoldedChange;
+
   const setFolded: Dispatch<SetStateAction<boolean>> = (value) => {
-    setFoldedInternal((prev) => {
-      const newState = typeof value === "function" ? value(prev) : value;
-      onFoldedChange?.(newState);
-      return newState;
-    });
+    setFoldedInternal((prev) =>
+      typeof value === "function" ? value(prev) : value
+    );
   };
+
+  // Notify after state commits rather than inside the updater, keeping the
+  // updater pure and safe under React's StrictMode double-invocation.
+  const isMounted = useRef(false);
+  useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
+    onFoldedChangeRef.current?.(folded);
+  }, [folded]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -100,6 +116,90 @@ export function useSidebarState(): SidebarStateContextType {
 }
 
 // ---------------------------------------------------------------------------
+// SidebarWrapper — structural chrome shared by Root and direct callers
+// ---------------------------------------------------------------------------
+
+export interface SidebarWrapperProps {
+  folded?: boolean;
+  onFoldClick?: () => void;
+  /**
+   * Render function for the logo/brand area. Receives the current fold state
+   * so the logo can adapt its appearance (e.g. icon-only vs full wordmark).
+   */
+  logo?: (folded: boolean | undefined) => React.ReactNode;
+  /**
+   * When `true` (default), the logo is shown in the folded state with a
+   * hover-to-reveal close button. When `false`, only the close button is
+   * shown when folded.
+   */
+  showLogoWhenFolded?: boolean;
+  children?: React.ReactNode;
+}
+
+export function SidebarWrapper({
+  folded,
+  onFoldClick,
+  logo,
+  showLogoWhenFolded = true,
+  children,
+}: SidebarWrapperProps) {
+  const closeButton = useMemo(
+    () => (
+      <div className="px-1">
+        <Button
+          icon={SvgSidebar}
+          prominence="tertiary"
+          tooltip={folded ? "Open Sidebar" : "Close Sidebar"}
+          tooltipSide={folded ? "right" : "bottom"}
+          size="md"
+          onClick={onFoldClick}
+        />
+      </div>
+    ),
+    [folded, onFoldClick]
+  );
+
+  const logoEl = logo ? logo(folded) : null;
+
+  return (
+    // The outer wrapper establishes a plain block formatting context so that
+    // `transition-[width]` on the inner div animates correctly. Without it the
+    // inner div is a direct flex item of the page layout, and the flex
+    // algorithm overrides the `width` property before the transition can fire,
+    // so the sidebar snaps between widths instead of sliding.
+    <div>
+      <div
+        className={cn(
+          "h-screen flex flex-col bg-background-tint-02 py-2 gap-4 group/SidebarWrapper transition-width duration-200 ease-in-out",
+          folded ? "w-(--sidebar-width-folded)" : "w-(--sidebar-width-expanded)"
+        )}
+      >
+        <div className="flex flex-row justify-between items-start pt-3 px-2">
+          {folded === undefined ? (
+            logoEl
+          ) : folded && showLogoWhenFolded && logoEl ? (
+            <>
+              <div className="group-hover/SidebarWrapper:hidden">{logoEl}</div>
+              <div className="hidden group-hover/SidebarWrapper:flex">
+                {closeButton}
+              </div>
+            </>
+          ) : folded ? (
+            closeButton
+          ) : (
+            <>
+              {logoEl}
+              {closeButton}
+            </>
+          )}
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Root
 // ---------------------------------------------------------------------------
 
@@ -111,16 +211,7 @@ interface SidebarRootProps {
    * regardless of this prop.
    */
   foldable?: boolean;
-  /**
-   * Render function for the logo/brand area. Receives the current fold state
-   * so the logo can adapt its appearance (e.g. icon-only vs full wordmark).
-   */
   logo?: (folded: boolean | undefined) => React.ReactNode;
-  /**
-   * When `true` (default), the logo is shown in the folded state with a
-   * hover-to-reveal close button. When `false`, only the close button is
-   * shown when folded.
-   */
   showLogoWhenFolded?: boolean;
   children: React.ReactNode;
 }

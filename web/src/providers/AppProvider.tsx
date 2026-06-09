@@ -32,7 +32,6 @@ import { SidebarLayouts } from "@opal/layouts";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
 import ToastProvider from "@/providers/ToastProvider";
-import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -46,15 +45,15 @@ function SidebarPersistenceProvider({
   const [defaultFolded] = useState(() => {
     if (typeof window === "undefined") return false;
     return (
-      Cookies.get(SIDEBAR_TOGGLED_COOKIE_NAME) === "true" ||
-      localStorage.getItem(SIDEBAR_TOGGLED_COOKIE_NAME) === "true"
+      Cookies.get("sidebarIsToggled") === "true" ||
+      localStorage.getItem("sidebarIsToggled") === "true"
     );
   });
 
   function handleFoldedChange(folded: boolean) {
     const value = folded.toString();
-    Cookies.set(SIDEBAR_TOGGLED_COOKIE_NAME, value, { expires: 365 });
-    localStorage.setItem(SIDEBAR_TOGGLED_COOKIE_NAME, value);
+    Cookies.set("sidebarIsToggled", value, { expires: 365 });
+    localStorage.setItem("sidebarIsToggled", value);
   }
 
   return (
