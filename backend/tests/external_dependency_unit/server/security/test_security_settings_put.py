@@ -172,20 +172,12 @@ def test_put_single_tenant_allows_operator_locked_fields() -> None:
     assert result.mask_credential_prefix is False
 
 
-def test_put_rejects_max_length_below_required_classes() -> None:
-    """If max_length < count(required character classes), no password can
-    satisfy the policy — admin must be told instead of silently locking out
-    every signup."""
-    # 3 required classes, max_length=2 → impossible.
+def test_put_rejects_max_length_below_floor() -> None:
+    """``password_max_length`` is floored at 4 (one char per required class).
+    Anything lower is rejected up front instead of silently locking out every
+    signup once all four require_* flags are on."""
     with pytest.raises(OnyxError) as exc_info:
-        _put(
-            {
-                "password_max_length": 2,
-                "password_require_uppercase": True,
-                "password_require_lowercase": True,
-                "password_require_digit": True,
-            }
-        )
+        _put({"password_max_length": 3})
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
     # Nothing should have persisted — the validation runs after merge.
     assert _load_row_as_dict() is None

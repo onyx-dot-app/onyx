@@ -39,6 +39,10 @@ _LOCK_WAIT_SECONDS = 10.0
 # Sanity cap for password length: env default is 64 today, so a 256 ceiling
 # does not change any current behavior.
 _PASSWORD_LENGTH_CAP = 256
+# Floor at 4 — one char per required character class (4 classes total). Any
+# lower would silently lock out every signup once all four require_* flags
+# are on.
+_PASSWORD_MAX_LENGTH_FLOOR = 4
 
 
 def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, dict[str, Any]]:
@@ -70,10 +74,10 @@ def _validate_effective(effective: SecuritySettings) -> None:
             OnyxErrorCode.INVALID_INPUT,
             "password_min_length must be >= 0",
         )
-    if effective.password_max_length < 1:
+    if effective.password_max_length < _PASSWORD_MAX_LENGTH_FLOOR:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "password_max_length must be >= 1",
+            f"password_max_length must be >= {_PASSWORD_MAX_LENGTH_FLOOR}",
         )
     if effective.password_max_length > _PASSWORD_LENGTH_CAP:
         raise OnyxError(
@@ -84,26 +88,6 @@ def _validate_effective(effective: SecuritySettings) -> None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "password_min_length must be <= password_max_length",
-        )
-
-    # A password must be able to contain one character from each required
-    # class. If max_length is smaller than the number of required classes,
-    # NO valid password exists and every signup/reset would fail — locking
-    # out the entire tenant with no clear admin signal.
-    required_classes = sum(
-        [
-            effective.password_require_uppercase,
-            effective.password_require_lowercase,
-            effective.password_require_digit,
-            effective.password_require_special_char,
-        ]
-    )
-    if required_classes > effective.password_max_length:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"password_max_length ({effective.password_max_length}) must be "
-            f">= number of required character classes ({required_classes}); "
-            f"otherwise no password could ever satisfy the policy",
         )
 
 
