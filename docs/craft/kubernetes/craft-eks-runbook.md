@@ -224,9 +224,11 @@ Point at the terraform endpoints; disable in-cluster deps:
 - Craft: `ENABLE_CRAFT=true`, `SANDBOX_API_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080`, `SANDBOX_S3_BUCKET`, `auth.sandboxPushSecret.enabled=true`. (`SANDBOX_SERVICE_ACCOUNT_NAME`/`SANDBOX_CONTAINER_IMAGE` default correctly.)
 
 ### Images
-`global.version: craft-edge` (backend/web/model-server — the moving Craft build; stable v4.0.x has no
-Craft). `code-interpreter`: `latest` (no craft-edge tag). Sandbox image default tracks the current
-`onyxdotapp/sandbox:vX.Y.Z`.
+`global.version: craft-edge` (backend/web/model-server — the rolling Craft dev build that tracks `main`,
+auto-moved nightly; newest Craft, may be unstable. `craft-latest` is the latest stable Craft release —
+use it for a stable deploy. `craft-dev` is an ad-hoc tag for testing an unmerged branch without
+disturbing `craft-edge`). `code-interpreter`: `latest` (no craft-edge tag). Sandbox image default
+tracks the current `onyxdotapp/sandbox:vX.Y.Z`.
 
 ---
 

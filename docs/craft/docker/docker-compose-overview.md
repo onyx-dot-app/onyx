@@ -72,7 +72,7 @@ These must end up in `~/onyx_data/deployment/.env` after install:
 | `SANDBOX_BACKEND=docker` | yes | Same as above — install script gates on fresh-install. |
 | `SANDBOX_API_SERVER_URL=http://host.docker.internal:3001` | yes | Provision raises `ValueError("SANDBOX_API_SERVER_URL must be set")` without it. Must be a URL the sandbox container can reach **from the `onyx_craft_sandbox` bridge** — compose-internal hostnames (`api_server`, `nginx`) won't resolve there. Match the port to `HOST_PORT`. |
 | `HOST_PORT=3001` | only if 3000 conflicts | Default is 3000; nginx binds this on the host. Free up 3000 or change here. |
-| `IMAGE_TAG=craft-edge` | yes | `craft-latest` lags `main` by weeks and predates the Docker sandbox backend (see [image staleness](#image-staleness--published-tags-lag-main) below). Use `craft-edge`. |
+| `IMAGE_TAG=craft-latest` | yes | Two Craft channels exist: **`craft-latest`** is the latest stable Craft release — recommended for self-hosting. **`craft-edge`** is the rolling dev build from `main` — newest Craft features, but may be unstable. See [image channels](#image-staleness--published-tags-lag-main) below. |
 | `ONYX_BACKEND_IMAGE` | only when running unreleased PRs | Lets you override just the backend image without forcing model-server / web-server to the same tag. |
 | `SANDBOX_CONTAINER_IMAGE` | only when running unreleased PRs | Same idea for the sandbox image itself. Default is a pinned tag like `onyxdotapp/sandbox:v0.1.44`. |
 | `AGENT_TRANSPORT=serve` | for serve transport | `docker-compose.craft.yml` defaults this to `serve` (post-#11402); override to `acp` for the rollback path. Reaches the sandbox container via env passthrough. |
@@ -132,7 +132,7 @@ ENABLE_CRAFT=true
 SANDBOX_BACKEND=docker
 SANDBOX_API_SERVER_URL=http://host.docker.internal:3001
 HOST_PORT=3001
-IMAGE_TAG=craft-edge
+IMAGE_TAG=craft-latest
 ENV
 ```
 
@@ -217,13 +217,25 @@ is a backend-only override.
 ### Sandbox image
 
 The sandbox container has its own image (`onyxdotapp/sandbox:vX.Y.Z`)
-pinned in compose. The published version lags `main` substantially —
-e.g. `v0.1.44` ships an old `entrypoint.sh` that does `sleep infinity` and
-has no `AGENT_TRANSPORT=serve` gate, so the serve transport will time
-out waiting for opencode-serve on :4096 even though your api_server side
-is correct.
+pinned in compose. It is **decoupled from the backend channel** — the
+default `SANDBOX_CONTAINER_IMAGE` is a fixed `vX.Y.Z` regardless of whether
+the backend is `craft-latest` / `craft-edge` / `craft-dev`. The published
+version lags `main` substantially — e.g. `v0.1.44` ships an old
+`entrypoint.sh` that does `sleep infinity` and has no `AGENT_TRANSPORT=serve`
+gate, so the serve transport will time out waiting for opencode-serve on
+:4096 even though your api_server side is correct.
 
-Build the sandbox image:
+To pick up sandbox changes you either build the image locally (below) or
+push the `craft-dev` git tag — CI builds and publishes
+`onyxdotapp/sandbox:craft-dev` (alongside the rest of the craft stack at
+`:craft-dev`). Either way you must point `SANDBOX_CONTAINER_IMAGE` at it;
+it is never selected automatically. For the CI route:
+
+```
+SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:craft-dev
+```
+
+Build the sandbox image locally instead:
 
 ```bash
 docker build --network=host \
@@ -375,16 +387,30 @@ environment:
 
 ### Image staleness: published tags lag main
 
-Symptom A: api_server crashes on boot with
-`ValueError: 'docker' is not a valid SandboxBackend`. Cause: the
-`craft-latest` tag is built off a release (e.g. `v4.0.0`) that predates
-the Docker sandbox backend (PR #11222, May 20). The `SandboxBackend`
-enum in that image only has `LOCAL` and `KUBERNETES`.
+The Craft image channels:
 
-Fix: switch to `craft-edge` (rolling tag built from `main`):
+- **`craft-latest`** — the latest stable Craft release. Recommended for
+  self-hosting.
+- **`craft-edge`** — rolling dev build that tracks `main` (auto-moved
+  nightly). Has the newest merged Craft code, but may be unstable.
+- **`craft-dev`** — ad-hoc build for testing an arbitrary (possibly
+  unmerged) branch. Built only when someone force-pushes the `craft-dev`
+  git tag. Builds the craft-specific images — `onyx-backend`, `onyx-web-server`,
+  and the sandbox — all tagged `craft-dev` only (model-server isn't craft-specific
+  and is skipped). Pin those per-component on the craft-dev cluster
+  (`SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:craft-dev`) and `helm upgrade`;
+  it never touches the shared `craft-edge` / `latest` channels.
+
+Symptom A: api_server crashes on boot with
+`ValueError: 'docker' is not a valid SandboxBackend`. Cause: a **stale
+cached** `craft-latest` image from before the Docker sandbox backend
+shipped (PR #11222, May 20) — the `SandboxBackend` enum in that old image
+only has `LOCAL` and `KUBERNETES`. Current `craft-latest` includes it.
+
+Fix: pull the current image, or switch to `craft-edge` for the newest code:
 
 ```
-IMAGE_TAG=craft-edge
+docker compose -f docker-compose.yml -f docker-compose.craft.yml pull
 ```
 
 Symptom B: `craft-edge` works for the Docker backend but is missing PR

@@ -996,8 +996,8 @@ if [ -f "$ENV_FILE" ]; then
             # --include-craft requires the craft-tagged backend image (Node.js
             # + opencode CLI are only built into that image), so the tag is
             # forced rather than prompted for.
-            VERSION="craft-edge"
-            print_info "Update selected. Using craft-edge (required by --include-craft)."
+            VERSION="craft-latest"
+            print_info "Update selected. Using craft-latest (required by --include-craft)."
         else
             print_info "Update selected. Which tag would you like to deploy?"
             echo ""
@@ -1052,8 +1052,8 @@ else
     # Ask for version (skipped when --include-craft forces the craft-tagged
     # backend image, which is the only image that ships Node.js + opencode CLI).
     if [ "$INCLUDE_CRAFT" = true ]; then
-        VERSION="craft-edge"
-        print_info "Using craft-edge (required by --include-craft)."
+        VERSION="craft-latest"
+        print_info "Using craft-latest (required by --include-craft)."
     else
         print_info "Which tag would you like to deploy?"
         echo ""
