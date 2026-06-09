@@ -321,6 +321,30 @@ class TestLoadChatFileLazy:
 
         assert loaded.content == b""
 
+    def test_transient_read_error_yields_empty_content(
+        self,
+        read_counter: _ReadCounter,  # noqa: ARG002 — keeps store fixtures live
+        file_cleanup: list[str],
+        db_session: Session,
+    ) -> None:
+        """Non-not-found failures (e.g. transient object-store errors) must
+        also degrade to empty content rather than raise mid-LLM-flow — the
+        send-message request must never die on a history-file read."""
+        file_id = _write_file(b"unreachable-bytes", file_type="image/png")
+        file_cleanup.append(file_id)
+
+        loaded = load_chat_file(
+            {"id": file_id, "type": ChatFileType.IMAGE, "name": "flaky.png"},
+            db_session,
+        )
+
+        with patch.object(
+            file_store_module.S3BackedFileStore,
+            "read_file",
+            side_effect=ConnectionError("simulated transient store failure"),
+        ):
+            assert loaded.content == b""
+
 
 class TestLoadAllChatFilesLazy:
     def test_returns_lazy_files_for_history(
