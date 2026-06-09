@@ -36,15 +36,6 @@ _LOCK_LEASE_SECONDS = 30.0
 # before giving up with a 5xx. 10s is plenty for a single KV roundtrip.
 _LOCK_WAIT_SECONDS = 10.0
 
-# Sanity cap for password length: env default is 64 today, so a 256 ceiling
-# does not change any current behavior.
-_PASSWORD_LENGTH_CAP = 256
-# Floor at 4 — one char per required character class (4 classes total). Any
-# lower would silently lock out every signup once all four require_* flags
-# are on.
-_PASSWORD_MAX_LENGTH_FLOOR = 4
-
-
 def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, dict[str, Any]]:
     """Parse and validate the PUT body, mapping every error shape to
     OnyxErrorCode.INVALID_INPUT so callers see one envelope.
@@ -66,29 +57,6 @@ def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, dict[str, An
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
     return overrides, payload_dict
-
-
-def _validate_effective(effective: SecuritySettings) -> None:
-    if effective.password_min_length < 0:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "password_min_length must be >= 0",
-        )
-    if effective.password_max_length < _PASSWORD_MAX_LENGTH_FLOOR:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"password_max_length must be >= {_PASSWORD_MAX_LENGTH_FLOOR}",
-        )
-    if effective.password_max_length > _PASSWORD_LENGTH_CAP:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"password_max_length must be <= {_PASSWORD_LENGTH_CAP}",
-        )
-    if effective.password_min_length > effective.password_max_length:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "password_min_length must be <= password_max_length",
-        )
 
 
 @admin_router.get("")
@@ -160,8 +128,12 @@ def _persist_overrides(
                 existing_dict[key] = getattr(overrides, key)
 
         merged = SecuritySettingsOverrides.model_validate(existing_dict)
-        effective = merge_with_env(merged)
-        _validate_effective(effective)
+        try:
+            # SecuritySettings.__init__ runs the password-length invariants
+            # via a model_validator; surface failures as INVALID_INPUT.
+            effective = merge_with_env(merged)
+        except ValidationError as e:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
         store_overrides(merged)
         return effective
     finally:

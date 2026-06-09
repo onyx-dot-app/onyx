@@ -1,6 +1,17 @@
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import field_validator
+from pydantic import model_validator
+from typing_extensions import Self
+
+
+# Sanity cap for password length: env default is 64 today, so a 256 ceiling
+# does not change any current behavior.
+PASSWORD_LENGTH_CAP = 256
+# Floor for ``password_max_length``: one char per required character class
+# (4 classes total). Anything lower would silently lock out every signup
+# once all four require_* flags are on.
+PASSWORD_MAX_LENGTH_FLOOR = 4
 
 
 class SecuritySettingsOverrides(BaseModel):
@@ -55,3 +66,19 @@ class SecuritySettings(BaseModel):
     password_require_lowercase: bool
     password_require_digit: bool
     password_require_special_char: bool
+
+    @model_validator(mode="after")
+    def _check_password_length_invariants(self) -> Self:
+        if self.password_min_length < 0:
+            raise ValueError("password_min_length must be >= 0")
+        if self.password_max_length < PASSWORD_MAX_LENGTH_FLOOR:
+            raise ValueError(
+                f"password_max_length must be >= {PASSWORD_MAX_LENGTH_FLOOR}"
+            )
+        if self.password_max_length > PASSWORD_LENGTH_CAP:
+            raise ValueError(
+                f"password_max_length must be <= {PASSWORD_LENGTH_CAP}"
+            )
+        if self.password_min_length > self.password_max_length:
+            raise ValueError("password_min_length must be <= password_max_length")
+        return self
