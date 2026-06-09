@@ -128,10 +128,15 @@ export default function SecurityHardeningPage() {
       // Re-sync from the server (the source of truth) rather than a possibly
       // stale local snapshot — a late failure must not clobber other edits
       // that may have succeeded while this request was in flight.
-      const fresh = await mutate<SecuritySettings>(
-        SWR_KEYS.adminSecuritySettings
-      );
-      if (fresh) setDraft(fresh);
+      try {
+        const fresh = await mutate<SecuritySettings>(
+          SWR_KEYS.adminSecuritySettings
+        );
+        if (fresh) setDraft(fresh);
+      } catch {
+        // If revalidation also fails (e.g. network down), the optimistic
+        // update stays until the next successful SWR refresh (e.g. focus).
+      }
       const message =
         error instanceof Error
           ? error.message
