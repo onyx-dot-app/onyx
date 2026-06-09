@@ -20,15 +20,15 @@ Lifecycle (see ``docs/craft/features/scheduled-tasks.md``):
 3. Transition QUEUED -> RUNNING.
 4. Create a fresh ``BuildSession`` with ``origin=SCHEDULED``. Record its
    id on the run row.
-5. Drive the agent via the shared ``_yield_sandbox_events`` generator,
-   persisting each event with ``_persist_sandbox_event``. Enforce a 30 min
+5. Drive the agent via the shared ``yield_sandbox_events`` generator,
+   persisting each event with ``persist_sandbox_event``. Enforce a 30 min
    monotonic budget (Celery thread-pool time limits are silently
    disabled — see CLAUDE.md).
 6. On ``RequestPermissionRequest`` (approval gate): mark
    ``AWAITING_APPROVAL``, emit a notification, return without writing a
    terminal status. Resume mechanics are owned by the approvals project;
    until that ships these runs are "terminal-for-display".
-7. On clean stream completion: ``_finalize_persist``, derive a
+7. On clean stream completion: ``finalize_persist``, derive a
    ~120-char summary, mark ``SUCCEEDED``.
 8. On any exception inside the drive loop: mark ``FAILED`` with the
    exception class/detail and emit a notification. We deliberately
@@ -325,7 +325,7 @@ def _drive_agent(
         AWAITING_APPROVAL). ``False`` otherwise (run status is terminal).
     """
     # We open a single session for the whole drive so that the
-    # `_persist_sandbox_event` calls (which write `BuildMessage` rows) and the
+    # `persist_sandbox_event` calls (which write `BuildMessage` rows) and the
     # final `mark_run_status` happen against the same connection. The
     # session is committed eagerly at key points so observers see progress.
     with get_session_with_current_tenant() as db_session:
@@ -373,17 +373,33 @@ def _drive_agent(
         # contends today, but acquire it anyway so any future change
         # that lets scheduled and interactive runs share a build_session
         # inherits the protection without needing to remember to add it.
-        sandbox_manager = session_manager._sandbox_manager
-
         approval_required = False
         final_event_count = 0
         # Acquire the per-build_session lock for the duration of the
         # agent loop. __enter__/__exit__ used directly (rather than a
         # `with`) to avoid reindenting the existing try/except block.
-        prompt_slot_cm = sandbox_manager.prompt_slot(sandbox_id, session_id)
-        prompt_slot_cm.__enter__()
+        prompt_slot_cm = session_manager.prompt_slot(sandbox_id, session_id)
+        if not prompt_slot_cm.__enter__():
+            prompt_slot_cm.__exit__(None, None, None)
+            mark_run_status(
+                db_session=db_session,
+                run_id=run_id,
+                status=ScheduledTaskRunStatus.FAILED,
+                error_class=ScheduledTaskErrorClass.AGENT_EXCEPTION,
+                error_detail="Concurrent turn in flight for build session.",
+            )
+            _notify(
+                db_session=db_session,
+                user_id=task_user_id,
+                task_name=task_name,
+                task_id=task_id,
+                run_id=run_id,
+                notif_type=NotificationType.SCHEDULED_TASK_FAILED,
+            )
+            db_session.commit()
+            return False
         try:
-            for sandbox_event in session_manager._yield_sandbox_events(
+            for sandbox_event in session_manager.yield_sandbox_events(
                 sandbox_id, session_id, task_prompt
             ):
                 # Approval gate: mark awaiting_approval, return. Resume
@@ -396,7 +412,7 @@ def _drive_agent(
                 # Budget check happens before persistence so a runaway
                 # agent can't keep growing the transcript.
                 if time.monotonic() > deadline:
-                    session_manager._finalize_persist(session_id, state)
+                    session_manager.finalize_persist(session_id, state)
                     mark_run_status(
                         db_session=db_session,
                         run_id=run_id,
@@ -415,7 +431,7 @@ def _drive_agent(
                     db_session.commit()
                     return False
 
-                session_manager._persist_sandbox_event(session_id, state, sandbox_event)
+                session_manager.persist_sandbox_event(session_id, state, sandbox_event)
                 db_session.commit()
                 final_event_count += 1
 
@@ -426,7 +442,7 @@ def _drive_agent(
                 summary_from_chunks = _summary_from_state(state)
                 # Flush any pending chunks so the transcript reflects
                 # what the agent has said before pausing.
-                session_manager._finalize_persist(session_id, state)
+                session_manager.finalize_persist(session_id, state)
                 db_session.commit()
                 summary = summary_from_chunks or _summary_from_session_messages(
                     session_id, db_session
@@ -450,7 +466,7 @@ def _drive_agent(
 
             # Clean completion path.
             summary_from_chunks = _summary_from_state(state)
-            session_manager._finalize_persist(session_id, state)
+            session_manager.finalize_persist(session_id, state)
             db_session.commit()
             summary = summary_from_chunks or _summary_from_session_messages(
                 session_id, db_session

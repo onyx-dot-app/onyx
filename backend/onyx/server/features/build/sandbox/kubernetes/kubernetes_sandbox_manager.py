@@ -343,7 +343,22 @@ fi
 set -e
 cd {session_path}/outputs/web
 {install_check}
-export WEBAPP_ASSET_PREFIX="/api/build/sessions/$(basename {session_path})/webapp"
+export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/$(basename {session_path})/webapp"
+if grep -q "WEBAPP_ASSET_PREFIX" next.config.ts 2>/dev/null; then
+    cat > next.config.ts <<'EOF'
+import type {{ NextConfig }} from "next";
+
+const webappBasePath = process.env.ONYX_WEBAPP_BASE_PATH || undefined;
+
+const nextConfig: NextConfig = {{
+  ...(webappBasePath
+    ? {{ basePath: webappBasePath, assetPrefix: webappBasePath }}
+    : {{}}),
+}};
+
+export default nextConfig;
+EOF
+fi
 echo "Starting Next.js dev server on port {nextjs_port}..."
 nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
@@ -1077,6 +1092,18 @@ class KubernetesSandboxManager(SandboxManager):
                     return True
         return False
 
+    @staticmethod
+    def _sandbox_container_is_ready(pod: client.V1Pod) -> bool:
+        """Return True only when the agent container itself is running/ready."""
+        for status in pod.status.container_statuses or []:
+            if status.name != _SANDBOX_CONTAINER_NAME:
+                continue
+            state = status.state
+            return bool(
+                status.ready and state is not None and state.running is not None
+            )
+        return False
+
     def _wait_for_pod_ready(
         self,
         pod_name: str,
@@ -1182,7 +1209,11 @@ class KubernetesSandboxManager(SandboxManager):
             if phase == "Running":
                 conditions = pod.status.conditions or []
                 for condition in conditions:
-                    if condition.type == "Ready" and condition.status == "True":
+                    if (
+                        condition.type == "Ready"
+                        and condition.status == "True"
+                        and self._sandbox_container_is_ready(pod)
+                    ):
                         return True
 
             # Pending is OK too - pod is being created by another request
@@ -2044,7 +2075,20 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         logger.info("Session configuration files regenerated")
 
     def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
-        """Check whether the sidecar's /health endpoint responds."""
+        """Check whether the agent container and sidecar are both healthy."""
+        pod_name = self._get_pod_name(str(sandbox_id))
+        try:
+            pod = self._core_api.read_namespaced_pod(
+                name=pod_name,
+                namespace=self._namespace,
+            )
+        except ApiException as e:
+            if e.status == 404:
+                return False
+            raise
+        if not self._sandbox_container_is_ready(pod):
+            return False
+
         for host in self._sandbox_pod_hosts(sandbox_id):
             url = f"http://{host}:{PUSH_DAEMON_PORT}/health"
             try:

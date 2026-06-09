@@ -20,7 +20,7 @@ const cspHeader = `
 const nextConfig = {
   productionBrowserSourceMaps: false,
   output: "standalone",
-  transpilePackages: ["@onyx-ai/opal"],
+  transpilePackages: ["@onyx-ai/opal", "@onyx-ai/shared"],
   typedRoutes: true,
   // NOTE: `reactCompiler` is set per-phase in module.exports below — enabled for
   // builds, disabled for the dev server. See the comment there for the rationale.
@@ -74,6 +74,12 @@ const nextConfig = {
   },
   async rewrites() {
     return [
+      {
+        source: "/api/build/sessions/:sessionId/webapp/_next/webpack-hmr",
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/build/sessions/:sessionId/webapp/_next/webpack-hmr`,
+      },
       {
         source: "/ph_ingest/static/:path*",
         destination: "https://us-assets.i.posthog.com/static/:path*",

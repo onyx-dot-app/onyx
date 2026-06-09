@@ -30,6 +30,7 @@ from sqlalchemy import Sequence
 from sqlalchemy import String
 from sqlalchemy import Text
 from sqlalchemy import text
+from sqlalchemy import true
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
@@ -4091,6 +4092,63 @@ class KVStore(Base):
     value: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
     encrypted_value: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
         EncryptedJson(), nullable=True
+    )
+
+
+class SecuritySettings(Base):
+    """Per-tenant runtime overrides for env-derived security settings.
+
+    Singleton row (boolean PK pinned to ``true`` via CHECK). Every column is
+    an override — ``None`` == "fall back to env default".
+    """
+
+    __tablename__ = "security_settings"
+
+    id: Mapped[bool] = mapped_column(
+        Boolean, primary_key=True, default=True, server_default=true()
+    )
+
+    user_directory_admin_only: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    track_external_idp_expiry: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    mask_credential_prefix: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    valid_email_domains: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True, default=None
+    )
+    password_min_length: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=None
+    )
+    password_max_length: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=None
+    )
+    password_require_uppercase: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    password_require_lowercase: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    password_require_digit: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    password_require_special_char: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+
+    __table_args__ = (
+        CheckConstraint("id = true", name="ck_security_settings_singleton"),
+        # Only catches min > max when both are explicitly overridden; the
+        # mixed-with-env case is enforced at the application layer.
+        CheckConstraint(
+            "password_min_length IS NULL "
+            "OR password_max_length IS NULL "
+            "OR password_min_length <= password_max_length",
+            name="ck_security_settings_pw_length_range",
+        ),
     )
 
 

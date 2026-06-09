@@ -74,6 +74,7 @@ export interface BuildMessage {
   type: "user" | "assistant" | "system";
   content: string;
   timestamp: Date;
+  turn_index?: number;
   /** Structured sandbox event data (tool calls, thinking, plans) */
   message_metadata?: Record<string, any> | null;
   /** Tool calls associated with this message (for agent messages) */
@@ -183,10 +184,25 @@ export interface ApiDetailedSessionResponse extends ApiSessionResponse {
 export interface ApiMessageResponse {
   id: string;
   session_id: string;
+  turn_index: number;
   type: "user" | "assistant";
   content: string;
   message_metadata?: Record<string, any> | null;
   created_at: string;
+}
+
+export type InteractiveTurnStatus =
+  | "QUEUED"
+  | "RUNNING"
+  | "SUCCEEDED"
+  | "FAILED"
+  | "CANCELLED";
+
+export interface ApiInteractiveTurnResponse {
+  turn_id: string;
+  session_id: string;
+  status: InteractiveTurnStatus;
+  turn_index: number;
 }
 
 export interface ApiArtifactResponse {

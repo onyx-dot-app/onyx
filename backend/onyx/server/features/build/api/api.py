@@ -1,6 +1,8 @@
-import re
+import asyncio
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from urllib.parse import parse_qsl
+from urllib.parse import urlencode
 from uuid import UUID
 
 import httpx
@@ -9,13 +11,26 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
+from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
+from fastapi import WebSocketException
 from fastapi.responses import RedirectResponse
 from fastapi.responses import StreamingResponse
+from fastapi_users.authentication.strategy.base import Strategy
+from fastapi_users.manager import BaseUserManager
 from sqlalchemy.orm import Session
+from starlette.websockets import WebSocketState
+from websockets.asyncio.client import ClientConnection
+from websockets.asyncio.client import connect as websocket_connect
+from websockets.exceptions import ConnectionClosed
 
+from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import require_permission
+from onyx.auth.users import auth_backend
+from onyx.auth.users import get_user_manager
 from onyx.auth.users import optional_user
 from onyx.cache.factory import get_cache_backend
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -32,6 +47,7 @@ from onyx.server.features.build.api.messages_api import router as messages_route
 from onyx.server.features.build.api.models import RateLimitResponse
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
+from onyx.server.features.build.api.turns_api import router as turns_router
 from onyx.server.features.build.api.user_library import router as user_library_router
 from onyx.server.features.build.approvals.api import router as approvals_router
 from onyx.server.features.build.db.build_session import get_webapp_access_async
@@ -47,7 +63,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
-_WEBAPP_HMR_FIXER_TEMPLATE = (_TEMPLATES_DIR / "webapp_hmr_fixer.js").read_text()
 
 # Lazy-init so importing this module (e.g. in tests) doesn't leak an open client.
 _ASYNC_PROXY_CLIENT: httpx.AsyncClient | None = None
@@ -93,6 +108,7 @@ router = APIRouter(prefix="/build", dependencies=[Depends(require_onyx_craft_ena
 # Include sub-routers for sessions, messages, and user library
 router.include_router(sessions_router, tags=["build"])
 router.include_router(messages_router, tags=["build"])
+router.include_router(turns_router, tags=["build"])
 router.include_router(user_library_router, tags=["build"])
 router.include_router(scheduled_tasks_router, tags=["build"])
 router.include_router(external_apps_router, tags=["build"])
@@ -170,105 +186,6 @@ EXCLUDED_REQUEST_HEADERS = {
 }
 
 
-def _inject_hmr_fixer(content: bytes, session_id: str) -> bytes:
-    """Inject a script that stubs root-scoped Next HMR websocket connections."""
-    base = f"/api/build/sessions/{session_id}/webapp"
-    script = f"<script>{_WEBAPP_HMR_FIXER_TEMPLATE.replace('__WEBAPP_BASE__', base)}</script>"
-    text = content.decode("utf-8")
-    text = re.sub(
-        r"(<head\b[^>]*>)",
-        lambda m: m.group(0) + script,
-        text,
-        count=1,
-        flags=re.IGNORECASE,
-    )
-    return text.encode("utf-8")
-
-
-def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
-    """Rewrite Next.js asset paths to go through the proxy."""
-    webapp_base_path = f"/api/build/sessions/{session_id}/webapp"
-    escaped_webapp_base_path = webapp_base_path.replace("/", r"\/")
-    hmr_paths = ("/_next/webpack-hmr", "/_next/hmr")
-
-    text = content.decode("utf-8")
-    # Anchor on delimiter so already-prefixed URLs (from assetPrefix) aren't double-rewritten.
-    for delim in ('"', "'", "("):
-        text = text.replace(f"{delim}/_next/", f"{delim}{webapp_base_path}/_next/")
-        text = re.sub(
-            rf"{re.escape(delim)}https?://[^/\"')]+/_next/",
-            f"{delim}{webapp_base_path}/_next/",
-            text,
-        )
-        text = re.sub(
-            rf"{re.escape(delim)}wss?://[^/\"')]+/_next/",
-            f"{delim}{webapp_base_path}/_next/",
-            text,
-        )
-    text = text.replace(r"\/_next\/", rf"{escaped_webapp_base_path}\/_next\/")
-    text = re.sub(
-        r"https?:\\\/\\\/[^\"']+?\\\/_next\\\/",
-        rf"{escaped_webapp_base_path}\/_next\/",
-        text,
-    )
-    text = re.sub(
-        r"wss?:\\\/\\\/[^\"']+?\\\/_next\\\/",
-        rf"{escaped_webapp_base_path}\/_next\/",
-        text,
-    )
-    for hmr_path in hmr_paths:
-        escaped_hmr_path = hmr_path.replace("/", r"\/")
-        text = text.replace(
-            f"{webapp_base_path}{hmr_path}",
-            hmr_path,
-        )
-        text = text.replace(
-            f"{escaped_webapp_base_path}{escaped_hmr_path}",
-            escaped_hmr_path,
-        )
-    text = re.sub(
-        r'"(/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+\.json)"',
-        f'"{webapp_base_path}\\1"',
-        text,
-    )
-    text = re.sub(
-        r"'(/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+\.json)'",
-        f"'{webapp_base_path}\\1'",
-        text,
-    )
-    text = text.replace('"/favicon.ico', f'"{webapp_base_path}/favicon.ico')
-    return text.encode("utf-8")
-
-
-def _rewrite_proxy_response_headers(
-    headers: dict[str, str], session_id: str
-) -> dict[str, str]:
-    """Rewrite response headers that can leak root-scoped asset URLs."""
-    link = headers.get("link")
-    if link:
-        webapp_base_path = f"/api/build/sessions/{session_id}/webapp"
-        rewritten_link = re.sub(
-            r"<https?://[^>]+/_next/",
-            f"<{webapp_base_path}/_next/",
-            link,
-        )
-        rewritten_link = rewritten_link.replace(
-            "</_next/", f"<{webapp_base_path}/_next/"
-        )
-        headers["link"] = rewritten_link
-    return headers
-
-
-# Content types that may contain asset path references that need rewriting
-REWRITABLE_CONTENT_TYPES = {
-    "text/html",
-    "text/css",
-    "application/javascript",
-    "text/javascript",
-    "application/x-javascript",
-}
-
-
 async def _get_sandbox_url(session_id: UUID) -> str:
     """Resolve a session's Next.js server URL; cache hits open no DB connection."""
     cache = get_cache_backend()
@@ -302,15 +219,22 @@ async def _aiter_and_close(response: httpx.Response) -> AsyncGenerator[bytes, No
         await response.aclose()
 
 
+def _webapp_next_path(session_id: UUID, path: str = "") -> str:
+    session_str = str(session_id)
+    rel_path = path.lstrip("/")
+    base_path = f"api/build/sessions/{session_str}/webapp"
+    return f"{base_path}/{rel_path}" if rel_path else base_path
+
+
 async def _proxy_request(
     path: str, request: Request, session_id: UUID
 ) -> StreamingResponse | Response:
     """Proxy a request to the sandbox's Next.js server."""
-    session_str = str(session_id)
     rel_path = path.lstrip("/")
     base_url = await _get_sandbox_url(session_id)
+    upstream_path = _webapp_next_path(session_id, rel_path)
 
-    target_url = f"{base_url}/{rel_path}"
+    target_url = f"{base_url}/{upstream_path}"
     if request.query_params:
         target_url = f"{target_url}?{request.query_params}"
 
@@ -345,9 +269,6 @@ async def _proxy_request(
             for key, value in response.headers.items()
             if key.lower() not in EXCLUDED_HEADERS
         }
-        response_headers = _rewrite_proxy_response_headers(
-            response_headers, session_str
-        )
 
         # Only /_next/static/media/* is content-hashed (safe forever). Dev chunk/CSS
         # URLs are stable but mutable, so immutable would serve stale code after edits.
@@ -358,25 +279,8 @@ async def _proxy_request(
 
         content_type = response.headers.get("content-type", "")
 
-        # Buffer to rewrite /_next/ refs; idempotent for assetPrefix-prefixed URLs.
-        if any(ct in content_type for ct in REWRITABLE_CONTENT_TYPES):
-            try:
-                raw = await response.aread()
-            except httpx.RequestError as e:
-                # Surface as 502 so the caller falls back to the offline page.
-                logger.error("Error reading proxied body from %s: %s", target_url, e)
-                raise HTTPException(status_code=502, detail="Bad gateway")
-            content = _rewrite_asset_paths(raw, session_str)
-            if "text/html" in content_type:
-                content = _inject_hmr_fixer(content, session_str)
-            return Response(
-                content=content,
-                status_code=response.status_code,
-                headers=response_headers,
-                media_type=content_type,
-            )
-
-        # Binary assets: stream through; _aiter_and_close now owns the connection.
+        # Next is configured with the proxy base path, so responses pass through
+        # without URL rewriting or HMR script injection.
         stream = _aiter_and_close(response)
         handed_off = True
         return StreamingResponse(
@@ -388,6 +292,112 @@ async def _proxy_request(
     finally:
         if not handed_off:
             await response.aclose()
+
+
+def _webapp_hmr_query_string(query_string: str) -> str:
+    return urlencode(
+        [
+            (key, value)
+            for key, value in parse_qsl(query_string, keep_blank_values=True)
+            if key == "id"
+        ]
+    )
+
+
+def _webapp_hmr_websocket_url(
+    session_id: UUID, base_url: str, query_string: str
+) -> str:
+    scheme = "wss" if base_url.startswith("https://") else "ws"
+    host_and_path = base_url.split("://", 1)[1].rstrip("/")
+    target_url = (
+        f"{scheme}://{host_and_path}/"
+        f"{_webapp_next_path(session_id, '_next/webpack-hmr')}"
+    )
+    hmr_query_string = _webapp_hmr_query_string(query_string)
+    if hmr_query_string:
+        target_url = f"{target_url}?{hmr_query_string}"
+    return target_url
+
+
+async def _current_webapp_websocket_user(
+    websocket: WebSocket,
+    user_manager: BaseUserManager[User, UUID] = Depends(get_user_manager),
+    strategy: Strategy[User, UUID] = Depends(auth_backend.get_strategy),
+) -> User:
+    token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    user = await strategy.read_token(token, user_manager)
+    if user is None or not user.is_active:
+        raise WebSocketException(code=1008)
+    if Permission.BASIC_ACCESS not in get_effective_permissions(user):
+        raise WebSocketException(code=1008)
+    return user
+
+
+_current_webapp_websocket_user._is_websocket_auth_dependency = True  # ty: ignore[unresolved-attribute]
+
+
+async def _pump_webapp_to_upstream(
+    websocket: WebSocket, upstream: ClientConnection
+) -> None:
+    while True:
+        message = await websocket.receive()
+        message_type = message["type"]
+        if message_type == "websocket.disconnect":
+            await upstream.close()
+            return
+        if "text" in message:
+            await upstream.send(message["text"])
+        elif "bytes" in message:
+            await upstream.send(message["bytes"])
+
+
+async def _pump_upstream_to_webapp(
+    websocket: WebSocket, upstream: ClientConnection
+) -> None:
+    async for message in upstream:
+        if isinstance(message, str):
+            await websocket.send_text(message)
+        else:
+            await websocket.send_bytes(message)
+
+
+async def _proxy_webapp_hmr_websocket(session_id: UUID, websocket: WebSocket) -> None:
+    base_url = await _get_sandbox_url(session_id)
+    upstream_url = _webapp_hmr_websocket_url(session_id, base_url, websocket.url.query)
+    logger.debug("Proxying websocket to: %s", upstream_url)
+
+    try:
+        async with websocket_connect(
+            upstream_url,
+            additional_headers=None,
+            compression=None,
+            extensions=None,
+            origin=None,
+            proxy=None,
+            subprotocols=None,
+            user_agent_header=None,
+        ) as upstream:
+            await websocket.accept()
+            webapp_task = asyncio.create_task(
+                _pump_webapp_to_upstream(websocket, upstream)
+            )
+            upstream_task = asyncio.create_task(
+                _pump_upstream_to_webapp(websocket, upstream)
+            )
+            done, pending = await asyncio.wait(
+                {webapp_task, upstream_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            for task in done:
+                task.result()
+    except (ConnectionClosed, WebSocketDisconnect):
+        return
+    except Exception as e:
+        logger.warning("Error proxying webapp HMR websocket: %s", e)
+        if websocket.application_state == WebSocketState.CONNECTED:
+            await websocket.close(code=1011)
 
 
 async def _check_webapp_access(session_id: UUID, user: User | None) -> None:
@@ -451,6 +461,20 @@ async def get_webapp(
             get_cache_backend().delete(_sandbox_url_cache_key(session_id))
             return _offline_html_response()
         raise
+
+
+@public_build_router.websocket("/sessions/{session_id}/webapp/_next/webpack-hmr")
+async def websocket_webapp_hmr(
+    session_id: UUID,
+    websocket: WebSocket,
+    user: User = Depends(_current_webapp_websocket_user),
+) -> None:
+    try:
+        await _check_webapp_access(session_id, user)
+    except HTTPException:
+        raise WebSocketException(code=1008)
+
+    await _proxy_webapp_hmr_websocket(session_id, websocket)
 
 
 # =============================================================================

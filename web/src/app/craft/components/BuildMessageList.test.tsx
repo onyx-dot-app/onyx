@@ -153,4 +153,20 @@ describe("BuildMessageList thinking visibility", () => {
 
     expect(screen.getByText("Checking the app structure.")).toBeInTheDocument();
   });
+
+  it("shows stream error packets inline", () => {
+    renderList({
+      streamItems: [
+        {
+          type: "error",
+          id: "error-1",
+          content: "provider model not found",
+        },
+      ],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "provider model not found"
+    );
+  });
 });

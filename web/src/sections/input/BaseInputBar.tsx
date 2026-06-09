@@ -51,7 +51,6 @@ export interface BaseInputBarProps {
   sandboxInitializing?: boolean;
   /** Blocks submit without the disabled visual (e.g. files still uploading). */
   submitBlocked?: boolean;
-  stopArmed?: boolean;
 
   queuedMessages?: readonly QueuedMessage[];
   onQueueMessage?: (text: string) => void;
@@ -84,7 +83,6 @@ const BaseInputBar = memo(
         pasteTilesEnabled = false,
         sandboxInitializing = false,
         submitBlocked = false,
-        stopArmed = false,
         queuedMessages,
         onQueueMessage,
         onRemoveQueuedMessage,
@@ -364,13 +362,10 @@ const BaseInputBar = memo(
                     tertiary
                     icon={isInterrupting ? SvgLoader : SvgStop}
                     iconClassName={isInterrupting ? "animate-spin" : undefined}
-                    className={cn(
-                      "border-[1.5px] border-border-02",
-                      stopArmed && "bg-background-tint-02!"
-                    )}
+                    className="border-[1.5px] border-border-02"
                     disabled={!interruptible || isInterrupting}
                     onClick={handleInterrupt}
-                    tooltip="Stop · esc esc"
+                    tooltip="Stop · esc"
                     aria-label="Stop generating"
                   />
                 </div>

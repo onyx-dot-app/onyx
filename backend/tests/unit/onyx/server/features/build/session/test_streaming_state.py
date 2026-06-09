@@ -5,6 +5,14 @@ Tests for chunk accumulation and finalize semantics — no DB required.
 
 from __future__ import annotations
 
+from typing import Any
+from typing import cast
+from uuid import uuid4
+
+import pytest
+
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.session import streaming
 from onyx.server.features.build.session.streaming import BuildStreamingState
 
 
@@ -61,6 +69,21 @@ class TestBuildStreamingState:
         # Case 4: continuing with another thought chunk → no finalize
         assert state.should_finalize_chunks("agent_thought_chunk") is False
 
+    def test_routing_meta_change_finalizes_previous_chunk(self) -> None:
+        """Parent and child chunks share packet types but must not share one
+        persisted assistant row."""
+        state = BuildStreamingState(turn_index=0)
+        child_meta = {"sessionId": "child", "parentSessionId": "parent"}
+
+        state.add_message_chunk("child text", child_meta)
+
+        assert state.should_finalize_chunks("agent_message_chunk", child_meta) is False
+        assert state.should_finalize_chunks("agent_message_chunk", None) is True
+
+        packet = state.finalize_message_chunks()
+        assert packet is not None
+        assert packet["_meta"] == child_meta
+
     def test_finalize_with_no_chunks_is_noop(self) -> None:
         """Empty finalize returns None / does nothing."""
         state = BuildStreamingState(turn_index=0)
@@ -112,3 +135,65 @@ class TestBuildStreamingState:
         assert state.should_finalize_chunks("some_future_event_type") is False
         assert state.should_finalize_chunks("agent_message_chunk") is False
         assert state.should_finalize_chunks("agent_thought_chunk") is False
+
+
+def test_persist_sandbox_event_splits_chunks_by_routing_meta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    persisted: list[dict[str, Any]] = []
+
+    def create_message_stub(**kwargs: Any) -> None:
+        persisted.append(cast(dict[str, Any], kwargs["message_metadata"]))
+
+    monkeypatch.setattr(streaming, "create_message", create_message_stub)
+    state = BuildStreamingState(turn_index=0)
+    session_id = uuid4()
+    child_meta = {"sessionId": "child", "parentSessionId": "parent"}
+
+    parent_first = AgentMessageChunk.model_validate(
+        {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {"type": "text", "text": "parent first"},
+        }
+    )
+    child = AgentMessageChunk.model_validate(
+        {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {"type": "text", "text": "child"},
+            "_meta": child_meta,
+        }
+    )
+    parent_second = AgentMessageChunk.model_validate(
+        {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {"type": "text", "text": "parent second"},
+        }
+    )
+
+    streaming.persist_sandbox_event(
+        cast(Any, object()), session_id, state, parent_first
+    )
+    streaming.persist_sandbox_event(cast(Any, object()), session_id, state, child)
+    streaming.persist_sandbox_event(
+        cast(Any, object()), session_id, state, parent_second
+    )
+    streaming.finalize_persist(cast(Any, object()), session_id, state)
+
+    assert persisted == [
+        {
+            "type": "agent_message",
+            "content": {"type": "text", "text": "parent first"},
+            "sessionUpdate": "agent_message",
+        },
+        {
+            "type": "agent_message",
+            "content": {"type": "text", "text": "child"},
+            "sessionUpdate": "agent_message",
+            "_meta": child_meta,
+        },
+        {
+            "type": "agent_message",
+            "content": {"type": "text", "text": "parent second"},
+            "sessionUpdate": "agent_message",
+        },
+    ]

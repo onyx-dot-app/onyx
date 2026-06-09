@@ -133,6 +133,7 @@ from onyx.server.documents.models import RunConnectorRequest
 from onyx.server.documents.models import SourceSummary
 from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.models import StatusResponse
+from onyx.server.security.store import get_security_settings
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -1065,6 +1066,7 @@ def get_connector_status(
             cc_pair.credential_id
         )
 
+    mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
         ConnectorStatus(
             cc_pair_id=cc_pair.id,
@@ -1075,7 +1077,10 @@ def get_connector_status(
                     cc_pair.connector_id, []
                 ),
             ),
-            credential=CredentialSnapshot.from_credential_db_model(cc_pair.credential),
+            credential=CredentialSnapshot.from_credential_db_model(
+                cc_pair.credential,
+                mask_credential_prefix=mask_credential_prefix,
+            ),
             access_type=cc_pair.access_type,
             groups=group_cc_pair_relationships_dict.get(cc_pair.id, []),
         )

@@ -14,7 +14,7 @@ The single-container sandbox puts credentials and control-plane processes in the
 ## Important Notes
 
 - Both containers use the same `onyxdotapp/sandbox` image with different `command` overrides.
-- `eks.amazonaws.com/skip-containers: "sandbox"` on the service account skips IRSA injection into the `sandbox` container.
+- `eks.amazonaws.com/skip-containers: "sandbox"` on the pod metadata skips IRSA injection into the `sandbox` container.
 - Snapshot endpoints are Ed25519-signed.
 - `GET /health` is the only unsigned endpoint.
 - `shareProcessNamespace` is set to `false`.
@@ -57,7 +57,8 @@ The single-container sandbox puts credentials and control-plane processes in the
 ```
 ┌───────────────────────────────────────────────────────────────┐
 │ Pod: sandbox-{id}                                             │
-│ SA: sandbox-file-sync, skip-containers: "sandbox"             │
+│ SA: sandbox-file-sync                                         │
+│ Pod annotation: skip-containers: "sandbox"                    │
 │ shareProcessNamespace: false                                  │
 │                                                               │
 │ ┌───────────────────────────┐ ┌─────────────────────────────┐ │
@@ -117,12 +118,12 @@ Mounts:
 
 ### Phase 2: IRSA Isolation
 
-Add `skip-containers` to the `sandbox-file-sync` service account:
+Add `skip-containers` to the sandbox pod metadata in `_create_sandbox_pod()`:
 
-```yaml
-annotations:
-  eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/sandbox-s3-role
-  eks.amazonaws.com/skip-containers: "sandbox"
+```python
+metadata=client.V1ObjectMeta(
+    annotations={"eks.amazonaws.com/skip-containers": "sandbox"},
+)
 ```
 
 ### Phase 3: Sidecar Entrypoint and Server
@@ -262,11 +263,11 @@ All other methods continue to exec into the `sandbox` container.
 
 #### 6a. Helm Chart (`deployment/helm/charts/onyx/`)
 
-No changes needed.
+`templates/sandbox-rbac.yaml` creates the `sandbox-file-sync` ServiceAccount with the IRSA role annotation, plus the sandbox-manager Role/RoleBinding.
 
-#### 6b. Production (internal deployment repo)
+#### 6b. Legacy manifests
 
-**`serviceaccount/sandbox-file-sync-sa.yaml`** — add `skip-containers`:
+If a deployment repo still owns the ServiceAccount outside Helm, keep only the IRSA role annotation there:
 
 ```yaml
 apiVersion: v1
@@ -281,20 +282,18 @@ metadata:
     app.kubernetes.io/managed-by: ArgoCD
   annotations:
     eks.amazonaws.com/role-arn: arn:aws:iam::<AWS_ACCOUNT_ID>:role/<SANDBOX_FILE_SYNC_ROLE>
-    eks.amazonaws.com/skip-containers: "sandbox"
 automountServiceAccountToken: true
 ```
 
+#### 6c. Dev
 
-#### 6c. Dev (internal deployment repo)
-
-The `sandbox-file-sync` SA for craft-dev needs the same `skip-containers: "sandbox"` annotation.
+Dev uses the same split: the ServiceAccount carries `role-arn`, and the pod spec carries `skip-containers`.
 
 #### Deployment Order
 
 1. Build and push the new sandbox image (snapshot endpoints in daemon, new entrypoints)
 2. Merge backend code changes (sidecar in pod spec, snapshot methods call sidecar HTTP API)
-3. Deploy SA annotation + backend atomically
+3. Deploy the role-annotated SA + backend pod annotation before enabling production traffic
 4. Verify on a new pod:
    - `kubectl exec -c sandbox` → `AWS_ROLE_ARN` is unset
    - `kubectl exec -c sandbox` → `/var/run/secrets/eks.amazonaws.com/` does not exist

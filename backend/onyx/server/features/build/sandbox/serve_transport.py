@@ -30,6 +30,8 @@ from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
 from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
+from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
@@ -54,6 +56,11 @@ OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.25
 
 # How long a new turn waits for the previous turn's slot before giving up.
 PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS = 10.0
+
+# Live attach streams are UI-facing. Coalesce adjacent text deltas just long
+# enough to avoid one React update per tiny opencode token burst, while keeping
+# control packets and final/error packets effectively immediate.
+LIVE_TEXT_COALESCE_SECONDS = 0.04
 
 
 @dataclass(frozen=True)
@@ -227,7 +234,11 @@ class _ServeMixin:
             session_path,
             opencode_session_id,
         )
-        with self._build_serve_client(sandbox_id, session_path) as client:
+        with self._build_serve_client(
+            sandbox_id,
+            session_path,
+            with_event_bus=False,
+        ) as client:
             return client.ensure_session(
                 opencode_session_id,
                 directory=session_path,
@@ -385,10 +396,18 @@ class _ServeMixin:
             return bus
 
     def _build_serve_client(
-        self, sandbox_id: UUID, directory: str
+        self,
+        sandbox_id: UUID,
+        directory: str,
+        *,
+        with_event_bus: bool = True,
     ) -> OpencodeServeClient:
         info = self._serve_connection_info(sandbox_id)
-        bus = self._get_or_create_event_bus(sandbox_id, directory)
+        bus = (
+            self._get_or_create_event_bus(sandbox_id, directory)
+            if with_event_bus
+            else None
+        )
         return OpencodeServeClient(
             base_url=info.base_url,
             password=info.password,
@@ -669,22 +688,72 @@ class _ServeMixin:
         sub = bus.subscribe(opencode_session_id)
         try:
             last_event = time.monotonic()
+            pending_text_event: SandboxEvent | None = None
+            pending_text_started_at = 0.0
             while True:
+                now = time.monotonic()
+                if (
+                    pending_text_event is not None
+                    and now - pending_text_started_at >= LIVE_TEXT_COALESCE_SECONDS
+                ):
+                    yield pending_text_event
+                    pending_text_event = None
+                    continue
+
+                queue_timeout = 1.0
+                if pending_text_event is not None:
+                    queue_timeout = max(
+                        0.0,
+                        LIVE_TEXT_COALESCE_SECONDS - (now - pending_text_started_at),
+                    )
                 try:
-                    raw = sub.queue.get(timeout=1.0)
+                    raw = sub.queue.get(timeout=queue_timeout)
                 except queue.Empty:
+                    if pending_text_event is not None:
+                        yield pending_text_event
+                        pending_text_event = None
+                        continue
                     if time.monotonic() - last_event >= keepalive_seconds:
                         yield SSEKeepalive()
                         last_event = time.monotonic()
                     continue
                 if raw is BUS_CLOSED_SENTINEL:
+                    if pending_text_event is not None:
+                        yield pending_text_event
                     return
                 last_event = time.monotonic()
                 if raw.get("type") == "server.connected":
                     continue
                 for sandbox_event in translate_opencode_event(
-                    raw, state, fetch_message=fetch_message
+                    raw,
+                    state,
+                    fetch_message=fetch_message,
+                    parent_resolver=bus.parent_of,
+                    children_resolver=bus.list_children,
+                    fetch_message_by_session=lambda session_id,
+                    message_id: client.get_message(
+                        session_id, message_id, directory=directory
+                    ),
                 ):
+                    if pending_text_event is not None:
+                        merged = _merge_text_chunk(pending_text_event, sandbox_event)
+                        if merged is not None:
+                            pending_text_event = merged
+                            continue
+
+                        yield pending_text_event
+                        pending_text_event = None
+
+                    if (
+                        isinstance(
+                            sandbox_event, (AgentMessageChunk, AgentThoughtChunk)
+                        )
+                        and getattr(sandbox_event.content, "type", None) == "text"
+                    ):
+                        pending_text_event = sandbox_event
+                        pending_text_started_at = time.monotonic()
+                        continue
+
                     yield sandbox_event
         finally:
             # Close client first so a flaky unsubscribe doesn't leak the pool.
@@ -700,3 +769,41 @@ class _ServeMixin:
                 logger.exception(
                     "[SANDBOX-SERVE] bus unsubscribe failed in subscribe teardown"
                 )
+
+
+def _merge_text_chunk(
+    pending: SandboxEvent,
+    incoming: SandboxEvent,
+) -> SandboxEvent | None:
+    if type(pending) is not type(incoming):
+        return None
+    if not isinstance(pending, (AgentMessageChunk, AgentThoughtChunk)):
+        return None
+
+    pending_content = pending.content
+    incoming_content = incoming.content
+    if (
+        getattr(pending_content, "type", None) != "text"
+        or getattr(incoming_content, "type", None) != "text"
+    ):
+        return None
+
+    pending_text = getattr(pending_content, "text", None)
+    incoming_text = getattr(incoming_content, "text", None)
+    if not isinstance(pending_text, str) or not isinstance(incoming_text, str):
+        return None
+
+    if getattr(pending_content, "field_meta", None) != getattr(
+        incoming_content, "field_meta", None
+    ) or getattr(pending_content, "annotations", None) != getattr(
+        incoming_content, "annotations", None
+    ):
+        return None
+
+    return pending.model_copy(
+        update={
+            "content": pending_content.model_copy(
+                update={"text": pending_text + incoming_text}
+            )
+        }
+    )
