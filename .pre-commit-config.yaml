@@ -248,7 +248,7 @@ repos:
         files: ^mobile/(package\.json|bun\.lock)$
         stages: [post-checkout, post-merge, post-rewrite]
       - id: mobile-bun-install-check
-        name: mobile bun install
+        name: mobile bun install check
         description: "Check the 'mobile/bun.lock' is updated"
         language: system
         entry: bash -c 'cd mobile && bun install'
