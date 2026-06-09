@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { toast } from "@/hooks/useToast";
@@ -23,8 +24,6 @@ import { markdown } from "@opal/utils";
 import type { RichStr } from "@opal/types";
 
 const route = ADMIN_ROUTES.SECURITY_HARDENING;
-
-const SECURITY_SETTINGS_KEY = "/api/admin/security";
 
 // Read shape: the effective, env-merged settings returned by GET /admin/security.
 // Every field is concrete — the backend never returns null here (see
@@ -74,7 +73,10 @@ export default function SecurityHardeningPage() {
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
 
   const { data: settings, isLoading: settingsLoading } =
-    useSWR<SecuritySettings>(SECURITY_SETTINGS_KEY, errorHandlingFetcher);
+    useSWR<SecuritySettings>(
+      SWR_KEYS.adminSecuritySettings,
+      errorHandlingFetcher
+    );
 
   // Local state mirrors the loaded settings; we save on every change.
   const [draft, setDraft] = useState<SecuritySettings | null>(null);
@@ -89,50 +91,54 @@ export default function SecurityHardeningPage() {
     if (settings) setDraft(settings);
   }, [settings]);
 
-  const saveSettings = useCallback(
-    async (updates: SecuritySettingsUpdate) => {
-      // Optimistically reflect concrete changes for snappy toggles. A `null`
-      // clears an override; its resolved env default only arrives with the PUT
-      // response, so we leave the current value in place rather than guess.
-      setDraft((prev) => {
-        if (!prev) return prev;
-        const concrete = Object.fromEntries(
-          Object.entries(updates).filter(([, value]) => value != null)
-        ) as Partial<SecuritySettings>;
-        return { ...prev, ...concrete };
+  const saveSettings = useCallback(async (updates: SecuritySettingsUpdate) => {
+    // Optimistically reflect concrete changes for snappy toggles. A `null`
+    // clears an override; its resolved env default only arrives with the PUT
+    // response, so we leave the current value in place rather than guess.
+    setDraft((prev) => {
+      if (!prev) return prev;
+      const concrete = Object.fromEntries(
+        Object.entries(updates).filter(([, value]) => value != null)
+      ) as Partial<SecuritySettings>;
+      return { ...prev, ...concrete };
+    });
+    try {
+      const response = await fetch(SWR_KEYS.adminSecuritySettings, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        // Send ONLY the changed fields. The backend persists each present key
+        // as an explicit override and lets absent keys fall back to env
+        // defaults. Sending the full settings would freeze every env default
+        // as an override and 403 on operator-locked fields in multi-tenant.
+        body: JSON.stringify(updates),
       });
-      try {
-        const response = await fetch(SECURITY_SETTINGS_KEY, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          // Send ONLY the changed fields. The backend persists each present key
-          // as an explicit override and lets absent keys fall back to env
-          // defaults. Sending the full settings would freeze every env default
-          // as an override and 403 on operator-locked fields in multi-tenant.
-          body: JSON.stringify(updates),
-        });
-        if (!response.ok) {
-          const errorMsg = (await response.json()).detail;
-          throw new Error(errorMsg);
-        }
-        // PUT returns the new effective settings — adopt them as the source of
-        // truth so the UI matches what was actually persisted/merged.
-        const effective: SecuritySettings = await response.json();
-        setDraft(effective);
-        await mutate(SECURITY_SETTINGS_KEY, effective, { revalidate: false });
-        toast.success("Security settings updated");
-      } catch (error) {
-        // Roll back the optimistic update to the last known-good settings.
-        setDraft(settings ?? null);
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to update security settings";
-        toast.error(message);
+      if (!response.ok) {
+        const errorMsg = (await response.json()).detail;
+        throw new Error(errorMsg);
       }
-    },
-    [settings]
-  );
+      // PUT returns the new effective settings — adopt them as the source of
+      // truth so the UI matches what was actually persisted/merged.
+      const effective: SecuritySettings = await response.json();
+      setDraft(effective);
+      await mutate(SWR_KEYS.adminSecuritySettings, effective, {
+        revalidate: false,
+      });
+      toast.success("Security settings updated");
+    } catch (error) {
+      // Re-sync from the server (the source of truth) rather than a possibly
+      // stale local snapshot — a late failure must not clobber other edits
+      // that may have succeeded while this request was in flight.
+      const fresh = await mutate<SecuritySettings>(
+        SWR_KEYS.adminSecuritySettings
+      );
+      if (fresh) setDraft(fresh);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update security settings";
+      toast.error(message);
+    }
+  }, []);
 
   if (settingsLoading || !draft) {
     return (
