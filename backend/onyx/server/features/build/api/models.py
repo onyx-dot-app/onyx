@@ -17,6 +17,7 @@ from onyx.server.features.build.sandbox.models import FilesystemEntry as FileSys
 if TYPE_CHECKING:
     from onyx.db.models import BuildSession
     from onyx.db.models import Sandbox
+    from onyx.server.features.build.interactive_turns.state import InteractiveTurn
 
 
 # ===== Session Models =====
@@ -183,9 +184,28 @@ class MessageRequest(BaseModel):
     """Request to send a message to the CLI agent."""
 
     content: str
+    client_request_id: str | None = None
     # Per-message model override from the composer; both set together.
     provider: str | None = None
     model: str | None = None
+
+
+class InteractiveTurnResponse(BaseModel):
+    """Interactive turn lifecycle response."""
+
+    turn_id: str
+    session_id: str
+    status: str
+    turn_index: int
+
+    @classmethod
+    def from_turn(cls, turn: "InteractiveTurn") -> "InteractiveTurnResponse":
+        return cls(
+            turn_id=str(turn.turn_id),
+            session_id=str(turn.session_id),
+            status=turn.status,
+            turn_index=turn.turn_index,
+        )
 
 
 class MessageInterruptResponse(BaseModel):

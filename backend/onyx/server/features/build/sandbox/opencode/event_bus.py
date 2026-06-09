@@ -278,6 +278,7 @@ class PodEventBus:
     def _dispatch(self, event: dict[str, Any]) -> None:
         event_type = event.get("type")
         props = event.get("properties") or {}
+        session_created_parent_id: str | None = None
 
         if event_type == "session.created":
             info = props.get("info") if isinstance(props, dict) else None
@@ -290,6 +291,7 @@ class PodEventBus:
                     and child_id
                     and parent_id
                 ):
+                    session_created_parent_id = parent_id
                     with self._lock:
                         if child_id not in self._child_to_parent:
                             self._child_to_parent[child_id] = parent_id
@@ -303,6 +305,8 @@ class PodEventBus:
                             )
 
         session_id = _extract_session_id(event)
+        if session_id is None:
+            session_id = session_created_parent_id
         log_session_id = session_id or "<unscoped>"
 
         # Deliver to session_id's own subscribers AND to every ancestor's subscribers

@@ -379,6 +379,18 @@ def create_message(
     return message
 
 
+def count_user_messages(session_id: UUID, db_session: Session) -> int:
+    """Count persisted user messages in a build session."""
+    return (
+        db_session.query(BuildMessage)
+        .filter(
+            BuildMessage.session_id == session_id,
+            BuildMessage.type == MessageType.USER,
+        )
+        .count()
+    )
+
+
 def update_message(
     message_id: UUID,
     message_metadata: dict[str, Any],
