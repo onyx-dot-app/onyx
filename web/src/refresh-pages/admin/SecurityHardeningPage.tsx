@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { toast } from "@/hooks/useToast";
@@ -11,8 +10,17 @@ import InputNumber from "@/refresh-components/inputs/InputNumber";
 import InputChipField, {
   type ChipItem,
 } from "@/refresh-components/inputs/InputChipField";
-import { InputHorizontal, InputVertical, SettingsLayouts } from "@opal/layouts";
-import { Card, Divider, Switch, Text } from "@opal/components";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
+import {
+  Content,
+  InputHorizontal,
+  InputVertical,
+  Section,
+  SettingsLayouts,
+} from "@opal/layouts";
+import { Card, Switch } from "@opal/components";
+import { markdown } from "@opal/utils";
+import type { RichStr } from "@opal/types";
 
 const route = ADMIN_ROUTES.SECURITY_HARDENING;
 
@@ -44,7 +52,7 @@ type SecuritySettingsUpdate = {
 
 interface ToggleRowProps {
   title: string;
-  description: string;
+  description?: string | RichStr;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
 }
@@ -71,6 +79,11 @@ export default function SecurityHardeningPage() {
   // Local state mirrors the loaded settings; we save on every change.
   const [draft, setDraft] = useState<SecuritySettings | null>(null);
   const [domainInput, setDomainInput] = useState("");
+  // The "Restrict Email Domains" toggle has no backing field — restriction is
+  // active iff the allowlist is non-empty. This lets an admin turn the toggle on
+  // and reveal the (still empty) input before typing the first domain. It stays
+  // independent of `draft` so unrelated saves don't collapse the open input.
+  const [forceShowDomains, setForceShowDomains] = useState(false);
 
   useEffect(() => {
     if (settings) setDraft(settings);
@@ -135,6 +148,10 @@ export default function SecurityHardeningPage() {
     label: domain,
   }));
 
+  // Show the domain allowlist when it's populated, or when the admin has
+  // explicitly turned the restriction on but not yet added a domain.
+  const showDomains = forceShowDomains || draft.valid_email_domains.length > 0;
+
   function addDomain(value: string) {
     const trimmed = value.trim().toLowerCase();
     if (!trimmed) return;
@@ -159,75 +176,86 @@ export default function SecurityHardeningPage() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={route.title}
-        description="Runtime-configurable security and hardening settings. Unset values fall back to your deployment's environment configuration."
+        description="Runtime-configurable security settings. Unset values fall back to your deployment's environment configuration."
         divider
       />
 
       <SettingsLayouts.Body>
-        {/* Card 1 — Account & access */}
-        <Card border="solid" rounding="lg">
-          <Section>
-            <ToggleRow
-              title="Restrict User Directory to Admins"
-              description="When enabled, only admins can list users in the workspace. Curators and basic users see only themselves."
-              checked={draft.user_directory_admin_only}
-              onCheckedChange={(checked) =>
-                void saveSettings({ user_directory_admin_only: checked })
-              }
-            />
+        {/* Authentication */}
+        <div className="flex w-full flex-col gap-3">
+          <Content
+            title="Authentication"
+            sizePreset="main-content"
+            variant="section"
+          />
 
-            <ToggleRow
-              title="Track External IdP Session Expiry"
-              description="Sync session expiration from your OAuth/OIDC provider. Users are logged out when the upstream session expires."
-              checked={draft.track_external_idp_expiry}
-              onCheckedChange={(checked) =>
-                void saveSettings({ track_external_idp_expiry: checked })
-              }
-            />
+          <Card border="solid" rounding="lg">
+            <Section>
+              <ToggleRow
+                title="Sync Session Expiry with Identity Provider"
+                description="Log users out when the upstream OAuth/OIDC provider session expires."
+                checked={draft.track_external_idp_expiry}
+                onCheckedChange={(checked) =>
+                  void saveSettings({ track_external_idp_expiry: checked })
+                }
+              />
 
-            {!isMultiTenant && (
-              <>
-                <ToggleRow
-                  title="Mask Credential Prefix"
-                  description="Hide the leading characters of stored credentials when displayed in the UI."
-                  checked={draft.mask_credential_prefix}
-                  onCheckedChange={(checked) =>
-                    void saveSettings({ mask_credential_prefix: checked })
-                  }
-                />
-
-                <InputVertical
-                  title="Allowed Email Domains"
-                  subDescription="When set, only users with an email at one of these domains can register. Leave empty to allow any domain."
-                  withLabel
-                >
-                  <InputChipField
-                    chips={validDomains}
-                    onRemoveChip={removeDomain}
-                    onAdd={addDomain}
-                    value={domainInput}
-                    onChange={setDomainInput}
-                    placeholder="Add a domain (e.g. onyx.app) and press Enter"
+              {!isMultiTenant && (
+                <>
+                  <ToggleRow
+                    title="Restrict Email Domains"
+                    description="Limit new user registrations to specific email domains."
+                    checked={showDomains}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setForceShowDomains(true);
+                      } else {
+                        // Clearing the allowlist disables the restriction.
+                        setForceShowDomains(false);
+                        void saveSettings({ valid_email_domains: [] });
+                      }
+                    }}
                   />
-                </InputVertical>
-              </>
-            )}
-          </Section>
-        </Card>
 
-        {/* Card 2 — Password policy (single-tenant only) */}
-        {!isMultiTenant && (
-          <>
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                  {showDomains && (
+                    <InputVertical
+                      title="Allowed Email Domains"
+                      subDescription="New users can only register new accounts with emails in this domain list."
+                      withLabel
+                    >
+                      <InputChipField
+                        chips={validDomains}
+                        onRemoveChip={removeDomain}
+                        onAdd={addDomain}
+                        value={domainInput}
+                        onChange={setDomainInput}
+                        placeholder="Add a domain (e.g. onyx.app)"
+                      />
+                    </InputVertical>
+                  )}
+                </>
+              )}
+            </Section>
+          </Card>
 
+          {/* Password policy (single-tenant only) */}
+          {!isMultiTenant && (
             <Card border="solid" rounding="lg">
               <Section>
-                <Text font="heading-h3" color="text-04">
-                  Password Policy
-                </Text>
-                <div className="flex gap-4 w-full items-start pt-2">
+                <Content
+                  title="Password Policy"
+                  description="Requirements for all new passwords. Applies to basic auth only."
+                  sizePreset="main-ui"
+                  variant="section"
+                />
+
+                <div className="flex w-full items-start gap-4">
                   <div className="flex-1">
-                    <InputVertical title="Minimum Length" withLabel>
+                    <InputVertical
+                      title="Minimum Password Length"
+                      suffix="(characters)"
+                      withLabel
+                    >
                       <InputNumber
                         value={draft.password_min_length}
                         onChange={(value) =>
@@ -240,7 +268,11 @@ export default function SecurityHardeningPage() {
                     </InputVertical>
                   </div>
                   <div className="flex-1">
-                    <InputVertical title="Maximum Length" withLabel>
+                    <InputVertical
+                      title="Maximum Password Length"
+                      suffix="(characters)"
+                      withLabel
+                    >
                       <InputNumber
                         value={draft.password_max_length}
                         onChange={(value) =>
@@ -256,7 +288,6 @@ export default function SecurityHardeningPage() {
 
                 <ToggleRow
                   title="Require Uppercase Letter"
-                  description="Passwords must contain at least one uppercase character."
                   checked={draft.password_require_uppercase}
                   onCheckedChange={(checked) =>
                     void saveSettings({ password_require_uppercase: checked })
@@ -265,7 +296,6 @@ export default function SecurityHardeningPage() {
 
                 <ToggleRow
                   title="Require Lowercase Letter"
-                  description="Passwords must contain at least one lowercase character."
                   checked={draft.password_require_lowercase}
                   onCheckedChange={(checked) =>
                     void saveSettings({ password_require_lowercase: checked })
@@ -273,8 +303,7 @@ export default function SecurityHardeningPage() {
                 />
 
                 <ToggleRow
-                  title="Require Digit"
-                  description="Passwords must contain at least one numeric digit."
+                  title="Require Number"
                   checked={draft.password_require_digit}
                   onCheckedChange={(checked) =>
                     void saveSettings({ password_require_digit: checked })
@@ -282,8 +311,10 @@ export default function SecurityHardeningPage() {
                 />
 
                 <ToggleRow
-                  title="Require Special Character"
-                  description="Passwords must contain at least one special character."
+                  title="Require Special Characters"
+                  description={markdown(
+                    "Accepted characters: `!@#$%^&*()_+-=[]{}|;:,.<>?`"
+                  )}
                   checked={draft.password_require_special_char}
                   onCheckedChange={(checked) =>
                     void saveSettings({
@@ -293,8 +324,99 @@ export default function SecurityHardeningPage() {
                 />
               </Section>
             </Card>
-          </>
-        )}
+          )}
+        </div>
+
+        {/* Admin Controls */}
+        <div className="flex w-full flex-col gap-3">
+          <Content
+            title="Admin Controls"
+            sizePreset="main-content"
+            variant="section"
+          />
+
+          <Card border="solid" rounding="lg">
+            <Section>
+              <InputHorizontal
+                title="Full User Directory Visibility"
+                description="Exact name and email lookups work regardless of this setting."
+                withLabel
+              >
+                <div className="w-60">
+                  <InputSelect
+                    value={
+                      draft.user_directory_admin_only
+                        ? "admins_only"
+                        : "all_users"
+                    }
+                    onValueChange={(value) =>
+                      void saveSettings({
+                        user_directory_admin_only: value === "admins_only",
+                      })
+                    }
+                  >
+                    <InputSelect.Trigger />
+                    <InputSelect.Content>
+                      <InputSelect.Item
+                        value="all_users"
+                        wrapDescription
+                        description="Anyone signed in can see the full user list when sharing resources."
+                      >
+                        Visible to All Users
+                      </InputSelect.Item>
+                      <InputSelect.Item
+                        value="admins_only"
+                        wrapDescription
+                        description="Only admins can see the full user list."
+                      >
+                        Visible to Admins Only
+                      </InputSelect.Item>
+                    </InputSelect.Content>
+                  </InputSelect>
+                </div>
+              </InputHorizontal>
+
+              {!isMultiTenant && (
+                <InputHorizontal
+                  title="Mask Stored Credentials"
+                  description="Display format for saved API keys and credentials for admins."
+                  withLabel
+                >
+                  <div className="w-60">
+                    <InputSelect
+                      value={
+                        draft.mask_credential_prefix ? "fully" : "partially"
+                      }
+                      onValueChange={(value) =>
+                        void saveSettings({
+                          mask_credential_prefix: value === "fully",
+                        })
+                      }
+                    >
+                      <InputSelect.Trigger />
+                      <InputSelect.Content>
+                        <InputSelect.Item
+                          value="fully"
+                          wrapDescription
+                          description="Mask all credential characters (e.g. ••••••••••)."
+                        >
+                          Fully Masked
+                        </InputSelect.Item>
+                        <InputSelect.Item
+                          value="partially"
+                          wrapDescription
+                          description="Show the first and last characters for identification (e.g. abcd••••wxyz)."
+                        >
+                          Partially Masked
+                        </InputSelect.Item>
+                      </InputSelect.Content>
+                    </InputSelect>
+                  </div>
+                </InputHorizontal>
+              )}
+            </Section>
+          </Card>
+        </div>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
