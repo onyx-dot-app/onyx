@@ -56,6 +56,13 @@ jobs:
           TAG_NAME="nightly-latest-$(date +'%Y%m%d')"
           git push origin $TAG_NAME
 
+      # Move craft-edge to current main so the craft dev cluster tracks main.
+      # Force-push (movable tag); DEPLOY_KEY lets it trigger the build workflows.
+      - name: Move craft-edge tag to latest main
+        run: |
+          git tag -f craft-edge
+          git push -f origin craft-edge
+
       - name: Send Slack notification
         if: failure()
         uses: ./.github/actions/slack-notify

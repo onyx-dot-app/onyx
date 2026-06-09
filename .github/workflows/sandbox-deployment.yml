@@ -3,7 +3,9 @@ name: Build and Push Sandbox Image on Tag
 on:
   push:
     tags:
-      - "experimental-cc4a.*"
+      # craft-edge: shared, versioned + latest. craft-dev: ad-hoc, tagged craft-dev only.
+      - "craft-edge"
+      - "craft-dev"
 
 # Restrictive defaults; jobs declare what they need.
 permissions: {}
@@ -26,38 +28,40 @@ jobs:
 
       - name: Check for sandbox-relevant file changes
         id: check
+        env:
+          # movable tag: github.event.before = commit it previously pointed at
+          BEFORE_SHA: ${{ github.event.before }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          # Get the previous tag to diff against
-          CURRENT_TAG="${GITHUB_REF_NAME}"
-          PREVIOUS_TAG=$(git tag --sort=-creatordate | grep '^experimental-cc4a\.' | grep -v "^${CURRENT_TAG}$" | head -n 1)
-
-          if [ -z "$PREVIOUS_TAG" ]; then
-            echo "No previous experimental-cc4a tag found, building unconditionally"
+          # craft-dev: always build (prior position is unrelated)
+          if [ "$REF_NAME" = "craft-dev" ]; then
+            echo "craft-dev tag: building sandbox unconditionally"
             echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "Comparing ${PREVIOUS_TAG}..${CURRENT_TAG}"
+          ZERO_SHA="0000000000000000000000000000000000000000"
+          if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "$ZERO_SHA" ] || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            echo "No usable previous craft-edge commit; building unconditionally"
+            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-          # Check if any sandbox-relevant files changed
-          SANDBOX_PATHS=(
-            "backend/onyx/server/features/build/sandbox/"
-          )
-
-          CHANGED=false
-          for path in "${SANDBOX_PATHS[@]}"; do
-            if git diff --name-only "${PREVIOUS_TAG}..${CURRENT_TAG}" -- "$path" | grep -q .; then
-              echo "Changes detected in: $path"
-              CHANGED=true
-              break
-            fi
-          done
-
-          echo "sandbox-changed=$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "Comparing ${BEFORE_SHA}..${GITHUB_SHA}"
+          # diff only the image build context (rest of sandbox/ ships in the backend)
+          if git diff --name-only "${BEFORE_SHA}..${GITHUB_SHA}" -- \
+              "backend/onyx/server/features/build/sandbox/image/" | grep -q .; then
+            echo "Sandbox image changes detected"
+            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No sandbox-relevant changes"
+            echo "sandbox-changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Determine new sandbox version
         id: version
-        if: steps.check.outputs.sandbox-changed == 'true'
+        # only craft-edge is versioned; craft-dev never bumps the version
+        if: steps.check.outputs.sandbox-changed == 'true' && github.ref_name == 'craft-edge'
         run: |
           # Query Docker Hub for the latest versioned tag
           LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags?page_size=100" \
@@ -274,8 +278,9 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=raw,value=v${{ needs.check-sandbox-changes.outputs.new-version }}
-            type=raw,value=latest
+            type=raw,value=${{ github.ref_name == 'craft-edge' && format('v{0}', needs.check-sandbox-changes.outputs.new-version) || '' }}
+            type=raw,value=${{ github.ref_name == 'craft-edge' && 'latest' || '' }}
+            type=raw,value=${{ github.ref_name == 'craft-dev' && 'craft-dev' || '' }}
 
       - name: Create and push manifest
         env:

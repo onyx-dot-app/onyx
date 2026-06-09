@@ -35,7 +35,8 @@ jobs:
       is-beta-standalone: ${{ steps.check.outputs.is-beta-standalone }}
       is-stable: ${{ steps.check.outputs.is-stable }}
       is-latest: ${{ steps.check.outputs.is-latest }}
-      is-experimental-cc4a: ${{ steps.check.outputs.is-experimental-cc4a }}
+      is-craft-edge: ${{ steps.check.outputs.is-craft-edge }}
+      is-craft-dev: ${{ steps.check.outputs.is-craft-dev }}
       is-test-run: ${{ steps.check.outputs.is-test-run }}
       sanitized-tag: ${{ steps.check.outputs.sanitized-tag }}
       short-sha: ${{ steps.check.outputs.short-sha }}
@@ -73,7 +74,8 @@ jobs:
           IS_BETA_STANDALONE=false
           IS_LATEST=false
           IS_PROD_TAG=false
-          IS_EXPERIMENTAL_CC4A=false
+          IS_CRAFT_EDGE=false
+          IS_CRAFT_DEV=false
           IS_TEST_RUN=false
           BUILD_DESKTOP=false
           BUILD_WEB=false
@@ -98,15 +100,23 @@ jobs:
           if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta(\.[0-9]+)?$ ]]; then
             IS_BETA=true
           fi
-          if [[ "$TAG" == experimental-cc4a.* ]]; then
-            IS_EXPERIMENTAL_CC4A=true
+          # craft-edge: shared rolling channel (full stack, auto-moved to main).
+          # craft-dev: ad-hoc branch test.
+          if [[ "$TAG" == "craft-edge" ]]; then
+            IS_CRAFT_EDGE=true
+          fi
+          if [[ "$TAG" == "craft-dev" ]]; then
+            IS_CRAFT_DEV=true
           fi
 
           # Determine what to build based on tag type
-          if [[ "$IS_EXPERIMENTAL_CC4A" == "true" ]]; then
-            # experimental-cc4a tags: craft backend + web + model-server, no regular backend
+          if [[ "$IS_CRAFT_EDGE" == "true" ]] || [[ "$IS_CRAFT_DEV" == "true" ]]; then
             BUILD_BACKEND=false
             BUILD_WEB=true
+            # craft-dev: backend + web + sandbox only; model-server isn't craft-specific.
+            if [[ "$IS_CRAFT_DEV" == "true" ]]; then
+              BUILD_MODEL_SERVER=false
+            fi
           elif [[ "$IS_CLOUD" == "true" ]]; then
             BUILD_WEB_CLOUD=true
           else
@@ -134,9 +144,8 @@ jobs:
             fi
           fi
 
-          # Build craft backend for stable releases (tagged craft-latest) and
-          # experimental cc4a tags (tagged craft-edge for dev clusters).
-          if [[ "$IS_LATEST" == "true" ]] || [[ "$IS_EXPERIMENTAL_CC4A" == "true" ]]; then
+          # Build craft backend for stable releases, craft-edge, and craft-dev.
+          if [[ "$IS_LATEST" == "true" ]] || [[ "$IS_CRAFT_EDGE" == "true" ]] || [[ "$IS_CRAFT_DEV" == "true" ]]; then
             BUILD_BACKEND_CRAFT=true
           fi
 
@@ -162,7 +171,8 @@ jobs:
             echo "is-beta-standalone=$IS_BETA_STANDALONE"
             echo "is-stable=$IS_STABLE"
             echo "is-latest=$IS_LATEST"
-            echo "is-experimental-cc4a=$IS_EXPERIMENTAL_CC4A"
+            echo "is-craft-edge=$IS_CRAFT_EDGE"
+            echo "is-craft-dev=$IS_CRAFT_DEV"
             echo "is-test-run=$IS_TEST_RUN"
             echo "sanitized-tag=$SANITIZED_TAG"
             echo "short-sha=$SHORT_SHA"
@@ -171,7 +181,7 @@ jobs:
   check-version-tag:
     runs-on: ubuntu-slim
     timeout-minutes: 10
-    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && !startsWith(github.ref_name, 'experimental-') && github.ref_name != 'edge' && github.event_name != 'workflow_dispatch' }}
+    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'craft-edge' && github.ref_name != 'craft-dev' && github.ref_name != 'edge' && github.event_name != 'workflow_dispatch' }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -627,7 +637,8 @@ jobs:
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('web-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'craft-latest' || '' }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-craft-edge == 'true' && 'craft-edge' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-craft-dev == 'true' && 'craft-dev' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
             type=semver,pattern={{version}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
@@ -1265,8 +1276,7 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=raw,value=${{ needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || 'craft-latest' }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-experimental-cc4a == 'true' && github.ref_name || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-craft-dev == 'true' && 'craft-dev' || (needs.determine-builds.outputs.is-craft-edge == 'true' && 'craft-edge' || 'craft-latest') }}
 
       - name: Create and push manifest
         env:
@@ -1485,7 +1495,7 @@ jobs:
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('model-server-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'craft-latest' || '' }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-craft-edge == 'true' && 'craft-edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
             type=semver,pattern={{version}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
