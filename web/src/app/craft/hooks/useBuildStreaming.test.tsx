@@ -705,6 +705,37 @@ describe("useBuildStreaming thinking packets", () => {
     );
   });
 
+  it("clears interrupt state when an attached stream settles", async () => {
+    jest.mocked(processSSEStream).mockResolvedValueOnce(undefined);
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted-settled",
+      activeTurnLocalOwner: false,
+      isInterrupting: true,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamTurnEvents(
+        sessionId,
+        "turn-interrupted-settled",
+        new AbortController().signal
+      );
+    });
+
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session).toMatchObject({
+      status: "active",
+      activeTurnId: null,
+      activeTurnLocalOwner: false,
+      isInterrupting: false,
+    });
+    expect(useBuildSessionStore.getState().loadSession).toHaveBeenCalledWith(
+      sessionId,
+      { force: true }
+    );
+  });
+
   it("skips duplicate watchers for a locally owned turn", async () => {
     jest.mocked(fetchTurnEventStream).mockClear();
     const owner = new AbortController();

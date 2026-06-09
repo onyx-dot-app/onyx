@@ -839,6 +839,7 @@ export function useBuildStreaming() {
           ) {
             clearTurnIfCurrent({
               status: "active",
+              isInterrupting: false,
             });
           }
           const settledStatus = useBuildSessionStore
