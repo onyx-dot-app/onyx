@@ -61,6 +61,18 @@ def _test_client() -> Generator[httpx.Client, None, None]:
         http_client.set_test_client(None)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _install_playwright() -> None:
+    """No-op override: No docker_e2e test uses playwright."""
+    return None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _start_celery_workers() -> Generator[None, None, None]:
+    """No-op override: The ``background`` container already runs the workers."""
+    yield None
+
+
 @pytest.fixture(scope="module")
 def slack_external_app() -> None:
     """

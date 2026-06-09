@@ -177,7 +177,7 @@ jobs:
       # artifacts. Truncated; the full per-container logs land in compose-logs/
       # via the next step and ship as an uploaded artifact.
       - name: Stack state + log tails on failure
-        if: failure()
+        if: ${{ failure() || cancelled() }}
         run: |
           echo "=== docker ps -a ==="; docker ps -a || true
           echo "=== api_server tail ==="; docker logs --tail 200 onyx-api_server-1 || true
@@ -192,7 +192,7 @@ jobs:
       # runner shuts down. Captures both compose-managed services AND the
       # dynamically-created sandbox-<id> containers the tests provision.
       - name: Collect Docker logs on failure
-        if: failure()
+        if: ${{ failure() || cancelled() }}
         run: |
           mkdir -p compose-logs
           # Compose-managed services (api_server, background, sandbox-proxy
@@ -216,7 +216,7 @@ jobs:
           done
 
       - name: Upload logs
-        if: failure()
+        if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: craft-compose-integration-logs
