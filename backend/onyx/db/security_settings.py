@@ -15,23 +15,6 @@ from sqlalchemy.orm import Session
 from onyx.db.models import SecuritySettings as SecuritySettingsRow
 from onyx.server.security.models import SecuritySettingsOverrides
 
-# Column names backing each override field. Kept in sync with
-# ``SecuritySettingsOverrides`` / the ORM model; the runtime PUT path needs to
-# null out columns when an admin clears a previously-set override, which is
-# easier to express explicitly than via reflection.
-_OVERRIDE_COLUMNS: tuple[str, ...] = (
-    "user_directory_admin_only",
-    "track_external_idp_expiry",
-    "mask_credential_prefix",
-    "valid_email_domains",
-    "password_min_length",
-    "password_max_length",
-    "password_require_uppercase",
-    "password_require_lowercase",
-    "password_require_digit",
-    "password_require_special_char",
-)
-
 
 def load_overrides(db_session: Session) -> SecuritySettingsOverrides:
     """Read the singleton row for the current tenant. Returns an empty
@@ -53,8 +36,16 @@ def upsert_overrides(db_session: Session, overrides: SecuritySettingsOverrides) 
     on ``exclude_none=True`` would leave previously-set columns untouched.
     Caller holds the Redis lock that serializes read-modify-write across
     processes.
+
+    Iterating over ``SecuritySettingsOverrides.model_fields`` makes the
+    Pydantic model the single source of truth for the column set — the same
+    name-by-name coupling ``load_overrides`` already relies on via
+    ``model_validate(..., from_attributes=True)``.
     """
-    payload = {col: getattr(overrides, col) for col in _OVERRIDE_COLUMNS}
+    payload = {
+        name: getattr(overrides, name)
+        for name in SecuritySettingsOverrides.model_fields
+    }
     stmt = insert(SecuritySettingsRow).values(id=True, **payload)
     stmt = stmt.on_conflict_do_update(index_elements=["id"], set_=payload)
     db_session.execute(stmt)
