@@ -9,6 +9,7 @@ interface UseEscapeInterruptArgs {
 
 const ESCAPE_RESERVED_LAYER_SELECTOR = [
   '[role="dialog"]',
+  '[role="alertdialog"]',
   '[role="menu"]',
   '[role="listbox"]',
 ].join(",");

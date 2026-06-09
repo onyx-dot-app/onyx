@@ -17,7 +17,9 @@ function dispatchEscape(event = escapeEvent()): KeyboardEvent {
   return event;
 }
 
-function visibleLayer(role: "dialog" | "menu" | "listbox"): HTMLElement {
+function visibleLayer(
+  role: "dialog" | "alertdialog" | "menu" | "listbox"
+): HTMLElement {
   const layer = document.createElement("div");
   layer.setAttribute("role", role);
   Object.defineProperty(layer, "getClientRects", {
@@ -87,7 +89,7 @@ describe("useEscapeInterrupt", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it.each(["dialog", "menu", "listbox"] as const)(
+  it.each(["dialog", "alertdialog", "menu", "listbox"] as const)(
     "lets visible %s layers reserve Escape",
     (role) => {
       const onInterrupt = jest.fn();

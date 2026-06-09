@@ -205,6 +205,21 @@ export function useBuildStreaming() {
           );
         return;
       }
+
+      const currentSession = useBuildSessionStore
+        .getState()
+        .sessions.get(sessionId);
+      if (
+        currentSession?.status !== "running" ||
+        (reconciledTurnId &&
+          currentSession.activeTurnId &&
+          currentSession.activeTurnId !== reconciledTurnId)
+      ) {
+        return;
+      }
+
+      console.warn("[Streaming] Interrupted turn reconciliation timed out");
+      updateSessionData(sessionId, { isInterrupting: false });
     },
     [updateSessionData]
   );

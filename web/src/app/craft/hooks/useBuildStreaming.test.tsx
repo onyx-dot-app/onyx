@@ -1057,6 +1057,53 @@ describe("useBuildStreaming thinking packets", () => {
     });
   });
 
+  it("clears only interrupt state when interrupted turn reconciliation times out", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    const activeTurn = {
+      session_id: sessionId,
+      turn_id: "turn-interrupted",
+      status: "RUNNING",
+      turn_index: 3,
+    } as never;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      jest.mocked(fetchActiveTurn).mockResolvedValueOnce(activeTurn);
+    }
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnIndex: 3,
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+    for (let attempt = 0; attempt < 30; attempt++) {
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+        await Promise.resolve();
+      });
+    }
+
+    expect(fetchActiveTurn).toHaveBeenCalledTimes(30);
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+    });
+    expect(useBuildSessionStore.getState().loadSession).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[Streaming] Interrupted turn reconciliation timed out"
+    );
+    warnSpy.mockRestore();
+  });
+
   it("keeps polling until the interrupted backend turn is gone", async () => {
     jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
     jest
