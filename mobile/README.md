@@ -13,6 +13,9 @@ dependencies, lockfile, and tooling). Scaffolded with `create-expo-app` (Expo Ro
 
 ## Prerequisites
 
+> First-time machine setup (Xcode, Android Studio, JDK 17, NDK, simulator/emulator) is in
+> [`GETTING_STARTED.md`](./GETTING_STARTED.md). The list below is the short version.
+
 - Node LTS on PATH, **Bun**, Xcode + an iOS simulator, CocoaPods.
 - Recommended: `brew install watchman` (faster, more reliable Metro file watching).
 - The project path must contain **no spaces** (RN/Xcode build scripts break otherwise).
@@ -35,7 +38,11 @@ bun run run:ios              # or: bunx expo run:ios --port 8082
 
 > The first iOS build compiles React Native **from source (~15 min)** — RN 0.85 has no prebuilt
 > CocoaPods artifact; this is expected, not a hang. Subsequent builds are incremental.
-> Metro runs on **port 8082** (8081 is commonly taken by Docker). Android: `bun run run:android`.
+> Metro runs on **port 8082** (8081 is commonly taken by Docker).
+>
+> **Android** (`bun run run:android`): the build must compile with **JDK 17** — point `JAVA_HOME`
+> at one first: `export JAVA_HOME=$(/usr/libexec/java_home -v 17)` (Android Studio's bundled
+> JDK 21 won't work). The first Android build compiles native C++ via the NDK (~10–15 min).
 
 ## Scripts
 
