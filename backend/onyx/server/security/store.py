@@ -7,7 +7,11 @@ from cachetools import TTLCache
 from pydantic import ValidationError
 
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.factory import get_shared_cache_backend
+from onyx.cache.interface import CacheBackendType
 from onyx.configs import app_configs as _cfg
+from onyx.configs.app_configs import CACHE_BACKEND
+from onyx.configs.constants import OnyxRedisChannels
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.security_settings import load_overrides as _db_load_overrides
@@ -25,15 +29,29 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 logger = setup_logger()
 
 
-# Bounds cross-process staleness after an admin save — no pub/sub today, so
-# other api_server processes converge via TTL expiry.
-_CACHE_TTL_SECONDS = 10.0
+# Primary cross-process propagation is Redis pub/sub: an admin save publishes the
+# tenant id on OnyxRedisChannels.SECURITY_SETTINGS_INVALIDATE and every process'
+# listener drops its cached entry near-instantly. This long TTL is only the
+# fallback for messages a process missed (e.g. it was reconnecting), so it is
+# bounded staleness of last resort rather than the propagation mechanism.
+_CACHE_TTL_SECONDS = 3600.0
 
 
 _CACHE_LOCK = threading.RLock()
 _CACHE: TTLCache[str, SecuritySettings] = TTLCache(
     maxsize=10_000, ttl=_CACHE_TTL_SECONDS, timer=time.monotonic
 )
+
+
+# Lazily-started, one per process. Guards the pub/sub listener daemon so we only
+# ever run a single subscriber thread regardless of how many callers race in.
+_LISTENER_LOCK = threading.Lock()
+_LISTENER_STARTED = False
+
+# Reconnect backoff for the listener thread: start small, double on repeated
+# failures, cap so a Redis outage can't turn into a hot reconnect loop.
+_LISTENER_RECONNECT_BASE_SECONDS = 5.0
+_LISTENER_RECONNECT_MAX_SECONDS = 30.0
 
 
 # Lock lifetime; held during a single read+merge+write.
@@ -110,7 +128,12 @@ def _store_overrides_unlocked(overrides: SecuritySettingsOverrides) -> None:
         )
     with get_session_with_current_tenant() as db_session:
         _db_upsert_overrides(db_session, overrides)
-    invalidate_security_cache(_current_tenant_id_or_default())
+    tenant_id = _current_tenant_id_or_default()
+    # Local invalidate is the immediate fast path for this process; pub/sub
+    # propagates to every other process. The DB write has already committed, so
+    # neither may fail the save.
+    invalidate_security_cache(tenant_id)
+    _publish_invalidation(tenant_id)
 
 
 def _apply_present_keys(
@@ -180,6 +203,78 @@ def invalidate_security_cache(tenant_id: str) -> None:
         _CACHE.pop(tenant_id, None)
 
 
+def _pubsub_supported() -> bool:
+    """Cross-process invalidation rides on Redis pub/sub. Onyx Lite runs
+    ``CACHE_BACKEND=postgres`` and is single-process anyway, so there local
+    invalidation alone is sufficient and we skip both publish and the listener.
+    """
+    return CACHE_BACKEND == CacheBackendType.REDIS
+
+
+def _publish_invalidation(tenant_id: str) -> None:
+    """Best-effort broadcast of an invalidation to other processes.
+
+    The caller has already committed the DB write and invalidated this process'
+    cache, so a pub/sub failure must never propagate — other processes still
+    converge via the TTL fallback. Logged, not raised.
+    """
+    if not _pubsub_supported():
+        return
+    try:
+        cache = get_shared_cache_backend()
+        cache.publish(OnyxRedisChannels.SECURITY_SETTINGS_INVALIDATE, tenant_id)
+    except Exception:
+        logger.exception("Failed to publish security settings invalidation")
+
+
+def _handle_invalidation_message(data: bytes) -> None:
+    """Drop the named tenant from this process' cache. The channel is global, so
+    a message for a tenant we never cached resolves to a harmless no-op pop."""
+    try:
+        tenant_id = data.decode()
+    except Exception:
+        logger.warning("Discarding undecodable security invalidation message")
+        return
+    invalidate_security_cache(tenant_id)
+
+
+def _listen_for_invalidations() -> None:
+    """Daemon loop: subscribe to the shared invalidation channel and apply every
+    message to the local cache. Reconnects with capped exponential backoff on any
+    error so a Redis blip can't become a hot loop. Never returns."""
+    backoff = _LISTENER_RECONNECT_BASE_SECONDS
+    while True:
+        try:
+            cache = get_shared_cache_backend()
+            for data in cache.subscribe(OnyxRedisChannels.SECURITY_SETTINGS_INVALIDATE):
+                backoff = _LISTENER_RECONNECT_BASE_SECONDS  # healthy → reset
+                _handle_invalidation_message(data)
+            # subscribe() returned without raising — treat as a disconnect.
+            logger.warning("Security settings invalidation stream ended; reconnecting")
+        except Exception:
+            logger.exception("Security settings invalidation listener error")
+        time.sleep(backoff)
+        backoff = min(backoff * 2, _LISTENER_RECONNECT_MAX_SECONDS)
+
+
+def _ensure_listener_started() -> None:
+    """Lazily start the single per-process invalidation listener. Idempotent and
+    cheap on the hot path — after the first start it is a flag read."""
+    global _LISTENER_STARTED
+    if _LISTENER_STARTED or not _pubsub_supported():
+        return
+    with _LISTENER_LOCK:
+        if _LISTENER_STARTED:
+            return
+        thread = threading.Thread(
+            target=_listen_for_invalidations,
+            name="security-settings-invalidation-listener",
+            daemon=True,
+        )
+        thread.start()
+        _LISTENER_STARTED = True
+
+
 def get_security_settings() -> SecuritySettings:
     """Effective, env-merged, immutable settings for the current tenant.
 
@@ -187,6 +282,9 @@ def get_security_settings() -> SecuritySettings:
     unset in multi-tenant. DB errors fall back to env defaults so a Postgres
     outage never bricks the auth path. Returned ``SecuritySettings`` is frozen.
     """
+    # Start the cross-process invalidation listener on first use (idempotent).
+    _ensure_listener_started()
+
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     if tenant_id is None:
         # Single-tenant defaults the contextvar at module import; this branch

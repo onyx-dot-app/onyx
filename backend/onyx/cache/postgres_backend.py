@@ -8,6 +8,7 @@ import hashlib
 import struct
 import time
 import uuid
+from collections.abc import Iterator
 from contextlib import AbstractContextManager
 from datetime import datetime
 from datetime import timedelta
@@ -292,6 +293,22 @@ class PostgresCacheBackend(CacheBackend):
             if time.monotonic() >= deadline:
                 return None
             time.sleep(_BLPOP_POLL_INTERVAL)
+
+    # -- pub/sub -----------------------------------------------------------
+
+    def publish(self, channel: str, message: str | bytes) -> None:
+        raise NotImplementedError(
+            "PostgresCacheBackend does not support pub/sub. Deployments on the "
+            "Postgres cache backend (Onyx Lite) are single-process, so "
+            "cross-process invalidation is unnecessary."
+        )
+
+    def subscribe(self, channel: str) -> Iterator[bytes]:
+        raise NotImplementedError(
+            "PostgresCacheBackend does not support pub/sub. Deployments on the "
+            "Postgres cache backend (Onyx Lite) are single-process, so "
+            "cross-process invalidation is unnecessary."
+        )
 
     # -- helpers -----------------------------------------------------------
 
