@@ -12,9 +12,11 @@ SUCCESS/CANCELED are left alone).
 
 import logging
 import time
+from collections.abc import MutableMapping
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from typing import Any
 
 from celery import Celery
 from celery import shared_task
@@ -66,6 +68,24 @@ _PORT_BATCH_RETRY_SLEEP_S = 2
 _PORT_STALL_THRESHOLD_SECONDS = _PORT_SOFT_TIME_LIMIT + 15 * 60  # 45 minutes
 
 
+class _PortLogAdapter(logging.LoggerAdapter):
+    """Prefix every port log line with its attempt + cc_pair so concurrent ports
+    are distinguishable in the shared worker log (mirrors the indexing
+    [Index Attempt][CC Pair] prefix). cc_pair_id is filled in once the attempt is
+    read, so the few lines logged before that omit it."""
+
+    def process(
+        self, msg: str, kwargs: MutableMapping[str, Any]
+    ) -> tuple[str, MutableMapping[str, Any]]:
+        extra = self.extra or {}
+        cc_pair_id = extra.get("cc_pair_id")
+        cc_prefix = f"[CC Pair: {cc_pair_id}] " if cc_pair_id is not None else ""
+        return (
+            f"[Port Attempt: {extra.get('port_attempt_id')}] {cc_prefix}{msg}",
+            kwargs,
+        )
+
+
 def _copy_batch_with_retry(
     copier: PortCopier, doc_ids: list[str], log: logging.LoggerAdapter
 ) -> int:
@@ -104,9 +124,13 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
     each batch, so a fresh attempt continues `WHERE document_id > cursor` rather
     than re-porting from the start.
     """
-    log = logging.LoggerAdapter(
+    log = _PortLogAdapter(
         task_logger,
-        extra={"port_attempt_id": port_attempt_id, "celery_task_id": celery_task_id},
+        {
+            "port_attempt_id": port_attempt_id,
+            "celery_task_id": celery_task_id,
+            "cc_pair_id": None,
+        },
     )
 
     # PortCopier must be built while the search settings are session-attached, so
@@ -124,6 +148,8 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             return
 
         cc_pair_id = attempt.cc_pair_id
+        # Replace extra (a read-only Mapping) so every later line carries the cc_pair.
+        log.extra = {**(log.extra or {}), "cc_pair_id": cc_pair_id}
         cursor = attempt.last_processed_doc_id
         docs_ported = attempt.docs_ported or 0
 
@@ -169,7 +195,7 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 cc_pair is None
                 or cc_pair.status == ConnectorCredentialPairStatus.DELETING
             ):
-                log.info("cc_pair %s gone/deleting, stopping port", cc_pair_id)
+                log.info("cc_pair gone/deleting, stopping port")
                 return
             doc_ids = get_document_ids_for_cc_pair_batch(
                 db_session, cc_pair_id, after_doc_id=cursor, limit=INDEX_BATCH_SIZE
@@ -234,7 +260,11 @@ def _fail_stalled_port_attempts(
         fresh = get_port_attempt(db_session, stale.id)
         if fresh is None or fresh.status.is_terminal():
             continue
-        task_logger.warning("check_for_port: failing stalled PortAttempt %s", stale.id)
+        task_logger.warning(
+            "check_for_port: failing stalled PortAttempt %s (cc_pair %s)",
+            stale.id,
+            stale.cc_pair_id,
+        )
         mark_port_failed(
             db_session, stale.id, error_msg="stalled: no progress within threshold"
         )
