@@ -234,7 +234,11 @@ class _ServeMixin:
             session_path,
             opencode_session_id,
         )
-        with self._build_serve_client(sandbox_id, session_path) as client:
+        with self._build_serve_client(
+            sandbox_id,
+            session_path,
+            with_event_bus=False,
+        ) as client:
             return client.ensure_session(
                 opencode_session_id,
                 directory=session_path,
@@ -392,10 +396,18 @@ class _ServeMixin:
             return bus
 
     def _build_serve_client(
-        self, sandbox_id: UUID, directory: str
+        self,
+        sandbox_id: UUID,
+        directory: str,
+        *,
+        with_event_bus: bool = True,
     ) -> OpencodeServeClient:
         info = self._serve_connection_info(sandbox_id)
-        bus = self._get_or_create_event_bus(sandbox_id, directory)
+        bus = (
+            self._get_or_create_event_bus(sandbox_id, directory)
+            if with_event_bus
+            else None
+        )
         return OpencodeServeClient(
             base_url=info.base_url,
             password=info.password,

@@ -87,3 +87,4 @@ def test_prewarm_opencode_session_raises_when_runtime_returns_no_id() -> None:
 
     assert session.opencode_session_id is None
     assert db_session.flush_count == 0
+    assert sandbox_manager.calls == [(sandbox_id, session.id, None)]

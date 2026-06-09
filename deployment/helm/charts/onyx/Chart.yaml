@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.19
+version: 0.5.20
 appVersion: latest
 annotations:
   category: Productivity
@@ -17,10 +17,10 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: '`configMap.ENABLE_PUBLIC_DOCS` flag (default off) gating the
-        interactive API docs and schema. When unset, /openapi.json, /docs, and
-        /redoc are not registered (404); set to "true" to expose them publicly
-        with no authentication.'
+      description: Add Craft sandbox RBAC and the `sandbox-file-sync`
+        ServiceAccount, configured through `craft.sandboxFileSyncRoleArn`
+        and `craft.extraBoundServiceAccounts`, so EKS installs can bind
+        sandbox snapshot access to a Terraform-managed IRSA role.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0

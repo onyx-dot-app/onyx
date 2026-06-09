@@ -110,6 +110,37 @@ variable "redis_auth_token" {
   sensitive   = true
 }
 
+# Craft sandbox node group knobs, forwarded to the eks module (default off).
+variable "enable_craft_sandbox_node_group" {
+  type        = bool
+  description = "Create a dedicated, IMDSv2-hardened Craft sandbox node group (labeled/tainted for sandbox pods)."
+  default     = false
+}
+
+variable "craft_sandbox_node_instance_types" {
+  type        = list(string)
+  description = "Instance types for the Craft sandbox node group."
+  default     = ["m5.large"]
+}
+
+variable "craft_sandbox_node_min_size" {
+  type        = number
+  description = "Min size of the Craft sandbox node group."
+  default     = 0
+}
+
+variable "craft_sandbox_node_max_size" {
+  type        = number
+  description = "Max size of the Craft sandbox node group."
+  default     = 4
+}
+
+variable "craft_sandbox_node_desired_size" {
+  type        = number
+  description = "Desired size of the Craft sandbox node group."
+  default     = 1
+}
+
 variable "enable_iam_auth" {
   type        = bool
   description = "Enable AWS IAM authentication for the RDS Postgres instance and wire IRSA policies"
