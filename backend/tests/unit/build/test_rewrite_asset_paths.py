@@ -1,7 +1,9 @@
-"""Unit tests for webapp proxy path rewriting/injection."""
+"""Unit tests for the Craft webapp proxy."""
 
+import re
 from collections.abc import AsyncGenerator
 from collections.abc import AsyncIterator
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from uuid import UUID
@@ -14,148 +16,59 @@ from starlette.responses import StreamingResponse
 
 from onyx.db.enums import SharingScope
 from onyx.server.features.build.api import api
-from onyx.server.features.build.api.api import _inject_hmr_fixer
-from onyx.server.features.build.api.api import _rewrite_asset_paths
-from onyx.server.features.build.api.api import _rewrite_proxy_response_headers
 
 SESSION_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 BASE = f"/api/build/sessions/{SESSION_ID}/webapp"
+NEXT_TEMPLATE_CONFIG = (
+    Path(api.__file__).resolve().parents[1]
+    / "sandbox/image/templates/outputs/web/next.config.ts"
+)
+DOCKER_SANDBOX_MANAGER = (
+    Path(api.__file__).resolve().parents[1] / "sandbox/docker/docker_sandbox_manager.py"
+)
+KUBERNETES_SANDBOX_MANAGER = (
+    Path(api.__file__).resolve().parents[1]
+    / "sandbox/kubernetes/kubernetes_sandbox_manager.py"
+)
+WEB_NEXT_CONFIG = Path(__file__).resolve().parents[4] / "web/next.config.js"
 
 
-def rewrite(html: str) -> str:
-    return _rewrite_asset_paths(html.encode(), SESSION_ID).decode()
+class TestNextjsProxyMountContract:
+    def test_webapp_prefix_is_used_as_next_base_path(self) -> None:
+        """A proxied App Router app needs basePath, not just assetPrefix.
 
+        Rewriting /_next/static URLs makes chunks load, but it does not update
+        Next's client-side mount/base-path contract. Without basePath, Craft
+        previews can SSR successfully through /api/build/.../webapp while the
+        client runtime never hydrates.
+        """
+        config_source = NEXT_TEMPLATE_CONFIG.read_text()
 
-def inject(html: str) -> str:
-    return _inject_hmr_fixer(html.encode(), SESSION_ID).decode()
+        assert "ONYX_WEBAPP_BASE_PATH" in config_source
+        assert "assetPrefix" in config_source
+        assert re.search(r"\bbasePath\s*:", config_source)
 
+    def test_sandbox_start_scripts_export_next_base_path(self) -> None:
+        for manager_source in (DOCKER_SANDBOX_MANAGER, KUBERNETES_SANDBOX_MANAGER):
+            source = manager_source.read_text()
 
-class TestNextjsPathRewriting:
-    def test_rewrites_bare_next_script_src(self) -> None:
-        html = '<script src="/_next/static/chunks/main.js">'
-        result = rewrite(html)
-        assert f'src="{BASE}/_next/static/chunks/main.js"' in result
-        assert '"/_next/' not in result
-
-    def test_rewrites_bare_next_in_single_quotes(self) -> None:
-        html = "<link href='/_next/static/css/app.css'>"
-        result = rewrite(html)
-        assert f"'{BASE}/_next/static/css/app.css'" in result
-
-    def test_rewrites_bare_next_in_url_parens(self) -> None:
-        html = "background: url(/_next/static/media/font.woff2)"
-        result = rewrite(html)
-        assert f"url({BASE}/_next/static/media/font.woff2)" in result
-
-    def test_no_double_prefix_when_already_proxied(self) -> None:
-        """assetPrefix makes Next.js emit already-prefixed URLs — must not double-rewrite."""
-        already_prefixed = f'<script src="{BASE}/_next/static/chunks/main.js">'
-        result = rewrite(already_prefixed)
-        # Should be unchanged
-        assert result == already_prefixed
-        # Specifically, no double path
-        assert f"{BASE}/{BASE}" not in result
-
-    def test_rewrites_favicon(self) -> None:
-        html = '<link rel="icon" href="/favicon.ico">'
-        result = rewrite(html)
-        assert f'"{BASE}/favicon.ico"' in result
-
-    def test_rewrites_json_data_path_double_quoted(self) -> None:
-        html = 'fetch("/data/tickets.json")'
-        result = rewrite(html)
-        assert f'"{BASE}/data/tickets.json"' in result
-
-    def test_rewrites_json_data_path_single_quoted(self) -> None:
-        html = "fetch('/data/items.json')"
-        result = rewrite(html)
-        assert f"'{BASE}/data/items.json'" in result
-
-    def test_rewrites_escaped_next_font_path_in_json_script(self) -> None:
-        """Next dev can embed font asset paths in JSON-escaped script payloads."""
-        html = r'{"src":"\/_next\/static\/media\/font.woff2"}'
-        result = rewrite(html)
-        assert (
-            r'{"src":"\/api\/build\/sessions\/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\/webapp\/_next\/static\/media\/font.woff2"}'
-            in result
-        )
-
-    def test_rewrites_escaped_next_font_path_in_style_payload(self) -> None:
-        """Keep dynamically generated next/font URLs inside the session proxy."""
-        html = r'{"css":"@font-face{src:url(\"\/_next\/static\/media\/font.woff2\")"}'
-        result = rewrite(html)
-        assert (
-            r"\/api\/build\/sessions\/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\/webapp\/_next\/static\/media\/font.woff2"
-            in result
-        )
-
-    def test_rewrites_absolute_next_font_url(self) -> None:
-        html = '<link rel="preload" as="font" href="https://craft-dev.onyx.app/_next/static/media/font.woff2">'
-        result = rewrite(html)
-        assert f'"{BASE}/_next/static/media/font.woff2"' in result
-
-    def test_rewrites_root_hmr_path(self) -> None:
-        html = 'new WebSocket("wss://craft-dev.onyx.app/_next/webpack-hmr?id=abc")'
-        result = rewrite(html)
-        assert '"wss://craft-dev.onyx.app/_next/webpack-hmr?id=abc"' not in result
-        assert '"/_next/webpack-hmr?id=abc"' in result
-
-    def test_rewrites_escaped_absolute_next_font_url(self) -> None:
-        html = (
-            r'{"href":"https:\/\/craft-dev.onyx.app\/_next\/static\/media\/font.woff2"}'
-        )
-        result = rewrite(html)
-        assert (
-            r'{"href":"\/api\/build\/sessions\/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\/webapp\/_next\/static\/media\/font.woff2"}'
-            in result
-        )
-
-
-class TestRuntimeFixerInjection:
-    def test_injects_websocket_rewrite_shim(self) -> None:
-        html = "<html><head></head><body></body></html>"
-        result = inject(html)
-        assert "window.WebSocket = function (url, protocols)" in result
-        assert f'var WEBAPP_BASE = "{BASE}"' in result
-
-    def test_injects_hmr_websocket_stub(self) -> None:
-        html = "<html><head></head><body></body></html>"
-        result = inject(html)
-        assert "function MockHmrWebSocket(url)" in result
-        assert "return new MockHmrWebSocket(rewriteNextAssetUrl(url));" in result
-
-    def test_injects_before_head_contents(self) -> None:
-        html = "<html><head><title>x</title></head><body></body></html>"
-        result = inject(html)
-        assert result.index(
-            "window.WebSocket = function (url, protocols)"
-        ) < result.index("<title>x</title>")
-
-    def test_rewritten_hmr_url_still_matches_shim_intercept_logic(self) -> None:
-        html = '<html><head></head><body>new WebSocket("wss://craft-dev.onyx.app/_next/webpack-hmr?id=abc")</body></html>'
-
-        rewritten = rewrite(html)
-        assert '"wss://craft-dev.onyx.app/_next/webpack-hmr?id=abc"' not in rewritten
-        assert 'new WebSocket("/_next/webpack-hmr?id=abc")' in rewritten
-
-        injected = inject(rewritten)
-
-        assert 'new WebSocket("/_next/webpack-hmr?id=abc")' in injected
-        assert 'parsedUrl.pathname.indexOf("/_next/webpack-hmr") === 0' in injected
-
-
-class TestProxyHeaderRewriting:
-    def test_rewrites_link_header_font_preload_paths(self) -> None:
-        headers = {
-            "link": (
-                '</_next/static/media/font.woff2>; rel=preload; as="font"; crossorigin, '
-                '</_next/static/media/font2.woff2>; rel=preload; as="font"; crossorigin'
+            assert (
+                'export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/$(basename '
+                '{session_path})/webapp"'
+            ) in source
+            assert "export WEBAPP_ASSET_PREFIX" not in source
+            assert 'grep -q "WEBAPP_ASSET_PREFIX" next.config.ts' in source
+            assert (
+                "? {{ basePath: webappBasePath, assetPrefix: webappBasePath }}"
+                in source
             )
-        }
 
-        result = _rewrite_proxy_response_headers(headers, SESSION_ID)
+    def test_web_dev_rewrites_hmr_websocket_to_backend(self) -> None:
+        """Local Next dev cannot proxy websocket upgrades via /api/[...path]."""
+        source = WEB_NEXT_CONFIG.read_text()
 
-        assert f"<{BASE}/_next/static/media/font.woff2>" in result["link"]
+        assert "/api/build/sessions/:sessionId/webapp/_next/webpack-hmr" in source
+        assert "/build/sessions/:sessionId/webapp/_next/webpack-hmr" in source
 
 
 class _FakeUpstream:
@@ -188,10 +101,12 @@ class _FakeAsyncClient:
     ) -> None:
         self._upstream = upstream
         self._captured = captured
+        self.last_url: str | None = None
 
     def build_request(
         self, method: str, url: str, headers: dict[str, str]
     ) -> SimpleNamespace:
+        self.last_url = url
         if self._captured is not None:
             self._captured.update(headers)
         return SimpleNamespace(method=method, url=url, headers=headers)
@@ -216,7 +131,22 @@ class _FakeACM:
 
 class TestProxyRequestWiring:
     @pytest.mark.asyncio
-    async def test_proxy_request_rewrites_link_header_on_html_response(
+    async def test_proxy_request_targets_native_nextjs_base_path(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        upstream = _FakeUpstream(200, {"content-type": "text/html"}, b"ok")
+        fake_client = _FakeAsyncClient(upstream)
+        monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
+        monkeypatch.setattr(api, "_get_proxy_client", lambda: fake_client)
+
+        request = cast(Request, SimpleNamespace(headers={}, query_params=""))
+
+        await api._proxy_request("", request, UUID(SESSION_ID))
+
+        assert fake_client.last_url == f"http://sandbox/{BASE.lstrip('/')}"
+
+    @pytest.mark.asyncio
+    async def test_proxy_request_preserves_link_header_on_html_response(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         upstream = _FakeUpstream(
@@ -237,11 +167,11 @@ class TestProxyRequestWiring:
         response = await api._proxy_request("", request, UUID(SESSION_ID))
 
         assert response.headers["link"] == (
-            f'<{BASE}/_next/static/media/font.woff2>; rel=preload; as="font"'
+            '</_next/static/media/font.woff2>; rel=preload; as="font"'
         )
 
     @pytest.mark.asyncio
-    async def test_proxy_request_injects_hmr_fixer_for_html_response(
+    async def test_proxy_request_streams_html_without_injecting_hmr_script(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         upstream = _FakeUpstream(
@@ -257,12 +187,83 @@ class TestProxyRequestWiring:
         request = cast(Request, SimpleNamespace(headers={}, query_params=""))
 
         response = await api._proxy_request("", request, UUID(SESSION_ID))
-        body = cast(bytes, response.body).decode("utf-8")
+        assert isinstance(response, StreamingResponse)
+        chunks = [chunk async for chunk in response.body_iterator]
+        body = b"".join(cast(list[bytes], chunks)).decode("utf-8")
 
-        assert "window.WebSocket = function (url, protocols)" in body
-        assert body.index("window.WebSocket = function (url, protocols)") < body.index(
-            "<title>x</title>"
+        assert body == "<html><head><title>x</title></head><body></body></html>"
+        assert "window.WebSocket = function (url, protocols)" not in body
+
+    def test_hmr_websocket_url_targets_native_nextjs_base_path(self) -> None:
+        target = api._webapp_hmr_websocket_url(
+            UUID(SESSION_ID), "http://sandbox:3014", "id=req-1"
         )
+
+        assert target == (
+            f"ws://sandbox:3014/{BASE.lstrip('/')}/_next/webpack-hmr?id=req-1"
+        )
+
+    def test_hmr_websocket_url_strips_non_hmr_query_params(self) -> None:
+        target = api._webapp_hmr_websocket_url(
+            UUID(SESSION_ID),
+            "http://sandbox:3014",
+            "id=req-1&token=secret&authorization=bearer",
+        )
+
+        assert target == (
+            f"ws://sandbox:3014/{BASE.lstrip('/')}/_next/webpack-hmr?id=req-1"
+        )
+
+    @pytest.mark.asyncio
+    async def test_hmr_websocket_proxy_does_not_forward_viewer_headers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        class FakeWebSocket:
+            url = SimpleNamespace(query="id=req-1&token=secret")
+            accepted = False
+
+            async def accept(self) -> None:
+                self.accepted = True
+
+        class FakeConnect:
+            def __init__(self, uri: str, **kwargs: object) -> None:
+                captured["uri"] = uri
+                captured["kwargs"] = kwargs
+
+            async def __aenter__(self) -> object:
+                return object()
+
+            async def __aexit__(self, *_args: object) -> bool:
+                return False
+
+        async def noop_pump(*_args: object) -> None:
+            return None
+
+        monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
+        monkeypatch.setattr(api, "websocket_connect", FakeConnect)
+        monkeypatch.setattr(api, "_pump_webapp_to_upstream", noop_pump)
+        monkeypatch.setattr(api, "_pump_upstream_to_webapp", noop_pump)
+
+        websocket = FakeWebSocket()
+        await api._proxy_webapp_hmr_websocket(
+            UUID(SESSION_ID), cast(api.WebSocket, websocket)
+        )
+
+        assert websocket.accepted
+        assert captured["uri"] == (
+            f"ws://sandbox/{BASE.lstrip('/')}/_next/webpack-hmr?id=req-1"
+        )
+        assert captured["kwargs"] == {
+            "additional_headers": None,
+            "compression": None,
+            "extensions": None,
+            "origin": None,
+            "proxy": None,
+            "subprotocols": None,
+            "user_agent_header": None,
+        }
 
     @pytest.mark.asyncio
     async def test_proxy_request_strips_sensitive_viewer_headers(
@@ -346,17 +347,6 @@ class TestProxyRequestWiring:
         # corresponding deny-list entry, this assertion will catch it.
         assert lower == benign_headers
 
-    def test_rewrites_absolute_link_header_font_preload_paths(self) -> None:
-        headers = {
-            "link": (
-                '<https://craft-dev.onyx.app/_next/static/media/font.woff2>; rel=preload; as="font"; crossorigin'
-            )
-        }
-
-        result = _rewrite_proxy_response_headers(headers, SESSION_ID)
-
-        assert f"<{BASE}/_next/static/media/font.woff2>" in result["link"]
-
     @pytest.mark.asyncio
     async def test_proxy_sets_immutable_cache_control_on_next_static_media(
         self, monkeypatch: pytest.MonkeyPatch
@@ -418,11 +408,9 @@ class TestProxyRequestWiring:
         assert "immutable" not in response.headers["cache-control"]
 
     @pytest.mark.asyncio
-    async def test_proxy_rewrites_js_asset_paths(
+    async def test_proxy_streams_js_asset_paths_without_rewriting(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """JS bundles are rewritten; idempotent for new sandboxes (assetPrefix),
-        and corrects bare /_next/ refs for sandboxes started before this deploy."""
         js = b'import x from "/_next/static/chunks/dep.js"'
         upstream = _FakeUpstream(200, {"content-type": "application/javascript"}, js)
         monkeypatch.setattr(api, "_get_sandbox_url", _fake_sandbox_url)
@@ -435,8 +423,9 @@ class TestProxyRequestWiring:
             "_next/static/chunks/x.js", request, UUID(SESSION_ID)
         )
 
-        body = cast(bytes, response.body).decode()
-        assert f'"/{BASE.lstrip("/")}/_next/static/chunks/dep.js"' in body
+        assert isinstance(response, StreamingResponse)
+        chunks = [chunk async for chunk in response.body_iterator]
+        assert b"".join(cast(list[bytes], chunks)) == js
 
     @pytest.mark.asyncio
     async def test_proxy_streams_binary_assets(
@@ -482,10 +471,9 @@ class TestProxyRequestWiring:
         assert upstream.close_count >= 1
 
     @pytest.mark.asyncio
-    async def test_buffered_response_closes_upstream(
+    async def test_text_response_closes_upstream_after_stream_drain(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The buffer-and-rewrite branch releases the upstream after reading."""
         upstream = _FakeUpstream(
             200, {"content-type": "text/html"}, b"<html><head></head></html>"
         )
@@ -495,8 +483,11 @@ class TestProxyRequestWiring:
         )
         request = cast(Request, SimpleNamespace(headers={}, query_params=""))
 
-        await api._proxy_request("", request, UUID(SESSION_ID))
+        response = await api._proxy_request("", request, UUID(SESSION_ID))
+        assert isinstance(response, StreamingResponse)
+        chunks = [chunk async for chunk in response.body_iterator]
 
+        assert b"".join(cast(list[bytes], chunks)) == b"<html><head></head></html>"
         assert upstream.close_count == 1
 
 
