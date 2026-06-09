@@ -761,8 +761,8 @@ def list_llm_provider_basics(
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch user-accessible LLM providers")
 
-    user_group_ids = fetch_user_group_ids(db_session, user)
     is_admin = user.role == UserRole.ADMIN
+    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
     cache_lookup = get_cached_provider_listing(
         persona_id=None, is_admin=is_admin, user_group_ids=user_group_ids

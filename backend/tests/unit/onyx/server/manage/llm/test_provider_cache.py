@@ -211,3 +211,24 @@ def test_cache_failures_are_non_fatal(monkeypatch: pytest.MonkeyPatch) -> None:
         version="v1",
     )
     provider_cache.invalidate_provider_listing_cache()
+
+
+def test_corrupted_version_key_self_heals(fake_cache: _FakeCache) -> None:
+    fake_cache._vals["llm_provider_listing:version"] = b"\xff\xfe"
+
+    lookup = provider_cache.get_cached_provider_listing(
+        persona_id=None, is_admin=False, user_group_ids=set()
+    )
+    assert lookup.response is None
+    assert lookup.version is not None
+
+    response = _make_response()
+    _lookup_and_fill(
+        persona_id=None, is_admin=False, user_group_ids=set(), response=response
+    )
+    assert (
+        provider_cache.get_cached_provider_listing(
+            persona_id=None, is_admin=False, user_group_ids=set()
+        ).response
+        == response
+    )

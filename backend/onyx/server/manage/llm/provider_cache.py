@@ -49,13 +49,28 @@ class ProviderListingCacheLookup(BaseModel):
     version: str | None
 
 
+def _decode_version(raw: bytes) -> str | None:
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        logger.warning("Corrupted LLM provider listing version key; reminting")
+        return None
+
+
 def _current_version(cache: CacheBackend) -> str:
     raw = cache.get(_VERSION_KEY)
-    if raw is not None:
-        return raw.decode("utf-8")
-    version = uuid.uuid4().hex
-    cache.set(_VERSION_KEY, version)
-    return version
+    version = _decode_version(raw) if raw is not None else None
+    if version is not None:
+        return version
+
+    # Missing or corrupted token: mint one, then re-read so concurrent
+    # initialisers converge on the winning write (CacheBackend has no NX set;
+    # entries filled under a losing token just expire via TTL).
+    minted = uuid.uuid4().hex
+    cache.set(_VERSION_KEY, minted)
+    raw = cache.get(_VERSION_KEY)
+    version = _decode_version(raw) if raw is not None else None
+    return version if version is not None else minted
 
 
 def build_entry_key(
