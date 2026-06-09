@@ -90,10 +90,10 @@ spec:
             {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- include "onyx.envSecretsRestricted" . | nindent 12}}
             {{- with include "onyx.customCACerts.env" . }}
             {{- . | nindent 12 }}
             {{- end }}
-            {{- include "onyx.envSecretsRestricted" . | nindent 12}}
             {{- with .Values.celery_worker_scheduled_tasks.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

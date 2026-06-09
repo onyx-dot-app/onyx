@@ -17,13 +17,9 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Add a top-level `customCACerts` block that mounts a
-        Secret/ConfigMap of private root/intermediate CA certificates into
-        every pod that makes outbound TLS connections (api server, celery
-        workers, slackbot, discordbot, MCP server, model servers), runs
-        `update-ca-certificates` at container startup, and sets
-        REQUESTS_CA_BUNDLE / SSL_CERT_FILE so Python HTTP clients trust the
-        updated bundle.
+      description: Add a top-level `customCACerts` block that installs
+        private CA certificates (via `update-ca-certificates`) on every
+        pod that makes outbound TLS connections.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0
