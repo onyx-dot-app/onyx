@@ -165,18 +165,55 @@ jobs:
             --durations=10 \
             tests/integration/tests/craft/docker_e2e/test_approval_gate_docker.py
 
-      - name: Stack state + logs on failure
+      # Inline tail for fast triage in the GH Actions UI without downloading
+      # artifacts. Truncated; the full per-container logs land in compose-logs/
+      # via the next step and ship as an uploaded artifact.
+      - name: Stack state + log tails on failure
         if: failure()
-        working-directory: deployment/docker_compose
         run: |
           echo "=== docker ps -a ==="; docker ps -a || true
-          echo "=== api_server logs ==="; docker logs --tail 200 onyx-api_server-1 || true
-          echo "=== sandbox-proxy logs ==="; docker logs --tail 200 onyx-sandbox-proxy-1 || true
-          echo "=== background logs ==="; docker logs --tail 100 onyx-background-1 || true
-          echo "=== sandbox-* logs ==="; \
+          echo "=== api_server tail ==="; docker logs --tail 200 onyx-api_server-1 || true
+          echo "=== sandbox-proxy tail ==="; docker logs --tail 200 onyx-sandbox-proxy-1 || true
+          echo "=== background tail ==="; docker logs --tail 100 onyx-background-1 || true
+          echo "=== sandbox-* tails ==="; \
             for c in $(docker ps -aq --filter "name=sandbox-" | grep -v sandbox-proxy || true); do \
               echo "--- $c ---"; docker logs --tail 200 "$c" || true; \
             done
+
+      # Full per-container logs to disk so failures are debuggable after the
+      # runner shuts down. Captures both compose-managed services AND the
+      # dynamically-created sandbox-<id> containers the tests provision.
+      - name: Collect Docker logs on failure
+        if: failure()
+        run: |
+          mkdir -p compose-logs
+          # Compose-managed services (api_server, background, sandbox-proxy
+          # and their depends_on graph).
+          cd deployment/docker_compose
+          for cid in $(docker compose \
+              -f docker-compose.yml \
+              -f docker-compose.dev.yml \
+              -f docker-compose.craft.yml \
+              ps -aq); do
+            name=$(docker inspect --format='{{.Name}}' "$cid" | sed 's/^\///')
+            docker logs "$cid" > "../../compose-logs/${name}.log" 2>&1 || true
+          done
+          # Test-provisioned sandbox containers (not in any compose file --
+          # DockerSandboxManager creates them at runtime).
+          cd ../..
+          for cid in $(docker ps -aq --filter "name=sandbox-" \
+              | grep -v sandbox-proxy || true); do
+            name=$(docker inspect --format='{{.Name}}' "$cid" | sed 's/^\///')
+            docker logs "$cid" > "compose-logs/${name}.log" 2>&1 || true
+          done
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: craft-compose-integration-logs
+          path: compose-logs/
+          retention-days: 7
 
       # Always tear down. -v removes named volumes inside the compose project
       # but the externally-declared sandbox_proxy_ca + onyx_craft_sandbox
