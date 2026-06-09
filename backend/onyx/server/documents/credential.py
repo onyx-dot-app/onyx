@@ -37,6 +37,7 @@ from onyx.server.documents.private_key_types import FILE_TYPE_TO_FILE_PROCESSOR
 from onyx.server.documents.private_key_types import PrivateKeyFileTypes
 from onyx.server.documents.private_key_types import ProcessPrivateKeyFileProtocol
 from onyx.server.models import StatusResponse
+from onyx.server.security.store import load_security_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -64,8 +65,9 @@ def list_credentials_admin(
         user=user,
         get_editable=False,
     )
+    mask = load_security_settings().mask_credential_prefix
     return [
-        CredentialSnapshot.from_credential_db_model(credential)
+        CredentialSnapshot.from_credential_db_model(credential, mask)
         for credential in credentials
     ]
 
@@ -86,8 +88,9 @@ def get_cc_source_full_info(
         get_editable=get_editable,
     )
 
+    mask = load_security_settings().mask_credential_prefix
     return [
-        CredentialSnapshot.from_credential_db_model(credential)
+        CredentialSnapshot.from_credential_db_model(credential, mask)
         for credential in credentials
     ]
 
@@ -232,8 +235,9 @@ def list_credentials(
     db_session: Session = Depends(get_session),
 ) -> list[CredentialSnapshot]:
     credentials = fetch_credentials_for_user(db_session=db_session, user=user)
+    mask = load_security_settings().mask_credential_prefix
     return [
-        CredentialSnapshot.from_credential_db_model(credential)
+        CredentialSnapshot.from_credential_db_model(credential, mask)
         for credential in credentials
     ]
 

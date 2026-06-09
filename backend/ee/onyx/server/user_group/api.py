@@ -38,6 +38,7 @@ from onyx.db.models import UserRole
 from onyx.db.persona import get_persona_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.security.store import load_security_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -66,7 +67,8 @@ def list_user_groups(
             eager_load_for_snapshot=True,
             include_default=include_default,
         )
-    return [UserGroup.from_model(user_group) for user_group in user_groups]
+    mask = load_security_settings().mask_credential_prefix
+    return [UserGroup.from_model(user_group, mask) for user_group in user_groups]
 
 
 @router.get("/user-groups/minimal")
