@@ -52,6 +52,14 @@ def upgrade() -> None:
         sa.Column("password_require_special_char", sa.Boolean(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         sa.CheckConstraint("id = true", name="ck_security_settings_singleton"),
+        # Only constrains rows where both bounds are explicitly overridden; a
+        # NULL bound falls back to its env default, invisible to this CHECK.
+        sa.CheckConstraint(
+            "password_min_length IS NULL "
+            "OR password_max_length IS NULL "
+            "OR password_min_length <= password_max_length",
+            name="ck_security_settings_pw_length_range",
+        ),
     )
 
 
