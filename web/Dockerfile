@@ -23,13 +23,15 @@ COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=bun_source /usr/local/bin/bunx /usr/local/bin/bunx
 WORKDIR /app
 
-# Copy package files + the full opal workspace source so that opal's `prepare`
-# lifecycle hook (which runs during `bun install` for workspace packages) can build
+# Copy package files + the full opal AND shared workspace sources so their `prepare`
+# lifecycle hooks (which run during `bun install` for workspace packages) can build
 # `dist/` artifacts before Next.js resolves package exports. opal's tsconfig
 # extends web's `tsconfig.json`, so that file must also be present at install
-# time for the DTS build to succeed.
+# time for the DTS build to succeed. (`lib/shared` uses a standalone tsconfig and
+# builds its design tokens + types via Style Dictionary + tsc in its own `prepare`.)
 COPY package.json bun.lock tsconfig.json ./
 COPY lib/opal/ ./lib/opal/
+COPY lib/shared/ ./lib/shared/
 
 # Install dependencies. opal's `prepare` script builds dist/ as part of install.
 RUN bun install --frozen-lockfile
