@@ -124,6 +124,7 @@ def get_external_app_by_id(
     db_session: Session,
     external_app_id: int,
 ) -> ExternalApp | None:
+    logger.info("[seed-debug] db.get_external_app_by_id.enter id=%s", external_app_id)
     stmt = (
         select(ExternalApp)
         .options(
@@ -132,7 +133,12 @@ def get_external_app_by_id(
         )
         .where(ExternalApp.id == external_app_id)
     )
-    return db_session.scalar(stmt)
+    result = db_session.scalar(stmt)
+    logger.info(
+        "[seed-debug] db.get_external_app_by_id.done present=%s",
+        result is not None,
+    )
+    return result
 
 
 def get_external_app_by_skill_id(
@@ -388,12 +394,15 @@ def get_policies(
 ) -> dict[str, EndpointPolicy]:
     """Return the app's stored per-action policy overrides as
     ``{action_id: policy}``. Sparse — only actions the admin has set."""
+    logger.info("[seed-debug] db.get_policies.enter app_id=%s", external_app_id)
     rows = db_session.scalars(
         select(ExternalAppPolicy).where(
             ExternalAppPolicy.external_app_id == external_app_id
         )
     ).all()
-    return {row.action_id: row.policy for row in rows}
+    result = {row.action_id: row.policy for row in rows}
+    logger.info("[seed-debug] db.get_policies.done count=%d", len(result))
+    return result
 
 
 def _write_policies__no_commit(

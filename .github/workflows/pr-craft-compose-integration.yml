@@ -108,9 +108,9 @@ jobs:
           cache-from: type=gha,scope=craft-compose-backend
           cache-to: type=gha,scope=craft-compose-backend,mode=max
 
-      # docker-compose.craft.yml declares both as external. In prod install.sh
-      # --include-craft creates them, but CI doesn't run install.sh.
       - name: Create compose-external resources
+        # docker-compose.craft.yml declares both as external. In prod install.sh
+        # --include-craft creates them, but CI doesn't run install.sh.
         run: |
           docker network create onyx_craft_sandbox
           docker volume create sandbox_proxy_ca
@@ -143,10 +143,10 @@ jobs:
             http://localhost:8080/health
 
       - name: Run integration tests
-        # Working dir = backend/ so alembic.ini is a relative path for the
-        # reset_all() fixture.
         timeout-minutes: 15
         shell: bash
+        # Working dir = backend/ so alembic.ini is a relative path for the
+        # reset_all() fixture.
         working-directory: backend
         env:
           # API_SERVER_URL and POSTGRES_* must point at the compose-published
