@@ -266,7 +266,7 @@ def main() -> int:
         # DumpMaster binds to the running event loop in its constructor.
         async def _async_main() -> None:
             options = _build_mitm_options()
-            master = DumpMaster(options=options, with_termlog=True, with_dumper=False)
+            master = DumpMaster(options=options, with_termlog=False, with_dumper=False)
             master.addons.add(gate)
             _install_signal_handlers(
                 asyncio.get_running_loop(),
