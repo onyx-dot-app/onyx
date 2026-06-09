@@ -2,6 +2,7 @@ import html
 import time
 from collections.abc import Callable
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
 from typing import Any
 
@@ -62,8 +63,10 @@ class BookstackConnector(LoadConnector, PollConnector):
             ).strftime("%Y-%m-%d")
 
         if end:
-            params["filter[updated_at:lte]"] = datetime.fromtimestamp(
-                end, tz=timezone.utc
+            # BookStack's lte filter is exclusive of the boundary day,
+            # so add 1 day to include content updated on the end date.
+            params["filter[updated_at:lte]"] = (
+                datetime.fromtimestamp(end, tz=timezone.utc) + timedelta(days=1)
             ).strftime("%Y-%m-%d")
 
         batch = bookstack_client.get(endpoint, params=params).get("data", [])
