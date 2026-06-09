@@ -10,7 +10,6 @@ import struct
 
 import pytest
 
-from onyx.voice.providers.openai import OPENAI_REALTIME_STT_MODEL
 from onyx.voice.providers.openai import OpenAIStreamingTranscriber
 from onyx.voice.providers.openai import OpenAIVoiceProvider
 from tests.utils.secret_names import TestSecret
@@ -18,6 +17,14 @@ from tests.utils.secret_names import TestSecret
 # 24kHz mono PCM16 — matches the browser's voice WS format.
 _SAMPLE_RATE_HZ = 24000
 _BYTES_PER_SAMPLE = 2
+
+# These tests validate the GA Realtime `session.update` *shape* and the PCM16
+# round-trip, both of which are independent of the transcription model. Pin a
+# universally-available model rather than production's `gpt-realtime-whisper`,
+# which can sit behind org verification (a CI key without access gets
+# `model_not_found`). `whisper-1` is a valid realtime input-transcription model
+# and is available on every account, so the handshake is exercised everywhere.
+_WELL_KNOWN_STT_MODEL = "whisper-1"
 
 
 def _silence_pcm16(duration_s: float) -> bytes:
@@ -46,7 +53,7 @@ def test_streaming_connect_uses_ga_realtime_shape(
     async def run() -> None:
         transcriber = OpenAIStreamingTranscriber(
             api_key=test_secrets[TestSecret.OPENAI_API_KEY],
-            model=OPENAI_REALTIME_STT_MODEL,
+            model=_WELL_KNOWN_STT_MODEL,
         )
         try:
             await transcriber.connect()
@@ -71,7 +78,7 @@ def test_streaming_accepts_pcm16_audio_chunks(
     async def run() -> None:
         transcriber = OpenAIStreamingTranscriber(
             api_key=test_secrets[TestSecret.OPENAI_API_KEY],
-            model=OPENAI_REALTIME_STT_MODEL,
+            model=_WELL_KNOWN_STT_MODEL,
         )
         await transcriber.connect()
         try:
