@@ -57,6 +57,8 @@ def sandbox_log_label(sandbox: ResolvedSandbox | SessionContext) -> str:
 def credential_outcome_label(outcome: InjectionOutcome) -> str:
     if outcome is InjectionOutcome.PASS_THROUGH:
         return "none"
+    if outcome is InjectionOutcome.CLAIMED:
+        return "claimed_no_headers"
     if outcome is InjectionOutcome.INJECTED:
         return "headers_injected"
     return outcome.value

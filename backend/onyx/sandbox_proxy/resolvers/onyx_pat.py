@@ -19,6 +19,7 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
 from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.sandbox_proxy.logging_utils import full_log_id
 from onyx.sandbox_proxy.logging_utils import short_log_id
 from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
@@ -56,17 +57,17 @@ class OnyxPatResolver(CredentialResolver):
             sandbox = get_sandbox_by_id(db, sandbox_id)
             if sandbox is None:
                 raise CredentialUnavailableError(
-                    f"sandbox {short_log_id(sandbox_id)} not found"
+                    f"sandbox {full_log_id(sandbox_id)} not found"
                 )
             if sandbox.encrypted_pat is None:
                 raise CredentialUnavailableError(
-                    f"sandbox {short_log_id(sandbox_id)} has no PAT"
+                    f"sandbox {full_log_id(sandbox_id)} has no PAT"
                 )
             try:
                 raw_token = sandbox.encrypted_pat.get_value(apply_mask=False)
             except Exception as e:
                 raise CredentialUnavailableError(
-                    f"failed to decrypt PAT for sandbox {short_log_id(sandbox_id)}"
+                    f"failed to decrypt PAT for sandbox {full_log_id(sandbox_id)}"
                 ) from e
 
         logger.debug(

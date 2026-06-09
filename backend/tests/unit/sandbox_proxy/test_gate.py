@@ -213,7 +213,22 @@ async def test_resolve_and_match_sandbox_resolution_fails_closed(
 
 
 # Spec value hardcoded so this test exercises the documented 1 MiB cap.
+_MAX_BODY = b"\x00" * 1_048_576
 _OVERSIZE_BODY = b"\x00" * 1_048_577
+
+
+@pytest.mark.asyncio
+async def test_resolve_and_match_body_at_cap_is_allowed() -> None:
+    resolver = StubResolver(sandbox=make_resolved_sandbox())
+    matcher = _StubMatcher(result=None)
+    addon = _build(resolver=resolver, matcher=matcher)
+    flow = make_flow(raw_content=_MAX_BODY)
+
+    result = await addon._resolve_and_match(flow)
+
+    assert result is None
+    assert flow.response is None
+    assert matcher.calls == 1
 
 
 @pytest.mark.parametrize(
