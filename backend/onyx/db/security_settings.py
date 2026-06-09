@@ -1,11 +1,7 @@
 """Persistence for the singleton ``security_settings`` row.
 
-Per CLAUDE.md, all DB access lives under ``backend/onyx/db``; the runtime
-store in ``onyx.server.security.store`` delegates here.
-
-The table holds at most one row per tenant schema (boolean PK pinned to
-``true``). Every column is an *override*: ``NULL`` means "use the env-derived
-default" — same semantic as an absent key in the prior JSONB blob.
+One row per tenant schema (boolean PK pinned to ``true``). Every column is
+an *override*: ``NULL`` == "fall back to env default".
 """
 
 from sqlalchemy import select
@@ -17,10 +13,7 @@ from onyx.server.security.models import SecuritySettingsOverrides
 
 
 def load_overrides(db_session: Session) -> SecuritySettingsOverrides:
-    """Read the singleton row for the current tenant. Returns an empty
-    overrides object when no row exists (the loader treats this as "all env
-    defaults").
-    """
+    """Returns an empty overrides object (all-None) when no row exists."""
     row = db_session.execute(select(SecuritySettingsRow)).scalar_one_or_none()
     if row is None:
         return SecuritySettingsOverrides()
@@ -30,17 +23,9 @@ def load_overrides(db_session: Session) -> SecuritySettingsOverrides:
 def upsert_overrides(db_session: Session, overrides: SecuritySettingsOverrides) -> None:
     """Upsert the singleton row.
 
-    ``None`` on the overrides model writes ``NULL`` on the column (admin
-    cleared the override → loader falls back to env). We pass every column
-    explicitly so DO UPDATE actually clears fields the admin removed; relying
-    on ``exclude_none=True`` would leave previously-set columns untouched.
-    Caller holds the Redis lock that serializes read-modify-write across
-    processes.
-
-    Iterating over ``SecuritySettingsOverrides.model_fields`` makes the
-    Pydantic model the single source of truth for the column set — the same
-    name-by-name coupling ``load_overrides`` already relies on via
-    ``model_validate(..., from_attributes=True)``.
+    We pass every column explicitly (not ``exclude_none``) so DO UPDATE
+    actually clears fields the admin removed — leaving them out would keep
+    the previously-set value.
     """
     payload = {
         name: getattr(overrides, name)

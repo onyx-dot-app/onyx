@@ -1,9 +1,4 @@
-"""Tests for the runtime security settings loader.
-
-Exercises cache behavior, env fallback, multi-tenant pre-tenant safety, and
-DB-failure resilience using the real Postgres-backed singleton row. The store
-exposes _install_cache_for_test for fake-clock TTL testing.
-"""
+"""Loader tests against the real Postgres-backed singleton row."""
 
 import threading
 from collections.abc import Generator
@@ -36,17 +31,12 @@ def _delete_security_settings_row() -> None:
 
 @pytest.fixture(autouse=True)
 def _clean_db_and_cache(
-    db_session: Session,  # noqa: ARG001 — fixture requested only for its side-effect (SQL engine init); pytest binds by name
-    tenant_context: None,  # noqa: ARG001 — requested for tenant-contextvar side effect
+    db_session: Session,  # noqa: ARG001 — requested for side-effect (SQL engine init)
+    tenant_context: None,  # noqa: ARG001 — requested for side-effect (tenant contextvar)
 ) -> Generator[None, None, None]:
-    """Clean state before and after each test:
-    - Wipe the security_settings singleton row for this tenant.
-    - Invalidate the in-process cache entry.
-    - Reinstall a fresh TTLCache to clear any prior fake-clock state.
-    """
     _delete_security_settings_row()
     invalidate_security_cache(TEST_TENANT_ID)
-    # Reinstall a stock cache so tests using a fake clock don't leak state.
+    # Reset to a real-clock cache so fake-clock tests don't leak state across.
     import time as _time
 
     _install_cache_for_test(ttl=10.0, timer=_time.monotonic)
@@ -96,7 +86,7 @@ def test_cache_hits_avoid_db_reads() -> None:
 
 
 def test_apply_patch_invalidates_cache() -> None:
-    """After a write, the next load must re-read the DB (cache invalidated)."""
+    """After a write, the next load must re-read the DB."""
     get_security_settings()  # warm cache
 
     with patch.object(
@@ -108,15 +98,15 @@ def test_apply_patch_invalidates_cache() -> None:
             SecuritySettingsOverrides(user_directory_admin_only=True),
             present_keys={"user_directory_admin_only"},
         )
-        # apply_patch itself reads existing (1 call) before merging and writing.
+        # apply_patch reads existing before merging; the post-invalidate
+        # read is the only additional call we care about counting.
         spy_after_write = spy.call_count
         get_security_settings()
-        # The read after invalidation is the only additional call.
         assert spy.call_count == spy_after_write + 1
 
 
 def test_cache_ttl_expiry_triggers_reload() -> None:
-    """Advancing the fake clock past the TTL must force a DB re-read."""
+    """Advancing past the TTL must force a DB re-read."""
     fake_now = [0.0]
 
     def fake_timer() -> float:
@@ -130,12 +120,10 @@ def test_cache_ttl_expiry_triggers_reload() -> None:
         "_load_raw_overrides_unlocked",
         wraps=security_store._load_raw_overrides_unlocked,
     ) as spy:
-        # Within TTL → cache hit.
-        fake_now[0] = 4.0
+        fake_now[0] = 4.0  # within TTL
         get_security_settings()
         assert spy.call_count == 0
-        # Past TTL → cache miss → DB read.
-        fake_now[0] = 6.0
+        fake_now[0] = 6.0  # past TTL
         get_security_settings()
         assert spy.call_count == 1
 
@@ -175,13 +163,10 @@ def test_effective_settings_are_frozen() -> None:
 def test_pre_tenant_returns_env_defaults_without_raising(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """In multi-tenant mode with no tenant contextvar, loader must return env
-    defaults without raising and without touching the DB."""
-    # Reset the contextvar to "unset" (None) for this test.
+    """Multi-tenant + contextvar unset must short-circuit to env defaults
+    without touching the DB."""
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(None)
     try:
-        # Flip the store module's local MULTI_TENANT binding (same pattern the
-        # rest of the codebase uses — see test_telemetry.py).
         monkeypatch.setattr(security_store, "MULTI_TENANT", True)
 
         with patch.object(security_store, "_load_raw_overrides_unlocked") as spy:

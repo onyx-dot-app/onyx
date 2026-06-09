@@ -252,9 +252,6 @@ async def refresh_oauth_token(
             if new_expires_at:
                 updated_data["expires_at"] = new_expires_at
 
-                # Update oidc_expiry in user model if we're tracking it. The
-                # loader already falls back to env defaults internally on any
-                # KV failure, so we don't need a second safety net here.
                 if get_security_settings().track_external_idp_expiry:
                     oidc_expiry = datetime.fromtimestamp(
                         new_expires_at, tz=timezone.utc

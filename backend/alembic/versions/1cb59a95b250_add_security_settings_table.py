@@ -1,13 +1,5 @@
 """add security_settings table
 
-Replaces the per-tenant ``onyx_security_settings`` JSONB blob in
-``key_value_store`` with a dedicated, typed ``security_settings`` table.
-
-The table holds a single row per tenant schema (enforced by a boolean
-primary key pinned to ``true`` via CHECK). Every column is an *override*:
-``NULL`` means "fall back to the env-derived default", mirroring the
-``SecuritySettingsOverrides`` storage shape (absent field == env default).
-
 Revision ID: 1cb59a95b250
 Revises: 99ecd56cb2ce
 Create Date: 2026-06-09 17:36:09.181328
@@ -29,7 +21,6 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "security_settings",
-        # Singleton row: pinned to true so a second INSERT collides on the PK.
         sa.Column(
             "id",
             sa.Boolean(),
@@ -52,8 +43,6 @@ def upgrade() -> None:
         sa.Column("password_require_special_char", sa.Boolean(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         sa.CheckConstraint("id = true", name="ck_security_settings_singleton"),
-        # Only constrains rows where both bounds are explicitly overridden; a
-        # NULL bound falls back to its env default, invisible to this CHECK.
         sa.CheckConstraint(
             "password_min_length IS NULL "
             "OR password_max_length IS NULL "

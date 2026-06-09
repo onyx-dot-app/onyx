@@ -1,8 +1,4 @@
-"""Unit tests for the security settings Pydantic models.
-
-These exercise only model-level behavior (validators, field metadata) and
-don't touch any external dependencies — keep them in the pure-unit tier.
-"""
+"""Model-level tests (validators, field metadata) — no external deps."""
 
 from typing import Any
 
@@ -32,16 +28,9 @@ _VALID_EFFECTIVE_KWARGS: dict[str, Any] = {
 }
 
 
-# -----------------------------------------------------------------------------
-# Field-level operator_locked marker enforcement
-# -----------------------------------------------------------------------------
-
-
 def test_every_overrides_field_declares_operator_locked_marker() -> None:
-    """Every field on ``SecuritySettingsOverrides`` must carry the marker;
-    the import-time derivation raises if any field is missing it. This test
-    pins the contract so a future contributor sees the enforcement in the
-    test suite, not only at import."""
+    """Pins the contract enforced at module import — every field must carry
+    the marker, with a bool value."""
     for name, info in SecuritySettingsOverrides.model_fields.items():
         extras = info.json_schema_extra
         assert isinstance(extras, dict), f"{name}: json_schema_extra must be a dict"
@@ -55,7 +44,6 @@ def test_every_overrides_field_declares_operator_locked_marker() -> None:
 
 
 def test_operator_locked_fields_matches_marker_declarations() -> None:
-    """The exported frozenset must be exactly the fields whose marker is True."""
     expected = {
         name
         for name, info in SecuritySettingsOverrides.model_fields.items()
@@ -66,25 +54,18 @@ def test_operator_locked_fields_matches_marker_declarations() -> None:
 
 
 def test_derivation_works_on_a_fresh_call() -> None:
-    """``_derive_operator_locked_fields`` is idempotent and should match the
-    module-level frozenset."""
     assert _derive_operator_locked_fields() == OPERATOR_LOCKED_FIELDS
 
 
 def test_helper_marker_factories_produce_independent_dicts() -> None:
-    """Each call to the marker factory returns a fresh dict so Pydantic field
-    metadata is never shared by reference."""
+    """Each factory call returns a fresh dict so Pydantic field metadata is
+    never shared by reference."""
     a = _operator_locked()
     b = _operator_locked()
     assert a is not b
     a.clear()
     assert b["operator_locked"] is True
     assert _tenant_editable()["operator_locked"] is False
-
-
-# -----------------------------------------------------------------------------
-# SecuritySettings invariants
-# -----------------------------------------------------------------------------
 
 
 def _effective_with(**overrides: Any) -> dict[str, Any]:
@@ -124,18 +105,13 @@ def test_security_settings_rejects_min_greater_than_max() -> None:
         )
 
 
-# -----------------------------------------------------------------------------
-# Overrides field validators
-# -----------------------------------------------------------------------------
-
-
 def test_overrides_extra_field_rejected() -> None:
     with pytest.raises(ValidationError):
         SecuritySettingsOverrides.model_validate({"not_a_real_field": True})
 
 
 def test_overrides_valid_email_domains_normalized() -> None:
-    """Strip whitespace, lowercase, drop empties; preserve order; no dedup."""
+    """Strip, lowercase, drop empties; preserve order; no dedup."""
     parsed = SecuritySettingsOverrides.model_validate(
         {"valid_email_domains": [" ACME.com", "", "  ", "Foo.IO", "acme.com"]}
     )
@@ -143,11 +119,13 @@ def test_overrides_valid_email_domains_normalized() -> None:
 
 
 def test_overrides_hide_input_in_errors() -> None:
-    """ValidationError messages must not echo back the offending input."""
+    """ValidationError must not echo the offending input — that's how an
+    admin's secret-shaped value would leak out of the PUT response envelope.
+    """
     sentinel = "DO-NOT-LEAK-12345"
     try:
         SecuritySettingsOverrides.model_validate({"password_min_length": sentinel})
     except ValidationError as e:
         assert sentinel not in str(e)
-    else:  # pragma: no cover — the validate call must raise
+    else:  # pragma: no cover
         raise AssertionError("expected ValidationError")

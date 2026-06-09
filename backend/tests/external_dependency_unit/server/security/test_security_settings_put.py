@@ -1,9 +1,8 @@
-"""Tests for the PUT /admin/security route handler.
+"""PUT /admin/security tests.
 
-Invokes ``put_security_settings_endpoint`` directly with a minimal Request
-shim. Each test runs against the real Postgres-backed singleton row plus a
-real Redis lock so the merge / serialization semantics are exercised
-end-to-end (sans HTTP framing).
+Invokes the handler directly with a Request shim — exercises merge and
+lock-serialization semantics against the real DB + Redis lock without HTTP
+framing.
 """
 
 import asyncio
@@ -36,7 +35,7 @@ from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 
 class _FakeRequest:
-    """Minimal stand-in for fastapi.Request. The handler only awaits .body()."""
+    """Stand-in for fastapi.Request — the handler only awaits ``.body()``."""
 
     def __init__(self, body_bytes: bytes) -> None:
         self._body = body_bytes
@@ -45,26 +44,18 @@ class _FakeRequest:
         return self._body
 
 
-# The handler's `_: User` param is only present to wire the permission
-# Depends; the body never reads it. Direct invocation bypasses Depends, so
-# we pass a placeholder cast to User to satisfy the type checker.
+# The `_: User` Depends param is unread; direct invocation bypasses Depends.
 _PLACEHOLDER_USER: User = cast(User, None)
 
 
 def _put(body: dict[str, Any] | bytes) -> Any:
-    """Invoke the PUT handler with the given JSON body or raw bytes."""
     raw = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
     request = cast(Request, _FakeRequest(raw))
     return asyncio.run(put_security_settings_endpoint(request, _=_PLACEHOLDER_USER))
 
 
 def _load_row_as_dict() -> dict[str, Any] | None:
-    """Read the singleton row and return non-None columns as a dict.
-
-    Mimics the prior ``KV_SECURITY_SETTINGS_KEY`` blob shape so existing test
-    assertions can stay readable: only explicitly-set overrides appear. A
-    missing row returns None.
-    """
+    """Singleton row as a dict of only explicitly-set overrides, or None."""
     with get_session_with_current_tenant() as session:
         row = session.execute(select(SecuritySettingsRow)).scalar_one_or_none()
     if row is None:
@@ -81,8 +72,8 @@ def _delete_security_settings_row() -> None:
 
 @pytest.fixture(autouse=True)
 def _clean_db_and_cache(
-    db_session: Session,  # noqa: ARG001 — fixture requested only for its side-effect (SQL engine init); pytest binds by name
-    tenant_context: None,  # noqa: ARG001 — requested for tenant-contextvar side effect
+    db_session: Session,  # noqa: ARG001 — requested for side-effect (SQL engine init)
+    tenant_context: None,  # noqa: ARG001 — requested for side-effect (tenant contextvar)
 ) -> Generator[None, None, None]:
     _delete_security_settings_row()
     invalidate_security_cache(TEST_TENANT_ID)
@@ -107,12 +98,12 @@ def test_put_writes_only_explicit_fields() -> None:
 
 
 def test_put_explicit_null_clears_previously_set_field() -> None:
-    """An explicit null in PATCH semantics resets the column to NULL (= env)."""
+    """Explicit null clears the column to NULL (loader falls back to env)."""
     _put({"user_directory_admin_only": True})
     assert _load_row_as_dict() == {"user_directory_admin_only": True}
 
     _put({"user_directory_admin_only": None})
-    # Row may still exist but every column is NULL → empty dict.
+    # Row exists but every column is NULL → empty dict after exclude_none.
     assert _load_row_as_dict() == {}
 
 
@@ -121,23 +112,21 @@ def test_put_cross_field_validation_against_effective_state(
 ) -> None:
     """A payload that's individually valid but violates the merged invariant
     (min > max) must be rejected with INVALID_INPUT."""
-    # Force env max length to 8 so payload's min=10 violates the post-merge
-    # invariant even though the payload alone says nothing about max.
     from onyx.configs import app_configs
 
+    # Force env max=8 so payload min=10 violates after merge.
     monkeypatch.setattr(app_configs, "PASSWORD_MAX_LENGTH", 8, raising=False)
 
     with pytest.raises(OnyxError) as exc_info:
         _put({"password_min_length": 10})
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
-    # Nothing should have been persisted.
     assert _load_row_as_dict() is None
 
 
 def test_put_accepts_password_min_length_zero() -> None:
-    """``password_min_length=0`` is valid (matches env-parse behavior) and
-    must not be coerced away by a truthy-fallback bug."""
+    """``password_min_length=0`` is valid; the merge must not coerce it
+    away via a truthy fallback."""
     result = _put({"password_min_length": 0})
     assert result.password_min_length == 0
 
@@ -145,21 +134,18 @@ def test_put_accepts_password_min_length_zero() -> None:
 
 
 def test_put_extra_field_rejected_as_invalid_input() -> None:
-    """extra='forbid' on the override model must surface as INVALID_INPUT."""
     with pytest.raises(OnyxError) as exc_info:
         _put({"this_field_does_not_exist": True})
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
 
 def test_put_malformed_json_rejected_as_invalid_input() -> None:
-    """Malformed JSON in the request body must map to INVALID_INPUT."""
     with pytest.raises(OnyxError) as exc_info:
         _put(b"{not valid json")
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
 
 def test_put_non_object_body_rejected_as_invalid_input() -> None:
-    """A JSON array (or any non-object) must map to INVALID_INPUT."""
     with pytest.raises(OnyxError) as exc_info:
         _put(b"[1, 2, 3]")
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
@@ -173,13 +159,10 @@ def test_put_single_tenant_allows_operator_locked_fields() -> None:
 
 
 def test_put_rejects_max_length_below_floor() -> None:
-    """``password_max_length`` is floored at 4 (one char per required class).
-    Anything lower is rejected up front instead of silently locking out every
-    signup once all four require_* flags are on."""
+    """``password_max_length`` is floored at PASSWORD_MAX_LENGTH_FLOOR."""
     with pytest.raises(OnyxError) as exc_info:
         _put({"password_max_length": 3})
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
-    # Nothing should have persisted — the validation runs after merge.
     assert _load_row_as_dict() is None
 
 
@@ -191,8 +174,7 @@ def test_put_rejects_max_length_below_floor() -> None:
 def test_put_multi_tenant_rejects_operator_locked_field(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Payload containing any operator-locked key returns
-    INSUFFICIENT_PERMISSIONS in multi-tenant mode."""
+    """An operator-locked key in payload returns INSUFFICIENT_PERMISSIONS."""
     monkeypatch.setattr(security_api, "MULTI_TENANT", True)
     monkeypatch.setattr(security_store, "MULTI_TENANT", True)
 
@@ -200,7 +182,6 @@ def test_put_multi_tenant_rejects_operator_locked_field(
         _put({"password_min_length": 12})
     assert exc_info.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
-    # Nothing should have been persisted.
     assert _load_row_as_dict() is None
 
 
@@ -223,8 +204,7 @@ def test_put_multi_tenant_accepts_tenant_editable_field(
 
 
 def _put_in_thread(body: dict[str, Any], errors: list[BaseException]) -> None:
-    """Worker that re-establishes the tenant contextvar (threads don't inherit
-    it by default) and runs the PUT handler in its own event loop."""
+    # Threads don't inherit contextvars; re-establish before the PUT.
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
     try:
         _put(body)
@@ -260,14 +240,13 @@ def test_concurrent_puts_disjoint_fields_both_land() -> None:
 def test_concurrent_puts_under_invariant_pressure_never_corrupt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When two writers race on fields whose combination could violate the
-    min<=max invariant, the lock serializes them and the later one is
-    rejected by the post-merge validator. The persisted row must never
-    reflect an invalid state."""
-    # Pin env so that the natural defaults won't accidentally satisfy a bad
-    # ordering of writes.
+    """Two writers racing on fields whose combination could break the
+    min<=max invariant: the lock serializes them and the post-merge
+    validator rejects the loser. Persisted state is never invalid.
+    """
     from onyx.configs import app_configs
 
+    # Pin env so natural defaults don't accidentally satisfy a bad ordering.
     monkeypatch.setattr(app_configs, "PASSWORD_MIN_LENGTH", 8, raising=False)
     monkeypatch.setattr(app_configs, "PASSWORD_MAX_LENGTH", 64, raising=False)
 
@@ -285,9 +264,7 @@ def test_concurrent_puts_under_invariant_pressure_never_corrupt(
     t_min.join()
     t_max.join()
 
-    # At least one write must have been rejected by the post-merge validator
-    # (min=20 with max=10 violates the invariant). The first writer wins; the
-    # second sees the now-merged state and is rejected.
+    # Exactly one writer wins; the other sees the merged state and is rejected.
     rejections = [
         e
         for e in errors
@@ -296,9 +273,6 @@ def test_concurrent_puts_under_invariant_pressure_never_corrupt(
     assert len(rejections) == 1
     assert len(errors) == 1
 
-    # The persisted state must reflect exactly one of the two writes, with the
-    # other field falling back to env defaults — never a min/max pair that
-    # violates the invariant.
     stored = _load_row_as_dict() or {}
     env = _build_env_defaults()
     effective_min = stored.get("password_min_length", env.password_min_length)
@@ -314,16 +288,16 @@ def test_concurrent_puts_under_invariant_pressure_never_corrupt(
 def test_apply_patch_strips_operator_locked_in_multi_tenant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Even if a future internal caller bypasses the API-layer rejection,
-    the storage write itself must strip operator-locked fields when
-    MULTI_TENANT=True. Calls ``apply_patch`` directly to skip the API check."""
+    """Belt-and-braces: the write itself strips operator-locked fields in
+    multi-tenant, even if a future caller bypasses the API-layer rejection.
+    """
     monkeypatch.setattr(security_store, "MULTI_TENANT", True)
 
     security_store.apply_patch(
         SecuritySettingsOverrides(
             user_directory_admin_only=True,
-            password_min_length=12,  # operator-locked
-            mask_credential_prefix=False,  # operator-locked
+            password_min_length=12,
+            mask_credential_prefix=False,
         ),
         present_keys={
             "user_directory_admin_only",

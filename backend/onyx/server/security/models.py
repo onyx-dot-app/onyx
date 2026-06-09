@@ -5,52 +5,31 @@ from pydantic import field_validator
 from pydantic import model_validator
 from typing_extensions import Self
 
-# Sanity cap for password length: env default is 64 today, so a 256 ceiling
-# does not change any current behavior.
 PASSWORD_LENGTH_CAP = 256
-# Floor for ``password_max_length``: one char per required character class
-# (4 classes total). Anything lower would silently lock out every signup
+# 4 = one char per required character class; lower would lock out signups
 # once all four require_* flags are on.
 PASSWORD_MAX_LENGTH_FLOOR = 4
 
 
-# Marker key under each field's ``json_schema_extra`` declaring whether tenant
-# admins may override that field in multi-tenant deployments. Adding a new
-# field without this marker is a hard error at module import — see the
-# derivation block below the model.
 _OPERATOR_LOCKED_MARKER = "operator_locked"
 
 
 def _operator_locked() -> dict[str, bool]:
-    """Marker for fields that, in multi-tenant deployments, are controlled by
-    the operator (env) only — tenant admins cannot override at runtime."""
+    """Field marker: operator (env) only — tenant admins can't override."""
     return {_OPERATOR_LOCKED_MARKER: True}
 
 
 def _tenant_editable() -> dict[str, bool]:
-    """Marker for fields that tenant admins may override at runtime in any
-    deployment."""
+    """Field marker: tenant admins may override at runtime."""
     return {_OPERATOR_LOCKED_MARKER: False}
 
 
 class SecuritySettingsOverrides(BaseModel):
-    """Wire/storage shape for runtime security overrides.
+    """Wire/storage shape. Absent / None on any field means "use env default"."""
 
-    Every field is optional. Absent / None means "use the env-derived default."
-    Persisted to the ``security_settings`` table with one column per field;
-    ``None`` writes NULL and the loader treats NULL as "fall back to env".
-    ``extra="forbid"`` rejects unknown keys.
-
-    Each field carries an ``operator_locked`` marker via ``json_schema_extra``.
-    Adding a new field without picking a side raises at module import (see
-    derivation of ``OPERATOR_LOCKED_FIELDS`` below).
-    """
-
-    # hide_input_in_errors: ValidationError.__str__ is surfaced to callers via
-    # the PUT handler's INVALID_INPUT envelope. The default Pydantic message
-    # includes the offending input_value, which would echo back any sensitive
-    # value an admin sends (today: low-risk bools/ints; future: any added
-    # secret-shaped field). Strip input from error messages so we never leak.
+    # hide_input_in_errors strips offending input_value from ValidationError
+    # messages — they surface back through the PUT envelope and would otherwise
+    # leak any sensitive value an admin sends (any future secret-shaped field).
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     user_directory_admin_only: bool | None = Field(
@@ -89,17 +68,16 @@ class SecuritySettingsOverrides(BaseModel):
     def _normalize_domains(cls, v: list[str] | None) -> list[str] | None:
         if v is None:
             return None
-        # Mirror the env-parse behavior for VALID_EMAIL_DOMAINS in app_configs
-        # exactly: strip, lowercase, drop empties. NO dedup (env parser does
-        # not dedupe). Order preserved.
+        # Mirror env-parse for VALID_EMAIL_DOMAINS exactly. NO dedup — env
+        # parser doesn't dedupe and behavior must match byte-for-byte.
         return [d.strip().lower() for d in v if d.strip()]
 
 
 def _derive_operator_locked_fields() -> frozenset[str]:
-    """Read each field's ``operator_locked`` marker and return the set of
-    locked field names. Raises at import time if any field is missing the
-    marker — so adding a new field forces an explicit yes/no decision rather
-    than a silent omission that defaults to tenant-editable.
+    """Names of fields whose ``operator_locked`` marker is True.
+
+    Raises at module import if any field is missing the marker — forces an
+    explicit yes/no at declaration rather than a silent tenant-editable default.
     """
     locked: set[str] = set()
     missing: list[str] = []

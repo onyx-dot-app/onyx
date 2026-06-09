@@ -25,44 +25,34 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 logger = setup_logger()
 
 
-# 10s TTL: short enough that admin saves propagate across processes within
-# the worst-case window the brief allows; long enough that hot paths see
-# nearly-pure cache hits in steady state.
+# Bounds cross-process staleness after an admin save — no pub/sub today, so
+# other api_server processes converge via TTL expiry.
 _CACHE_TTL_SECONDS = 10.0
 
 
-# Module-level cache & lock. Tests may swap the cache via the
-# _install_cache_for_test seam below; default is a real TTLCache.
 _CACHE_LOCK = threading.RLock()
 _CACHE: TTLCache[str, SecuritySettings] = TTLCache(
     maxsize=10_000, ttl=_CACHE_TTL_SECONDS, timer=time.monotonic
 )
 
 
-# Lock lifetime if the writer crashes mid-write. apply_patch itself is fast
-# (DB read + merge + DB write), so 30s is generous.
+# Lock lifetime; held during a single read+merge+write.
 _WRITE_LOCK_LEASE_SECONDS = 30.0
-# How long a competing writer will wait for the in-progress one to finish
-# before giving up. 10s is plenty for a single singleton-row roundtrip.
+# How long a competing writer waits before giving up with CONFLICT.
 _WRITE_LOCK_WAIT_SECONDS = 10.0
 
 
 def _install_cache_for_test(
     *, ttl: float, timer: Callable[[], float], maxsize: int = 10_000
 ) -> None:
-    """Test seam. Swaps the module-level cache with one driven by a fake
-    clock so TTL behavior can be exercised without freezegun. Production
-    code never calls this.
-    """
+    """Test seam for fake-clock TTL testing; production never calls this."""
     global _CACHE
     with _CACHE_LOCK:
         _CACHE = TTLCache(maxsize=maxsize, ttl=ttl, timer=timer)
 
 
 def _build_env_defaults() -> SecuritySettings:
-    """Build a SecuritySettings from the current env constants. Reads each
-    attribute on the module at call time so tests can monkeypatch.
-    """
+    """Builds from env constants at call time so tests can monkeypatch them."""
     return SecuritySettings(
         user_directory_admin_only=_cfg.USER_DIRECTORY_ADMIN_ONLY,
         track_external_idp_expiry=_cfg.TRACK_EXTERNAL_IDP_EXPIRY,
@@ -78,10 +68,10 @@ def _build_env_defaults() -> SecuritySettings:
 
 
 def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
-    """Apply per-field env fallbacks. Explicit `is None` checks so 0/False
-    overrides are preserved (no `or` fallback). In multi-tenant mode,
-    operator-locked field overrides are ignored (env always wins) — this
-    is belt-and-braces enforcement in addition to the API-layer rejection.
+    """Apply per-field env fallbacks. Explicit ``is None`` so 0/False overrides
+    aren't dropped by a truthy fallback. In multi-tenant, operator-locked
+    overrides are ignored (env wins) — belt-and-braces alongside the API
+    rejection.
     """
     env = _build_env_defaults()
     locked = OPERATOR_LOCKED_FIELDS if MULTI_TENANT else frozenset()
@@ -100,26 +90,19 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
 
 
 def _load_raw_overrides_unlocked() -> SecuritySettingsOverrides:
-    """Uncached DB read of the persisted overrides.
-
-    Read-consistency comes from the write path's Redis lock; the cache-miss
-    read path tolerates being stale by at most one revision (the cache TTL
-    bounds the staleness window).
-
-    Returns an empty overrides object (all-None) when no row exists for
-    this tenant — callers treat that as "all env defaults".
+    """Uncached DB read. Read-consistency comes from the write path's lock;
+    cache-miss readers may see a stale value bounded by the TTL.
     """
     with get_session_with_current_tenant() as db_session:
         return _db_load_overrides(db_session)
 
 
 def _store_overrides_unlocked(overrides: SecuritySettingsOverrides) -> None:
-    """Internal write: upsert the singleton row and invalidate this process's
-    cache entry. Only ``apply_patch`` calls this, and only while holding the
-    Redis write lock.
+    """DB upsert + local cache invalidate. ``apply_patch`` is the only caller,
+    and only while holding the Redis write lock.
 
-    In multi-tenant mode, operator-locked fields are forced to ``None``
-    before persistence — defense in depth against bypasses of the API check.
+    In multi-tenant, operator-locked fields are forced to ``None`` before
+    write — defense-in-depth if a future internal caller bypasses the API check.
     """
     if MULTI_TENANT:
         overrides = overrides.model_copy(
@@ -135,13 +118,9 @@ def _apply_present_keys(
     patch: SecuritySettingsOverrides,
     present_keys: set[str],
 ) -> SecuritySettingsOverrides:
-    """PATCH-semantic merge.
-
-    For each key the caller actually included in the payload, take the value
-    from ``patch`` (None to clear → env fallback, otherwise to set). Absent
-    keys keep their existing persisted value. Distinguishing absent from
-    explicit-null requires the caller to pass ``present_keys`` — Pydantic
-    can't surface that from the parsed model alone.
+    """PATCH-semantic merge. Caller must pass ``present_keys`` so we can tell
+    absent (keep existing) from explicit-null (clear → env fallback) — Pydantic
+    collapses both to ``None`` on the parsed model.
     """
     merged: dict[str, Any] = existing.model_dump()
     for name in present_keys:
@@ -152,17 +131,12 @@ def _apply_present_keys(
 def apply_patch(
     patch: SecuritySettingsOverrides, present_keys: set[str]
 ) -> SecuritySettings:
-    """Public write entry point: acquire the Redis lock, perform
-    read-modify-write on the persisted overrides, return the effective
-    merged settings.
+    """Public write entry point. Acquires the Redis lock for the full
+    read-modify-write so concurrent writers can't clobber each other.
 
-    Lock-held in code, not a docstring contract: the only way to write is
-    through this function. Concurrent callers serialize through Redis;
-    cross-process race-free.
-
-    Raises ``OnyxError(CONFLICT)`` if another writer is in progress beyond
+    Raises ``OnyxError(CONFLICT)`` if a competing writer holds the lock past
     the wait window, and ``OnyxError(INVALID_INPUT)`` if the merged effective
-    state would violate a model invariant (e.g. min > max after merge).
+    state would violate a model invariant.
     """
     cache = get_cache_backend()
     lock = cache.lock(
@@ -177,28 +151,25 @@ def apply_patch(
         existing = _load_raw_overrides_unlocked()
         merged = _apply_present_keys(existing, patch, present_keys)
         try:
-            # SecuritySettings.__init__ runs the password-length invariants
-            # via a model_validator; surface failures as INVALID_INPUT.
+            # SecuritySettings invariants run via model_validator on construction.
             effective = merge_with_env(merged)
         except ValidationError as e:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
         _store_overrides_unlocked(merged)
         return effective
     finally:
-        # Lock lease may have expired while we held it; release only if we
-        # still own it to avoid raising LockNotOwnedError after a successful
-        # write.
+        # Lease may have expired during the write; unconditional release would
+        # raise LockNotOwnedError and mask a successful save as a 500.
         if lock.owned():
             lock.release()
 
 
 def _current_tenant_id_or_default() -> str:
-    """Return the tenant id from the contextvar or POSTGRES_DEFAULT_SCHEMA.
+    """Tenant id from the contextvar, or ``POSTGRES_DEFAULT_SCHEMA`` if unset.
 
-    Inspects the contextvar directly (rather than calling
-    get_current_tenant_id()) to avoid the stack-traced RuntimeError that
-    function raises in multi-tenant when the contextvar is unset. Hot
-    paths like /auth/type call into the loader before tenant resolution.
+    Inspects the contextvar directly; ``get_current_tenant_id()`` raises a
+    stack-traced ``RuntimeError`` in multi-tenant when unset, which is too
+    expensive for hot pre-tenant paths like ``/auth/type``.
     """
     tid = CURRENT_TENANT_ID_CONTEXTVAR.get()
     return tid if tid is not None else POSTGRES_DEFAULT_SCHEMA
@@ -212,21 +183,14 @@ def invalidate_security_cache(tenant_id: str) -> None:
 def get_security_settings() -> SecuritySettings:
     """Effective, env-merged, immutable settings for the current tenant.
 
-    - Cache hit: process-local memory access (TTLCache under an RLock), no IO.
-    - Cache miss: one sync DB roundtrip held under the same lock. Other
-      tenants briefly block, but each tenant misses ≤1×/TTL/process so the
-      contention is rare and the DB roundtrip is cheap.
-    - Pre-tenant safe: when the tenant contextvar is unset in multi-tenant,
-      returns a fresh env-defaults SecuritySettings (never cached) without
-      touching the DB. Avoids the stack-trace cost of get_current_tenant_id()'s
-      RuntimeError on hot unauth paths like /auth/type.
-    - Result is frozen; callers cannot mutate the cached value.
+    Pre-tenant safe: returns env defaults (uncached) when the contextvar is
+    unset in multi-tenant. DB errors fall back to env defaults so a Postgres
+    outage never bricks the auth path. Returned ``SecuritySettings`` is frozen.
     """
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     if tenant_id is None:
-        # MULTI_TENANT=true and contextvar not yet set (pre-tenant). Single-
-        # tenant deployments default the contextvar to POSTGRES_DEFAULT_SCHEMA
-        # at module import, so this branch only fires in multi-tenant.
+        # Single-tenant defaults the contextvar at module import; this branch
+        # fires only in multi-tenant before tenant resolution.
         return _build_env_defaults()
 
     with _CACHE_LOCK:
@@ -236,7 +200,6 @@ def get_security_settings() -> SecuritySettings:
         try:
             effective = merge_with_env(_load_raw_overrides_unlocked())
         except Exception as e:
-            # Never brick the auth path on a DB outage.
             logger.error("Failed to load security settings, using env defaults: %s", e)
             return _build_env_defaults()
         _CACHE[tenant_id] = effective

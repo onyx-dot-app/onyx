@@ -26,12 +26,11 @@ admin_router = APIRouter(prefix="/admin/security")
 
 
 def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, set[str]]:
-    """Parse and validate the PUT body, mapping every error shape to
-    OnyxErrorCode.INVALID_INPUT so callers see one envelope.
+    """Parse the PUT body. Returns (parsed model, present_keys).
 
-    Returns (parsed model, present_keys). ``present_keys`` is the set of keys
-    the caller actually included in the payload — distinguishing absent from
-    explicit-null requires this because Pydantic collapses both to None.
+    ``present_keys`` is the set of keys the caller actually included — needed
+    downstream to distinguish absent (keep existing) from explicit-null (clear
+    → env fallback), which Pydantic collapses to ``None`` on the model.
     """
     try:
         payload_dict = json.loads(raw) if raw else {}
@@ -46,8 +45,6 @@ def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, set[str]]:
     except ValidationError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
-    # extra="forbid" on the model means every payload_dict key is already a
-    # known field. Safe to convert directly.
     payload_dict_typed: dict[str, Any] = payload_dict
     return overrides, set(payload_dict_typed.keys())
 
@@ -67,8 +64,8 @@ async def put_security_settings_endpoint(
     raw = await request.body()
     overrides, present_keys = _parse_put_body(raw)
 
-    # Operator-locked field rejection — primary boundary. The storage layer
-    # also strips these, but failing fast here gives the admin a clear 403.
+    # Primary boundary for operator-locked fields. The storage layer also
+    # strips them; this gives admins a clear 403 instead of a silent no-op.
     if MULTI_TENANT:
         locked_in_payload = present_keys & OPERATOR_LOCKED_FIELDS
         if locked_in_payload:
@@ -78,7 +75,5 @@ async def put_security_settings_endpoint(
                 + ", ".join(sorted(locked_in_payload)),
             )
 
-    # apply_patch acquires the Redis write lock, does the read-modify-write,
-    # and translates lock-busy / invariant violations to OnyxError. Sync IO
-    # (DB + Redis) — offload so the event loop never blocks.
+    # Sync DB + Redis IO — offload so the event loop isn't blocked.
     return await run_in_threadpool(apply_patch, overrides, present_keys)
