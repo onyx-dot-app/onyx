@@ -11,6 +11,7 @@ import {
 
 import {
   createTurn,
+  fetchActiveTurn,
   fetchTurnEventStream,
   interruptMessageStream,
   processSSEStream,
@@ -36,6 +37,13 @@ import {
   subagentNameFromToolCall,
   cleanTaskOutput,
 } from "@/app/craft/utils/subagentRouting";
+
+const INTERRUPT_RECONCILE_INTERVAL_MS = 1000;
+const INTERRUPT_RECONCILE_MAX_ATTEMPTS = 30;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function promptFromToolCall(toolCall: ToolCallState): string {
   const prompt = toolCall.command || toolCall.description || "";
@@ -132,6 +140,73 @@ export function useBuildStreaming() {
   );
   const openMarkdownPreview = useBuildSessionStore(
     (state) => state.openMarkdownPreview
+  );
+
+  const reconcileInterruptedTurn = useCallback(
+    async (
+      sessionId: string,
+      interruptedTurnId: string | null
+    ): Promise<void> => {
+      let reconciledTurnId = interruptedTurnId;
+      for (
+        let attempt = 0;
+        attempt < INTERRUPT_RECONCILE_MAX_ATTEMPTS;
+        attempt++
+      ) {
+        await sleep(INTERRUPT_RECONCILE_INTERVAL_MS);
+
+        const currentSession = useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId);
+        if (
+          !currentSession ||
+          currentSession.status !== "running" ||
+          (reconciledTurnId &&
+            currentSession.activeTurnId &&
+            currentSession.activeTurnId !== reconciledTurnId)
+        ) {
+          return;
+        }
+
+        let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
+        try {
+          activeTurn = await fetchActiveTurn(sessionId);
+        } catch (err) {
+          console.warn(
+            "[Streaming] Failed to reconcile interrupted turn:",
+            err
+          );
+          continue;
+        }
+
+        if (
+          activeTurn &&
+          (reconciledTurnId === null || activeTurn.turn_id === reconciledTurnId)
+        ) {
+          reconciledTurnId = activeTurn.turn_id;
+          continue;
+        }
+
+        updateSessionData(sessionId, {
+          status: "active",
+          isInterrupting: false,
+          activeTurnId: null,
+          activeTurnIndex: null,
+          activeTurnLocalOwner: false,
+        });
+        await useBuildSessionStore
+          .getState()
+          .loadSession(sessionId, { force: true })
+          .catch((err) =>
+            console.warn(
+              "[Streaming] Failed to reload reconciled interrupted turn:",
+              err
+            )
+          );
+        return;
+      }
+    },
+    [updateSessionData]
   );
 
   // Subagent routing actions
@@ -680,7 +755,10 @@ export function useBuildStreaming() {
 
       updateSessionData(sessionId, {
         status: "running",
-        isInterrupting: false,
+        isInterrupting:
+          existingSession?.activeTurnId === turnId
+            ? existingSession.isInterrupting
+            : false,
         activeTurnId: turnId,
       });
       if (existingSession?.activeTurnId !== turnId) {
@@ -869,15 +947,17 @@ export function useBuildStreaming() {
         return;
       }
 
+      const interruptedTurnId = session.activeTurnId;
       updateSessionData(sessionId, { isInterrupting: true });
       try {
         await interruptMessageStream(sessionId);
+        void reconcileInterruptedTurn(sessionId, interruptedTurnId);
       } catch (err) {
         console.error("[Streaming] Failed to interrupt:", err);
         updateSessionData(sessionId, { isInterrupting: false });
       }
     },
-    [updateSessionData]
+    [reconcileInterruptedTurn, updateSessionData]
   );
 
   const streamScheduledRunEvents = useCallback(

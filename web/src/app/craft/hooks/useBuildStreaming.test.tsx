@@ -10,6 +10,7 @@ import {
   fetchMessages,
   fetchSession,
   fetchTurnEventStream,
+  interruptMessageStream,
   processSSEStream,
 } from "@/app/craft/services/apiServices";
 
@@ -938,5 +939,183 @@ describe("useBuildStreaming thinking packets", () => {
       error: null,
     });
     expect(session?.streamItems).toEqual([]);
+  });
+
+  it("clears local interrupt state when the backend active turn is gone", async () => {
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    jest.mocked(fetchActiveTurn).mockResolvedValueOnce(null as never);
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnIndex: 3,
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      isInterrupting: true,
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(fetchActiveTurn).toHaveBeenCalledWith(sessionId);
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "active",
+      activeTurnId: null,
+      activeTurnIndex: null,
+      activeTurnLocalOwner: false,
+      isInterrupting: false,
+    });
+    expect(useBuildSessionStore.getState().loadSession).toHaveBeenCalledWith(
+      sessionId,
+      { force: true }
+    );
+  });
+
+  it("does not clear local interrupt state while the backend turn is still active", async () => {
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    jest.mocked(fetchActiveTurn).mockResolvedValueOnce({
+      session_id: sessionId,
+      turn_id: "turn-interrupted",
+      status: "RUNNING",
+      turn_index: 3,
+    } as never);
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnIndex: 3,
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnLocalOwner: true,
+      isInterrupting: true,
+    });
+    expect(useBuildSessionStore.getState().loadSession).not.toHaveBeenCalled();
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "active",
+      isInterrupting: false,
+    });
+  });
+
+  it("keeps polling until the interrupted backend turn is gone", async () => {
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    jest
+      .mocked(fetchActiveTurn)
+      .mockResolvedValueOnce({
+        session_id: sessionId,
+        turn_id: "turn-interrupted",
+        status: "RUNNING",
+        turn_index: 3,
+      } as never)
+      .mockResolvedValueOnce(null as never);
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnIndex: 3,
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(useBuildSessionStore.getState().loadSession).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(fetchActiveTurn).toHaveBeenCalledTimes(2);
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "active",
+      activeTurnId: null,
+      activeTurnLocalOwner: false,
+      isInterrupting: false,
+    });
+    expect(useBuildSessionStore.getState().loadSession).toHaveBeenCalledWith(
+      sessionId,
+      { force: true }
+    );
+  });
+
+  it("reconciles interrupts before the local active turn id is known", async () => {
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    jest
+      .mocked(fetchActiveTurn)
+      .mockResolvedValueOnce({
+        session_id: sessionId,
+        turn_id: "turn-created-after-interrupt",
+        status: "RUNNING",
+        turn_index: 3,
+      } as never)
+      .mockResolvedValueOnce(null as never);
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: null,
+      activeTurnIndex: null,
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(fetchActiveTurn).toHaveBeenCalledTimes(2);
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "active",
+      activeTurnId: null,
+      activeTurnLocalOwner: false,
+      isInterrupting: false,
+    });
   });
 });
