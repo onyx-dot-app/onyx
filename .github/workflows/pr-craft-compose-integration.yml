@@ -169,6 +169,9 @@ jobs:
         run: |
           py.test \
             -v \
+            -s \
+            --setup-show \
+            -o faulthandler_timeout=90 \
             --tb=short \
             --durations=10 \
             tests/integration/tests/craft/docker_e2e/test_approval_gate_docker.py
