@@ -32,12 +32,6 @@ _CACHE_LOCK = threading.RLock()
 _CACHE: TTLCache[str, SecuritySettings] = TTLCache(
     maxsize=10_000, ttl=_CACHE_TTL_SECONDS, timer=time.monotonic
 )
-# Bumped on every invalidation. A cold-miss reader captures the generation
-# before its DB roundtrip; if it changed during the read, we know an
-# invalidation raced us and we MUST NOT write the now-stale value back into
-# the cache. Without this, write→invalidate followed by stale-reader-write
-# would resurrect the pre-write value for up to a full TTL.
-_CACHE_GENERATION = 0
 
 
 def _install_cache_for_test(
@@ -132,22 +126,21 @@ def _current_tenant_id_or_default() -> str:
 
 
 def invalidate_security_cache(tenant_id: str) -> None:
-    global _CACHE_GENERATION
     with _CACHE_LOCK:
         _CACHE.pop(tenant_id, None)
-        _CACHE_GENERATION += 1
 
 
 def get_security_settings() -> SecuritySettings:
     """Effective, env-merged, immutable settings for the current tenant.
 
     - Cache hit: process-local memory access (TTLCache under an RLock), no IO.
-    - Cache miss: one sync DB roundtrip via the security_settings table.
+    - Cache miss: one sync DB roundtrip held under the same lock. Other
+      tenants briefly block, but each tenant misses ≤1×/TTL/process so the
+      contention is rare and the DB roundtrip is cheap.
     - Pre-tenant safe: when the tenant contextvar is unset in multi-tenant,
       returns a fresh env-defaults SecuritySettings (never cached) without
       touching the DB. Avoids the stack-trace cost of get_current_tenant_id()'s
       RuntimeError on hot unauth paths like /auth/type.
-    - Thread-safe via an RLock around the TTLCache.
     - Result is frozen; callers cannot mutate the cached value.
     """
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
@@ -159,23 +152,13 @@ def get_security_settings() -> SecuritySettings:
 
     with _CACHE_LOCK:
         cached = _CACHE.get(tenant_id)
-        gen_at_miss = _CACHE_GENERATION
-    if cached is not None:
-        return cached
-
-    try:
-        overrides = load_raw_overrides()
-        effective = merge_with_env(overrides)
-    except Exception as e:
-        # Never brick the auth path on a DB outage.
-        logger.error("Failed to load security settings, using env defaults: %s", e)
-        return _build_env_defaults()
-
-    with _CACHE_LOCK:
-        # If an invalidation happened between our miss-read and now, a writer
-        # has just persisted a newer value to the DB. Don't overwrite the
-        # now-empty cache slot with what we read — that value is potentially
-        # stale. The next caller will re-read fresh from the DB.
-        if _CACHE_GENERATION == gen_at_miss:
-            _CACHE[tenant_id] = effective
-    return effective
+        if cached is not None:
+            return cached
+        try:
+            effective = merge_with_env(load_raw_overrides())
+        except Exception as e:
+            # Never brick the auth path on a DB outage.
+            logger.error("Failed to load security settings, using env defaults: %s", e)
+            return _build_env_defaults()
+        _CACHE[tenant_id] = effective
+        return effective
