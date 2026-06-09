@@ -61,7 +61,7 @@ jobs:
       - volume=100gb
       - run-id=${{ github.run_id }}-craft-compose-integration
       - extras=ecr-cache
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     env:
       PYTHONPATH: ./backend
@@ -145,6 +145,8 @@ jobs:
       - name: Run integration tests
         # Working dir = backend/ so alembic.ini is a relative path for the
         # reset_all() fixture.
+        timeout-minutes: 15
+        shell: bash
         working-directory: backend
         env:
           # API_SERVER_URL and POSTGRES_* must point at the compose-published
@@ -167,14 +169,19 @@ jobs:
           SANDBOX_DOCKER_NETWORK: "onyx_craft_sandbox"
           SANDBOX_DOCKER_SOCKET: "/var/run/docker.sock"
         run: |
-          py.test \
+          # pipefail + tee so pytest output survives a step-timeout kill;
+          # line-buffered flush so the file is up to date when that happens.
+          set -o pipefail
+          mkdir -p ../compose-logs
+          PYTHONUNBUFFERED=1 stdbuf -oL -eL py.test \
             -v \
             -s \
             --setup-show \
             -o faulthandler_timeout=90 \
             --tb=short \
             --durations=10 \
-            tests/integration/tests/craft/docker_e2e/test_approval_gate_docker.py
+            tests/integration/tests/craft/docker_e2e/test_approval_gate_docker.py \
+            2>&1 | tee ../compose-logs/pytest.log
 
       # Inline tail for fast triage in the GH Actions UI without downloading
       # artifacts. Truncated; the full per-container logs land in compose-logs/
