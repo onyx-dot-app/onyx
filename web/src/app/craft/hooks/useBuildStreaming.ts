@@ -179,12 +179,15 @@ export function useBuildStreaming() {
           continue;
         }
 
-        if (
-          activeTurn &&
-          (reconciledTurnId === null || activeTurn.turn_id === reconciledTurnId)
-        ) {
-          reconciledTurnId = activeTurn.turn_id;
-          continue;
+        if (activeTurn) {
+          if (reconciledTurnId === null) {
+            reconciledTurnId = activeTurn.turn_id;
+            continue;
+          }
+          if (activeTurn.turn_id === reconciledTurnId) {
+            continue;
+          }
+          return;
         }
 
         updateSessionData(sessionId, {

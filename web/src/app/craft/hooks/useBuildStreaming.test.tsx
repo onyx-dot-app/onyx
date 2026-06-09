@@ -1104,6 +1104,48 @@ describe("useBuildStreaming thinking packets", () => {
     warnSpy.mockRestore();
   });
 
+  it("does not clear local state when backend reports a different active turn", async () => {
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    jest.mocked(fetchActiveTurn).mockResolvedValueOnce({
+      session_id: sessionId,
+      turn_id: "turn-new",
+      status: "RUNNING",
+      turn_index: 4,
+    } as never);
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnIndex: 3,
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(fetchActiveTurn).toHaveBeenCalledTimes(1);
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnIndex: 3,
+      activeTurnLocalOwner: true,
+      isInterrupting: true,
+    });
+    expect(useBuildSessionStore.getState().loadSession).not.toHaveBeenCalled();
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "active",
+      isInterrupting: false,
+    });
+  });
+
   it("keeps polling until the interrupted backend turn is gone", async () => {
     jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
     jest
