@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.20
+version: 0.5.21
 appVersion: latest
 annotations:
   category: Productivity
@@ -17,10 +17,13 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Add Craft sandbox RBAC and the `sandbox-file-sync`
-        ServiceAccount, configured through `craft.sandboxFileSyncRoleArn`
-        and `craft.extraBoundServiceAccounts`, so EKS installs can bind
-        sandbox snapshot access to a Terraform-managed IRSA role.
+      description: Add a top-level `customCACerts` block that mounts a
+        Secret/ConfigMap of private root/intermediate CA certificates into
+        every pod that makes outbound TLS connections (api server, celery
+        workers, slackbot, discordbot, MCP server, model servers), runs
+        `update-ca-certificates` at container startup, and sets
+        REQUESTS_CA_BUNDLE / SSL_CERT_FILE so Python HTTP clients trust the
+        updated bundle.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0

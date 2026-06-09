@@ -15,6 +15,29 @@ global:
   # Host for all Onyx components
   host: "0.0.0.0"
 
+# -- Custom (private/internal) CA certificates for outbound TLS.
+# When enabled, every pod that makes outbound TLS connections (api server,
+# all celery workers, slackbot, discordbot, MCP server, and both model
+# servers) mounts the referenced Secret or ConfigMap at
+# /usr/local/share/ca-certificates and runs `update-ca-certificates` at
+# container startup so the system trust store includes the custom CAs.
+# REQUESTS_CA_BUNDLE and SSL_CERT_FILE are set on those pods automatically
+# so Python HTTP clients pick up the updated bundle.
+#
+# The Secret/ConfigMap must contain PEM-encoded root/intermediate
+# certificates in keys ending with `.crt`, e.g.:
+#   kubectl create secret generic private-ca-certs \
+#     --from-file=my-root-ca.crt --from-file=my-intermediate-ca.crt
+#
+# NOTE: the web server (Next.js) is not covered — it only talks to
+# in-cluster services. If you need it to trust a custom CA, mount the cert
+# via webserver.volumes/volumeMounts and set NODE_EXTRA_CA_CERTS.
+customCACerts:
+  enabled: false
+  # Exactly one of secretName / configMapName must be set when enabled.
+  secretName: ""
+  configMapName: ""
+
 postgresql:
   enabled: true
   # IMPORTANT: This nameOverride is required for the CloudNativePG operator to find itself.
@@ -110,6 +133,8 @@ autoscaling:
 
 inferenceCapability:
   extraEnv: []
+  volumes: []
+  volumeMounts: []
   service:
     portName: modelserver
     type: ClusterIP
@@ -165,6 +190,8 @@ inferenceCapability:
 
 indexCapability:
   extraEnv: []
+  volumes: []
+  volumeMounts: []
   service:
     portName: modelserver
     type: ClusterIP
@@ -483,7 +510,12 @@ api:
   affinity: {}
 
   # Run update-ca-certificates before starting the server.
-  # Useful when mounting custom CA certificates via volumes/volumeMounts.
+  # DEPRECATED: prefer the top-level customCACerts block, which covers the API
+  # server and every other pod that makes outbound TLS connections (celery
+  # workers, bots, MCP server, model servers) and sets REQUESTS_CA_BUNDLE /
+  # SSL_CERT_FILE automatically.
+  # This flag only affects the API server. Useful when mounting custom CA
+  # certificates manually via api.volumes/api.volumeMounts.
   # NOTE: Requires the container to run as root (runAsUser: 0).
   # CA certificate files must be mounted under /usr/local/share/ca-certificates/
   # with a .crt extension (e.g. /usr/local/share/ca-certificates/my-ca.crt).
