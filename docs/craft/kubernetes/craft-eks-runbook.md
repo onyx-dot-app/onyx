@@ -21,7 +21,7 @@ Craft provisions a sandbox + snapshot/restore, with no manual kubectl/RBAC/node 
 
 **Helm** (`deployment/helm/charts/onyx`) creates ONLY Kubernetes objects:
 - All in-cluster workloads (api, web, nginx, celery, model servers, code-interpreter, **sandbox-proxy**).
-- The **`onyx-sandboxes`** namespace (`templates/sandbox-namespace.yaml`) + **`sandbox-file-sync` SA** + sandbox RBAC (`onyx-sandbox-manager`, `onyx-proxy-resolve`) (`templates/sandbox-rbac.yaml`).
+- The **`onyx-sandboxes`** namespace (`templates/sandbox-namespace.yaml`) + **`sandbox-file-sync` SA** + sandbox RBAC (`<release>-<release-namespace>-sandbox-manager`, `<release>-<release-namespace>-proxy-resolve`) (`templates/sandbox-rbac.yaml`).
 - `configMap` + secrets that **point the app at the terraform-created endpoints** (POSTGRES_HOST, REDIS_HOST, OpenSearch host, S3 buckets) and carry the IRSA role ARNs.
 
 **Neither crosses over:** Terraform never deploys app workloads or app RBAC; Helm never creates AWS resources — it only *references* them via values you pass from terraform outputs.
@@ -82,10 +82,10 @@ opencode auth/config.
 |---|---|---:|---|
 | `Namespace/onyx-sandboxes` | cluster | Yes | Keeps runtime sandbox pods/services/secrets separate from app workloads. |
 | `ServiceAccount/sandbox-file-sync` | `onyx-sandboxes` | Yes on EKS | Annotated with `craft.sandboxFileSyncRoleArn`; used by sandbox pods for sidecar S3 access. |
-| `Role/onyx-sandbox-manager` | `onyx-sandboxes` | Yes | Allows the Onyx workload SA to manage sandbox pods, services, secrets, exec, and logs. |
-| `RoleBinding/onyx-sandbox-manager` | `onyx-sandboxes` | Yes | Binds sandbox-management permissions to `onyx.serviceAccountName` and `craft.extraBoundServiceAccounts`. |
-| `Role/onyx-proxy-resolve` | proxy namespace | Yes | Allows service lookup for resolving `SANDBOX_PROXY_HOST` to a ClusterIP. |
-| `RoleBinding/onyx-proxy-resolve` | proxy namespace | Yes | Binds proxy service lookup to the same workload SAs. |
+| `Role/<release>-<release-namespace>-sandbox-manager` | `onyx-sandboxes` | Yes | Allows the Onyx workload SA to manage sandbox pods, services, secrets, exec, and logs. |
+| `RoleBinding/<release>-<release-namespace>-sandbox-manager` | `onyx-sandboxes` | Yes | Binds sandbox-management permissions to `onyx.serviceAccountName` and `craft.extraBoundServiceAccounts`. |
+| `Role/<release>-<release-namespace>-proxy-resolve` | proxy namespace | Yes | Allows service lookup for resolving `SANDBOX_PROXY_HOST` to a ClusterIP. |
+| `RoleBinding/<release>-<release-namespace>-proxy-resolve` | proxy namespace | Yes | Binds proxy service lookup to the same workload SAs. |
 | `Deployment/onyx-sandbox-proxy` | release namespace | Yes for proxied egress | Runs the egress proxy/gate. |
 | `Service/onyx-sandbox-proxy` | release namespace | Yes for proxied egress | Stable in-cluster address for sandbox traffic. |
 | `ServiceAccount/onyx-sandbox-proxy` | release namespace | Yes for proxy | Identity used by the proxy deployment. |
@@ -303,10 +303,10 @@ The chart now owns these Kubernetes objects when `ENABLE_CRAFT=true`:
 
 - `namespace/onyx-sandboxes`;
 - `serviceaccount/sandbox-file-sync`;
-- `role/onyx-sandbox-manager`;
-- `rolebinding/onyx-sandbox-manager`;
-- `role/onyx-proxy-resolve`;
-- `rolebinding/onyx-proxy-resolve`;
+- `role/<release>-<release-namespace>-sandbox-manager`;
+- `rolebinding/<release>-<release-namespace>-sandbox-manager`;
+- `role/<release>-<release-namespace>-proxy-resolve`;
+- `rolebinding/<release>-<release-namespace>-proxy-resolve`;
 - sandbox proxy ServiceAccount, Roles, RoleBindings, Deployment, Service, PDB,
   and NetworkPolicy;
 - sandbox push/proxy NetworkPolicies.
@@ -317,13 +317,17 @@ running, then replace the manual objects with chart-managed ones:
 
 ```bash
 kubectl -n onyx-sandboxes get pods,svc,secret
-kubectl -n onyx-sandboxes delete role onyx-sandbox-manager --ignore-not-found
-kubectl -n onyx-sandboxes delete rolebinding onyx-sandbox-manager --ignore-not-found
+kubectl -n onyx-sandboxes delete role onyx-sandbox-manager onyx-onyx-sandbox-manager --ignore-not-found
+kubectl -n onyx-sandboxes delete rolebinding onyx-sandbox-manager onyx-onyx-sandbox-manager --ignore-not-found
 kubectl -n onyx-sandboxes delete serviceaccount sandbox-file-sync --ignore-not-found
-kubectl -n onyx delete role onyx-proxy-resolve --ignore-not-found
-kubectl -n onyx delete rolebinding onyx-proxy-resolve --ignore-not-found
+kubectl -n onyx delete role onyx-proxy-resolve onyx-onyx-proxy-resolve --ignore-not-found
+kubectl -n onyx delete rolebinding onyx-proxy-resolve onyx-onyx-proxy-resolve --ignore-not-found
 helm upgrade --install onyx deployment/helm/charts/onyx -n onyx -f your-values.yaml ...
 ```
+
+The example commands include legacy unqualified names and assume release `onyx`
+in namespace `onyx`. For other release namespaces, use the rendered
+Role/RoleBinding names from `helm template`.
 
 If you cannot delete the objects, you can adopt them into Helm by adding the
 standard Helm ownership labels/annotations, but deletion and recreation is
@@ -476,5 +480,5 @@ sandbox provisions on the tainted sandbox node group → snapshot + restore, zer
 Also verified: direct IMDS from a sandbox pod is blocked (`hop_limit=1`); `sandbox-proxy` reaches RDS
 (authenticated query) and gates egress (DB-resolved per request); the file-sync `sidecar` IRSA reads/writes
 the bucket via `s5cmd`; **celery** runs the real `cleanup_idle_sandboxes_task` end-to-end — the worker SA
-(`onyx-workload-access`, bound to `onyx-sandbox-manager`) execs into `onyx-sandboxes`, snapshots to S3, and
+(`onyx-workload-access`, bound to `onyx-onyx-sandbox-manager`) execs into `onyx-sandboxes`, snapshots to S3, and
 sleeps the sandbox, then the API restore re-provisions and pulls that celery-made snapshot back.

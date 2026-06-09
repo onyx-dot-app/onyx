@@ -8,6 +8,13 @@
 {{- fail "craft.sandboxFileSyncRoleArn is required when configMap.ENABLE_CRAFT=true (IRSA role ARN for the sandbox-file-sync ServiceAccount — output of the craft_sandbox terraform module)." }}
 {{- end }}
 {{- $boundSAs := prepend ((index $craft "extraBoundServiceAccounts") | default (list)) (include "onyx.serviceAccountName" .) }}
+{{- $rbacNameBase := printf "%s-%s" (include "onyx.fullname" .) .Release.Namespace }}
+{{- $rbacNamePrefix := $rbacNameBase }}
+{{- if gt (len $rbacNameBase) 47 }}
+{{- $rbacNamePrefix = printf "%s-%s" ($rbacNameBase | trunc 38 | trimSuffix "-") (sha256sum $rbacNameBase | trunc 8) }}
+{{- end }}
+{{- $sandboxManagerName := printf "%s-sandbox-manager" $rbacNamePrefix }}
+{{- $proxyResolveName := printf "%s-proxy-resolve" $rbacNamePrefix }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -23,7 +30,7 @@ automountServiceAccountToken: true
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "onyx.fullname" . }}-sandbox-manager
+  name: {{ $sandboxManagerName }}
   namespace: {{ $sandboxNs }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
@@ -49,7 +56,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "onyx.fullname" . }}-sandbox-manager
+  name: {{ $sandboxManagerName }}
   namespace: {{ $sandboxNs }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
@@ -62,14 +69,14 @@ subjects:
   {{- end }}
 roleRef:
   kind: Role
-  name: {{ include "onyx.fullname" . }}-sandbox-manager
+  name: {{ $sandboxManagerName }}
   apiGroup: rbac.authorization.k8s.io
 ---
 # api_server resolves SANDBOX_PROXY_HOST's ClusterIP for the sandbox pod's /etc/hosts alias.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "onyx.fullname" . }}-proxy-resolve
+  name: {{ $proxyResolveName }}
   namespace: {{ $proxyNs }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
@@ -82,7 +89,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "onyx.fullname" . }}-proxy-resolve
+  name: {{ $proxyResolveName }}
   namespace: {{ $proxyNs }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
@@ -95,6 +102,6 @@ subjects:
   {{- end }}
 roleRef:
   kind: Role
-  name: {{ include "onyx.fullname" . }}-proxy-resolve
+  name: {{ $proxyResolveName }}
   apiGroup: rbac.authorization.k8s.io
 {{- end }}
