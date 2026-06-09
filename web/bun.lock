@@ -129,13 +129,15 @@
     },
     "lib/opal": {
       "name": "@onyx-ai/opal",
-      "version": "0.1.7",
+      "version": "0.1.8",
       "dependencies": {
         "clsx": "^2.0.0",
         "copy-to-clipboard": "^3.3.3",
+        "js-cookie": "^3.0.8",
         "tailwind-merge": "^2.0.0",
       },
       "devDependencies": {
+        "@types/js-cookie": "^3.0.6",
         "tsup": "^8.3.0",
         "typescript": "^5.0.0",
       },
@@ -2457,6 +2459,8 @@
     "@jest/reporters/glob": ["glob@7.2.3", "", { "dependencies": { "fs.realpath": "^1.0.0", "inflight": "^1.0.4", "inherits": "2", "minimatch": "^3.1.1", "once": "^1.3.0", "path-is-absolute": "^1.0.0" } }, ""],
 
     "@joshwooding/vite-plugin-react-docgen-typescript/magic-string": ["magic-string@0.27.0", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.4.13" } }, "sha512-8UnnX2PeRAPZuN12svgR9j7M1uWMovg/CEnIwIG0LFkXSJJe4PdfUGiTGl8V9bsBHFUtfVINcSyYxd7q+kx9fA=="],
+
+    "@onyx-ai/opal/js-cookie": ["js-cookie@3.0.8", "", {}, "sha512-yeJd4aNAdYZQjaon2bpD/Gb0B/omw7HQOsynXXcOiWVCacbBcPlgn8S/d1X6blFSaHao7ozqtW7NZW19xpCtIw=="],
 
     "@onyx-ai/opal/tailwind-merge": ["tailwind-merge@2.6.1", "", {}, "sha512-Oo6tHdpZsGpkKG88HJ8RR1rg/RdnEkQEfMoEk2x1XRI3F1AxeU+ijRXpiVUF4UbLfcxxRGw6TbUINKYdWVsQTQ=="],
 

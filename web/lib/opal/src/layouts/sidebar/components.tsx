@@ -1,55 +1,32 @@
 "use client";
 
-/**
- * Sidebar Layout Components
- *
- * Provides composable layout primitives for app and admin sidebars with mobile
- * overlay support and optional desktop folding.
- *
- * @example
- * ```tsx
- * import * as SidebarLayouts from "@/layouts/sidebar-layouts";
- * import { useSidebarFolded } from "@/layouts/sidebar-layouts";
- *
- * function MySidebar() {
- *   const contentFolded = useSidebarFolded();
- *
- *   return (
- *     <SidebarLayouts.Root foldable>
- *       <SidebarLayouts.Header>
- *         <NewSessionButton folded={contentFolded} />
- *       </SidebarLayouts.Header>
- *       <SidebarLayouts.Body scrollKey="my-sidebar">
- *         {contentFolded ? null : <SectionContent />}
- *       </SidebarLayouts.Body>
- *       <SidebarLayouts.Footer>
- *         <UserAvatar />
- *       </SidebarLayouts.Footer>
- *     </SidebarLayouts.Root>
- *   );
- * }
- * ```
- */
-
 import {
   createContext,
   useContext,
   useState,
   useEffect,
+  useRef,
+  useLayoutEffect,
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { usePathname } from "next/navigation";
 import Cookies from "js-cookie";
 import { cn } from "@opal/utils";
-import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
-import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
-import OverflowDiv from "@/refresh-components/OverflowDiv";
-import useScreenSize from "@/hooks/useScreenSize";
 import {
   RootLayoutFoldedContext,
   useSidebarFolded,
 } from "@opal/layouts/root/components";
+import useScreenSize from "@opal/hooks/useScreenSize";
+import SidebarWrapper from "@opal/layouts/sidebar/SidebarWrapper";
 export { useSidebarFolded } from "@opal/layouts/root/components";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const SIDEBAR_TOGGLED_COOKIE_NAME = "sidebarIsToggled";
+const SCROLL_POSITION_PREFIX = "opal-sidebar-scroll-";
 
 // ---------------------------------------------------------------------------
 // State provider — persistent sidebar fold state with keyboard shortcut
@@ -134,10 +111,6 @@ export function useSidebarState(): SidebarStateContextType {
 }
 
 // ---------------------------------------------------------------------------
-// Fold context — provided by RootLayout.Sidebar (or SidebarRoot for legacy)
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // Root
 // ---------------------------------------------------------------------------
 
@@ -149,10 +122,26 @@ interface SidebarRootProps {
    * regardless of this prop.
    */
   foldable?: boolean;
+  /**
+   * Render function for the logo/brand area. Receives the current fold state
+   * so the logo can adapt its appearance (e.g. icon-only vs full wordmark).
+   */
+  logo?: (folded: boolean | undefined) => React.ReactNode;
+  /**
+   * When `true` (default), the logo is shown in the folded state with a
+   * hover-to-reveal close button. When `false`, only the close button is
+   * shown when folded.
+   */
+  showLogoWhenFolded?: boolean;
   children: React.ReactNode;
 }
 
-function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
+function SidebarRoot({
+  foldable = false,
+  logo,
+  showLogoWhenFolded = true,
+  children,
+}: SidebarRootProps) {
   const { isMobile, isMediumScreen } = useScreenSize();
   const { folded, setFolded } = useSidebarState();
 
@@ -163,9 +152,6 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
     setFolded((prev) => !prev);
   }
 
-  // On mobile the sidebar content is always visually expanded — the overlay
-  // transform handles visibility. On desktop, only foldable sidebars honour
-  // the fold state.
   const contentFolded = !isMobile && foldable ? folded : false;
 
   const inner = (
@@ -181,7 +167,12 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
             folded ? "-translate-x-full" : "translate-x-0"
           )}
         >
-          <SidebarWrapper folded={false} onFoldClick={closeSidebar}>
+          <SidebarWrapper
+            folded={false}
+            onFoldClick={closeSidebar}
+            logo={logo}
+            showLogoWhenFolded={showLogoWhenFolded}
+          >
             {inner}
           </SidebarWrapper>
         </div>
@@ -200,8 +191,6 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
     );
   }
 
-  // Medium screens: the folded strip stays visible in the layout flow;
-  // expanding overlays content instead of pushing it.
   if (isMediumScreen) {
     return (
       <RootLayoutFoldedContext.Provider value={folded}>
@@ -210,7 +199,12 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
 
         {/* Sidebar — fixed so it overlays content when expanded */}
         <div className="fixed inset-y-0 left-0 z-50">
-          <SidebarWrapper folded={folded} onFoldClick={toggleSidebar}>
+          <SidebarWrapper
+            folded={folded}
+            onFoldClick={toggleSidebar}
+            logo={logo}
+            showLogoWhenFolded={showLogoWhenFolded}
+          >
             {inner}
           </SidebarWrapper>
         </div>
@@ -234,6 +228,8 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
       <SidebarWrapper
         folded={foldable ? folded : undefined}
         onFoldClick={foldable ? toggleSidebar : undefined}
+        logo={logo}
+        showLogoWhenFolded={showLogoWhenFolded}
       >
         {inner}
       </SidebarWrapper>
@@ -255,7 +251,7 @@ function SidebarHeader({ children }: SidebarHeaderProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Body — scrollable content area
+// Body — scrollable content area with scroll-position persistence
 // ---------------------------------------------------------------------------
 
 interface SidebarBodyProps {
@@ -269,13 +265,55 @@ interface SidebarBodyProps {
 
 function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
   const folded = useSidebarFolded();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) return;
+
+    const storageKey = `${SCROLL_POSITION_PREFIX}${scrollKey}`;
+    const handleScroll = () => {
+      sessionStorage.setItem(storageKey, scrollElement.scrollTop.toString());
+    };
+
+    scrollElement.addEventListener("scroll", handleScroll, { passive: true });
+    return () => scrollElement.removeEventListener("scroll", handleScroll);
+  }, [scrollKey]);
+
+  useLayoutEffect(() => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) return;
+
+    const storageKey = `${SCROLL_POSITION_PREFIX}${scrollKey}`;
+    const savedPosition = parseInt(
+      sessionStorage.getItem(storageKey) || "0",
+      10
+    );
+    scrollElement.scrollTop = savedPosition;
+  }, [pathname, scrollKey]);
+
   return (
-    <OverflowDiv
-      className={cn("gap-3 px-2", folded && "hidden")}
-      scrollKey={scrollKey}
+    <div
+      className={cn(
+        "relative flex-1 min-h-0 overflow-y-hidden flex flex-col",
+        folded && "hidden"
+      )}
     >
-      {children}
-    </OverflowDiv>
+      <div
+        ref={scrollRef}
+        className="flex-1 min-h-0 overflow-y-auto flex flex-col"
+      >
+        <div className={cn("flex-1 flex flex-col gap-3 px-2")}>{children}</div>
+        <div style={{ minHeight: "2rem" }} />
+      </div>
+      <div
+        className="absolute bottom-0 left-0 right-0 h-4 z-20 pointer-events-none"
+        style={{
+          background: `linear-gradient(to bottom, transparent, var(--background-tint-02))`,
+        }}
+      />
+    </div>
   );
 }
 

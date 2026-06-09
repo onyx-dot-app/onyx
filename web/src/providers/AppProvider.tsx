@@ -26,7 +26,7 @@ import { UserProvider } from "@/providers/UserProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
 import { SettingsProvider } from "@/providers/SettingsProvider";
 import { ModalProvider } from "@/components/context/ModalContext";
-import { StateProvider as SidebarStateProvider } from "@/layouts/sidebar-layouts";
+import { SidebarLayouts } from "@opal/layouts";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
 import ToastProvider from "@/providers/ToastProvider";
@@ -42,11 +42,11 @@ export default function AppProvider({ children }: AppProviderProps) {
         <AppBackgroundProvider>
           <ProviderContextProvider>
             <ModalProvider>
-              <SidebarStateProvider>
+              <SidebarLayouts.StateProvider>
                 <QueryControllerProvider>
                   <ToastProvider>{children}</ToastProvider>
                 </QueryControllerProvider>
-              </SidebarStateProvider>
+              </SidebarLayouts.StateProvider>
             </ModalProvider>
           </ProviderContextProvider>
         </AppBackgroundProvider>

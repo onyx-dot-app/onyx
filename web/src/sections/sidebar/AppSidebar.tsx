@@ -43,9 +43,12 @@ import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
 import type { Project } from "@/app/app/projects/projectsService";
-import * as SidebarLayouts from "@/layouts/sidebar-layouts";
-import { useSidebarFolded, useSidebarState } from "@/layouts/sidebar-layouts";
-import { RootLayout } from "@opal/layouts";
+import {
+  SidebarLayouts,
+  useSidebarFolded,
+  useSidebarState,
+  RootLayout,
+} from "@opal/layouts";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
