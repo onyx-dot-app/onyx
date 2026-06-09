@@ -681,6 +681,16 @@ def remove_llm_provider(
     for persona in get_personas_using_provider(db_session, provider_id):
         persona.default_model_configuration_id = None
 
+    # Clear personal default models referencing this provider. They are stored
+    # as "<provider display name>__<provider type>__<model name>" strings, so
+    # they'd otherwise dangle forever and silently resolve to an arbitrary
+    # provider in the UI instead of the global default.
+    db_session.execute(
+        update(User)
+        .where(User.default_model.startswith(f"{provider.name}__", autoescape=True))
+        .values(default_model=None)
+    )
+
     db_session.execute(
         delete(LLMProvider__UserGroup).where(
             LLMProvider__UserGroup.llm_provider_id == provider_id
