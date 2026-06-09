@@ -230,6 +230,7 @@ export default function BuildChatPanel({
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const prevScrollTopRef = useRef(0);
+  const liveApprovalCountRef = useRef(0);
 
   // Check if user is at bottom of scroll container
   const checkIfAtBottom = useCallback(() => {
@@ -274,8 +275,7 @@ export default function BuildChatPanel({
     prevScrollTopRef.current = currentScrollTop;
   }, [checkIfAtBottom]);
 
-  // Scroll to bottom and resume auto-scroll
-  const scrollToBottom = useCallback(() => {
+  const scrollChatToBottom = useCallback((behavior: ScrollBehavior) => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
@@ -286,7 +286,7 @@ export default function BuildChatPanel({
       // Scroll to a value larger than scrollHeight - browsers will clamp to max
       // This ensures we always reach the absolute bottom
       const targetScroll = container.scrollHeight + 1000; // Add buffer to ensure we go all the way
-      container.scrollTo({ top: targetScroll, behavior: "smooth" });
+      container.scrollTo({ top: targetScroll, behavior });
 
       // Update state immediately
       setIsAtBottom(true);
@@ -301,10 +301,40 @@ export default function BuildChatPanel({
     });
   }, []);
 
+  // Scroll to bottom and resume auto-scroll
+  const scrollToBottom = useCallback(() => {
+    scrollChatToBottom("smooth");
+  }, [scrollChatToBottom]);
+
+  const handleLiveApprovalCountChange = useCallback(
+    (approvalCount: number) => {
+      const previousApprovalCount = liveApprovalCountRef.current;
+      liveApprovalCountRef.current = approvalCount;
+
+      if (approvalCount <= previousApprovalCount) {
+        return;
+      }
+
+      if (!isAtBottom) {
+        return;
+      }
+
+      // Approval cards live above the input bar, so a newly-rendered card
+      // shrinks the transcript viewport from below. Scroll once after the
+      // card appears and once more after the viewport resize has settled.
+      // Only do this while sticky bottom scrolling is active; users reading
+      // earlier history should not be moved by a new approval request.
+      scrollChatToBottom("auto");
+      requestAnimationFrame(() => scrollChatToBottom("auto"));
+    },
+    [isAtBottom, scrollChatToBottom]
+  );
+
   // Reset scroll state when session changes
   useEffect(() => {
     setIsAtBottom(true);
     setShowScrollButton(false);
+    liveApprovalCountRef.current = 0;
   }, [sessionId]);
 
   const handleSubmit = useCallback(
@@ -601,11 +631,6 @@ export default function BuildChatPanel({
                       isStreaming={displayIsRunning}
                       autoScrollEnabled={isAtBottom}
                       scrollContainerRef={scrollContainerRef}
-                      trailingAssistantSlot={
-                        <LiveApprovalsRegion
-                          sessionId={sessionId ?? existingSessionId ?? null}
-                        />
-                      }
                     />
                   )}
                 </motion.div>
@@ -681,6 +706,14 @@ export default function BuildChatPanel({
                     queuedMessages={queuedMessages}
                     onQueueMessage={handleQueueMessage}
                     onRemoveQueuedMessage={handleRemoveQueuedMessage}
+                    aboveInputSlot={
+                      isViewingSubagent ? null : (
+                        <LiveApprovalsRegion
+                          sessionId={sessionId ?? existingSessionId ?? null}
+                          onApprovalCountChange={handleLiveApprovalCountChange}
+                        />
+                      )
+                    }
                   />
                 </div>
               </div>

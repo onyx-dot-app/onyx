@@ -3,6 +3,7 @@
 import {
   forwardRef,
   memo,
+  type ReactNode,
   useCallback,
   useImperativeHandle,
   useMemo,
@@ -56,6 +57,7 @@ export interface CraftInputBarProps {
   onRemoveQueuedMessage?: (index: number) => void;
   onInterrupt?: () => void;
   isInterrupting?: boolean;
+  aboveInputSlot?: ReactNode;
   /** Seed the active entry chips. For stories/tests; production callers leave unset. */
   initialEntries?: PickerEntry[];
 }
@@ -75,6 +77,7 @@ const CraftInputBar = memo(
         onRemoveQueuedMessage,
         onInterrupt,
         isInterrupting = false,
+        aboveInputSlot,
         initialEntries,
       },
       ref
@@ -256,6 +259,7 @@ const CraftInputBar = memo(
             onRemoveQueuedMessage={onRemoveQueuedMessage}
             onInterrupt={onInterrupt}
             isInterrupting={isInterrupting}
+            aboveInputSlot={aboveInputSlot}
             topSlot={topSlot}
             bottomLeftSlot={bottomLeftSlot}
             onPasteText={onPasteText}

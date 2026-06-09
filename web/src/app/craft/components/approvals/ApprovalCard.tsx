@@ -31,7 +31,7 @@ import CometEdge from "@/app/craft/components/CometEdge";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 // Hold the settled edge so the cross-fade is visible before the row unmounts.
-const SETTLE_HOLD_MS = 800;
+const SETTLE_HOLD_MS = 1800;
 
 interface ApprovalCardProps {
   approval: ApprovalView;
@@ -245,10 +245,8 @@ export default function ApprovalCard({
                   size="sm"
                   disabled={submitting}
                   onClick={() =>
-                    void submitDecision(
-                      "APPROVED",
-                      () => postApprovalSessionGrant(approval.approval_id),
-                      0
+                    void submitDecision("APPROVED", () =>
+                      postApprovalSessionGrant(approval.approval_id)
                     )
                   }
                   aria-label="Approve matching actions for this session"

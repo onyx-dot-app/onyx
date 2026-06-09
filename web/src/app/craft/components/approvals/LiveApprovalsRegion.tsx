@@ -1,35 +1,49 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import ApprovalCard from "@/app/craft/components/approvals/ApprovalCard";
 import { useLiveApprovals } from "@/app/craft/hooks/useLiveApprovals";
 
 interface LiveApprovalsRegionProps {
   sessionId: string | null;
+  onApprovalCountChange?: (count: number) => void;
 }
 
 // Renders one ApprovalCard per row returned by /live (already filtered
-// to undecided + within wait window). No outer logo/wrapper — caller is
-// responsible for placing this inside the previous assistant message
-// region so cards visually attach to the agent's last turn.
+// to undecided + within wait window). The region is intended for the
+// pre-input stack and should stay above queued messages.
 //
 // SWR cache invalidation is owned by useBuildStreaming's
 // approval_requested handler and by ApprovalCard itself after a
 // decision — this component just reads.
 export default function LiveApprovalsRegion({
   sessionId,
+  onApprovalCountChange,
 }: LiveApprovalsRegionProps) {
   const { data } = useLiveApprovals(sessionId);
 
-  if (!sessionId || !data || data.items.length === 0) {
-    return null;
-  }
-
-  const sorted = [...data.items].sort(
-    (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)
+  const sorted = useMemo(
+    () =>
+      data
+        ? [...data.items].sort(
+            (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)
+          )
+        : [],
+    [data]
   );
+  const approvalCount = sessionId ? sorted.length : 0;
+
+  useEffect(() => {
+    onApprovalCountChange?.(approvalCount);
+  }, [approvalCount, onApprovalCountChange]);
+
+  if (!sessionId || approvalCount === 0) return null;
 
   return (
-    <div data-testid="live-approvals-region" className="flex flex-col gap-3">
+    <div
+      data-testid="live-approvals-region"
+      className="flex flex-col gap-3 pb-1.5"
+    >
       {sorted.map((approval) => (
         <ApprovalCard key={approval.approval_id} approval={approval} />
       ))}

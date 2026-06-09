@@ -51,13 +51,13 @@ const READ_CHAT_PANEL = call("g-read-2", {
   rawOutput: "// 482 lines",
 });
 
-const GREP_TRAILING_SLOT = call("g-grep-1", {
+const GREP_ABOVE_INPUT_SLOT = call("g-grep-1", {
   kind: "search",
   toolName: "grep",
   title: "Searching content",
-  description: "trailingAssistantSlot",
+  description: "aboveInputSlot",
   rawOutput:
-    "web/src/app/craft/components/BuildMessageList.tsx:34:  trailingAssistantSlot?: React.ReactNode;\nweb/src/app/craft/components/ChatPanel.tsx:411:              trailingAssistantSlot={",
+    "web/src/sections/input/BaseInputBar.tsx:68:  aboveInputSlot?: ReactNode;\nweb/src/app/craft/components/ChatPanel.tsx:679:                    aboveInputSlot={",
 });
 
 const EDIT_API_SERVICES = call("g-edit-1", {
@@ -89,7 +89,7 @@ export const AllCompleted: Story = {
     toolCalls: [
       READ_BUILD_LIST,
       READ_CHAT_PANEL,
-      GREP_TRAILING_SLOT,
+      GREP_ABOVE_INPUT_SLOT,
       EDIT_API_SERVICES,
       BASH_LINT,
     ],
@@ -195,7 +195,7 @@ export const ManyCalls: Story = {
     toolCalls: [
       READ_BUILD_LIST,
       READ_CHAT_PANEL,
-      GREP_TRAILING_SLOT,
+      GREP_ABOVE_INPUT_SLOT,
       EDIT_API_SERVICES,
       BASH_LINT,
       call("g-bash-format", {
