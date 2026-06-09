@@ -3,9 +3,9 @@
 # docker-specific posture invariants the K8s lane can't catch by construction
 # (image ENTRYPOINT concat, HOME after setpriv, curl httpoxy on the bridge).
 #
-# Not per-PR -- the standup runs ~10-15 min cold. The narrower
-# pr-craft-compose-tests lane keeps PR feedback fast; this one runs nightly, on
-# every merge to main that touches the relevant paths, and on demand.
+# Not per-PR. The narrower pr-craft-compose-tests lane keeps PR feedback fast;
+# this one runs nightly, on every merge to main that touches the relevant paths,
+# and on demand.
 
 name: Craft Docker-Compose Integration
 
@@ -37,7 +37,7 @@ permissions:
 env:
   # Pin S3_ENDPOINT_URL defensively. The runner env is usually clean, but we hit
   # a leak during local smoke (host shell exported localhost:9004, compose's
-  # ${VAR:-default} picked it over --env-file). Belt-and-braces.
+  # ${VAR:-default} picked it over --env-file).
   S3_ENDPOINT_URL: "http://minio:9000"
   SANDBOX_BACKEND: "docker"
   ENABLE_CRAFT: "true"
@@ -47,24 +47,31 @@ env:
   # Pin to a CI-only tag so the locally-built sandbox image is what compose
   # passes to api_server, and what DockerSandboxManager.provision then loads
   # into each sandbox container. Without this, compose falls back to
-  # docker-compose.craft.yml's default version tag (currently v0.1.52); docker
-  # then pulls that published image from Docker Hub and the locally-built image
-  # is dead weight -- the lane silently runs against the public image instead of
-  # the tree under test.
+  # docker-compose.craft.yml's default version tag (currently v0.1.52).
   SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:ci"
 
 jobs:
-  integration:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  craft-compose-integration-test:
+    # Self-hosted runs-on pool (matches pr-craft-k8s-tests /
+    # pr-integration-tests / pr-playwright-tests). Github's runners do not have
+    # sufficient disk space by default.
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - volume=40gb
+      - run-id=${{ github.run_id }}-craft-compose-integration
+      - extras=ecr-cache
+    timeout-minutes: 15
 
     env:
       PYTHONPATH: ./backend
       DISABLE_TELEMETRY: "true"
 
     steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
 
@@ -77,7 +84,7 @@ jobs:
             backend/requirements/ee.txt
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
 
       - name: Build sandbox image (proxy-aware firewall-init.sh + opencode)
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
@@ -101,6 +108,8 @@ jobs:
           cache-from: type=gha,scope=craft-compose-backend
           cache-to: type=gha,scope=craft-compose-backend,mode=max
 
+      # docker-compose.craft.yml declares both as external. In prod install.sh
+      # --include-craft creates them, but CI doesn't run install.sh.
       - name: Create compose-external resources
         run: |
           docker network create onyx_craft_sandbox
@@ -215,10 +224,9 @@ jobs:
           path: compose-logs/
           retention-days: 7
 
-      # Always tear down. -v removes named volumes inside the compose project
+      # Tear down. -v removes named volumes inside the compose project
       # but the externally-declared sandbox_proxy_ca + onyx_craft_sandbox
-      # survive (compose down doesn't touch external resources). The runner is
-      # ephemeral so leftover state is moot, but explicit is cleaner.
+      # survive (compose down doesn't touch external resources).
       - name: Teardown
         if: always()
         working-directory: deployment/docker_compose
