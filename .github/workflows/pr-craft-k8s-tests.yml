@@ -15,6 +15,7 @@ on:
     branches: [main]
     paths:
       - "backend/onyx/server/features/build/sandbox/**"
+      - "backend/onyx/server/features/build/approvals/**"
       - "backend/onyx/skills/**"
       - "backend/onyx/sandbox_proxy/**"
       - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py"
@@ -26,6 +27,7 @@ on:
       - "backend/tests/external_dependency_unit/craft/test_user_library_sync.py"
       - "backend/tests/external_dependency_unit/craft/test_ensure_sandbox_running.py"
       - "backend/tests/external_dependency_unit/craft/test_scheduled_task_executor.py"
+      - "backend/tests/external_dependency_unit/craft/test_approval_gate.py"
       - "backend/tests/external_dependency_unit/craft/conftest.py"
       - ".github/workflows/pr-craft-k8s-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
@@ -454,7 +456,8 @@ jobs:
             backend/tests/external_dependency_unit/craft/test_skill_push.py \
             backend/tests/external_dependency_unit/craft/test_user_library_sync.py \
             backend/tests/external_dependency_unit/craft/test_ensure_sandbox_running.py \
-            backend/tests/external_dependency_unit/craft/test_scheduled_task_executor.py
+            backend/tests/external_dependency_unit/craft/test_scheduled_task_executor.py \
+            backend/tests/external_dependency_unit/craft/test_approval_gate.py
 
       # Surface the live-captured sandbox pod logs inline so the serve
       # startup output is visible in the run without downloading artifacts.

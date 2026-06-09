@@ -226,3 +226,55 @@ repos:
         language: system
         pass_filenames: false
         files: ^(bun\.lock|examples/widget/(.*\.(ts|tsx)|package\.json|tsconfig\.json))$
+
+      - id: shared-typescript-check
+        name: shared TypeScript type check
+        entry: bash -c 'cd web/lib/shared && bunx tsgo --noEmit'
+        language: system
+        pass_filenames: false
+        files: ^web/lib/shared/(.*\.(ts|tsx)|package\.json|tsconfig.*\.json)$
+
+      # mobile/ is a standalone Expo (SDK 56) app with its own bun.lock — it is NOT
+      # part of the root bun workspace, so it gets its own install + lockfile-check
+      # hooks. Lint/format use the Expo-native toolchain (ESLint flat config +
+      # Prettier) rather than web's oxlint/oxfmt: eslint-config-expo gives RN-aware
+      # rules and prettier-plugin-tailwindcss sorts NativeWind classes.
+      - id: mobile-bun-install
+        name: mobile bun install
+        description: "Automatically run 'bun install' in mobile/ after a checkout, pull or rebase"
+        language: system
+        entry: bash -c 'cd mobile && bun install'
+        pass_filenames: false
+        files: ^mobile/(package\.json|bun\.lock)$
+        stages: [post-checkout, post-merge, post-rewrite]
+      - id: mobile-bun-install-check
+        name: mobile bun install check
+        description: "Check the 'mobile/bun.lock' is updated"
+        language: system
+        entry: bash -c 'cd mobile && bun install'
+        pass_filenames: false
+        files: ^mobile/(package\.json|bun\.lock)$
+
+      # Uses tsc (not tsgo) because mobile is standalone and types against Expo/RN
+      # (tsconfig extends expo/tsconfig.base); the native-preview compiler isn't
+      # wired in here.
+      - id: mobile-typescript-check
+        name: mobile TypeScript type check
+        entry: bash -c 'cd mobile && bunx tsc --noEmit'
+        language: system
+        pass_filenames: false
+        files: ^mobile/(.*\.(ts|tsx)|package\.json|tsconfig\.json|bun\.lock)$
+
+      - id: mobile-lint
+        name: mobile lint
+        entry: bash -c 'cd mobile && bunx expo lint'
+        language: system
+        pass_filenames: false
+        files: ^mobile/.*\.(ts|tsx|js|jsx)$
+
+      - id: mobile-format
+        name: mobile format
+        entry: bash -c 'cd mobile && bunx prettier --write "${@#mobile/}"' _
+        language: system
+        files: ^mobile/
+        types_or: [javascript, jsx, ts, tsx, json, css]

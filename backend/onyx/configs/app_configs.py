@@ -286,6 +286,12 @@ METRICS_AUTH_TOKEN = os.environ.get("METRICS_AUTH_TOKEN") or ""
 # deliberate choice, since auth is otherwise required by default.
 DISABLE_METRICS_AUTH = os.environ.get("DISABLE_METRICS_AUTH", "").lower() == "true"
 
+# Explicit opt-in: serve the interactive API docs and schema (/openapi.json,
+# /docs, /redoc) publicly with no authentication. Default off so the API surface
+# is not exposed on a fresh deployment. When disabled the routes are not
+# registered at all (404). Note: these renderers never bypass per-route auth.
+ENABLE_PUBLIC_DOCS = os.environ.get("ENABLE_PUBLIC_DOCS", "").lower() == "true"
+
 # Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
 # By default, this is set to match the Redis expiry time for consistency.
 AUTH_COOKIE_EXPIRE_TIME_SECONDS = int(
