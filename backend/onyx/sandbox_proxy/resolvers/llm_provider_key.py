@@ -18,6 +18,7 @@ from onyx.db.users import fetch_user_by_id
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
 from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.sandbox_proxy.logging_utils import short_log_id
 from onyx.server.features.build.db.build_session import (
     fetch_all_supported_build_llm_providers,
 )
@@ -50,7 +51,9 @@ class LLMProviderKeyResolver(CredentialResolver):
         with get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id) as db:
             user = fetch_user_by_id(db, user_id)
             if user is None:
-                raise CredentialUnavailableError(f"sandbox user {user_id} not found")
+                raise CredentialUnavailableError(
+                    f"sandbox user {short_log_id(user_id)} not found"
+                )
             providers = fetch_all_supported_build_llm_providers(db, user)
 
         # First accessible provider of the type, matching how provisioning picks
@@ -58,14 +61,14 @@ class LLMProviderKeyResolver(CredentialResolver):
         provider = next((p for p in providers if p.provider == provider_type), None)
         if provider is None:
             raise CredentialUnavailableError(
-                f"no accessible {provider_type} provider for user {user_id}"
+                f"no accessible {provider_type} provider for user {short_log_id(user_id)}"
             )
         if not provider.api_key:
             raise CredentialUnavailableError(
-                f"{provider_type} provider for user {user_id} has no api_key"
+                f"{provider_type} provider for user {short_log_id(user_id)} has no api_key"
             )
 
-        logger.info(
+        logger.debug(
             "llm_provider_key_resolver.resolved provider=%s host=%s",
             provider_type,
             request.host,

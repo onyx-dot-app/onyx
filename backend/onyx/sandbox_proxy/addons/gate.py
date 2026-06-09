@@ -34,10 +34,23 @@ from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.sandbox_proxy.credential_injection import InjectionOutcome
 from onyx.sandbox_proxy.errors import http_403
 from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
+from onyx.sandbox_proxy.logging_utils import credential_outcome_label
+from onyx.sandbox_proxy.logging_utils import egress_approval_matched_args
+from onyx.sandbox_proxy.logging_utils import EGRESS_APPROVAL_MATCHED_FIELDS
+from onyx.sandbox_proxy.logging_utils import egress_matched_args
+from onyx.sandbox_proxy.logging_utils import EGRESS_MATCHED_FIELDS
+from onyx.sandbox_proxy.logging_utils import egress_session_matched_args
+from onyx.sandbox_proxy.logging_utils import EGRESS_SESSION_MATCHED_FIELDS
+from onyx.sandbox_proxy.logging_utils import egress_target_args
+from onyx.sandbox_proxy.logging_utils import EGRESS_TARGET_FIELDS
+from onyx.sandbox_proxy.logging_utils import full_log_id
+from onyx.sandbox_proxy.logging_utils import sandbox_log_label
+from onyx.sandbox_proxy.logging_utils import short_log_id
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from onyx.server.features.build.db import action_approval
@@ -170,12 +183,13 @@ class GateAddon:
         tag = _parse_proxy_auth_username(auth_header)
 
         logger.debug(
-            "gate.http_connect conn_id=%s host=%s port=%s proxy_auth=%r parsed_tag=%s",
-            conn_id,
+            "proxy.session_tag_capture conn=%s host=%s port=%s session=%s "
+            "proxy_auth_present=%s",
+            conn_id or "-",
             flow.request.host,
             flow.request.port,
-            auth_header,
-            tag,
+            short_log_id(tag),
+            str(auth_header is not None).lower(),
         )
         if conn_id is None:
             return
@@ -235,9 +249,9 @@ class GateAddon:
         flow.request.stream = True
         flow.metadata[_SNAPSHOT_STREAM_FLAG] = True
         logger.info(
-            "gate.snapshot_stream sandbox_id=%s tenant_id=%s host=%s method=%s",
-            sandbox.sandbox_id,
+            "proxy.snapshot_stream tenant=%s sandbox=%s host=%s method=%s",
             sandbox.tenant_id,
+            sandbox_log_label(sandbox),
             flow.request.host,
             flow.request.method,
         )
@@ -267,19 +281,43 @@ class GateAddon:
             # the original request, bypassing the gate after an APPROVED row
             # exists.
             try:
-                await asyncio.to_thread(
+                injection = await asyncio.to_thread(
                     self._dispatch_injection_or_block,
                     flow,
                     sandbox=ctx.without_session(),
                     matched_actions=matched_actions,
                 )
+                if injection is InjectionOutcome.BLOCKED:
+                    logger.warning(
+                        "proxy.egress_block "
+                        + EGRESS_SESSION_MATCHED_FIELDS
+                        + " reason=%s credential_outcome=%s",
+                        *egress_session_matched_args(
+                            flow, ctx, matched_actions, EndpointPolicy.ASK
+                        ),
+                        SandboxProxyError.CREDENTIAL_ERROR.value,
+                        credential_outcome_label(injection),
+                    )
+                else:
+                    logger.info(
+                        "proxy.egress_allow "
+                        + EGRESS_SESSION_MATCHED_FIELDS
+                        + " credential_outcome=%s",
+                        *egress_session_matched_args(
+                            flow, ctx, matched_actions, EndpointPolicy.ASK
+                        ),
+                        credential_outcome_label(injection),
+                    )
             except Exception:
                 logger.exception(
-                    "gate.approval_grant_dispatch_error session_id=%s tenant_id=%s "
-                    "action_type=%s",
-                    ctx.session_id,
+                    "proxy.approval_dispatch_error tenant=%s sandbox=%s "
+                    "session=%s app=%r action_type=%s session_id=%s",
                     ctx.tenant_id,
+                    sandbox_log_label(ctx),
+                    short_log_id(ctx.session_id),
+                    matched_actions.app_name,
                     matched_actions.governing_action.action_type,
+                    full_log_id(ctx.session_id),
                 )
                 flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             return
@@ -302,20 +340,60 @@ class GateAddon:
                 # OAuth token (token POST + Redis lock) before rendering
                 # headers; Keep that off the proxy event loop so a slow token
                 # endpoint stalls only this request, not every in-flight flow.
-                await asyncio.to_thread(
+                injection = await asyncio.to_thread(
                     self._dispatch_injection_or_block,
                     flow,
                     sandbox=ctx.without_session(),
                     matched_actions=matched_actions,
                 )
+                if injection is InjectionOutcome.BLOCKED:
+                    logger.warning(
+                        "proxy.egress_block "
+                        + EGRESS_APPROVAL_MATCHED_FIELDS
+                        + " reason=%s credential_outcome=%s",
+                        *egress_approval_matched_args(
+                            flow, ctx, matched_actions, EndpointPolicy.ASK, approval_id
+                        ),
+                        SandboxProxyError.CREDENTIAL_ERROR.value,
+                        credential_outcome_label(injection),
+                    )
+                else:
+                    logger.info(
+                        "proxy.egress_allow "
+                        + EGRESS_APPROVAL_MATCHED_FIELDS
+                        + " credential_outcome=%s",
+                        *egress_approval_matched_args(
+                            flow, ctx, matched_actions, EndpointPolicy.ASK, approval_id
+                        ),
+                        credential_outcome_label(injection),
+                    )
+            else:
+                reason = (
+                    SandboxProxyError.USER_REJECTED.value
+                    if decision == ApprovalDecision.REJECTED
+                    else SandboxProxyError.NOT_AUTHORIZED.value
+                )
+                logger.info(
+                    "proxy.egress_block "
+                    + EGRESS_APPROVAL_MATCHED_FIELDS
+                    + " reason=%s",
+                    *egress_approval_matched_args(
+                        flow, ctx, matched_actions, EndpointPolicy.ASK, approval_id
+                    ),
+                    reason,
+                )
         except Exception:
             logger.exception(
-                "gate.unhandled_error session_id=%s tenant_id=%s "
-                "approval_id=%s action_type=%s",
-                ctx.session_id,
+                "proxy.approval_unhandled_error tenant=%s sandbox=%s session=%s "
+                "approval=%s app=%r action_type=%s session_id=%s approval_id=%s",
                 ctx.tenant_id,
-                approval_id,
+                sandbox_log_label(ctx),
+                short_log_id(ctx.session_id),
+                short_log_id(approval_id),
+                matched_actions.app_name,
                 matched_actions.governing_action.action_type,
+                full_log_id(ctx.session_id),
+                full_log_id(approval_id),
             )
             flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             if approval_id is not None:
@@ -344,10 +422,12 @@ class GateAddon:
             # mitmproxy peername returned no usable IP -- should never happen
             # over real TCP. Log loudly so a stuck NAT or transport-mode mishap
             # doesn't read as "everything just 403's silently".
+            peer = flow.client_conn.peername
+            peer_label = "-" if peer is None else ":".join(str(part) for part in peer)
             logger.warning(
-                "gate.no_src_ip host=%s peername=%s",
+                "proxy.identity_missing_src_ip host=%s peer=%s",
                 flow.request.host,
-                flow.client_conn.peername,
+                peer_label,
             )
             flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
             return None
@@ -357,7 +437,7 @@ class GateAddon:
         except Exception:
             # A DB blip can't be allowed to grant ungated egress.
             logger.exception(
-                "gate.identity_error src_ip=%s host=%s",
+                "proxy.identity_error src_ip=%s host=%s",
                 src_ip,
                 flow.request.host,
             )
@@ -369,7 +449,7 @@ class GateAddon:
             # (2) Deployment-shape SNAT masks the sandbox's real bridge IP (e.g.
             # proxy outside the sandbox bridge).
             logger.warning(
-                "gate.unidentified_sandbox src_ip=%s host=%s",
+                "proxy.identity_unknown_sandbox src_ip=%s host=%s",
                 src_ip,
                 flow.request.host,
             )
@@ -380,6 +460,15 @@ class GateAddon:
         # future stream opt-in can't silently bypass the cap.
         raw = flow.request.raw_content
         if raw is None or len(raw) > PARSER_MAX_BODY_BYTES:
+            logger.info(
+                "proxy.egress_block "
+                + EGRESS_TARGET_FIELDS
+                + " reason=%s body_bytes=%s body_limit=%s",
+                *egress_target_args(flow, sandbox),
+                SandboxProxyError.BODY_TOO_LARGE.value,
+                "-" if raw is None else len(raw),
+                PARSER_MAX_BODY_BYTES,
+            )
             flow.response = http_403(SandboxProxyError.BODY_TOO_LARGE)
             return None
 
@@ -392,51 +481,82 @@ class GateAddon:
             # still get a chance to inject so the request doesn't forward with a
             # placeholder credential.
             logger.exception(
-                "gate.matcher_error host=%s error=%s",
+                "proxy.matcher_error tenant=%s sandbox=%s host=%s error=%r",
+                sandbox.tenant_id,
+                sandbox_log_label(sandbox),
                 flow.request.host,
                 str(e),
             )
             matched_actions = None
 
-        # Audit every evaluated request. session_id is the unvalidated claimed
-        # tag (the ASK path validates it below); off_catalog = nothing matched.
-        logger.info(
-            "gate.request tenant_id=%s sandbox_id=%s session_id=%s host=%s "
-            "action_type=%s policy=%s",
-            sandbox.tenant_id,
-            sandbox.sandbox_id,
-            self._extract_session_tag(flow),
-            flow.request.host,
-            matched_actions.governing_action.action_type
-            if matched_actions is not None
-            else "-",
-            matched_actions.governing_action.policy.value
-            if matched_actions is not None
-            else "off_catalog",
-        )
-
         # ALWAYS / DENY / off-catalog terminate here; ASK falls through to the
         # approval pipeline in `request()`.
         if matched_actions is None:
-            self._dispatch_injection_or_block(
+            injection = self._dispatch_injection_or_block(
                 flow, sandbox=sandbox, matched_actions=None
             )
+            if injection is InjectionOutcome.BLOCKED:
+                logger.warning(
+                    "proxy.egress_block "
+                    + EGRESS_TARGET_FIELDS
+                    + " reason=%s credential_outcome=%s",
+                    *egress_target_args(flow, sandbox),
+                    SandboxProxyError.CREDENTIAL_ERROR.value,
+                    credential_outcome_label(injection),
+                )
+            elif injection is not InjectionOutcome.PASS_THROUGH:
+                logger.info(
+                    "proxy.egress_allow "
+                    + EGRESS_TARGET_FIELDS
+                    + " policy=%s credential_outcome=%s",
+                    *egress_target_args(flow, sandbox),
+                    "off_catalog",
+                    credential_outcome_label(injection),
+                )
             return None
 
         if matched_actions.governing_action.policy is EndpointPolicy.DENY:
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
+            logger.info(
+                "proxy.egress_block " + EGRESS_MATCHED_FIELDS + " reason=%s",
+                *egress_matched_args(
+                    flow, sandbox, matched_actions, EndpointPolicy.DENY
+                ),
+                SandboxProxyError.POLICY_DENIED.value,
+            )
             return None
 
         if matched_actions.governing_action.policy is EndpointPolicy.ALWAYS:
             # Off-thread: see the ASK path in `request` — the resolver may
             # refresh an expiring OAuth token before injecting on this
             # auto-approved call.
-            await asyncio.to_thread(
+            injection = await asyncio.to_thread(
                 self._dispatch_injection_or_block,
                 flow,
                 sandbox=sandbox,
                 matched_actions=matched_actions,
             )
+            if injection is InjectionOutcome.BLOCKED:
+                logger.warning(
+                    "proxy.egress_block "
+                    + EGRESS_MATCHED_FIELDS
+                    + " reason=%s credential_outcome=%s",
+                    *egress_matched_args(
+                        flow, sandbox, matched_actions, EndpointPolicy.ALWAYS
+                    ),
+                    SandboxProxyError.CREDENTIAL_ERROR.value,
+                    credential_outcome_label(injection),
+                )
+            else:
+                logger.info(
+                    "proxy.egress_allow "
+                    + EGRESS_MATCHED_FIELDS
+                    + " credential_outcome=%s",
+                    *egress_matched_args(
+                        flow, sandbox, matched_actions, EndpointPolicy.ALWAYS
+                    ),
+                    credential_outcome_label(injection),
+                )
             return None
 
         # ASK: resolve the originating session before prompting. An
@@ -445,35 +565,38 @@ class GateAddon:
             session_id = self._resolve_gated_session(flow, sandbox)
         except Exception:
             logger.exception(
-                "gate.session_lookup_error sandbox_id=%s user_id=%s host=%s",
-                sandbox.sandbox_id,
-                sandbox.user_id,
+                "proxy.session_lookup_error tenant=%s sandbox=%s host=%s app=%r "
+                "action_type=%s",
+                sandbox.tenant_id,
+                sandbox_log_label(sandbox),
                 flow.request.host,
+                matched_actions.app_name,
+                matched_actions.governing_action.action_type,
             )
             flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
             return None
         if session_id is None:
             logger.info(
-                "gate.unattributed_block sandbox_id=%s user_id=%s "
-                "tenant_id=%s action_type=%s host=%s",
-                sandbox.sandbox_id,
-                sandbox.user_id,
-                sandbox.tenant_id,
-                matched_actions.governing_action.action_type,
-                flow.request.host,
+                "proxy.egress_block " + EGRESS_MATCHED_FIELDS + " reason=%s",
+                *egress_matched_args(
+                    flow, sandbox, matched_actions, EndpointPolicy.ASK
+                ),
+                SandboxProxyError.NO_ACTIVE_SESSION.value,
             )
             flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
             return None
 
         ctx = sandbox.with_session(session_id)
-        logger.info(
-            "gate.match session_id=%s tenant_id=%s sandbox_id=%s "
-            "action_type=%s host=%s",
-            ctx.session_id,
+        logger.debug(
+            "proxy.approval_match tenant=%s sandbox=%s session=%s host=%s "
+            "method=%s app=%r action_type=%s",
             ctx.tenant_id,
-            ctx.sandbox_id,
-            matched_actions.governing_action.action_type,
+            sandbox_log_label(ctx),
+            short_log_id(ctx.session_id),
             flow.request.host,
+            flow.request.method,
+            matched_actions.app_name,
+            matched_actions.governing_action.action_type,
         )
         return ctx, matched_actions
 
@@ -536,11 +659,12 @@ class GateAddon:
                 return _ApprovalGrant(decided_via=ApprovalDecidedVia.SESSION_GRANT)
         except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
-                "gate.session_grant_cache_check_failed session_id=%s "
-                "tenant_id=%s external_app_id=%s error=%s",
-                ctx.session_id,
+                "proxy.approval_grant_cache_error tenant=%s session=%s "
+                "external_app_id=%s operation=%s error=%r",
                 ctx.tenant_id,
+                short_log_id(ctx.session_id),
                 matched_actions.external_app_id,
+                "check",
                 str(e),
             )
 
@@ -571,11 +695,12 @@ class GateAddon:
                     )
             except CACHE_TRANSIENT_ERRORS as e:
                 logger.warning(
-                    "gate.session_grant_cache_hydrate_failed session_id=%s "
-                    "tenant_id=%s external_app_id=%s error=%s",
-                    ctx.session_id,
+                    "proxy.approval_grant_cache_error tenant=%s session=%s "
+                    "external_app_id=%s operation=%s error=%r",
                     ctx.tenant_id,
+                    short_log_id(ctx.session_id),
                     matched_actions.external_app_id,
+                    "hydrate",
                     str(e),
                 )
         return _ApprovalGrant(decided_via=ApprovalDecidedVia.SESSION_GRANT)
@@ -596,12 +721,17 @@ class GateAddon:
             )
         except Exception:
             logger.exception(
-                "gate.approval_grant_check_error session_id=%s tenant_id=%s "
-                "approval_id=%s action_type=%s",
-                ctx.session_id,
+                "proxy.approval_grant_check_error tenant=%s sandbox=%s "
+                "session=%s approval=%s app=%r action_type=%s session_id=%s "
+                "approval_id=%s",
                 ctx.tenant_id,
-                approval_id,
+                sandbox_log_label(ctx),
+                short_log_id(ctx.session_id),
+                short_log_id(approval_id),
+                matched_actions.app_name,
                 matched_actions.governing_action.action_type,
+                full_log_id(ctx.session_id),
+                full_log_id(approval_id),
             )
             return False
 
@@ -643,23 +773,30 @@ class GateAddon:
             db.commit()
 
         logger.info(
-            "gate.approval_grant_applied approval_id=%s session_id=%s tenant_id=%s "
-            "decided_via=%s external_app_id=%s action_type=%s",
-            applied_approval_id,
-            ctx.session_id,
+            "proxy.approval_decided tenant=%s sandbox=%s session=%s approval=%s "
+            "app=%r external_app_id=%s action_type=%s decision=%s source=%s "
+            "session_id=%s approval_id=%s",
             ctx.tenant_id,
-            grant.decided_via,
+            sandbox_log_label(ctx),
+            short_log_id(ctx.session_id),
+            short_log_id(applied_approval_id),
+            matched_actions.app_name,
             matched_actions.external_app_id,
             matched_actions.governing_action.action_type,
+            ApprovalDecision.APPROVED.value,
+            grant.decided_via.value,
+            full_log_id(ctx.session_id),
+            full_log_id(applied_approval_id),
         )
         try:
             if grant.notif_type is not None:
                 self._notify_approval_grant(ctx, grant)
         except Exception as e:
             logger.warning(
-                "gate.approval_grant_notify_failed approval_id=%s error=%s",
-                applied_approval_id,
+                "proxy.approval_notify_error approval=%s error=%r approval_id=%s",
+                short_log_id(applied_approval_id),
                 str(e),
+                full_log_id(applied_approval_id),
             )
         return True
 
@@ -693,30 +830,37 @@ class GateAddon:
             )
         except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
-                "gate.announce_failed approval_id=%s error=%s",
-                approval_id,
+                "proxy.approval_announce_error approval=%s error=%r approval_id=%s",
+                short_log_id(approval_id),
                 str(e),
+                full_log_id(approval_id),
             )
 
         logger.info(
-            "gate.row_committed approval_id=%s session_id=%s tenant_id=%s "
-            "sandbox_id=%s proxy_instance_id=%s action_type=%s action_count=%s",
-            approval_id,
-            ctx.session_id,
+            "proxy.approval_requested tenant=%s sandbox=%s session=%s approval=%s "
+            "app=%r external_app_id=%s action_type=%s action_count=%s "
+            "proxy_instance=%s session_id=%s approval_id=%s",
             ctx.tenant_id,
-            ctx.sandbox_id,
-            self._proxy_instance_id,
+            sandbox_log_label(ctx),
+            short_log_id(ctx.session_id),
+            short_log_id(approval_id),
+            matched_actions.app_name,
+            matched_actions.external_app_id,
             matched_actions.governing_action.action_type,
             len(matched_actions.actions),
+            self._proxy_instance_id,
+            full_log_id(ctx.session_id),
+            full_log_id(approval_id),
         )
 
         try:
             self._notify_approval_requested(approval_id, ctx, matched_actions)
         except Exception as e:
             logger.warning(
-                "approval.notify_failed approval_id=%s error=%s",
-                approval_id,
+                "proxy.approval_notify_error approval=%s error=%r approval_id=%s",
+                short_log_id(approval_id),
                 str(e),
+                full_log_id(approval_id),
             )
 
         return approval_id
@@ -738,30 +882,40 @@ class GateAddon:
             )
             if decision is not None:
                 logger.info(
-                    "gate.wake_received approval_id=%s session_id=%s "
-                    "tenant_id=%s decision=%s",
-                    approval_id,
-                    ctx.session_id,
+                    "proxy.approval_decided tenant=%s sandbox=%s session=%s "
+                    "approval=%s app=%r action_type=%s decision=%s wake=%s "
+                    "source=%s session_id=%s approval_id=%s",
                     ctx.tenant_id,
+                    sandbox_log_label(ctx),
+                    short_log_id(ctx.session_id),
+                    short_log_id(approval_id),
+                    matched_actions.app_name,
+                    matched_actions.governing_action.action_type,
                     decision.value,
+                    "received",
+                    "wake",
+                    full_log_id(ctx.session_id),
+                    full_log_id(approval_id),
                 )
                 return decision
-            logger.info(
-                "gate.wake_timeout approval_id=%s session_id=%s tenant_id=%s "
-                "action_type=%s",
-                approval_id,
-                ctx.session_id,
-                ctx.tenant_id,
-                matched_actions.governing_action.action_type,
-            )
             resolved = self._claim_expired_or_read_winner(approval_id, ctx.tenant_id)
-            if resolved == ApprovalDecision.EXPIRED:
-                logger.info(
-                    "gate.expired_on_timeout approval_id=%s session_id=%s tenant_id=%s",
-                    approval_id,
-                    ctx.session_id,
-                    ctx.tenant_id,
-                )
+            source = "timeout" if resolved == ApprovalDecision.EXPIRED else "db_winner"
+            logger.info(
+                "proxy.approval_decided tenant=%s sandbox=%s session=%s approval=%s "
+                "app=%r action_type=%s decision=%s wake=%s source=%s "
+                "session_id=%s approval_id=%s",
+                ctx.tenant_id,
+                sandbox_log_label(ctx),
+                short_log_id(ctx.session_id),
+                short_log_id(approval_id),
+                matched_actions.app_name,
+                matched_actions.governing_action.action_type,
+                resolved.value,
+                "missed",
+                source,
+                full_log_id(ctx.session_id),
+                full_log_id(approval_id),
+            )
             return resolved
         except asyncio.CancelledError:
             # Sandbox socket closed mid-wait. Terminalize the audit row, then
@@ -792,9 +946,10 @@ class GateAddon:
                 # FK cascade dropped the row (build_session deleted).
                 # Treat as expired so the upstream call is rejected.
                 logger.error(
-                    "gate.row_missing_on_claim approval_id=%s tenant_id=%s",
-                    approval_id,
+                    "proxy.approval_row_missing tenant=%s approval=%s approval_id=%s",
                     tenant_id,
+                    short_log_id(approval_id),
+                    full_log_id(approval_id),
                 )
                 return ApprovalDecision.EXPIRED
             return existing.decision
@@ -817,15 +972,18 @@ class GateAddon:
         *,
         sandbox: ResolvedSandbox,
         matched_actions: AllMatchedActions | None,
-    ) -> None:
+    ) -> InjectionOutcome:
         """Runs the credential dispatcher; Fails closed with a 403 on BLOCKED."""
-        self._credential_dispatcher.apply_or_block(
+        outcome = self._credential_dispatcher.apply(
             flow,
             InjectionContext(
                 sandbox=sandbox,
                 matched_actions=matched_actions,
             ),
         )
+        if outcome is InjectionOutcome.BLOCKED:
+            flow.response = http_403(SandboxProxyError.CREDENTIAL_ERROR)
+        return outcome
 
     def _terminalize_after_unhandled_error(
         self, approval_id: UUID, tenant_id: str
@@ -840,9 +998,12 @@ class GateAddon:
             decision = self._claim_expired_or_read_winner(approval_id, tenant_id)
         except Exception:
             logger.exception(
-                "gate.terminalize_db_failed approval_id=%s tenant_id=%s",
-                approval_id,
+                "proxy.approval_terminalize_error tenant=%s approval=%s "
+                "operation=%s approval_id=%s",
                 tenant_id,
+                short_log_id(approval_id),
+                "db",
+                full_log_id(approval_id),
             )
             return
         try:
@@ -851,9 +1012,12 @@ class GateAddon:
             )
         except Exception:
             logger.exception(
-                "gate.terminalize_wake_failed approval_id=%s tenant_id=%s",
-                approval_id,
+                "proxy.approval_terminalize_error tenant=%s approval=%s "
+                "operation=%s approval_id=%s",
                 tenant_id,
+                short_log_id(approval_id),
+                "wake",
+                full_log_id(approval_id),
             )
 
     # ------------------------------------------------------------------
@@ -882,24 +1046,28 @@ class GateAddon:
                         pass
                     if decision == ApprovalDecision.EXPIRED:
                         logger.info(
-                            "gate.drain_expired approval_id=%s tenant_id=%s",
-                            approval_id,
+                            "proxy.drain_expired tenant=%s approval=%s approval_id=%s",
                             tenant_id,
+                            short_log_id(approval_id),
+                            full_log_id(approval_id),
                         )
                     else:
                         logger.info(
-                            "gate.drain_forwarded approval_id=%s "
-                            "tenant_id=%s decision=%s",
-                            approval_id,
+                            "proxy.drain_forwarded tenant=%s approval=%s "
+                            "decision=%s approval_id=%s",
                             tenant_id,
+                            short_log_id(approval_id),
                             decision.value,
+                            full_log_id(approval_id),
                         )
                 except Exception as e:
                     logger.warning(
-                        "gate.drain_error approval_id=%s tenant_id=%s error=%s",
-                        approval_id,
+                        "proxy.drain_error tenant=%s approval=%s error=%r "
+                        "approval_id=%s",
                         tenant_id,
+                        short_log_id(approval_id),
                         str(e),
+                        full_log_id(approval_id),
                     )
 
         # Exclude self so we don't deadlock if drain ever ends up registered in
@@ -907,7 +1075,7 @@ class GateAddon:
         self_task = asyncio.current_task()
         pending = [t for t in self._inflight_tasks if t is not self_task]
         if pending:
-            logger.info("gate.drain_awaiting_tasks count=%d", len(pending))
+            logger.info("proxy.drain_wait requests=%s", len(pending))
             await asyncio.wait(pending)
 
     # --------------------------------------------------------------------------
@@ -991,9 +1159,9 @@ class GateAddon:
         tag = self._extract_session_tag(flow)
         if tag is None:
             logger.warning(
-                "gate.session_tag_missing sandbox_id=%s user_id=%s host=%s",
-                sandbox.sandbox_id,
-                sandbox.user_id,
+                "proxy.session_missing tenant=%s sandbox=%s host=%s",
+                sandbox.tenant_id,
+                sandbox_log_label(sandbox),
                 flow.request.host,
             )
             return None
@@ -1001,9 +1169,9 @@ class GateAddon:
             tagged_id = UUID(tag)
         except ValueError:
             logger.warning(
-                "gate.session_tag_malformed sandbox_id=%s user_id=%s host=%s",
-                sandbox.sandbox_id,
-                sandbox.user_id,
+                "proxy.session_malformed tenant=%s sandbox=%s host=%s",
+                sandbox.tenant_id,
+                sandbox_log_label(sandbox),
                 flow.request.host,
             )
             return None
@@ -1013,16 +1181,18 @@ class GateAddon:
         if exact is None:
             # Stale, foreign, or tampered tag. Fail closed — do not guess.
             logger.warning(
-                "gate.session_tag_unverified sandbox_id=%s user_id=%s host=%s",
-                sandbox.sandbox_id,
-                sandbox.user_id,
+                "proxy.session_unverified tenant=%s sandbox=%s session=%s host=%s",
+                sandbox.tenant_id,
+                sandbox_log_label(sandbox),
+                short_log_id(tagged_id),
                 flow.request.host,
             )
             return None
-        logger.info(
-            "gate.session_exact session_id=%s sandbox_id=%s host=%s",
-            exact,
-            sandbox.sandbox_id,
+        logger.debug(
+            "proxy.session_verified tenant=%s sandbox=%s session=%s host=%s",
+            sandbox.tenant_id,
+            sandbox_log_label(sandbox),
+            short_log_id(exact),
             flow.request.host,
         )
         return exact
@@ -1040,14 +1210,14 @@ class GateAddon:
         tag = cached or direct
 
         logger.debug(
-            "gate.session_tag_extract conn_id=%s host=%s cached=%s "
-            "direct=%s direct_proxy_auth=%r resolved=%s",
-            conn_id,
+            "proxy.session_tag_resolved conn=%s host=%s cached=%s direct=%s "
+            "proxy_auth_present=%s session=%s",
+            conn_id or "-",
             flow.request.host,
-            cached,
-            direct,
-            direct_auth_header,
-            tag,
+            short_log_id(cached),
+            short_log_id(direct),
+            str(direct_auth_header is not None).lower(),
+            short_log_id(tag),
         )
         return tag
 

@@ -19,6 +19,7 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
 from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.sandbox_proxy.logging_utils import short_log_id
 from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.utils.logger import setup_logger
@@ -54,18 +55,24 @@ class OnyxPatResolver(CredentialResolver):
         with get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id) as db:
             sandbox = get_sandbox_by_id(db, sandbox_id)
             if sandbox is None:
-                raise CredentialUnavailableError(f"sandbox {sandbox_id} not found")
+                raise CredentialUnavailableError(
+                    f"sandbox {short_log_id(sandbox_id)} not found"
+                )
             if sandbox.encrypted_pat is None:
-                raise CredentialUnavailableError(f"sandbox {sandbox_id} has no PAT")
+                raise CredentialUnavailableError(
+                    f"sandbox {short_log_id(sandbox_id)} has no PAT"
+                )
             try:
                 raw_token = sandbox.encrypted_pat.get_value(apply_mask=False)
             except Exception as e:
                 raise CredentialUnavailableError(
-                    f"failed to decrypt PAT for sandbox {sandbox_id}"
+                    f"failed to decrypt PAT for sandbox {short_log_id(sandbox_id)}"
                 ) from e
 
-        logger.info(
-            "onyx_pat_resolver.resolved sandbox_id=%s host=%s", sandbox_id, request.host
+        logger.debug(
+            "onyx_pat_resolver.resolved sandbox=%s host=%s",
+            short_log_id(sandbox_id),
+            request.host,
         )
         bearer = f"{BEARER_PREFIX}{raw_token}"
         return {API_KEY_HEADER_NAME: bearer, API_KEY_HEADER_ALTERNATIVE_NAME: bearer}

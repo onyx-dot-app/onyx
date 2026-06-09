@@ -57,11 +57,11 @@ class ExternalAppResolver(CredentialResolver):
                 db, matched_actions.external_app_id, ctx.sandbox.user_id
             )
 
-        # Per-app audit line so `external_app_id` survives in logs even when
-        # the dispatcher's `credential_injection.applied` log groups by resolver.
+        # Per-app debug line so `external_app_id` survives in logs even when
+        # the dispatcher's credential logs group by resolver.
         # Empty `headers` means "app disabled / deleted / placeholders unfillable" —
         # the request still forwards (upstream 401 surfaces to the user).
-        logger.info(
+        logger.debug(
             "external_app_resolver.resolved external_app_id=%s host=%s headers=%s",
             matched_actions.external_app_id,
             request.host,
