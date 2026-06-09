@@ -15,6 +15,21 @@ global:
   # Host for all Onyx components
   host: "0.0.0.0"
 
+# -- Custom (private/internal) CA certificates for outbound TLS.
+# When enabled, every pod that makes outbound TLS connections (api server,
+# celery workers, bots, MCP server, model servers) mounts the referenced
+# Secret/ConfigMap at /usr/local/share/ca-certificates, runs
+# `update-ca-certificates` at startup, and sets REQUESTS_CA_BUNDLE /
+# SSL_CERT_FILE so Python HTTP clients trust the updated bundle.
+# Keys must be PEM certs ending in `.crt`.
+# NOTE: requires the containers to run as root (the chart default);
+# incompatible with runAsNonRoot overrides.
+customCACerts:
+  enabled: false
+  # Exactly one of secretName / configMapName must be set when enabled.
+  secretName: ""
+  configMapName: ""
+
 postgresql:
   enabled: true
   # IMPORTANT: This nameOverride is required for the CloudNativePG operator to find itself.
@@ -110,6 +125,8 @@ autoscaling:
 
 inferenceCapability:
   extraEnv: []
+  volumes: []
+  volumeMounts: []
   service:
     portName: modelserver
     type: ClusterIP
@@ -165,6 +182,8 @@ inferenceCapability:
 
 indexCapability:
   extraEnv: []
+  volumes: []
+  volumeMounts: []
   service:
     portName: modelserver
     type: ClusterIP
@@ -483,7 +502,9 @@ api:
   affinity: {}
 
   # Run update-ca-certificates before starting the server.
-  # Useful when mounting custom CA certificates via volumes/volumeMounts.
+  # DEPRECATED: prefer the top-level customCACerts block, which covers all
+  # outbound-TLS pods. This flag only affects the API server; useful when
+  # mounting custom CA certificates manually via api.volumes/api.volumeMounts.
   # NOTE: Requires the container to run as root (runAsUser: 0).
   # CA certificate files must be mounted under /usr/local/share/ca-certificates/
   # with a .crt extension (e.g. /usr/local/share/ca-certificates/my-ca.crt).
