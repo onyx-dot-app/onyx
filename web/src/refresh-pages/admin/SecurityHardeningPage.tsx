@@ -391,29 +391,29 @@ export default function SecurityHardeningPage() {
                   <div className="w-60">
                     <InputSelect
                       value={
-                        draft.mask_credential_prefix ? "fully" : "partially"
+                        draft.mask_credential_prefix ? "masked" : "visible"
                       }
                       onValueChange={(value) =>
                         void saveSettings({
-                          mask_credential_prefix: value === "fully",
+                          mask_credential_prefix: value === "masked",
                         })
                       }
                     >
                       <InputSelect.Trigger />
                       <InputSelect.Content>
                         <InputSelect.Item
-                          value="fully"
+                          value="masked"
                           wrapDescription
-                          description="Mask all credential characters (e.g. ••••••••••)."
-                        >
-                          Fully Masked
-                        </InputSelect.Item>
-                        <InputSelect.Item
-                          value="partially"
-                          wrapDescription
-                          description="Show the first and last characters for identification (e.g. abcd••••wxyz)."
+                          description="Show only the first and last few characters (e.g. abcd...wxyz)."
                         >
                           Partially Masked
+                        </InputSelect.Item>
+                        <InputSelect.Item
+                          value="visible"
+                          wrapDescription
+                          description="Show the full credential value to admins."
+                        >
+                          Fully Visible
                         </InputSelect.Item>
                       </InputSelect.Content>
                     </InputSelect>
