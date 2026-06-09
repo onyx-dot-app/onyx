@@ -161,27 +161,18 @@ export function SidebarWrapper({
   );
 
   const logoEl = logo ? logo(folded) : null;
+  const foldedAttr = folded === undefined ? undefined : String(folded);
 
   return (
-    // The outer wrapper establishes a plain block formatting context so that
-    // `transition-[width]` on the inner div animates correctly. Without it the
-    // inner div is a direct flex item of the page layout, and the flex
-    // algorithm overrides the `width` property before the transition can fire,
-    // so the sidebar snaps between widths instead of sliding.
-    <div>
-      <div
-        className={cn(
-          "h-screen flex flex-col bg-background-tint-02 py-2 gap-4 group/SidebarWrapper transition-width duration-200 ease-in-out",
-          folded ? "w-(--sidebar-width-folded)" : "w-(--sidebar-width-expanded)"
-        )}
-      >
-        <div className="flex flex-row justify-between items-start pt-3 px-2">
+    <div className="opal-sidebar-wrapper">
+      <div className="opal-sidebar-wrapper__inner" data-folded={foldedAttr}>
+        <div className="opal-sidebar-wrapper__topbar">
           {folded === undefined ? (
             logoEl
           ) : folded && showLogoWhenFolded && logoEl ? (
             <>
-              <div className="group-hover/SidebarWrapper:hidden">{logoEl}</div>
-              <div className="hidden group-hover/SidebarWrapper:flex">
+              <div className="opal-sidebar-wrapper__logo-default">{logoEl}</div>
+              <div className="opal-sidebar-wrapper__logo-hover">
                 {closeButton}
               </div>
             </>
@@ -234,19 +225,17 @@ function SidebarRoot({
   }
 
   const contentFolded = !isMobile && foldable ? folded : false;
+  const foldedAttr = String(folded);
 
-  const inner = (
-    <div className="flex flex-col min-h-0 h-full gap-3">{children}</div>
-  );
+  const inner = <div className="opal-sidebar-root__inner">{children}</div>;
 
   if (isMobile) {
     return (
       <RootLayoutFoldedContext.Provider value={false}>
         <div
-          className={cn(
-            "fixed inset-y-0 left-0 z-50 transition-transform duration-200",
-            folded ? "-translate-x-full" : "translate-x-0"
-          )}
+          className="opal-sidebar-root__overlay"
+          data-variant="mobile"
+          data-folded={foldedAttr}
         >
           <SidebarWrapper
             folded={false}
@@ -258,14 +247,10 @@ function SidebarRoot({
           </SidebarWrapper>
         </div>
 
-        {/* Backdrop — closes the sidebar when anything outside it is tapped */}
         <div
-          className={cn(
-            "fixed inset-0 z-40 bg-mask-03 backdrop-blur-03 transition-opacity duration-200",
-            folded
-              ? "opacity-0 pointer-events-none"
-              : "opacity-100 pointer-events-auto"
-          )}
+          className="opal-sidebar-root__backdrop"
+          data-variant="mobile"
+          data-folded={foldedAttr}
           onClick={closeSidebar}
         />
       </RootLayoutFoldedContext.Provider>
@@ -275,11 +260,9 @@ function SidebarRoot({
   if (isMediumScreen) {
     return (
       <RootLayoutFoldedContext.Provider value={folded}>
-        {/* Spacer reserves the folded sidebar width in the flex layout */}
-        <div className="shrink-0 w-(--sidebar-width-folded)" />
+        <div className="opal-sidebar-root__spacer" />
 
-        {/* Sidebar — fixed so it overlays content when expanded */}
-        <div className="fixed inset-y-0 left-0 z-50">
+        <div className="opal-sidebar-root__overlay" data-variant="medium">
           <SidebarWrapper
             folded={folded}
             onFoldClick={toggleSidebar}
@@ -290,14 +273,10 @@ function SidebarRoot({
           </SidebarWrapper>
         </div>
 
-        {/* Backdrop when expanded — blur only, no tint */}
         <div
-          className={cn(
-            "fixed inset-0 z-40 backdrop-blur-03 transition-opacity duration-200",
-            folded
-              ? "opacity-0 pointer-events-none"
-              : "opacity-100 pointer-events-auto"
-          )}
+          className="opal-sidebar-root__backdrop"
+          data-variant="medium"
+          data-folded={foldedAttr}
           onClick={closeSidebar}
         />
       </RootLayoutFoldedContext.Provider>
@@ -328,7 +307,7 @@ interface SidebarHeaderProps {
 
 function SidebarHeader({ children }: SidebarHeaderProps) {
   if (!children) return null;
-  return <div className="px-2">{children}</div>;
+  return <div className="opal-sidebar-header">{children}</div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -375,26 +354,17 @@ function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
   }, [pathname, scrollKey]);
 
   return (
-    <div className="relative flex-1 min-h-0 overflow-y-hidden flex flex-col">
-      <div
-        ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto flex flex-col"
-      >
-        {/* hidden targets only the content, not the outer flex-1 wrapper,
-            so the footer's position is unaffected when the sidebar is folded */}
+    <div className="opal-sidebar-body">
+      <div ref={scrollRef} className="opal-sidebar-body__scroll">
         <div
-          className={cn("flex-1 flex flex-col gap-3 px-2", folded && "hidden")}
+          className="opal-sidebar-body__content"
+          data-folded={String(folded)}
         >
           {children}
         </div>
-        <div style={{ minHeight: "2rem" }} />
+        <div className="opal-sidebar-body__spacer" />
       </div>
-      <div
-        className="absolute bottom-0 left-0 right-0 h-4 z-20 pointer-events-none"
-        style={{
-          background: `linear-gradient(to bottom, transparent, var(--background-tint-02))`,
-        }}
-      />
+      <div className="opal-sidebar-body__fade" />
     </div>
   );
 }
@@ -409,7 +379,7 @@ interface SidebarFooterProps {
 
 function SidebarFooter({ children }: SidebarFooterProps) {
   if (!children) return null;
-  return <div className="px-2">{children}</div>;
+  return <div className="opal-sidebar-footer">{children}</div>;
 }
 
 // ---------------------------------------------------------------------------

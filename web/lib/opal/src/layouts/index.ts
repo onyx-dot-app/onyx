@@ -59,8 +59,8 @@ export { useSidebarFolded } from "@opal/layouts/root/components";
 
 /* SidebarLayouts */
 export * as SidebarLayouts from "@opal/layouts/sidebar/components";
-export { useSidebarState } from "@opal/layouts/sidebar/components";
 export {
+  useSidebarState,
   SidebarWrapper,
   type SidebarWrapperProps,
 } from "@opal/layouts/sidebar/components";
