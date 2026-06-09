@@ -13,6 +13,7 @@ Revises: 99ecd56cb2ce
 Create Date: 2026-06-09 17:36:09.181328
 
 """
+
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
