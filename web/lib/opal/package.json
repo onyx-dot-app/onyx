@@ -71,7 +71,6 @@
   "dependencies": {
     "clsx": "^2.0.0",
     "copy-to-clipboard": "^3.3.3",
-    "js-cookie": "^3.0.8",
     "tailwind-merge": "^2.0.0"
   },
   "peerDependencies": {
@@ -94,7 +93,6 @@
     "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
-    "@types/js-cookie": "^3.0.6",
     "tsup": "^8.3.0",
     "typescript": "^5.0.0"
   }

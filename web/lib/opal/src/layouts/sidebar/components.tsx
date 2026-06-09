@@ -11,7 +11,6 @@ import {
   type SetStateAction,
 } from "react";
 import { usePathname } from "next/navigation";
-import Cookies from "js-cookie";
 import { cn } from "@opal/utils";
 import {
   RootLayoutFoldedContext,
@@ -25,20 +24,11 @@ export { useSidebarFolded } from "@opal/layouts/root/components";
 // Constants
 // ---------------------------------------------------------------------------
 
-const SIDEBAR_TOGGLED_COOKIE_NAME = "sidebarIsToggled";
 const SCROLL_POSITION_PREFIX = "opal-sidebar-scroll-";
 
 // ---------------------------------------------------------------------------
-// State provider — persistent sidebar fold state with keyboard shortcut
+// State provider — sidebar fold state with Cmd/Ctrl+E keyboard shortcut
 // ---------------------------------------------------------------------------
-
-function setFoldedCookie(folded: boolean) {
-  const foldedAsString = folded.toString();
-  Cookies.set(SIDEBAR_TOGGLED_COOKIE_NAME, foldedAsString, { expires: 365 });
-  if (typeof window !== "undefined") {
-    localStorage.setItem(SIDEBAR_TOGGLED_COOKIE_NAME, foldedAsString);
-  }
-}
 
 interface SidebarStateContextType {
   folded: boolean;
@@ -50,25 +40,24 @@ const SidebarStateContext = createContext<SidebarStateContextType | undefined>(
 );
 
 interface SidebarStateProviderProps {
+  /** Initial fold state, typically read from a persisted cookie by the app. */
+  defaultFolded?: boolean;
+  /** Called whenever the fold state changes, e.g. to persist to a cookie. */
+  onFoldedChange?: (folded: boolean) => void;
   children: React.ReactNode;
 }
 
-function SidebarStateProvider({ children }: SidebarStateProviderProps) {
-  const [folded, setFoldedInternal] = useState(false);
-
-  useEffect(() => {
-    const stored =
-      Cookies.get(SIDEBAR_TOGGLED_COOKIE_NAME) ??
-      localStorage.getItem(SIDEBAR_TOGGLED_COOKIE_NAME);
-    if (stored === "true") {
-      setFoldedInternal(true);
-    }
-  }, []);
+function SidebarStateProvider({
+  defaultFolded = false,
+  onFoldedChange,
+  children,
+}: SidebarStateProviderProps) {
+  const [folded, setFoldedInternal] = useState(defaultFolded);
 
   const setFolded: Dispatch<SetStateAction<boolean>> = (value) => {
     setFoldedInternal((prev) => {
       const newState = typeof value === "function" ? value(prev) : value;
-      setFoldedCookie(newState);
+      onFoldedChange?.(newState);
       return newState;
     });
   };

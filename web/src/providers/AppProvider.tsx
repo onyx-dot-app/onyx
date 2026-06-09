@@ -22,6 +22,8 @@
  */
 "use client";
 
+import { useState } from "react";
+import Cookies from "js-cookie";
 import { UserProvider } from "@/providers/UserProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
 import { SettingsProvider } from "@/providers/SettingsProvider";
@@ -30,9 +32,39 @@ import { SidebarLayouts } from "@opal/layouts";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
 import ToastProvider from "@/providers/ToastProvider";
+import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
 
 interface AppProviderProps {
   children: React.ReactNode;
+}
+
+function SidebarPersistenceProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [defaultFolded] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return (
+      Cookies.get(SIDEBAR_TOGGLED_COOKIE_NAME) === "true" ||
+      localStorage.getItem(SIDEBAR_TOGGLED_COOKIE_NAME) === "true"
+    );
+  });
+
+  function handleFoldedChange(folded: boolean) {
+    const value = folded.toString();
+    Cookies.set(SIDEBAR_TOGGLED_COOKIE_NAME, value, { expires: 365 });
+    localStorage.setItem(SIDEBAR_TOGGLED_COOKIE_NAME, value);
+  }
+
+  return (
+    <SidebarLayouts.StateProvider
+      defaultFolded={defaultFolded}
+      onFoldedChange={handleFoldedChange}
+    >
+      {children}
+    </SidebarLayouts.StateProvider>
+  );
 }
 
 export default function AppProvider({ children }: AppProviderProps) {
@@ -42,11 +74,11 @@ export default function AppProvider({ children }: AppProviderProps) {
         <AppBackgroundProvider>
           <ProviderContextProvider>
             <ModalProvider>
-              <SidebarLayouts.StateProvider>
+              <SidebarPersistenceProvider>
                 <QueryControllerProvider>
                   <ToastProvider>{children}</ToastProvider>
                 </QueryControllerProvider>
-              </SidebarLayouts.StateProvider>
+              </SidebarPersistenceProvider>
             </ModalProvider>
           </ProviderContextProvider>
         </AppBackgroundProvider>
