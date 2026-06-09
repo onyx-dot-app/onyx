@@ -6,7 +6,9 @@ export default function Home() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-1 items-center justify-center gap-2 px-6">
-        <Text className="text-2xl font-semibold text-neutral-900">Onyx Mobile</Text>
+        <Text className="text-2xl font-semibold text-neutral-900">
+          Onyx Mobile
+        </Text>
         <Text className="text-center text-base text-neutral-500">
           Scaffold ready — Expo SDK 56 · Expo Router · NativeWind v4.
         </Text>

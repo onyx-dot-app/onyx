@@ -39,13 +39,14 @@ bun run run:ios              # or: bunx expo run:ios --port 8082
 
 ## Scripts
 
-| Command | What it does |
-| --- | --- |
-| `bun run start` / `ios` / `android` / `web` | Metro / dev menu (port 8082). |
-| `bun run run:ios` / `run:android` | Build + launch the native dev build. |
-| `bun run prebuild` | Regenerate the native `ios/` + `android/` projects (CNG). |
-| `bun run typecheck` | `tsc --noEmit`. |
-| `bun run lint` | `expo lint`. |
+| Command                                     | What it does                                              |
+| ------------------------------------------- | --------------------------------------------------------- |
+| `bun run start` / `ios` / `android` / `web` | Metro / dev menu (port 8082).                             |
+| `bun run run:ios` / `run:android`           | Build + launch the native dev build.                      |
+| `bun run prebuild`                          | Regenerate the native `ios/` + `android/` projects (CNG). |
+| `bun run typecheck`                         | `tsc --noEmit`.                                           |
+| `bun run lint`                              | `expo lint` (ESLint flat config + `eslint-config-expo`).  |
+| `bun run format` / `format:check`           | Prettier write / check (sorts NativeWind classes).        |
 
 ## Project layout
 
