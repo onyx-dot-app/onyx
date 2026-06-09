@@ -4,6 +4,64 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: added
+          description: Add Craft sandbox RBAC and the `sandbox-file-sync`
+            ServiceAccount, configured through `craft.sandboxFileSyncRoleArn`
+            and `craft.extraBoundServiceAccounts`, so EKS installs can bind
+            sandbox snapshot access to a Terraform-managed IRSA role.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+    apiVersion: v2
+    appVersion: latest
+    created: "2026-06-09T18:33:14.86894837Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.3
+    description: A Helm chart for Kubernetes
+    digest: 2172dda4187a9a71b0697806d566d184b5a71b501773a43e0da0b37f0ea51793
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://onyx-dot-app.github.io/onyx/onyx-0.5.20.tgz
+    version: 0.5.20
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
           description: '`configMap.ENABLE_PUBLIC_DOCS` flag (default off) gating the
             interactive API docs and schema. When unset, /openapi.json, /docs, and
             /redoc are not registered (404); set to "true" to expose them publicly
@@ -4501,4 +4559,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-06-09T18:18:35.223173903Z"
+generated: "2026-06-09T18:33:14.839500121Z"
