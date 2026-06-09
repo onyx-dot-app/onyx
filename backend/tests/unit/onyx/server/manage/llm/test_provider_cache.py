@@ -51,6 +51,25 @@ def _make_response() -> LLMProviderResponse[LLMProviderDescriptor]:
     )
 
 
+def _lookup_and_fill(
+    persona_id: int | None,
+    is_admin: bool,
+    user_group_ids: set[int],
+    response: LLMProviderResponse[LLMProviderDescriptor],
+) -> None:
+    lookup = provider_cache.get_cached_provider_listing(
+        persona_id=persona_id, is_admin=is_admin, user_group_ids=user_group_ids
+    )
+    assert lookup.response is None
+    provider_cache.cache_provider_listing(
+        persona_id=persona_id,
+        is_admin=is_admin,
+        user_group_ids=user_group_ids,
+        response=response,
+        version=lookup.version,
+    )
+
+
 @pytest.fixture
 def fake_cache(monkeypatch: pytest.MonkeyPatch) -> _FakeCache:
     cache = _FakeCache()
@@ -60,49 +79,48 @@ def fake_cache(monkeypatch: pytest.MonkeyPatch) -> _FakeCache:
 
 @pytest.mark.usefixtures("fake_cache")
 def test_miss_returns_none() -> None:
-    assert (
-        provider_cache.get_cached_provider_listing(
-            persona_id=None, is_admin=False, user_group_ids=set()
-        )
-        is None
+    lookup = provider_cache.get_cached_provider_listing(
+        persona_id=None, is_admin=False, user_group_ids=set()
     )
+    assert lookup.response is None
+    assert lookup.version is not None
 
 
 @pytest.mark.usefixtures("fake_cache")
 def test_round_trip() -> None:
     response = _make_response()
-    provider_cache.cache_provider_listing(
+    _lookup_and_fill(
         persona_id=None, is_admin=False, user_group_ids={3, 1}, response=response
     )
     cached = provider_cache.get_cached_provider_listing(
         persona_id=None, is_admin=False, user_group_ids={1, 3}
     )
-    assert cached == response
+    assert cached.response == response
 
 
 @pytest.mark.usefixtures("fake_cache")
 def test_key_isolation_across_users_and_personas() -> None:
     response = _make_response()
-    provider_cache.cache_provider_listing(
+    _lookup_and_fill(
         persona_id=None, is_admin=False, user_group_ids={1}, response=response
     )
 
     assert (
         provider_cache.get_cached_provider_listing(
             persona_id=None, is_admin=False, user_group_ids={2}
-        )
+        ).response
         is None
     )
     assert (
         provider_cache.get_cached_provider_listing(
             persona_id=None, is_admin=True, user_group_ids={1}
-        )
+        ).response
         is None
     )
     assert (
         provider_cache.get_cached_provider_listing(
             persona_id=7, is_admin=False, user_group_ids={1}
-        )
+        ).response
         is None
     )
 
@@ -110,10 +128,10 @@ def test_key_isolation_across_users_and_personas() -> None:
 @pytest.mark.usefixtures("fake_cache")
 def test_invalidation_drops_all_entries() -> None:
     response = _make_response()
-    provider_cache.cache_provider_listing(
+    _lookup_and_fill(
         persona_id=None, is_admin=False, user_group_ids=set(), response=response
     )
-    provider_cache.cache_provider_listing(
+    _lookup_and_fill(
         persona_id=7, is_admin=True, user_group_ids=set(), response=response
     )
 
@@ -122,19 +140,19 @@ def test_invalidation_drops_all_entries() -> None:
     assert (
         provider_cache.get_cached_provider_listing(
             persona_id=None, is_admin=False, user_group_ids=set()
-        )
+        ).response
         is None
     )
     assert (
         provider_cache.get_cached_provider_listing(
             persona_id=7, is_admin=True, user_group_ids=set()
-        )
+        ).response
         is None
     )
 
 
 def test_invalid_cached_payload_is_discarded(fake_cache: _FakeCache) -> None:
-    provider_cache.cache_provider_listing(
+    _lookup_and_fill(
         persona_id=None, is_admin=False, user_group_ids=set(), response=_make_response()
     )
     for key in list(fake_cache._vals):
@@ -144,7 +162,35 @@ def test_invalid_cached_payload_is_discarded(fake_cache: _FakeCache) -> None:
     assert (
         provider_cache.get_cached_provider_listing(
             persona_id=None, is_admin=False, user_group_ids=set()
-        )
+        ).response
+        is None
+    )
+
+
+@pytest.mark.usefixtures("fake_cache")
+def test_stale_fill_after_invalidation_is_unreachable() -> None:
+    """A fill races an invalidation: the reader looked up (and read the DB)
+    before a mutation flipped the version token. Its write must land under the
+    old token and never be served."""
+    lookup = provider_cache.get_cached_provider_listing(
+        persona_id=None, is_admin=False, user_group_ids=set()
+    )
+    assert lookup.response is None
+
+    provider_cache.invalidate_provider_listing_cache()
+
+    provider_cache.cache_provider_listing(
+        persona_id=None,
+        is_admin=False,
+        user_group_ids=set(),
+        response=_make_response(),
+        version=lookup.version,
+    )
+
+    assert (
+        provider_cache.get_cached_provider_listing(
+            persona_id=None, is_admin=False, user_group_ids=set()
+        ).response
         is None
     )
 
@@ -152,13 +198,16 @@ def test_invalid_cached_payload_is_discarded(fake_cache: _FakeCache) -> None:
 def test_cache_failures_are_non_fatal(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(provider_cache, "get_cache_backend", lambda: _BrokenCache())
 
-    assert (
-        provider_cache.get_cached_provider_listing(
-            persona_id=None, is_admin=False, user_group_ids=set()
-        )
-        is None
+    lookup = provider_cache.get_cached_provider_listing(
+        persona_id=None, is_admin=False, user_group_ids=set()
     )
+    assert lookup.response is None
+    assert lookup.version is None
     provider_cache.cache_provider_listing(
-        persona_id=None, is_admin=False, user_group_ids=set(), response=_make_response()
+        persona_id=None,
+        is_admin=False,
+        user_group_ids=set(),
+        response=_make_response(),
+        version="v1",
     )
     provider_cache.invalidate_provider_listing_cache()

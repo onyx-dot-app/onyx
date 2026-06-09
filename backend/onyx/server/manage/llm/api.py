@@ -187,6 +187,7 @@ def _sync_fetched_models(
                 source_label,
                 provider_name,
             )
+        invalidate_provider_listing_cache()
     except ValueError as e:
         logger.warning("Failed to sync %s models to DB: %s", source_label, e)
 
@@ -617,12 +618,15 @@ def put_llm_provider(
                     # Refresh result with synced models
                     result = LLMProviderView.from_model(updated_provider)
 
-        invalidate_provider_listing_cache()
         _mask_provider_credentials(result)
         return result
     except ValueError as e:
         logger.exception("Failed to upsert LLM Provider")
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
+    finally:
+        # upsert_llm_provider and sync_auto_mode_models commit internally, so a
+        # post-commit failure must still drop cached listings
+        invalidate_provider_listing_cache()
 
 
 @admin_router.delete("/provider/{provider_id}")
@@ -760,11 +764,11 @@ def list_llm_provider_basics(
     user_group_ids = fetch_user_group_ids(db_session, user)
     is_admin = user.role == UserRole.ADMIN
 
-    cached_response = get_cached_provider_listing(
+    cache_lookup = get_cached_provider_listing(
         persona_id=None, is_admin=is_admin, user_group_ids=user_group_ids
     )
-    if cached_response is not None:
-        return cached_response
+    if cache_lookup.response is not None:
+        return cache_lookup.response
 
     all_providers = fetch_existing_llm_providers(db_session, [])
 
@@ -804,6 +808,7 @@ def list_llm_provider_basics(
         is_admin=is_admin,
         user_group_ids=user_group_ids,
         response=response,
+        version=cache_lookup.version,
     )
     return response
 
@@ -902,11 +907,11 @@ def list_llm_providers_for_persona(
     is_admin = user.role == UserRole.ADMIN
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
-    cached_response = get_cached_provider_listing(
+    cache_lookup = get_cached_provider_listing(
         persona_id=persona_id, is_admin=is_admin, user_group_ids=user_group_ids
     )
-    if cached_response is not None:
-        return cached_response
+    if cache_lookup.response is not None:
+        return cache_lookup.response
 
     all_providers = fetch_existing_llm_providers(
         db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
@@ -962,6 +967,7 @@ def list_llm_providers_for_persona(
         is_admin=is_admin,
         user_group_ids=user_group_ids,
         response=response,
+        version=cache_lookup.version,
     )
     return response
 

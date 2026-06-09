@@ -18,6 +18,7 @@ Cache failures are non-fatal: readers fall through to Postgres.
 import hashlib
 import uuid
 
+from pydantic import BaseModel
 from pydantic import ValidationError
 
 from onyx.cache.factory import get_cache_backend
@@ -32,6 +33,20 @@ logger = setup_logger()
 _VERSION_KEY = "llm_provider_listing:version"
 _ENTRY_KEY_PREFIX = "llm_provider_listing:entry"
 ENTRY_TTL_SECONDS = 60
+
+
+class ProviderListingCacheLookup(BaseModel):
+    """Result of a cache lookup.
+
+    `version` is the namespace token observed at lookup time. The subsequent
+    fill MUST write under this token (not a re-read one): a reader that loaded
+    pre-mutation DB state would otherwise write its stale payload under a token
+    minted after it read, resurrecting stale data past an invalidation.
+    `version` is None when the cache was unreachable — the fill is skipped.
+    """
+
+    response: LLMProviderResponse[LLMProviderDescriptor] | None
+    version: str | None
 
 
 def _current_version(cache: CacheBackend) -> str:
@@ -64,29 +79,31 @@ def get_cached_provider_listing(
     persona_id: int | None,
     is_admin: bool,
     user_group_ids: set[int],
-) -> LLMProviderResponse[LLMProviderDescriptor] | None:
+) -> ProviderListingCacheLookup:
     try:
         cache = get_cache_backend()
-        raw = cache.get(
-            build_entry_key(
-                _current_version(cache), persona_id, is_admin, user_group_ids
-            )
-        )
+        version = _current_version(cache)
+        raw = cache.get(build_entry_key(version, persona_id, is_admin, user_group_ids))
     except CACHE_TRANSIENT_ERRORS:
         logger.warning("LLM provider listing cache read failed", exc_info=True)
-        return None
+        return ProviderListingCacheLookup(response=None, version=None)
 
     if raw is None:
-        return None
+        return ProviderListingCacheLookup(response=None, version=version)
 
     try:
-        return LLMProviderResponse[LLMProviderDescriptor].model_validate_json(raw)
+        return ProviderListingCacheLookup(
+            response=LLMProviderResponse[LLMProviderDescriptor].model_validate_json(
+                raw
+            ),
+            version=version,
+        )
     except ValidationError:
         logger.warning(
             "Discarding cached LLM provider listing that failed validation",
             exc_info=True,
         )
-        return None
+        return ProviderListingCacheLookup(response=None, version=version)
 
 
 def cache_provider_listing(
@@ -94,13 +111,14 @@ def cache_provider_listing(
     is_admin: bool,
     user_group_ids: set[int],
     response: LLMProviderResponse[LLMProviderDescriptor],
+    version: str | None,
 ) -> None:
+    if version is None:
+        return
     try:
         cache = get_cache_backend()
         cache.set(
-            build_entry_key(
-                _current_version(cache), persona_id, is_admin, user_group_ids
-            ),
+            build_entry_key(version, persona_id, is_admin, user_group_ids),
             response.model_dump_json(),
             ex=ENTRY_TTL_SECONDS,
         )
