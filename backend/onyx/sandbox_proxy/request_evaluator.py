@@ -73,8 +73,19 @@ class ExternalAppRequestEvaluator(RequestEvaluator):
     ) -> AllMatchedActions | None:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             apps = get_external_apps(db)
+            logger.info(
+                "[seed-debug] evaluator.apps tenant_id=%s count=%d apps=%s url=%s",
+                tenant_id,
+                len(apps),
+                [(a.id, a.app_type.value, a.upstream_url_patterns) for a in apps],
+                request.url,
+            )
             app = resolve_app_for_url(request.url, apps)
             if app is None:
+                logger.info(
+                    "[seed-debug] evaluator.no_match url=%s",
+                    request.url,
+                )
                 return None
 
             # Catalog path matchers test the URL path only; mitmproxy's
