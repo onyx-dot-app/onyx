@@ -1,0 +1,14 @@
+@reference "#reference.css";
+
+/*
+  Sidebar layout — CSS custom properties expected by this module.
+
+  Consumers must define these on :root (or an ancestor element) before
+  rendering any SidebarLayouts component:
+
+    --sidebar-width-folded   Width of the sidebar when collapsed (e.g. 4rem).
+    --sidebar-width-expanded Width of the sidebar when open (e.g. 15rem).
+
+  Both values are used by SidebarWrapper to drive the `w-*` utility and the
+  `transition-[width]` animation between the two states.
+*/

@@ -1,5 +1,6 @@
 "use client";
 
+import "@opal/layouts/sidebar/styles.css";
 import {
   createContext,
   useContext,
