@@ -126,6 +126,36 @@ variable "tags" {
   default     = {}
 }
 
+variable "enable_craft_sandbox_node_group" {
+  type        = bool
+  description = "Create a dedicated Craft sandbox node group (labeled onyx.app/workload=sandbox, tainted workload=sandbox:NoSchedule, IMDSv2 hop-limit 1)."
+  default     = false
+}
+
+variable "craft_sandbox_node_instance_types" {
+  type        = list(string)
+  description = "Instance types for the Craft sandbox node group."
+  default     = ["m5.large"]
+}
+
+variable "craft_sandbox_node_min_size" {
+  type        = number
+  description = "Min size of the Craft sandbox node group."
+  default     = 0
+}
+
+variable "craft_sandbox_node_max_size" {
+  type        = number
+  description = "Max size of the Craft sandbox node group (concurrency: each sandbox needs ~1 vCPU/2Gi)."
+  default     = 4
+}
+
+variable "craft_sandbox_node_desired_size" {
+  type        = number
+  description = "Desired size of the Craft sandbox node group."
+  default     = 1
+}
+
 variable "create_gp3_storage_class" {
   type        = bool
   description = "Whether to create the gp3 storage class. The gp3 storage class will be patched to make it default and allow volume expansion."

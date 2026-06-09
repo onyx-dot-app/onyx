@@ -18,6 +18,11 @@ configMap:
   SANDBOX_S3_BUCKET: "onyx-sandbox-snapshots-ci"
   AWS_ENDPOINT_URL: "http://minio.onyx-sandboxes.svc.cluster.local:9000"
 
+craft:
+  # CI-only placeholder. Kind tests use MinIO credentials from auth.objectstorage,
+  # but the chart requires an IRSA role ARN whenever ENABLE_CRAFT=true.
+  sandboxFileSyncRoleArn: "arn:aws:iam::000000000000:role/ci-sandbox-file-sync"
+
 # Placeholder secret values so auth-secrets.yaml renders without erroring.
 # Postgres/Redis/MinIO actually run in docker-compose alongside the kind
 # cluster in this lane (see pr-craft-k8s-tests.yml), so the in-chart values
