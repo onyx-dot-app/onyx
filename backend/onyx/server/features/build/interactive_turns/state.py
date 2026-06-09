@@ -7,17 +7,27 @@ from dataclasses import asdict
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timezone
+from enum import StrEnum
 from uuid import UUID
 from uuid import uuid4
 
 from onyx.cache.interface import CacheBackend
 from onyx.cache.interface import CacheLock
 
-TURN_STATUS_QUEUED = "QUEUED"
-TURN_STATUS_RUNNING = "RUNNING"
-TURN_STATUS_SUCCEEDED = "SUCCEEDED"
-TURN_STATUS_FAILED = "FAILED"
-TURN_STATUS_CANCELLED = "CANCELLED"
+
+class InteractiveTurnStatus(StrEnum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+TURN_STATUS_QUEUED = InteractiveTurnStatus.QUEUED
+TURN_STATUS_RUNNING = InteractiveTurnStatus.RUNNING
+TURN_STATUS_SUCCEEDED = InteractiveTurnStatus.SUCCEEDED
+TURN_STATUS_FAILED = InteractiveTurnStatus.FAILED
+TURN_STATUS_CANCELLED = InteractiveTurnStatus.CANCELLED
 
 ACTIVE_TURN_STATUSES = frozenset((TURN_STATUS_QUEUED, TURN_STATUS_RUNNING))
 ACTIVE_TURN_TTL_SECONDS = 45 * 60
@@ -37,7 +47,7 @@ class InteractiveTurn:
     session_id: UUID
     user_id: UUID
     prompt: str
-    status: str
+    status: InteractiveTurnStatus
     turn_index: int
     last_heartbeat_at: datetime | None = None
     error_detail: str | None = None
@@ -202,7 +212,7 @@ def finish_turn(
     *,
     cache: CacheBackend,
     turn_id: UUID,
-    status: str,
+    status: InteractiveTurnStatus,
     error_detail: str | None = None,
     runner_id: str | None = None,
 ) -> InteractiveTurn | None:
@@ -264,7 +274,7 @@ def _load_turn(raw: bytes | None) -> InteractiveTurn | None:
             session_id=UUID(payload["session_id"]),
             user_id=UUID(payload["user_id"]),
             prompt=payload["prompt"],
-            status=payload["status"],
+            status=InteractiveTurnStatus(payload["status"]),
             turn_index=int(payload["turn_index"]),
             last_heartbeat_at=_parse_dt(payload.get("last_heartbeat_at")),
             error_detail=payload.get("error_detail"),

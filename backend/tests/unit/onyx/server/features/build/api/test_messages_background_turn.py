@@ -95,7 +95,6 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
             model="gpt-5-mini",
         ),
         user=cast(User, SimpleNamespace(id=user_id)),
-        _rate_limit_check=None,
         db_session=cast(Session, db_session),
     )
 
@@ -131,7 +130,6 @@ def test_send_message_rejects_second_active_turn(
         session_id=session_id,
         request=MessageRequest(content="hello", client_request_id="req-1"),
         user=cast(User, SimpleNamespace(id=user_id)),
-        _rate_limit_check=None,
         db_session=cast(Session, _FakeDbSession(user_message_count=0)),
     )
     assert first.status == "QUEUED"
@@ -141,7 +139,6 @@ def test_send_message_rejects_second_active_turn(
             session_id=session_id,
             request=MessageRequest(content="again", client_request_id="req-2"),
             user=cast(User, SimpleNamespace(id=user_id)),
-            _rate_limit_check=None,
             db_session=cast(Session, _FakeDbSession(user_message_count=1)),
         )
 
@@ -187,14 +184,12 @@ def test_send_message_is_idempotent_for_same_client_request(
         session_id=session_id,
         request=MessageRequest(content="hello", client_request_id="req-1"),
         user=cast(User, SimpleNamespace(id=user_id)),
-        _rate_limit_check=None,
         db_session=cast(Session, _FakeDbSession(user_message_count=0)),
     )
     same = messages_api.send_message(
         session_id=session_id,
         request=MessageRequest(content="hello", client_request_id="req-1"),
         user=cast(User, SimpleNamespace(id=user_id)),
-        _rate_limit_check=None,
         db_session=cast(Session, _FakeDbSession(user_message_count=1)),
     )
 
@@ -232,7 +227,6 @@ def test_send_message_leaves_turn_active_if_runner_cannot_start(
         session_id=session_id,
         request=MessageRequest(content="hello", client_request_id="req-1"),
         user=cast(User, SimpleNamespace(id=user_id)),
-        _rate_limit_check=None,
         db_session=cast(Session, _FakeDbSession(user_message_count=0)),
     )
 

@@ -17,7 +17,6 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import Permission
-from onyx.db.models import BuildMessage
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -26,6 +25,7 @@ from onyx.server.features.build.api.models import MessageInterruptResponse
 from onyx.server.features.build.api.models import MessageListResponse
 from onyx.server.features.build.api.models import MessageRequest
 from onyx.server.features.build.api.models import MessageResponse
+from onyx.server.features.build.db.build_session import count_user_messages
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
@@ -95,7 +95,6 @@ def send_message(
     session_id: UUID,
     request: MessageRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    _rate_limit_check: None = None,
     db_session: Session = Depends(get_session),
 ) -> InteractiveTurnResponse:
     """Start an interactive Craft turn in the background."""
@@ -134,14 +133,7 @@ def send_message(
 
         check_build_rate_limits(user=user, db_session=db_session)
 
-        turn_index = (
-            db_session.query(BuildMessage)
-            .filter(
-                BuildMessage.session_id == session_id,
-                BuildMessage.type == MessageType.USER,
-            )
-            .count()
-        )
+        turn_index = count_user_messages(session_id, db_session)
         if request.provider and request.model:
             session.agent_provider = request.provider
             session.agent_model = request.model
