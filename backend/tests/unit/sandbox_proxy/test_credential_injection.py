@@ -6,7 +6,6 @@ The dispatcher is the single seam between the gate and any concrete
 
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock
 
 from onyx.external_apps.matching.engine import AllMatchedActions
@@ -15,7 +14,6 @@ from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
 from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.credential_injection import InjectionOutcome
-from onyx.sandbox_proxy.errors import SandboxProxyError
 from tests.unit.sandbox_proxy.conftest import make_flow
 from tests.unit.sandbox_proxy.conftest import make_matched_actions
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox
@@ -128,43 +126,6 @@ def test_all_claims_raise_returns_pass_through() -> None:
     outcome = CredentialInjectionDispatcher([a, b]).apply(make_flow(), _ctx())
 
     assert outcome is InjectionOutcome.PASS_THROUGH
-
-
-def test_apply_or_block_writes_403_on_blocked() -> None:
-    """The high-level seam: BLOCKED → sandbox-visible 403 with the documented body."""
-    resolver = RecordingCredentialResolver(
-        claims_result=True, exc=CredentialUnavailableError("no creds")
-    )
-    flow = make_flow()
-
-    CredentialInjectionDispatcher([resolver]).apply_or_block(flow, _ctx())
-
-    assert flow.response is not None
-    assert flow.response.status_code == 403
-    content = flow.response.content
-    assert content is not None
-    body = json.loads(content)
-    assert body["error"] == SandboxProxyError.CREDENTIAL_ERROR.value
-    assert body["message"]
-
-
-def test_apply_or_block_leaves_response_unset_on_forwarding_outcomes() -> None:
-    """Forwarding outcomes leave `flow.response` untouched."""
-    claiming = RecordingCredentialResolver(claims_result=True, headers={"X": "y"})
-    claiming_empty = RecordingCredentialResolver(claims_result=True, headers={})
-    not_claiming = RecordingCredentialResolver(claims_result=False)
-
-    flow_a = make_flow()
-    CredentialInjectionDispatcher([claiming]).apply_or_block(flow_a, _ctx())
-    assert flow_a.response is None
-
-    flow_b = make_flow()
-    CredentialInjectionDispatcher([claiming_empty]).apply_or_block(flow_b, _ctx())
-    assert flow_b.response is None
-
-    flow_c = make_flow()
-    CredentialInjectionDispatcher([not_claiming]).apply_or_block(flow_c, _ctx())
-    assert flow_c.response is None
 
 
 def test_resolver_receives_request_and_full_context() -> None:

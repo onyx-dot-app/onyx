@@ -303,9 +303,9 @@ async def test_resolve_and_match_off_catalog_pass_through_is_not_logged(
 
     assert result is None
     assert flow.response is None
-    messages = "\n".join(record.getMessage() for record in caplog.records)
-    assert "proxy.egress_" not in messages
-    assert "proxy.session_tag_resolved" not in messages
+    messages = [record.getMessage() for record in caplog.records]
+    assert not any(message.startswith("egress_") for message in messages)
+    assert not any(message.startswith("session_tag_resolved") for message in messages)
     assert resolver.resolve_session_by_id_calls == []
 
 

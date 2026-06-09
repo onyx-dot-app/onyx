@@ -10,19 +10,23 @@ from onyx.sandbox_proxy.credential_injection import InjectionOutcome
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
 
-LOG_ID_PREFIX_LEN = 8
-
-EGRESS_TARGET_FIELDS = "tenant=%s sandbox=%s host=%s method=%s"
-EGRESS_MATCHED_FIELDS = (
-    EGRESS_TARGET_FIELDS + " app=%r external_app_id=%s action_type=%s policy=%s"
+_EGRESS_CONTEXT_FIELDS = "tenant=%s sandbox=%s"
+_EGRESS_SESSION_FIELDS = f"{_EGRESS_CONTEXT_FIELDS} session=%s"
+_EGRESS_APPROVAL_FIELDS = f"{_EGRESS_SESSION_FIELDS} approval=%s"
+_EGRESS_REQUEST_FIELDS = "host=%s method=%s"
+_EGRESS_ACTION_FIELDS = "app_name=%r external_app_id=%s action_type=%s policy=%s"
+APPROVAL_DECIDED_FIELDS = (
+    f"{_EGRESS_APPROVAL_FIELDS} app_name=%r external_app_id=%s action_type=%s "
+    "decision=%s wake=%s source=%s session_id=%s approval_id=%s"
 )
+
+EGRESS_TARGET_FIELDS = f"{_EGRESS_CONTEXT_FIELDS} {_EGRESS_REQUEST_FIELDS}"
+EGRESS_MATCHED_FIELDS = f"{EGRESS_TARGET_FIELDS} {_EGRESS_ACTION_FIELDS}"
 EGRESS_SESSION_MATCHED_FIELDS = (
-    "tenant=%s sandbox=%s session=%s host=%s method=%s app=%r "
-    "external_app_id=%s action_type=%s policy=%s"
+    f"{_EGRESS_SESSION_FIELDS} {_EGRESS_REQUEST_FIELDS} {_EGRESS_ACTION_FIELDS}"
 )
 EGRESS_APPROVAL_MATCHED_FIELDS = (
-    "tenant=%s sandbox=%s session=%s approval=%s host=%s method=%s app=%r "
-    "external_app_id=%s action_type=%s policy=%s"
+    f"{_EGRESS_APPROVAL_FIELDS} {_EGRESS_REQUEST_FIELDS} {_EGRESS_ACTION_FIELDS}"
 )
 
 
@@ -31,7 +35,7 @@ def short_log_id(value: UUID | str | None) -> str:
         return "-"
     text = str(value)
     try:
-        return str(UUID(text))[:LOG_ID_PREFIX_LEN]
+        return str(UUID(text))[:8]
     except ValueError:
         return text
 
@@ -62,14 +66,31 @@ def _policy_label(policy: EndpointPolicy | str) -> str:
     return policy.value if isinstance(policy, EndpointPolicy) else policy
 
 
+def _egress_context_args(sandbox: ResolvedSandbox | SessionContext) -> tuple[str, str]:
+    return sandbox.tenant_id, sandbox_log_label(sandbox)
+
+
+def _egress_request_args(flow: http.HTTPFlow) -> tuple[str, str]:
+    return flow.request.host, flow.request.method
+
+
+def _egress_action_args(
+    matched_actions: AllMatchedActions, policy: EndpointPolicy | str
+) -> tuple[object, ...]:
+    return (
+        matched_actions.app_name,
+        matched_actions.external_app_id,
+        matched_actions.governing_action.action_type,
+        _policy_label(policy),
+    )
+
+
 def egress_target_args(
     flow: http.HTTPFlow, sandbox: ResolvedSandbox | SessionContext
 ) -> tuple[object, ...]:
     return (
-        sandbox.tenant_id,
-        sandbox_log_label(sandbox),
-        flow.request.host,
-        flow.request.method,
+        *_egress_context_args(sandbox),
+        *_egress_request_args(flow),
     )
 
 
@@ -81,10 +102,7 @@ def egress_matched_args(
 ) -> tuple[object, ...]:
     return (
         *egress_target_args(flow, sandbox),
-        matched_actions.app_name,
-        matched_actions.external_app_id,
-        matched_actions.governing_action.action_type,
-        _policy_label(policy),
+        *_egress_action_args(matched_actions, policy),
     )
 
 
@@ -95,15 +113,10 @@ def egress_session_matched_args(
     policy: EndpointPolicy | str,
 ) -> tuple[object, ...]:
     return (
-        ctx.tenant_id,
-        sandbox_log_label(ctx),
+        *_egress_context_args(ctx),
         short_log_id(ctx.session_id),
-        flow.request.host,
-        flow.request.method,
-        matched_actions.app_name,
-        matched_actions.external_app_id,
-        matched_actions.governing_action.action_type,
-        _policy_label(policy),
+        *_egress_request_args(flow),
+        *_egress_action_args(matched_actions, policy),
     )
 
 
@@ -112,17 +125,36 @@ def egress_approval_matched_args(
     ctx: SessionContext,
     matched_actions: AllMatchedActions,
     policy: EndpointPolicy | str,
-    approval_id: UUID | None,
+    approval_id: UUID,
 ) -> tuple[object, ...]:
     return (
-        ctx.tenant_id,
-        sandbox_log_label(ctx),
+        *_egress_context_args(ctx),
         short_log_id(ctx.session_id),
         short_log_id(approval_id),
-        flow.request.host,
-        flow.request.method,
+        *_egress_request_args(flow),
+        *_egress_action_args(matched_actions, policy),
+    )
+
+
+def approval_decided_args(
+    ctx: SessionContext,
+    approval_id: UUID,
+    matched_actions: AllMatchedActions,
+    *,
+    decision: str,
+    wake: str,
+    source: str,
+) -> tuple[object, ...]:
+    return (
+        *_egress_context_args(ctx),
+        short_log_id(ctx.session_id),
+        short_log_id(approval_id),
         matched_actions.app_name,
         matched_actions.external_app_id,
         matched_actions.governing_action.action_type,
-        _policy_label(policy),
+        decision,
+        wake,
+        source,
+        full_log_id(ctx.session_id),
+        full_log_id(approval_id),
     )
