@@ -109,9 +109,8 @@ export default function CreateCustomAppModal({
     }
     return null;
   })();
-  const canSave = disabledCreateReason === null;
   const createButton = (
-    <Button onClick={save} disabled={!canSave}>
+    <Button onClick={save} disabled={disabledCreateReason !== null}>
       {isSaving
         ? isEdit
           ? "Saving…"
