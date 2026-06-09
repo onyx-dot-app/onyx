@@ -4094,6 +4094,59 @@ class KVStore(Base):
     )
 
 
+class SecuritySettings(Base):
+    """Per-tenant runtime overrides for the env-derived security settings.
+
+    Singleton: one row per tenant schema, enforced by a boolean primary key
+    pinned to ``true`` via a CHECK constraint. Every column is an *override* —
+    ``None`` means "fall back to the env-derived default" — so this is the
+    typed, relational counterpart of the ``SecuritySettingsOverrides`` wire
+    shape (absent field == env default). Replaces the prior
+    ``onyx_security_settings`` JSONB blob in ``key_value_store``.
+    """
+
+    __tablename__ = "security_settings"
+
+    id: Mapped[bool] = mapped_column(
+        Boolean, primary_key=True, default=True, server_default=text("true")
+    )
+
+    user_directory_admin_only: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    track_external_idp_expiry: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    mask_credential_prefix: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    valid_email_domains: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True, default=None
+    )
+    password_min_length: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=None
+    )
+    password_max_length: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=None
+    )
+    password_require_uppercase: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    password_require_lowercase: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    password_require_digit: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    password_require_special_char: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+
+    __table_args__ = (
+        CheckConstraint("id = true", name="ck_security_settings_singleton"),
+    )
+
+
 class FileRecord(Base):
     __tablename__ = "file_record"
 
