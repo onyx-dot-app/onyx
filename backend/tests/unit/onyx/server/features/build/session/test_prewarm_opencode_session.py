@@ -61,7 +61,13 @@ def test_prewarm_opencode_session_persists_resolved_id(
     initial_id: str | None,
     resolved_id: str,
     flush_count: int,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Empty session (no assistant messages) — prewarm may mint/replace.
+    monkeypatch.setattr(
+        "onyx.server.features.build.session.manager.session_has_assistant_messages",
+        lambda *_args: False,
+    )
     sandbox_id = uuid4()
     session = _build_session(initial_id)
     sandbox_manager = _FakeSandboxManager(resolved_id)
@@ -72,6 +78,28 @@ def test_prewarm_opencode_session_persists_resolved_id(
     assert session.opencode_session_id == resolved_id
     assert db_session.flush_count == flush_count
     assert sandbox_manager.calls == [(sandbox_id, session.id, initial_id)]
+
+
+def test_prewarm_opencode_session_refuses_non_empty_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A session with assistant history must keep its persisted opencode id:
+    prewarm must not call ensure_opencode_session at all (a 404 there would
+    mint a replacement and silently discard the chat history)."""
+    monkeypatch.setattr(
+        "onyx.server.features.build.session.manager.session_has_assistant_messages",
+        lambda *_args: True,
+    )
+    sandbox_id = uuid4()
+    session = _build_session("persisted-opencode")
+    sandbox_manager = _FakeSandboxManager("fresh-opencode")
+    db_session = _FakeDbSession()
+
+    _manager(sandbox_manager, db_session)._prewarm_opencode_session(sandbox_id, session)
+
+    assert session.opencode_session_id == "persisted-opencode"
+    assert db_session.flush_count == 0
+    assert sandbox_manager.calls == []
 
 
 def test_prewarm_opencode_session_raises_when_runtime_returns_no_id() -> None:

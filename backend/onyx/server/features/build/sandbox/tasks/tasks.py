@@ -90,6 +90,26 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                 task_logger.info(f"Putting sandbox {sandbox_id_str} to sleep")
 
                 try:
+                    # A failed history snapshot aborts the sleep: terminating
+                    # would roll history back to the previous snapshot. But
+                    # only when the pod is actually reachable — otherwise a
+                    # dead pod would pin the sandbox in RUNNING forever.
+                    try:
+                        sandbox_manager.create_opencode_data_snapshot(
+                            sandbox_id, tenant_id
+                        )
+                    except Exception as e:
+                        if sandbox_manager.health_check(sandbox_id, timeout=5.0):
+                            task_logger.error(
+                                f"opencode-data snapshot failed for sandbox "
+                                f"{sandbox_id_str}; leaving it RUNNING: {e}"
+                            )
+                            continue
+                        task_logger.warning(
+                            f"Sandbox {sandbox_id_str} pod unreachable; sleeping "
+                            f"without a fresh history snapshot: {e}"
+                        )
+
                     # List session directories in the sandbox via the
                     # backend-agnostic manager API. K8s lists pod paths via
                     # exec; Docker lists container paths via exec; Local

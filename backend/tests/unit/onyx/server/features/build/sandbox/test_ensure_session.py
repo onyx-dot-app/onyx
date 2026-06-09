@@ -26,9 +26,13 @@ import json
 from typing import Any
 
 import httpx
+import pytest
 
 from onyx.server.features.build.sandbox.opencode.serve_client import ClientTimeouts
 from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
+from onyx.server.features.build.sandbox.opencode.serve_client import (
+    OpencodeSessionLostError,
+)
 
 _STALE_ID = "ses_stale_old_id_001"
 _FRESH_ID = "ses_fresh_new_id_002"
@@ -217,6 +221,46 @@ def test_ensure_session_passes_directory_as_query_string() -> None:
     # and the Session.create schema would silently drop it.
     body = json.loads(post_req.content)
     assert "directory" not in body
+
+
+def test_ensure_session_expect_existing_raises_on_stale_id() -> None:
+    """For a session with prior history (``expect_existing=True``), a stale
+    persisted id means the opencode store was lost — ensure_session MUST
+    raise instead of minting a replacement, so history loss can't
+    masquerade as a fresh chat. No POST must be issued."""
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "GET" and req.url.path == f"/session/{_STALE_ID}":
+            return httpx.Response(404, json={"error": "not found"})
+        raise AssertionError(f"unexpected request {req.method} {req.url.path}")
+
+    transport = _RecordingTransport(handler)
+    client = _make_client(transport)
+
+    with pytest.raises(OpencodeSessionLostError):
+        client.ensure_session(_STALE_ID, directory=_CWD, expect_existing=True)
+
+    # Exactly one request: the lookup. We did NOT fall through to POST.
+    assert len(transport.requests) == 1
+    assert transport.requests[0].method == "GET"
+
+
+def test_ensure_session_expect_existing_reuses_valid_id() -> None:
+    """``expect_existing=True`` with a still-valid id behaves exactly like
+    the happy path: one GET, no POST, same id returned."""
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "GET" and req.url.path == f"/session/{_STALE_ID}":
+            return httpx.Response(200, json={"id": _STALE_ID})
+        raise AssertionError(f"unexpected request {req.method} {req.url.path}")
+
+    transport = _RecordingTransport(handler)
+    client = _make_client(transport)
+
+    resolved = client.ensure_session(_STALE_ID, directory=_CWD, expect_existing=True)
+
+    assert resolved == _STALE_ID
+    assert len(transport.requests) == 1
 
 
 def test_ensure_session_callback_does_not_fire_on_valid_id() -> None:

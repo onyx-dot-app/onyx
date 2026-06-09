@@ -131,6 +131,8 @@ class StubSandboxManager(SandboxManager):
         self.health_check_returns: bool | None = None
         self.session_workspace_exists_returns: bool | None = None
         self.create_snapshot_returns: SnapshotResult | None | object = _UNSET
+        self.create_opencode_data_snapshot_returns: bool = False
+        self.supports_opencode_history_persistence: bool = True
         self.list_directory_returns: list[FilesystemEntry] | None = None
         self.read_file_returns: bytes | None = None
         self.upload_file_returns: str | None = None
@@ -153,6 +155,7 @@ class StubSandboxManager(SandboxManager):
 
         # Fault injection.
         self.write_files_to_sandbox_raises_for: dict[UUID, Exception] | None = None
+        self.create_opencode_data_snapshot_raises: Exception | None = None
 
         # ``send_message_events`` is stored via the property below so it is
         # materialised at assignment time (see __setattr__-like setter).
@@ -165,6 +168,8 @@ class StubSandboxManager(SandboxManager):
         self.setup_session_workspace_count: int = 0
         self.cleanup_session_workspace_count: int = 0
         self.create_snapshot_count: int = 0
+        self.create_opencode_data_snapshot_count: int = 0
+        self.delete_opencode_session_count: int = 0
         self.restore_snapshot_count: int = 0
         self.session_workspace_exists_count: int = 0
         self.list_session_workspaces_count: int = 0
@@ -190,6 +195,8 @@ class StubSandboxManager(SandboxManager):
         self.last_setup_session_workspace_payload: dict[str, Any] | None = None
         self.last_cleanup_session_workspace_payload: dict[str, Any] | None = None
         self.last_create_snapshot_payload: dict[str, Any] | None = None
+        self.last_create_opencode_data_snapshot_payload: dict[str, Any] | None = None
+        self.last_delete_opencode_session_payload: dict[str, Any] | None = None
         self.last_restore_snapshot_payload: dict[str, Any] | None = None
         self.last_session_workspace_exists_payload: dict[str, Any] | None = None
         self.last_health_check_payload: dict[str, Any] | None = None
@@ -314,6 +321,36 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("create_snapshot")
         return cast("SnapshotResult | None", self.create_snapshot_returns)
 
+    def create_opencode_data_snapshot(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+        timeout_seconds: float = 300.0,  # noqa: ARG002
+    ) -> bool:
+        self.create_opencode_data_snapshot_count += 1
+        self.last_create_opencode_data_snapshot_payload = {
+            "sandbox_id": sandbox_id,
+            "tenant_id": tenant_id,
+        }
+        if self.create_opencode_data_snapshot_raises is not None:
+            raise self.create_opencode_data_snapshot_raises
+        return self.create_opencode_data_snapshot_returns
+
+    def delete_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_session_id: str,
+    ) -> None:
+        # Override the _ServeMixin implementation — there is no pod to
+        # reach under the stub.
+        self.delete_opencode_session_count += 1
+        self.last_delete_opencode_session_payload = {
+            "sandbox_id": sandbox_id,
+            "session_id": session_id,
+            "opencode_session_id": opencode_session_id,
+        }
+
     def restore_snapshot(
         self,
         sandbox_id: UUID,
@@ -393,6 +430,7 @@ class StubSandboxManager(SandboxManager):
         opencode_session_id: str | None = None,
         agent_provider: str | None = None,
         agent_model: str | None = None,
+        expect_existing_opencode_session: bool = False,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
@@ -404,6 +442,7 @@ class StubSandboxManager(SandboxManager):
             "opencode_session_id": opencode_session_id,
             "agent_provider": agent_provider,
             "agent_model": agent_model,
+            "expect_existing_opencode_session": expect_existing_opencode_session,
             "on_opencode_session_resolved": on_opencode_session_resolved,
             "should_interrupt": should_interrupt,
         }

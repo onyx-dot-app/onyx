@@ -48,6 +48,7 @@ from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import get_empty_session_for_user
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
+from onyx.server.features.build.db.build_session import session_has_assistant_messages
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import get_snapshots_for_session
@@ -222,6 +223,20 @@ class SessionManager:
         session's frontend-ready state aligned with the agent runtime being
         ready to accept the first user message.
         """
+        # Never touch a non-empty session's id: ensure_opencode_session
+        # mints a replacement when the persisted one doesn't resolve, which
+        # would silently discard the session's history.
+        if session.opencode_session_id is not None and session_has_assistant_messages(
+            session.id, self._db_session
+        ):
+            logger.warning(
+                "Refusing to prewarm opencode session for non-empty build "
+                "session %s (persisted id %s must not be replaced)",
+                session.id,
+                session.opencode_session_id,
+            )
+            return
+
         opencode_session_id = self._sandbox_manager.ensure_opencode_session(
             sandbox_id=sandbox_id,
             session_id=session.id,
@@ -650,6 +665,18 @@ class SessionManager:
         # Get user's sandbox to clean up session workspace
         sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox and sandbox.status.is_active():
+            if session.opencode_session_id:
+                try:
+                    self._sandbox_manager.delete_opencode_session(
+                        sandbox.id, session_id, session.opencode_session_id
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to delete opencode session for %s",
+                        session_id,
+                        exc_info=True,
+                    )
+
             # Clean up session workspace (but don't terminate sandbox)
             try:
                 self._sandbox_manager.cleanup_session_workspace(
@@ -1506,6 +1533,15 @@ class SessionManager:
             return True
 
         try:
+            # Snapshot chat history so sessions still resume after the
+            # wipe; skip when the pod is unreachable.
+            if sandbox.status == SandboxStatus.RUNNING and (
+                self._sandbox_manager.health_check(sandbox.id, timeout=5.0)
+            ):
+                self._sandbox_manager.create_opencode_data_snapshot(
+                    sandbox.id, get_current_tenant_id()
+                )
+
             # Terminate the sandbox (this cleans up all resources)
             self._sandbox_manager.terminate(sandbox.id)
             logger.info("Terminated sandbox %s for user %s", sandbox.id, user_id)

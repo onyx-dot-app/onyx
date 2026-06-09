@@ -1134,8 +1134,7 @@ echo "Session cleanup complete"
             (
                 f"cd {session_path} && tar -czf - "
                 f"$([ -d outputs ] && echo outputs) "
-                f"$([ -d attachments ] && echo attachments) "
-                f"$([ -d .opencode-data ] && echo .opencode-data)"
+                f"$([ -d attachments ] && echo attachments)"
             ),
         ]
 
@@ -1162,6 +1161,15 @@ echo "Session cleanup complete"
             size_bytes,
         )
         return SnapshotResult(storage_path=storage_path, size_bytes=size_bytes)
+
+    def create_opencode_data_snapshot(
+        self,
+        sandbox_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+        timeout_seconds: float = 300.0,  # noqa: ARG002
+    ) -> bool:
+        # Docker doesn't persist chat history across terminate (K8s-only).
+        return False
 
     def restore_snapshot(
         self,

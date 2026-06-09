@@ -842,6 +842,13 @@ def _emit_terminator(
 # ---------------------------------------------------------------------------
 
 
+class OpencodeSessionLostError(RuntimeError):
+    """A session with prior history has a persisted opencode id that no
+    longer resolves — its chat history was lost. Raised instead of minting
+    a fresh session so the loss can't masquerade as a new chat.
+    """
+
+
 class OpencodeServeClient:
     """Thin Python client over a single in-pod ``opencode serve`` instance.
 
@@ -1024,8 +1031,13 @@ class OpencodeServeClient:
         *,
         directory: str,
         title: str | None = None,
+        expect_existing: bool = False,
     ) -> str:
         """Return a valid opencode session id. Idempotent across replicas.
+
+        ``expect_existing``: the caller knows this session has prior
+        history, so a stale persisted id raises
+        :class:`OpencodeSessionLostError` instead of minting a replacement.
 
         ``directory`` anchors the opencode Instance for this session.
         Opencode-serve scopes its session store per-directory via the
@@ -1059,6 +1071,14 @@ class OpencodeServeClient:
                 )
                 return opencode_session_id
             if r.status_code == 404:
+                if expect_existing:
+                    # User-facing: surfaces verbatim as the turn's error.
+                    raise OpencodeSessionLostError(
+                        "This session's chat history could not be restored in "
+                        "the sandbox, so the agent cannot continue the "
+                        "conversation. (opencode session "
+                        f"{opencode_session_id} missing from the store)"
+                    )
                 logger.warning(
                     "[SESSION-LIFECYCLE] ensure_session: GET /session/%s -> 404 "
                     "(persisted id stale; will create new)",

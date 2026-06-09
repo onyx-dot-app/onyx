@@ -81,6 +81,14 @@ configMap:
   # Host gateway (Docker Desktop), not internal cluster DNS; Linux-kind devs sub their own.
   SANDBOX_API_SERVER_URL: "http://host.docker.internal:3000"
   ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
+  # Craft snapshot storage: the in-cluster MinIO (FQDN — sandbox pods live
+  # in the onyx-sandboxes namespace). The sandbox-proxy inherits these via
+  # envFrom, and its snapshot-egress allowlist must agree with what the
+  # sidecar / restore init container actually target. Telepresence devs
+  # must mirror these as AWS_* in their local api-server env
+  # (.vscode/.env.k8s) — the manager forwards them into sandbox pods.
+  SANDBOX_S3_BUCKET: "onyx-sandbox-files"
+  AWS_ENDPOINT_URL: "http://onyx-minio.onyx.svc.cluster.local:9000"
 
 sandboxProxy:
   replicaCount: 1

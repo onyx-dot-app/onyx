@@ -59,3 +59,19 @@ class SnapshotRestoreRequest(BaseModel):
 
 
 # Restore has no response body — failures raise, success is the 204.
+
+
+class OpencodeDataRequest(BaseModel):
+    """Snapshot the opencode chat-history store. The S3 key is
+    deterministic and derived daemon-side, so no path travels on the wire.
+    (Restore happens in the opencode_restore init container, not via the
+    daemon.)
+    """
+
+    sandbox_id: UUID
+    tenant_id: TenantId
+    s3_bucket: str
+
+
+class OpencodeDataCreateResponse(BaseModel):
+    status: SnapshotCreateStatus

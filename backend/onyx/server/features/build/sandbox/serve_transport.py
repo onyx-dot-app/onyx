@@ -245,6 +245,24 @@ class _ServeMixin:
                 title=f"build-session-{str(session_id)[:8]}",
             )
 
+    def delete_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_session_id: str,
+    ) -> None:
+        """Drop a deleted build session's chat history from the opencode
+        store. Best-effort and eventually consistent: it only reaches the
+        live store, so the S3 blob keeps the history until the next sleep.
+        """
+        session_path = self._session_directory(session_id)
+        with self._build_serve_client(
+            sandbox_id,
+            session_path,
+            with_event_bus=False,
+        ) as client:
+            client.delete_session(opencode_session_id, directory=session_path)
+
     def list_subagents(
         self,
         sandbox_id: UUID,
@@ -463,6 +481,7 @@ class _ServeMixin:
         agent_provider: str | None,
         agent_model: str | None,
         *,
+        expect_existing_opencode_session: bool = False,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
@@ -483,6 +502,7 @@ class _ServeMixin:
                 opencode_session_id,
                 directory=session_path,
                 title=f"build-session-{str(session_id)[:8]}",
+                expect_existing=expect_existing_opencode_session,
             )
             if resolved_session_id != opencode_session_id:
                 # Caller must persist the new id or we orphan one opencode

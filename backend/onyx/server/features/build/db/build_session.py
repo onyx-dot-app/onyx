@@ -379,6 +379,21 @@ def create_message(
     return message
 
 
+def session_has_assistant_messages(session_id: UUID, db_session: Session) -> bool:
+    """True if the agent has responded at least once in this session —
+    i.e. there is opencode chat history worth protecting."""
+    return bool(
+        db_session.query(
+            db_session.query(BuildMessage.id)
+            .filter(
+                BuildMessage.session_id == session_id,
+                BuildMessage.type == MessageType.ASSISTANT,
+            )
+            .exists()
+        ).scalar()
+    )
+
+
 def count_user_messages(session_id: UUID, db_session: Session) -> int:
     """Count persisted user messages in a build session."""
     return (

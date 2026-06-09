@@ -262,6 +262,7 @@ class TestDeleteSession:
             user_id=test_user.id,
             name="cascading",
             status=BuildSessionStatus.ACTIVE,
+            opencode_session_id="ses_cascading",
         )
         db_session.add(session_row)
         db_session.commit()
@@ -313,6 +314,13 @@ class TestDeleteSession:
             db_session.query(Artifact).filter(Artifact.id == artifact_id).one_or_none()
             is None
         )
+
+        # Chat history is pruned from the sandbox-global opencode store.
+        assert stub_sandbox_manager.delete_opencode_session_count == 1
+        payload = stub_sandbox_manager.last_delete_opencode_session_payload
+        assert payload is not None
+        assert payload["session_id"] == session_id
+        assert payload["opencode_session_id"] == "ses_cascading"
 
     def test_delete_session_removes_s3_snapshots(
         self,

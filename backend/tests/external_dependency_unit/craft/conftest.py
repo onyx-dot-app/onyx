@@ -875,12 +875,15 @@ def _cleanup_pool_workspace(
         "-mindepth 1 -delete 2>/dev/null; true",
         container="sidecar",
     )
-    # sessions/ is the per-session emptyDir tree.
+    # sessions/ is the per-session emptyDir tree. Preserve .opencode-data
+    # (the live opencode store): opencode-serve holds the sqlite db open.
     pod_exec(
         k8s_client,
         pod_name,
         SANDBOX_NAMESPACE,
-        "find /workspace/sessions -mindepth 1 -delete 2>/dev/null; true",
+        "find /workspace/sessions -mindepth 1 "
+        "-not -path '/workspace/sessions/.opencode-data*' -delete "
+        "2>/dev/null; true",
         container="sandbox",
     )
 

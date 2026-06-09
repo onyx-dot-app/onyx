@@ -4,11 +4,15 @@
 # OPENCODE_SERVER_PASSWORD is the only env input. Port and XDG_DATA_HOME
 # are internal contracts (configs.py + sandbox_daemon snapshot path);
 # overriding from env would silently break snapshot capture / restore.
+#
+# XDG_DATA_HOME (opencode's chat-history store) lives on the shared
+# /workspace/sessions volume. The opencode-restore init container puts the
+# saved db back before this container ever starts.
 
 set -euo pipefail
 
 OPENCODE_PORT=4096
-export XDG_DATA_HOME=/workspace/.opencode-data
+export XDG_DATA_HOME=/workspace/sessions/.opencode-data
 mkdir -p "$XDG_DATA_HOME"
 
 child_pid=

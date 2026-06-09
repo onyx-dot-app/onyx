@@ -263,7 +263,7 @@ class TestCreateSnapshot:
             pod_name,
             SANDBOX_NAMESPACE,
             f"rm -rf {session_root}/outputs {session_root}/attachments "
-            f"{session_root}/.opencode-data 2>/dev/null; true",
+            f"2>/dev/null; true",
         )
 
         result = k8s_manager.create_snapshot(

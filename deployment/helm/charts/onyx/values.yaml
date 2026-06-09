@@ -1064,6 +1064,10 @@ minio:
   existingSecret: onyx-objectstorage
   buckets:
     - name: onyx-file-store-bucket
+    # Craft sandbox snapshots (workspace + opencode chat history). Must
+    # match SANDBOX_S3_BUCKET. Only relevant when ENABLE_CRAFT=true; in
+    # prod MinIO is disabled and the bucket lives in real S3.
+    - name: onyx-sandbox-files
   persistence:
     enabled: true
     size: 30Gi

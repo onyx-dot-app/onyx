@@ -156,6 +156,87 @@ def test_idle_sandbox_snapshotted_then_terminated_then_sleep_status(
     assert stubbed_cleanup.terminate_count == 1
     assert stubbed_cleanup.last_terminate_sandbox_id == sandbox.id
 
+    # Chat history must be snapshotted before the pod is destroyed.
+    assert stubbed_cleanup.create_opencode_data_snapshot_count == 1
+
+
+def test_opencode_data_snapshot_failure_aborts_sleep(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failed opencode-data (chat history) snapshot aborts the sleep —
+    but only while the pod is reachable.
+
+    Terminating anyway would silently roll history back to the previous
+    snapshot on the next wake — the sandbox must stay RUNNING so the next
+    cleanup cycle retries. The history snapshot runs first, so the abort
+    also skips the per-session snapshots (no duplicate rows per retry).
+    """
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    session_row = BuildSession(
+        user_id=user.id,
+        name="abort-sleep-session",
+        status=BuildSessionStatus.ACTIVE,
+    )
+    db_session.add(session_row)
+    db_session.commit()
+    db_session.refresh(session_row)
+
+    _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+
+    stubbed_cleanup.list_session_workspaces_returns = [session_row.id]
+    stubbed_cleanup.create_opencode_data_snapshot_raises = RuntimeError(
+        "S3 unreachable"
+    )
+    stubbed_cleanup.health_check_returns = True
+    stubbed_cleanup.terminate_silent = True
+
+    with caplog.at_level(logging.ERROR):
+        cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.RUNNING
+    assert stubbed_cleanup.terminate_count == 0
+    assert stubbed_cleanup.create_snapshot_count == 0
+    assert any(
+        "opencode-data snapshot failed" in r.getMessage() for r in caplog.records
+    )
+
+
+def test_opencode_data_snapshot_failure_on_dead_pod_still_sleeps(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+) -> None:
+    """An unreachable pod must not pin the sandbox in RUNNING forever:
+    the sleep proceeds without a fresh history snapshot (the previous
+    blob is intact)."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+
+    stubbed_cleanup.list_session_workspaces_returns = []
+    stubbed_cleanup.create_opencode_data_snapshot_raises = RuntimeError(
+        "sidecar unreachable"
+    )
+    stubbed_cleanup.health_check_returns = False
+    stubbed_cleanup.terminate_silent = True
+
+    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.SLEEPING
+    assert stubbed_cleanup.terminate_count == 1
+
 
 def test_active_sandbox_within_threshold_not_touched(
     db_session: Session,

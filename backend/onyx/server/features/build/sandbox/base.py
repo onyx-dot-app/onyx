@@ -109,6 +109,11 @@ class SandboxManager(_ServeMixin, ABC):
     Use get_sandbox_manager() to get the appropriate implementation.
     """
 
+    # True when chat history survives re-provisions. Gates the
+    # OpencodeSessionLostError path: without persistence, stale opencode
+    # session ids are normal and the transport mints silently.
+    supports_opencode_history_persistence: bool = False
+
     @abstractmethod
     def provision(
         self,
@@ -126,6 +131,10 @@ class SandboxManager(_ServeMixin, ABC):
         configured. K8s pre-loads each into opencode-serve's startup config
         so per-prompt model overrides can cross providers without restarting
         the pod. Defaults to ``[llm_config]`` (single-provider, back-compat).
+
+        On K8s, provisioning also restores the sandbox's chat-history
+        snapshot before opencode-serve starts, so persisted opencode
+        session ids resolve after a re-provision.
 
         Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces
@@ -242,6 +251,25 @@ class SandboxManager(_ServeMixin, ABC):
         ...
 
     @abstractmethod
+    def create_opencode_data_snapshot(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+        timeout_seconds: float = 300.0,
+    ) -> bool:
+        """Snapshot the sandbox-global opencode store (chat history) so the
+        next ``provision`` can restore it. One blob per sandbox,
+        overwritten each sleep.
+
+        Returns False when nothing was uploaded (empty store, or the
+        backend doesn't persist history).
+
+        Raises:
+            RuntimeError: If snapshot creation fails
+        """
+        ...
+
+    @abstractmethod
     def restore_snapshot(
         self,
         sandbox_id: UUID,
@@ -330,6 +358,7 @@ class SandboxManager(_ServeMixin, ABC):
         opencode_session_id: str | None = None,
         agent_provider: str | None = None,
         agent_model: str | None = None,
+        expect_existing_opencode_session: bool = False,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
@@ -340,6 +369,10 @@ class SandboxManager(_ServeMixin, ABC):
           ``BuildSession.opencode_session_id`` or ``None`` to mint.
         - ``agent_provider`` / ``agent_model``: per-prompt model override;
           either ``None`` falls back to the loaded default.
+        - ``expect_existing_opencode_session``: the session has prior
+          history, so a stale persisted id raises
+          ``OpencodeSessionLostError`` instead of minting a replacement
+          (history loss must not masquerade as a fresh chat).
         - ``on_opencode_session_resolved``: invoked with the resolved id
           when it differs from the caller's. Caller persists it so later
           turns don't orphan a fresh session each time.
@@ -351,6 +384,7 @@ class SandboxManager(_ServeMixin, ABC):
             opencode_session_id,
             agent_provider,
             agent_model,
+            expect_existing_opencode_session=expect_existing_opencode_session,
             on_opencode_session_resolved=on_opencode_session_resolved,
             should_interrupt=should_interrupt,
         )

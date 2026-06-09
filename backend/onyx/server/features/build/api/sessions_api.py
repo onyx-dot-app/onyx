@@ -382,6 +382,17 @@ def restore_session(
                     "Sandbox %s marked as RUNNING but pod is unhealthy/missing. Entering recovery mode.",
                     sandbox.id,
                 )
+                # Best-effort history snapshot: the sidecar may be up even
+                # if opencode isn't.
+                try:
+                    sandbox_manager.create_opencode_data_snapshot(
+                        sandbox.id, tenant_id, timeout_seconds=30.0
+                    )
+                except Exception:
+                    logger.warning(
+                        "opencode-data snapshot failed during recovery of sandbox %s",
+                        sandbox.id,
+                    )
                 sandbox_manager.terminate(sandbox.id)
                 update_sandbox_status__no_commit(
                     db_session, sandbox.id, SandboxStatus.TERMINATED

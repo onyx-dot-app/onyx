@@ -38,6 +38,7 @@ from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.packets import SubagentStartedPacket
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_build_session
+from onyx.server.features.build.db.build_session import session_has_assistant_messages
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.build_session import upsert_agent_plan
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
@@ -52,6 +53,9 @@ from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
 from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
+from onyx.server.features.build.sandbox.opencode.serve_client import (
+    OpencodeSessionLostError,
+)
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
 
@@ -415,11 +419,12 @@ def yield_sandbox_events(
 ) -> Generator[Any, None, None]:
     """Drive the agent to completion, yielding raw sandbox events.
 
-    Thin pass-through to ``sandbox_manager.send_message`` — no DB reads,
-    no SSE formatting. Callers resolve the turn inputs first
-    (interactive path off the session row it holds; headless via
-    :func:`load_turn_session`), then compose the events with
-    `persist_sandbox_event` and, in the SSE case, an SSE serializer.
+    Thin pass-through to ``sandbox_manager.send_message`` — no SSE
+    formatting, and no DB reads beyond the history-presence check below.
+    Callers resolve the turn inputs first (interactive path off the
+    session row it holds; headless via :func:`load_turn_session`), then
+    compose the events with `persist_sandbox_event` and, in the SSE case,
+    an SSE serializer.
 
     The events include `SSEKeepalive` markers from the sandbox client;
     callers should pass them through (interactive) or drop them
@@ -433,16 +438,33 @@ def yield_sandbox_events(
         # opencode session (dropping conversation history).
         _persist_opencode_session_id(db_session, session_id, new_id)
 
-    yield from sandbox_manager.send_message(
-        sandbox_id,
-        session_id,
-        user_message_content,
-        opencode_session_id=opencode_session_id,
-        agent_provider=agent_provider,
-        agent_model=agent_model,
-        on_opencode_session_resolved=_persist_resolved_id,
-        should_interrupt=should_interrupt,
+    # On a history-persisting backend, a stale id for a session the agent
+    # has responded in means history was lost — fail the turn loudly.
+    # Without persistence (Docker), stale ids are normal: mint silently.
+    expect_existing = (
+        sandbox_manager.supports_opencode_history_persistence
+        and opencode_session_id is not None
+        and session_has_assistant_messages(session_id, db_session)
     )
+
+    try:
+        yield from sandbox_manager.send_message(
+            sandbox_id,
+            session_id,
+            user_message_content,
+            opencode_session_id=opencode_session_id,
+            agent_provider=agent_provider,
+            agent_model=agent_model,
+            expect_existing_opencode_session=expect_existing,
+            on_opencode_session_resolved=_persist_resolved_id,
+            should_interrupt=should_interrupt,
+        )
+    except OpencodeSessionLostError:
+        # Loud once, then recover: this turn fails visibly, and clearing
+        # the dangling id lets the next turn mint a fresh opencode session
+        # instead of erroring forever.
+        _clear_opencode_session_id(db_session, session_id)
+        raise
 
 
 def _ensure_opencode_session_id(
@@ -478,6 +500,22 @@ def _ensure_opencode_session_id(
         build_session.id,
     )
     return new_id
+
+
+def _clear_opencode_session_id(db_session: DBSession, session_id: UUID) -> None:
+    build_session = (
+        db_session.query(BuildSession).filter(BuildSession.id == session_id).first()
+    )
+    if build_session is None:
+        return
+    logger.warning(
+        "[SESSION-LIFECYCLE] clearing lost opencode_session_id %s for "
+        "build_session=%s; next turn starts a fresh opencode session",
+        build_session.opencode_session_id,
+        session_id,
+    )
+    build_session.opencode_session_id = None
+    db_session.commit()
 
 
 def _persist_opencode_session_id(

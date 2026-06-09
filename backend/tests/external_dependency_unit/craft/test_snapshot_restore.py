@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import os
+import sqlite3
 import tarfile
 from pathlib import Path
 from typing import Any
@@ -71,7 +72,6 @@ def _populate_session_workspace(
         "outputs/web/page.tsx": "// hello from outputs\n",
         "outputs/data/manifest.json": '{"v": 1}\n',
         "attachments/notes.txt": "user uploaded notes\n",
-        ".opencode-data/session.json": '{"id": "deadbeef"}\n',
     }
 
     script_lines = ["set -e", f"cd {session_path}"]
@@ -166,7 +166,7 @@ def _list_archive_members(tar_path: Path) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def test_snapshot_includes_outputs_and_attachments_and_opencode_data(
+def test_snapshot_includes_outputs_and_attachments(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
@@ -191,14 +191,136 @@ def test_snapshot_includes_outputs_and_attachments_and_opencode_data(
     assert any(m == "attachments" or m.startswith("attachments/") for m in members), (
         f"Expected attachments/ tree. Members: {members}"
     )
-    assert any(
-        m == ".opencode-data" or m.startswith(".opencode-data/") for m in members
-    ), f"Expected .opencode-data/ tree. Members: {members}"
+    # opencode chat history is sandbox-global and captured by the separate
+    # opencode-data snapshot — never per-session.
+    assert not any(".opencode-data" in m for m in members), (
+        f"Per-session snapshot must not contain .opencode-data. Members: {members}"
+    )
 
     # The specific seed files should round-trip.
     assert any(m.endswith("outputs/web/page.tsx") for m in members)
     assert any(m.endswith("attachments/notes.txt") for m in members)
-    assert any(m.endswith(".opencode-data/session.json") for m in members)
+
+
+_OC_DB = "/workspace/sessions/.opencode-data/opencode/opencode.db"
+
+
+def _seed_opencode_db(k8s: client.CoreV1Api, pod_name: str, value: str) -> None:
+    """Create a real sqlite db in the pod (VACUUM INTO requires one)."""
+    py = (
+        "import sqlite3, os; "
+        f"os.makedirs(os.path.dirname('{_OC_DB}'), exist_ok=True); "
+        f"c = sqlite3.connect('{_OC_DB}'); "
+        "c.execute('CREATE TABLE IF NOT EXISTS t (v TEXT)'); "
+        "c.execute('DELETE FROM t'); "
+        f"c.execute('INSERT INTO t VALUES (?)', ('{value}',)); "
+        "c.commit(); c.close()"
+    )
+    pod_exec(k8s, pod_name, SANDBOX_NAMESPACE, ["python3", "-c", py])
+
+
+def _run_restore_init(k8s: client.CoreV1Api, pod_name: str, sandbox_id: UUID) -> str:
+    """Run the opencode_restore init-container module in the sidecar
+    (same image/env as the real init container) and report its exit code."""
+    cmd = (
+        f"cd /workspace && ONYX_SANDBOX_ID={sandbox_id} "
+        f"ONYX_TENANT_ID={TEST_TENANT_ID} SANDBOX_S3_BUCKET={SANDBOX_S3_BUCKET} "
+        "/workspace/.venv/bin/python -m sandbox_daemon.opencode_restore 2>&1; "
+        "echo EXIT=$?"
+    )
+    return pod_exec(k8s, pod_name, SANDBOX_NAMESPACE, cmd, container="sidecar")
+
+
+def test_opencode_data_snapshot_round_trip(
+    k8s_manager: KubernetesSandboxManager,
+    k8s_client: client.CoreV1Api,
+    pool_session: tuple[UUID, UUID, str],
+    tmp_path: Path,
+) -> None:
+    """VACUUM INTO snapshot of the opencode sqlite db → S3, then the
+    init-container restore module brings it back intact."""
+    sandbox_id, _session_id, pod_name = pool_session
+
+    storage_path = f"{TEST_TENANT_ID}/snapshots/opencode-data/{sandbox_id}/latest.db"
+
+    _seed_opencode_db(k8s_client, pod_name, "history-marker")
+    created = k8s_manager.create_opencode_data_snapshot(sandbox_id, TEST_TENANT_ID)
+    assert created, "db was seeded; snapshot must not be empty"
+
+    # The blob is a plain consistent sqlite db — verify by opening it.
+    local_db = tmp_path / "latest.db"
+    _download_snapshot(storage_path, local_db)
+    conn = sqlite3.connect(local_db)
+    try:
+        rows = conn.execute("SELECT v FROM t").fetchall()
+    finally:
+        conn.close()
+    assert rows == [("history-marker",)]
+
+    # Fresh pod: store gone; the restore module brings the db back.
+    pod_exec(k8s_client, pod_name, SANDBOX_NAMESPACE, f"rm -rf {_OC_DB}")
+    out = _run_restore_init(k8s_client, pod_name, sandbox_id)
+    assert "EXIT=0" in out, out
+    restored = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        [
+            "python3",
+            "-c",
+            f"import sqlite3; print(sqlite3.connect('{_OC_DB}').execute('SELECT v FROM t').fetchall())",
+        ],
+    )
+    assert "history-marker" in restored
+
+    _delete_snapshot(storage_path)
+
+
+def test_opencode_data_restore_edge_cases(
+    k8s_manager: KubernetesSandboxManager,
+    k8s_client: client.CoreV1Api,
+    pool_session: tuple[UUID, UUID, str],
+) -> None:
+    """Missing blob = fresh sandbox (exit 0, no file). Corrupt blob =
+    fail closed (nonzero exit fails pod startup; no partial file left).
+    Empty store = nothing snapshotted."""
+    sandbox_id, _session_id, pod_name = pool_session
+
+    storage_path = f"{TEST_TENANT_ID}/snapshots/opencode-data/{sandbox_id}/latest.db"
+
+    # Missing blob → exit 0 and no db written.
+    _delete_snapshot(storage_path)
+    pod_exec(k8s_client, pod_name, SANDBOX_NAMESPACE, f"rm -rf {_OC_DB}")
+    out = _run_restore_init(k8s_client, pod_name, sandbox_id)
+    assert "EXIT=0" in out, out
+    state = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        f"[ -f {_OC_DB} ] && echo DB_PRESENT || echo DB_MISSING",
+    )
+    assert "DB_MISSING" in state
+
+    # Corrupt blob → nonzero exit (pod startup would fail → retriable),
+    # and no partial file left behind.
+    _put_snapshot_bytes(storage_path, b"definitely not a sqlite db")
+    out = _run_restore_init(k8s_client, pod_name, sandbox_id)
+    assert "EXIT=1" in out, out
+    state = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        f"ls /workspace/sessions/.opencode-data/opencode/ 2>/dev/null; "
+        f"[ -f {_OC_DB} ] && echo DB_PRESENT || echo DB_MISSING",
+    )
+    assert "DB_MISSING" in state
+    assert ".restore" not in state, "partial download must be cleaned up"
+    _delete_snapshot(storage_path)
+
+    # Empty store → nothing to snapshot.
+    assert (
+        k8s_manager.create_opencode_data_snapshot(sandbox_id, TEST_TENANT_ID) is False
+    )
 
 
 def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
@@ -259,7 +381,7 @@ def test_restore_from_snapshot_recreates_workspace(
         pod_name,
         SANDBOX_NAMESPACE,
         f"cd /workspace/sessions/{session_id} && "
-        f"find outputs attachments .opencode-data -type f | sort | "
+        f"find outputs attachments -type f | sort | "
         f"xargs sha256sum",
     )
 
@@ -295,7 +417,7 @@ def test_restore_from_snapshot_recreates_workspace(
         pod_name,
         SANDBOX_NAMESPACE,
         f"cd /workspace/sessions/{session_id} && "
-        f"find outputs attachments .opencode-data -type f | sort | "
+        f"find outputs attachments -type f | sort | "
         f"xargs sha256sum",
     )
     assert pre_hashes.strip() == post_hashes.strip(), (

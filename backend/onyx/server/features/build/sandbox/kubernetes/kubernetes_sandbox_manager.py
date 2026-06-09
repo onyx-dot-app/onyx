@@ -86,6 +86,12 @@ from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    OpencodeDataCreateResponse,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    OpencodeDataRequest,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SnapshotCreateRequest,
 )
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
@@ -199,6 +205,35 @@ def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
         client.V1EnvVar(name="CURL_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
         client.V1EnvVar(name="GIT_SSL_CAINFO", value=_PROXY_CA_BUNDLE_FILE),
     ]
+
+
+def _s3_access_env_vars() -> list[client.V1EnvVar]:
+    """S3 credentials fallback for containers that run s5cmd. In prod IRSA
+    injects credentials; in local-dev / CI we forward AWS_* from the
+    api_server env (MinIO reachable in-cluster).
+
+    s5cmd v2.3.0 reads S3_ENDPOINT_URL — it does NOT honor
+    AWS_ENDPOINT_URL — so mirror it. We do NOT forward the api_server's own
+    S3_ENDPOINT_URL: in CI that points at a host-network MinIO that's
+    unreachable from inside the pod; the cluster-DNS-reachable endpoint is
+    always in AWS_ENDPOINT_URL.
+    """
+    env_vars: list[client.V1EnvVar] = []
+    for var in (
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+        "AWS_ENDPOINT_URL",
+    ):
+        value = os.environ.get(var)
+        if value:
+            env_vars.append(client.V1EnvVar(name=var, value=value))
+    aws_endpoint = os.environ.get("AWS_ENDPOINT_URL")
+    if aws_endpoint:
+        env_vars.append(client.V1EnvVar(name="S3_ENDPOINT_URL", value=aws_endpoint))
+    return env_vars
 
 
 def _proxy_init_container() -> client.V1Container:
@@ -380,6 +415,8 @@ class KubernetesSandboxManager(SandboxManager):
 
     This is a singleton class - use get_sandbox_manager() to get the instance.
     """
+
+    supports_opencode_history_persistence = True
 
     _instance: "KubernetesSandboxManager | None" = None
     _lock = threading.Lock()
@@ -677,33 +714,8 @@ class KubernetesSandboxManager(SandboxManager):
         sidecar_env = [
             client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
             *_proxy_main_container_env_vars(),
+            *_s3_access_env_vars(),
         ]
-        for var in (
-            "AWS_ACCESS_KEY_ID",
-            "AWS_SECRET_ACCESS_KEY",
-            "AWS_SESSION_TOKEN",
-            "AWS_REGION",
-            "AWS_DEFAULT_REGION",
-            "AWS_ENDPOINT_URL",
-        ):
-            value = os.environ.get(var)
-            if value:
-                sidecar_env.append(client.V1EnvVar(name=var, value=value))
-
-        # s5cmd v2.3.0 reads S3_ENDPOINT_URL — it does NOT honor
-        # AWS_ENDPOINT_URL. Mirror AWS_ENDPOINT_URL into S3_ENDPOINT_URL
-        # so the snapshot daemon's `s5cmd pipe`/`cat` and the file-sync
-        # sidecar's `s5cmd sync` both hit MinIO in dev/CI.
-        #
-        # We do NOT forward the api_server's own S3_ENDPOINT_URL: in CI
-        # that points at a host-network MinIO (localhost:9004 from
-        # docker-compose) which is unreachable from inside the pod. The
-        # cluster-DNS-reachable endpoint is always in AWS_ENDPOINT_URL.
-        aws_endpoint = os.environ.get("AWS_ENDPOINT_URL")
-        if aws_endpoint:
-            sidecar_env.append(
-                client.V1EnvVar(name="S3_ENDPOINT_URL", value=aws_endpoint)
-            )
         sidecar_container = client.V1Container(
             name="sidecar",
             image=self._image,
@@ -781,9 +793,53 @@ class KubernetesSandboxManager(SandboxManager):
             client.V1HostAlias(ip=self._resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
         ]
 
+        # Restores opencode's chat-history db from S3 before any regular
+        # container starts (kubelet-ordered, after the firewall init so
+        # s5cmd routes through the proxy). A failure fails pod startup —
+        # provisioning retries instead of starting with empty history.
+        restore_init_container = client.V1Container(
+            name="opencode-restore",
+            image=self._image,
+            image_pull_policy="IfNotPresent",
+            working_dir="/workspace",
+            command=[
+                "/workspace/.venv/bin/python",
+                "-m",
+                "sandbox_daemon.opencode_restore",
+            ],
+            env=[
+                client.V1EnvVar(name="ONYX_SANDBOX_ID", value=sandbox_id),
+                client.V1EnvVar(name="ONYX_TENANT_ID", value=tenant_id),
+                client.V1EnvVar(name="SANDBOX_S3_BUCKET", value=self._s3_bucket),
+                client.V1EnvVar(name="PYTHONUNBUFFERED", value="1"),
+                *_proxy_main_container_env_vars(),
+                *_s3_access_env_vars(),
+            ],
+            volume_mounts=[
+                client.V1VolumeMount(
+                    name="workspace", mount_path="/workspace/sessions"
+                ),
+                client.V1VolumeMount(
+                    name=_PROXY_CA_BUNDLE_VOLUME,
+                    mount_path=_PROXY_CA_BUNDLE_DIR,
+                    read_only=True,
+                ),
+            ],
+            resources=client.V1ResourceRequirements(
+                requests={"cpu": "100m", "memory": "128Mi"},
+                limits={"cpu": "500m", "memory": "512Mi"},
+            ),
+            security_context=client.V1SecurityContext(
+                allow_privilege_escalation=False,
+                read_only_root_filesystem=False,
+                privileged=False,
+                capabilities=client.V1Capabilities(drop=["ALL"]),
+            ),
+        )
+
         pod_spec = client.V1PodSpec(
             service_account_name=self._service_account,
-            init_containers=[_proxy_init_container()],
+            init_containers=[_proxy_init_container(), restore_init_container],
             containers=[sandbox_container, sidecar_container],
             host_aliases=host_aliases,
             share_process_namespace=False,
@@ -1794,7 +1850,9 @@ echo "Session cleanup complete"
         Captures:
         - sessions/$session_id/outputs/
         - sessions/$session_id/attachments/
-        - sessions/$session_id/.opencode-data/
+
+        opencode chat history is sandbox-global and captured separately via
+        :meth:`create_opencode_data_snapshot`.
 
         Returns None if there are no outputs to snapshot.
         """
@@ -1833,6 +1891,59 @@ echo "Session cleanup complete"
             storage_path=parsed.storage_path,
             size_bytes=parsed.size_bytes,
         )
+
+    def _opencode_data_request_body(self, sandbox_id: UUID, tenant_id: str) -> bytes:
+        return (
+            OpencodeDataRequest(
+                sandbox_id=sandbox_id,
+                tenant_id=tenant_id,
+                s3_bucket=self._s3_bucket,
+            )
+            .model_dump_json()
+            .encode()
+        )
+
+    def create_opencode_data_snapshot(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+        timeout_seconds: float = 300.0,
+    ) -> bool:
+        """Snapshot the sandbox-global opencode store (chat history) via
+        the sidecar's /opencode-data/create endpoint, overwriting the
+        previous snapshot.
+
+        Returns False when the store is empty (nothing uploaded).
+        """
+        body = self._opencode_data_request_body(sandbox_id, tenant_id)
+        try:
+            resp = self._post_to_sidecar(
+                sandbox_id, "/opencode-data/create", body, timeout=timeout_seconds
+            )
+        except httpx.TransportError as e:
+            raise RuntimeError(f"opencode-data snapshot request failed: {e}") from e
+
+        if resp.status_code == 404:
+            # Pre-rollout pod whose sidecar lacks the endpoint; don't block
+            # its sleep (its store was never persisted anyway).
+            logger.warning(
+                "Sidecar for sandbox %s has no /opencode-data/create "
+                "(old image); skipping history snapshot",
+                sandbox_id,
+            )
+            return False
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"opencode-data snapshot failed: {resp.status_code} {resp.text}"
+            )
+
+        parsed = OpencodeDataCreateResponse.model_validate_json(resp.content)
+        if parsed.status == "empty":
+            logger.info("No opencode data to snapshot for sandbox %s", sandbox_id)
+            return False
+
+        logger.info("Created opencode-data snapshot for sandbox %s", sandbox_id)
+        return True
 
     def session_workspace_exists(
         self,

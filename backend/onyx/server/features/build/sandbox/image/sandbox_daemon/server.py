@@ -16,9 +16,12 @@ from fastapi import Query
 from fastapi import Request
 from sandbox_daemon.extract import MAX_BUNDLE_BYTES
 from sandbox_daemon.extract import safe_extract_then_atomic_swap
+from sandbox_daemon.models import OpencodeDataCreateResponse
+from sandbox_daemon.models import OpencodeDataRequest
 from sandbox_daemon.models import SnapshotCreateRequest
 from sandbox_daemon.models import SnapshotCreateResponse
 from sandbox_daemon.models import SnapshotRestoreRequest
+from sandbox_daemon.snapshot import create_opencode_data_snapshot
 from sandbox_daemon.snapshot import create_snapshot
 from sandbox_daemon.snapshot import restore_snapshot
 from sandbox_daemon.snapshot import SnapshotError
@@ -195,6 +198,44 @@ async def snapshot_restore(
         raise HTTPException(status_code=500, detail=f"Snapshot restore failed: {e}")
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Snapshot restore OS error: {e}")
+
+
+@app.post("/opencode-data/create")
+async def opencode_data_create(
+    request: Request,
+    x_push_signature: str = Header(..., alias="X-Push-Signature"),
+    x_push_timestamp: str = Header(..., alias="X-Push-Timestamp"),
+) -> OpencodeDataCreateResponse:
+    body = await request.body()
+    _verify_signature(
+        "/opencode-data/create",
+        hashlib.sha256(body).hexdigest(),
+        x_push_signature,
+        x_push_timestamp,
+    )
+
+    try:
+        payload = OpencodeDataRequest.model_validate_json(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
+
+    try:
+        status = await asyncio.to_thread(
+            create_opencode_data_snapshot,
+            sandbox_id=payload.sandbox_id,
+            tenant_id=payload.tenant_id,
+            s3_bucket=payload.s3_bucket,
+        )
+    except SnapshotError as e:
+        raise HTTPException(
+            status_code=500, detail=f"opencode-data snapshot create failed: {e}"
+        )
+    except OSError as e:
+        raise HTTPException(
+            status_code=500, detail=f"opencode-data snapshot create OS error: {e}"
+        )
+
+    return OpencodeDataCreateResponse(status=status)
 
 
 if __name__ == "__main__":

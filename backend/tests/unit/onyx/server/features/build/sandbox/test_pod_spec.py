@@ -236,11 +236,22 @@ def test_proxy_env_is_set_on_sandbox_and_sidecar(pod: client.V1Pod) -> None:
         )
 
 
-def test_proxy_init_container_present(pod: client.V1Pod) -> None:
+def test_init_container_ordering(pod: client.V1Pod) -> None:
     """The iptables-lockdown initContainer must run before any user code —
-    it's what blocks direct egress that the HTTPS_PROXY env doesn't catch."""
+    it's what blocks direct egress that the HTTPS_PROXY env doesn't catch.
+    The chat-history restore runs after it (so s5cmd routes through the
+    proxy) and before all regular containers, so opencode-serve can never
+    open the store mid-restore."""
     init_names = [c.name for c in (pod.spec.init_containers or [])]
-    assert init_names == ["sandbox-init"]
+    assert init_names == ["sandbox-init", "opencode-restore"]
+
+
+def test_opencode_restore_init_container_wiring(pod: client.V1Pod) -> None:
+    restore = next(c for c in pod.spec.init_containers if c.name == "opencode-restore")
+    env = {e.name for e in restore.env or []}
+    assert {"ONYX_SANDBOX_ID", "ONYX_TENANT_ID", "SANDBOX_S3_BUCKET"} <= env
+    mounts = {m.name: m.mount_path for m in restore.volume_mounts or []}
+    assert mounts.get("workspace") == "/workspace/sessions"
 
 
 def test_host_aliases_pin_proxy(pod: client.V1Pod) -> None:

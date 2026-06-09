@@ -5,8 +5,12 @@ upload/download tar.gz archives to/from S3. Tarring/extraction happens
 via shell pipelines so we don't buffer large snapshots in memory.
 """
 
+import os
 import shlex
+import signal
+import sqlite3
 import subprocess
+import tempfile
 from pathlib import Path
 from uuid import UUID
 
@@ -17,6 +21,13 @@ SESSIONS_ROOT = Path("/workspace/sessions")
 # daemon can't import from the main package at runtime, hence the copy.
 BUN_CACHE_DIR = SESSIONS_ROOT / ".bun-cache"
 BUN_IMAGE_CACHE_DIR = Path("/home/sandbox/.bun/install/cache")
+# opencode's sqlite store (chat history), under XDG_DATA_HOME. Restored by
+# the opencode_restore init container before opencode-serve ever starts.
+OPENCODE_DATA_DIR = SESSIONS_ROOT / ".opencode-data"
+OPENCODE_DB_PATH = OPENCODE_DATA_DIR / "opencode" / "opencode.db"
+
+# Keep the upload bounded well under the manager's 300s sidecar deadline.
+OPENCODE_DATA_UPLOAD_TIMEOUT_SECONDS = 240
 
 
 class SnapshotError(RuntimeError):
@@ -25,7 +36,7 @@ class SnapshotError(RuntimeError):
     """
 
 
-def _run(script: str) -> None:
+def _run(script: str, timeout: float | None = None) -> None:
     """Run a shell script with stderr merged into stdout for the error.
 
     We deliberately merge stderr into stdout (rather than capturing them
@@ -33,18 +44,26 @@ def _run(script: str) -> None:
     surfaces *something* in the SnapshotError — `set -o pipefail` can
     otherwise tear the stream down before stderr buffers flush, leaving
     a useless "no output" diagnostic.
+
+    Timeout kills the whole process GROUP — killing only the bash wrapper
+    would orphan tar/s5cmd, which could keep writing past the deadline.
     """
+    proc = subprocess.Popen(
+        ["/bin/bash", "-c", script],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
     try:
-        subprocess.run(
-            ["/bin/bash", "-c", script],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-    except subprocess.CalledProcessError as e:
-        detail = (e.stdout or "").strip() or "no output"
-        raise SnapshotError(f"exit {e.returncode}: {detail}") from e
+        stdout, _ = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        os.killpg(proc.pid, signal.SIGKILL)
+        proc.communicate()
+        raise SnapshotError(f"timed out after {timeout}s") from e
+    if proc.returncode != 0:
+        detail = (stdout or "").strip() or "no output"
+        raise SnapshotError(f"exit {proc.returncode}: {detail}")
 
 
 def create_snapshot(
@@ -53,7 +72,8 @@ def create_snapshot(
     s3_bucket: str,
     snapshot_id: UUID,
 ) -> tuple[SnapshotCreateStatus, str]:
-    """Create a snapshot of a session's outputs/attachments/.opencode-data.
+    """Create a snapshot of a session's outputs/attachments. Chat history
+    is sandbox-global — see :func:`create_opencode_data_snapshot`.
 
     Returns:
         (status, storage_path). storage_path is empty when status is "empty".
@@ -67,7 +87,7 @@ def create_snapshot(
     # /etc or the sidecar's IRSA token mount. GNU tar's default already
     # archives symlinks as symlinks (so the target isn't exfiltrated), but
     # we fail-loud here so the operator notices the tamper.
-    for sub in ("outputs", "attachments", ".opencode-data"):
+    for sub in ("outputs", "attachments"):
         candidate = session_path / sub
         if candidate.is_symlink():
             raise SnapshotError(f"{sub} is a symlink; refusing to snapshot")
@@ -93,15 +113,15 @@ dirs="outputs"
 if [ -d attachments ] && [ "$(ls -A attachments 2>/dev/null)" ]; then
     dirs="$dirs attachments"
 fi
-if [ -d .opencode-data ] && [ "$(ls -A .opencode-data 2>/dev/null)" ]; then
-    dirs="$dirs .opencode-data"
-fi
 
 set +e
 tar --exclude='outputs/web/node_modules' --exclude='outputs/web/.next' \\
     -czf - $dirs | s5cmd --log info pipe {safe_s3_uri}
-tar_ec=${{PIPESTATUS[0]-0}}
-s5_ec=${{PIPESTATUS[1]-0}}
+# Copy PIPESTATUS in one shot — any command (even an assignment) resets it,
+# so reading the indices on separate lines silently yields 0 for s5cmd.
+ecs=("${{PIPESTATUS[@]}}")
+tar_ec=${{ecs[0]-0}}
+s5_ec=${{ecs[1]-0}}
 set -e
 
 if [ "$tar_ec" -ne 0 ] || [ "$s5_ec" -ne 0 ]; then
@@ -154,3 +174,51 @@ fi
 """
 
     _run(script)
+
+
+def opencode_data_storage_path(tenant_id: str, sandbox_id: UUID) -> str:
+    """Deterministic S3 key for a sandbox's opencode chat-history snapshot.
+    One blob per sandbox, overwritten on every idle-sleep."""
+    return f"{tenant_id}/snapshots/opencode-data/{sandbox_id}/latest.db"
+
+
+def create_opencode_data_snapshot(
+    sandbox_id: UUID,
+    tenant_id: str,
+    s3_bucket: str,
+) -> SnapshotCreateStatus:
+    """Snapshot opencode's sqlite store (chat history) to S3.
+
+    Sandbox-level because one opencode-serve process serves every session
+    in the pod, with one global db. ``VACUUM INTO`` produces a
+    transactionally consistent single-file copy even while opencode has
+    the db open, so nothing else (wal/shm, repo cache, logs) needs to be
+    captured.
+    """
+    # The agent has rw access to the store's parent dirs — refuse any
+    # symlink trickery that redirects the snapshot source.
+    if OPENCODE_DB_PATH.resolve() != OPENCODE_DB_PATH:
+        raise SnapshotError("opencode.db path contains a symlink; refusing")
+    if not OPENCODE_DB_PATH.is_file():
+        return "empty"
+
+    s3_uri = f"s3://{s3_bucket}/{opencode_data_storage_path(tenant_id, sandbox_id)}"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        copy_path = Path(tmp) / "opencode.db"
+        # mode=ro so a vanished db raises instead of sqlite minting an
+        # empty one and overwriting the good blob.
+        conn = sqlite3.connect(f"file:{OPENCODE_DB_PATH}?mode=ro", uri=True)
+        try:
+            conn.execute("PRAGMA busy_timeout = 5000")
+            conn.execute("VACUUM INTO ?", (str(copy_path),))
+        except sqlite3.Error as e:
+            raise SnapshotError(f"VACUUM INTO failed: {e}") from e
+        finally:
+            conn.close()
+
+        _run(
+            f"s5cmd --log info cp {shlex.quote(str(copy_path))} {shlex.quote(s3_uri)}",
+            timeout=OPENCODE_DATA_UPLOAD_TIMEOUT_SECONDS,
+        )
+    return "created"
