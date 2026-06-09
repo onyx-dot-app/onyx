@@ -48,8 +48,11 @@ export default function SidebarWrapper({
   const logoEl = logo ? logo(folded) : null;
 
   return (
-    // This extra `div` wrapping needs to be present (for some reason).
-    // Without, the widths of the sidebars don't properly get set to the explicitly declared widths (i.e., `4rem` folded and `15rem` unfolded).
+    // The outer wrapper establishes a plain block formatting context so that
+    // `transition-[width]` on the inner div animates correctly. Without it the
+    // inner div is a direct flex item of the page layout, and the flex
+    // algorithm overrides the `width` property before the transition can fire,
+    // so the sidebar snaps between widths instead of sliding.
     <div>
       <div
         className={cn(
@@ -60,7 +63,7 @@ export default function SidebarWrapper({
         <div className="flex flex-row justify-between items-start pt-3 px-2">
           {folded === undefined ? (
             logoEl
-          ) : folded && showLogoWhenFolded ? (
+          ) : folded && showLogoWhenFolded && logoEl ? (
             <>
               <div className="group-hover/SidebarWrapper:hidden">{logoEl}</div>
               <div className="hidden group-hover/SidebarWrapper:flex">

@@ -283,17 +283,18 @@ function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
   }, [pathname, scrollKey]);
 
   return (
-    <div
-      className={cn(
-        "relative flex-1 min-h-0 overflow-y-hidden flex flex-col",
-        folded && "hidden"
-      )}
-    >
+    <div className="relative flex-1 min-h-0 overflow-y-hidden flex flex-col">
       <div
         ref={scrollRef}
         className="flex-1 min-h-0 overflow-y-auto flex flex-col"
       >
-        <div className={cn("flex-1 flex flex-col gap-3 px-2")}>{children}</div>
+        {/* hidden targets only the content, not the outer flex-1 wrapper,
+            so the footer's position is unaffected when the sidebar is folded */}
+        <div
+          className={cn("flex-1 flex flex-col gap-3 px-2", folded && "hidden")}
+        >
+          {children}
+        </div>
         <div style={{ minHeight: "2rem" }} />
       </div>
       <div
