@@ -8,8 +8,6 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
 from onyx.auth.permissions import require_permission
-from onyx.cache.factory import get_cache_backend
-from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -17,10 +15,8 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.models import OPERATOR_LOCKED_FIELDS
 from onyx.server.security.models import SecuritySettings
 from onyx.server.security.models import SecuritySettingsOverrides
+from onyx.server.security.store import apply_patch
 from onyx.server.security.store import get_security_settings
-from onyx.server.security.store import load_raw_overrides
-from onyx.server.security.store import merge_with_env
-from onyx.server.security.store import store_overrides
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -29,20 +25,13 @@ logger = setup_logger()
 admin_router = APIRouter(prefix="/admin/security")
 
 
-# Lock lifetime if the handler crashes mid-write. PUT itself is fast (a
-# read + merge + KV write), so 30s is generous.
-_LOCK_LEASE_SECONDS = 30.0
-# How long a competing PUT will wait for the in-progress one to finish
-# before giving up with a 5xx. 10s is plenty for a single KV roundtrip.
-_LOCK_WAIT_SECONDS = 10.0
-
-
-def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, dict[str, Any]]:
+def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, set[str]]:
     """Parse and validate the PUT body, mapping every error shape to
     OnyxErrorCode.INVALID_INPUT so callers see one envelope.
 
-    Returns (parsed model, raw dict) so the caller can distinguish absent
-    fields from explicit nulls without going back through Pydantic.
+    Returns (parsed model, present_keys). ``present_keys`` is the set of keys
+    the caller actually included in the payload — distinguishing absent from
+    explicit-null requires this because Pydantic collapses both to None.
     """
     try:
         payload_dict = json.loads(raw) if raw else {}
@@ -57,7 +46,10 @@ def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, dict[str, An
     except ValidationError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
-    return overrides, payload_dict
+    # extra="forbid" on the model means every payload_dict key is already a
+    # known field. Safe to convert directly.
+    payload_dict_typed: dict[str, Any] = payload_dict
+    return overrides, set(payload_dict_typed.keys())
 
 
 @admin_router.get("")
@@ -73,11 +65,7 @@ async def put_security_settings_endpoint(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> SecuritySettings:
     raw = await request.body()
-    overrides, raw_dict = _parse_put_body(raw)
-
-    # Track which keys the caller actually sent. Distinguishing "absent" from
-    # "explicit null" is required for PATCH semantics — model_dump can't.
-    present_keys = set(raw_dict.keys())
+    overrides, present_keys = _parse_put_body(raw)
 
     # Operator-locked field rejection — primary boundary. The storage layer
     # also strips these, but failing fast here gives the admin a clear 403.
@@ -90,53 +78,7 @@ async def put_security_settings_endpoint(
                 + ", ".join(sorted(locked_in_payload)),
             )
 
-    # The merge + KV write is sync I/O (KV store + cache lock). Offload to a
-    # threadpool so the event loop is never blocked on Postgres/Redis.
-    return await run_in_threadpool(
-        _persist_overrides, overrides, raw_dict, present_keys
-    )
-
-
-def _persist_overrides(
-    overrides: SecuritySettingsOverrides,
-    raw_dict: dict[str, Any],
-    present_keys: set[str],
-) -> SecuritySettings:
-    """Synchronous lock-acquire + merge + KV write. Uses ``get_cache_backend()``
-    so it works in deployments without Redis (e.g. Onyx Lite, which runs only
-    frontend, backend, Postgres, and nginx)."""
-    cache = get_cache_backend()
-    lock = cache.lock(OnyxRedisLocks.SECURITY_SETTINGS, timeout=_LOCK_LEASE_SECONDS)
-    if not lock.acquire(blocking=True, blocking_timeout=_LOCK_WAIT_SECONDS):
-        raise OnyxError(
-            OnyxErrorCode.CONFLICT,
-            "Another security settings save is in progress, please retry.",
-        )
-
-    try:
-        existing_dict = load_raw_overrides().model_dump(exclude_none=True)
-
-        # Manual merge: explicit null in the request removes the key (falls
-        # back to env), an explicit value sets it, an absent key is left
-        # alone. model_copy(update=...) can't distinguish absent from None.
-        for key in present_keys:
-            value = raw_dict.get(key)
-            if value is None:
-                existing_dict.pop(key, None)
-            else:
-                # Use the Pydantic-validated value (handles normalization
-                # like the valid_email_domains lowercasing).
-                existing_dict[key] = getattr(overrides, key)
-
-        merged = SecuritySettingsOverrides.model_validate(existing_dict)
-        try:
-            # SecuritySettings.__init__ runs the password-length invariants
-            # via a model_validator; surface failures as INVALID_INPUT.
-            effective = merge_with_env(merged)
-        except ValidationError as e:
-            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
-        store_overrides(merged)
-        return effective
-    finally:
-        if lock.owned():
-            lock.release()
+    # apply_patch acquires the Redis write lock, does the read-modify-write,
+    # and translates lock-busy / invariant violations to OnyxError. Sync IO
+    # (DB + Redis) — offload so the event loop never blocks.
+    return await run_in_threadpool(apply_patch, overrides, present_keys)

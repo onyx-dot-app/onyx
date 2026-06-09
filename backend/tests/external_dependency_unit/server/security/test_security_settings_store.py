@@ -21,9 +21,9 @@ from onyx.server.security import store as security_store
 from onyx.server.security.models import SecuritySettingsOverrides
 from onyx.server.security.store import _build_env_defaults
 from onyx.server.security.store import _install_cache_for_test
+from onyx.server.security.store import apply_patch
 from onyx.server.security.store import get_security_settings
 from onyx.server.security.store import invalidate_security_cache
-from onyx.server.security.store import store_overrides
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
@@ -64,7 +64,10 @@ def test_empty_db_returns_env_defaults() -> None:
 
 def test_partial_overrides_only_overrides_specified_fields() -> None:
     """Setting one field via the store must not perturb the others."""
-    store_overrides(SecuritySettingsOverrides(user_directory_admin_only=True))
+    apply_patch(
+        SecuritySettingsOverrides(user_directory_admin_only=True),
+        present_keys={"user_directory_admin_only"},
+    )
     effective = get_security_settings()
     env = _build_env_defaults()
 
@@ -83,25 +86,33 @@ def test_cache_hits_avoid_db_reads() -> None:
     get_security_settings()  # warm cache
 
     with patch.object(
-        security_store, "load_raw_overrides", wraps=security_store.load_raw_overrides
+        security_store,
+        "_load_raw_overrides_unlocked",
+        wraps=security_store._load_raw_overrides_unlocked,
     ) as spy:
         for _ in range(100):
             get_security_settings()
         assert spy.call_count == 0
 
 
-def test_store_overrides_invalidates_cache() -> None:
+def test_apply_patch_invalidates_cache() -> None:
     """After a write, the next load must re-read the DB (cache invalidated)."""
     get_security_settings()  # warm cache
 
     with patch.object(
-        security_store, "load_raw_overrides", wraps=security_store.load_raw_overrides
+        security_store,
+        "_load_raw_overrides_unlocked",
+        wraps=security_store._load_raw_overrides_unlocked,
     ) as spy:
-        store_overrides(SecuritySettingsOverrides(user_directory_admin_only=True))
+        apply_patch(
+            SecuritySettingsOverrides(user_directory_admin_only=True),
+            present_keys={"user_directory_admin_only"},
+        )
+        # apply_patch itself reads existing (1 call) before merging and writing.
+        spy_after_write = spy.call_count
         get_security_settings()
-        # store_overrides only writes; the read after invalidation is the
-        # only call that hits load_raw_overrides.
-        assert spy.call_count == 1
+        # The read after invalidation is the only additional call.
+        assert spy.call_count == spy_after_write + 1
 
 
 def test_cache_ttl_expiry_triggers_reload() -> None:
@@ -115,7 +126,9 @@ def test_cache_ttl_expiry_triggers_reload() -> None:
 
     get_security_settings()  # warm
     with patch.object(
-        security_store, "load_raw_overrides", wraps=security_store.load_raw_overrides
+        security_store,
+        "_load_raw_overrides_unlocked",
+        wraps=security_store._load_raw_overrides_unlocked,
     ) as spy:
         # Within TTL → cache hit.
         fake_now[0] = 4.0
@@ -129,7 +142,10 @@ def test_cache_ttl_expiry_triggers_reload() -> None:
 
 def test_thread_safe_concurrent_reads() -> None:
     """Many threads hammering the loader must not race or raise."""
-    store_overrides(SecuritySettingsOverrides(user_directory_admin_only=True))
+    apply_patch(
+        SecuritySettingsOverrides(user_directory_admin_only=True),
+        present_keys={"user_directory_admin_only"},
+    )
     results: list[Any] = []
     errors: list[BaseException] = []
 
@@ -168,7 +184,7 @@ def test_pre_tenant_returns_env_defaults_without_raising(
         # rest of the codebase uses — see test_telemetry.py).
         monkeypatch.setattr(security_store, "MULTI_TENANT", True)
 
-        with patch.object(security_store, "load_raw_overrides") as spy:
+        with patch.object(security_store, "_load_raw_overrides_unlocked") as spy:
             effective = get_security_settings()
             spy.assert_not_called()
         assert effective == _build_env_defaults()
@@ -180,7 +196,7 @@ def test_db_error_falls_back_to_env_defaults() -> None:
     """An unexpected DB exception must not brick auth — fall back to env."""
     with patch.object(
         security_store,
-        "load_raw_overrides",
+        "_load_raw_overrides_unlocked",
         side_effect=RuntimeError("simulated DB outage"),
     ):
         invalidate_security_cache(TEST_TENANT_ID)

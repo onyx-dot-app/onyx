@@ -4,11 +4,16 @@ from collections.abc import Callable
 from typing import Any
 
 from cachetools import TTLCache
+from pydantic import ValidationError
 
+from onyx.cache.factory import get_cache_backend
 from onyx.configs import app_configs as _cfg
+from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.security_settings import load_overrides as _db_load_overrides
 from onyx.db.security_settings import upsert_overrides as _db_upsert_overrides
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.models import OPERATOR_LOCKED_FIELDS
 from onyx.server.security.models import SecuritySettings
 from onyx.server.security.models import SecuritySettingsOverrides
@@ -32,6 +37,14 @@ _CACHE_LOCK = threading.RLock()
 _CACHE: TTLCache[str, SecuritySettings] = TTLCache(
     maxsize=10_000, ttl=_CACHE_TTL_SECONDS, timer=time.monotonic
 )
+
+
+# Lock lifetime if the writer crashes mid-write. apply_patch itself is fast
+# (DB read + merge + DB write), so 30s is generous.
+_WRITE_LOCK_LEASE_SECONDS = 30.0
+# How long a competing writer will wait for the in-progress one to finish
+# before giving up. 10s is plenty for a single singleton-row roundtrip.
+_WRITE_LOCK_WAIT_SECONDS = 10.0
 
 
 def _install_cache_for_test(
@@ -86,20 +99,24 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
     return SecuritySettings(**merged)
 
 
-def load_raw_overrides() -> SecuritySettingsOverrides:
-    """Uncached read of the persisted overrides. Used by the PUT path inside
-    the Redis lock; everyone else should use get_security_settings().
+def _load_raw_overrides_unlocked() -> SecuritySettingsOverrides:
+    """Uncached DB read of the persisted overrides.
 
-    Returns an empty overrides object (all-None) when no row exists for this
-    tenant — the loader treats that as "all env defaults".
+    Read-consistency comes from the write path's Redis lock; the cache-miss
+    read path tolerates being stale by at most one revision (the cache TTL
+    bounds the staleness window).
+
+    Returns an empty overrides object (all-None) when no row exists for
+    this tenant — callers treat that as "all env defaults".
     """
     with get_session_with_current_tenant() as db_session:
         return _db_load_overrides(db_session)
 
 
-def store_overrides(overrides: SecuritySettingsOverrides) -> None:
-    """Persist overrides as the singleton row and invalidate the current
-    tenant's local cache entry. Caller must hold the Redis lock.
+def _store_overrides_unlocked(overrides: SecuritySettingsOverrides) -> None:
+    """Internal write: upsert the singleton row and invalidate this process's
+    cache entry. Only ``apply_patch`` calls this, and only while holding the
+    Redis write lock.
 
     In multi-tenant mode, operator-locked fields are forced to ``None``
     before persistence — defense in depth against bypasses of the API check.
@@ -111,6 +128,68 @@ def store_overrides(overrides: SecuritySettingsOverrides) -> None:
     with get_session_with_current_tenant() as db_session:
         _db_upsert_overrides(db_session, overrides)
     invalidate_security_cache(_current_tenant_id_or_default())
+
+
+def _apply_present_keys(
+    existing: SecuritySettingsOverrides,
+    patch: SecuritySettingsOverrides,
+    present_keys: set[str],
+) -> SecuritySettingsOverrides:
+    """PATCH-semantic merge.
+
+    For each key the caller actually included in the payload, take the value
+    from ``patch`` (None to clear → env fallback, otherwise to set). Absent
+    keys keep their existing persisted value. Distinguishing absent from
+    explicit-null requires the caller to pass ``present_keys`` — Pydantic
+    can't surface that from the parsed model alone.
+    """
+    merged: dict[str, Any] = existing.model_dump()
+    for name in present_keys:
+        merged[name] = getattr(patch, name, None)
+    return SecuritySettingsOverrides.model_validate(merged)
+
+
+def apply_patch(
+    patch: SecuritySettingsOverrides, present_keys: set[str]
+) -> SecuritySettings:
+    """Public write entry point: acquire the Redis lock, perform
+    read-modify-write on the persisted overrides, return the effective
+    merged settings.
+
+    Lock-held in code, not a docstring contract: the only way to write is
+    through this function. Concurrent callers serialize through Redis;
+    cross-process race-free.
+
+    Raises ``OnyxError(CONFLICT)`` if another writer is in progress beyond
+    the wait window, and ``OnyxError(INVALID_INPUT)`` if the merged effective
+    state would violate a model invariant (e.g. min > max after merge).
+    """
+    cache = get_cache_backend()
+    lock = cache.lock(
+        OnyxRedisLocks.SECURITY_SETTINGS, timeout=_WRITE_LOCK_LEASE_SECONDS
+    )
+    if not lock.acquire(blocking=True, blocking_timeout=_WRITE_LOCK_WAIT_SECONDS):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Another security settings save is in progress, please retry.",
+        )
+    try:
+        existing = _load_raw_overrides_unlocked()
+        merged = _apply_present_keys(existing, patch, present_keys)
+        try:
+            # SecuritySettings.__init__ runs the password-length invariants
+            # via a model_validator; surface failures as INVALID_INPUT.
+            effective = merge_with_env(merged)
+        except ValidationError as e:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+        _store_overrides_unlocked(merged)
+        return effective
+    finally:
+        # Lock lease may have expired while we held it; release only if we
+        # still own it to avoid raising LockNotOwnedError after a successful
+        # write.
+        if lock.owned():
+            lock.release()
 
 
 def _current_tenant_id_or_default() -> str:
@@ -155,7 +234,7 @@ def get_security_settings() -> SecuritySettings:
         if cached is not None:
             return cached
         try:
-            effective = merge_with_env(load_raw_overrides())
+            effective = merge_with_env(_load_raw_overrides_unlocked())
         except Exception as e:
             # Never brick the auth path on a DB outage.
             logger.error("Failed to load security settings, using env defaults: %s", e)

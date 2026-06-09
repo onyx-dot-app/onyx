@@ -311,19 +311,25 @@ def test_concurrent_puts_under_invariant_pressure_never_corrupt(
 # -----------------------------------------------------------------------------
 
 
-def test_store_overrides_strips_operator_locked_in_multi_tenant(
+def test_apply_patch_strips_operator_locked_in_multi_tenant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Even if the API check is bypassed, store_overrides itself must strip
-    operator-locked fields when MULTI_TENANT=True."""
+    """Even if a future internal caller bypasses the API-layer rejection,
+    the storage write itself must strip operator-locked fields when
+    MULTI_TENANT=True. Calls ``apply_patch`` directly to skip the API check."""
     monkeypatch.setattr(security_store, "MULTI_TENANT", True)
 
-    security_store.store_overrides(
+    security_store.apply_patch(
         SecuritySettingsOverrides(
             user_directory_admin_only=True,
             password_min_length=12,  # operator-locked
             mask_credential_prefix=False,  # operator-locked
-        )
+        ),
+        present_keys={
+            "user_directory_admin_only",
+            "password_min_length",
+            "mask_credential_prefix",
+        },
     )
 
     assert _load_row_as_dict() == {"user_directory_admin_only": True}
