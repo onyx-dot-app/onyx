@@ -8,10 +8,12 @@ from uuid import UUID
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
+from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.interactive_turns.state import claim_turn_for_runner
 from onyx.server.features.build.interactive_turns.state import finish_turn
+from onyx.server.features.build.interactive_turns.state import get_active_turn
 from onyx.server.features.build.interactive_turns.state import InteractiveTurn
 from onyx.server.features.build.interactive_turns.state import touch_turn
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_CANCELLED
@@ -31,6 +33,26 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 DEFAULT_INTERACTIVE_TURN_BUDGET_SECONDS = 30 * 60
+
+
+def _can_clear_interrupt_fence(
+    *,
+    cache: CacheBackend,
+    turn_id: UUID,
+    session_id: UUID,
+    user_id: UUID,
+    runner_id: str | None,
+) -> bool:
+    active_turn = get_active_turn(
+        cache=cache,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    if active_turn is None:
+        return True
+    return active_turn.turn_id == turn_id and (
+        runner_id is None or active_turn.runner_id == runner_id
+    )
 
 
 def start_interactive_turn_runner(turn_id: UUID) -> None:
@@ -260,7 +282,14 @@ def _drive_interactive_turn(
             )
         finally:
             try:
-                clear_interrupt(session_id, cache)
+                if _can_clear_interrupt_fence(
+                    cache=cache,
+                    turn_id=turn_id,
+                    session_id=session_id,
+                    user_id=user_id,
+                    runner_id=runner_id,
+                ):
+                    clear_interrupt(session_id, cache)
             except CACHE_TRANSIENT_ERRORS:
                 logger.warning(
                     "[SANDBOX-SERVE] failed to clear interrupt fence for session %s",

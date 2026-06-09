@@ -200,12 +200,24 @@ def touch_turn(
     turn = get_turn(cache, turn_id)
     if turn is None or not turn.is_active:
         return False
-    if runner_id is not None and turn.runner_id != runner_id:
+
+    try:
+        lock = acquire_active_turn_lock(cache, turn.session_id)
+    except InteractiveTurnLockError:
         return False
-    turn.last_heartbeat_at = datetime.now(tz=timezone.utc)
-    _save_turn(cache, turn, ex=ACTIVE_TURN_TTL_SECONDS)
-    cache.expire(_active_turn_key(turn.session_id), ACTIVE_TURN_TTL_SECONDS)
-    return True
+
+    try:
+        turn = get_turn(cache, turn_id)
+        if turn is None or not turn.is_active:
+            return False
+        if runner_id is not None and turn.runner_id != runner_id:
+            return False
+        turn.last_heartbeat_at = datetime.now(tz=timezone.utc)
+        _save_turn(cache, turn, ex=ACTIVE_TURN_TTL_SECONDS)
+        cache.expire(_active_turn_key(turn.session_id), ACTIVE_TURN_TTL_SECONDS)
+        return True
+    finally:
+        lock.release()
 
 
 def finish_turn(
@@ -219,25 +231,31 @@ def finish_turn(
     turn = get_turn(cache, turn_id)
     if turn is None:
         return None
-    if runner_id is not None and turn.runner_id != runner_id:
-        return None
-    now = datetime.now(tz=timezone.utc)
-    turn.status = status
-    turn.last_heartbeat_at = now
-    turn.error_detail = error_detail
-    turn.runner_id = None
-    _save_turn(cache, turn, ex=REQUEST_ID_TTL_SECONDS)
+
     try:
         lock = acquire_active_turn_lock(cache, turn.session_id)
     except InteractiveTurnLockError:
-        return turn
+        return None
+
     try:
+        turn = get_turn(cache, turn_id)
+        if turn is None:
+            return None
+        if runner_id is not None and turn.runner_id != runner_id:
+            return None
+        now = datetime.now(tz=timezone.utc)
+        turn.status = status
+        turn.last_heartbeat_at = now
+        turn.error_detail = error_detail
+        turn.runner_id = None
+        _save_turn(cache, turn, ex=REQUEST_ID_TTL_SECONDS)
+
         raw_active_id = cache.get(_active_turn_key(turn.session_id))
         if raw_active_id is not None and _decode(raw_active_id) == str(turn_id):
             cache.delete(_active_turn_key(turn.session_id))
+        return turn
     finally:
         lock.release()
-    return turn
 
 
 def _runner_is_stale(

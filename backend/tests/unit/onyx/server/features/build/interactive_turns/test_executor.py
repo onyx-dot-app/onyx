@@ -330,6 +330,96 @@ def test_prompt_slot_busy_does_not_finish_reclaimed_turn(
     assert prompt_slot.exited
 
 
+def test_lost_runner_does_not_clear_reclaimed_turn_interrupt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    db_session = _FakeDbSession()
+    session_id = uuid4()
+    user_id = uuid4()
+    sandbox_id = uuid4()
+    prompt_slot = _FakePromptSlot()
+    reclaimed: InteractiveTurn | None = None
+    clear_calls: list[UUID] = []
+
+    turn = create_interactive_turn(
+        cache=cache,
+        session_id=session_id,
+        user_id=user_id,
+        client_request_id="req-1",
+        prompt="hello",
+        turn_index=0,
+    )
+    claimed = claim_turn_for_runner(cache=cache, turn_id=turn.turn_id)
+    assert claimed is not None
+
+    class FakeSessionManager:
+        def __init__(self, db_session_arg: _FakeDbSession) -> None:
+            assert db_session_arg is db_session
+
+        def ensure_sandbox_running(self, user_id_arg: UUID) -> SimpleNamespace:
+            assert user_id_arg == user_id
+            return SimpleNamespace(id=sandbox_id)
+
+        def prompt_slot(
+            self,
+            sandbox_id_arg: UUID,
+            session_id_arg: UUID,
+        ) -> _FakePromptSlot:
+            assert sandbox_id_arg == sandbox_id
+            assert session_id_arg == session_id
+            return prompt_slot
+
+        def yield_sandbox_events(
+            self,
+            sandbox_id_arg: UUID,
+            session_id_arg: UUID,
+            prompt: str,
+            *,
+            should_interrupt: object,
+        ) -> Iterator[object]:
+            nonlocal reclaimed
+            assert sandbox_id_arg == sandbox_id
+            assert session_id_arg == session_id
+            assert prompt == "hello"
+            assert should_interrupt is not None
+            reclaimed = claim_turn_for_runner(
+                cache=cache,
+                turn_id=turn.turn_id,
+                stale_after_seconds=0,
+            )
+            assert reclaimed is not None
+            yield object()
+
+    monkeypatch.setattr(executor, "get_cache_backend", lambda: cache)
+    monkeypatch.setattr(
+        executor,
+        "get_session_with_current_tenant",
+        lambda: _fake_db_scope(db_session),
+    )
+    monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
+    monkeypatch.setattr(executor, "update_session_activity", lambda *_: None)
+    monkeypatch.setattr(executor, "is_interrupt_requested", lambda *_: False)
+    monkeypatch.setattr(
+        executor,
+        "clear_interrupt",
+        lambda session_id_arg, _: clear_calls.append(session_id_arg),
+    )
+
+    executor.run_claimed_interactive_build_turn(claimed, budget_seconds=30)
+
+    current = get_turn(cache, turn.turn_id)
+    assert current is not None
+    assert reclaimed is not None
+    assert current.status == TURN_STATUS_RUNNING
+    assert current.runner_id == reclaimed.runner_id
+    active = get_active_turn(cache=cache, session_id=session_id, user_id=user_id)
+    assert active is not None
+    assert active.runner_id == reclaimed.runner_id
+    assert clear_calls == []
+    assert prompt_slot.exited
+
+
 def test_start_interactive_turn_runner_preserves_tenant_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

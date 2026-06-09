@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from uuid import UUID
 from uuid import uuid4
 
@@ -8,6 +9,7 @@ from onyx.server.features.build.interactive_turns.state import claim_turn_for_ru
 from onyx.server.features.build.interactive_turns.state import create_interactive_turn
 from onyx.server.features.build.interactive_turns.state import finish_turn
 from onyx.server.features.build.interactive_turns.state import get_active_turn
+from onyx.server.features.build.interactive_turns.state import get_turn
 from onyx.server.features.build.interactive_turns.state import get_turn_for_request
 from onyx.server.features.build.interactive_turns.state import InteractiveTurn
 from onyx.server.features.build.interactive_turns.state import REQUEST_ID_TTL_SECONDS
@@ -16,6 +18,23 @@ from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILE
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_QUEUED
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_RUNNING
 from tests.unit.onyx.server.features.build.fakes import FakeCache
+
+
+class _InterleavingCache(FakeCache):
+    def __init__(self) -> None:
+        super().__init__()
+        self.after_next_turn_read: Callable[[], None] | None = None
+
+    def get(self, key: str) -> bytes | None:
+        value = super().get(key)
+        if (
+            key.startswith("craft:interactive_turn:")
+            and self.after_next_turn_read is not None
+        ):
+            callback = self.after_next_turn_read
+            self.after_next_turn_read = None
+            callback()
+        return value
 
 
 def _create_turn(
@@ -144,6 +163,78 @@ def test_stale_running_turn_can_be_reclaimed_by_new_runner() -> None:
         )
         is None
     )
+    active = get_active_turn(cache=cache, session_id=session_id, user_id=user_id)
+    assert active is not None
+    assert active.runner_id == reclaimed.runner_id
+
+
+def test_finish_turn_does_not_clobber_concurrent_reclaim() -> None:
+    cache = _InterleavingCache()
+    session_id, user_id, turn = _create_turn(cache)
+
+    first = claim_turn_for_runner(cache=cache, turn_id=turn.turn_id)
+    assert first is not None
+    first_runner_id = first.runner_id
+    assert first_runner_id is not None
+    reclaimed: InteractiveTurn | None = None
+
+    def reclaim_turn() -> None:
+        nonlocal reclaimed
+        reclaimed = claim_turn_for_runner(
+            cache=cache,
+            turn_id=turn.turn_id,
+            stale_after_seconds=0,
+        )
+
+    cache.after_next_turn_read = reclaim_turn
+
+    assert (
+        finish_turn(
+            cache=cache,
+            turn_id=turn.turn_id,
+            status=TURN_STATUS_FAILED,
+            runner_id=first_runner_id,
+        )
+        is None
+    )
+
+    current = get_turn(cache, turn.turn_id)
+    assert current is not None
+    assert reclaimed is not None
+    assert current.status == TURN_STATUS_RUNNING
+    assert current.runner_id == reclaimed.runner_id
+    active = get_active_turn(cache=cache, session_id=session_id, user_id=user_id)
+    assert active is not None
+    assert active.runner_id == reclaimed.runner_id
+
+
+def test_touch_turn_does_not_clobber_concurrent_reclaim() -> None:
+    cache = _InterleavingCache()
+    session_id, user_id, turn = _create_turn(cache)
+
+    first = claim_turn_for_runner(cache=cache, turn_id=turn.turn_id)
+    assert first is not None
+    first_runner_id = first.runner_id
+    assert first_runner_id is not None
+    reclaimed: InteractiveTurn | None = None
+
+    def reclaim_turn() -> None:
+        nonlocal reclaimed
+        reclaimed = claim_turn_for_runner(
+            cache=cache,
+            turn_id=turn.turn_id,
+            stale_after_seconds=0,
+        )
+
+    cache.after_next_turn_read = reclaim_turn
+
+    assert not touch_turn(cache=cache, turn_id=turn.turn_id, runner_id=first_runner_id)
+
+    current = get_turn(cache, turn.turn_id)
+    assert current is not None
+    assert reclaimed is not None
+    assert current.status == TURN_STATUS_RUNNING
+    assert current.runner_id == reclaimed.runner_id
     active = get_active_turn(cache=cache, session_id=session_id, user_id=user_id)
     assert active is not None
     assert active.runner_id == reclaimed.runner_id
