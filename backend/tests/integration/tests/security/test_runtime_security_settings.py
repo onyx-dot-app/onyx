@@ -4,12 +4,10 @@ The integration api_server runs as a single uvicorn worker, so the PUT
 handler's local-cache invalidation takes effect on the very next request
 without any TTL wait.
 
-NOTE: Because this harness is single-worker, it does NOT exercise cross-process
-propagation (the Redis pub/sub path in ``onyx.server.security.store``). A true
-multi-worker test — asserting that a save on worker A is observed by worker B
-before the TTL fallback — belongs in a multi-process harness if/when one exists.
-The pub/sub publish→subscribe wiring itself is covered in
-``backend/tests/external_dependency_unit/server/security/test_security_settings_pubsub.py``.
+Being single-worker, it does NOT exercise cross-process propagation (the pub/sub
+path in ``onyx.server.security.store``). A true multi-worker test belongs in a
+multi-process harness if/when one exists; the publish→subscribe wiring itself is
+covered in the external_dependency_unit ``test_security_settings_pubsub`` module.
 """
 
 from collections.abc import Generator

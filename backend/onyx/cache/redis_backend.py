@@ -85,9 +85,8 @@ class RedisCacheBackend(CacheBackend):
 
     # -- pub/sub -----------------------------------------------------------
     #
-    # Pub/sub channels are global to the Redis instance, so we deliberately go
-    # through the *raw* (non-prefixed) client: the channel name must be identical
-    # across tenants and processes for everyone to receive a message.
+    # Use the *raw* (non-prefixed) client: pub/sub channels are global, so the
+    # name must be identical across tenants and processes.
 
     def publish(self, channel: str, message: str | bytes) -> None:
         self._r.raw_client.publish(channel, message)
@@ -97,16 +96,14 @@ class RedisCacheBackend(CacheBackend):
         try:
             pubsub.subscribe(channel)
             for message in pubsub.listen():
-                # listen() emits a 'subscribe' confirmation first, then 'message'
-                # entries; only the latter carry a payload we care about.
+                # listen() also emits a 'subscribe' confirmation; skip non-messages.
                 if message.get("type") != "message":
                     continue
                 data = message.get("data")
                 if isinstance(data, bytes):
                     yield data
         finally:
-            # Best-effort: the connection may already be dead if we're unwinding
-            # after an error, in which case close() can itself raise.
+            # close() can itself raise if the connection already died.
             try:
                 pubsub.close()
             except Exception:

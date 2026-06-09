@@ -56,9 +56,8 @@ def test_apply_patch_publishes_invalidation_to_subscriber() -> None:
     stop = threading.Event()
 
     def _listener() -> None:
-        # Drive a raw pubsub directly (rather than store.subscribe()) so the test
-        # can wait for the subscribe confirmation before publishing — pub/sub has
-        # no persistence, so a message sent before we subscribe would be lost.
+        # Raw pubsub (not store.subscribe()) so we can wait for the subscribe
+        # confirmation before publishing — pub/sub drops messages with no subscriber.
         pubsub = get_raw_redis_client().pubsub()
         pubsub.subscribe(OnyxRedisChannels.SECURITY_SETTINGS_INVALIDATE)
         try:
@@ -115,6 +114,5 @@ def test_postgres_backend_skips_pubsub(monkeypatch: pytest.MonkeyPatch) -> None:
     security_store._ensure_listener_started()
     assert security_store._LISTENER_STARTED is False
 
-    # The publish hook short-circuits before touching any cache backend, so it
-    # must complete without raising even though Postgres has no pub/sub.
+    # Publish hook short-circuits before touching any backend; must not raise.
     security_store._publish_invalidation(TEST_TENANT_ID)

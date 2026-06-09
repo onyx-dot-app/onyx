@@ -119,25 +119,16 @@ class CacheBackend(abc.ABC):
 
     # -- pub/sub -----------------------------------------------------------
     #
-    # Not abstract: only backends that genuinely support pub/sub override these.
-    # The default raises so callers that depend on pub/sub (e.g. cross-process
-    # cache invalidation) must gate on a backend that supports it rather than
-    # silently no-op'ing. Channels are global to the cache instance and are NOT
-    # tenant-prefixed — carry any tenant scope in the message payload.
+    # Non-abstract so non-pub/sub backends (and test fakes) need not implement
+    # them; the default raises so dependent callers gate on a supporting backend
+    # rather than silently no-op'ing. Channels are global (not tenant-prefixed) —
+    # carry tenant scope in the payload.
 
     def publish(self, channel: str, message: str | bytes) -> None:
-        """Publish *message* on *channel* to all subscribers.
-
-        Channels are not tenant-prefixed; every subscriber across all tenants
-        and processes receives the message.
-        """
+        """Publish *message* on *channel* to all subscribers."""
         raise NotImplementedError(f"{type(self).__name__} does not support pub/sub.")
 
     def subscribe(self, channel: str) -> Iterator[bytes]:
-        """Subscribe to *channel*, yielding each message payload as ``bytes``.
-
-        Blocks the calling thread between messages, so callers should run this
-        on a dedicated thread. Raises on connection loss; callers are expected
-        to reconnect.
-        """
+        """Yield each message payload on *channel* as ``bytes``. Blocks between
+        messages (run on a dedicated thread) and raises on connection loss."""
         raise NotImplementedError(f"{type(self).__name__} does not support pub/sub.")

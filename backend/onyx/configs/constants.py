@@ -535,15 +535,12 @@ class OnyxRedisConstants:
 
 
 class OnyxRedisChannels:
-    """Redis pub/sub channel names.
-
-    Channels are global to the Redis instance — they are NOT tenant-prefixed, so
-    every subscribed process across all tenants receives every message. Carry the
-    tenant id (or other scope) in the message payload, not the channel name.
+    """Redis pub/sub channel names — global to the instance, NOT tenant-prefixed.
+    Every subscribed process across all tenants receives every message, so carry
+    any tenant scope in the payload rather than the channel name.
     """
 
-    # Published with a tenant id payload when an admin saves runtime security
-    # settings; subscribers drop that tenant's locally-cached SecuritySettings.
+    # Payload is a tenant id; subscribers drop that tenant's cached SecuritySettings.
     SECURITY_SETTINGS_INVALIDATE = "channel:security_settings_invalidate"
 
 

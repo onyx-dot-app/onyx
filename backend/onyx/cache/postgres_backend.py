@@ -296,19 +296,13 @@ class PostgresCacheBackend(CacheBackend):
 
     # -- pub/sub -----------------------------------------------------------
 
+    # Single-process (Onyx Lite), so cross-process invalidation is unnecessary.
+
     def publish(self, channel: str, message: str | bytes) -> None:
-        raise NotImplementedError(
-            "PostgresCacheBackend does not support pub/sub. Deployments on the "
-            "Postgres cache backend (Onyx Lite) are single-process, so "
-            "cross-process invalidation is unnecessary."
-        )
+        raise NotImplementedError("PostgresCacheBackend does not support pub/sub.")
 
     def subscribe(self, channel: str) -> Iterator[bytes]:
-        raise NotImplementedError(
-            "PostgresCacheBackend does not support pub/sub. Deployments on the "
-            "Postgres cache backend (Onyx Lite) are single-process, so "
-            "cross-process invalidation is unnecessary."
-        )
+        raise NotImplementedError("PostgresCacheBackend does not support pub/sub.")
 
     # -- helpers -----------------------------------------------------------
 
