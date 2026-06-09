@@ -20,6 +20,7 @@
  * 6. **SidebarStateProvider** - Sidebar open/closed state
  * 7. **QueryControllerProvider** - Search/Chat mode + query lifecycle
  */
+
 "use client";
 
 import { useState } from "react";
@@ -33,15 +34,13 @@ import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
 import ToastProvider from "@/providers/ToastProvider";
 
-interface AppProviderProps {
+interface SidebarPersistenceProviderProps {
   children: React.ReactNode;
 }
 
 function SidebarPersistenceProvider({
   children,
-}: {
-  children: React.ReactNode;
-}) {
+}: SidebarPersistenceProviderProps) {
   const [defaultFolded] = useState(() => {
     if (typeof window === "undefined") return false;
     return (
@@ -64,6 +63,10 @@ function SidebarPersistenceProvider({
       {children}
     </SidebarLayouts.StateProvider>
   );
+}
+
+interface AppProviderProps {
+  children: React.ReactNode;
 }
 
 export default function AppProvider({ children }: AppProviderProps) {
