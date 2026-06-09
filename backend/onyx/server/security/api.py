@@ -14,12 +14,12 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.security.models import OPERATOR_LOCKED_FIELDS
 from onyx.server.security.models import SecuritySettings
 from onyx.server.security.models import SecuritySettingsOverrides
 from onyx.server.security.store import get_security_settings
 from onyx.server.security.store import load_raw_overrides
 from onyx.server.security.store import merge_with_env
-from onyx.server.security.store import OPERATOR_LOCKED_FIELDS
 from onyx.server.security.store import store_overrides
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -35,6 +35,7 @@ _LOCK_LEASE_SECONDS = 30.0
 # How long a competing PUT will wait for the in-progress one to finish
 # before giving up with a 5xx. 10s is plenty for a single KV roundtrip.
 _LOCK_WAIT_SECONDS = 10.0
+
 
 def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, dict[str, Any]]:
     """Parse and validate the PUT body, mapping every error shape to

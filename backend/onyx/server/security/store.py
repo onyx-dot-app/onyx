@@ -9,6 +9,7 @@ from onyx.configs import app_configs as _cfg
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.security_settings import load_overrides as _db_load_overrides
 from onyx.db.security_settings import upsert_overrides as _db_upsert_overrides
+from onyx.server.security.models import OPERATOR_LOCKED_FIELDS
 from onyx.server.security.models import SecuritySettings
 from onyx.server.security.models import SecuritySettingsOverrides
 from onyx.utils.logger import setup_logger
@@ -17,22 +18,6 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
-
-
-# Fields that, in multi-tenant deployments, can only be set by the operator
-# via environment variables. Tenant admins cannot override them at runtime.
-OPERATOR_LOCKED_FIELDS: frozenset[str] = frozenset(
-    {
-        "password_min_length",
-        "password_max_length",
-        "password_require_uppercase",
-        "password_require_lowercase",
-        "password_require_digit",
-        "password_require_special_char",
-        "valid_email_domains",
-        "mask_credential_prefix",
-    }
-)
 
 
 # 10s TTL: short enough that admin saves propagate across processes within
@@ -94,63 +79,17 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
     env = _build_env_defaults()
     locked = OPERATOR_LOCKED_FIELDS if MULTI_TENANT else frozenset()
 
-    def pick(field: str, override_value: Any, env_value: Any) -> Any:
-        if field in locked:
-            return env_value
-        return env_value if override_value is None else override_value
-
-    return SecuritySettings(
-        user_directory_admin_only=pick(
-            "user_directory_admin_only",
-            overrides.user_directory_admin_only,
-            env.user_directory_admin_only,
-        ),
-        track_external_idp_expiry=pick(
-            "track_external_idp_expiry",
-            overrides.track_external_idp_expiry,
-            env.track_external_idp_expiry,
-        ),
-        mask_credential_prefix=pick(
-            "mask_credential_prefix",
-            overrides.mask_credential_prefix,
-            env.mask_credential_prefix,
-        ),
-        valid_email_domains=(
-            env.valid_email_domains
-            if "valid_email_domains" in locked or overrides.valid_email_domains is None
-            else tuple(overrides.valid_email_domains)
-        ),
-        password_min_length=pick(
-            "password_min_length",
-            overrides.password_min_length,
-            env.password_min_length,
-        ),
-        password_max_length=pick(
-            "password_max_length",
-            overrides.password_max_length,
-            env.password_max_length,
-        ),
-        password_require_uppercase=pick(
-            "password_require_uppercase",
-            overrides.password_require_uppercase,
-            env.password_require_uppercase,
-        ),
-        password_require_lowercase=pick(
-            "password_require_lowercase",
-            overrides.password_require_lowercase,
-            env.password_require_lowercase,
-        ),
-        password_require_digit=pick(
-            "password_require_digit",
-            overrides.password_require_digit,
-            env.password_require_digit,
-        ),
-        password_require_special_char=pick(
-            "password_require_special_char",
-            overrides.password_require_special_char,
-            env.password_require_special_char,
-        ),
-    )
+    merged: dict[str, Any] = {}
+    for name in SecuritySettings.model_fields:
+        override_value = getattr(overrides, name, None)
+        if name in locked or override_value is None:
+            merged[name] = getattr(env, name)
+        else:
+            merged[name] = override_value
+    # SecuritySettings types valid_email_domains as tuple; overrides as list.
+    if isinstance(merged["valid_email_domains"], list):
+        merged["valid_email_domains"] = tuple(merged["valid_email_domains"])
+    return SecuritySettings(**merged)
 
 
 def load_raw_overrides() -> SecuritySettingsOverrides:
