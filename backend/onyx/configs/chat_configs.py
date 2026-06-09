@@ -36,7 +36,9 @@ CHAT_HEARTBEAT_INTERVAL_S = int(os.environ.get("CHAT_HEARTBEAT_INTERVAL_S") or "
 # Max EXTRA attempts to re-issue a streaming completion when the provider raises a
 # timeout/connection error BEFORE any chunk has been yielded. Never retried once any
 # chunk is consumed downstream.
-LLM_FIRST_CHUNK_MAX_RETRIES = int(os.environ.get("LLM_FIRST_CHUNK_MAX_RETRIES") or "2")
+LLM_FIRST_CHUNK_MAX_RETRIES = max(
+    0, int(os.environ.get("LLM_FIRST_CHUNK_MAX_RETRIES") or "2")
+)
 # Socket-read timeout (max gap between chunks) for deep-research report LLM calls.
 # 60s still permits arbitrarily long generations; combined with first-chunk retry a
 # zero-chunk stall costs <=60s per attempt instead of a fatal 300s.

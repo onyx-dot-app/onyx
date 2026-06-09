@@ -917,8 +917,8 @@ class LitellmLLM(LLM):
             LiteLLMServiceUnavailableError,
             LiteLLMInternalServerError,
         )
-        max_attempts = 1 + LLM_FIRST_CHUNK_MAX_RETRIES
-        yielded_any = False
+        max_attempts: int = 1 + LLM_FIRST_CHUNK_MAX_RETRIES
+        yielded_any: bool = False
 
         # HTTPHandler Threading & Connection Pool Notes:
         # =============================================

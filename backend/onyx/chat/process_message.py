@@ -1217,7 +1217,7 @@ def _run_models(
 
         # ── Main thread: merge and yield packets ────────────────────────────
         models_remaining = n_models
-        last_packet_yield = time.monotonic()
+        last_packet_yield: float = time.monotonic()
         while models_remaining > 0:
             try:
                 model_idx, item = merged_queue.get(timeout=_CANCEL_POLL_INTERVAL_S)
