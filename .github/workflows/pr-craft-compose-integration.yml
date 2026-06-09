@@ -167,8 +167,7 @@ jobs:
           SANDBOX_DOCKER_NETWORK: "onyx_craft_sandbox"
           SANDBOX_DOCKER_SOCKET: "/var/run/docker.sock"
         run: |
-          source ../.venv/bin/activate
-          python -m pytest \
+          py.test \
             -v \
             --tb=short \
             --durations=10 \
