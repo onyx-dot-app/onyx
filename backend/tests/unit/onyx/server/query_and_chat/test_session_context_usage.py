@@ -21,60 +21,46 @@ def _msg(
     )
 
 
-def test_uses_last_assistant_prompt_tokens() -> None:
+def test_uses_last_reported_assistant_prompt_tokens() -> None:
     messages = [
         _msg(1, MessageType.USER, None),
         _msg(2, MessageType.ASSISTANT, 5000),
     ]
-
-    # baseline_fn must NOT be invoked when a real last turn exists — proving the
-    # expensive baseline tokenization stays off the common hot path.
-    def _exploding_baseline() -> int:
-        raise AssertionError("baseline_fn should not be called when a turn exists")
-
-    usage = compute_context_usage(
-        messages, max_input_tokens=128000, baseline_fn=_exploding_baseline
-    )
-
+    usage = compute_context_usage(messages, lambda: 128000)
+    assert usage is not None
     assert usage.used_tokens == 5000
     assert usage.max_input_tokens == 128000
-    assert usage.is_baseline is False
 
 
-def test_baseline_fn_not_called_with_last_turn() -> None:
+def test_backtracks_to_most_recent_reporting_turn() -> None:
+    # Latest assistant turn has no usage; fall back to the last one that did.
     messages = [
-        _msg(1, MessageType.USER, None),
-        _msg(2, MessageType.ASSISTANT, 5000),
+        _msg(1, MessageType.ASSISTANT, 4000),
+        _msg(2, MessageType.ASSISTANT, None),
     ]
-    calls = 0
-
-    def _counting_baseline() -> int:
-        nonlocal calls
-        calls += 1
-        return 100
-
-    compute_context_usage(
-        messages, max_input_tokens=128000, baseline_fn=_counting_baseline
-    )
-
-    assert calls == 0
+    usage = compute_context_usage(messages, lambda: 128000)
+    assert usage is not None
+    assert usage.used_tokens == 4000
 
 
-def test_falls_back_to_baseline_when_no_assistant_turn() -> None:
-    # user-only history: no assistant message with prompt_tokens
-    messages = [_msg(1, MessageType.USER, None)]
-
-    usage = compute_context_usage(
-        messages, max_input_tokens=128000, baseline_fn=lambda: 100
-    )
-
-    assert usage.used_tokens == 100
-    assert usage.max_input_tokens == 128000
-    assert usage.is_baseline is True
+def test_none_when_no_reporting_turn() -> None:
+    # user-only history: no assistant message with prompt_tokens -> no gauge.
+    usage = compute_context_usage([_msg(1, MessageType.USER, None)], lambda: 128000)
+    assert usage is None
 
 
-def test_falls_back_to_baseline_for_empty_history() -> None:
-    usage = compute_context_usage([], max_input_tokens=128000, baseline_fn=lambda: 250)
+def test_none_for_empty_history() -> None:
+    assert compute_context_usage([], lambda: 128000) is None
 
-    assert usage.used_tokens == 250
-    assert usage.is_baseline is True
+
+def test_max_input_tokens_fn_not_resolved_without_a_turn() -> None:
+    # No reporting turn -> the (potentially expensive) LLM resolution is skipped.
+    def _exploding() -> int:
+        raise AssertionError("max_input_tokens_fn must not run without a turn")
+
+    assert compute_context_usage([_msg(1, MessageType.USER, None)], _exploding) is None
+
+
+def test_none_when_max_input_tokens_non_positive() -> None:
+    messages = [_msg(1, MessageType.ASSISTANT, 5000)]
+    assert compute_context_usage(messages, lambda: 0) is None

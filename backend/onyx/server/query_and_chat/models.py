@@ -17,7 +17,6 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
-from onyx.server.query_and_chat.context_usage import ContextUsage
 from onyx.server.query_and_chat.streaming_models import Packet
 
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
@@ -248,6 +247,11 @@ class ChatMessageDetail(BaseModel):
 class SetPreferredResponseRequest(BaseModel):
     user_message_id: int
     preferred_response_id: int
+
+
+class ContextUsage(BaseModel):
+    used_tokens: int  # provider prompt_tokens of the most recent reporting turn
+    max_input_tokens: int  # the producing model's context window
 
 
 class ChatSessionDetailResponse(BaseModel):

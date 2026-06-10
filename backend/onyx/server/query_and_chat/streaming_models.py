@@ -462,7 +462,6 @@ PacketObj = Union[
     CitationInfo,
     ToolCallDebug,
     ToolCallArgumentDelta,
-    # Context Usage Packet
     ContextUsagePacket,
     # Deep Research Packets
     DeepResearchPlanStart,

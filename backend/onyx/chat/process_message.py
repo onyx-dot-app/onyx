@@ -1746,8 +1746,6 @@ def llm_loop_completion_handle(
             compression_params=compression_params,
         )
 
-    # Returned so the caller can stream a ContextUsagePacket for the gauge.
-    # None when no real turn produced provider prompt_tokens.
     return prompt_tokens
 
 
