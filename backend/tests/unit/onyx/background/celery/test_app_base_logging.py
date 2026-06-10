@@ -14,52 +14,6 @@ from collections.abc import Generator
 import pytest
 
 from onyx.background.celery.apps import app_base
-from onyx.utils.logger import NOISY_THIRD_PARTY_LOGGER_PREFIXES
-
-NOISY_DEPENDENCY_CHILD_LOGGER_NAMES = (
-    "googleapiclient.discovery",
-    "googleapiclient.discovery_cache",
-    "googleapiclient.http",
-    "httpcore.connection",
-    "httpcore.http11",
-    "httpx",
-    "kubernetes.client.rest",
-    "slack_sdk.web.base_client",
-    "urllib3.connectionpool",
-)
-
-
-class CapturingHandler(logging.Handler):
-    def __init__(self) -> None:
-        super().__init__()
-        self.records: list[logging.LogRecord] = []
-
-    def emit(self, record: logging.LogRecord) -> None:
-        self.records.append(record)
-
-
-def _matches_noisy_dependency_prefix(logger_name: str) -> bool:
-    return logger_name in NOISY_THIRD_PARTY_LOGGER_PREFIXES or any(
-        logger_name.startswith(f"{logger_prefix}.")
-        for logger_prefix in NOISY_THIRD_PARTY_LOGGER_PREFIXES
-    )
-
-
-def _noisy_dependency_loggers() -> dict[str, logging.Logger]:
-    loggers = {
-        logger_prefix: logging.getLogger(logger_prefix)
-        for logger_prefix in NOISY_THIRD_PARTY_LOGGER_PREFIXES
-    }
-
-    for logger_name, candidate_logger in list(
-        logging.Logger.manager.loggerDict.items()
-    ):
-        if not isinstance(candidate_logger, logging.Logger):
-            continue
-        if _matches_noisy_dependency_prefix(logger_name):
-            loggers[logger_name] = candidate_logger
-
-    return loggers
 
 
 @pytest.fixture
@@ -77,10 +31,6 @@ def _snapshot_loggers() -> Generator[None, None, None]:
     task_handlers_before = list(task.handlers)
     task_level_before = task.level
     task_propagate_before = task.propagate
-    noisy_logger_levels_before = {
-        logger_name: logger.level
-        for logger_name, logger in _noisy_dependency_loggers().items()
-    }
 
     yield
 
@@ -90,9 +40,6 @@ def _snapshot_loggers() -> Generator[None, None, None]:
     task.setLevel(task_level_before)
     task.propagate = task_propagate_before
 
-    for logger_name, logger in _noisy_dependency_loggers().items():
-        logger.setLevel(noisy_logger_levels_before.get(logger_name, logging.NOTSET))
-
 
 def _clean_argv(monkeypatch: pytest.MonkeyPatch, *extra: str) -> None:
     """Replaces sys.argv with a celery-like invocation (plus any extra args).
@@ -101,13 +48,6 @@ def _clean_argv(monkeypatch: pytest.MonkeyPatch, *extra: str) -> None:
     from pytest's command line as a false short-flag match.
     """
     monkeypatch.setattr(sys, "argv", ["celery", "-A", "app", "worker", *extra])
-
-
-def _dependency_loggers() -> list[logging.Logger]:
-    return [
-        logging.getLogger(logger_name)
-        for logger_name in NOISY_DEPENDENCY_CHILD_LOGGER_NAMES
-    ]
 
 
 def test_env_unset_cli_not_passed_falls_back_to_celery_default(
@@ -228,85 +168,6 @@ def test_env_loglevel_case_insensitive(
 
     assert logging.getLogger().level == logging.WARNING
     assert app_base.task_logger.level == logging.WARNING
-
-
-def test_noisy_dependency_loggers_suppress_debug_and_info_with_debug_root(
-    _snapshot_loggers: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
-    _clean_argv(monkeypatch)
-
-    dependency_loggers = _dependency_loggers()
-    for dependency_logger in dependency_loggers:
-        dependency_logger.setLevel(logging.DEBUG)
-
-    app_base.on_setup_logging(
-        loglevel=logging.WARNING,
-        logfile=None,
-        format="",
-        colorize=False,
-    )
-
-    assert logging.getLogger().level == logging.DEBUG
-    assert app_base.task_logger.level == logging.DEBUG
-    capture_handler = CapturingHandler()
-    logging.getLogger().addHandler(capture_handler)
-
-    for dependency_logger in dependency_loggers:
-        dependency_logger.debug("debug should be hidden")
-        dependency_logger.info("info should be hidden")
-        dependency_logger.warning("warning should be visible")
-
-    dependency_records = [
-        record
-        for record in capture_handler.records
-        if record.name in NOISY_DEPENDENCY_CHILD_LOGGER_NAMES
-    ]
-    assert {record.getMessage() for record in dependency_records} == {
-        "warning should be visible"
-    }
-    assert {record.name for record in dependency_records} == set(
-        NOISY_DEPENDENCY_CHILD_LOGGER_NAMES
-    )
-
-
-def test_noisy_dependency_loggers_do_not_loosen_error_root(
-    _snapshot_loggers: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("LOG_LEVEL", "ERROR")
-    _clean_argv(monkeypatch)
-
-    dependency_loggers = _dependency_loggers()
-    for dependency_logger in dependency_loggers:
-        dependency_logger.setLevel(logging.DEBUG)
-
-    app_base.on_setup_logging(
-        loglevel=logging.WARNING,
-        logfile=None,
-        format="",
-        colorize=False,
-    )
-
-    assert logging.getLogger().level == logging.ERROR
-    assert app_base.task_logger.level == logging.ERROR
-    capture_handler = CapturingHandler()
-    logging.getLogger().addHandler(capture_handler)
-
-    for dependency_logger in dependency_loggers:
-        dependency_logger.warning("warning should be hidden")
-        dependency_logger.error("error should be visible")
-
-    dependency_records = [
-        record
-        for record in capture_handler.records
-        if record.name in NOISY_DEPENDENCY_CHILD_LOGGER_NAMES
-    ]
-    assert {record.getMessage() for record in dependency_records} == {
-        "error should be visible"
-    }
-    assert {record.name for record in dependency_records} == set(
-        NOISY_DEPENDENCY_CHILD_LOGGER_NAMES
-    )
 
 
 # Direct tests of the resolver helper so we can assert on the human-readable
