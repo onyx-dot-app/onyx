@@ -11,7 +11,7 @@ Research checked:
 - Existing `docker-compose.yml` + `install.sh` for Craft wiring:
   - `code-interpreter` already uses Docker-out-of-Docker by mounting `${DOCKER_SOCK_PATH:-/var/run/docker.sock}`.
   - docker-compose currently sets Craft template paths and `ENABLE_CRAFT`, but does not set `SANDBOX_BACKEND`; the code default is `local`.
-  - `--include-craft` selects `craft-latest` and sets `ENABLE_CRAFT=true`, but does not provision an isolated Craft sandbox backend.
+  - `--include-craft` uses the regular image tag and sets `ENABLE_CRAFT=true`, but does not provision an isolated Craft sandbox backend.
 - `KubernetesSandboxManager` (`backend/onyx/server/features/build/sandbox/kubernetes/`):
   - K8s Craft provisions one sandbox pod per user.
   - Each pod contains a `sandbox` container for the agent and a `sidecar` container for push/snapshot HTTP on port `8731`.
@@ -105,7 +105,7 @@ Keep the design compatible with adding sidecars later:
 
 `install.sh`:
 
-- `--include-craft` selects `craft-latest`, sets `ENABLE_CRAFT=true`, sets `SANDBOX_BACKEND=docker`, and ensures Docker socket env guidance exists.
+- `--include-craft` uses the regular image tag, sets `ENABLE_CRAFT=true`, sets `SANDBOX_BACKEND=docker`, and ensures Docker socket env guidance exists.
 - It should warn clearly that api_server/background get Docker socket access, which is root-equivalent on the host.
 - On EC2, either install and verify host-level IMDS blocking or fail unless `CRAFT_ALLOW_UNBLOCKED_IMDS=true` is explicitly set.
 
