@@ -1553,7 +1553,6 @@ class KubernetesSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
-        snapshot_path: str | None = None,
         user_name: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
@@ -1570,19 +1569,11 @@ class KubernetesSandboxManager(SandboxManager):
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
-            snapshot_path: Deprecated; restore_snapshot owns snapshot restoration.
             user_name: User's name for personalization in AGENTS.md
 
         Raises:
             RuntimeError: If workspace setup fails
         """
-        if snapshot_path:
-            logger.warning(
-                "setup_session_workspace called with snapshot_path=%s; use "
-                "restore_snapshot for Kubernetes snapshot restoration.",
-                snapshot_path,
-            )
-
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 

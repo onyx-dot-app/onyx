@@ -390,7 +390,6 @@ class SessionManager:
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
-            snapshot_path=None,  # TODO: Support restoring from snapshot
             user_name=user_name,
         )
         self._hydrate_skills(sandbox.id, user, files=skills_files)
