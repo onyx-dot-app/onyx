@@ -4,6 +4,8 @@
 
 export type SharingScope = "private" | "public_org";
 
+export type SessionOrigin = "INTERACTIVE" | "SCHEDULED";
+
 // =============================================================================
 // Session Error Constants
 // =============================================================================
@@ -173,6 +175,7 @@ export interface ApiSessionResponse {
   sandbox: ApiSandboxResponse | null;
   artifacts: ApiArtifactResponse[];
   sharing_scope: SharingScope;
+  origin: SessionOrigin;
   agent_provider: string | null;
   agent_model: string | null;
 }

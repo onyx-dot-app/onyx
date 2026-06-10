@@ -77,8 +77,11 @@ export default function BuildChatPanel({
   const session = useSession();
   const sessionId = useSessionId();
   const scheduledSessionId = sessionId ?? existingSessionId ?? null;
+  // Gate on origin so interactive sessions don't 404 on scheduled-run-context.
+  const scheduledRunSessionId =
+    session?.origin === "SCHEDULED" ? scheduledSessionId : null;
   const { data: scheduledRunContext, mutate: mutateScheduledRunContext } =
-    useScheduledRunContext(scheduledSessionId);
+    useScheduledRunContext(scheduledRunSessionId);
   const scheduledRunInFlight =
     isScheduledRunContextInFlight(scheduledRunContext);
   const shouldStreamScheduledRun = scheduledRunContext?.status === "RUNNING";
