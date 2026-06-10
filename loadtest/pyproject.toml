@@ -1,0 +1,15 @@
+[project]
+name = "onyx-loadtest"
+version = "0.1.0"
+description = "Locust load tests for the Onyx chat path"
+requires-python = ">=3.11"
+dependencies = [
+    "locust>=2.32",
+    # mock_llm server (also deployed standalone in later phases)
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
+
+# Intentionally NOT a member of the root uv workspace: locust pins
+# gevent/geventhttpclient/flask, which must not constrain the backend's
+# shared lockfile. Run `uv sync` from inside this directory.
