@@ -1,174 +1,325 @@
 """Snapshot create/restore operations for the sandbox sidecar.
 
-Shells out to s5cmd (baked into the image via multi-stage COPY) to
-upload/download tar.gz archives to/from S3. Tarring/extraction happens
-via shell pipelines so we don't buffer large snapshots in memory.
+The sidecar owns pod-local filesystem access. The api-server owns durable
+storage by streaming these tarballs into/out of the main Onyx FileStore.
 """
 
 import os
-import shlex
-import signal
+import shutil
+import stat
 import subprocess
+import tarfile
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID
 
-from sandbox_daemon.models import SnapshotCreateStatus
-
 SESSIONS_ROOT = Path("/workspace/sessions")
-# Must match onyx.server.features.build.sandbox.base.BUN_CACHE_DIR — the
+# Must match onyx.server.features.build.sandbox.base.BUN_CACHE_DIR -- the
 # daemon can't import from the main package at runtime, hence the copy.
 BUN_CACHE_DIR = SESSIONS_ROOT / ".bun-cache"
 BUN_IMAGE_CACHE_DIR = Path("/home/sandbox/.bun/install/cache")
 
-# Bounded under the manager's 300s client deadline so a hung s5cmd fails as a
-# SnapshotError instead of holding the request open.
-SNAPSHOT_PIPELINE_TIMEOUT_SECONDS = 240
-
 
 class SnapshotError(RuntimeError):
-    """Raised when a snapshot subprocess fails. Carries stderr from the
-    underlying tool (s5cmd / tar) so the manager can see the cause.
-    """
+    """Raised when tar or bun fails so the manager can see the cause."""
 
 
-def _run(script: str, timeout: float | None = None) -> None:
-    """Run a shell script with stderr merged into stdout for the error.
+_SNAPSHOT_ROOTS = frozenset({"outputs", "attachments", ".opencode-data"})
+MAX_SNAPSHOT_ARCHIVE_BYTES = 100 * 1024 * 1024
+MAX_SNAPSHOT_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
+_ARCHIVE_CHUNK_BYTES = 1024 * 1024
 
-    We deliberately merge stderr into stdout (rather than capturing them
-    separately) so a failure anywhere in a `tar | s5cmd` pipeline always
-    surfaces *something* in the SnapshotError — `set -o pipefail` can
-    otherwise tear the stream down before stderr buffers flush, leaving
-    a useless "no output" diagnostic.
 
-    On timeout, kills the process group so tar/s5cmd aren't orphaned.
-    """
-    proc = subprocess.Popen(
-        ["/bin/bash", "-c", script],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        start_new_session=True,
-    )
+def _safe_session_path(session_id: UUID, *, create: bool) -> Path:
+    """Return the pod-local session path, rejecting symlink escape hatches."""
+    sessions_root = SESSIONS_ROOT.resolve()
+    session_path = SESSIONS_ROOT / str(session_id)
+
+    if session_path.is_symlink():
+        raise SnapshotError("session path is a symlink; refusing snapshot access")
+
+    if create:
+        session_path.mkdir(parents=True, exist_ok=True)
+
+    if session_path.exists() and not session_path.is_dir():
+        raise SnapshotError("session path is not a directory")
+
     try:
-        stdout, _ = proc.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired as e:
-        os.killpg(proc.pid, signal.SIGKILL)
+        session_path.resolve(strict=False).relative_to(sessions_root)
+    except ValueError as e:
+        raise SnapshotError("session path escapes sessions root") from e
+
+    return session_path
+
+
+def _snapshot_dirs(session_path: Path) -> list[str]:
+    """Return session-relative directories that should be archived.
+
+    ``outputs`` is required; the others are included only when present and
+    non-empty. Refuse top-level symlinks so a compromised workspace cannot
+    redirect snapshotting outside the session tree.
+    """
+    outputs_path = session_path / "outputs"
+    if session_path.is_symlink():
+        raise SnapshotError("session path is a symlink; refusing to snapshot")
+    if session_path.exists() and not session_path.is_dir():
+        raise SnapshotError("session path is not a directory")
+    if outputs_path.is_symlink():
+        raise SnapshotError("outputs is a symlink; refusing to snapshot")
+    if not outputs_path.is_dir():
+        return []
+
+    dirs = ["outputs"]
+    for subdir in ("outputs", "attachments", ".opencode-data"):
+        candidate = session_path / subdir
+        if candidate.is_symlink():
+            raise SnapshotError(f"{subdir} is a symlink; refusing to snapshot")
+        if subdir == "outputs":
+            continue
+        if candidate.is_dir() and any(candidate.iterdir()):
+            dirs.append(subdir)
+    return dirs
+
+
+def _validate_snapshot_tree(session_path: Path, dirs: list[str]) -> None:
+    """Refuse filesystem entries that restore will reject or that can escape."""
+    session_root = session_path.resolve()
+    total_uncompressed_bytes = 0
+    for dirname in dirs:
+        root_path = session_path / dirname
         try:
-            proc.communicate(timeout=10)
-        except subprocess.TimeoutExpired:
-            pass  # SIGKILL didn't reap quickly; surface the original timeout
-        raise SnapshotError(f"timed out after {timeout}s") from e
-    if proc.returncode != 0:
-        detail = (stdout or "").strip() or "no output"
-        raise SnapshotError(f"exit {proc.returncode}: {detail}")
+            root_path.resolve(strict=False).relative_to(session_root)
+        except ValueError as e:
+            raise SnapshotError(f"{dirname} escapes session") from e
+
+        for dirpath, dirnames, filenames in os.walk(root_path, followlinks=False):
+            current = Path(dirpath)
+            entries = [current, *(current / name for name in dirnames + filenames)]
+            for entry in entries:
+                try:
+                    mode = entry.lstat().st_mode
+                except OSError as e:
+                    raise SnapshotError(f"cannot stat snapshot entry: {entry}") from e
+
+                if stat.S_ISLNK(mode):
+                    rel = entry.relative_to(session_path)
+                    raise SnapshotError(f"snapshot links are not allowed: {rel}")
+                if stat.S_ISDIR(mode):
+                    continue
+                if stat.S_ISREG(mode):
+                    total_uncompressed_bytes += entry.lstat().st_size
+                    if total_uncompressed_bytes > MAX_SNAPSHOT_UNCOMPRESSED_BYTES:
+                        raise SnapshotError(
+                            "snapshot uncompressed size exceeds "
+                            f"{MAX_SNAPSHOT_UNCOMPRESSED_BYTES} byte limit"
+                        )
+                    continue
+
+                rel = entry.relative_to(session_path)
+                raise SnapshotError(f"snapshot special file is not allowed: {rel}")
 
 
-def create_snapshot(
-    session_id: UUID,
-    tenant_id: str,
-    s3_bucket: str,
-    snapshot_id: UUID,
-) -> tuple[SnapshotCreateStatus, str]:
+def _validate_snapshot_member(member: tarfile.TarInfo) -> str:
+    """Return a normalized member name if it is safe for session extraction."""
+    try:
+        member.name.encode("utf-8")
+    except UnicodeEncodeError as e:
+        raise SnapshotError(f"non-UTF-8 snapshot path: {member.name!r}") from e
+
+    if member.issym() or member.islnk():
+        raise SnapshotError(f"snapshot links are not allowed: {member.name}")
+    if not (member.isfile() or member.isdir()):
+        raise SnapshotError(f"snapshot special file is not allowed: {member.name}")
+    if os.path.isabs(member.name):
+        raise SnapshotError(f"absolute snapshot path is not allowed: {member.name}")
+
+    normalized = os.path.normpath(member.name)
+    if normalized in ("", ".") or normalized == ".." or normalized.startswith("../"):
+        raise SnapshotError(f"snapshot path escapes session: {member.name}")
+
+    root = normalized.split(os.sep, 1)[0]
+    if root not in _SNAPSHOT_ROOTS:
+        raise SnapshotError(f"snapshot path has unexpected root: {member.name}")
+    if normalized == root and not member.isdir():
+        raise SnapshotError(f"snapshot root must be a directory: {member.name}")
+
+    return normalized
+
+
+def _replace_snapshot_roots(
+    session_path: Path,
+    staging_path: Path,
+    roots: set[str],
+) -> None:
+    for root in sorted(roots):
+        target = session_path / root
+        replacement = staging_path / root
+        if target.is_symlink() or target.is_file():
+            target.unlink()
+        elif target.exists():
+            shutil.rmtree(target)
+        if replacement.exists():
+            os.replace(replacement, target)
+
+
+def _extract_snapshot_archive(archive_path: Path, session_path: Path) -> None:
+    members: list[tuple[tarfile.TarInfo, str]] = []
+    roots: set[str] = set()
+    total_uncompressed_bytes = 0
+
+    try:
+        with tempfile.TemporaryDirectory(
+            dir=session_path,
+            prefix=".snapshot-restore-",
+        ) as tmp_dir:
+            staging_path = Path(tmp_dir)
+
+            with tarfile.open(archive_path, "r:gz") as tar:
+                for member in tar.getmembers():
+                    normalized = _validate_snapshot_member(member)
+                    roots.add(normalized.split(os.sep, 1)[0])
+                    if member.isfile():
+                        total_uncompressed_bytes += member.size
+                        if total_uncompressed_bytes > MAX_SNAPSHOT_UNCOMPRESSED_BYTES:
+                            raise SnapshotError(
+                                "snapshot uncompressed size exceeds "
+                                f"{MAX_SNAPSHOT_UNCOMPRESSED_BYTES} byte limit"
+                            )
+                    members.append((member, normalized))
+
+                for member, normalized in members:
+                    final_path = staging_path / normalized
+                    try:
+                        final_path.resolve(strict=False).relative_to(staging_path)
+                    except ValueError as e:
+                        raise SnapshotError(
+                            f"snapshot path escapes session: {member.name}"
+                        ) from e
+
+                    if member.isdir():
+                        final_path.mkdir(parents=True, exist_ok=True)
+                        os.chmod(final_path, (member.mode or 0o755) & 0o777)
+                        continue
+
+                    final_path.parent.mkdir(parents=True, exist_ok=True)
+                    src = tar.extractfile(member)
+                    if src is None:
+                        raise SnapshotError(
+                            f"cannot read snapshot entry: {member.name}"
+                        )
+                    with src, final_path.open("wb") as out_file:
+                        shutil.copyfileobj(src, out_file)
+                    os.chmod(final_path, (member.mode or 0o644) & 0o777)
+
+            _replace_snapshot_roots(session_path, staging_path, roots)
+    except (tarfile.TarError, OSError) as e:
+        raise SnapshotError(f"invalid snapshot archive: {e}") from e
+
+
+def has_snapshot_content(session_id: UUID) -> bool:
+    """True when a session has an outputs/ tree worth snapshotting."""
+    session_path = _safe_session_path(session_id, create=False)
+    return bool(_snapshot_dirs(session_path))
+
+
+def iter_snapshot_archive(session_id: UUID) -> Iterator[bytes]:
     """Create a snapshot of a session's outputs/attachments/.opencode-data.
 
-    Returns:
-        (status, storage_path). storage_path is empty when status is "empty".
+    Yields a tar.gz byte stream. Durable persistence is handled by the
+    api-server, not the sidecar.
     """
-    session_path = SESSIONS_ROOT / str(session_id)
-    if not (session_path / "outputs").is_dir():
-        return ("empty", "")
+    session_path = _safe_session_path(session_id, create=False)
+    dirs = _snapshot_dirs(session_path)
+    if not dirs:
+        return
+    _validate_snapshot_tree(session_path, dirs)
 
-    # Reject symlinks at the top level — the agent has rw access to the
-    # session dir and could swap one of these for a symlink pointing at
-    # /etc or the sidecar's IRSA token mount. GNU tar's default already
-    # archives symlinks as symlinks (so the target isn't exfiltrated), but
-    # we fail-loud here so the operator notices the tamper.
-    for sub in ("outputs", "attachments", ".opencode-data"):
-        candidate = session_path / sub
-        if candidate.is_symlink():
-            raise SnapshotError(f"{sub} is a symlink; refusing to snapshot")
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp_file:
+            tmp_path = Path(tmp_file.name)
 
-    storage_path = f"{tenant_id}/snapshots/{session_id}/{snapshot_id}.tar.gz"
-    s3_uri = f"s3://{s3_bucket}/{storage_path}"
+        proc = subprocess.run(
+            [
+                "tar",
+                "--exclude=outputs/web/node_modules",
+                "--exclude=outputs/web/.next",
+                "-czf",
+                str(tmp_path),
+                *dirs,
+            ],
+            cwd=session_path,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            detail = proc.stdout.strip() or "no output"
+            raise SnapshotError(f"tar exited {proc.returncode}: {detail}")
 
-    safe_session_path = shlex.quote(str(session_path))
-    safe_s3_uri = shlex.quote(s3_uri)
+        size_bytes = tmp_path.stat().st_size
+        if size_bytes > MAX_SNAPSHOT_ARCHIVE_BYTES:
+            raise SnapshotError(
+                f"snapshot archive exceeds {MAX_SNAPSHOT_ARCHIVE_BYTES} byte limit"
+            )
 
-    # node_modules + .next are excluded; restore_snapshot rebuilds them.
-    # Including them would also break post-restore dedup since extracted
-    # files get fresh inodes.
-    #
-    # Don't use `set -eo pipefail` for the pipeline — pipefail tears the
-    # streams down before tar / s5cmd can flush diagnostics, so a failure
-    # surfaces as exit-1-with-no-output. Inspect PIPESTATUS explicitly
-    # instead and echo what each side returned before erroring out.
-    script = f"""
-set -e
-cd {safe_session_path}
-dirs="outputs"
-if [ -d attachments ] && [ "$(ls -A attachments 2>/dev/null)" ]; then
-    dirs="$dirs attachments"
-fi
-if [ -d .opencode-data ] && [ "$(ls -A .opencode-data 2>/dev/null)" ]; then
-    dirs="$dirs .opencode-data"
-fi
-
-set +e
-tar --exclude='outputs/web/node_modules' --exclude='outputs/web/.next' \\
-    -czf - $dirs | s5cmd --log info pipe {safe_s3_uri}
-# Snapshot PIPESTATUS in one shot — any later command resets it.
-ecs=("${{PIPESTATUS[@]}}")
-tar_ec=${{ecs[0]-0}}
-s5_ec=${{ecs[1]-0}}
-set -e
-
-if [ "$tar_ec" -ne 0 ] || [ "$s5_ec" -ne 0 ]; then
-    echo "snapshot pipeline failed: tar=$tar_ec s5cmd=$s5_ec" >&2
-    echo "  S3_ENDPOINT_URL=${{S3_ENDPOINT_URL-<unset>}}" >&2
-    echo "  AWS_ENDPOINT_URL=${{AWS_ENDPOINT_URL-<unset>}}" >&2
-    echo "  AWS_REGION=${{AWS_REGION-<unset>}}" >&2
-    echo "  s3_uri={safe_s3_uri}" >&2
-    exit 1
-fi
-"""
-
-    _run(script, timeout=SNAPSHOT_PIPELINE_TIMEOUT_SECONDS)
-    return ("created", storage_path)
+        with tmp_path.open("rb") as archive_file:
+            while True:
+                chunk = archive_file.read(_ARCHIVE_CHUNK_BYTES)
+                if not chunk:
+                    break
+                yield chunk
+    finally:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
 
 
 def restore_snapshot(
     session_id: UUID,
-    s3_bucket: str,
-    storage_path: str,
+    archive_path: Path,
 ) -> None:
-    """Download snapshot from S3, extract, then bun-install to rebuild node_modules."""
-    session_path = SESSIONS_ROOT / str(session_id)
-    session_path.mkdir(parents=True, exist_ok=True)
-
-    s3_uri = f"s3://{s3_bucket}/{storage_path}"
-    safe_session_path = shlex.quote(str(session_path))
-    safe_s3_uri = shlex.quote(s3_uri)
+    """Extract a local snapshot archive, then bun-install to rebuild node_modules."""
+    session_path = _safe_session_path(session_id, create=True)
 
     # Keep in sync with docker_sandbox_manager.restore_snapshot's install.
-    script = f"""
+    script = """
 set -eo pipefail
-s5cmd cat {safe_s3_uri} | tar -xzf - -C {safe_session_path}
 
-web_dir={safe_session_path}/outputs/web
+web_dir="$SESSION_PATH/outputs/web"
 if [ -f "$web_dir/bun.lock" ]; then
     (
         flock -x 9
-        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
-            rm -rf {BUN_CACHE_DIR}
-            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
-                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
-            touch {BUN_CACHE_DIR}/.ready
+        if [ ! -f "$BUN_CACHE_DIR/.ready" ]; then
+            rm -rf "$BUN_CACHE_DIR"
+            cp -r "$BUN_IMAGE_CACHE_DIR" "$BUN_CACHE_DIR" \\
+                || { echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }
+            touch "$BUN_CACHE_DIR/.ready"
         fi
-    ) 9>{BUN_CACHE_DIR}.lock
+    ) 9>"$BUN_CACHE_DIR.lock"
     cd "$web_dir"
-    BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
+    BUN_INSTALL_CACHE_DIR="$BUN_CACHE_DIR" \\
         bun install --frozen-lockfile --backend=hardlink
 fi
 """
 
-    _run(script, timeout=SNAPSHOT_PIPELINE_TIMEOUT_SECONDS)
+    try:
+        _extract_snapshot_archive(archive_path, session_path)
+        subprocess.run(
+            ["/bin/bash", "-c", script],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env={
+                **os.environ,
+                "ARCHIVE_PATH": str(archive_path),
+                "SESSION_PATH": str(session_path),
+                "BUN_CACHE_DIR": str(BUN_CACHE_DIR),
+                "BUN_IMAGE_CACHE_DIR": str(BUN_IMAGE_CACHE_DIR),
+            },
+        )
+    except subprocess.CalledProcessError as e:
+        detail = (e.stdout or "").strip() or "no output"
+        raise SnapshotError(f"exit {e.returncode}: {detail}") from e

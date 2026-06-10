@@ -9,11 +9,10 @@
 # rate limits.
 ARG BASE_IMAGE_REGISTRY=docker.io
 
-# bun + s5cmd binary sources. Pinned via the registry prefix in their own stages
-# because buildx rejects variable expansion directly in `COPY --from=` -- the
-# ARG is only expandable in a FROM.
+# bun binary source. Pinned via the registry prefix in its own stage because
+# buildx rejects variable expansion directly in `COPY --from=` — the ARG is
+# only expandable in a FROM.
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
-FROM ${BASE_IMAGE_REGISTRY}/peakcom/s5cmd:v2.3.0@sha256:2ff939e2ee3c76adcadd78dbfc3e2569b18a3743ed9dcfccb1ec589af7fb9903 AS s5cmd_source
 
 # GitHub CLI (gh): downloaded + checksum-verified in its own stage (arch-matched
 # via buildx's TARGETARCH) so only the binary lands in the final image.
@@ -111,9 +110,8 @@ RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     rm -rf /root/.npm; \
     fi
 
-# bun + s5cmd copied from the binary-source stages defined at the top of this file.
+# bun copied from the binary-source stage defined at the top of this file.
 COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
-COPY --from=s5cmd_source /s5cmd /usr/local/bin/s5cmd
 COPY --from=gh_source /usr/local/bin/gh /usr/local/bin/gh
 
 # Default gh config for the sandbox user: HTTPS git remotes (the proxy is

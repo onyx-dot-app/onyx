@@ -108,7 +108,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 - **Python venv**: `/workspace/.venv/` with packages from `initial-requirements.txt`
 - **OpenCode CLI**: Installed in `/home/sandbox/.opencode/bin/`
 - **onyx-cli**: `/usr/local/bin/onyx-cli` — Onyx CLI for search
-- **AWS CLI**: For S3 snapshot operations
+- **Snapshot sidecar daemon**: Packages and restores session files; durable storage is handled by the api_server through the Onyx FileStore
 
 Skills are **not** baked in — the API server pushes them to `/workspace/managed/skills/` at session setup.
 

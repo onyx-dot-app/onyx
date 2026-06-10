@@ -58,15 +58,7 @@ SANDBOX_CONTAINER_IMAGE = os.environ.get(
 # re-pull on every pod start; immutable version pins can use the node cache.
 SANDBOX_IMAGE_PULL_POLICY = os.environ.get("SANDBOX_IMAGE_PULL_POLICY", "IfNotPresent")
 
-# Path structure: s3://{bucket}/{tenant_id}/snapshots/{session_id}/{snapshot_id}.tar.gz
-#                 s3://{bucket}/{tenant_id}/knowledge/{user_id}/
-#                 s3://{bucket}/{tenant_id}/uploads/{session_id}/
-SANDBOX_S3_BUCKET = os.environ.get("SANDBOX_S3_BUCKET", "onyx-sandbox-files")
-
-# Needs IRSA for S3 snapshot access.
-SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get(
-    "SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox-file-sync"
-)
+SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get("SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox")
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 

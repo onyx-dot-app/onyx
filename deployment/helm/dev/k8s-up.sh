@@ -93,17 +93,14 @@ fi
 kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 \
   || kubectl create namespace "$NAMESPACE"
 # The chart also templates the onyx-sandboxes namespace (see
-# templates/sandbox-namespace.yaml). We pre-create it here so the
-# sandbox-file-sync ServiceAccount can be created before helm install runs,
-# but we must stamp Helm ownership metadata or `helm install` refuses to
-# adopt the namespace.
+# templates/sandbox-namespace.yaml). We pre-create it here so local setup can
+# label nodes before helm install runs, but we must stamp Helm ownership
+# metadata or `helm install` refuses to adopt the namespace.
 kubectl get namespace onyx-sandboxes >/dev/null 2>&1 \
   || kubectl create namespace onyx-sandboxes
 kubectl label   namespace onyx-sandboxes app.kubernetes.io/managed-by=Helm --overwrite >/dev/null
 kubectl annotate namespace onyx-sandboxes meta.helm.sh/release-name=onyx --overwrite >/dev/null
 kubectl annotate namespace onyx-sandboxes meta.helm.sh/release-namespace="$NAMESPACE" --overwrite >/dev/null
-kubectl -n onyx-sandboxes get serviceaccount sandbox-file-sync >/dev/null 2>&1 \
-  || kubectl -n onyx-sandboxes create serviceaccount sandbox-file-sync
 kubectl label node --all onyx.app/workload=sandbox --overwrite >/dev/null 2>&1
 
 # Use an isolated helm repo config: helm matches chart deps by repo NAME, so a

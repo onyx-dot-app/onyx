@@ -669,7 +669,7 @@ class SessionManager:
                     "Failed to cleanup session workspace %s: %s", session_id, e
                 )
 
-        # Delete snapshot files from S3 before removing DB records
+        # Delete snapshot files from FileStore before removing DB records
         snapshots = get_snapshots_for_session(self._db_session, session_id)
         if snapshots:
             snapshot_manager = SnapshotManager(get_default_file_store())

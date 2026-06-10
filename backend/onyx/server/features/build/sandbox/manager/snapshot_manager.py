@@ -1,6 +1,5 @@
 """Snapshot management for sandbox state persistence."""
 
-import shutil
 import tarfile
 import tempfile
 from pathlib import Path
@@ -15,6 +14,26 @@ logger = setup_logger()
 
 # File type for snapshot archives
 SNAPSHOT_FILE_TYPE = "application/gzip"
+MAX_SNAPSHOT_ARCHIVE_BYTES = 100 * 1024 * 1024
+_SNAPSHOT_COPY_CHUNK_BYTES = 8 * 1024 * 1024
+
+
+def _copy_snapshot_stream_with_limit(
+    source: IO[bytes],
+    target: IO[bytes],
+) -> int:
+    size_bytes = 0
+    while True:
+        chunk = source.read(_SNAPSHOT_COPY_CHUNK_BYTES)
+        if not chunk:
+            break
+        size_bytes += len(chunk)
+        if size_bytes > MAX_SNAPSHOT_ARCHIVE_BYTES:
+            raise RuntimeError(
+                f"snapshot archive exceeds {MAX_SNAPSHOT_ARCHIVE_BYTES} byte limit"
+            )
+        target.write(chunk)
+    return size_bytes
 
 
 class SnapshotManager:
@@ -80,6 +99,10 @@ class SnapshotManager:
 
             # Get size
             size_bytes = Path(tmp_path).stat().st_size
+            if size_bytes > MAX_SNAPSHOT_ARCHIVE_BYTES:
+                raise RuntimeError(
+                    f"snapshot archive exceeds {MAX_SNAPSHOT_ARCHIVE_BYTES} byte limit"
+                )
 
             # Generate storage path for file store
             # Format: sandbox-snapshots/{tenant_id}/{sandbox_id}/{snapshot_id}.tar.gz
@@ -238,6 +261,11 @@ class SnapshotManager:
             "snapshot_id": snapshot_id,
         }
 
+        if size_hint is not None and size_hint > MAX_SNAPSHOT_ARCHIVE_BYTES:
+            raise RuntimeError(
+                f"snapshot archive exceeds {MAX_SNAPSHOT_ARCHIVE_BYTES} byte limit"
+            )
+
         if size_hint is not None:
             try:
                 self._file_store.save_file(
@@ -271,8 +299,7 @@ class SnapshotManager:
                 suffix=".tar.gz", delete=False
             ) as tmp_file:
                 tmp_path = tmp_file.name
-                shutil.copyfileobj(stream, tmp_file)
-            size_bytes = Path(tmp_path).stat().st_size
+                size_bytes = _copy_snapshot_stream_with_limit(stream, tmp_file)
 
             with open(tmp_path, "rb") as f:
                 self._file_store.save_file(
@@ -327,7 +354,7 @@ class SnapshotManager:
         file_io = None
         try:
             file_io = self._file_store.read_file(storage_path, use_tempfile=True)
-            shutil.copyfileobj(file_io, write_stream)
+            _copy_snapshot_stream_with_limit(file_io, write_stream)
             logger.info("Streamed snapshot %s to caller writer", storage_path)
         except Exception as e:
             logger.error("Failed to stream snapshot %s to writer: %s", storage_path, e)
