@@ -89,6 +89,11 @@ env:
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
 
+  # Must match the helm values-ci.yaml redis_password the proxy reads from its
+  # onyx-redis secret. Compose Redis is set to require this password right after
+  # startup (see Start Postgres step).
+  REDIS_PASSWORD: "password"
+
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 jobs:
@@ -305,6 +310,17 @@ jobs:
             minio \
             relational_db \
             cache
+
+          # The proxy chart bakes in REDIS_PASSWORD=password (helm
+          # values-ci.yaml). Compose Redis ships without requirepass, so a
+          # CONFIG SET aligns the daemon with what the proxy expects -- without
+          # it, the proxy's grant-cache check trips NOAUTH and the approval row
+          # gets terminalized.
+          REDIS_ID=$(docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.dev.yml \
+            ps -q cache)
+          docker exec "$REDIS_ID" redis-cli CONFIG SET requirepass password
 
       - name: Expose MinIO inside the kind cluster
         run: |
