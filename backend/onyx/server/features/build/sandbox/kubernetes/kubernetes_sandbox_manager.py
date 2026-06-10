@@ -51,6 +51,7 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 from typing import IO
 from uuid import UUID
 
@@ -309,23 +310,6 @@ def _build_targz(files: FileSet) -> tuple[bytes, str]:
             tar.addfile(info, io.BytesIO(data))
     raw = buf.getvalue()
     return raw, hashlib.sha256(raw).hexdigest()
-
-
-def _iter_file_chunks(file_obj: IO[bytes]) -> Iterator[bytes]:
-    while True:
-        chunk = file_obj.read(_SNAPSHOT_CHUNK_SIZE)
-        if not chunk:
-            break
-        yield chunk
-
-
-def _sha256_file(file_obj: IO[bytes]) -> str:
-    sha256_hash = hashlib.sha256()
-    file_obj.seek(0)
-    for chunk in _iter_file_chunks(file_obj):
-        sha256_hash.update(chunk)
-    file_obj.seek(0)
-    return sha256_hash.hexdigest()
 
 
 class _IteratorReader:
@@ -2000,7 +1984,11 @@ echo "Session cleanup complete"
                     snapshot_storage_path, tmp_file
                 )
                 tmp_file.flush()
-                sha256_hex = _sha256_file(tmp_file)
+                tmp_file.file.seek(0)
+                sha256_hex = hashlib.file_digest(
+                    cast(io.BufferedRandom, tmp_file.file), "sha256"
+                ).hexdigest()
+                tmp_file.file.seek(0)
                 self._restore_snapshot_archive_via_sidecar(
                     sandbox_id=sandbox_id,
                     session_id=session_id,
@@ -2908,7 +2896,9 @@ fi
                 with httpx.Client(timeout=timeout) as http_client:
                     resp = http_client.post(
                         url,
-                        content=_iter_file_chunks(archive_file),
+                        content=iter(
+                            lambda: archive_file.read(_SNAPSHOT_CHUNK_SIZE), b""
+                        ),
                         headers=headers,
                     )
             except httpx.TransportError as e:

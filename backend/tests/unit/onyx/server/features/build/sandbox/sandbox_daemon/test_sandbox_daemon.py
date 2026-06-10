@@ -744,7 +744,7 @@ def test_snapshot_restore_rejects_session_root_symlink(
     assert not (outside / "outputs/file.txt").exists()
 
 
-def test_snapshot_create_rejects_nested_symlink(
+def test_snapshot_create_rejects_snapshot_root_symlink(
     sandbox_daemon_modules: tuple[ModuleType, ModuleType],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -754,13 +754,73 @@ def test_snapshot_create_rejects_nested_symlink(
     sessions_root = tmp_path / "sessions"
     session_id = UUID("00000000-0000-0000-0000-000000000001")
     session_path = sessions_root / str(session_id)
-    (session_path / "outputs").mkdir(parents=True)
-    (session_path / "outputs" / "safe.txt").write_text("safe\n")
-    (session_path / "outputs" / "link").symlink_to(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir(parents=True)
+    session_path.mkdir(parents=True)
+    (session_path / "outputs").symlink_to(outside, target_is_directory=True)
     monkeypatch.setattr(snapshot_mod, "SESSIONS_ROOT", sessions_root)
 
-    with pytest.raises(snapshot_mod.SnapshotError, match="links are not allowed"):
+    with pytest.raises(snapshot_mod.SnapshotError, match="outputs is a symlink"):
         list(snapshot_mod.iter_snapshot_archive(session_id))
+
+
+def test_snapshot_create_skips_nested_unsupported_entries(
+    sandbox_daemon_modules: tuple[ModuleType, ModuleType],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _, _ = sandbox_daemon_modules
+    snapshot_mod = sys.modules["sandbox_daemon.snapshot"]
+    sessions_root = tmp_path / "sessions"
+    session_id = UUID("00000000-0000-0000-0000-000000000001")
+    session_path = sessions_root / str(session_id)
+    outputs_path = session_path / "outputs"
+    attachments_path = session_path / "attachments"
+    outputs_path.mkdir(parents=True)
+    attachments_path.mkdir(parents=True)
+    (outputs_path / "safe.txt").write_text("safe\n")
+    (outputs_path / "link").symlink_to(tmp_path)
+    (attachments_path / "attachment.txt").write_text("keep\n")
+    (attachments_path / "link").symlink_to(tmp_path)
+
+    fifo_created = False
+    if hasattr(os, "mkfifo"):
+        os.mkfifo(outputs_path / "fifo")
+        fifo_created = True
+
+    hardlink_created = False
+    hardlink_source = tmp_path / "hardlink-source.txt"
+    hardlink_source.write_text("hardlink\n")
+    try:
+        os.link(hardlink_source, outputs_path / "hardlinked.txt")
+        hardlink_created = True
+    except OSError:
+        pass
+
+    monkeypatch.setattr(snapshot_mod, "SESSIONS_ROOT", sessions_root)
+    caplog.set_level("WARNING", logger="sandbox_daemon.snapshot")
+
+    archive_bytes = b"".join(snapshot_mod.iter_snapshot_archive(session_id))
+
+    with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as tar:
+        members = tar.getnames()
+    assert "outputs/safe.txt" in members
+    assert "attachments/attachment.txt" in members
+    assert "outputs/link" not in members
+    assert "attachments/link" not in members
+    if fifo_created:
+        assert "outputs/fifo" not in members
+    if hardlink_created:
+        assert "outputs/hardlinked.txt" not in members
+
+    assert "Skipping" in caplog.text
+    assert "outputs/link (symlink)" in caplog.text
+    assert "attachments/link (symlink)" in caplog.text
+    if fifo_created:
+        assert "outputs/fifo (special)" in caplog.text
+    if hardlink_created:
+        assert "outputs/hardlinked.txt (hardlink)" in caplog.text
 
 
 def test_snapshot_create_excludes_generated_dirs_from_size_check_and_archive(

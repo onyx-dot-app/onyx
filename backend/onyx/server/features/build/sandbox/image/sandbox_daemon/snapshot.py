@@ -4,6 +4,7 @@ The sidecar owns pod-local filesystem access. The api-server owns durable
 storage by streaming these tarballs into/out of the main Onyx FileStore.
 """
 
+import logging
 import os
 import shutil
 import stat
@@ -19,6 +20,7 @@ SESSIONS_ROOT = Path("/workspace/sessions")
 # daemon can't import from the main package at runtime, hence the copy.
 BUN_CACHE_DIR = SESSIONS_ROOT / ".bun-cache"
 BUN_IMAGE_CACHE_DIR = Path("/home/sandbox/.bun/install/cache")
+logger = logging.getLogger(__name__)
 
 
 class SnapshotError(RuntimeError):
@@ -30,6 +32,7 @@ _SNAPSHOT_GENERATED_DIR_NAMES = frozenset({"node_modules", ".next"})
 MAX_SNAPSHOT_ARCHIVE_BYTES = 100 * 1024 * 1024
 MAX_SNAPSHOT_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 _ARCHIVE_CHUNK_BYTES = 1024 * 1024
+_SKIPPED_PATH_LOG_SAMPLE_LIMIT = 20
 
 
 def _safe_session_path(session_id: UUID, *, create: bool) -> Path:
@@ -91,30 +94,66 @@ def _is_excluded_snapshot_dir(relative_path: Path) -> bool:
     )
 
 
-def _snapshot_tar_exclude_paths(session_path: Path) -> list[str]:
-    """Return session-relative generated directories to exclude from tar."""
-    outputs_path = session_path / "outputs"
-    if not outputs_path.is_dir():
-        return []
-
-    excluded_paths: list[str] = []
-    for dirpath, dirnames, _filenames in os.walk(outputs_path, followlinks=False):
-        current = Path(dirpath)
-        visible_dirnames: list[str] = []
-        for dirname in dirnames:
-            relative_dir = (current / dirname).relative_to(session_path)
-            if _is_excluded_snapshot_dir(relative_dir):
-                excluded_paths.append(relative_dir.as_posix())
-                continue
-            visible_dirnames.append(dirname)
-        dirnames[:] = visible_dirnames
-    return excluded_paths
+def _add_excluded_snapshot_path(
+    skipped_paths: list[tuple[str, str]],
+    skipped_path_set: set[str],
+    entry: Path,
+    session_path: Path,
+    reason: str,
+) -> None:
+    relative_path = entry.relative_to(session_path).as_posix()
+    if relative_path in skipped_path_set:
+        return
+    skipped_path_set.add(relative_path)
+    skipped_paths.append((relative_path, reason))
 
 
-def _validate_snapshot_tree(session_path: Path, dirs: list[str]) -> None:
-    """Refuse filesystem entries that restore will reject or that can escape."""
+def _log_skipped_snapshot_paths(skipped_paths: list[tuple[str, str]]) -> None:
+    if not skipped_paths:
+        return
+
+    sample = ", ".join(
+        f"{path} ({reason})"
+        for path, reason in skipped_paths[:_SKIPPED_PATH_LOG_SAMPLE_LIMIT]
+    )
+    remaining_count = len(skipped_paths) - _SKIPPED_PATH_LOG_SAMPLE_LIMIT
+    suffix = f", ... and {remaining_count} more" if remaining_count > 0 else ""
+    logger.warning(
+        "Skipping %s unsupported/generated snapshot paths: %s%s",
+        len(skipped_paths),
+        sample,
+        suffix,
+    )
+
+
+def _snapshot_entry_skip_reason(
+    relative_path: Path,
+    mode: int,
+    link_count: int,
+) -> str | None:
+    if _is_excluded_snapshot_dir(relative_path):
+        return "generated"
+    if stat.S_ISLNK(mode):
+        return "symlink"
+    if stat.S_ISREG(mode) and link_count > 1:
+        return "hardlink"
+    if stat.S_ISDIR(mode) or stat.S_ISREG(mode):
+        return None
+    return "special"
+
+
+def _validate_snapshot_tree(session_path: Path, dirs: list[str]) -> list[str]:
+    """Validate snapshot roots and return nested paths to exclude from tar.
+
+    Root escape hatches still fail the snapshot. Nested unsupported filesystem
+    entries are excluded instead so one symlink or FIFO does not block
+    snapshotting the rest of the workspace.
+    """
     session_root = session_path.resolve()
     total_uncompressed_bytes = 0
+    skipped_paths: list[tuple[str, str]] = []
+    skipped_path_set: set[str] = set()
+
     for dirname in dirs:
         root_path = session_path / dirname
         try:
@@ -124,28 +163,71 @@ def _validate_snapshot_tree(session_path: Path, dirs: list[str]) -> None:
 
         for dirpath, dirnames, filenames in os.walk(root_path, followlinks=False):
             current = Path(dirpath)
-            dirnames[:] = [
-                dirname
-                for dirname in dirnames
-                if not _is_excluded_snapshot_dir(
-                    (current / dirname).relative_to(session_path)
-                )
-            ]
-            entries = [current, *(current / name for name in dirnames)]
-            entries.extend(current / name for name in filenames)
-            for entry in entries:
+            visible_dirnames: list[str] = []
+            for dirname in dirnames:
+                entry = current / dirname
+                relative_dir = entry.relative_to(session_path)
                 try:
-                    mode = entry.lstat().st_mode
-                except OSError as e:
-                    raise SnapshotError(f"cannot stat snapshot entry: {entry}") from e
-
-                if stat.S_ISLNK(mode):
-                    rel = entry.relative_to(session_path)
-                    raise SnapshotError(f"snapshot links are not allowed: {rel}")
-                if stat.S_ISDIR(mode):
+                    entry_stat = entry.lstat()
+                except OSError:
+                    _add_excluded_snapshot_path(
+                        skipped_paths,
+                        skipped_path_set,
+                        entry,
+                        session_path,
+                        "unreadable",
+                    )
                     continue
-                if stat.S_ISREG(mode):
-                    total_uncompressed_bytes += entry.lstat().st_size
+
+                reason = _snapshot_entry_skip_reason(
+                    relative_dir,
+                    entry_stat.st_mode,
+                    entry_stat.st_nlink,
+                )
+                if reason is not None:
+                    _add_excluded_snapshot_path(
+                        skipped_paths,
+                        skipped_path_set,
+                        entry,
+                        session_path,
+                        reason,
+                    )
+                    continue
+
+                visible_dirnames.append(dirname)
+            dirnames[:] = visible_dirnames
+
+            for filename in filenames:
+                entry = current / filename
+                relative_file = entry.relative_to(session_path)
+                try:
+                    entry_stat = entry.lstat()
+                except OSError:
+                    _add_excluded_snapshot_path(
+                        skipped_paths,
+                        skipped_path_set,
+                        entry,
+                        session_path,
+                        "unreadable",
+                    )
+                    continue
+
+                reason = _snapshot_entry_skip_reason(
+                    relative_file,
+                    entry_stat.st_mode,
+                    entry_stat.st_nlink,
+                )
+                if reason is not None:
+                    _add_excluded_snapshot_path(
+                        skipped_paths,
+                        skipped_path_set,
+                        entry,
+                        session_path,
+                        reason,
+                    )
+                    continue
+                if stat.S_ISREG(entry_stat.st_mode):
+                    total_uncompressed_bytes += entry_stat.st_size
                     if total_uncompressed_bytes > MAX_SNAPSHOT_UNCOMPRESSED_BYTES:
                         raise SnapshotError(
                             "snapshot uncompressed size exceeds "
@@ -153,8 +235,8 @@ def _validate_snapshot_tree(session_path: Path, dirs: list[str]) -> None:
                         )
                     continue
 
-                rel = entry.relative_to(session_path)
-                raise SnapshotError(f"snapshot special file is not allowed: {rel}")
+    _log_skipped_snapshot_paths(skipped_paths)
+    return [path for path, _reason in skipped_paths]
 
 
 def _validate_snapshot_member(member: tarfile.TarInfo) -> str:
@@ -270,10 +352,8 @@ def iter_snapshot_archive(session_id: UUID) -> Iterator[bytes]:
     dirs = _snapshot_dirs(session_path)
     if not dirs:
         return
-    _validate_snapshot_tree(session_path, dirs)
-    exclude_args = [
-        f"--exclude={path}" for path in _snapshot_tar_exclude_paths(session_path)
-    ]
+    exclude_paths = _validate_snapshot_tree(session_path, dirs)
+    exclude_args = [f"--exclude={path}" for path in exclude_paths]
 
     tmp_path: Path | None = None
     try:
