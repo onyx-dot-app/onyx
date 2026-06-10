@@ -77,6 +77,7 @@ from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_bac
 from onyx.llm.factory import get_contextual_rag_llm_for_search_settings
 from onyx.llm.factory import get_default_llm_with_vision
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LLMRateLimitError
 from onyx.llm.utils import llm_response_to_string
@@ -101,6 +102,11 @@ logger = setup_logger()
 
 MAX_CONTEXTUAL_RAG_WORKERS = 128  # Assume 8mb of memory per worker
 MAX_IMAGE_WORKERS = 16
+
+# Contextual-RAG doc/chunk summaries are a short, non-reasoning task. On a reasoning
+# model the hidden reasoning tokens consume the small MAX_CONTEXT_TOKENS budget and the
+# visible summary returns empty, so disable reasoning for these calls.
+CONTEXTUAL_RAG_REASONING_EFFORT = ReasoningEffort.OFF
 
 
 class _DocsToUpdateResult(NamedTuple):
@@ -860,7 +866,11 @@ def add_document_summaries(
         flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
         input_messages=[prompt_msg],
     ) as span_generation:
-        response = llm.invoke(prompt_msg, max_tokens=MAX_CONTEXT_TOKENS)
+        response = llm.invoke(
+            prompt_msg,
+            max_tokens=MAX_CONTEXT_TOKENS,
+            reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+        )
         record_llm_response(span_generation, response)
     doc_summary = llm_response_to_string(response)
 
@@ -909,7 +919,11 @@ def add_chunk_summaries(
             flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
             input_messages=[fallback_prompt],
         ) as span_generation:
-            response = llm.invoke(fallback_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+            response = llm.invoke(
+                fallback_prompt,
+                max_tokens=MAX_CONTEXT_TOKENS,
+                reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+            )
             record_llm_response(span_generation, response)
         doc_info = llm_response_to_string(response)
 
@@ -934,7 +948,11 @@ def add_chunk_summaries(
                 flow=LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
                 input_messages=[processed_prompt],
             ) as span_generation:
-                response = llm.invoke(processed_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+                response = llm.invoke(
+                    processed_prompt,
+                    max_tokens=MAX_CONTEXT_TOKENS,
+                    reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+                )
                 record_llm_response(span_generation, response)
             chunk.chunk_context = llm_response_to_string(response)
 
