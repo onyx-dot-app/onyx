@@ -36,6 +36,7 @@ import {
 import {
   SvgArrowExchange,
   SvgChevronDown,
+  SvgEdit,
   SvgOnyxOctagon,
   SvgOrganization,
   SvgPlusCircle,
@@ -428,6 +429,104 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
 
 const FOLD_THRESHOLD = 3;
 
+interface ModelRowProps {
+  model: ModelConfiguration;
+  isAutoMode: boolean;
+  onToggleVisibility: (visible: boolean) => void;
+  onRename: (value: string | undefined) => void;
+}
+
+/**
+ * A single selectable model row.
+ *
+ * The toggle (a `LineItemButton`) and the rename control are kept as siblings
+ * rather than nesting an editable `<button>` inside the toggle `<button>` — the
+ * latter is invalid HTML and triggers a hydration error. Keeping them separate
+ * also means renaming no longer accidentally toggles the model's visibility.
+ */
+function ModelRow({
+  model,
+  isAutoMode,
+  onToggleVisibility,
+  onRename,
+}: ModelRowProps) {
+  const displayName =
+    model.custom_display_name || model.display_name || model.name;
+  // In auto mode every model is shown, so the row is always "selected" and the
+  // toggle is disabled (no onClick).
+  const isSelected = isAutoMode || model.is_visible;
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(displayName);
+
+  function startEditing() {
+    setDraft(displayName);
+    setEditing(true);
+  }
+
+  function commit() {
+    const trimmed = draft.trim();
+    if (trimmed !== displayName) onRename(trimmed || undefined);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div
+        data-model-name={model.name}
+        className="flex items-center gap-2 px-2 py-2"
+      >
+        <Checkbox checked={isSelected} />
+        <div className="min-w-0 flex-1">
+          <InputTypeIn
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onFocus={(e) => e.currentTarget.select()}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              }
+              if (e.key === "Escape") {
+                setDraft(displayName);
+                setEditing(false);
+              }
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div data-model-name={model.name} className="flex items-center gap-1">
+      <div className="min-w-0 flex-1">
+        <LineItemButton
+          variant="section"
+          sizePreset="main-ui"
+          selectVariant="select-heavy"
+          state={isSelected ? "selected" : "empty"}
+          icon={() => <Checkbox checked={isSelected} />}
+          title={displayName}
+          onClick={
+            isAutoMode ? undefined : () => onToggleVisibility(!model.is_visible)
+          }
+        />
+      </div>
+      <Button
+        icon={SvgEdit}
+        prominence="internal"
+        size="xs"
+        tooltip="Rename"
+        tooltipSide="right"
+        onClick={startEditing}
+      />
+    </div>
+  );
+}
+
 export interface ModelSelectionFieldProps {
   shouldShowAutoUpdateToggle: boolean;
   onRefetch?: (signal: AbortSignal) => Promise<void> | void;
@@ -540,56 +639,19 @@ export function ModelSelectionField({
 
               return (
                 <>
-                  {shownModels.map((model) =>
-                    isAutoMode ? (
-                      <div key={model.name} data-model-name={model.name}>
-                        <LineItemButton
-                          variant="section"
-                          sizePreset="main-ui"
-                          selectVariant="select-heavy"
-                          state="selected"
-                          icon={() => <Checkbox checked />}
-                          title={
-                            model.custom_display_name ||
-                            model.display_name ||
-                            model.name
-                          }
-                          editable
-                          onTitleChange={(newTitle) =>
-                            setCustomDisplayName(
-                              model.name,
-                              newTitle || undefined
-                            )
-                          }
-                        />
-                      </div>
-                    ) : (
-                      <div key={model.name} data-model-name={model.name}>
-                        <LineItemButton
-                          variant="section"
-                          sizePreset="main-ui"
-                          selectVariant="select-heavy"
-                          state={model.is_visible ? "selected" : "empty"}
-                          icon={() => <Checkbox checked={model.is_visible} />}
-                          title={
-                            model.custom_display_name ||
-                            model.display_name ||
-                            model.name
-                          }
-                          onClick={() =>
-                            setVisibility(model.name, !model.is_visible)
-                          }
-                          editable
-                          onTitleChange={(newTitle) =>
-                            setCustomDisplayName(
-                              model.name,
-                              newTitle || undefined
-                            )
-                          }
-                        />
-                      </div>
-                    )
-                  )}
+                  {shownModels.map((model) => (
+                    <ModelRow
+                      key={model.name}
+                      model={model}
+                      isAutoMode={isAutoMode}
+                      onToggleVisibility={(visible) =>
+                        setVisibility(model.name, visible)
+                      }
+                      onRename={(value) =>
+                        setCustomDisplayName(model.name, value)
+                      }
+                    />
+                  ))}
                   {isFoldable && (
                     <Interactive.Stateless
                       prominence="tertiary"
