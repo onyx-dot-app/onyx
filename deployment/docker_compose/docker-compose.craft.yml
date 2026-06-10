@@ -82,6 +82,10 @@ services:
       - SANDBOX_PROXY_LISTEN_PORT=${SANDBOX_PROXY_PORT:-8080}
       # Matches the healthcheck URL below.
       - SANDBOX_PROXY_HEALTHZ_PORT=8081
+      # OnyxPatResolver reads this at boot to know which host to claim for PAT
+      # injection. Without it, /me requests pass through bare with the
+      # placeholder bearer and api_server 403s.
+      - SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-}
     volumes:
       - sandbox_proxy_ca:/var/lib/sandbox-proxy/ca
       # RO: the proxy only inspects (events watcher + initial sync).
