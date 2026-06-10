@@ -551,6 +551,24 @@ if _rate_limit_max_requests_str is not None:
         pass
 
 AUTH_RATE_LIMITING_ENABLED = RATE_LIMIT_MAX_REQUESTS and RATE_LIMIT_WINDOW_SECONDS
+
+# Rate limiting for the chat message feedback endpoints. Unlike the auth rate
+# limiting above, this is enabled by default — set either value to 0 to
+# disable. Requires the Redis cache backend (no-op under CACHE_BACKEND=postgres).
+# The limit is per user (all sessions/API keys of an account share one bucket),
+# so the default leaves headroom for legitimate bursts while still blocking floods.
+FEEDBACK_RATE_LIMIT_MAX_REQUESTS = int(
+    os.environ.get("FEEDBACK_RATE_LIMIT_MAX_REQUESTS", "100")
+)
+FEEDBACK_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.environ.get("FEEDBACK_RATE_LIMIT_WINDOW_SECONDS", "60")
+)
+FEEDBACK_RATE_LIMITING_ENABLED = (
+    FEEDBACK_RATE_LIMIT_MAX_REQUESTS > 0
+    and FEEDBACK_RATE_LIMIT_WINDOW_SECONDS > 0
+    and CACHE_BACKEND == CacheBackendType.REDIS
+)
+
 # Used for general redis things
 REDIS_DB_NUMBER = int(os.environ.get("REDIS_DB_NUMBER", 0))
 

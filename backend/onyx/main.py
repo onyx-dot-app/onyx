@@ -36,7 +36,6 @@ from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
-from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
@@ -140,6 +139,7 @@ from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
 from onyx.server.middleware.rate_limiting import close_auth_limiter
 from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
+from onyx.server.middleware.rate_limiting import RATE_LIMITING_ENABLED
 from onyx.server.middleware.rate_limiting import setup_auth_limiter
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.pat.api import router as pat_router
@@ -386,7 +386,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
             record_type=RecordType.VERSION, data={"version": __version__}
         )
 
-    if AUTH_RATE_LIMITING_ENABLED:
+    if RATE_LIMITING_ENABLED:
         await setup_auth_limiter()
 
     if DISABLE_VECTOR_DB:
@@ -421,7 +421,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     except Exception:
         logger.exception("Failed to dispose readonly SQLAlchemy engine on shutdown")
 
-    if AUTH_RATE_LIMITING_ENABLED:
+    if RATE_LIMITING_ENABLED:
         await close_auth_limiter()
 
 
