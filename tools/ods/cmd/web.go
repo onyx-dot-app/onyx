@@ -49,8 +49,8 @@ func runWebScript(args []string) {
 	}
 
 	nodeModules := filepath.Join(webDir, "node_modules")
-	if _, err := os.Stat(nodeModules); os.IsNotExist(err) {
-		log.Info("node_modules not found, running bun install --frozen-lockfile...")
+	if needsInstall, reason := nodeModulesNeedsInstall(nodeModules); needsInstall {
+		log.Infof("%s, running bun install --frozen-lockfile...", reason)
 		installCmd := exec.Command("bun", "install", "--frozen-lockfile")
 		installCmd.Dir = webDir
 		installCmd.Stdout = os.Stdout
@@ -92,6 +92,25 @@ func runWebScript(args []string) {
 		}
 		log.Fatalf("Failed to run bun: %v", err)
 	}
+}
+
+// nodeModulesNeedsInstall reports whether bun install should be run, along with
+// a human-readable reason. Install is needed when node_modules is missing or
+// exists but is empty.
+func nodeModulesNeedsInstall(nodeModules string) (bool, string) {
+	entries, err := os.ReadDir(nodeModules)
+	if errors.Is(err, os.ErrNotExist) {
+		return true, "node_modules not found"
+	}
+	if err != nil {
+		// Couldn't read the directory for some other reason; let bun install
+		// attempt to sort it out rather than silently skipping.
+		return true, fmt.Sprintf("could not read node_modules (%v)", err)
+	}
+	if len(entries) == 0 {
+		return true, "node_modules is empty"
+	}
+	return false, ""
 }
 
 func webScriptNames() []string {
