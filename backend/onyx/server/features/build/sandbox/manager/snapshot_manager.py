@@ -60,7 +60,6 @@ class SnapshotManager:
         stream: IO[bytes],
         sandbox_id: str,
         tenant_id: str,
-        size_hint: int | None = None,
     ) -> tuple[str, str, int]:
         """Persist an already-built tar.gz byte stream as a snapshot.
 
@@ -73,9 +72,6 @@ class SnapshotManager:
             stream: Binary, readable stream of tar.gz bytes.
             sandbox_id: Sandbox identifier (string form).
             tenant_id: Tenant identifier for multi-tenant isolation.
-            size_hint: Optional precomputed size. If provided, avoids buffering
-                to disk to measure the size. Otherwise the stream is spooled
-                to a temp file and the size is reported from there.
 
         Returns:
             Tuple of (snapshot_id, storage_path, size_bytes).
@@ -91,38 +87,8 @@ class SnapshotManager:
             "snapshot_id": snapshot_id,
         }
 
-        if size_hint is not None and size_hint > MAX_SNAPSHOT_ARCHIVE_BYTES:
-            raise RuntimeError(
-                f"snapshot archive exceeds {MAX_SNAPSHOT_ARCHIVE_BYTES} byte limit"
-            )
-
-        if size_hint is not None:
-            try:
-                self._file_store.save_file(
-                    content=stream,
-                    display_name=display_name,
-                    file_origin=FileOrigin.SANDBOX_SNAPSHOT,
-                    file_type=SNAPSHOT_FILE_TYPE,
-                    file_id=storage_path,
-                    file_metadata=metadata,
-                )
-            except Exception as e:
-                logger.error(
-                    "Failed to create streamed snapshot for sandbox %s: %s",
-                    sandbox_id,
-                    e,
-                )
-                raise RuntimeError(f"Failed to create snapshot: {e}") from e
-
-            logger.info(
-                "Created snapshot %s for sandbox %s, size: %s bytes (hint)",
-                snapshot_id,
-                sandbox_id,
-                size_hint,
-            )
-            return snapshot_id, storage_path, size_hint
-
-        # Spool to a temp file so we can report the real size.
+        # Spool to a temp file so we can enforce the real stream size before
+        # handing bytes to the file store and report exact snapshot metadata.
         tmp_path: str | None = None
         try:
             with tempfile.NamedTemporaryFile(

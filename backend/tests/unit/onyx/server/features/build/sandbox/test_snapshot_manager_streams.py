@@ -96,20 +96,6 @@ def test_create_snapshot_from_stream_persists_with_expected_metadata(
     assert saved["size"] == len(payload)
 
 
-def test_create_snapshot_from_stream_uses_size_hint(
-    manager: SnapshotManager,
-) -> None:
-    """With a size hint, the manager skips spooling to disk and trusts the caller."""
-    payload = b"hint-data"
-    _id, _path, size = manager.create_snapshot_from_stream(
-        stream=io.BytesIO(payload),
-        sandbox_id="s",
-        tenant_id="t",
-        size_hint=999,
-    )
-    assert size == 999
-
-
 def test_create_snapshot_from_stream_rejects_oversized_stream(
     store: _FakeFileStore,
     manager: SnapshotManager,
@@ -122,24 +108,6 @@ def test_create_snapshot_from_stream_rejects_oversized_stream(
             stream=io.BytesIO(b"12345"),
             sandbox_id="s",
             tenant_id="t",
-        )
-
-    assert store.saved == []
-
-
-def test_create_snapshot_from_stream_rejects_oversized_size_hint(
-    store: _FakeFileStore,
-    manager: SnapshotManager,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(snapshot_manager_mod, "MAX_SNAPSHOT_ARCHIVE_BYTES", 4)
-
-    with pytest.raises(RuntimeError, match="exceeds"):
-        manager.create_snapshot_from_stream(
-            stream=io.BytesIO(b"x"),
-            sandbox_id="s",
-            tenant_id="t",
-            size_hint=5,
         )
 
     assert store.saved == []
