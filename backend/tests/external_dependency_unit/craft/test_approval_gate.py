@@ -111,7 +111,11 @@ def _seed_slack_external_app() -> Generator[None, None, None]:
                     app_type=ExternalAppType.SLACK,
                     upstream_url_patterns=["https://slack\\.com/api/.*"],
                     auth_template={"Authorization": "Bearer {access_token}"},
-                    organization_credentials={},
+                    # Fake token: Never reaches Slack on the REJECTED path, and
+                    # the APPROVED path expects Slack to reply ``invalid_auth``.
+                    # An unfillable template skips the ASK gate (forwards bare,
+                    # no DB row), which is what the tests assert against.
+                    organization_credentials={"access_token": "fake-test-token"},
                     enabled=True,
                     is_public=True,
                     action_policies={"slack.messages.write": EndpointPolicy.ASK},
@@ -544,6 +548,48 @@ def test_gated_egress_without_session_tag_fails_closed(
 
     assert _approval_count_for_user(db_session, user.id) == 0, (
         "fail-closed before commit must not mint an approval row"
+    )
+
+
+def test_ask_with_uninvokable_app_forwards_bare(
+    k8s_manager: object,  # noqa: ARG001 -- required to construct live_pod
+    k8s_client: client.CoreV1Api,
+    gated_session: tuple[User, UUID, str],
+    db_session: Session,
+) -> None:
+    """ASKs on an app whose auth template can't be filled forwards bare.
+
+    The credential gate's documented short-circuit: With no credentials to
+    inject after approval, the gate skips the ASK prompt and forwards the
+    request as-is rather than parking it.
+    """
+    user, session_id, pod_name = gated_session
+
+    # Strip the org credential the module seed put on Slack so app_is_available
+    # falls to False. _isolate_skill_tables restores the row after this test.
+    slack = get_built_in_external_app(db_session, ExternalAppType.SLACK)
+    assert slack is not None, "Module seed must have created the Slack row."
+    slack.organization_credentials = {}  # ty: ignore[invalid-assignment]
+    db_session.commit()
+
+    output_path = f"/tmp/curl_bare_{uuid4().hex[:8]}"
+    _post_slack_via_curl(
+        k8s_client,
+        pod_name,
+        output_path,
+        text="hello",
+        session_id=session_id,
+    )
+
+    # Request hit Slack with the curl's fake bearer -> 401 invalid_auth.
+    status_code, _body = wait_for_pod_exec_output(
+        k8s_client, pod_name, output_path, timeout_s=30
+    )
+    assert status_code == 401, (
+        f"Uninvokable ASK should forward bare and Slack should 401, got {status_code}."
+    )
+    assert _approval_count_for_user(db_session, user.id) == 0, (
+        "Uninvokable ASK must not mint an approval row."
     )
 
 

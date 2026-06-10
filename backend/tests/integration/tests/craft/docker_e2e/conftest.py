@@ -84,7 +84,9 @@ def slack_external_app() -> None:
                 app_type=ExternalAppType.SLACK,
                 upstream_url_patterns=["https://slack\\.com/api/.*"],
                 auth_template={"Authorization": "Bearer {access_token}"},
-                organization_credentials={},
+                # Fake token. An unfillable template short-circuits the ASK gate
+                # (forwards bare, no DB row), which breaks every gate-flow test.
+                organization_credentials={"access_token": "fake-test-token"},
                 enabled=True,
                 is_public=True,
                 action_policies={"slack.messages.write": EndpointPolicy.ASK},
