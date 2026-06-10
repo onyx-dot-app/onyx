@@ -48,15 +48,15 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const { mutate } = useSWRConfig();
   const [model, setModel] = useState(existing?.model ?? "");
   const [inputRate, setInputRate] = useState(
-    existing ? String(existing.input_cost_per_mtok) : ""
+    existing ? String(existing.input_cost_per_mtok) : "",
   );
   const [outputRate, setOutputRate] = useState(
-    existing ? String(existing.output_cost_per_mtok) : ""
+    existing ? String(existing.output_cost_per_mtok) : "",
   );
   const [cacheRate, setCacheRate] = useState(
     existing?.cache_read_cost_per_mtok != null
       ? String(existing.cache_read_cost_per_mtok)
-      : ""
+      : "",
   );
   const [submitting, setSubmitting] = useState(false);
 
@@ -79,8 +79,15 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const isEdit = existing !== undefined;
   const parsedInput = parseRate(inputRate);
   const parsedOutput = parseRate(outputRate);
+  // Empty cache rate is valid (bill cache reads at the input rate); a non-empty
+  // but unparseable value must block submit, not silently drop to null.
+  const parsedCache = parseRate(cacheRate);
+  const cacheValid = cacheRate.trim() === "" || parsedCache !== null;
   const canSubmit =
-    model.trim() !== "" && parsedInput !== null && parsedOutput !== null;
+    model.trim() !== "" &&
+    parsedInput !== null &&
+    parsedOutput !== null &&
+    cacheValid;
 
   async function handleSubmit() {
     if (!canSubmit || parsedInput === null || parsedOutput === null) return;
@@ -91,7 +98,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
         input_cost_per_mtok: parsedInput,
         output_cost_per_mtok: parsedOutput,
         // Empty cache rate => null (cache reads bill at the input rate).
-        cache_read_cost_per_mtok: parseRate(cacheRate),
+        cache_read_cost_per_mtok: parsedCache,
       });
       await refreshCostOverrides(mutate);
       toast.success(`Saved rate for ${model.trim()}.`);
@@ -237,7 +244,7 @@ function OverrideRow({ override }: OverrideRowProps) {
             </Text>
             <Text font="secondary-body" color="text-03">
               {`In ${formatRate(override.input_cost_per_mtok)} · Out ${formatRate(
-                override.output_cost_per_mtok
+                override.output_cost_per_mtok,
               )}${
                 override.cache_read_cost_per_mtok != null
                   ? ` · Cache ${formatRate(override.cache_read_cost_per_mtok)}`
@@ -293,7 +300,7 @@ export default function CostOverridesPanel() {
       <ContentAction
         title="Cost Overrides"
         description={markdown(
-          `Set negotiated per-model rates in **${RATE_UNIT_LABEL}**. These override the built-in price book for usage cost calculations.`
+          `Set negotiated per-model rates in **${RATE_UNIT_LABEL}**. These override the built-in price book for usage cost calculations.`,
         )}
         sizePreset="main-content"
         variant="section"
