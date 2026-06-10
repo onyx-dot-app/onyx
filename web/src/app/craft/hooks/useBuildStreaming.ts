@@ -126,6 +126,9 @@ export function useBuildStreaming() {
   const updateToolCallStreamItem = useBuildSessionStore(
     (state) => state.updateToolCallStreamItem
   );
+  const cancelLatestInFlightToolCallStreamItem = useBuildSessionStore(
+    (state) => state.cancelLatestInFlightToolCallStreamItem
+  );
   const upsertTodoListStreamItem = useBuildSessionStore(
     (state) => state.upsertTodoListStreamItem
   );
@@ -483,7 +486,13 @@ export function useBuildStreaming() {
               break;
             }
 
-            const startedToolCall = toolCallStateFromStart(parsed);
+            const isInterrupting = useBuildSessionStore
+              .getState()
+              .sessions.get(sessionId)?.isInterrupting;
+            const startedToolCall = {
+              ...toolCallStateFromStart(parsed),
+              status: isInterrupting ? "cancelled" : "pending",
+            } satisfies ToolCallState;
 
             // Parent `task` start packets can carry the spawned child session
             // before any progress packet arrives. Seed immediately so the task
@@ -606,8 +615,15 @@ export function useBuildStreaming() {
               break;
             }
 
+            const status =
+              useBuildSessionStore.getState().sessions.get(sessionId)
+                ?.isInterrupting &&
+              (parsed.status === "pending" || parsed.status === "in_progress")
+                ? "cancelled"
+                : parsed.status;
+
             updateToolCallStreamItem(sessionId, parsed.toolCallId, {
-              status: parsed.status,
+              status,
               title: parsed.title,
               description: parsed.description,
               command: parsed.command,
@@ -667,6 +683,12 @@ export function useBuildStreaming() {
 
           case "prompt_response": {
             finalizeStreaming();
+            if (
+              useBuildSessionStore.getState().sessions.get(sessionId)
+                ?.isInterrupting
+            ) {
+              cancelLatestInFlightToolCallStreamItem(sessionId);
+            }
 
             const session = useBuildSessionStore
               .getState()
@@ -737,6 +759,7 @@ export function useBuildStreaming() {
       updateLastStreamingText,
       updateLastStreamingThinking,
       updateToolCallStreamItem,
+      cancelLatestInFlightToolCallStreamItem,
       upsertTodoListStreamItem,
       addArtifactToSession,
       appendMessageToSession,
@@ -968,6 +991,7 @@ export function useBuildStreaming() {
 
       const interruptedTurnId = session.activeTurnId;
       updateSessionData(sessionId, { isInterrupting: true });
+      cancelLatestInFlightToolCallStreamItem(sessionId);
       try {
         await interruptMessageStream(sessionId);
         void reconcileInterruptedTurn(sessionId, interruptedTurnId);
@@ -976,7 +1000,11 @@ export function useBuildStreaming() {
         updateSessionData(sessionId, { isInterrupting: false });
       }
     },
-    [reconcileInterruptedTurn, updateSessionData]
+    [
+      reconcileInterruptedTurn,
+      updateSessionData,
+      cancelLatestInFlightToolCallStreamItem,
+    ]
   );
 
   const streamScheduledRunEvents = useCallback(
