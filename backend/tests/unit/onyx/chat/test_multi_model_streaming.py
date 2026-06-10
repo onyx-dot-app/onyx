@@ -608,13 +608,14 @@ class TestRunModels:
         """Worker-thread completion survives HTTP disconnect."""
 
         completion_called = threading.Event()
+        client_gone = threading.Event()
 
         def emit_then_block_until_drain(**kwargs: Any) -> None:
             emitter = kwargs["emitter"]
             emitter.emit(
                 Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
             )
-            emitter._drain_done.wait(timeout=5)
+            client_gone.wait(timeout=5)
 
         setup = _make_setup(n_models=1)
         setup.check_is_connected = MagicMock(return_value=True)
@@ -641,6 +642,7 @@ class TestRunModels:
             first = next(gen)
             assert isinstance(first, Packet)
             gen.close()
+            client_gone.set()
 
             assert completion_called.wait(timeout=5), (
                 "worker thread must call completion for the successful model"
@@ -650,12 +652,14 @@ class TestRunModels:
     def test_http_disconnect_error_saves_message_once(self) -> None:
         """Disconnecting during an erroring run saves the errored message once."""
 
+        client_gone = threading.Event()
+
         def emit_then_raise_after_drain(**kwargs: Any) -> None:
             emitter = kwargs["emitter"]
             emitter.emit(
                 Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
             )
-            emitter._drain_done.wait(timeout=5)
+            client_gone.wait(timeout=5)
             raise RuntimeError("disconnect failure")
 
         setup = _make_setup(n_models=1)
@@ -693,6 +697,7 @@ class TestRunModels:
             first = next(gen)
             assert isinstance(first, Packet)
             gen.close()
+            client_gone.set()
 
             assert commit_called.wait(timeout=5)
             mock_handle.assert_not_called()
@@ -750,6 +755,8 @@ class TestRunModels:
     def test_http_disconnect_persists_each_model_once(self) -> None:
         """Disconnecting mid-run persists each model once, even with staggered exits."""
 
+        client_gone = threading.Event()
+
         def emit_and_maybe_block(**kwargs: Any) -> None:
             emitter = kwargs["emitter"]
             llm = kwargs["llm"]
@@ -757,7 +764,7 @@ class TestRunModels:
                 Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
             )
             if llm is setup.llms[1]:
-                emitter._drain_done.wait(timeout=5)
+                client_gone.wait(timeout=5)
 
         setup = _make_setup(n_models=2)
         setup.check_is_connected = MagicMock(return_value=True)
@@ -793,12 +800,68 @@ class TestRunModels:
             assert isinstance(first, Packet)
             assert model_0_persisted.wait(timeout=5)
             gen.close()
+            client_gone.set()
             assert model_1_persisted.wait(timeout=5)
 
         assert mock_handle.call_count == 2
         persisted_llms = [call.kwargs["llm"] for call in mock_handle.call_args_list]
         assert persisted_llms.count(setup.llms[0]) == 1
         assert persisted_llms.count(setup.llms[1]) == 1
+
+    def test_disconnect_buffers_full_stream_and_marks_done(self) -> None:
+        """After a disconnect the writer keeps buffering to the end and marks done."""
+
+        client_gone = threading.Event()
+
+        def emit_then_block(**kwargs: Any) -> None:
+            kwargs["emitter"].emit(
+                Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
+            )
+            client_gone.wait(timeout=5)
+            kwargs["emitter"].emit(
+                Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
+            )
+
+        setup = _make_setup(n_models=1)
+        setup.check_is_connected = MagicMock(return_value=True)
+        stream_buffer = MagicMock()
+        done_marked = threading.Event()
+        stream_buffer.mark_done.side_effect = lambda: done_marked.set()
+
+        with (
+            patch(
+                "onyx.chat.process_message.run_llm_loop",
+                side_effect=emit_then_block,
+            ),
+            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.construct_tools", return_value={}),
+            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch(
+                "onyx.chat.process_message.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            from onyx.chat.process_message import _run_models
+
+            gen = cast(
+                Generator,
+                _run_models(setup, MagicMock(), stream_buffer=stream_buffer),
+            )
+            first = next(gen)
+            assert isinstance(first, Packet)
+            gen.close()
+            client_gone.set()
+
+            assert done_marked.wait(timeout=5), (
+                "writer must mark the buffer done after the run finishes"
+            )
+
+        buffered = "".join(
+            call.args[0] for call in stream_buffer.append_line.call_args_list
+        )
+        # Both packets reached the buffer — including the one emitted after the
+        # client was gone.
+        assert buffered.count("reasoning_start") == 2
 
     def test_stop_button_does_not_call_completion_for_errored_model(self) -> None:
         """Stop-button completion skips errored models."""
