@@ -31,6 +31,7 @@ from onyx.db.user_usage import get_user_cost_cents_in_window
 from onyx.db.user_usage import get_user_cost_cents_since
 from onyx.db.user_usage import get_user_usage_by_day_and_model
 from onyx.db.user_usage import get_window_start
+from onyx.db.user_usage import USAGE_PERIOD_HOURS
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cost import get_model_price_per_million
@@ -48,10 +49,6 @@ from onyx.server.features.usage.models import UsageExportTotals
 from onyx.server.features.usage.models import UsageExportUser
 from onyx.server.features.usage.models import UserUsageResponse
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
-
-# Per-user windows must coincide with the tenant-usage windows; same source as
-# the recorder (onyx/tracing/processors/user_usage_processor.py).
-_PERIOD_HOURS = max(USAGE_LIMIT_WINDOW_SECONDS // 3600, 1)
 
 # Default trailing range for the export when no start is given.
 _DEFAULT_EXPORT_DAYS = 30
@@ -171,7 +168,7 @@ def get_my_usage(
     a trailing N-day range. Budget fields are null when the user has no cost limit.
     """
     now = datetime.now(timezone.utc)
-    window_start = get_window_start(now, period_hours=_PERIOD_HOURS)
+    window_start = get_window_start(now, period_hours=USAGE_PERIOD_HOURS)
 
     since = now - timedelta(days=days) if days else window_start
     user_id = str(user.id)

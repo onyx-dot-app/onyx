@@ -17,11 +17,18 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserUsage
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
 logger = setup_logger()
 
 # Dimension columns that uniquely identify a ledger row within a window.
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider"]
+
+# Per-user windows coincide with the tenant-usage window. Floor at 1h so a
+# sub-hour USAGE_LIMIT_WINDOW_SECONDS can't truncate to 0 (div-by-zero); windows
+# finer than hourly aren't supported. Shared so the recorder and the /user/usage
+# read agree on the window — a drift here would mis-bucket the displayed cost.
+USAGE_PERIOD_HOURS = max(USAGE_LIMIT_WINDOW_SECONDS // 3600, 1)
 
 
 def get_window_start(dt: datetime, period_hours: int) -> datetime:

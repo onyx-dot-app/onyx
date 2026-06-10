@@ -13,23 +13,18 @@ from typing import Any
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.user_usage import get_window_start
 from onyx.db.user_usage import record_user_usage
+from onyx.db.user_usage import USAGE_PERIOD_HOURS
 from onyx.llm.cost import compute_cost_cents
 from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 from shared_configs.contextvars import get_current_user_id
 
 logger = setup_logger()
-
-# Per-user windows must coincide with tenant-usage windows. Floor at 1h so a
-# sub-hour USAGE_LIMIT_WINDOW_SECONDS can't truncate to a 0-hour (div-by-zero)
-# window; finer-than-hourly cost windows aren't supported.
-_PERIOD_HOURS = max(USAGE_LIMIT_WINDOW_SECONDS // 3600, 1)
 
 _DEFAULT_FLUSH_INTERVAL_SECONDS = 2.0
 # Drain early once this many records have queued up, regardless of interval.
@@ -78,20 +73,26 @@ class UserUsageTracingProcessor(TracingProcessor):
         self._queue: queue.Queue[Any] = queue.Queue()
         self._flush_interval = flush_interval_seconds
         self._shutdown = threading.Event()
+        # Serializes the shutdown flag against enqueues so a record can't slip in
+        # after the _SHUTDOWN sentinel — every record is enqueued before it or
+        # dropped, never lost to a drained-and-exited thread.
+        self._enqueue_lock = threading.Lock()
         self._thread = threading.Thread(
             target=self._drain_loop, name="user-usage-recorder", daemon=True
         )
         self._thread.start()
 
     def on_span_end(self, span: Span[Any]) -> None:
-        # After shutdown the drain thread is gone, so anything enqueued now would
-        # sit unwritten forever — drop it instead.
-        if self._shutdown.is_set():
-            return
         # Never propagate into the span/LLM path.
         try:
             record = self._capture(span)
-            if record is not None:
+            if record is None:
+                return
+            with self._enqueue_lock:
+                # Drop once shutting down — the sentinel is or will be the last
+                # item, so the drain thread won't pick this up.
+                if self._shutdown.is_set():
+                    return
                 self._queue.put(record)
         except Exception:
             logger.exception("UserUsageTracingProcessor.on_span_end failed; dropping")
@@ -120,7 +121,7 @@ class UserUsageTracingProcessor(TracingProcessor):
         provider = model_config.get("model_provider")
 
         window_start = get_window_start(
-            datetime.now(timezone.utc), period_hours=_PERIOD_HOURS
+            datetime.now(timezone.utc), period_hours=USAGE_PERIOD_HOURS
         )
 
         return _UsageRecord(
@@ -232,8 +233,12 @@ class UserUsageTracingProcessor(TracingProcessor):
         self._queue.join()
 
     def shutdown(self) -> None:
-        if self._shutdown.is_set():
-            return
-        self._shutdown.set()
+        # Set the flag under the lock so any concurrent on_span_end either
+        # enqueues before the sentinel or sees the flag and drops — no record
+        # lands after _SHUTDOWN.
+        with self._enqueue_lock:
+            if self._shutdown.is_set():
+                return
+            self._shutdown.set()
         self._queue.put(_SHUTDOWN)
         self._thread.join(timeout=10.0)
