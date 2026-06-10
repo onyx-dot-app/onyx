@@ -142,9 +142,7 @@ async def test_lifespan_shutdown_disposes_all_three_engines() -> None:
         stack.enter_context(patch.object(onyx_main, "get_or_generate_uuid"))
         stack.enter_context(patch.object(onyx_main, "optional_telemetry"))
         stack.enter_context(patch.object(onyx_main, "MULTI_TENANT", False))
-        stack.enter_context(
-            patch.object(onyx_main, "AUTH_RATE_LIMITING_ENABLED", False)
-        )
+        stack.enter_context(patch.object(onyx_main, "RATE_LIMITING_ENABLED", False))
         stack.enter_context(patch.object(onyx_main, "DISABLE_VECTOR_DB", False))
         stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_ID", ""))
         stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_SECRET", ""))
