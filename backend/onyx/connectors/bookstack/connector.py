@@ -56,15 +56,20 @@ class BookstackConnector(LoadConnector, PollConnector):
             "sort": "+id",
         }
 
+        # BookStack interprets a date-only "updated_at" filter (YYYY-MM-DD) as
+        # "<= YYYY-MM-DD 00:00:00", which silently excludes documents updated
+        # later on the boundary day. Since every poll uses end=now, this drops
+        # anything edited "today" until the next calendar day. Full ISO-8601
+        # datetime granularity makes the gte/lte bounds inclusive as intended.
         if start:
             params["filter[updated_at:gte]"] = datetime.fromtimestamp(
                 start, tz=timezone.utc
-            ).strftime("%Y-%m-%d")
+            ).strftime("%Y-%m-%dT%H:%M:%S")
 
         if end:
             params["filter[updated_at:lte]"] = datetime.fromtimestamp(
                 end, tz=timezone.utc
-            ).strftime("%Y-%m-%d")
+            ).strftime("%Y-%m-%dT%H:%M:%S")
 
         batch = bookstack_client.get(endpoint, params=params).get("data", [])
         doc_batch: list[Document | HierarchyNode] = [
