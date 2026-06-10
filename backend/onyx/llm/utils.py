@@ -1,5 +1,6 @@
 import copy
 import re
+import time
 from collections.abc import Callable
 from collections.abc import Iterable
 from functools import lru_cache
@@ -839,9 +840,43 @@ def litellm_thinks_model_supports_image_input(
         return False
 
 
-def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
+_REASONING_PROBE_FAILURE_TTL_SECONDS = 300
+
+# value: (result, expires_at) — expires_at None means permanent (a real probe
+# result, which is static model metadata); a float means a failure placeholder
+# that re-probes once the TTL passes.
+_LITELLM_SUPPORTS_REASONING_CACHE: dict[str, tuple[bool, float | None]] = {}
+
+
+def _litellm_supports_reasoning(full_model_name: str) -> bool:
+    """litellm.supports_reasoning can fetch model info over the network for some
+    providers (e.g. Ollama hosts), and every request used to pay that cost —
+    convoying on litellm's shared httpx pool under load. Memoize per process.
+    Failures are cached as False with a short TTL: an unreachable host costs one
+    attempt per TTL window instead of one per request, but a recovered host is
+    re-probed rather than pinned to False until restart (a wrong False silently
+    degrades reasoning models in chat and deep research).
+    """
+    entry = _LITELLM_SUPPORTS_REASONING_CACHE.get(full_model_name)
+    if entry is not None:
+        result, expires_at = entry
+        if expires_at is None or time.monotonic() < expires_at:
+            return result
+
     import litellm
 
+    expires_at = None
+    try:
+        result = bool(litellm.supports_reasoning(model=full_model_name))
+    except Exception:
+        logger.exception("Failed to check if %s supports reasoning", full_model_name)
+        result = False
+        expires_at = time.monotonic() + _REASONING_PROBE_FAILURE_TTL_SECONDS
+    _LITELLM_SUPPORTS_REASONING_CACHE[full_model_name] = (result, expires_at)
+    return result
+
+
+def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
     model_map = get_model_map()
     try:
         model_obj = find_model_obj(
@@ -859,22 +894,13 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
                 model_provider,
             )
 
-        # Fallback: try using litellm.supports_reasoning() for newer models
-        try:
-            # logger.debug("Falling back to `litellm.supports_reasoning`")
-            full_model_name = (
-                f"{model_provider}/{model_name}"
-                if model_provider not in model_name
-                else model_name
-            )
-            return litellm.supports_reasoning(model=full_model_name)
-        except Exception:
-            logger.exception(
-                "Failed to check if %s/%s supports reasoning",
-                model_provider,
-                model_name,
-            )
-            return False
+        # Fallback for newer models missing from the local model map
+        full_model_name = (
+            f"{model_provider}/{model_name}"
+            if model_provider not in model_name
+            else model_name
+        )
+        return _litellm_supports_reasoning(full_model_name)
 
     except Exception:
         logger.exception(
