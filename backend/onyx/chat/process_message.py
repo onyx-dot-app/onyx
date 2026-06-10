@@ -1071,10 +1071,65 @@ def _run_models(
     # Set to True when a model raises an exception (distinct from "still running").
     # Used in the stop-button path to avoid calling completion for errored models.
     model_errored: list[bool] = [False] * n_models
+    persist_lock = threading.Lock()
+    persisted: list[bool] = [False] * n_models
+    finished_count: list[int] = [0]
+    post_steps_done = threading.Event()
 
     # Set when the drain loop exits early (HTTP disconnect / GeneratorExit).
     # Signals emitters to skip future puts so workers exit promptly.
     drain_done = threading.Event()
+
+    def _persist_model_outcome(model_idx: int, context: str) -> None:
+        with persist_lock:
+            if persisted[model_idx]:
+                return
+            succeeded = model_succeeded[model_idx]
+            errored = model_errored[model_idx]
+            if not succeeded and not errored:
+                return
+            persisted[model_idx] = True
+
+        if errored:
+            _save_errored_message(model_idx, context)
+            return
+
+        try:
+            llm_loop_completion_handle(
+                state_container=state_containers[model_idx],
+                is_connected=setup.check_is_connected,
+                assistant_message=setup.reserved_messages[model_idx],
+                llm=setup.llms[model_idx],
+                reserved_tokens=setup.reserved_token_count,
+            )
+        except Exception:
+            logger.exception(
+                "%s completion failed for model %d (%s)",
+                context,
+                model_idx,
+                setup.model_display_names[model_idx],
+            )
+
+    def _run_post_steps() -> None:
+        with persist_lock:
+            if post_steps_done.is_set():
+                return
+            post_steps_done.set()
+
+        for i in range(n_models):
+            _persist_model_outcome(i, "post-steps")
+
+        # Normally reset in _stream_chat_turn's finally, but that generator can be
+        # abandoned on HTTP disconnect — without this the session shows "processing"
+        # forever after a disconnected run completes.
+        try:
+            set_processing_status(
+                chat_session_id=setup.chat_session.id,
+                cache=setup.cache,
+                value=False,
+            )
+        except Exception:
+            logger.exception("post-steps processing status reset failed")
 
     def _run_model(model_idx: int) -> None:
         """Run one LLM loop inside a worker thread, writing packets to ``merged_queue``."""
@@ -1176,6 +1231,21 @@ def _run_models(
             merged_queue.put((model_idx, e))
 
         finally:
+            _persist_model_outcome(model_idx, "worker")
+
+            is_last = False
+            with persist_lock:
+                finished_count[0] += 1
+                is_last = finished_count[0] == n_models and drain_done.is_set()
+
+            if is_last:
+                _run_post_steps()
+                while True:
+                    try:
+                        merged_queue.get_nowait()
+                    except queue.Empty:
+                        break
+
             merged_queue.put((model_idx, _MODEL_DONE))
 
     def _save_errored_message(model_idx: int, context: str) -> None:
@@ -1220,38 +1290,14 @@ def _run_models(
             except queue.Empty:
                 # Check for user-initiated cancellation every 50 ms.
                 if not setup.check_is_connected():
-                    # Save state for every model before exiting.
-                    # - Succeeded models: full answer (is_connected=True).
-                    # - Still-in-flight models: partial answer + "stopped by user".
-                    # - Errored models: delete the orphaned reserved message; do NOT
-                    #   save "stopped by user" for a model that actually threw an exception.
+                    # Persist finished models now; workers persist themselves on exit.
                     for i in range(n_models):
-                        if model_errored[i]:
-                            _save_errored_message(i, "stop-button")
-                            continue
-                        try:
-                            succeeded = model_succeeded[i]
-
-                            def _stop_button_is_connected(s: bool = succeeded) -> bool:
-                                return s
-
-                            llm_loop_completion_handle(
-                                state_container=state_containers[i],
-                                is_connected=_stop_button_is_connected,
-                                assistant_message=setup.reserved_messages[i],
-                                llm=setup.llms[i],
-                                reserved_tokens=setup.reserved_token_count,
-                            )
-                        except Exception:
-                            logger.exception(
-                                "stop-button completion failed for model %d (%s)",
-                                i,
-                                setup.model_display_names[i],
-                            )
+                        _persist_model_outcome(i, "stop-button")
                     yield Packet(
                         placement=Placement(turn_index=0),
                         obj=OverallStop(type="stop", stop_reason="user_cancelled"),
                     )
+                    drain_done.set()
                     completion_persisted = True
                     return
                 continue
@@ -1289,29 +1335,9 @@ def _run_models(
                     # model_index already embedded by the model's Emitter in _run_model
                     yield item
 
-        # ── Completion: save each successful model's response ───────────────
-        # All model loops have completed (run_llm_loop returned) — no more writes
-        # to state_containers. Each model's completion runs inside its own
-        # short-lived DB session so no connection is held across the loop.
         for i in range(n_models):
-            if not model_succeeded[i]:
-                # Model errored — delete its orphaned reserved message.
-                _save_errored_message(i, "normal")
-                continue
-            try:
-                llm_loop_completion_handle(
-                    state_container=state_containers[i],
-                    is_connected=setup.check_is_connected,
-                    assistant_message=setup.reserved_messages[i],
-                    llm=setup.llms[i],
-                    reserved_tokens=setup.reserved_token_count,
-                )
-            except Exception:
-                logger.exception(
-                    "normal completion failed for model %d (%s)",
-                    i,
-                    setup.model_display_names[i],
-                )
+            _persist_model_outcome(i, "normal")
+        _run_post_steps()
         completion_persisted = True
 
     finally:
@@ -1320,40 +1346,20 @@ def _run_models(
             # Threads are done (normal path) or can finish in the background (stop-button).
             executor.shutdown(wait=False)
         else:
-            # Early exit (GeneratorExit from raw HTTP disconnect, or unhandled
-            # exception in the drain loop).
-            # 1. Signal emitters to stop — future emit() calls return immediately,
-            #    so workers exit their LLM loops promptly.
             drain_done.set()
-            # 2. Wait for all workers to finish. Once drain_done is set the Emitter
-            #    short-circuits, so workers should exit quickly.
-            executor.shutdown(wait=True)
-            # 3. All workers are done — complete from the main thread only.
-            for i in range(n_models):
-                if model_succeeded[i]:
-                    try:
-                        llm_loop_completion_handle(
-                            state_container=state_containers[i],
-                            # Model already finished — persist full response.
-                            is_connected=lambda: True,
-                            assistant_message=setup.reserved_messages[i],
-                            llm=setup.llms[i],
-                            reserved_tokens=setup.reserved_token_count,
-                        )
-                    except Exception:
-                        logger.exception(
-                            "disconnect completion failed for model %d (%s)",
-                            i,
-                            setup.model_display_names[i],
-                        )
-                elif model_errored[i]:
-                    _save_errored_message(i, "disconnect")
-            # 4. Drain buffered packets from memory — no consumer is running.
-            while not merged_queue.empty():
-                try:
-                    merged_queue.get_nowait()
-                except queue.Empty:
-                    break
+            executor.shutdown(wait=False)
+            with persist_lock:
+                all_finished: bool = finished_count[0] == n_models
+                running_count: int = n_models - finished_count[0]
+            # Workers that finished before drain_done was set saw is_last=False and
+            # skipped post-steps — no later worker will run them, so do it here.
+            if all_finished:
+                _run_post_steps()
+            else:
+                logger.info(
+                    "client disconnected; %d model(s) still running will persist on completion",
+                    running_count,
+                )
 
 
 def _stream_chat_turn(
