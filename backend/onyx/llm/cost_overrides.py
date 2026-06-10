@@ -26,6 +26,9 @@ _cache_lock = threading.Lock()
 _OverrideKey = tuple[str, str]
 # tenant_id -> (loaded_at_monotonic, {(provider, model): rates})
 _cache: dict[str, tuple[float, dict[_OverrideKey, _OverrideRates]]] = {}
+# Bound the per-tenant cache so a many-tenant process can't accumulate entries
+# unboundedly; evict the oldest (insertion order) when full.
+_MAX_CACHED_TENANTS = 10_000
 
 
 def _load_cache(db_session: Session) -> dict[_OverrideKey, _OverrideRates]:
@@ -69,6 +72,8 @@ def get_override(
                     return None
                 return _lookup(entry[1], model, provider)
             entry = (time.monotonic(), snapshot)
+            if tenant_id not in _cache and len(_cache) >= _MAX_CACHED_TENANTS:
+                _cache.pop(next(iter(_cache)), None)
             _cache[tenant_id] = entry
         return _lookup(entry[1], model, provider)
 
