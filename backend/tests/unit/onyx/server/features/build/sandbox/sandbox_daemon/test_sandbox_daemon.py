@@ -416,6 +416,7 @@ def _post_snapshot(
     timestamp: str,
     content_type: str = "application/json",
     bundle_sha256: str | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> httpx.Response:
     headers = {
         "Content-Type": content_type,
@@ -424,6 +425,8 @@ def _post_snapshot(
     }
     if bundle_sha256 is not None:
         headers["X-Bundle-Sha256"] = bundle_sha256
+    if extra_headers:
+        headers.update(extra_headers)
     return client.post(
         endpoint_path,
         content=body,
@@ -436,6 +439,7 @@ def _signed_snapshot_post(
     endpoint_path: str,
     body: bytes,
     priv: Ed25519PrivateKey,
+    extra_headers: dict[str, str] | None = None,
 ) -> httpx.Response:
     ts = str(int(time.time()))
     sig = _sign_snapshot(priv, endpoint_path=endpoint_path, body=body, timestamp=ts)
@@ -445,6 +449,7 @@ def _signed_snapshot_post(
         body,
         signature=sig,
         timestamp=ts,
+        extra_headers=extra_headers,
     )
 
 
@@ -483,11 +488,13 @@ def test_snapshot_create_empty_session_returns_204(
     _, server_mod, priv, _ = configured_sandbox_daemon
     captured: dict[str, UUID] = {}
 
-    def fake_has_snapshot_content(session_id: UUID) -> bool:
+    def fake_compute_snapshot_digest(session_id: UUID) -> str | None:
         captured["session_id"] = session_id
-        return False
+        return None
 
-    monkeypatch.setattr(server_mod, "has_snapshot_content", fake_has_snapshot_content)
+    monkeypatch.setattr(
+        server_mod, "compute_snapshot_digest", fake_compute_snapshot_digest
+    )
 
     body = b'{"session_id":"00000000-0000-0000-0000-000000000001"}'
     resp = _signed_snapshot_post(client, "/snapshot/create", body, priv)
@@ -507,16 +514,18 @@ def test_snapshot_create_streams_archive_when_content_exists(
     _, server_mod, priv, _ = configured_sandbox_daemon
     captured: dict[str, UUID] = {}
 
-    def fake_has_snapshot_content(session_id: UUID) -> bool:
+    def fake_compute_snapshot_digest(session_id: UUID) -> str | None:
         captured["session_id"] = session_id
-        return True
+        return "deadbeef"
 
     def fake_iter_snapshot_archive(session_id: UUID) -> Generator[bytes, None, None]:
         captured["iter_session_id"] = session_id
         yield b"tar"
         yield b"bytes"
 
-    monkeypatch.setattr(server_mod, "has_snapshot_content", fake_has_snapshot_content)
+    monkeypatch.setattr(
+        server_mod, "compute_snapshot_digest", fake_compute_snapshot_digest
+    )
     monkeypatch.setattr(server_mod, "iter_snapshot_archive", fake_iter_snapshot_archive)
 
     body = b'{"session_id":"00000000-0000-0000-0000-000000000003"}'
@@ -524,9 +533,38 @@ def test_snapshot_create_streams_archive_when_content_exists(
 
     assert resp.status_code == 200, resp.text
     assert resp.headers["content-type"].startswith("application/gzip")
+    assert resp.headers["ETag"] == "deadbeef"
     assert resp.content == b"tarbytes"
     session_id = UUID("00000000-0000-0000-0000-000000000003")
     assert captured == {"session_id": session_id, "iter_session_id": session_id}
+
+
+def test_snapshot_create_unchanged_returns_304(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, server_mod, priv, _ = configured_sandbox_daemon
+
+    def fake_compute_snapshot_digest(_session_id: UUID) -> str | None:
+        return "samedigest"
+
+    def fail_iter(_session_id: UUID) -> Generator[bytes, None, None]:
+        raise AssertionError("must not archive an unchanged workspace")
+        yield b""
+
+    monkeypatch.setattr(
+        server_mod, "compute_snapshot_digest", fake_compute_snapshot_digest
+    )
+    monkeypatch.setattr(server_mod, "iter_snapshot_archive", fail_iter)
+
+    body = b'{"session_id":"00000000-0000-0000-0000-000000000003"}'
+    resp = _signed_snapshot_post(
+        client, "/snapshot/create", body, priv, {"If-None-Match": "samedigest"}
+    )
+
+    assert resp.status_code == 304, resp.text
+    assert resp.content == b""
 
 
 def test_snapshot_create_rejects_stale_storage_fields(
@@ -537,12 +575,14 @@ def test_snapshot_create_rejects_stale_storage_fields(
     _, server_mod, priv, _ = configured_sandbox_daemon
     called = False
 
-    def fake_has_snapshot_content(_session_id: UUID) -> bool:
+    def fake_compute_snapshot_digest(_session_id: UUID) -> str | None:
         nonlocal called
         called = True
-        return True
+        return "digest"
 
-    monkeypatch.setattr(server_mod, "has_snapshot_content", fake_has_snapshot_content)
+    monkeypatch.setattr(
+        server_mod, "compute_snapshot_digest", fake_compute_snapshot_digest
+    )
 
     body = (
         b'{"session_id":"00000000-0000-0000-0000-000000000003",'
@@ -909,7 +949,7 @@ def test_snapshot_body_tampering_after_signing_is_rejected(
     redirect a snapshot to a different tenant by swapping tenant_id.
     """
     _, server_mod, priv, _ = configured_sandbox_daemon
-    monkeypatch.setattr(server_mod, "has_snapshot_content", lambda _session_id: False)
+    monkeypatch.setattr(server_mod, "compute_snapshot_digest", lambda _session_id: None)
 
     signed_body = b'{"session_id":"00000000-0000-0000-0000-000000000003"}'
     ts = str(int(time.time()))
@@ -954,3 +994,70 @@ def test_push_signature_cannot_be_replayed_against_snapshot_endpoint(
         client, "/snapshot/create", body, signature=push_style_sig, timestamp=ts
     )
     assert resp.status_code == 401
+
+
+def test_compute_snapshot_digest_stable_and_detects_change(
+    sandbox_daemon_modules: tuple[ModuleType, ModuleType],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Digest is stable for an unchanged tree and changes when content changes."""
+    _, _ = sandbox_daemon_modules
+    snapshot_mod = sys.modules["sandbox_daemon.snapshot"]
+    sessions_root = tmp_path / "sessions"
+    session_id = UUID("00000000-0000-0000-0000-000000000042")
+    outputs = sessions_root / str(session_id) / "outputs"
+    outputs.mkdir(parents=True)
+    (outputs / "page.tsx").write_text("hello\n")
+    monkeypatch.setattr(snapshot_mod, "SESSIONS_ROOT", sessions_root)
+
+    digest_a = snapshot_mod.compute_snapshot_digest(session_id)
+    digest_b = snapshot_mod.compute_snapshot_digest(session_id)
+    assert digest_a is not None
+    assert digest_a == digest_b
+
+    # Editing a file changes the digest (size differs).
+    (outputs / "page.tsx").write_text("hello world\n")
+    assert snapshot_mod.compute_snapshot_digest(session_id) != digest_a
+
+    # Empty session has no digest.
+    empty_id = UUID("00000000-0000-0000-0000-000000000099")
+    assert snapshot_mod.compute_snapshot_digest(empty_id) is None
+
+
+def test_snapshot_digest_survives_restore(
+    sandbox_daemon_modules: tuple[ModuleType, ModuleType],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A workspace restored from its own snapshot yields the same digest.
+
+    Restore preserves mtimes, so an idle->sleep->wake cycle without edits is
+    detected as unchanged and skips a redundant snapshot.
+    """
+    _, _ = sandbox_daemon_modules
+    snapshot_mod = sys.modules["sandbox_daemon.snapshot"]
+    sessions_root = tmp_path / "sessions"
+    monkeypatch.setattr(snapshot_mod, "SESSIONS_ROOT", sessions_root)
+
+    # Archive entries carry a fixed mtime (see _build_targz_bytes); restore
+    # re-applies it, so two restores of the same archive must produce the same
+    # digest -- i.e. an unchanged workspace is recognized across wake cycles.
+    archive = tmp_path / "snap.tar.gz"
+    archive.write_bytes(
+        _build_targz_bytes(
+            {
+                "outputs/web/page.tsx": b"// hello\n",
+                "attachments/note.txt": b"note\n",
+            }
+        )
+    )
+
+    dst1 = UUID("00000000-0000-0000-0000-0000000000a1")
+    dst2 = UUID("00000000-0000-0000-0000-0000000000a2")
+    snapshot_mod.restore_snapshot(dst1, archive)
+    snapshot_mod.restore_snapshot(dst2, archive)
+
+    digest1 = snapshot_mod.compute_snapshot_digest(dst1)
+    assert digest1 is not None
+    assert digest1 == snapshot_mod.compute_snapshot_digest(dst2)

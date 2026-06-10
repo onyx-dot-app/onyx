@@ -44,6 +44,9 @@ class SnapshotResult(BaseModel):
 
     storage_path: str
     size_bytes: int
+    tree_digest: str | None = None
+    # True when unchanged since the prior digest; no new snapshot was created.
+    unchanged: bool = False
 
 
 class SnapshotInfo(BaseModel):

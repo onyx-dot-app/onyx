@@ -22,7 +22,7 @@ from fastapi.responses import StreamingResponse
 from sandbox_daemon.extract import MAX_BUNDLE_BYTES
 from sandbox_daemon.extract import safe_extract_then_atomic_swap
 from sandbox_daemon.models import SnapshotCreateRequest
-from sandbox_daemon.snapshot import has_snapshot_content
+from sandbox_daemon.snapshot import compute_snapshot_digest
 from sandbox_daemon.snapshot import iter_snapshot_archive
 from sandbox_daemon.snapshot import MAX_SNAPSHOT_ARCHIVE_BYTES
 from sandbox_daemon.snapshot import restore_snapshot
@@ -138,6 +138,7 @@ async def snapshot_create(
     request: Request,
     x_push_signature: str = Header(..., alias="X-Push-Signature"),
     x_push_timestamp: str = Header(..., alias="X-Push-Timestamp"),
+    if_none_match: str | None = Header(None, alias="If-None-Match"),
 ) -> Response:
     body = await request.body()
     _verify_signature(
@@ -153,18 +154,23 @@ async def snapshot_create(
         raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
 
     try:
-        has_content = await asyncio.to_thread(has_snapshot_content, payload.session_id)
+        digest = await asyncio.to_thread(compute_snapshot_digest, payload.session_id)
     except SnapshotError as e:
         raise HTTPException(status_code=500, detail=f"Snapshot create failed: {e}")
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Snapshot create OS error: {e}")
 
-    if not has_content:
+    if digest is None:
         return Response(status_code=204)
+
+    # ETag conditional request: matching digest => workspace unchanged, skip archiving.
+    if if_none_match is not None and if_none_match == digest:
+        return Response(status_code=304)
 
     return StreamingResponse(
         iter_snapshot_archive(payload.session_id),
         media_type="application/gzip",
+        headers={"ETag": digest},
     )
 
 

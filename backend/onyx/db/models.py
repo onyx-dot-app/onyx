@@ -5453,6 +5453,8 @@ class Snapshot(Base):
     )
     storage_path: Mapped[str] = mapped_column(String, nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    # Digest of the snapshot tree; lets the next snapshot skip an unchanged workspace.
+    tree_digest: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

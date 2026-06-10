@@ -32,6 +32,12 @@ SANDBOX_MAX_CONCURRENT_PER_ORG = int(
     os.environ.get("SANDBOX_MAX_CONCURRENT_PER_ORG", "10")
 )
 
+# Snapshot retention: snapshots older than this are pruned, except the newest
+# SNAPSHOT_KEEP_LAST_N per session (the most recent is always kept so a
+# session's workspace is never orphaned).
+SNAPSHOT_RETENTION_DAYS = int(os.environ.get("SNAPSHOT_RETENTION_DAYS", "30"))
+SNAPSHOT_KEEP_LAST_N = int(os.environ.get("SNAPSHOT_KEEP_LAST_N", "3"))
+
 SANDBOX_NEXTJS_PORT_START = int(os.environ.get("SANDBOX_NEXTJS_PORT_START", "3010"))
 SANDBOX_NEXTJS_PORT_END = int(os.environ.get("SANDBOX_NEXTJS_PORT_END", "3100"))
 

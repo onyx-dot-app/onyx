@@ -205,6 +205,7 @@ def create_snapshot__no_commit(
     session_id: UUID,
     storage_path: str,
     size_bytes: int,
+    tree_digest: str | None = None,
 ) -> Snapshot:
     """Create a snapshot record for a session.
 
@@ -216,6 +217,7 @@ def create_snapshot__no_commit(
         session_id=session_id,
         storage_path=storage_path,
         size_bytes=size_bytes,
+        tree_digest=tree_digest,
     )
     db_session.add(snapshot)
     db_session.flush()
@@ -245,35 +247,34 @@ def get_snapshots_for_session(db_session: Session, session_id: UUID) -> list[Sna
     return list(db_session.execute(stmt).scalars().all())
 
 
-def delete_old_snapshots(
+def get_prunable_snapshots(
     db_session: Session,
-    tenant_id: str,  # noqa: ARG001
     retention_days: int,
-) -> int:
-    """Delete snapshots older than retention period, return count deleted.
+    keep_last_n: int,
+) -> list[Snapshot]:
+    """Return snapshots eligible for deletion under the retention policy.
 
-    Note: tenant_id parameter is kept for API compatibility but is not used
-    since Snapshot model no longer has tenant_id. This function deletes
-    all snapshots older than the retention period.
+    Keeps each session's ``keep_last_n`` most recent snapshots (the newest is
+    the always-kept workspace anchor) and prunes older surplus beyond
+    ``retention_days``. The caller deletes the file-store blobs and DB rows.
     """
     cutoff_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
         days=retention_days
     )
-
-    stmt = select(Snapshot).where(
-        Snapshot.created_at < cutoff_time,
+    rank = func.row_number().over(
+        partition_by=Snapshot.session_id,
+        order_by=Snapshot.created_at.desc(),
     )
-    old_snapshots = db_session.execute(stmt).scalars().all()
-
-    count = 0
-    for snapshot in old_snapshots:
-        db_session.delete(snapshot)
-        count += 1
-
-    if count > 0:
-        db_session.commit()
-
-    return count
+    ranked = select(Snapshot.id, Snapshot.created_at, rank.label("rank")).subquery()
+    prunable_ids = select(ranked.c.id).where(
+        ranked.c.rank > 1,
+        or_(ranked.c.rank > keep_last_n, ranked.c.created_at < cutoff_time),
+    )
+    return list(
+        db_session.execute(select(Snapshot).where(Snapshot.id.in_(prunable_ids)))
+        .scalars()
+        .all()
+    )
 
 
 def delete_snapshot(db_session: Session, snapshot_id: UUID) -> bool:

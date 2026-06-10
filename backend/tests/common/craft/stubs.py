@@ -301,12 +301,14 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
         tenant_id: str,
+        previous_digest: str | None = None,
     ) -> SnapshotResult | None:
         self.create_snapshot_count += 1
         self.last_create_snapshot_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
             "tenant_id": tenant_id,
+            "previous_digest": previous_digest,
         }
         if self.create_snapshot_returns is _UNSET:
             raise _not_configured("create_snapshot")

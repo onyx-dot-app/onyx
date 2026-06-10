@@ -1595,6 +1595,7 @@ echo "Session cleanup complete"
         sandbox_id: UUID,
         session_id: UUID,
         tenant_id: str,
+        previous_digest: str | None = None,
     ) -> SnapshotResult | None:
         """Create a FileStore-backed snapshot via the sidecar filesystem API.
 
@@ -1603,7 +1604,8 @@ echo "Session cleanup complete"
         - sessions/$session_id/attachments/
         - sessions/$session_id/.opencode-data/
 
-        Returns None if there are no outputs to snapshot.
+        Returns None if there are no outputs to snapshot, or a SnapshotResult
+        with ``unchanged=True`` when the workspace matches ``previous_digest``.
         """
         body = SnapshotCreateRequest(session_id=session_id).model_dump_json().encode()
         sha256_hex = hashlib.sha256(body).hexdigest()
@@ -1616,16 +1618,19 @@ echo "Session cleanup complete"
                 sha256_hex=sha256_hex,
                 content_type="application/json",
             )
+            if previous_digest is not None:
+                headers["If-None-Match"] = previous_digest
             url = f"http://{host}:{PUSH_DAEMON_PORT}/snapshot/create"
             try:
                 with httpx.Client(timeout=timeout) as http_client:
                     with http_client.stream(
                         "POST", url, content=body, headers=headers
                     ) as resp:
-                        if resp.status_code == 204:
-                            logger.info(
-                                "No outputs to snapshot for session %s", session_id
+                        if resp.status_code == 304:
+                            return SnapshotResult(
+                                storage_path="", size_bytes=0, unchanged=True
                             )
+                        if resp.status_code == 204:
                             return None
                         if resp.status_code != 200:
                             detail = resp.read().decode(errors="replace")
@@ -1633,6 +1638,7 @@ echo "Session cleanup complete"
                                 f"Snapshot create failed: {resp.status_code} {detail}"
                             )
 
+                        tree_digest = resp.headers.get("ETag")
                         adapter = _IteratorReader(
                             resp.iter_bytes(chunk_size=_SNAPSHOT_CHUNK_SIZE)
                         )
@@ -1643,16 +1649,10 @@ echo "Session cleanup complete"
                                 tenant_id=tenant_id,
                             )
                         )
-
-                        logger.info(
-                            "Created snapshot for sandbox %s session %s (size=%s bytes).",
-                            sandbox_id,
-                            session_id,
-                            size_bytes,
-                        )
                         return SnapshotResult(
                             storage_path=storage_path,
                             size_bytes=size_bytes,
+                            tree_digest=tree_digest,
                         )
             except httpx.TransportError as e:
                 last_exc = e

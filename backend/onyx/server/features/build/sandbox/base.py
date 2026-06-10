@@ -214,8 +214,15 @@ class SandboxManager(_ServeMixin, ABC):
         sandbox_id: UUID,
         session_id: UUID,
         tenant_id: str,
+        previous_digest: str | None = None,
     ) -> SnapshotResult | None:
         """Create a snapshot of a session's outputs and attachments directories.
+
+        ``previous_digest`` is the tree digest of the session's most recent
+        snapshot, if any. Backends that support it compute the current
+        workspace digest and, when it matches, skip re-archiving and return a
+        SnapshotResult with ``unchanged=True`` so the caller reuses the prior
+        snapshot.
 
         Captures session-specific user data:
         - sessions/$session_id/outputs/ (generated artifacts, web apps)

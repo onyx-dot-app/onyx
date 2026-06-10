@@ -1095,6 +1095,7 @@ echo "Session cleanup complete"
         sandbox_id: UUID,
         session_id: UUID,
         tenant_id: str,
+        previous_digest: str | None = None,
     ) -> SnapshotResult | None:
         container = self._get_container(sandbox_id)
         if container is None:
@@ -1117,6 +1118,10 @@ echo "Session cleanup complete"
             return None
         if "OK" not in probe.stdout_text:
             return None
+
+        tree_digest = self._session_tree_digest(container, session_path)
+        if tree_digest is not None and tree_digest == previous_digest:
+            return SnapshotResult(storage_path="", size_bytes=0, unchanged=True)
 
         # Stream tar bytes out of the container through FileStore.
         tar_cmd = [
@@ -1152,7 +1157,37 @@ echo "Session cleanup complete"
             session_id,
             size_bytes,
         )
-        return SnapshotResult(storage_path=storage_path, size_bytes=size_bytes)
+        return SnapshotResult(
+            storage_path=storage_path, size_bytes=size_bytes, tree_digest=tree_digest
+        )
+
+    def _session_tree_digest(
+        self, container: Container, session_path: str
+    ) -> str | None:
+        """Digest of the session's snapshotted tree (file path/size/mtime).
+
+        Mirrors the archived set (outputs/attachments/.opencode-data, minus
+        regenerable node_modules/.next), so an unchanged workspace yields the
+        same digest across sleep/wake -- tar -x preserves mtimes on restore.
+
+        Best-effort: this only feeds the skip-unchanged optimization, so any
+        failure returns None and the caller snapshots normally.
+        """
+        cmd = (
+            f"cd {session_path} && {{ "
+            "for d in outputs attachments .opencode-data; do "
+            '[ -d "$d" ] && find "$d" \\( -name node_modules -o -name .next \\) '
+            "-prune -o -type f -exec stat -c '%n %s %Y' {} + ; "
+            "done; } | LC_ALL=C sort | sha256sum | awk '{print $1}'"
+        )
+        try:
+            digest = run_in_container(
+                container, ["/bin/sh", "-c", cmd]
+            ).stdout_text.strip()
+        except ExecError as e:
+            logger.warning("snapshot digest failed for %s: %s", session_path, e)
+            return None
+        return digest or None
 
     def restore_snapshot(
         self,

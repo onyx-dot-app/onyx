@@ -11,17 +11,19 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import SNAPSHOT_KEEP_LAST_N
+from onyx.server.features.build.configs import SNAPSHOT_RETENTION_DAYS
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
 )
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 
-# Snapshot retention period in days
-SNAPSHOT_RETENTION_DAYS = 30
-
 # 100 minutes - snapshotting can take time
 TIMEOUT_SECONDS = 6000
+
+# Snapshot pruning is I/O-light; cap its runtime well under the beat cadence.
+SNAPSHOT_CLEANUP_TIMEOUT_SECONDS = 600
 
 
 @shared_task(
@@ -61,6 +63,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
         from onyx.db.enums import SandboxStatus
         from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
         from onyx.server.features.build.db.sandbox import get_idle_sandboxes
+        from onyx.server.features.build.db.sandbox import (
+            get_latest_snapshot_for_session,
+        )
         from onyx.server.features.build.db.sandbox import (
             update_sandbox_status__no_commit,
         )
@@ -107,16 +112,27 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                             task_logger.debug(
                                 f"Creating snapshot for session {session_id}"
                             )
-                            snapshot_result = sandbox_manager.create_snapshot(
-                                sandbox_id, session_id, tenant_id
+                            latest = get_latest_snapshot_for_session(
+                                db_session, session_id
                             )
-                            if snapshot_result:
-                                # Create DB record for the snapshot
+                            snapshot_result = sandbox_manager.create_snapshot(
+                                sandbox_id,
+                                session_id,
+                                tenant_id,
+                                previous_digest=latest.tree_digest if latest else None,
+                            )
+                            if snapshot_result and snapshot_result.unchanged:
+                                task_logger.debug(
+                                    f"Workspace unchanged for session {session_id}; "
+                                    f"reusing prior snapshot"
+                                )
+                            elif snapshot_result:
                                 create_snapshot__no_commit(
                                     db_session,
                                     session_id,
                                     snapshot_result.storage_path,
                                     snapshot_result.size_bytes,
+                                    tree_digest=snapshot_result.tree_digest,
                                 )
                                 task_logger.debug(
                                     f"Snapshot created for session {session_id}"
@@ -186,3 +202,76 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
             lock.release()
 
     task_logger.info("cleanup_idle_sandboxes_task completed")
+
+
+@shared_task(
+    name=OnyxCeleryTask.CLEANUP_OLD_SNAPSHOTS,
+    soft_time_limit=SNAPSHOT_CLEANUP_TIMEOUT_SECONDS,
+    bind=True,
+    ignore_result=True,
+)
+def cleanup_old_snapshots_task(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
+    """Prune expired/excess session snapshots from the file store and DB.
+
+    Enforces SNAPSHOT_RETENTION_DAYS + SNAPSHOT_KEEP_LAST_N (see
+    onyx.server.features.build.db.sandbox.get_prunable_snapshots). The most
+    recent snapshot per session is always retained so a workspace is never
+    orphaned. Blobs are deleted before their DB rows: if a blob delete fails,
+    the row is left in place and retried next cycle, so we never leak storage.
+    """
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    lock: RedisLock = redis_client.lock(
+        OnyxRedisLocks.CLEANUP_OLD_SNAPSHOTS_BEAT_LOCK,
+        timeout=SNAPSHOT_CLEANUP_TIMEOUT_SECONDS,
+    )
+
+    if not lock.acquire(blocking=False):
+        task_logger.info("cleanup_old_snapshots_task - lock not acquired, skipping")
+        return
+
+    try:
+        from onyx.file_store.file_store import get_default_file_store
+        from onyx.server.features.build.db.sandbox import get_prunable_snapshots
+        from onyx.server.features.build.sandbox.manager.snapshot_manager import (
+            SnapshotManager,
+        )
+
+        snapshot_manager = SnapshotManager(get_default_file_store())
+
+        with get_session_with_current_tenant() as db_session:
+            prunable = get_prunable_snapshots(
+                db_session,
+                retention_days=SNAPSHOT_RETENTION_DAYS,
+                keep_last_n=SNAPSHOT_KEEP_LAST_N,
+            )
+
+            if not prunable:
+                task_logger.debug("No snapshots to prune")
+                return
+
+            maybe_mark_tenant_active(tenant_id, caller="snapshot_cleanup")
+            task_logger.info(f"Pruning {len(prunable)} expired/excess snapshots")
+
+            deleted = 0
+            for snapshot in prunable:
+                try:
+                    snapshot_manager.delete_snapshot(snapshot.storage_path)
+                except Exception as e:
+                    task_logger.warning(
+                        f"Skipping snapshot {snapshot.id}; blob delete failed "
+                        f"(will retry next cycle): {e}"
+                    )
+                    continue
+                db_session.delete(snapshot)
+                deleted += 1
+
+            db_session.commit()
+            task_logger.info(f"Pruned {deleted} snapshots")
+
+    except Exception:
+        task_logger.exception("Error in cleanup_old_snapshots_task")
+        raise
+
+    finally:
+        if lock.owned():
+            lock.release()

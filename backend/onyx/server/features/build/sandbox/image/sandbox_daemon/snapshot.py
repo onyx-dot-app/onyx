@@ -4,6 +4,7 @@ The sidecar owns pod-local filesystem access. The api-server owns durable
 storage by streaming these tarballs into/out of the main Onyx FileStore.
 """
 
+import hashlib
 import logging
 import os
 import shutil
@@ -330,10 +331,57 @@ def _extract_snapshot_archive(archive_path: Path, session_path: Path) -> None:
                     with src, final_path.open("wb") as out_file:
                         shutil.copyfileobj(src, out_file)
                     os.chmod(final_path, (member.mode or 0o644) & 0o777)
+                    # Preserve mtime so compute_snapshot_digest stays stable
+                    # across sleep/wake and unchanged workspaces skip re-snapshot.
+                    os.utime(final_path, (member.mtime, member.mtime))
 
             _replace_snapshot_roots(session_path, staging_path, roots)
     except (tarfile.TarError, OSError) as e:
         raise SnapshotError(f"invalid snapshot archive: {e}") from e
+
+
+def compute_snapshot_digest(session_id: UUID) -> str | None:
+    """Return a stable digest of the snapshot tree, or None if nothing to snapshot.
+
+    The digest covers each archived regular file's session-relative path, size,
+    and integer mtime. tar stores mtimes at 1-second granularity and restore
+    re-applies them, so an unchanged workspace produces the same digest across
+    sleep/wake cycles -- letting the caller skip re-snapshotting identical state.
+    Generated dirs, symlinks, hardlinks and special files are excluded to match
+    what ``iter_snapshot_archive`` actually writes.
+    """
+    session_path = _safe_session_path(session_id, create=False)
+    dirs = _snapshot_dirs(session_path)
+    if not dirs:
+        return None
+
+    entries: list[tuple[str, int, int]] = []
+    for dirname in dirs:
+        root_path = session_path / dirname
+        for dirpath, dirnames, filenames in os.walk(root_path, followlinks=False):
+            current = Path(dirpath)
+            dirnames[:] = [
+                d
+                for d in dirnames
+                if not _is_excluded_snapshot_dir(
+                    (current / d).relative_to(session_path)
+                )
+            ]
+            for filename in filenames:
+                entry = current / filename
+                relative = entry.relative_to(session_path)
+                try:
+                    st = entry.lstat()
+                except OSError:
+                    continue
+                if _snapshot_entry_skip_reason(relative, st.st_mode, st.st_nlink):
+                    continue
+                entries.append((relative.as_posix(), st.st_size, int(st.st_mtime)))
+
+    hasher = hashlib.sha256()
+    for rel, size, mtime in sorted(entries):
+        hasher.update(f"{rel}\0{size}\0{mtime}\0".encode("utf-8"))
+    return hasher.hexdigest()
 
 
 def has_snapshot_content(session_id: UUID) -> bool:
