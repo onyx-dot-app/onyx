@@ -7,6 +7,7 @@ import secrets
 import string
 import uuid
 from collections.abc import AsyncGenerator
+from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -90,18 +91,10 @@ from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
-from onyx.configs.app_configs import PASSWORD_MAX_LENGTH
-from onyx.configs.app_configs import PASSWORD_MIN_LENGTH
-from onyx.configs.app_configs import PASSWORD_REQUIRE_DIGIT
-from onyx.configs.app_configs import PASSWORD_REQUIRE_LOWERCASE
-from onyx.configs.app_configs import PASSWORD_REQUIRE_SPECIAL_CHAR
-from onyx.configs.app_configs import PASSWORD_REQUIRE_UPPERCASE
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
-from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
@@ -140,6 +133,7 @@ from onyx.error_handling.exceptions import onyx_error_to_json_response
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import retrieve_ws_token_data
+from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
@@ -295,7 +289,12 @@ def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
             verify_email_is_invited(email)
 
 
-def verify_email_domain(email: str, *, is_registration: bool = False) -> None:
+def verify_email_domain(
+    email: str,
+    *,
+    valid_email_domains: Sequence[str],
+    is_registration: bool = False,
+) -> None:
     if email.count("@") != 1:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email is not valid")
 
@@ -333,8 +332,8 @@ def verify_email_domain(email: str, *, is_registration: bool = False) -> None:
         )
 
     # Check domain whitelist if configured
-    if VALID_EMAIL_DOMAINS:
-        if domain not in VALID_EMAIL_DOMAINS:
+    if valid_email_domains:
+        if domain not in valid_email_domains:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email domain is not valid")
 
 
@@ -511,8 +510,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     ) -> User:
         # Check for disposable emails FIRST so obvious throwaway domains are
         # rejected before hitting Google's siteverify API. Cheap local check.
+        security_settings = get_security_settings()
         try:
-            verify_email_domain(user_create.email, is_registration=True)
+            verify_email_domain(
+                user_create.email,
+                valid_email_domains=security_settings.valid_email_domains,
+                is_registration=True,
+            )
         except OnyxError as e:
             # Log blocked disposable email attempts
             if "Disposable email" in e.detail:
@@ -771,28 +775,34 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def validate_password(  # ty: ignore[invalid-method-override]
         self, password: str, _: schemas.UC | models.UP
     ) -> None:
-        # Validate password according to configurable security policy (defined via environment variables)
-        if len(password) < PASSWORD_MIN_LENGTH:
+        settings = get_security_settings()
+        if len(password) < settings.password_min_length:
             raise exceptions.InvalidPasswordException(
-                reason=f"Password must be at least {PASSWORD_MIN_LENGTH} characters long."
+                reason=f"Password must be at least {settings.password_min_length} characters long."
             )
-        if len(password) > PASSWORD_MAX_LENGTH:
+        if len(password) > settings.password_max_length:
             raise exceptions.InvalidPasswordException(
-                reason=f"Password must not exceed {PASSWORD_MAX_LENGTH} characters."
+                reason=f"Password must not exceed {settings.password_max_length} characters."
             )
-        if PASSWORD_REQUIRE_UPPERCASE and not any(char.isupper() for char in password):
+        if settings.password_require_uppercase and not any(
+            char.isupper() for char in password
+        ):
             raise exceptions.InvalidPasswordException(
                 reason="Password must contain at least one uppercase letter."
             )
-        if PASSWORD_REQUIRE_LOWERCASE and not any(char.islower() for char in password):
+        if settings.password_require_lowercase and not any(
+            char.islower() for char in password
+        ):
             raise exceptions.InvalidPasswordException(
                 reason="Password must contain at least one lowercase letter."
             )
-        if PASSWORD_REQUIRE_DIGIT and not any(char.isdigit() for char in password):
+        if settings.password_require_digit and not any(
+            char.isdigit() for char in password
+        ):
             raise exceptions.InvalidPasswordException(
                 reason="Password must contain at least one number."
             )
-        if PASSWORD_REQUIRE_SPECIAL_CHAR and not any(
+        if settings.password_require_special_char and not any(
             char in PASSWORD_SPECIAL_CHARS for char in password
         ):
             raise exceptions.InvalidPasswordException(
@@ -837,7 +847,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
             verify_email_in_whitelist(account_email, tenant_id)
-            verify_email_domain(account_email)
+            oauth_security_settings = get_security_settings()
+            verify_email_domain(
+                account_email,
+                valid_email_domains=oauth_security_settings.valid_email_domains,
+            )
 
             # NOTE(rkuo): If this UserManager is instantiated per connection
             # should we even be doing this here?
@@ -883,7 +897,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # OAuth-created accounts are not subject to the dotted-Gmail
                     # signup block: the provider vouches for one canonical email
                     # per account, so dot-alias abuse isn't possible here.
-                    verify_email_domain(account_email)
+                    verify_email_domain(
+                        account_email,
+                        valid_email_domains=oauth_security_settings.valid_email_domains,
+                    )
 
                     # Lock + check on the same session that does the insert.
                     await self.user_db.session.run_sync(
@@ -921,7 +938,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
-            if expires_at and TRACK_EXTERNAL_IDP_EXPIRY:
+            track_external_idp_expiry = (
+                oauth_security_settings.track_external_idp_expiry
+            )
+            if expires_at and track_external_idp_expiry:
                 oidc_expiry = datetime.fromtimestamp(expires_at, tz=timezone.utc)
                 await self.user_db.update(
                     user, update_dict={"oidc_expiry": oidc_expiry}
@@ -972,9 +992,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 user = await self.user_db.get(user.id)
                 assert user is not None
 
-            # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
-            # otherwise, the oidc expiry will always be old, and the user will never be able to login
-            if user.oidc_expiry is not None and not TRACK_EXTERNAL_IDP_EXPIRY:
+            # this is needed if an organization toggles track_external_idp_expiry from
+            # true to false; otherwise the oidc expiry will always be old and the user
+            # will never be able to login.
+            if user.oidc_expiry is not None and not track_external_idp_expiry:
                 await self.user_db.update(user, {"oidc_expiry": None})
                 user.oidc_expiry = None  # ty: ignore[invalid-assignment]
             remove_user_from_invited_users(user.email)
@@ -1160,7 +1181,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token: str,
         request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
-        verify_email_domain(user.email)
+        verify_email_domain(
+            user.email,
+            valid_email_domains=get_security_settings().valid_email_domains,
+        )
 
         logger.notice(
             "Verification requested for user %s. Verification token: %s", user.id, token
@@ -1659,7 +1683,7 @@ def _extract_email_from_jwt(payload: dict[str, Any]) -> str | None:
 async def _sync_jwt_oidc_expiry(
     user_manager: UserManager, user: User, payload: dict[str, Any]
 ) -> None:
-    if TRACK_EXTERNAL_IDP_EXPIRY:
+    if get_security_settings().track_external_idp_expiry:
         expires_at = payload.get("exp")
         if expires_at is None:
             return
@@ -1696,7 +1720,10 @@ async def _get_or_create_user_from_jwt(
 
     # Enforce the same allowlist/domain policies as other auth flows
     verify_email_is_invited(email)
-    verify_email_domain(email)
+    verify_email_domain(
+        email,
+        valid_email_domains=get_security_settings().valid_email_domains,
+    )
 
     user_db: SQLAlchemyUserAdminDB[User, uuid.UUID] = SQLAlchemyUserAdminDB(
         async_db_session, User, OAuthAccount

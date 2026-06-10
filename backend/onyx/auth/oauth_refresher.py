@@ -17,9 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import OPENID_CONFIG_URL
-from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.db.models import OAuthAccount
 from onyx.db.models import User
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -252,8 +252,7 @@ async def refresh_oauth_token(
             if new_expires_at:
                 updated_data["expires_at"] = new_expires_at
 
-                # Update oidc_expiry in user model if we're tracking it
-                if TRACK_EXTERNAL_IDP_EXPIRY:
+                if get_security_settings().track_external_idp_expiry:
                     oidc_expiry = datetime.fromtimestamp(
                         new_expires_at, tz=timezone.utc
                     )

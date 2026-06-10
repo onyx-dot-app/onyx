@@ -11,6 +11,7 @@ import {
 
 import {
   createTurn,
+  fetchActiveTurn,
   fetchTurnEventStream,
   interruptMessageStream,
   processSSEStream,
@@ -36,6 +37,13 @@ import {
   subagentNameFromToolCall,
   cleanTaskOutput,
 } from "@/app/craft/utils/subagentRouting";
+
+const INTERRUPT_RECONCILE_INTERVAL_MS = 1000;
+const INTERRUPT_RECONCILE_MAX_ATTEMPTS = 30;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function promptFromToolCall(toolCall: ToolCallState): string {
   const prompt = toolCall.command || toolCall.description || "";
@@ -118,6 +126,9 @@ export function useBuildStreaming() {
   const updateToolCallStreamItem = useBuildSessionStore(
     (state) => state.updateToolCallStreamItem
   );
+  const cancelLatestInFlightToolCallStreamItem = useBuildSessionStore(
+    (state) => state.cancelLatestInFlightToolCallStreamItem
+  );
   const upsertTodoListStreamItem = useBuildSessionStore(
     (state) => state.upsertTodoListStreamItem
   );
@@ -132,6 +143,91 @@ export function useBuildStreaming() {
   );
   const openMarkdownPreview = useBuildSessionStore(
     (state) => state.openMarkdownPreview
+  );
+
+  const reconcileInterruptedTurn = useCallback(
+    async (
+      sessionId: string,
+      interruptedTurnId: string | null
+    ): Promise<void> => {
+      let reconciledTurnId = interruptedTurnId;
+      for (
+        let attempt = 0;
+        attempt < INTERRUPT_RECONCILE_MAX_ATTEMPTS;
+        attempt++
+      ) {
+        await sleep(INTERRUPT_RECONCILE_INTERVAL_MS);
+
+        const currentSession = useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId);
+        if (
+          !currentSession ||
+          currentSession.status !== "running" ||
+          (reconciledTurnId &&
+            currentSession.activeTurnId &&
+            currentSession.activeTurnId !== reconciledTurnId)
+        ) {
+          return;
+        }
+
+        let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
+        try {
+          activeTurn = await fetchActiveTurn(sessionId);
+        } catch (err) {
+          console.warn(
+            "[Streaming] Failed to reconcile interrupted turn:",
+            err
+          );
+          continue;
+        }
+
+        if (activeTurn) {
+          if (reconciledTurnId === null) {
+            reconciledTurnId = activeTurn.turn_id;
+            continue;
+          }
+          if (activeTurn.turn_id === reconciledTurnId) {
+            continue;
+          }
+          return;
+        }
+
+        updateSessionData(sessionId, {
+          status: "active",
+          isInterrupting: false,
+          activeTurnId: null,
+          activeTurnIndex: null,
+          activeTurnLocalOwner: false,
+        });
+        await useBuildSessionStore
+          .getState()
+          .loadSession(sessionId, { force: true })
+          .catch((err) =>
+            console.warn(
+              "[Streaming] Failed to reload reconciled interrupted turn:",
+              err
+            )
+          );
+        return;
+      }
+
+      const currentSession = useBuildSessionStore
+        .getState()
+        .sessions.get(sessionId);
+      if (
+        currentSession?.status !== "running" ||
+        (reconciledTurnId &&
+          currentSession.activeTurnId &&
+          currentSession.activeTurnId !== reconciledTurnId)
+      ) {
+        return;
+      }
+
+      console.warn("[Streaming] Interrupted turn reconciliation timed out");
+      updateSessionData(sessionId, { isInterrupting: false });
+    },
+    [updateSessionData]
   );
 
   // Subagent routing actions
@@ -390,7 +486,13 @@ export function useBuildStreaming() {
               break;
             }
 
-            const startedToolCall = toolCallStateFromStart(parsed);
+            const isInterrupting = useBuildSessionStore
+              .getState()
+              .sessions.get(sessionId)?.isInterrupting;
+            const startedToolCall = {
+              ...toolCallStateFromStart(parsed),
+              status: isInterrupting ? "cancelled" : "pending",
+            } satisfies ToolCallState;
 
             // Parent `task` start packets can carry the spawned child session
             // before any progress packet arrives. Seed immediately so the task
@@ -513,8 +615,15 @@ export function useBuildStreaming() {
               break;
             }
 
+            const status =
+              useBuildSessionStore.getState().sessions.get(sessionId)
+                ?.isInterrupting &&
+              (parsed.status === "pending" || parsed.status === "in_progress")
+                ? "cancelled"
+                : parsed.status;
+
             updateToolCallStreamItem(sessionId, parsed.toolCallId, {
-              status: parsed.status,
+              status,
               title: parsed.title,
               description: parsed.description,
               command: parsed.command,
@@ -574,6 +683,12 @@ export function useBuildStreaming() {
 
           case "prompt_response": {
             finalizeStreaming();
+            if (
+              useBuildSessionStore.getState().sessions.get(sessionId)
+                ?.isInterrupting
+            ) {
+              cancelLatestInFlightToolCallStreamItem(sessionId);
+            }
 
             const session = useBuildSessionStore
               .getState()
@@ -644,6 +759,7 @@ export function useBuildStreaming() {
       updateLastStreamingText,
       updateLastStreamingThinking,
       updateToolCallStreamItem,
+      cancelLatestInFlightToolCallStreamItem,
       upsertTodoListStreamItem,
       addArtifactToSession,
       appendMessageToSession,
@@ -680,7 +796,10 @@ export function useBuildStreaming() {
 
       updateSessionData(sessionId, {
         status: "running",
-        isInterrupting: false,
+        isInterrupting:
+          existingSession?.activeTurnId === turnId
+            ? existingSession.isInterrupting
+            : false,
         activeTurnId: turnId,
       });
       if (existingSession?.activeTurnId !== turnId) {
@@ -761,6 +880,7 @@ export function useBuildStreaming() {
           ) {
             clearTurnIfCurrent({
               status: "active",
+              isInterrupting: false,
             });
           }
           const settledStatus = useBuildSessionStore
@@ -869,15 +989,22 @@ export function useBuildStreaming() {
         return;
       }
 
+      const interruptedTurnId = session.activeTurnId;
       updateSessionData(sessionId, { isInterrupting: true });
+      cancelLatestInFlightToolCallStreamItem(sessionId);
       try {
         await interruptMessageStream(sessionId);
+        void reconcileInterruptedTurn(sessionId, interruptedTurnId);
       } catch (err) {
         console.error("[Streaming] Failed to interrupt:", err);
         updateSessionData(sessionId, { isInterrupting: false });
       }
     },
-    [updateSessionData]
+    [
+      reconcileInterruptedTurn,
+      updateSessionData,
+      cancelLatestInFlightToolCallStreamItem,
+    ]
   );
 
   const streamScheduledRunEvents = useCallback(

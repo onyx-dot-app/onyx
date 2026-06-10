@@ -140,7 +140,9 @@ class TestDisposableEmailValidation:
 
         # Verify domain validation was called
         mock_verify_domain.assert_called_once_with(
-            mock_user_create.email, is_registration=True
+            mock_user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
         )
 
 
@@ -540,7 +542,9 @@ class TestCaseInsensitiveEmailMatching:
 
         # Verify flow
         mock_verify_domain.assert_called_once_with(
-            user_create.email, is_registration=True
+            user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
         )
 
     @patch("onyx.auth.users.is_disposable_email")
@@ -592,7 +596,9 @@ class TestCaseInsensitiveEmailMatching:
 
         # Verify flow
         mock_verify_domain.assert_called_once_with(
-            mock_user_create.email, is_registration=True
+            mock_user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
         )
         mock_verify_invited.assert_called_once()  # Existing tenant = invite needed
 

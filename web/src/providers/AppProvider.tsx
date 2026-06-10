@@ -20,16 +20,50 @@
  * 6. **SidebarStateProvider** - Sidebar open/closed state
  * 7. **QueryControllerProvider** - Search/Chat mode + query lifecycle
  */
+
 "use client";
 
+import { useState } from "react";
+import Cookies from "js-cookie";
 import { UserProvider } from "@/providers/UserProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
 import { SettingsProvider } from "@/providers/SettingsProvider";
 import { ModalProvider } from "@/components/context/ModalContext";
-import { StateProvider as SidebarStateProvider } from "@/layouts/sidebar-layouts";
+import { SidebarLayouts } from "@opal/layouts";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
 import ToastProvider from "@/providers/ToastProvider";
+
+interface SidebarPersistenceProviderProps {
+  children: React.ReactNode;
+}
+
+function SidebarPersistenceProvider({
+  children,
+}: SidebarPersistenceProviderProps) {
+  const [defaultFolded] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return (
+      Cookies.get("sidebarIsToggled") === "true" ||
+      localStorage.getItem("sidebarIsToggled") === "true"
+    );
+  });
+
+  function handleFoldedChange(folded: boolean) {
+    const value = folded.toString();
+    Cookies.set("sidebarIsToggled", value, { expires: 365 });
+    localStorage.setItem("sidebarIsToggled", value);
+  }
+
+  return (
+    <SidebarLayouts.StateProvider
+      defaultFolded={defaultFolded}
+      onFoldedChange={handleFoldedChange}
+    >
+      {children}
+    </SidebarLayouts.StateProvider>
+  );
+}
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -42,11 +76,11 @@ export default function AppProvider({ children }: AppProviderProps) {
         <AppBackgroundProvider>
           <ProviderContextProvider>
             <ModalProvider>
-              <SidebarStateProvider>
+              <SidebarPersistenceProvider>
                 <QueryControllerProvider>
                   <ToastProvider>{children}</ToastProvider>
                 </QueryControllerProvider>
-              </SidebarStateProvider>
+              </SidebarPersistenceProvider>
             </ModalProvider>
           </ProviderContextProvider>
         </AppBackgroundProvider>

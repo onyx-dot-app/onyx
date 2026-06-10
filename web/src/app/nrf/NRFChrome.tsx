@@ -17,7 +17,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
-import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 
 const footerMarkdownComponents = {

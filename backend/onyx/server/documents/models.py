@@ -12,7 +12,6 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
-from onyx.configs.app_configs import MASK_CREDENTIAL_PREFIX
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
@@ -148,17 +147,18 @@ class CredentialSnapshot(CredentialBase):
     time_updated: datetime
 
     @classmethod
-    def from_credential_db_model(cls, credential: Credential) -> "CredentialSnapshot":
+    def from_credential_db_model(
+        cls,
+        credential: Credential,
+        *,
+        mask_credential_prefix: bool,
+    ) -> "CredentialSnapshot":
         # Get the credential_json value with appropriate masking
         if credential.credential_json is None:
             credential_json_value: dict[str, Any] = {}
-        elif MASK_CREDENTIAL_PREFIX:
-            credential_json_value = credential.credential_json.get_value(
-                apply_mask=True
-            )
         else:
             credential_json_value = credential.credential_json.get_value(
-                apply_mask=False
+                apply_mask=mask_credential_prefix
             )
 
         return CredentialSnapshot(
@@ -456,6 +456,8 @@ class CCPairFullInfo(BaseModel):
         num_docs_indexed: int,  # not ideal, but this must be computed separately
         is_editable_for_current_user: bool,
         indexing: bool,
+        *,
+        mask_credential_prefix: bool,
         last_successful_index_time: datetime | None = None,
         last_permission_sync_attempt_status: PermissionSyncStatus | None = None,
         permission_syncing: bool = False,
@@ -497,7 +499,8 @@ class CCPairFullInfo(BaseModel):
                 credential_ids=[cc_pair_model.credential_id],
             ),
             credential=CredentialSnapshot.from_credential_db_model(
-                cc_pair_model.credential
+                cc_pair_model.credential,
+                mask_credential_prefix=mask_credential_prefix,
             ),
             number_of_index_attempts=number_of_index_attempts,
             last_index_attempt_status=last_indexing_status,

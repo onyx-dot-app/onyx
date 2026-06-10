@@ -102,6 +102,10 @@ def _is_require_permission_dependency(fn: object) -> bool:
     return bool(getattr(fn, "_is_require_permission", False))
 
 
+def _is_websocket_auth_dependency(fn: object) -> bool:
+    return bool(getattr(fn, "_is_websocket_auth_dependency", False))
+
+
 def check_router_auth(
     application: FastAPI,
     public_endpoint_specs: list[tuple[str, set[str]]] = PUBLIC_ENDPOINT_SPECS,
@@ -145,6 +149,7 @@ def check_router_auth(
                     or depends_fn == current_cloud_superuser
                     or depends_fn == verify_scim_token
                     or _is_require_permission_dependency(depends_fn)
+                    or _is_websocket_auth_dependency(depends_fn)
                 ):
                     found_auth = True
                     break

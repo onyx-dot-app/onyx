@@ -57,7 +57,7 @@ spec:
             {{- toYaml .Values.mcpServer.securityContext | nindent 12 }}
           image: "{{ .Values.mcpServer.image.repository }}:{{ .Values.mcpServer.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
-          command: ["python", "onyx/mcp_server_main.py"]
+          command: [{{ include "onyx.customCACerts.commandPrefix" . }}"python", "onyx/mcp_server_main.py"]
           ports:
             - name: mcp-server-port
               containerPort: {{ .Values.mcpServer.containerPorts.server }}
@@ -103,16 +103,17 @@ spec:
             - name: API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS
               value: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort }}"
             {{- include "onyx.envSecrets" . | nindent 12 }}
+            {{- with include "onyx.customCACerts.env" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
             {{- with .Values.mcpServer.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- with .Values.mcpServer.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
+          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.mcpServer.volumeMounts) }}
+          {{- . | nindent 10 }}
           {{- end }}
-      {{- with .Values.mcpServer.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
+      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.mcpServer.volumes) }}
+      {{- . | nindent 6 }}
       {{- end }}
 {{- end }}
 

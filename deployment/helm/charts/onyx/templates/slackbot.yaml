@@ -56,7 +56,7 @@ spec:
             {{- toYaml .Values.slackbot.securityContext | nindent 12 }}
           image: "{{ .Values.slackbot.image.repository }}:{{ .Values.slackbot.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
-          command: ["python", "onyx/onyxbot/slack/listener.py"]
+          command: [{{ include "onyx.customCACerts.commandPrefix" . }}"python", "onyx/onyxbot/slack/listener.py"]
           resources:
             {{- toYaml .Values.slackbot.resources | nindent 12 }}
           envFrom:
@@ -68,15 +68,16 @@ spec:
             {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- with include "onyx.customCACerts.env" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
             {{- with .Values.slackbot.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- with .Values.slackbot.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
+          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.slackbot.volumeMounts) }}
+          {{- . | nindent 10 }}
           {{- end }}
-      {{- with .Values.slackbot.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
+      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.slackbot.volumes) }}
+      {{- . | nindent 6 }}
       {{- end }}
 {{- end }}

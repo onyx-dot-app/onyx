@@ -95,6 +95,9 @@ from onyx.server.manage.llm.models import OpenRouterModelsRequest
 from onyx.server.manage.llm.models import SyncModelEntry
 from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
+from onyx.server.manage.llm.provider_cache import cache_provider_listing
+from onyx.server.manage.llm.provider_cache import get_cached_provider_listing
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.manage.llm.utils import generate_bedrock_display_name
 from onyx.server.manage.llm.utils import generate_ollama_display_name
 from onyx.server.manage.llm.utils import infer_vision_support
@@ -184,6 +187,7 @@ def _sync_fetched_models(
                 source_label,
                 provider_name,
             )
+        invalidate_provider_listing_cache()
     except ValueError as e:
         logger.warning("Failed to sync %s models to DB: %s", source_label, e)
 
@@ -619,6 +623,10 @@ def put_llm_provider(
     except ValueError as e:
         logger.exception("Failed to upsert LLM Provider")
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
+    finally:
+        # upsert_llm_provider and sync_auto_mode_models commit internally, so a
+        # post-commit failure must still drop cached listings
+        invalidate_provider_listing_cache()
 
 
 @admin_router.delete("/provider/{provider_id}")
@@ -642,6 +650,8 @@ def delete_llm_provider(
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
+    invalidate_provider_listing_cache()
+
 
 @admin_router.post("/default")
 def set_provider_as_default(
@@ -654,6 +664,7 @@ def set_provider_as_default(
         model_name=default_model_request.model_name,
         db_session=db_session,
     )
+    invalidate_provider_listing_cache()
 
 
 @admin_router.post("/default-vision")
@@ -667,6 +678,7 @@ def set_provider_as_default_vision(
         vision_model=default_model.model_name,
         db_session=db_session,
     )
+    invalidate_provider_listing_cache()
 
 
 @admin_router.get("/auto-config")
@@ -749,9 +761,16 @@ def list_llm_provider_basics(
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch user-accessible LLM providers")
 
-    all_providers = fetch_existing_llm_providers(db_session, [])
-    user_group_ids = fetch_user_group_ids(db_session, user)
     is_admin = user.role == UserRole.ADMIN
+    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
+
+    cache_lookup = get_cached_provider_listing(
+        persona_id=None, is_admin=is_admin, user_group_ids=user_group_ids
+    )
+    if cache_lookup.response is not None:
+        return cache_lookup.response
+
+    all_providers = fetch_existing_llm_providers(db_session, [])
 
     accessible_providers = []
 
@@ -775,7 +794,7 @@ def list_llm_provider_basics(
         format(duration, ".2f"),
     )
 
-    return LLMProviderResponse[LLMProviderDescriptor].from_models(
+    response = LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=accessible_providers,
         default_text=DefaultModel.from_model_config(
             fetch_default_llm_model(db_session)
@@ -784,6 +803,14 @@ def list_llm_provider_basics(
             fetch_default_vision_model(db_session)
         ),
     )
+    cache_provider_listing(
+        persona_id=None,
+        is_admin=is_admin,
+        user_group_ids=user_group_ids,
+        response=response,
+        version=cache_lookup.version,
+    )
+    return response
 
 
 def get_valid_model_names_for_persona(
@@ -878,10 +905,17 @@ def list_llm_providers_for_persona(
         )
 
     is_admin = user.role == UserRole.ADMIN
+    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
+
+    cache_lookup = get_cached_provider_listing(
+        persona_id=persona_id, is_admin=is_admin, user_group_ids=user_group_ids
+    )
+    if cache_lookup.response is not None:
+        return cache_lookup.response
+
     all_providers = fetch_existing_llm_providers(
         db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
     )
-    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
     llm_provider_list: list[LLMProviderDescriptor] = []
 
@@ -923,11 +957,19 @@ def list_llm_providers_for_persona(
                 model_name=model_config.name,
             )
 
-    return LLMProviderResponse[LLMProviderDescriptor].from_models(
+    response = LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=llm_provider_list,
         default_text=default_text,
         default_vision=default_vision,
     )
+    cache_provider_listing(
+        persona_id=persona_id,
+        is_admin=is_admin,
+        user_group_ids=user_group_ids,
+        response=response,
+        version=cache_lookup.version,
+    )
+    return response
 
 
 @admin_router.get("/provider-contextual-cost")

@@ -299,6 +299,52 @@ class TestLoadChatFileLazy:
         assert loaded.content == b"sentinel-bytes"
         assert read_counter.hits_for(file_id) == 1
 
+    def test_deleted_file_yields_empty_content(
+        self,
+        read_counter: _ReadCounter,  # noqa: ARG002 — keeps store fixtures live
+        db_session: Session,
+    ) -> None:
+        """A file referenced in chat history but deleted from the file store
+        (user-file deletion doesn't scrub chat-message ``files`` references)
+        must degrade to empty content on ``.content`` access — not raise and
+        kill the send-message flow."""
+        file_id = _write_file(b"doomed-bytes", file_type="image/png")
+
+        loaded = load_chat_file(
+            {"id": file_id, "type": ChatFileType.IMAGE, "name": "gone.png"},
+            db_session,
+        )
+
+        # Delete the underlying file after construction but before the lazy
+        # bytes read — simulates user-file deletion racing chat history use.
+        get_default_file_store().delete_file(file_id)
+
+        assert loaded.content == b""
+
+    def test_transient_read_error_yields_empty_content(
+        self,
+        read_counter: _ReadCounter,  # noqa: ARG002 — keeps store fixtures live
+        file_cleanup: list[str],
+        db_session: Session,
+    ) -> None:
+        """Non-not-found failures (e.g. transient object-store errors) must
+        also degrade to empty content rather than raise mid-LLM-flow — the
+        send-message request must never die on a history-file read."""
+        file_id = _write_file(b"unreachable-bytes", file_type="image/png")
+        file_cleanup.append(file_id)
+
+        loaded = load_chat_file(
+            {"id": file_id, "type": ChatFileType.IMAGE, "name": "flaky.png"},
+            db_session,
+        )
+
+        with patch.object(
+            file_store_module.S3BackedFileStore,
+            "read_file",
+            side_effect=ConnectionError("simulated transient store failure"),
+        ):
+            assert loaded.content == b""
+
 
 class TestLoadAllChatFilesLazy:
     def test_returns_lazy_files_for_history(

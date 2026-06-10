@@ -192,7 +192,22 @@ fi
 set -e
 cd {session_path}/outputs/web
 {install_check}
-export WEBAPP_ASSET_PREFIX="/api/build/sessions/$(basename {session_path})/webapp"
+export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/$(basename {session_path})/webapp"
+if grep -q "WEBAPP_ASSET_PREFIX" next.config.ts 2>/dev/null; then
+    cat > next.config.ts <<'EOF'
+import type {{ NextConfig }} from "next";
+
+const webappBasePath = process.env.ONYX_WEBAPP_BASE_PATH || undefined;
+
+const nextConfig: NextConfig = {{
+  ...(webappBasePath
+    ? {{ basePath: webappBasePath, assetPrefix: webappBasePath }}
+    : {{}}),
+}};
+
+export default nextConfig;
+EOF
+fi
 echo "Starting Next.js dev server on port {nextjs_port}..."
 nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!

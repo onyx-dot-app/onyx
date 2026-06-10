@@ -1012,9 +1012,9 @@ prometheus-client==0.23.1 \
     # via
     #   onyx
     #   prometheus-fastapi-instrumentator
-prometheus-fastapi-instrumentator==7.1.0 \
-    --hash=sha256:978130f3c0bb7b8ebcc90d35516a6fe13e02d2eb358c8f83887cdef7020c31e9 \
-    --hash=sha256:be7cd61eeea4e5912aeccb4261c6631b3f227d8924542d79eaf5af3f439cbe5e
+prometheus-fastapi-instrumentator==8.0.0 \
+    --hash=sha256:c31ed192db077e75467b28b2fe5055362517f53369b798cb8dac9ff85f3f1c38 \
+    --hash=sha256:e3c967c402124dfe81cf5aad35208d9f96db5452c6cb752350d9358ca0a96198
     # via onyx
 prompt-toolkit==3.0.52 \
     --hash=sha256:28cde192929c8e7321de85de1ddbe736f1375148b02f2e17edd840042b1be855 \
@@ -1489,9 +1489,9 @@ sniffio==1.3.1 \
     # via
     #   anyio
     #   openai
-starlette==0.49.3 \
-    --hash=sha256:1c14546f299b5901a1ea0e34410575bc33bbd741377a10484a54445588d00284 \
-    --hash=sha256:b579b99715fdc2980cf88c8ec96d3bf1ce16f5a8051a7c2b84ef9b1cdecaea2f
+starlette==1.0.1 \
+    --hash=sha256:512399c5f1de7fac99c88572212ded9ddeddef2fb32afa82d724000e88b38f4f \
+    --hash=sha256:7c0e69b2ee1c848bd54669d908500117a3ee13de603a21427e5c6fc1adf98dcd
     # via
     #   fastapi
     #   prometheus-fastapi-instrumentator
