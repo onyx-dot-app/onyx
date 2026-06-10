@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import { Text, EmptyMessageCard, Divider } from "@opal/components";
@@ -39,7 +39,7 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
   // Drives the relative bar widths in the breakdown.
   const maxRowCost = rows.reduce(
     (max, row) => Math.max(max, row.cost_cents),
-    0
+    0,
   );
   const hasCache = rows.some((row) => row.cache_read_tokens > 0);
 
@@ -101,7 +101,7 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
 
                 <Text font="secondary-body" color="text-01">
                   {`${formatTokens(row.input_tokens)} in · ${formatTokens(
-                    row.output_tokens
+                    row.output_tokens,
                   )} out${
                     hasCache
                       ? ` · ${formatTokens(row.cache_read_tokens)} cache`
@@ -184,7 +184,7 @@ function BudgetSection({
   budgetRemainingCents,
   budgetPeriodHours,
 }: BudgetSectionProps) {
-  // budget_* are null until P5 enforcement ships; show a graceful empty state.
+  // budget_* are null when the user has no cost limit; show a graceful empty state.
   const hasBudget = budgetCents !== null;
   const remaining = budgetRemainingCents ?? 0;
   const spent = hasBudget ? Math.max(0, budgetCents - remaining) : 0;
@@ -215,7 +215,9 @@ function BudgetSection({
               </Text>
               <Text font="secondary-body" color="text-01">
                 {`of ${formatDollars(budgetCents)}${
-                  budgetPeriodHours ? ` per ${formatPeriod(budgetPeriodHours)}` : ""
+                  budgetPeriodHours
+                    ? ` per ${formatPeriod(budgetPeriodHours)}`
+                    : ""
                 }`}
               </Text>
             </Section>
@@ -225,7 +227,7 @@ function BudgetSection({
                   "h-full rounded-full",
                   usedFraction >= 1
                     ? "bg-status-error-05"
-                    : "bg-theme-primary-05"
+                    : "bg-theme-primary-05",
                 )}
                 style={{ width: `${usedFraction * 100}%` }}
               />
@@ -244,6 +246,10 @@ function BudgetSection({
 export default function UsageSettings() {
   const [days, setDays] = useState<string>(String(DEFAULT_DAYS));
   const { data, error, isLoading } = useUserUsage(Number(days));
+
+  useEffect(() => {
+    if (error) console.error("Failed to load usage", error);
+  }, [error]);
 
   return (
     <Section gap={2}>
