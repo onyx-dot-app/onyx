@@ -499,10 +499,6 @@ interface AppChromeProps {
 
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
-  const setRight = useCallback<(panel: ReactNode) => void>(
-    (panel) => setRightPanel(panel),
-    []
-  );
 
   const appFocus = useAppFocus();
   const { hasBackground, appBackgroundUrl } = useAppBackground();
@@ -550,7 +546,7 @@ export default function AppChrome({ children }: AppChromeProps) {
   }, []);
 
   return (
-    <RootLayoutRightPanelSlotContext.Provider value={setRight}>
+    <RootLayoutRightPanelSlotContext.Provider value={setRightPanel}>
       <RootLayout.App
         data-main-container
         onMouseDown={handleMouseDown}
