@@ -26,6 +26,8 @@ output "cluster_security_group_id" {
   value       = module.eks.cluster_security_group_id
 }
 
+# Re-exported from the upstream eks module so the craft_sandbox module can
+# trust-scope its IRSA role to the cluster's OIDC provider.
 output "oidc_provider_arn" {
   description = "EKS OIDC provider ARN (for IRSA roles)"
   value       = module.eks.oidc_provider_arn
