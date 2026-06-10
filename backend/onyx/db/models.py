@@ -5375,8 +5375,10 @@ class UserUsage(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
+    # No index=True: uq_user_usage_dims leads with user_id, so Postgres uses it
+    # for user-only lookups.
     user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
     )
 
     window_start: Mapped[datetime.datetime] = mapped_column(
@@ -5427,8 +5429,13 @@ class ModelCostOverride(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # litellm-style model name (e.g. "gpt-4o"); one override per model.
-    model: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    # litellm-style model name (e.g. "gpt-4o").
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    # Empty string (not NULL) for a provider-agnostic override, so the unique key
+    # below works on every Postgres version without NULLS NOT DISTINCT (PG15+).
+    provider: Mapped[str] = mapped_column(
+        String, nullable=False, default="", server_default=""
+    )
 
     # Rates in USD per million tokens.
     input_cost_per_mtok: Mapped[float] = mapped_column(Float, nullable=False)
@@ -5438,6 +5445,13 @@ class ModelCostOverride(Base):
 
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        # provider+model so the same model can be priced per provider.
+        UniqueConstraint(
+            "provider", "model", name="uq_model_cost_override_provider_model"
+        ),
     )
 
 
