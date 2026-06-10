@@ -14,6 +14,7 @@ from collections.abc import Callable
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import Token
+from enum import Enum
 from typing import Final
 from uuid import UUID
 
@@ -1018,6 +1019,15 @@ def build_chat_turn(
 # Sentinel placed on the merged queue when a model thread finishes.
 _MODEL_DONE = object()
 
+
+# Which exit path persisted a model's outcome — for log attribution.
+class _PersistContext(Enum):
+    WORKER = "worker"
+    STOP_BUTTON = "stop-button"
+    NORMAL = "normal"
+    POST_STEPS = "post-steps"
+
+
 # How often the drain loop polls for user-initiated cancellation (stop button).
 _CANCEL_POLL_INTERVAL_S: Final[float] = 0.05
 
@@ -1081,7 +1091,10 @@ def _run_models(
     drain_done = threading.Event()
 
     def _persist_model_outcome(
-        model_idx: int, context: str, *, stop_button: bool = False
+        model_idx: int,
+        context: _PersistContext,
+        *,
+        stop_button: bool = False,
     ) -> None:
         """Persist one model's outcome exactly once, from any thread.
 
@@ -1120,7 +1133,7 @@ def _run_models(
         except Exception:
             logger.exception(
                 "%s completion failed for model %d (%s)",
-                context,
+                context.value,
                 model_idx,
                 setup.model_display_names[model_idx],
             )
@@ -1132,7 +1145,7 @@ def _run_models(
             post_steps_done.set()
 
         for i in range(n_models):
-            _persist_model_outcome(i, "post-steps")
+            _persist_model_outcome(i, _PersistContext.POST_STEPS)
 
         # _stream_chat_turn's own reset can be abandoned on disconnect; reset here
         # so the session never sticks at "processing". Normal exits (drain alive)
@@ -1248,7 +1261,7 @@ def _run_models(
             merged_queue.put((model_idx, e))
 
         finally:
-            _persist_model_outcome(model_idx, "worker")
+            _persist_model_outcome(model_idx, _PersistContext.WORKER)
 
             is_last = False
             with persist_lock:
@@ -1265,7 +1278,7 @@ def _run_models(
 
             merged_queue.put((model_idx, _MODEL_DONE))
 
-    def _save_errored_message(model_idx: int, context: str) -> None:
+    def _save_errored_message(model_idx: int, context: _PersistContext) -> None:
         """Save an error message to a reserved ChatMessage that failed during execution."""
         try:
             with get_session_with_current_tenant() as save_db_session:
@@ -1283,7 +1296,7 @@ def _run_models(
         except Exception:
             logger.exception(
                 "%s error save failed for model %d (%s)",
-                context,
+                context.value,
                 model_idx,
                 setup.model_display_names[model_idx],
             )
@@ -1311,7 +1324,9 @@ def _run_models(
                     for i in range(n_models):
                         # Snapshot every model now: finished loops save complete,
                         # in-flight ones save partial + stopped-by-user.
-                        _persist_model_outcome(i, "stop-button", stop_button=True)
+                        _persist_model_outcome(
+                            i, _PersistContext.STOP_BUTTON, stop_button=True
+                        )
                     yield Packet(
                         placement=Placement(turn_index=0),
                         obj=OverallStop(type="stop", stop_reason="user_cancelled"),
@@ -1355,7 +1370,7 @@ def _run_models(
                     yield item
 
         for i in range(n_models):
-            _persist_model_outcome(i, "normal")
+            _persist_model_outcome(i, _PersistContext.NORMAL)
         _run_post_steps()
         completion_persisted = True
 
