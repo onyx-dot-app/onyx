@@ -544,7 +544,7 @@ export default function AppChrome({ children }: AppChromeProps) {
     >
       <div
         className={cn(
-          "@container relative isolate flex-1 flex flex-col",
+          "@container relative isolate flex-1 flex flex-col min-h-0",
           showBackground && "bg-cover bg-center bg-fixed"
         )}
         style={

@@ -1,18 +1,16 @@
 "use client";
 
+import { useCallback } from "react";
 import { useField } from "formik";
 
 /**
  * Custom hook for handling form input changes in Formik forms.
  *
- * This hook automatically sets the field as "touched" when its value changes,
- * enabling immediate validation feedback after the first user interaction.
- *
  * @example
  * ```tsx
  * function MyField({ name }: { name: string }) {
  *   const [field] = useField(name);
- *   const onChange = useFormInputCallback(name);
+ *   const onChange = useOnChangeEvent(name);
  *
  *   return (
  *     <input
@@ -23,37 +21,23 @@ import { useField } from "formik";
  *   );
  * }
  * ```
- *
- * @example
- * ```tsx
- * // With callback
- * function MySelect({ name, onValueChange }: Props) {
- *   const [field] = useField(name);
- *   const onChange = useFormInputCallback(name, onValueChange);
- *
- *   return (
- *     <Select value={field.value} onValueChange={onChange} />
- *   );
- * }
- * ```
  */
 export function useOnChangeEvent<T = any>(
   name: string,
   f?: (event: T) => void
 ) {
-  const [field, , helpers] = useField<T>(name);
-  return (event: T) => {
-    helpers.setTouched(true);
-    f?.(event);
-    field.onChange(event);
-  };
+  const [field] = useField<T>(name);
+  return useCallback(
+    (event: T) => {
+      field.onChange(event);
+      f?.(event);
+    },
+    [field, f]
+  );
 }
 
 /**
  * Custom hook for handling form value changes in Formik forms.
- *
- * This hook automatically sets the field as "touched" when its value changes,
- * enabling immediate validation feedback after the first user interaction.
  * Use this for components that pass values directly (not events).
  *
  * @example
@@ -67,36 +51,23 @@ export function useOnChangeEvent<T = any>(
  *   );
  * }
  * ```
- *
- * @example
- * ```tsx
- * function MyDatePicker({ name }: Props) {
- *   const [field] = useField(name);
- *   const onChange = useOnChangeValue(name);
- *
- *   return (
- *     <DatePicker selectedDate={field.value} setSelectedDate={onChange} />
- *   );
- * }
- * ```
  */
 export function useOnChangeValue<T = any>(
   name: string,
   f?: (value: T) => void
 ) {
   const [, , helpers] = useField<T>(name);
-  return (value: T) => {
-    helpers.setTouched(true);
-    f?.(value);
-    helpers.setValue(value);
-  };
+  return useCallback(
+    (value: T) => {
+      helpers.setValue(value);
+      f?.(value);
+    },
+    [helpers, f]
+  );
 }
 
 /**
  * Custom hook for handling form input blur events in Formik forms.
- *
- * This hook chains the consumer's onBlur callback with Formik's blur handler,
- * ensuring both effects run when the field loses focus.
  *
  * @example
  * ```tsx
@@ -115,9 +86,13 @@ export function useOnChangeValue<T = any>(
  * ```
  */
 export function useOnBlurEvent<T = any>(name: string, f?: (event: T) => void) {
-  const [field] = useField<T>(name);
-  return (event: T) => {
-    f?.(event);
-    field.onBlur(event);
-  };
+  const [field, , helpers] = useField<T>(name);
+  return useCallback(
+    (event: T) => {
+      f?.(event);
+      field.onBlur(event);
+      helpers.setTouched(true);
+    },
+    [field, helpers, f]
+  );
 }
