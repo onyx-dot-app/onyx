@@ -121,3 +121,33 @@ def test_concurrent_cold_misses_probe_once(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert results == [True, True, True, True]
     assert calls == ["fakeprov/cold-model"]
+
+
+def test_probe_results_are_tenant_scoped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two tenants can define the same custom model name for different models —
+    a probe result for one tenant must never be served to another."""
+    calls = []
+    answers = {"tenant_a": True, "tenant_b": False}
+    current_tenant = "tenant_a"
+
+    def per_tenant_supports_reasoning(model: str) -> bool:
+        calls.append((current_tenant, model))
+        return answers[current_tenant]
+
+    monkeypatch.setattr(litellm, "supports_reasoning", per_tenant_supports_reasoning)
+    monkeypatch.setattr(utils, "_LITELLM_SUPPORTS_REASONING_CACHE", {})
+    monkeypatch.setattr(utils, "_REASONING_PROBE_LOCKS", {})
+    monkeypatch.setattr(utils, "get_current_tenant_id", lambda: current_tenant)
+
+    assert model_is_reasoning_model("shared-name-model", "fakeprov") is True
+
+    current_tenant = "tenant_b"
+    assert model_is_reasoning_model("shared-name-model", "fakeprov") is False
+
+    current_tenant = "tenant_a"
+    assert model_is_reasoning_model("shared-name-model", "fakeprov") is True
+
+    assert calls == [
+        ("tenant_a", "fakeprov/shared-name-model"),
+        ("tenant_b", "fakeprov/shared-name-model"),
+    ]

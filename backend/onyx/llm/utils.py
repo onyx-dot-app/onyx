@@ -32,6 +32,7 @@ from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_TOKEN_ESTIMATE
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
+from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
     from onyx.server.manage.llm.models import LLMProviderView
@@ -843,18 +844,24 @@ def litellm_thinks_model_supports_image_input(
 
 _REASONING_PROBE_FAILURE_TTL_SECONDS = 300
 
+# keyed per (tenant, model): tenants can define the same custom model name for
+# different models, so probe results must never cross tenant boundaries.
 # (result, expires_at): None expiry = permanent probe result (static metadata);
 # float = failure placeholder that re-probes once the TTL passes
 _LITELLM_SUPPORTS_REASONING_CACHE: dict[str, tuple[bool, float | None]] = {}
 
-# per-model locks so concurrent cold misses probe once; a single shared lock
-# would serialize unrelated models behind one slow host
+# per-(tenant, model) locks so concurrent cold misses probe once; a single
+# shared lock would serialize unrelated models behind one slow host
 _REASONING_PROBE_LOCKS: dict[str, threading.Lock] = {}
 _REASONING_PROBE_LOCKS_GUARD = threading.Lock()
 
 
-def _cached_reasoning_result(full_model_name: str) -> bool | None:
-    entry = _LITELLM_SUPPORTS_REASONING_CACHE.get(full_model_name)
+def _reasoning_cache_key(full_model_name: str) -> str:
+    return f"{get_current_tenant_id()}:{full_model_name}"
+
+
+def _cached_reasoning_result(cache_key: str) -> bool | None:
+    entry = _LITELLM_SUPPORTS_REASONING_CACHE.get(cache_key)
     if entry is None:
         return None
     result, expires_at = entry
@@ -864,20 +871,22 @@ def _cached_reasoning_result(full_model_name: str) -> bool | None:
 
 
 def _litellm_supports_reasoning(full_model_name: str) -> bool:
-    """Single-flight, process-lifetime cache around litellm.supports_reasoning,
-    which can fetch model info over the network (e.g. Ollama hosts). Successful
-    probes cache permanently; failures cache as False with a short TTL so an
-    unreachable host isn't probed per-request but recovers without a restart
-    (a stuck False silently downgrades reasoning models)."""
-    cached = _cached_reasoning_result(full_model_name)
+    """Single-flight, process-lifetime, tenant-scoped cache around
+    litellm.supports_reasoning, which can fetch model info over the network
+    (e.g. Ollama hosts). Successful probes cache permanently; failures cache as
+    False with a short TTL so an unreachable host isn't probed per-request but
+    recovers without a restart (a stuck False silently downgrades reasoning
+    models)."""
+    cache_key = _reasoning_cache_key(full_model_name)
+    cached = _cached_reasoning_result(cache_key)
     if cached is not None:
         return cached
 
     with _REASONING_PROBE_LOCKS_GUARD:
-        key_lock = _REASONING_PROBE_LOCKS.setdefault(full_model_name, threading.Lock())
+        key_lock = _REASONING_PROBE_LOCKS.setdefault(cache_key, threading.Lock())
 
     with key_lock:
-        cached = _cached_reasoning_result(full_model_name)
+        cached = _cached_reasoning_result(cache_key)
         if cached is not None:
             return cached
 
@@ -892,7 +901,7 @@ def _litellm_supports_reasoning(full_model_name: str) -> bool:
             )
             result = False
             expires_at = time.monotonic() + _REASONING_PROBE_FAILURE_TTL_SECONDS
-        _LITELLM_SUPPORTS_REASONING_CACHE[full_model_name] = (result, expires_at)
+        _LITELLM_SUPPORTS_REASONING_CACHE[cache_key] = (result, expires_at)
         return result
 
 
