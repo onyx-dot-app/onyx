@@ -1,7 +1,12 @@
 "use client";
 
 import "@opal/layouts/root/styles.css";
-import { createContext, useContext, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  type ReactNode,
+} from "react";
 import useScreenSize from "@opal/hooks/useScreenSize";
 import type { WithoutStyles } from "@opal/types";
 
@@ -160,8 +165,25 @@ function RootLayoutLeftPanel(props: RootLayoutPanelProps) {
   return <RootLayoutPanel {...props} />;
 }
 
-function RootLayoutRightPanel(props: RootLayoutPanelProps) {
-  return <RootLayoutPanel {...props} />;
+// When provided, RightPanel hoists itself into this slot (set by the host
+// layout, e.g. AppChrome) instead of rendering in place. This lets it sit as
+// a flex sibling to the Header/Content/Footer column and push the whole column
+// in, regardless of where in the tree RightPanel is actually rendered.
+export type RightPanelSlotSetter = (panel: ReactNode) => void;
+export const RootLayoutRightPanelSlotContext =
+  createContext<RightPanelSlotSetter | null>(null);
+
+function RootLayoutRightPanel({ children }: RootLayoutPanelProps) {
+  const setSlot = useContext(RootLayoutRightPanelSlotContext);
+
+  useLayoutEffect(() => {
+    if (!setSlot) return;
+    setSlot(<RootLayoutPanel>{children}</RootLayoutPanel>);
+    return () => setSlot(null);
+  }, [setSlot, children]);
+
+  if (setSlot) return null;
+  return <RootLayoutPanel>{children}</RootLayoutPanel>;
 }
 
 // ---------------------------------------------------------------------------

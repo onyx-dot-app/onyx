@@ -2,14 +2,7 @@
 
 import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast, useToastFromQuery } from "@/hooks/useToast";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
@@ -67,7 +60,6 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { getProjectTokenCount } from "@/app/app/projects/projectsService";
 import ProjectChatSessionList from "@/app/app/components/projects/ProjectChatSessionList";
 import { cn } from "@opal/utils";
-import { useSetAppRightPanel } from "@/sections/app-chrome/AppChrome";
 import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";
 import { OnboardingStep } from "@/interfaces/onboarding";
@@ -677,44 +669,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     setTimeout(() => updateCurrentDocumentSidebarVisible(false), 300);
   }, [updateCurrentDocumentSidebarVisible]);
 
-  const setAppRightPanel = useSetAppRightPanel();
-  useLayoutEffect(() => {
-    setAppRightPanel(
-      isReady &&
-        !(noAgents && !isLoadingAgents) &&
-        retrievalEnabled &&
-        !settings.isMobile ? (
-        <RootLayout.RightPanel>
-          <div
-            className={cn(
-              "overflow-hidden transition-all duration-300 ease-in-out h-full",
-              documentSidebarVisible ? "w-100" : "w-0"
-            )}
-          >
-            <DocumentsSidebar
-              setPresentingDocument={setPresentingDocument}
-              modal={false}
-              closeSidebar={handleDesktopDocumentSidebarClose}
-              selectedDocuments={selectedDocuments}
-            />
-          </div>
-        </RootLayout.RightPanel>
-      ) : null
-    );
-    return () => setAppRightPanel(null);
-  }, [
-    isReady,
-    noAgents,
-    isLoadingAgents,
-    retrievalEnabled,
-    settings.isMobile,
-    documentSidebarVisible,
-    setPresentingDocument,
-    handleDesktopDocumentSidebarClose,
-    selectedDocuments,
-    setAppRightPanel,
-  ]);
-
   // When no chat session exists but a project is selected, fetch the
   // total tokens for the project's files so upload UX can compare
   // against available context similar to session-based flows.
@@ -806,6 +760,26 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       )}
 
       <FederatedOAuthModal />
+
+      {!(noAgents && !isLoadingAgents) &&
+        retrievalEnabled &&
+        !settings.isMobile && (
+          <RootLayout.RightPanel>
+            <div
+              className={cn(
+                "overflow-hidden transition-all duration-300 ease-in-out h-full",
+                documentSidebarVisible ? "w-100" : "w-0"
+              )}
+            >
+              <DocumentsSidebar
+                setPresentingDocument={setPresentingDocument}
+                modal={false}
+                closeSidebar={handleDesktopDocumentSidebarClose}
+                selectedDocuments={selectedDocuments}
+              />
+            </div>
+          </RootLayout.RightPanel>
+        )}
 
       <div className="w-full h-full overflow-hidden">
         <Dropzone

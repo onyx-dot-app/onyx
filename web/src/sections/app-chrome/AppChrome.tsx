@@ -1,16 +1,14 @@
 "use client";
 
 import {
-  createContext,
   useCallback,
-  useContext,
   useMemo,
   useRef,
   useState,
   useEffect,
   type ReactNode,
 } from "react";
-import { RootLayout } from "@opal/layouts";
+import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import { ensureHrefProtocol, INTERACTIVE_SELECTOR, noProp } from "@/lib/utils";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
@@ -56,22 +54,6 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
 import { APP_SLOGAN } from "@/lib/constants";
-
-// ---------------------------------------------------------------------------
-// Right-panel slot — pages hoist their panel content here so it sits as a
-// flex sibling to the Header/MainContent/Footer column and pushes them in.
-// ---------------------------------------------------------------------------
-
-type PanelSetter = (panel: ReactNode) => void;
-
-const AppChromeRightPanelContext = createContext<PanelSetter | null>(null);
-
-export function useSetAppRightPanel(): PanelSetter {
-  const setter = useContext(AppChromeRightPanelContext);
-  if (!setter)
-    throw new Error("useSetAppRightPanel must be used within AppChrome");
-  return setter;
-}
 
 // ---------------------------------------------------------------------------
 // Header
@@ -517,7 +499,10 @@ interface AppChromeProps {
 
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
-  const setRight = useCallback((panel: ReactNode) => setRightPanel(panel), []);
+  const setRight = useCallback<(panel: ReactNode) => void>(
+    (panel) => setRightPanel(panel),
+    []
+  );
 
   const appFocus = useAppFocus();
   const { hasBackground, appBackgroundUrl } = useAppBackground();
@@ -565,7 +550,7 @@ export default function AppChrome({ children }: AppChromeProps) {
   }, []);
 
   return (
-    <AppChromeRightPanelContext.Provider value={setRight}>
+    <RootLayoutRightPanelSlotContext.Provider value={setRight}>
       <RootLayout.App
         data-main-container
         onMouseDown={handleMouseDown}
@@ -632,6 +617,6 @@ export default function AppChrome({ children }: AppChromeProps) {
           {rightPanel}
         </div>
       </RootLayout.App>
-    </AppChromeRightPanelContext.Provider>
+    </RootLayoutRightPanelSlotContext.Provider>
   );
 }
