@@ -680,7 +680,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const setAppRightPanel = useSetAppRightPanel();
   useLayoutEffect(() => {
     setAppRightPanel(
-      retrievalEnabled && !settings.isMobile ? (
+      isReady &&
+        !(noAgents && !isLoadingAgents) &&
+        retrievalEnabled &&
+        !settings.isMobile ? (
         <RootLayout.RightPanel>
           <div
             className={cn(
@@ -700,6 +703,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     );
     return () => setAppRightPanel(null);
   }, [
+    isReady,
+    noAgents,
+    isLoadingAgents,
     retrievalEnabled,
     settings.isMobile,
     documentSidebarVisible,

@@ -152,12 +152,16 @@ interface RootLayoutPanelProps {
   children: ReactNode;
 }
 
-function RootLayoutLeftPanel({ children }: RootLayoutPanelProps) {
+function RootLayoutPanel({ children }: RootLayoutPanelProps) {
   return <div className="opal-root-layout__panel">{children}</div>;
 }
 
-function RootLayoutRightPanel({ children }: RootLayoutPanelProps) {
-  return <div className="opal-root-layout__panel">{children}</div>;
+function RootLayoutLeftPanel(props: RootLayoutPanelProps) {
+  return <RootLayoutPanel {...props} />;
+}
+
+function RootLayoutRightPanel(props: RootLayoutPanelProps) {
+  return <RootLayoutPanel {...props} />;
 }
 
 // ---------------------------------------------------------------------------

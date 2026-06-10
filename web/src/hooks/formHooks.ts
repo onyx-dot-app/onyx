@@ -59,6 +59,7 @@ export function useOnChangeValue<T = any>(
   const [, , helpers] = useField<T>(name);
   return useCallback(
     (value: T) => {
+      helpers.setTouched(true);
       helpers.setValue(value);
       f?.(value);
     },

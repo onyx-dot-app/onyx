@@ -58,15 +58,27 @@ import { Tier } from "@/interfaces/settings";
 import { APP_SLOGAN } from "@/lib/constants";
 
 // ---------------------------------------------------------------------------
-// Right-panel slot — pages hoist their panel content here so it sits as a
-// flex sibling to the Header/MainContent/Footer column and pushes them in.
+// Left / right panel slots — pages hoist their panel content here so it sits
+// as a flex sibling to the Header/MainContent/Footer column and pushes it in.
 // ---------------------------------------------------------------------------
 
-type RightPanelSetter = (panel: ReactNode) => void;
-const AppChromeRightPanelContext = createContext<RightPanelSetter>(() => {});
+type PanelSetter = (panel: ReactNode) => void;
 
-export function useSetAppRightPanel(): RightPanelSetter {
-  return useContext(AppChromeRightPanelContext);
+const AppChromeLeftPanelContext = createContext<PanelSetter | null>(null);
+const AppChromeRightPanelContext = createContext<PanelSetter | null>(null);
+
+export function useSetAppLeftPanel(): PanelSetter {
+  const setter = useContext(AppChromeLeftPanelContext);
+  if (!setter)
+    throw new Error("useSetAppLeftPanel must be used within AppChrome");
+  return setter;
+}
+
+export function useSetAppRightPanel(): PanelSetter {
+  const setter = useContext(AppChromeRightPanelContext);
+  if (!setter)
+    throw new Error("useSetAppRightPanel must be used within AppChrome");
+  return setter;
 }
 
 // ---------------------------------------------------------------------------
@@ -512,8 +524,10 @@ interface AppChromeProps {
 }
 
 export default function AppChrome({ children }: AppChromeProps) {
+  const [leftPanel, setLeftPanel] = useState<ReactNode>(null);
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
-  const setPanel = useCallback((panel: ReactNode) => setRightPanel(panel), []);
+  const setLeft = useCallback((panel: ReactNode) => setLeftPanel(panel), []);
+  const setRight = useCallback((panel: ReactNode) => setRightPanel(panel), []);
 
   const appFocus = useAppFocus();
   const { hasBackground, appBackgroundUrl } = useAppBackground();
@@ -561,73 +575,76 @@ export default function AppChrome({ children }: AppChromeProps) {
   }, []);
 
   return (
-    <AppChromeRightPanelContext.Provider value={setPanel}>
-      <RootLayout.App
-        data-main-container
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-      >
-        <div className="flex flex-row flex-1 min-h-0">
-          <div
-            className={cn(
-              "@container relative isolate flex-1 flex flex-col min-h-0",
-              showBackground && "bg-cover bg-center bg-fixed"
-            )}
-            style={
-              showBackground
-                ? { backgroundImage: `url(${appBackgroundUrl})` }
-                : undefined
-            }
-          >
-            {/* Effect 1 — Vignette overlay for custom backgrounds (disabled in light mode).
+    <AppChromeLeftPanelContext.Provider value={setLeft}>
+      <AppChromeRightPanelContext.Provider value={setRight}>
+        <RootLayout.App
+          data-main-container
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
+        >
+          <div className="flex flex-row flex-1 min-h-0">
+            {leftPanel}
+            <div
+              className={cn(
+                "@container relative isolate flex-1 flex flex-col min-h-0",
+                showBackground && "bg-cover bg-center bg-fixed"
+              )}
+              style={
+                showBackground
+                  ? { backgroundImage: `url(${appBackgroundUrl})` }
+                  : undefined
+              }
+            >
+              {/* Effect 1 — Vignette overlay for custom backgrounds (disabled in light mode).
               z-[-1] keeps overlays below the normal-flow header/content/footer. */}
-            {showBackground && !isLightMode && (
-              <div
-                className="absolute z-[-1] inset-0 pointer-events-none"
-                style={{
-                  background: `
+              {showBackground && !isLightMode && (
+                <div
+                  className="absolute z-[-1] inset-0 pointer-events-none"
+                  style={{
+                    background: `
                   linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 4rem),
                   linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 4rem)
                 `,
-                }}
-              />
-            )}
-            {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
-            {showBackground && appFocus.isChat() && (
-              <>
-                <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />
-                {isSafari ? (
-                  <div
-                    className="absolute z-[-1] inset-0 bg-cover bg-center bg-fixed pointer-events-none"
-                    style={{
-                      backgroundImage: `url(${appBackgroundUrl})`,
-                      filter: "blur(16px)",
-                      maskImage: horizontalBlurMask,
-                      WebkitMaskImage: horizontalBlurMask,
-                    }}
-                  />
-                ) : (
-                  <div
-                    className="absolute z-[-1] inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
-                    style={{
-                      maskImage: horizontalBlurMask,
-                      WebkitMaskImage: horizontalBlurMask,
-                    }}
-                  />
-                )}
-              </>
-            )}
-            <RootLayout.Header>
-              <Header />
-            </RootLayout.Header>
-            <RootLayout.MainContent>{children}</RootLayout.MainContent>
-            <RootLayout.Footer>
-              <Footer />
-            </RootLayout.Footer>
+                  }}
+                />
+              )}
+              {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
+              {showBackground && appFocus.isChat() && (
+                <>
+                  <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />
+                  {isSafari ? (
+                    <div
+                      className="absolute z-[-1] inset-0 bg-cover bg-center bg-fixed pointer-events-none"
+                      style={{
+                        backgroundImage: `url(${appBackgroundUrl})`,
+                        filter: "blur(16px)",
+                        maskImage: horizontalBlurMask,
+                        WebkitMaskImage: horizontalBlurMask,
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="absolute z-[-1] inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
+                      style={{
+                        maskImage: horizontalBlurMask,
+                        WebkitMaskImage: horizontalBlurMask,
+                      }}
+                    />
+                  )}
+                </>
+              )}
+              <RootLayout.Header>
+                <Header />
+              </RootLayout.Header>
+              <RootLayout.MainContent>{children}</RootLayout.MainContent>
+              <RootLayout.Footer>
+                <Footer />
+              </RootLayout.Footer>
+            </div>
+            {rightPanel}
           </div>
-          {rightPanel}
-        </div>
-      </RootLayout.App>
-    </AppChromeRightPanelContext.Provider>
+        </RootLayout.App>
+      </AppChromeRightPanelContext.Provider>
+    </AppChromeLeftPanelContext.Provider>
   );
 }
