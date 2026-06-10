@@ -10,6 +10,7 @@ import {
   BuildMessage,
   Session,
   SessionHistoryItem,
+  SessionOrigin,
   SessionStatus,
   ToolCall,
   ToolCallStatus,
@@ -611,6 +612,7 @@ export interface BuildSessionData {
   /** Model this session runs on (from the row); seeds the composer picker. */
   agentProvider: string | null;
   agentModel: string | null;
+  origin: SessionOrigin;
   abortController: AbortController;
   lastAccessed: Date;
   isLoaded: boolean;
@@ -870,6 +872,7 @@ const createInitialSessionData = (
   sandbox: null,
   agentProvider: null,
   agentModel: null,
+  origin: "INTERACTIVE",
   abortController: new AbortController(),
   lastAccessed: new Date(),
   isLoaded: false,
@@ -1767,6 +1770,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox,
         agentProvider: sessionData.agent_provider,
         agentModel: sessionData.agent_model,
+        origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,
         activeTurnLocalOwner: isStreaming
