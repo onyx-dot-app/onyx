@@ -1081,14 +1081,22 @@ def _run_models(
     drain_done = threading.Event()
 
     def _persist_model_outcome(
-        model_idx: int, context: str, completed_normally: bool | None = None
+        model_idx: int, context: str, *, stop_button: bool = False
     ) -> None:
+        """Persist one model's outcome exactly once, from any thread.
+
+        The LLM loops never observe the stop signal, so a worker that returns
+        non-errored always holds a complete answer. Partial content exists only
+        when the stop-button path snapshots a still-running model mid-loop —
+        that call forces a claim (``stop_button=True``) so the in-flight state
+        is saved with the stopped-by-user annotation and the worker's later
+        call becomes a no-op."""
         with persist_lock:
             if persisted[model_idx]:
                 return
             succeeded = model_succeeded[model_idx]
             errored = model_errored[model_idx]
-            if not succeeded and not errored:
+            if not succeeded and not errored and not stop_button:
                 return
             persisted[model_idx] = True
 
@@ -1096,11 +1104,7 @@ def _run_models(
             _save_errored_message(model_idx, context)
             return
 
-        # completed_normally decides the "stopped by the user" annotation. The
-        # stop-button path overrides it to True for models whose loops finished
-        # before the stop was noticed; otherwise fall back to the stop signal.
-        if completed_normally is None:
-            completed_normally = setup.check_is_connected()
+        completed_normally = succeeded if stop_button else True
 
         def _is_connected(value: bool = completed_normally) -> bool:
             return value
@@ -1305,11 +1309,9 @@ def _run_models(
                 if not setup.check_is_connected():
                     # Persist finished models now; workers persist themselves on exit.
                     for i in range(n_models):
-                        # Loops that finished before the stop was noticed are
-                        # complete answers — don't annotate them as stopped.
-                        _persist_model_outcome(
-                            i, "stop-button", completed_normally=True
-                        )
+                        # Snapshot every model now: finished loops save complete,
+                        # in-flight ones save partial + stopped-by-user.
+                        _persist_model_outcome(i, "stop-button", stop_button=True)
                     yield Packet(
                         placement=Placement(turn_index=0),
                         obj=OverallStop(type="stop", stop_reason="user_cancelled"),
