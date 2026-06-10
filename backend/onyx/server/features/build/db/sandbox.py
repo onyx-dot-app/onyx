@@ -3,9 +3,7 @@
 import datetime
 from uuid import UUID
 
-from sqlalchemy import and_
 from sqlalchemy import func
-from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -94,26 +92,6 @@ def get_sandbox_by_user_id(db_session: Session, user_id: UUID) -> Sandbox | None
     return db_session.execute(stmt).scalar_one_or_none()
 
 
-def get_sandbox_by_session_id(db_session: Session, session_id: UUID) -> Sandbox | None:
-    """Get sandbox by session ID (compatibility function).
-
-    This function provides backwards compatibility during the transition to
-    user-owned sandboxes. It looks up the session's user_id, then finds the
-    user's sandbox.
-
-    NOTE: This will be removed in a future phase when all callers are updated
-    to use get_sandbox_by_user_id() directly.
-    """
-    from onyx.db.models import BuildSession
-
-    stmt = select(BuildSession.user_id).where(BuildSession.id == session_id)
-    result = db_session.execute(stmt).scalar_one_or_none()
-    if result is None:
-        return None
-
-    return get_sandbox_by_user_id(db_session, result)
-
-
 def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
     """Get sandbox by its ID."""
     stmt = select(Sandbox).where(Sandbox.id == sandbox_id)
@@ -159,29 +137,9 @@ def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
     return sandbox
 
 
-def get_idle_sandboxes(
-    db_session: Session, idle_threshold_seconds: int
-) -> list[Sandbox]:
-    """Get sandboxes that have been idle longer than threshold.
-
-    Also includes sandboxes with NULL heartbeat, but only if they were created
-    before the threshold (to avoid sweeping up brand-new sandboxes that may have
-    NULL heartbeat due to edge cases like older rows or manual inserts).
-    """
-    threshold_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
-        seconds=idle_threshold_seconds
-    )
-
-    stmt = select(Sandbox).where(
-        Sandbox.status == SandboxStatus.RUNNING,
-        or_(
-            Sandbox.last_heartbeat < threshold_time,
-            and_(
-                Sandbox.last_heartbeat.is_(None),
-                Sandbox.created_at < threshold_time,
-            ),
-        ),
-    )
+def get_running_sandboxes(db_session: Session) -> list[Sandbox]:
+    """Get all RUNNING sandboxes (the sweep task's working set)."""
+    stmt = select(Sandbox).where(Sandbox.status == SandboxStatus.RUNNING)
     return list(db_session.execute(stmt).scalars().all())
 
 

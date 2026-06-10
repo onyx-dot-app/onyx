@@ -1,5 +1,7 @@
 """Celery tasks for sandbox operations (cleanup, etc.)."""
 
+import datetime
+
 from celery import shared_task
 from celery import Task
 from redis.lock import Lock as RedisLock
@@ -9,14 +11,25 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import SandboxStatus
+from onyx.db.models import Sandbox
 from onyx.db.models import Snapshot
+from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import (
+    SANDBOX_PERIODIC_SNAPSHOT_INTERVAL_SECONDS,
+)
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
 )
+from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
+from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
+from onyx.server.features.build.db.sandbox import get_running_sandboxes
+from onyx.server.features.build.db.sandbox import get_snapshots_for_session
+from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 
@@ -47,6 +60,13 @@ def _prune_prior_session_snapshots(
         db_session.delete(old)
 
 
+def _is_idle(sandbox: Sandbox, now: datetime.datetime) -> bool:
+    """Idle = no heartbeat for the timeout (NULL heartbeat falls back to
+    created_at so legacy/edge-case rows don't sit RUNNING forever)."""
+    reference = sandbox.last_heartbeat or sandbox.created_at
+    return reference < now - datetime.timedelta(seconds=SANDBOX_IDLE_TIMEOUT_SECONDS)
+
+
 @shared_task(
     name=OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
     soft_time_limit=TIMEOUT_SECONDS,
@@ -54,17 +74,15 @@ def _prune_prior_session_snapshots(
     ignore_result=True,
 )
 def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
-    """Put idle sandboxes to sleep after snapshotting all sessions.
+    """Sweep RUNNING sandboxes: background-snapshot sessions, sleep idle ones.
 
-    This task:
-    1. Finds sandboxes that have been idle longer than SANDBOX_IDLE_TIMEOUT_SECONDS
-    2. Lists all session directories in the pod's /workspace/sessions/
-    3. Creates a FileStore-backed snapshot of each session's outputs
-    4. Terminates the pod (but keeps the sandbox record)
-    5. Marks the sandbox as SLEEPING (can be restored later)
-
-    Args:
-        tenant_id: The tenant ID for multi-tenant isolation
+    Background snapshots bound data loss from ungraceful pod death (kubelet
+    eviction, node loss, spot reclaim) to
+    ~SANDBOX_PERIODIC_SNAPSHOT_INTERVAL_SECONDS: sessions whose latest
+    snapshot is fresher than the interval are skipped without touching the
+    pod (except at reap — the pod is about to die, so always snapshot).
+    Reap stays fail-closed: snapshot failure on a reachable pod keeps the
+    sandbox RUNNING for retry next sweep.
     """
     task_logger.info(f"cleanup_idle_sandboxes_task starting for tenant {tenant_id}")
 
@@ -80,43 +98,30 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
         return
 
     try:
-        # Import here to avoid circular imports
-        from onyx.db.enums import SandboxStatus
-        from onyx.file_store.file_store import get_default_file_store
-        from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
-        from onyx.server.features.build.db.sandbox import get_idle_sandboxes
-        from onyx.server.features.build.db.sandbox import get_snapshots_for_session
-        from onyx.server.features.build.db.sandbox import (
-            update_sandbox_status__no_commit,
-        )
-
         sandbox_manager = get_sandbox_manager()
         snapshot_manager = SnapshotManager(get_default_file_store())
 
         with get_session_with_current_tenant() as db_session:
-            idle_sandboxes = get_idle_sandboxes(
-                db_session, SANDBOX_IDLE_TIMEOUT_SECONDS
-            )
-
-            if not idle_sandboxes:
-                task_logger.debug("No idle sandboxes found")
+            running_sandboxes = get_running_sandboxes(db_session)
+            if not running_sandboxes:
+                task_logger.debug("No running sandboxes found")
                 return
 
             # Tenant-work-gating hook: refresh this tenant's active-set
-            # membership whenever sandbox cleanup has work to do.
+            # membership whenever the sweep has work to do.
             maybe_mark_tenant_active(tenant_id, caller="sandbox_cleanup")
 
-            task_logger.info(
-                f"Found {len(idle_sandboxes)} idle sandboxes to put to sleep"
+            now = datetime.datetime.now(datetime.timezone.utc)
+            snapshot_cutoff = now - datetime.timedelta(
+                seconds=SANDBOX_PERIODIC_SNAPSHOT_INTERVAL_SECONDS
             )
 
-            for sandbox in idle_sandboxes:
+            for sandbox in running_sandboxes:
                 sandbox_id = sandbox.id
-                sandbox_id_str = str(sandbox_id)
-                task_logger.info(f"Putting sandbox {sandbox_id_str} to sleep")
+                idle = _is_idle(sandbox, now)
 
                 try:
-                    if sandbox_manager.supports_opencode_history_persistence:
+                    if idle and sandbox_manager.supports_opencode_history_persistence:
                         try:
                             sandbox_manager.create_opencode_history_snapshot(
                                 sandbox_id, tenant_id
@@ -125,11 +130,11 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                             if sandbox_manager.health_check(sandbox_id, timeout=5.0):
                                 task_logger.error(
                                     f"opencode history snapshot failed for sandbox "
-                                    f"{sandbox_id_str}; leaving it RUNNING: {e}"
+                                    f"{sandbox_id}; leaving it RUNNING: {e}"
                                 )
                                 continue
                             task_logger.warning(
-                                f"Sandbox {sandbox_id_str} pod unreachable; sleeping "
+                                f"Sandbox {sandbox_id} pod unreachable; sleeping "
                                 f"without a fresh opencode history snapshot: {e}"
                             )
 
@@ -138,18 +143,21 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                     # exec; Docker lists container paths via exec; Local
                     # walks the on-disk sessions/ directory.
                     session_ids = sandbox_manager.list_session_workspaces(sandbox_id)
-                    task_logger.info(
-                        f"Found {len(session_ids)} sessions in sandbox {sandbox_id_str}"
-                    )
 
-                    # Snapshot each session; track failures for the fail-closed
-                    # guard below.
                     snapshot_failed = False
+                    snapshots_created = 0
                     for session_id in session_ids:
                         try:
-                            task_logger.debug(
-                                f"Creating snapshot for session {session_id}"
+                            latest = get_latest_snapshot_for_session(
+                                db_session, session_id
                             )
+                            if (
+                                not idle
+                                and latest
+                                and latest.created_at > snapshot_cutoff
+                            ):
+                                continue
+
                             # Capture priors before the new snapshot so we can
                             # prune them once the fresh one lands (keep-latest).
                             prior_snapshots = get_snapshots_for_session(
@@ -168,7 +176,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                                 _prune_prior_session_snapshots(
                                     db_session, snapshot_manager, prior_snapshots
                                 )
-                                task_logger.debug(
+                                db_session.commit()
+                                snapshots_created += 1
+                                task_logger.info(
                                     f"Snapshot created for session {session_id}"
                                 )
                         except Exception as e:
@@ -176,6 +186,27 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                             task_logger.warning(
                                 f"Failed to create snapshot for session {session_id}: {e}"
                             )
+                            db_session.rollback()
+
+                    if not idle:
+                        # Chat history lives outside session workspaces;
+                        # keep it equally fresh.
+                        if (
+                            snapshots_created
+                            and sandbox_manager.supports_opencode_history_persistence
+                        ):
+                            try:
+                                sandbox_manager.create_opencode_history_snapshot(
+                                    sandbox_id, tenant_id
+                                )
+                            except Exception as e:
+                                task_logger.warning(
+                                    f"Background opencode history snapshot failed "
+                                    f"for sandbox {sandbox_id}: {e}"
+                                )
+                        continue
+
+                    task_logger.info(f"Putting sandbox {sandbox_id} to sleep")
 
                     # Fail-closed: terminating with an unsnapshotted workspace
                     # loses it (restore falls back to a fresh template). Keep the
@@ -185,14 +216,12 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                     if snapshot_failed:
                         if sandbox_manager.health_check(sandbox_id, timeout=5.0):
                             task_logger.error(
-                                f"Snapshot failed for sandbox {sandbox_id_str}; "
+                                f"Snapshot failed for sandbox {sandbox_id}; "
                                 f"leaving it RUNNING to retry next cycle"
                             )
-                            # Drop this sandbox's uncommitted snapshot rows.
-                            db_session.rollback()
                             continue
                         task_logger.warning(
-                            f"Sandbox {sandbox_id_str} pod is unreachable; "
+                            f"Sandbox {sandbox_id} pod is unreachable; "
                             f"terminating despite snapshot failure (cannot recover "
                             f"its workspace, won't pin it RUNNING forever)"
                         )
@@ -218,11 +247,11 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                         db_session, sandbox_id, SandboxStatus.SLEEPING
                     )
                     db_session.commit()
-                    task_logger.info(f"Sandbox {sandbox_id_str} is now sleeping")
+                    task_logger.info(f"Sandbox {sandbox_id} is now sleeping")
 
                 except Exception as e:
                     task_logger.error(
-                        f"Failed to put sandbox {sandbox_id_str} to sleep: {e}",
+                        f"Failed to sweep sandbox {sandbox_id}: {e}",
                         exc_info=True,
                     )
                     db_session.rollback()

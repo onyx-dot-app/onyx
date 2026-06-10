@@ -177,18 +177,14 @@ beat_task_templates: list[dict] = [
             "queue": OnyxCeleryQueues.PRIMARY,
         },
     },
-    # Sandbox cleanup tasks
+    # Sandbox sweep: background-snapshot changed sessions, sleep idle sandboxes.
     {
         "name": "cleanup-idle-sandboxes",
         "task": OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
-        # SANDBOX_IDLE_TIMEOUT_SECONDS defaults to 1 hour, so there is no
-        # functional reason to scan more often than every ~15 minutes. In the
-        # cloud this is multiplied by CLOUD_BEAT_MULTIPLIER_DEFAULT (=8) so
-        # the effective cadence becomes ~2 hours, which still meets the
-        # idle-detection SLA. The previous 1-minute base schedule produced
-        # an 8-minute per-tenant fan-out and was the dominant source of
-        # background DB load on the cloud cluster.
-        "schedule": timedelta(minutes=15),
+        # Ticks are cheap (the age gate skips fresh-snapshotted sessions);
+        # the cloud beat multiplier (x8) makes this ~40 min effective = the
+        # data-loss bound.
+        "schedule": timedelta(minutes=5),
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,

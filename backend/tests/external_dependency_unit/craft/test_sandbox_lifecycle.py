@@ -2,7 +2,7 @@
 
 DB-bound tests that pin the sandbox state machine: PROVISIONING → RUNNING,
 provision failures rolling back the row, idempotent provisioning, the
-health-check failure -> re-provision recovery path, the ``get_idle_sandboxes``
+health-check failure -> re-provision recovery path, the idle-selection
 query shape, and the Redis lock that serializes concurrent provision
 attempts for the same user.
 
@@ -30,9 +30,10 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.sessions_api import restore_session
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
-from onyx.server.features.build.db.sandbox import get_idle_sandboxes
+from onyx.server.features.build.db.sandbox import get_running_sandboxes
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import SandboxInfo
+from onyx.server.features.build.sandbox.tasks.tasks import _is_idle
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.sandbox_lifecycle import provision_sandbox
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
@@ -421,9 +422,8 @@ class TestIdleCleanupSelection:
         ) - datetime.timedelta(hours=2)
         db_session.commit()
 
-        idle = get_idle_sandboxes(db_session, idle_threshold_seconds=3600)
-
-        idle_ids = {s.id for s in idle}
+        now = datetime.datetime.now(datetime.timezone.utc)
+        idle_ids = {s.id for s in get_running_sandboxes(db_session) if _is_idle(s, now)}
         assert row.id in idle_ids
 
     def test_idle_cleanup_excludes_sandbox_within_threshold(
@@ -439,9 +439,9 @@ class TestIdleCleanupSelection:
         ) - datetime.timedelta(minutes=30)
         db_session.commit()
 
-        idle = get_idle_sandboxes(db_session, idle_threshold_seconds=3600)
-
-        assert row.id not in {s.id for s in idle}
+        now = datetime.datetime.now(datetime.timezone.utc)
+        idle_ids = {s.id for s in get_running_sandboxes(db_session) if _is_idle(s, now)}
+        assert row.id not in idle_ids
 
 
 # NOTE: ``test_idle_cleanup_marks_sandbox_sleeping_and_sessions_idle`` was
