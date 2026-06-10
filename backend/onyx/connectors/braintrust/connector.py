@@ -12,7 +12,6 @@ from typing import Any
 import requests
 from pydantic import BaseModel
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
@@ -40,6 +39,7 @@ _LIST_PAGE_SIZE = 100
 _EVENT_PAGE_SIZE = 200
 _SUMMARIES_PER_CALL = 10
 _PROMPTS_PER_CALL = 50
+_MAX_PAGES_PER_CALL = 20
 # Nightly eval runs re-create every row under a new experiment, so unbounded
 # per-row indexing grows with time, not suite size. 0 disables the cutoff.
 _DEFAULT_EXPERIMENT_ROW_LOOKBACK_DAYS = 30
@@ -108,14 +108,18 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
     def __init__(
         self,
         project_name: str | None = None,
-        experiment_row_lookback_days: int = _DEFAULT_EXPERIMENT_ROW_LOOKBACK_DAYS,
-        batch_size: int = INDEX_BATCH_SIZE,
+        experiment_row_lookback_days: int | None = None,
     ) -> None:
         self._project_name = project_name
-        self._experiment_row_lookback_days = experiment_row_lookback_days
-        self._batch_size = batch_size
+        self._experiment_row_lookback_days = (
+            _DEFAULT_EXPERIMENT_ROW_LOOKBACK_DAYS
+            if experiment_row_lookback_days is None
+            else experiment_row_lookback_days
+        )
         self._api_key: str | None = None
         self._rate_limited_get: Callable[..., requests.Response] | None = None
+        self._project_names: dict[str, str] | None = None
+        self._experiment_objects: list[dict[str, Any]] | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         api_key = credentials.get(_API_KEY)
@@ -190,10 +194,17 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
         return data.get("events", []), data.get("cursor")
 
     def _project_names_by_id(self) -> dict[str, str]:
-        return {
-            project["id"]: project.get("name", "")
-            for project in self._list_objects("project")
-        }
+        if self._project_names is None:
+            self._project_names = {
+                project["id"]: project.get("name", "")
+                for project in self._list_objects("project")
+            }
+        return self._project_names
+
+    def _list_experiments(self) -> list[dict[str, Any]]:
+        if self._experiment_objects is None:
+            self._experiment_objects = self._list_objects("experiment")
+        return self._experiment_objects
 
     def _to_refs(
         self, objects: list[dict[str, Any]], project_names: dict[str, str]
@@ -377,7 +388,7 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
         elif checkpoint.phase == BraintrustPhase.DATASET_ROWS:
             objects = self._list_objects("dataset")
         else:
-            objects = self._list_objects("experiment")
+            objects = self._list_experiments()
         refs = self._to_refs(objects, project_names)
         if (
             checkpoint.phase == BraintrustPhase.EXPERIMENT_ROWS
@@ -414,28 +425,36 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
     ) -> Iterator[Document | ConnectorFailure]:
         assert checkpoint.todo is not None
         parent = checkpoint.todo[-1]
-        events, next_cursor = self._fetch_events_page(
-            object_path, parent.id, checkpoint.cursor
-        )
-        for event in events:
-            created = _parse_time(event.get("created"))
-            if created and not (start_dt <= created <= end_dt):
-                continue
-            try:
-                yield self._event_to_document(event, parent, object_type)
-            except Exception as e:
-                yield ConnectorFailure(
-                    failed_document=DocumentFailure(
-                        document_id=f"braintrust:{object_path}:{parent.id}:row:{event.get('id', 'unknown')}",
-                    ),
-                    failure_message=f"Failed to map Braintrust event: {e}",
-                    exception=e,
-                )
-        if next_cursor and events:
-            checkpoint.cursor = next_cursor
-        else:
-            checkpoint.todo.pop()
-            checkpoint.cursor = None
+        # Keep paging past fully out-of-window pages (bounded) so stale objects
+        # don't cost one checkpoint round-trip per skipped page.
+        for _ in range(_MAX_PAGES_PER_CALL):
+            events, next_cursor = self._fetch_events_page(
+                object_path, parent.id, checkpoint.cursor
+            )
+            yielded = False
+            for event in events:
+                created = _parse_time(event.get("created"))
+                if created and not (start_dt <= created <= end_dt):
+                    continue
+                yielded = True
+                try:
+                    yield self._event_to_document(event, parent, object_type)
+                except Exception as e:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=f"braintrust:{object_path}:{parent.id}:row:{event.get('id', 'unknown')}",
+                        ),
+                        failure_message=f"Failed to map Braintrust event: {e}",
+                        exception=e,
+                    )
+            if next_cursor and events:
+                checkpoint.cursor = next_cursor
+            else:
+                checkpoint.todo.pop()
+                checkpoint.cursor = None
+                return
+            if yielded:
+                return
 
     def load_from_checkpoint(
         self,

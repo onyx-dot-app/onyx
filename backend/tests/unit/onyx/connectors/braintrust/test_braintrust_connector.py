@@ -129,6 +129,74 @@ def connector() -> BraintrustConnector:
     return connector
 
 
+def test_none_lookback_falls_back_to_default() -> None:
+    """A cleared optional UI field arrives as None and must not break the
+    `> 0` comparison; it resolves to the default window."""
+    connector = BraintrustConnector(experiment_row_lookback_days=None)
+    assert connector._experiment_row_lookback_days == 30
+
+
+def test_out_of_window_pages_skipped_within_one_call(
+    connector: BraintrustConnector,
+) -> None:
+    """Pages whose events all fall outside [start, end] are skipped inside a
+    single load_from_checkpoint call instead of costing one checkpoint
+    round-trip each."""
+    old_event = {**_DATASET_EVENT, "created": "2020-01-01T00:00:00Z"}
+    pages = {
+        None: ([old_event], "c1"),
+        "c1": ([old_event], "c2"),
+        "c2": ([_DATASET_EVENT], None),
+    }
+    fetch_calls: list[str | None] = []
+
+    def get_paged(
+        self: BraintrustConnector, path: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        if path == "/v1/dataset/ds-1/fetch":
+            cursor = (params or {}).get("cursor")
+            fetch_calls.append(cursor)
+            events, next_cursor = pages[cursor]
+            return {"events": events, "cursor": next_cursor}
+        return _fake_get(self, path, params)
+
+    checkpoint = BraintrustCheckpoint(
+        has_more=True,
+        phase=BraintrustPhase.DATASET_ROWS,
+        todo=[BraintrustObjectRef(id="ds-1", name="merge-cases")],
+    )
+    window_start = time.mktime(time.strptime("2026-06-01", "%Y-%m-%d"))
+
+    with patch.object(BraintrustConnector, "_get", get_paged):
+        outputs = list(
+            connector.load_from_checkpoint(window_start, time.time(), checkpoint)
+        )
+
+    assert fetch_calls == [None, "c1", "c2"]
+    assert sum(1 for o in outputs if isinstance(o, Document)) == 1
+
+
+def test_project_and_experiment_lists_fetched_once(
+    connector: BraintrustConnector,
+) -> None:
+    """Project names and the experiment list are cached on the instance, not
+    re-listed by every phase seed."""
+    list_calls: list[str] = []
+
+    def counting_get(
+        self: BraintrustConnector, path: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        if path in ("/v1/project", "/v1/experiment"):
+            list_calls.append(path)
+        return _fake_get(self, path, params)
+
+    with patch.object(BraintrustConnector, "_get", counting_get):
+        _run_connector(connector)
+
+    assert list_calls.count("/v1/project") == 1
+    assert list_calls.count("/v1/experiment") == 1
+
+
 def test_experiment_row_lookback_skips_old_experiments() -> None:
     """Experiments older than the lookback window keep their summary doc but
     contribute no per-row docs."""
