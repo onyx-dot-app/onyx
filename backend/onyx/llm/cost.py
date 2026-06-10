@@ -181,6 +181,14 @@ def compute_cost_cents(
     except Exception:
         # litellm has no price for this model — fall back to the configurable
         # default rates so unpriced/BYO models still accrue cost (0 by default).
+        # Log at debug so a transient litellm failure (vs a genuinely unpriced
+        # model) is diagnosable without spamming on every BYO model.
+        logger.debug(
+            "litellm pricing failed for model %s (provider %s); using default rates",
+            model,
+            provider,
+            exc_info=True,
+        )
         billed_input = input_tokens + cache_read_tokens
         input_cents = billed_input / 1_000_000 * DEFAULT_LLM_INPUT_COST_PER_MTOK * 100
         output_cents = (

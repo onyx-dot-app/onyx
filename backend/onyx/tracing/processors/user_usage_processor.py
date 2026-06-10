@@ -152,6 +152,10 @@ class UserUsageTracingProcessor(TracingProcessor):
             try:
                 item = self._queue.get(timeout=self._flush_interval)
             except queue.Empty:
+                # Exit on shutdown even if the sentinel couldn't be enqueued
+                # (queue was full) — don't rely solely on the sentinel.
+                if self._shutdown.is_set():
+                    return
                 continue
 
             if item is _SHUTDOWN:
@@ -251,5 +255,10 @@ class UserUsageTracingProcessor(TracingProcessor):
             if self._shutdown.is_set():
                 return
             self._shutdown.set()
-        self._queue.put(_SHUTDOWN)
+        try:
+            # Wake the drain thread now if there's room; if the queue is full,
+            # the flag-check on its next get() timeout exits it. Never block here.
+            self._queue.put_nowait(_SHUTDOWN)
+        except queue.Full:
+            pass
         self._thread.join(timeout=10.0)
