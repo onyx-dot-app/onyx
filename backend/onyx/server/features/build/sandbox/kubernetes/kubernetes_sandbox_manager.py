@@ -2859,14 +2859,16 @@ fi
     ) -> httpx.Response:
         """POST a signed JSON request to the sidecar."""
         sha256_hex = hashlib.sha256(body).hexdigest()
-        sig_b64, ts = _sign_sidecar_request(endpoint_path, sha256_hex)
-        headers = {
-            "Content-Type": "application/json",
-            "X-Push-Signature": sig_b64,
-            "X-Push-Timestamp": ts,
-        }
         last_exc: httpx.TransportError | None = None
         for host in self._sandbox_pod_hosts(sandbox_id):
+            # Sign per attempt — the daemon rejects timestamps >60s old, so a
+            # slow first attempt would hand the failover a stale signature.
+            sig_b64, ts = _sign_sidecar_request(endpoint_path, sha256_hex)
+            headers = {
+                "Content-Type": "application/json",
+                "X-Push-Signature": sig_b64,
+                "X-Push-Timestamp": ts,
+            }
             url = f"http://{host}:{PUSH_DAEMON_PORT}{endpoint_path}"
             try:
                 with httpx.Client(timeout=timeout) as http_client:
@@ -2885,16 +2887,17 @@ fi
         """Build tar.gz, POST to the in-pod daemon."""
         pod_name = self._get_pod_name(sandbox_id)
         tar_bytes, sha256_hex = _build_targz(files)
-        sig_b64, ts = _sign_sidecar_request(mount_path, sha256_hex)
-        headers = {
-            "Content-Type": "application/gzip",
-            "X-Bundle-Sha256": sha256_hex,
-            "X-Push-Signature": sig_b64,
-            "X-Push-Timestamp": ts,
-        }
 
         last_exc: httpx.TransportError | None = None
         for host in self._sandbox_pod_hosts(sandbox_id):
+            # Sign per attempt — see _post_to_sidecar.
+            sig_b64, ts = _sign_sidecar_request(mount_path, sha256_hex)
+            headers = {
+                "Content-Type": "application/gzip",
+                "X-Bundle-Sha256": sha256_hex,
+                "X-Push-Signature": sig_b64,
+                "X-Push-Timestamp": ts,
+            }
             url = f"http://{host}:{PUSH_DAEMON_PORT}/push"
             try:
                 with httpx.Client(timeout=30.0) as http_client:

@@ -5,7 +5,9 @@ upload/download tar.gz archives to/from S3. Tarring/extraction happens
 via shell pipelines so we don't buffer large snapshots in memory.
 """
 
+import os
 import shlex
+import signal
 import subprocess
 from pathlib import Path
 from uuid import UUID
@@ -18,6 +20,10 @@ SESSIONS_ROOT = Path("/workspace/sessions")
 BUN_CACHE_DIR = SESSIONS_ROOT / ".bun-cache"
 BUN_IMAGE_CACHE_DIR = Path("/home/sandbox/.bun/install/cache")
 
+# Bounded under the manager's 300s client deadline so a hung s5cmd fails as a
+# SnapshotError instead of holding the request open.
+SNAPSHOT_PIPELINE_TIMEOUT_SECONDS = 240
+
 
 class SnapshotError(RuntimeError):
     """Raised when a snapshot subprocess fails. Carries stderr from the
@@ -25,7 +31,7 @@ class SnapshotError(RuntimeError):
     """
 
 
-def _run(script: str) -> None:
+def _run(script: str, timeout: float | None = None) -> None:
     """Run a shell script with stderr merged into stdout for the error.
 
     We deliberately merge stderr into stdout (rather than capturing them
@@ -33,18 +39,28 @@ def _run(script: str) -> None:
     surfaces *something* in the SnapshotError — `set -o pipefail` can
     otherwise tear the stream down before stderr buffers flush, leaving
     a useless "no output" diagnostic.
+
+    On timeout, kills the process group so tar/s5cmd aren't orphaned.
     """
+    proc = subprocess.Popen(
+        ["/bin/bash", "-c", script],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
     try:
-        subprocess.run(
-            ["/bin/bash", "-c", script],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-    except subprocess.CalledProcessError as e:
-        detail = (e.stdout or "").strip() or "no output"
-        raise SnapshotError(f"exit {e.returncode}: {detail}") from e
+        stdout, _ = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        os.killpg(proc.pid, signal.SIGKILL)
+        try:
+            proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass  # SIGKILL didn't reap quickly; surface the original timeout
+        raise SnapshotError(f"timed out after {timeout}s") from e
+    if proc.returncode != 0:
+        detail = (stdout or "").strip() or "no output"
+        raise SnapshotError(f"exit {proc.returncode}: {detail}")
 
 
 def create_snapshot(
@@ -100,8 +116,10 @@ fi
 set +e
 tar --exclude='outputs/web/node_modules' --exclude='outputs/web/.next' \\
     -czf - $dirs | s5cmd --log info pipe {safe_s3_uri}
-tar_ec=${{PIPESTATUS[0]-0}}
-s5_ec=${{PIPESTATUS[1]-0}}
+# Snapshot PIPESTATUS in one shot — any later command resets it.
+ecs=("${{PIPESTATUS[@]}}")
+tar_ec=${{ecs[0]-0}}
+s5_ec=${{ecs[1]-0}}
 set -e
 
 if [ "$tar_ec" -ne 0 ] || [ "$s5_ec" -ne 0 ]; then
@@ -114,7 +132,7 @@ if [ "$tar_ec" -ne 0 ] || [ "$s5_ec" -ne 0 ]; then
 fi
 """
 
-    _run(script)
+    _run(script, timeout=SNAPSHOT_PIPELINE_TIMEOUT_SECONDS)
     return ("created", storage_path)
 
 
@@ -153,4 +171,4 @@ if [ -f "$web_dir/bun.lock" ]; then
 fi
 """
 
-    _run(script)
+    _run(script, timeout=SNAPSHOT_PIPELINE_TIMEOUT_SECONDS)
