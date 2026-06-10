@@ -61,6 +61,7 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import action_entry
+from tests.external_dependency_unit.craft.conftest import pod_exec
 from tests.external_dependency_unit.craft.conftest import pod_exec_async
 from tests.external_dependency_unit.craft.conftest import wait_for_pod_exec_output
 from tests.external_dependency_unit.craft.conftest import wait_for_proxy_redeploy
@@ -650,7 +651,20 @@ def test_body_too_large_returns_403(
     user, _, pod_name = gated_session
 
     output_path = f"/tmp/curl_oversize_{uuid4().hex[:8]}"
-    big_payload = "x" * (1_572_864)  # 1.5 MiB, above the 1 MiB cap
+    body_path = f"/tmp/body_oversize_{uuid4().hex[:8]}.json"
+    # Generate the 1.5 MiB body in-pod -- inlining it through pod_exec_async
+    # would push the full payload into the apiserver's exec URL query params and
+    # trip a 431 Request Header Fields Too Large at the websocket handshake.
+    pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        (
+            f'printf \'{{"channel":"#general","text":"\' > {body_path} && '
+            f'head -c 1572864 /dev/zero | tr "\\0" x >> {body_path} && '
+            f"printf '\"}}' >> {body_path}"
+        ),
+    )
     pod_exec_async(
         k8s_client,
         pod_name,
@@ -661,7 +675,7 @@ def test_body_too_large_returns_403(
             "Authorization": "Bearer xoxb-fake-test-token",
             "Content-Type": "application/json",
         },
-        body=json.dumps({"channel": "#general", "text": big_payload}),
+        body_file=body_path,
         max_time_s=60,
     )
 
