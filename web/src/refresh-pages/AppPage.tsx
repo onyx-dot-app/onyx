@@ -186,7 +186,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       newSearchParams.toString(),
       sources,
       documentSets.map((ds) => ds.name),
-      tags
+      tags,
     );
 
     newSearchParams.delete(SEARCH_PARAM_NAMES.SEND_ON_LOAD);
@@ -208,7 +208,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       // Only remove project context if user explicitly selected an agent
       // (i.e., agentId is present). Avoid clearing project when agentId was removed.
       const newSearchParams = new URLSearchParams(
-        searchParams?.toString() || ""
+        searchParams?.toString() || "",
       );
       if (newSearchParams.has(SEARCH_PARAM_NAMES.PERSONA_ID)) {
         newSearchParams.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
@@ -252,7 +252,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const sources: SourceMetadata[] = useMemo(() => {
     const uniqueSources = Array.from(new Set(availableSources));
     const regularSources = uniqueSources.map((source) =>
-      getSourceMetadata(source)
+      getSourceMetadata(source),
     );
 
     // Add federated connectors as sources
@@ -281,7 +281,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       toast.error(
         lastFailedFiles.length === 1
           ? `File failed and was removed: ${names}`
-          : `Files failed and were removed: ${names}`
+          : `Files failed and were removed: ${names}`,
       );
       clearLastFailedFiles();
     }
@@ -295,7 +295,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     liveAgent,
     currentChatSessionId,
     currentChatSession ?? undefined,
-    settings
+    settings,
   );
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
@@ -347,7 +347,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }, []);
 
   const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
-    []
+    [],
   );
 
   // Access chat state directly from the store
@@ -355,19 +355,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const isReady = useIsReady();
   const documentSidebarVisible = useDocumentSidebarVisible();
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
-    (state) => state.updateCurrentDocumentSidebarVisible
+    (state) => state.updateCurrentDocumentSidebarVisible,
   );
   const messageHistory = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
 
-  // Context-window gauge: prefer the live value from the latest assistant turn's
-  // packets, else fall back to the session-detail baseline loaded into the store.
+  // Context-window gauge: prefer the live value from the most recent assistant
+  // turn that reported usage, else the value loaded from session-detail.
   const sessionContextUsage = useCurrentSessionContextUsage();
   const liveContextUsage = useMemo(() => {
+    // Backtrack past assistant turns that reported no usage (matching the backend).
     for (let i = messageHistory.length - 1; i >= 0; i--) {
       const message = messageHistory[i];
       if (message?.type === "assistant") {
-        return getContextUsage(message.packets);
+        const usage = getContextUsage(message.packets);
+        if (usage) return usage;
       }
     }
     return null;
@@ -393,7 +395,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         (m) =>
           m &&
           (m.type === "assistant" || m.type === "error") &&
-          (m.modelDisplayName || m.overridden_model)
+          (m.modelDisplayName || m.overridden_model),
       );
     if (multiModelChildren.length < 2) return false;
     // Check if a preferred response has been set on this user message
@@ -592,7 +594,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       showOnboarding,
       onboardingDismissed,
       finishOnboarding,
-    ]
+    ],
   );
   const { submit: submitQuery, state, setAppMode } = useQueryController();
 
@@ -614,7 +616,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const handleSearchDocumentClick = useCallback(
     (doc: MinimalOnyxDocument) => setPresentingDocument(doc),
-    []
+    [],
   );
 
   const handleAppInputBarSubmit = useCallback(
@@ -658,7 +660,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       finishOnboarding,
       multiModel.isMultiModelActive,
       multiModel.selectedModels,
-    ]
+    ],
   );
 
   // Memoized callbacks for DocumentsSidebar
@@ -675,7 +677,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       <RootLayout.RightPanel
         className={cn(
           "overflow-hidden transition-all duration-300 ease-in-out",
-          documentSidebarVisible ? "w-100" : "w-0"
+          documentSidebarVisible ? "w-100" : "w-0",
         )}
       >
         <div className="h-full w-100">
@@ -929,7 +931,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   <div
                     className={cn(
                       "row-start-2 flex flex-col items-center px-4",
-                      sessionFetchError && "hidden"
+                      sessionFetchError && "hidden",
                     )}
                   >
                     <div className="relative w-full max-w-(--app-page-main-content-width) flex flex-col">
@@ -982,7 +984,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         <div
                           className={cn(
                             "transition-all duration-150 ease-in-out overflow-hidden",
-                            isSearch ? "h-[14px]" : "h-0"
+                            isSearch ? "h-[14px]" : "h-0",
                           )}
                         />
                         {appFocus.isChat() &&
@@ -1041,7 +1043,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         <div
                           className={cn(
                             "transition-all duration-150 ease-in-out overflow-hidden",
-                            appFocus.isChat() ? "h-[14px]" : "h-0"
+                            appFocus.isChat() ? "h-[14px]" : "h-0",
                           )}
                         />
                       </div>
