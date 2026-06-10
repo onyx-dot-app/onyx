@@ -6,9 +6,6 @@ from sqlalchemy.orm import Session
 from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import get_external_app_user_credential
 from onyx.db.models import ExternalApp
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 
 def build_auth_headers(
@@ -50,51 +47,20 @@ def resolve_injection_headers(
     the user's stored credentials (the user's win on key conflicts), then
     renders the ``auth_template`` via :func:`build_auth_headers`.
     """
-    logger.info(
-        "[seed-debug] resolve_injection_headers.enter app_id=%s user_id=%s",
-        external_app_id,
-        user_id,
-    )
     app = get_external_app_by_id(db_session, external_app_id)
-    logger.info(
-        "[seed-debug] resolve_injection_headers.got_app present=%s",
-        app is not None,
-    )
     if app is None or not app.skill.enabled:
         return {}
 
-    logger.info("[seed-debug] resolve_injection_headers.before_org_get_value")
-    org_creds = app.organization_credentials.get_value(apply_mask=False)
-    logger.info(
-        "[seed-debug] resolve_injection_headers.got_org_creds keys=%s",
-        list(org_creds.keys()),
+    credentials: dict[str, Any] = dict(
+        app.organization_credentials.get_value(apply_mask=False)
     )
-    credentials: dict[str, Any] = dict(org_creds)
-
-    logger.info("[seed-debug] resolve_injection_headers.before_user_cred")
     user_cred = get_external_app_user_credential(
         db_session, external_app_id=external_app_id, user_id=user_id
     )
-    logger.info(
-        "[seed-debug] resolve_injection_headers.got_user_cred present=%s",
-        user_cred is not None,
-    )
     if user_cred is not None:
-        logger.info("[seed-debug] resolve_injection_headers.before_user_get_value")
-        user_value = user_cred.user_credentials.get_value(apply_mask=False)
-        logger.info(
-            "[seed-debug] resolve_injection_headers.got_user_value keys=%s",
-            list(user_value.keys()),
-        )
-        credentials.update(user_value)
+        credentials.update(user_cred.user_credentials.get_value(apply_mask=False))
 
-    logger.info("[seed-debug] resolve_injection_headers.before_build")
-    headers = build_auth_headers(app.auth_template, credentials)
-    logger.info(
-        "[seed-debug] resolve_injection_headers.done header_names=%s",
-        list(headers.keys()),
-    )
-    return headers
+    return build_auth_headers(app.auth_template, credentials)
 
 
 def app_is_available(db_session: Session, app: ExternalApp, user_id: UUID) -> bool:

@@ -41,7 +41,6 @@ from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.external_app import create_external_app
 from onyx.db.external_app import get_built_in_external_app
-from onyx.db.external_app import get_external_apps
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
 from onyx.db.models import Notification
@@ -100,20 +99,10 @@ def _seed_slack_external_app() -> Generator[None, None, None]:
     """
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
-    logger.info(
-        "[seed-debug] entering _seed_slack_external_app tenant=%s", TEST_TENANT_ID
-    )
     try:
         with get_session_with_current_tenant() as session:
-            existing = get_built_in_external_app(session, ExternalAppType.SLACK)
-            logger.info(
-                "[seed-debug] get_built_in_external_app(SLACK) -> %s",
-                f"id={existing.id} skill.enabled={existing.skill.enabled}"
-                if existing is not None
-                else "None",
-            )
-            if existing is None:
-                created = create_external_app(
+            if get_built_in_external_app(session, ExternalAppType.SLACK) is None:
+                create_external_app(
                     db_session=session,
                     name="Slack",
                     description="Slack integration for gate-flow K8s tests.",
@@ -128,25 +117,6 @@ def _seed_slack_external_app() -> Generator[None, None, None]:
                     action_policies={"slack.messages.write": EndpointPolicy.ASK},
                 )
                 session.commit()
-                logger.info(
-                    "[seed-debug] created Slack ExternalApp id=%s skill.enabled=%s "
-                    "patterns=%s policies=%s",
-                    created.id,
-                    created.skill.enabled,
-                    created.upstream_url_patterns,
-                    {p.action_id: p.policy.value for p in created.policies},
-                )
-
-        # Reopen a brand-new session so the read goes to the committed state
-        # rather than the just-committed session's view -- proves the row is
-        # visible to fresh connections (like the proxy's).
-        with get_session_with_current_tenant() as verify_session:
-            apps = get_external_apps(verify_session)
-            logger.info(
-                "[seed-debug] post-commit verify get_external_apps -> count=%d types=%s",
-                len(apps),
-                [a.app_type.value for a in apps],
-            )
         yield
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -331,17 +301,6 @@ def test_rejected_decision_returns_403_user_rejected(
 ) -> None:
     """REJECTED decision → proxy writes 403 ``user_rejected`` to the sandbox."""
     user, session_id, pod_name = gated_session
-
-    apps_at_test = get_external_apps(db_session)
-    logger.info(
-        "[seed-debug] pre-curl get_external_apps from test process -> count=%d "
-        "types=%s",
-        len(apps_at_test),
-        [
-            (a.id, a.app_type.value, a.skill.enabled, a.upstream_url_patterns)
-            for a in apps_at_test
-        ],
-    )
 
     output_path = f"/tmp/curl_reject_{uuid4().hex[:8]}"
     _post_slack_via_curl(

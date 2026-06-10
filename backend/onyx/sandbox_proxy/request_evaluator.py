@@ -73,24 +73,8 @@ class ExternalAppRequestEvaluator(RequestEvaluator):
     ) -> AllMatchedActions | None:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             apps = get_external_apps(db)
-            logger.info(
-                "[seed-debug] evaluator.apps tenant_id=%s count=%d apps=%s url=%s",
-                tenant_id,
-                len(apps),
-                [(a.id, a.app_type.value, a.upstream_url_patterns) for a in apps],
-                request.url,
-            )
-            logger.info("[seed-debug] evaluator.before_resolve_app_for_url")
             app = resolve_app_for_url(request.url, apps)
-            logger.info(
-                "[seed-debug] evaluator.resolved_app app=%s",
-                app.id if app is not None else None,
-            )
             if app is None:
-                logger.info(
-                    "[seed-debug] evaluator.no_match url=%s",
-                    request.url,
-                )
                 return None
 
             # Catalog path matchers test the URL path only; mitmproxy's
@@ -100,32 +84,11 @@ class ExternalAppRequestEvaluator(RequestEvaluator):
                 path=(request.path or "").split("?", 1)[0],
                 body=request.raw_content,
             )
-            logger.info("[seed-debug] evaluator.before_recognize_actions")
-            recognized = recognize_actions(db, app, proxied)
-            logger.info(
-                "[seed-debug] evaluator.recognized actions=%s",
-                [
-                    (a.action_type, a.policy.value)
-                    for a in (recognized.actions if recognized is not None else ())
-                ]
-                if recognized is not None
-                else None,
-            )
-            logger.info("[seed-debug] evaluator.before_app_is_available")
-            available = app_is_available(db, app, user_id)
-            logger.info("[seed-debug] evaluator.app_is_available -> %s", available)
-            logger.info("[seed-debug] evaluator.before_apply_credential_gate")
             matched_actions = apply_credential_gate(
                 app,
                 proxied,
-                recognized,
-                is_available=available,
-            )
-            logger.info(
-                "[seed-debug] evaluator.apply_credential_gate -> %s",
-                None
-                if matched_actions is None
-                else [(a.action_type, a.policy.value) for a in matched_actions.actions],
+                recognize_actions(db, app, proxied),
+                is_available=app_is_available(db, app, user_id),
             )
             if matched_actions is None:
                 return None

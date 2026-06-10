@@ -22,9 +22,6 @@ from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.providers.registry import effective_policy
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.external_apps.providers.registry import get_provider_for_app
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 # action_type for a domain-matched request that hit no catalog action.
 WHOLE_DOMAIN_ACTION_TYPE = "unspecified"
@@ -125,16 +122,9 @@ def recognize_actions(
     the caller's job (see ``apply_credential_gate``). ``payload`` is left empty here; refill
     it via ``model_copy``.
     """
-    logger.info("[seed-debug] recognize_actions.enter app_id=%s", app.id)
     context = MatchContext(request)
-    logger.info("[seed-debug] recognize_actions.before_get_policies")
     stored = get_policies(db_session, app.id)
-    logger.info(
-        "[seed-debug] recognize_actions.got_policies count=%d",
-        len(stored) if stored is not None else -1,
-    )
     catalog = get_endpoint_catalog(app.app_type)
-    logger.info("[seed-debug] recognize_actions.got_catalog count=%d", len(catalog))
     matched = [
         MatchedAction(
             action_type=endpoint.id,

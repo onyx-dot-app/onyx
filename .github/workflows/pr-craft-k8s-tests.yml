@@ -461,32 +461,6 @@ jobs:
 
       # Surface the live-captured sandbox pod logs inline so the serve
       # startup output is visible in the run without downloading artifacts.
-      # Postgres ground-truth at failure time. Lets us tell apart "the seed
-      # never wrote" from "the seed wrote but something deleted it" from "the
-      # proxy is reading a different DB than the test."
-      - name: Dump Postgres state on failure
-        if: failure()
-        run: |
-          PG_ID=$(cd deployment/docker_compose && \
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q relational_db)
-          echo "=== external_app ==="
-          docker exec "$PG_ID" psql -U postgres -d postgres -c \
-            "SELECT id, app_type, enabled, upstream_url_patterns FROM external_app;" \
-            || true
-          echo "=== skill ==="
-          docker exec "$PG_ID" psql -U postgres -d postgres -c \
-            "SELECT id, slug, name, enabled FROM skill;" || true
-          echo "=== sandbox ==="
-          docker exec "$PG_ID" psql -U postgres -d postgres -c \
-            "SELECT id, user_id, status FROM sandbox;" || true
-          echo "=== build_session ==="
-          docker exec "$PG_ID" psql -U postgres -d postgres -c \
-            "SELECT id, user_id, status FROM build_session;" || true
-          echo "=== action_approval ==="
-          docker exec "$PG_ID" psql -U postgres -d postgres -c \
-            "SELECT approval_id, session_id, decision, created_at FROM action_approval ORDER BY created_at DESC LIMIT 20;" \
-            || true
-
       - name: Dump captured sandbox pod logs on failure
         if: failure()
         run: |
