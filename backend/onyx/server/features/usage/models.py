@@ -11,6 +11,8 @@ class CostOverrideUpsertRequest(BaseModel):
     # cache_read is optional; null bills cache reads at the input rate. Rates are
     # non-negative — a negative rate would credit usage and corrupt budgets.
     model: str
+    # "" = provider-agnostic; set to price the same model per provider.
+    provider: str = ""
     input_cost_per_mtok: float = Field(ge=0)
     output_cost_per_mtok: float = Field(ge=0)
     cache_read_cost_per_mtok: float | None = Field(default=None, ge=0)
@@ -18,6 +20,7 @@ class CostOverrideUpsertRequest(BaseModel):
 
 class CostOverride(BaseModel):
     model: str
+    provider: str
     input_cost_per_mtok: float
     output_cost_per_mtok: float
     cache_read_cost_per_mtok: float | None
@@ -27,6 +30,7 @@ class CostOverride(BaseModel):
     def from_db(cls, row: ModelCostOverride) -> "CostOverride":
         return cls(
             model=row.model,
+            provider=row.provider,
             input_cost_per_mtok=row.input_cost_per_mtok,
             output_cost_per_mtok=row.output_cost_per_mtok,
             cache_read_cost_per_mtok=row.cache_read_cost_per_mtok,
