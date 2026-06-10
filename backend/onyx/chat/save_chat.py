@@ -177,6 +177,7 @@ def save_chat_turn(
     is_clarification: bool = False,
     emitted_citations: set[int] | None = None,
     pre_answer_processing_time: float | None = None,
+    prompt_tokens: int | None = None,
 ) -> None:
     """
     Save a chat turn by populating the assistant_message and creating related entities.
@@ -202,6 +203,7 @@ def save_chat_turn(
         emitted_citations: Set of citation numbers that were actually emitted during streaming.
             If provided, only citations in this set will be saved; others are filtered out.
         pre_answer_processing_time: Duration of processing before answer starts (in seconds)
+        prompt_tokens: Provider-reported prompt tokens for this turn (real context-window usage)
     """
     # 1. Update ChatMessage with message content, reasoning tokens, and token count
     sanitized_message_text = (
@@ -226,6 +228,9 @@ def save_chat_turn(
         )
     else:
         assistant_message.token_count = 0
+
+    # Provider-reported prompt tokens (real context-window usage for this turn)
+    assistant_message.prompt_tokens = prompt_tokens
 
     # 2. Create DB SearchDoc entries from pre-deduplicated all_search_docs
     search_doc_key_to_id: dict[SearchDocKey, int] = {}

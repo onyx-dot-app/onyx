@@ -956,6 +956,7 @@ def translate_db_message_to_chat_message_detail(
         processing_duration_seconds=chat_message.processing_duration_seconds,
         preferred_response_id=chat_message.preferred_response_id,
         model_display_name=chat_message.model_display_name,
+        prompt_tokens=chat_message.prompt_tokens,
     )
 
     return chat_msg_detail

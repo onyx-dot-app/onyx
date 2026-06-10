@@ -230,6 +230,7 @@ class ChatMessageDetail(BaseModel):
     processing_duration_seconds: float | None = None
     preferred_response_id: int | None = None
     model_display_name: str | None = None
+    prompt_tokens: int | None = None
 
     def model_dump(  # ty: ignore[invalid-method-override]
         self, *args: list, **kwargs: dict[str, Any]
@@ -248,6 +249,11 @@ class SetPreferredResponseRequest(BaseModel):
     preferred_response_id: int
 
 
+class ContextUsage(BaseModel):
+    used_tokens: int  # provider prompt_tokens of the most recent reporting turn
+    max_input_tokens: int  # the producing model's context window
+
+
 class ChatSessionDetailResponse(BaseModel):
     chat_session_id: UUID
     description: str | None
@@ -262,6 +268,7 @@ class ChatSessionDetailResponse(BaseModel):
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
+    context_usage: ContextUsage | None = None
 
 
 class AdminSearchRequest(BaseModel):

@@ -44,6 +44,7 @@ class StreamingType(Enum):
     CITATION_INFO = "citation_info"
     TOOL_CALL_DEBUG = "tool_call_debug"
     TOOL_CALL_ARGUMENT_DELTA = "tool_call_argument_delta"
+    CONTEXT_USAGE = "context_usage"
 
     MEMORY_TOOL_START = "memory_tool_start"
     MEMORY_TOOL_DELTA = "memory_tool_delta"
@@ -299,6 +300,15 @@ class ToolCallArgumentDelta(BaseObj):
     argument_deltas: dict[str, Any]
 
 
+# Provider prompt_tokens of the completed turn + the producing model's context window,
+# emitted once at turn end so the frontend can render the context-usage gauge live.
+class ContextUsagePacket(BaseObj):
+    type: Literal["context_usage"] = StreamingType.CONTEXT_USAGE.value
+
+    used_tokens: int
+    max_input_tokens: int
+
+
 ################################################
 # File Reader Packets
 ################################################
@@ -459,6 +469,7 @@ PacketObj = Union[
     CitationInfo,
     ToolCallDebug,
     ToolCallArgumentDelta,
+    ContextUsagePacket,
     # Deep Research Packets
     DeepResearchPlanStart,
     DeepResearchPlanDelta,

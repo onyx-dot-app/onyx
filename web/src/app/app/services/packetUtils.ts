@@ -5,10 +5,11 @@ import {
   StreamingCitation,
 } from "./streamingModels";
 import { Packet } from "@/app/app/services/streamingModels";
+import { ContextUsage } from "@/sections/chat/interfaces";
 
 export function isToolPacket(
   packet: Packet,
-  includeSectionEnd: boolean = true
+  includeSectionEnd: boolean = true,
 ) {
   let toolPacketTypes = [
     PacketType.SEARCH_TOOL_START,
@@ -85,7 +86,7 @@ export function isFinalAnswerComing(packets: Packet[]) {
   return packets.some(
     (packet) =>
       packet.obj.type === PacketType.MESSAGE_START ||
-      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
+      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START,
   );
 }
 
@@ -94,7 +95,7 @@ export function isFinalAnswerComplete(packets: Packet[]) {
   const messageStartPacket = packets.find(
     (packet) =>
       packet.obj.type === PacketType.MESSAGE_START ||
-      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
+      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START,
   );
 
   if (!messageStartPacket) {
@@ -106,12 +107,12 @@ export function isFinalAnswerComplete(packets: Packet[]) {
     (packet) =>
       (packet.obj.type === PacketType.SECTION_END ||
         packet.obj.type === PacketType.ERROR) &&
-      packet.placement.turn_index === messageStartPacket.placement.turn_index
+      packet.placement.turn_index === messageStartPacket.placement.turn_index,
   );
 }
 
 export function groupPacketsByTurnIndex(
-  packets: Packet[]
+  packets: Packet[],
 ): { turn_index: number; tab_index: number; packets: Packet[] }[] {
   /*
   Group packets by (turn_index, tab_index). 
@@ -125,7 +126,7 @@ export function groupPacketsByTurnIndex(
         string,
         { turn_index: number; tab_index: number; packets: Packet[] }
       >,
-      packet
+      packet,
     ) => {
       const turn_index = packet.placement.turn_index;
       const tab_index = packet.placement.tab_index ?? 0;
@@ -136,7 +137,7 @@ export function groupPacketsByTurnIndex(
       acc.get(key)!.packets.push(packet);
       return acc;
     },
-    new Map()
+    new Map(),
   );
 
   // Convert to array and sort by turn_index first, then tab_index
@@ -184,4 +185,23 @@ export function getCitations(packets: Packet[]): StreamingCitation[] {
   });
 
   return citations;
+}
+
+// Latest context_usage packet wins: in multi-model comparison each model emits
+// one, and taking the last is acceptable for v1.
+export function getContextUsage(packets: Packet[]): ContextUsage | null {
+  for (let i = packets.length - 1; i >= 0; i--) {
+    const packet = packets[i];
+    if (packet && packet.obj.type === PacketType.CONTEXT_USAGE) {
+      const o = packet.obj as {
+        used_tokens: number;
+        max_input_tokens: number;
+      };
+      return {
+        used_tokens: o.used_tokens,
+        max_input_tokens: o.max_input_tokens,
+      };
+    }
+  }
+  return null;
 }
