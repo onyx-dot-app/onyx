@@ -296,9 +296,9 @@ jobs:
           MINIO_ID=$(cd deployment/docker_compose && \
             docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q minio)
           docker exec "$MINIO_ID" \
-            mc alias set local http://localhost:9000 minioadmin minioadmin
+            mc alias set local http://127.0.0.1:9000 minioadmin minioadmin
           docker exec "$MINIO_ID" \
-            mc mb -p "local/${S3_FILE_STORE_BUCKET_NAME}"
+            mc mb --ignore-existing -p "local/${S3_FILE_STORE_BUCKET_NAME}"
 
       - name: Expose MinIO inside the kind cluster
         run: |
@@ -476,7 +476,7 @@ jobs:
           MINIO_ID=$(cd deployment/docker_compose && \
             docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q minio)
           docker exec "$MINIO_ID" \
-            mc alias set local http://localhost:9000 minioadmin minioadmin || true
+            mc alias set local http://127.0.0.1:9000 minioadmin minioadmin || true
           echo "=== buckets in docker-compose minio (container view) ==="
           docker exec "$MINIO_ID" mc ls local/ || true
           echo "=== recursive listing of every bucket (container view) ==="
