@@ -115,7 +115,11 @@ class UserUsageTracingProcessor(TracingProcessor):
 
         user_id = get_current_user_id()
         if user_id is None:
-            # Background worker / no request — nothing to attribute.
+            # v1 attributes usage only for interactive chat (the user-id
+            # contextvar is set on the chat-send endpoints). Non-chat LLM calls
+            # — search-answer, Slack, agent sub-calls, background workers —
+            # yield no row rather than mis-attributing. Fails safe (undercount,
+            # never wrong-user); widening the set-sites is a follow-up.
             return None
 
         model = data.model

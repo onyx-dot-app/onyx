@@ -9,7 +9,9 @@ class TokenRateLimitArgs(BaseModel):
     enabled: bool
     # A limit may be token-only, cost-only, or both; a null side is exempt from
     # that gate. At least one must be set (a row with neither enforces nothing).
-    token_budget: int | None = None
+    # ge=1: a 0/negative budget is silently treated as token-exempt by the gate
+    # (skips token_budget <= 0), so the admin's limit would enforce nothing.
+    token_budget: int | None = Field(default=None, ge=1)
     period_hours: int
     # gt=0 + finite: a 0/NaN budget would otherwise trip the gate on the first
     # request (cost >= 0 always true; cost >= NaN always false), bypassing real

@@ -58,24 +58,27 @@ def get_override(
     tenant_id = get_current_tenant_id()
     with _cache_lock:
         entry = _cache.get(tenant_id)
-        if entry is None or (time.monotonic() - entry[0]) >= _CACHE_TTL_SECONDS:
-            try:
-                snapshot = _load_cache(db_session)
-            except Exception:
-                # Cost computation must never raise. On a transient load failure
-                # keep serving the last good snapshot (stale rates beat silently
-                # dropping negotiated rates); only with no prior snapshot do we
-                # treat as no overrides. The stale timestamp is left as-is so the
-                # next lookup retries the DB.
-                logger.exception("Failed to load model cost overrides")
-                if entry is None:
-                    return None
-                return _lookup(entry[1], model, provider)
-            entry = (time.monotonic(), snapshot)
-            if tenant_id not in _cache and len(_cache) >= _MAX_CACHED_TENANTS:
-                _cache.pop(next(iter(_cache)), None)
-            _cache[tenant_id] = entry
+    if entry is not None and (time.monotonic() - entry[0]) < _CACHE_TTL_SECONDS:
         return _lookup(entry[1], model, provider)
+
+    # Reload outside the lock so a slow DB query doesn't serialize every other
+    # tenant's lookups. A concurrent double-load is harmless (idempotent).
+    try:
+        snapshot = _load_cache(db_session)
+    except Exception:
+        # Cost computation must never raise. On a transient load failure keep
+        # serving the last good snapshot (stale rates beat silently dropping
+        # negotiated rates); only with no prior snapshot do we treat as no
+        # overrides. The stale timestamp is left as-is so the next lookup retries.
+        logger.exception("Failed to load model cost overrides")
+        return _lookup(entry[1], model, provider) if entry is not None else None
+
+    entry = (time.monotonic(), snapshot)
+    with _cache_lock:
+        if tenant_id not in _cache and len(_cache) >= _MAX_CACHED_TENANTS:
+            _cache.pop(next(iter(_cache)), None)
+        _cache[tenant_id] = entry
+    return _lookup(snapshot, model, provider)
 
 
 def invalidate_override_cache() -> None:
