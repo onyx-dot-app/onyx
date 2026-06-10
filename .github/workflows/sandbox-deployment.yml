@@ -2,10 +2,17 @@ name: Build and Push Sandbox Image
 
 # The sandbox image is the only Craft-specific image. Build a new version on
 # the nightly tag when its build context changed, or manually on demand.
+#
+# To push an ad-hoc dev build:
+#   git tag -f sandbox-dev && git push -f origin sandbox-dev
+# builds unconditionally and pushes onyxdotapp/sandbox:dev. Dev builds never
+# cut a vX.Y.Z version or move :latest — those only happen on the nightly
+# path. Only sandbox-dev is supported, to keep Docker Hub free of one-off tags.
 on:
   push:
     tags:
       - "nightly-latest-*"
+      - "sandbox-dev"
   workflow_dispatch:
 
 # Restrictive defaults; jobs declare what they need.
@@ -19,7 +26,9 @@ jobs:
       contents: read
     outputs:
       sandbox-changed: ${{ steps.check.outputs.sandbox-changed }}
-      new-version: ${{ steps.version.outputs.new-version }}
+      # metadata-action tags input: set by the check step for dev builds,
+      # otherwise by the version step.
+      image-tags: ${{ steps.check.outputs.image-tags || steps.version.outputs.image-tags }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -35,6 +44,14 @@ jobs:
           # Manual runs always build.
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             echo "Manual dispatch: building unconditionally"
+            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # The sandbox-dev tag always builds and pushes the :dev image tag.
+          if [ "$GITHUB_REF_NAME" = "sandbox-dev" ]; then
+            echo "Dev tag: building and pushing :dev"
+            echo "image-tags=type=raw,value=dev" >> "$GITHUB_OUTPUT"
             echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -60,7 +77,7 @@ jobs:
 
       - name: Determine new sandbox version
         id: version
-        if: steps.check.outputs.sandbox-changed == 'true'
+        if: steps.check.outputs.sandbox-changed == 'true' && steps.check.outputs.image-tags == ''
         run: |
           # Query Docker Hub for the latest versioned tag
           LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags?page_size=100" \
@@ -85,7 +102,12 @@ jobs:
           fi
 
           echo "New version: $NEW_VERSION"
-          echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "image-tags<<EOF"
+            echo "type=raw,value=v${NEW_VERSION}"
+            echo "type=raw,value=latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
   build-sandbox-amd64:
     needs: check-sandbox-changes
@@ -276,9 +298,7 @@ jobs:
           images: ${{ env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
-          tags: |
-            type=raw,value=v${{ needs.check-sandbox-changes.outputs.new-version }}
-            type=raw,value=latest
+          tags: ${{ needs.check-sandbox-changes.outputs.image-tags }}
 
       - name: Create and push manifest
         env:

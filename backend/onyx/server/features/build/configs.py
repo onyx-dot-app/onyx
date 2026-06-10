@@ -54,6 +54,10 @@ SANDBOX_CONTAINER_IMAGE = os.environ.get(
     "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.52"
 )
 
+# Set to "Always" in environments that pin a mutable tag (e.g. :dev) so nodes
+# re-pull on every pod start; immutable version pins can use the node cache.
+SANDBOX_IMAGE_PULL_POLICY = os.environ.get("SANDBOX_IMAGE_PULL_POLICY", "IfNotPresent")
+
 # Path structure: s3://{bucket}/{tenant_id}/snapshots/{session_id}/{snapshot_id}.tar.gz
 #                 s3://{bucket}/{tenant_id}/knowledge/{user_id}/
 #                 s3://{bucket}/{tenant_id}/uploads/{session_id}/

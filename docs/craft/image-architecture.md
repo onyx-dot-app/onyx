@@ -32,6 +32,24 @@ previous nightly. It publishes `onyxdotapp/sandbox:vX.Y.Z` (auto-incremented
 patch) + `:latest`. Run it manually any time via the workflow's
 `workflow_dispatch` to cut a build on demand.
 
+For an ad-hoc dev build, push the `sandbox-dev` git tag:
+
+```bash
+git tag -f sandbox-dev && git push -f origin sandbox-dev
+```
+
+This builds unconditionally and pushes `onyxdotapp/sandbox:dev`. Dev builds
+never cut a `vX.Y.Z` version or move `:latest` — those only happen on the
+nightly path. Only `sandbox-dev` is supported, to keep Docker Hub free of
+one-off tags.
+
+Sandbox pods default to `imagePullPolicy: IfNotPresent`, which would keep
+serving a node-cached `:dev` after a re-push. Environments that pin the
+mutable `:dev` tag must also set `SANDBOX_IMAGE_PULL_POLICY=Always` (next to
+`SANDBOX_CONTAINER_IMAGE` in the env config) so new pods always pull the
+latest dev build. Already running sandbox pods are unaffected — delete them
+to pick up the new image.
+
 The backend does **not** track `:latest` — it pins a specific version via
 `SANDBOX_CONTAINER_IMAGE` (default in `configs.py`). Bump that pin to adopt a
 new sandbox version.
