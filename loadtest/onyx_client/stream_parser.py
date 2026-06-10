@@ -91,10 +91,13 @@ class ChatStreamAnalyzer:
             self.summary.saw_message_start = True
             content = obj.get("content") or ""
             self.summary.answer_chars += len(content)
-            self._mark(FIRST_ANSWER_TOKEN, hit)
+            if content:
+                self._mark(FIRST_ANSWER_TOKEN, hit)
         elif packet_type == MESSAGE_DELTA:
-            self.summary.answer_chars += len(obj.get("content") or "")
-            self._mark(FIRST_ANSWER_TOKEN, hit)
+            content = obj.get("content") or ""
+            self.summary.answer_chars += len(content)
+            if content:
+                self._mark(FIRST_ANSWER_TOKEN, hit)
         elif packet_type == SEARCH_TOOL_DOCUMENTS_DELTA:
             docs = obj.get("documents") or []
             self.summary.search_doc_count += len(docs)
@@ -115,8 +118,27 @@ class ChatStreamAnalyzer:
             hit.append(milestone)
 
     def completed_ok(self) -> bool:
+        # saw_stop is required: a stream cut mid-answer (proxy timeout, OOM)
+        # is a failure even if answer content already arrived.
         return (
             self.summary.error is None
             and self.summary.saw_message_start
             and self.summary.answer_chars > 0
+            and self.summary.saw_stop
         )
+
+    def failure_reason(self) -> str:
+        if self.summary.error:
+            return self.summary.error
+        if not self.summary.saw_message_start or not self.summary.answer_chars:
+            return (
+                "stream ended without answer content "
+                f"(packets={self.summary.packets}, saw_stop={self.summary.saw_stop})"
+            )
+        if not self.summary.saw_stop:
+            return (
+                "stream truncated: answer content arrived but no stop packet "
+                f"(packets={self.summary.packets}, "
+                f"answer_chars={self.summary.answer_chars})"
+            )
+        return "unknown failure"

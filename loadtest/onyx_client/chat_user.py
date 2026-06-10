@@ -46,8 +46,8 @@ class OnyxChatUser(HttpUser):
     wait_time = constant(_env_float("ONYX_WAIT_SECONDS", 15.0))
     # Read timeout is between chunks, not total; chat_heartbeat keepalives in
     # the stream mean a healthy turn never goes silent this long.
-    stream_read_timeout = _env_float("ONYX_STREAM_READ_TIMEOUT", 180.0)
-    deep_research = os.environ.get("ONYX_DEEP_RESEARCH", "").lower() == "true"
+    stream_read_timeout: float = _env_float("ONYX_STREAM_READ_TIMEOUT", 180.0)
+    deep_research: bool = os.environ.get("ONYX_DEEP_RESEARCH", "").lower() == "true"
 
     def on_start(self) -> None:
         api_key = os.environ.get("ONYX_API_KEY")
@@ -61,8 +61,8 @@ class OnyxChatUser(HttpUser):
         if provider and model:
             self.llm_override = {"model_provider": provider, "model_version": model}
 
-        self.messages = DEFAULT_MESSAGES
-        self.turn_index = 0
+        self.messages: list[str] = DEFAULT_MESSAGES
+        self.turn_index: int = 0
 
     def _fire(
         self,
@@ -136,11 +136,11 @@ class OnyxChatUser(HttpUser):
         if analyzer.completed_ok():
             self._fire("chat:total_turn", start, response_length=summary.answer_chars)
         else:
-            reason = summary.error or (
-                "stream ended without message_start/answer content "
-                f"(packets={summary.packets}, saw_stop={summary.saw_stop})"
+            self._fire(
+                "chat:total_turn",
+                start,
+                exception=Exception(analyzer.failure_reason()),
             )
-            self._fire("chat:total_turn", start, exception=Exception(reason))
 
 
 class BasicChatUser(OnyxChatUser):
