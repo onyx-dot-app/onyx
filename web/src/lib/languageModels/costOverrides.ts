@@ -7,20 +7,22 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 
 /**
  * Admin-set negotiated per-model rate, overriding the built-in price book.
- * Rates are USD per MILLION tokens. There is no provider field — overrides
- * key solely on `model`.
+ * Rates are USD per MILLION tokens. Keyed on (provider, model); provider is ""
+ * for a provider-agnostic override.
  */
 export interface CostOverride {
   model: string;
+  provider: string;
   input_cost_per_mtok: number;
   output_cost_per_mtok: number;
   cache_read_cost_per_mtok: number | null; // null = bill cache at the input rate
   updated_at: string | null;
 }
 
-/** PUT body — an idempotent upsert keyed on `model`. */
+/** PUT body — an idempotent upsert keyed on (provider, model). */
 export interface CostOverrideUpsert {
   model: string;
+  provider?: string; // "" / omitted = provider-agnostic
   input_cost_per_mtok: number;
   output_cost_per_mtok: number;
   cache_read_cost_per_mtok: number | null;
@@ -34,7 +36,7 @@ export function useCostOverrides() {
   const { data, error, isLoading, mutate } = useSWR<CostOverride[]>(
     SWR_KEYS.costOverrides,
     errorHandlingFetcher,
-    { revalidateOnFocus: false }
+    { revalidateOnFocus: false },
   );
 
   return {
@@ -51,7 +53,7 @@ export function useCostOverrides() {
  * @throws Error with the API detail message on failure.
  */
 export async function upsertCostOverride(
-  body: CostOverrideUpsert
+  body: CostOverrideUpsert,
 ): Promise<CostOverride> {
   const response = await fetch(SWR_KEYS.costOverrides, {
     method: "PUT",
@@ -71,16 +73,21 @@ export async function upsertCostOverride(
  * the caller's intent (override absent) is satisfied either way.
  * @throws Error with the API detail message on non-404 failures.
  */
-export async function deleteCostOverride(model: string): Promise<void> {
+export async function deleteCostOverride(
+  model: string,
+  provider: string = "",
+): Promise<void> {
   // Keep "/" as real path separators (backend route is {model:path}) but encode
   // each segment, so slash-containing model ids (e.g. "bedrock/...") delete.
   const encodedModel = model
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
-  const response = await fetch(`${SWR_KEYS.costOverrides}/${encodedModel}`, {
-    method: "DELETE",
-  });
+  const query = provider ? `?provider=${encodeURIComponent(provider)}` : "";
+  const response = await fetch(
+    `${SWR_KEYS.costOverrides}/${encodedModel}${query}`,
+    { method: "DELETE" },
+  );
 
   if (response.ok || response.status === 404) {
     return;
@@ -91,7 +98,7 @@ export async function deleteCostOverride(model: string): Promise<void> {
 
 /** Revalidate the overrides list after a mutation. */
 export async function refreshCostOverrides(
-  mutate: ScopedMutator
+  mutate: ScopedMutator,
 ): Promise<void> {
   await mutate(SWR_KEYS.costOverrides);
 }
