@@ -16,8 +16,16 @@ output "workload_irsa_role_arn" {
   value       = length(module.irsa-workload-access) > 0 ? module.irsa-workload-access[0].iam_role_arn : null
 }
 
-# Re-exported from the upstream eks module so the craft_sandbox module can
-# trust-scope its IRSA role to the cluster's OIDC provider.
+output "node_security_group_id" {
+  description = "Node security group ID from the EKS module"
+  value       = module.eks.node_security_group_id
+}
+
+output "cluster_security_group_id" {
+  description = "Cluster security group ID from the EKS module"
+  value       = module.eks.cluster_security_group_id
+}
+
 output "oidc_provider_arn" {
   description = "EKS OIDC provider ARN (for IRSA roles)"
   value       = module.eks.oidc_provider_arn
