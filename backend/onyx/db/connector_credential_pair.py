@@ -331,11 +331,16 @@ def get_last_successful_attempt_poll_range_end(
     search_settings: SearchSettings,
     db_session: Session,
     ignore_targeted_reindex: bool = True,
-    ignore_synthetic_seed: bool = True,
+    ignore_synthetic_seed: bool = False,
 ) -> float:
     """Used to get the latest `poll_range_end` for a given connector and credential.
 
     This can be used to determine the next "start" time for a new index attempt.
+
+    A reindex-port synthetic seed carries PRESENT's poll cursor and IS a valid resume
+    point, so it is considered by default - the FUTURE's first connector attempt resumes
+    from it instead of refetching full history. This differs from the count/latest helpers,
+    which keep `ignore_synthetic_seed=True` because a seed is not a real indexing run.
 
     Note that the attempts time_started is not necessarily correct - that gets set
     separately and is similar but not exactly the same as the `poll_range_end`.

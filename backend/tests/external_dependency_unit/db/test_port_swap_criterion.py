@@ -14,7 +14,6 @@ from other cc_pairs); the `check_and_perform_index_swap` cases patch
 
 from collections.abc import Generator
 from datetime import datetime
-from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
@@ -24,12 +23,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.db import swap_index
 from onyx.db.document import mark_document_synced_secondary_pending
 from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingStatus
 from onyx.db.enums import SwitchoverType
-from onyx.db.index_attempt import create_synthetic_seed_attempt
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import IndexAttempt
 from onyx.db.models import PortAttempt
 from onyx.db.models import SearchSettings
 from onyx.db.port_attempt import create_port_attempt
@@ -74,37 +70,15 @@ def _make_success_port(db_session: Session, cc_pair_id: int, ss_id: int) -> date
     return row.time_completed
 
 
-def _make_real_index_attempt(
-    db_session: Session,
-    cc_pair_id: int,
-    ss_id: int,
-    time_started: object,
-    status: IndexingStatus = IndexingStatus.SUCCESS,
-) -> None:
-    db_session.add(
-        IndexAttempt(
-            connector_credential_pair_id=cc_pair_id,
-            search_settings_id=ss_id,
-            from_beginning=False,
-            status=status,
-            is_synthetic_seed=False,
-            time_started=time_started,
-            time_updated=time_started,
-        )
-    )
-    db_session.commit()
-
-
-def test_port_swap_ready_all_conditions_met(
+def test_port_swap_ready_when_port_succeeded(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
+    """A successful port (no active attempt) with a drained sync backlog is ready —
+    no post-port connector index attempt is required."""
     cc_pair, future_id = cc_pair_and_future
     future_ss = db_session.get(SearchSettings, future_id)
     assert future_ss is not None
-    port_done = _make_success_port(db_session, cc_pair.id, future_id)
-    _make_real_index_attempt(
-        db_session, cc_pair.id, future_id, port_done + timedelta(seconds=1)
-    )
+    _make_success_port(db_session, cc_pair.id, future_id)
     assert _port_swap_ready(db_session, future_ss, [cc_pair]) is True
 
 
@@ -128,65 +102,14 @@ def test_port_swap_blocks_on_active_port(
     assert _port_swap_ready(db_session, future_ss, [cc_pair]) is False
 
 
-def test_port_swap_blocks_on_seed_only_future(
-    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
-) -> None:
-    cc_pair, future_id = cc_pair_and_future
-    future_ss = db_session.get(SearchSettings, future_id)
-    assert future_ss is not None
-    _make_success_port(db_session, cc_pair.id, future_id)
-    # only a synthetic seed exists -> no real (non-seed) post-port attempt
-    create_synthetic_seed_attempt(
-        cc_pair.id, future_id, poll_range_end=1000.0, db_session=db_session
-    )
-    assert _port_swap_ready(db_session, future_ss, [cc_pair]) is False
-
-
-def test_port_swap_blocks_on_stale_post_port_poll(
-    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
-) -> None:
-    cc_pair, future_id = cc_pair_and_future
-    future_ss = db_session.get(SearchSettings, future_id)
-    assert future_ss is not None
-    port_done = _make_success_port(db_session, cc_pair.id, future_id)
-    # a real success, but it started BEFORE the port completed -> not "post-port"
-    _make_real_index_attempt(
-        db_session, cc_pair.id, future_id, port_done - timedelta(seconds=5)
-    )
-    assert _port_swap_ready(db_session, future_ss, [cc_pair]) is False
-
-
-def test_port_swap_blocks_on_in_progress_index(
-    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
-) -> None:
-    cc_pair, future_id = cc_pair_and_future
-    future_ss = db_session.get(SearchSettings, future_id)
-    assert future_ss is not None
-    port_done = _make_success_port(db_session, cc_pair.id, future_id)
-    _make_real_index_attempt(
-        db_session, cc_pair.id, future_id, port_done + timedelta(seconds=1)
-    )
-    _make_real_index_attempt(
-        db_session,
-        cc_pair.id,
-        future_id,
-        port_done + timedelta(seconds=2),
-        status=IndexingStatus.IN_PROGRESS,
-    )
-    assert _port_swap_ready(db_session, future_ss, [cc_pair]) is False
-
-
 def test_port_swap_blocks_on_pending_sync_backlog(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     cc_pair, future_id = cc_pair_and_future
     future_ss = db_session.get(SearchSettings, future_id)
     assert future_ss is not None
-    port_done = _make_success_port(db_session, cc_pair.id, future_id)
-    _make_real_index_attempt(
-        db_session, cc_pair.id, future_id, port_done + timedelta(seconds=1)
-    )
-    # a deferred-sync doc remains -> condition (d) fails (tenant-global count)
+    _make_success_port(db_session, cc_pair.id, future_id)
+    # a deferred-sync doc remains -> the backlog gate fails (tenant-global count)
     doc_id = f"{_PENDING_DOC_PREFIX}pending"
     db_session.add(
         DbDocument(id=doc_id, semantic_id=doc_id, kg_stage=KGStage.NOT_STARTED)

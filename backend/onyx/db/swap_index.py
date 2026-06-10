@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
-from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
@@ -14,7 +13,6 @@ from onyx.db.connector_credential_pair import resync_cc_pair
 from onyx.db.document import count_secondary_only_sync_pending_documents
 from onyx.db.document import delete_all_documents_for_connector_credential_pair
 from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import SwitchoverType
 from onyx.db.index_attempt import cancel_indexing_attempts_for_search_settings
@@ -22,8 +20,6 @@ from onyx.db.index_attempt import (
     count_unique_active_cc_pairs_with_successful_index_attempts,
 )
 from onyx.db.index_attempt import count_unique_cc_pairs_with_successful_index_attempts
-from onyx.db.index_attempt import get_last_attempt_for_cc_pair
-from onyx.db.index_attempt import get_latest_successful_index_attempt_for_cc_pair_id
 from onyx.db.llm import update_default_contextual_model
 from onyx.db.llm import update_no_default_contextual_rag_provider
 from onyx.db.models import ConnectorCredentialPair
@@ -151,15 +147,6 @@ def _perform_index_swap(
     return current_search_settings
 
 
-def _is_push_based_pair(cc_pair: ConnectorCredentialPair) -> bool:
-    """Ingestion-API pairs push docs in and never run a connector index attempt, so
-    their docs reach FUTURE only via the port."""
-    return (
-        cc_pair.connector_id == 0
-        or cc_pair.connector.source == DocumentSource.INGESTION_API
-    )
-
-
 def _required_cc_pairs_for_switchover(
     db_session: Session,
     all_cc_pairs: list[ConnectorCredentialPair],
@@ -187,41 +174,15 @@ def _port_swap_ready(
     new_search_settings: SearchSettings,
     required_cc_pairs: list[ConnectorCredentialPair],
 ) -> bool:
-    """Port-flow swap gate: True only when every required cc_pair's port is SUCCESS
-    (none active) and — for standard connectors — a real (non-seed) FUTURE index
-    attempt landed after the port with none in progress (push-based pairs skip that
-    index check), and the deferred metadata-sync backlog has drained.
-    """
+    """Port-flow swap gate: True once every required cc_pair's port is SUCCESS
+    (none active) and the deferred metadata-sync backlog has drained. The port copy
+    is the whole bar — we do not wait for a post-port connector index attempt."""
     ss_id = new_search_settings.id
     for cc_pair in required_cc_pairs:
         if get_active_port_attempt(db_session, cc_pair.id, ss_id) is not None:
             return False
         latest_port = get_latest_port_attempt(db_session, cc_pair.id, ss_id)
         if latest_port is None or not latest_port.status.is_successful():
-            return False
-
-        # No connector index attempt to wait on; port success is the whole gate.
-        if _is_push_based_pair(cc_pair):
-            continue
-
-        # the synthetic seed can't satisfy this: it's excluded by the T5 helper and
-        # would fail the time_started >= time_completed check anyway.
-        latest_index = get_latest_successful_index_attempt_for_cc_pair_id(
-            db_session, cc_pair.id, secondary_index=True
-        )
-        if (
-            latest_index is None
-            or latest_index.time_started is None
-            or latest_port.time_completed is None
-            or latest_index.time_started < latest_port.time_completed
-        ):
-            return False
-
-        last_attempt = get_last_attempt_for_cc_pair(cc_pair.id, ss_id, db_session)
-        if last_attempt is not None and last_attempt.status in (
-            IndexingStatus.NOT_STARTED,
-            IndexingStatus.IN_PROGRESS,
-        ):
             return False
 
     return count_secondary_only_sync_pending_documents(db_session) == 0

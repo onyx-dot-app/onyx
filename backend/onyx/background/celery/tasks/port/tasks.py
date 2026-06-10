@@ -12,9 +12,11 @@ SUCCESS/CANCELED are left alone).
 
 import logging
 import time
+from collections.abc import MutableMapping
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from typing import Any
 
 from celery import Celery
 from celery import shared_task
@@ -66,6 +68,24 @@ _PORT_BATCH_RETRY_SLEEP_S = 2
 _PORT_STALL_THRESHOLD_SECONDS = _PORT_SOFT_TIME_LIMIT + 15 * 60  # 45 minutes
 
 
+class _PortLogAdapter(logging.LoggerAdapter):
+    """Prefix every port log line with its attempt + cc_pair so concurrent ports
+    are distinguishable in the shared worker log (mirrors the indexing
+    [Index Attempt][CC Pair] prefix). cc_pair_id is filled in once the attempt is
+    read, so the few lines logged before that omit it."""
+
+    def process(
+        self, msg: str, kwargs: MutableMapping[str, Any]
+    ) -> tuple[str, MutableMapping[str, Any]]:
+        extra = self.extra or {}
+        cc_pair_id = extra.get("cc_pair_id")
+        cc_prefix = f"[CC Pair: {cc_pair_id}] " if cc_pair_id is not None else ""
+        return (
+            f"[Port Attempt: {extra.get('port_attempt_id')}] {cc_prefix}{msg}",
+            kwargs,
+        )
+
+
 def _copy_batch_with_retry(
     copier: PortCopier, doc_ids: list[str], log: logging.LoggerAdapter
 ) -> int:
@@ -104,9 +124,13 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
     each batch, so a fresh attempt continues `WHERE document_id > cursor` rather
     than re-porting from the start.
     """
-    log = logging.LoggerAdapter(
+    log = _PortLogAdapter(
         task_logger,
-        extra={"port_attempt_id": port_attempt_id, "celery_task_id": celery_task_id},
+        {
+            "port_attempt_id": port_attempt_id,
+            "celery_task_id": celery_task_id,
+            "cc_pair_id": None,
+        },
     )
 
     # PortCopier must be built while the search settings are session-attached, so
@@ -124,6 +148,8 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             return
 
         cc_pair_id = attempt.cc_pair_id
+        # Replace extra (a read-only Mapping) so every later line carries the cc_pair.
+        log.extra = {**(log.extra or {}), "cc_pair_id": cc_pair_id}
         cursor = attempt.last_processed_doc_id
         docs_ported = attempt.docs_ported or 0
 
@@ -169,7 +195,7 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 cc_pair is None
                 or cc_pair.status == ConnectorCredentialPairStatus.DELETING
             ):
-                log.info("cc_pair %s gone/deleting, stopping port", cc_pair_id)
+                log.info("cc_pair gone/deleting, stopping port")
                 return
             doc_ids = get_document_ids_for_cc_pair_batch(
                 db_session, cc_pair_id, after_doc_id=cursor, limit=INDEX_BATCH_SIZE
@@ -234,10 +260,28 @@ def _fail_stalled_port_attempts(
         fresh = get_port_attempt(db_session, stale.id)
         if fresh is None or fresh.status.is_terminal():
             continue
-        task_logger.warning("check_for_port: failing stalled PortAttempt %s", stale.id)
+        task_logger.warning(
+            "check_for_port: failing stalled PortAttempt %s (cc_pair %s)",
+            stale.id,
+            stale.cc_pair_id,
+        )
         mark_port_failed(
             db_session, stale.id, error_msg="stalled: no progress within threshold"
         )
+
+
+def _enqueue_run_port_attempt(
+    celery_app: Celery, port_attempt_id: int, tenant_id: str
+) -> None:
+    """Enqueue run_port_attempt for one attempt. The TTL means a task not consumed
+    within BEAT_EXPIRES_DEFAULT is dropped; check_for_port re-issues it next tick."""
+    celery_app.send_task(
+        OnyxCeleryTask.RUN_PORT_ATTEMPT,
+        kwargs={"port_attempt_id": port_attempt_id, "tenant_id": tenant_id},
+        queue=OnyxCeleryQueues.PORT,
+        priority=OnyxCeleryPriority.MEDIUM,
+        expires=BEAT_EXPIRES_DEFAULT,
+    )
 
 
 def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
@@ -274,12 +318,37 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
 
             _fail_stalled_port_attempts(db_session, search_settings_id, lock_beat)
 
+            # A NOT_STARTED attempt older than the task TTL had its enqueued
+            # run_port_attempt dropped (worker down/absent when it was created); it
+            # would otherwise strand forever since it still counts as "active".
+            not_started_expired_before = datetime.now(timezone.utc) - timedelta(
+                seconds=BEAT_EXPIRES_DEFAULT
+            )
+
             for cc_pair_id in cc_pair_ids:
                 lock_beat.reacquire()
-                if (
-                    get_active_port_attempt(db_session, cc_pair_id, search_settings_id)
-                    is not None
-                ):
+                active = get_active_port_attempt(
+                    db_session, cc_pair_id, search_settings_id
+                )
+                if active is not None:
+                    # IN_PROGRESS is the stall watchdog's job; a recent NOT_STARTED is
+                    # still in flight. Only re-issue a NOT_STARTED whose task has
+                    # definitely expired -- idempotent (the run task's terminal-check
+                    # + the active-unique index make a re-send safe, and the original
+                    # task is already gone, so there's no double-run).
+                    if (
+                        active.status == PortAttemptStatus.NOT_STARTED
+                        and active.time_created < not_started_expired_before
+                    ):
+                        try:
+                            _enqueue_run_port_attempt(celery_app, active.id, tenant_id)
+                            tasks_created += 1
+                        except Exception:
+                            task_logger.exception(
+                                "check_for_port: re-enqueue failed for stale "
+                                "NOT_STARTED PortAttempt %s",
+                                active.id,
+                            )
                     continue
                 latest = get_latest_port_attempt(
                     db_session, cc_pair_id, search_settings_id
@@ -306,13 +375,7 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
                     )
                     continue
                 try:
-                    celery_app.send_task(
-                        OnyxCeleryTask.RUN_PORT_ATTEMPT,
-                        kwargs={"port_attempt_id": attempt.id, "tenant_id": tenant_id},
-                        queue=OnyxCeleryQueues.DOCPROCESSING,
-                        priority=OnyxCeleryPriority.MEDIUM,
-                        expires=BEAT_EXPIRES_DEFAULT,
-                    )
+                    _enqueue_run_port_attempt(celery_app, attempt.id, tenant_id)
                 except Exception:
                     # Row is committed; on enqueue failure mark it FAILED so the
                     # next tick recreates it (else an orphaned NOT_STARTED sticks).

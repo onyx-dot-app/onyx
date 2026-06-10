@@ -17,6 +17,7 @@ from onyx.db.enums import Permission
 from onyx.db.enums import SwitchoverType
 from onyx.db.index_attempt import create_synthetic_seed_attempt
 from onyx.db.index_attempt import expire_index_attempts
+from onyx.db.llm import fetch_default_contextual_rag_model
 from onyx.db.llm import update_default_contextual_model
 from onyx.db.llm import update_no_default_contextual_rag_provider
 from onyx.db.models import IndexModelStatus
@@ -84,6 +85,7 @@ def set_new_search_settings(
     validate_contextual_rag_model(
         model_configuration_id=search_settings_new.contextual_rag_model_configuration_id,
         db_session=db_session,
+        enable_contextual_rag=search_settings_new.enable_contextual_rag,
     )
 
     search_settings = get_current_search_settings(db_session)
@@ -103,6 +105,12 @@ def set_new_search_settings(
         new_search_settings_request = SavedSearchSettings(
             **search_settings_new.model_dump()
         )
+
+    # Every new (FUTURE) search settings drives its reindex through the port flow:
+    # re-embed PRESENT -> FUTURE in place rather than re-fetching from connectors.
+    new_search_settings_request = new_search_settings_request.model_copy(
+        update={"use_port_flow": True}
+    )
 
     secondary_search_settings = get_secondary_search_settings(db_session)
 
@@ -289,6 +297,7 @@ def update_saved_search_settings(
     validate_contextual_rag_model(
         model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         db_session=db_session,
+        enable_contextual_rag=search_settings.enable_contextual_rag,
     )
 
     update_current_search_settings(
@@ -329,8 +338,18 @@ def delete_unstructured_api_key_endpoint(
 def validate_contextual_rag_model(
     model_configuration_id: int | None,
     db_session: Session,
+    enable_contextual_rag: bool = False,
 ) -> None:
     if model_configuration_id is None:
+        if (
+            enable_contextual_rag
+            and fetch_default_contextual_rag_model(db_session) is None
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Contextual Retrieval is enabled but no Contextual Retrieval "
+                "model is configured, and no tenant default exists.",
+            )
         return
     from onyx.db.models import ModelConfiguration
 

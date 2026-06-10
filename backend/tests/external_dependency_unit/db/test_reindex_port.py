@@ -8,9 +8,10 @@ covered by applying the migration, which this repo does not test programmaticall
   and first-terminal-write-wins
 - mark_document_synced_secondary_pending sets the flag (and clears needs-sync),
   and a later mark_document_as_synced clears it again
-- the synthetic seed: writer row shape, seed-blind filtering (a seed must not count
-  toward the swap or masquerade as the poll cursor), and the gated should_index
-  FUTURE branch (legacy once-only vs port-flow continuous)
+- the synthetic seed: writer row shape, seed-blind filtering for counts/latest/swap (a
+  seed must not count toward the swap or appear as the latest run) while it DOES prime the
+  resume poll cursor, and the gated should_index FUTURE branch (legacy once-only vs
+  port-flow continuous)
 - run_port_attempt: ports docs in batches, advances/commits the cursor, retries a
   failed batch then marks FAILED (cursor left at the prior good batch)
 """
@@ -29,10 +30,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
-from onyx.background.celery.tasks.docprocessing import port_task
-from onyx.background.celery.tasks.docprocessing.port_task import run_check_for_port
-from onyx.background.celery.tasks.docprocessing.port_task import run_port_attempt
 from onyx.background.celery.tasks.docprocessing.utils import should_index
+from onyx.background.celery.tasks.port import tasks as port_task
+from onyx.background.celery.tasks.port.tasks import run_check_for_port
+from onyx.background.celery.tasks.port.tasks import run_port_attempt
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -368,8 +369,6 @@ def test_seed_excluded_from_latest_and_counts(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     cc_pair, future_id = cc_pair_and_future
-    future_ss = db_session.get(SearchSettings, future_id)
-    assert future_ss is not None
 
     # only a synthetic seed exists
     create_synthetic_seed_attempt(
@@ -391,13 +390,6 @@ def test_seed_excluded_from_latest_and_counts(
         )
         is None
     )
-    # the seed's cursor is invisible to the seed-blind helper -> earliest fallback
-    assert (
-        get_last_successful_attempt_poll_range_end(
-            cc_pair.id, 42.0, future_ss, db_session
-        )
-        == 42.0
-    )
 
     # a real SUCCESS attempt IS counted and returned
     real_id = mock_successful_index_attempt(
@@ -411,6 +403,47 @@ def test_seed_excluded_from_latest_and_counts(
         db_session, cc_pair.id, secondary_index=True
     )
     assert latest is not None and latest.id == real_id
+
+
+def test_seed_primes_poll_cursor(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The seed IS the resume cursor: with only a seed present, the FUTURE's first
+    connector attempt starts from PRESENT's cursor (carried by the seed), not the
+    earliest_index fallback. A later real SUCCESS attempt then supersedes the seed."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+
+    seed_cursor = 1000.0
+    create_synthetic_seed_attempt(
+        cc_pair.id, future_id, poll_range_end=seed_cursor, db_session=db_session
+    )
+    db_session.expire_all()
+    # resume from the seed cursor, not the earliest_index arg (42.0)
+    assert (
+        get_last_successful_attempt_poll_range_end(
+            cc_pair.id, 42.0, future_ss, db_session
+        )
+        == seed_cursor
+    )
+
+    # a real SUCCESS attempt with a later cursor supersedes the seed
+    later_cursor = seed_cursor + 5000.0
+    real_id = mock_successful_index_attempt(
+        cc_pair.id, future_id, docs_indexed=5, db_session=db_session
+    )
+    real = db_session.get(IndexAttempt, real_id)
+    assert real is not None
+    real.poll_range_end = datetime.fromtimestamp(later_cursor, tz=timezone.utc)
+    db_session.commit()
+    db_session.expire_all()
+    assert (
+        get_last_successful_attempt_poll_range_end(
+            cc_pair.id, 42.0, future_ss, db_session
+        )
+        == later_cursor
+    )
 
 
 def test_should_index_future_gated_on_port_flow(
@@ -760,7 +793,7 @@ def test_check_for_port_creates_and_enqueues(
         "port_attempt_id": attempts[0].id,
         "tenant_id": get_current_tenant_id(),
     }
-    assert call.kwargs["queue"] == OnyxCeleryQueues.DOCPROCESSING
+    assert call.kwargs["queue"] == OnyxCeleryQueues.PORT
     assert call.kwargs["expires"] == BEAT_EXPIRES_DEFAULT
 
 
@@ -881,6 +914,69 @@ def test_check_for_port_leaves_active_in_progress(
         .count()
         == 1
     )
+
+
+def test_check_for_port_reissues_stale_not_started(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A NOT_STARTED attempt whose enqueued task was lost/expired (created before the
+    TTL window) is re-enqueued in place — not stranded, not duplicated."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    stale = create_port_attempt(db_session, cc_pair.id, future_id)
+    # backdate time_created past the task TTL so its enqueued task is "expired"
+    old = datetime.now(timezone.utc) - timedelta(seconds=BEAT_EXPIRES_DEFAULT + 60)
+    db_session.query(PortAttempt).filter(PortAttempt.id == stale.id).update(
+        {PortAttempt.time_created: old}
+    )
+    db_session.commit()
+
+    result, celery_app = _run_check_for_port(cc_pair, future_id)
+
+    assert result == 1
+    celery_app.send_task.assert_called_once()
+    assert (
+        celery_app.send_task.call_args.kwargs["kwargs"]["port_attempt_id"] == stale.id
+    )
+    # re-issued in place: still the same single attempt, still NOT_STARTED
+    db_session.expire_all()
+    rows = (
+        db_session.query(PortAttempt).filter(PortAttempt.cc_pair_id == cc_pair.id).all()
+    )
+    assert len(rows) == 1 and rows[0].id == stale.id
+    assert rows[0].status == PortAttemptStatus.NOT_STARTED
+
+
+def test_check_for_port_leaves_fresh_not_started(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A recently-created NOT_STARTED attempt (task still in flight, within the TTL)
+    is left alone — not re-enqueued or duplicated."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    fresh = create_port_attempt(db_session, cc_pair.id, future_id)  # time_created = now
+
+    result, celery_app = _run_check_for_port(cc_pair, future_id)
+
+    assert result == 0
+    celery_app.send_task.assert_not_called()
+    db_session.expire_all()
+    assert (
+        db_session.query(PortAttempt)
+        .filter(PortAttempt.cc_pair_id == cc_pair.id)
+        .count()
+        == 1
+    )
+    row = db_session.get(PortAttempt, fresh.id)
+    assert row is not None and row.status == PortAttemptStatus.NOT_STARTED
 
 
 def test_check_for_port_fails_attempt_when_enqueue_raises(
