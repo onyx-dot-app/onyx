@@ -23,12 +23,9 @@ const PUBLIC_ROUTES = ["/auth", "/anonymous", "/_next", "/api"];
 // be run before the config is defined e.g. if we try and do a .map it will complain
 export const config = {
   matcher: [
-    // Match everything except /api (proxied to the backend — framing headers
-    // are meaningless on API responses and the proxy would add per-request
-    // overhead) and Next.js internals/static assets. The catch-all is needed
-    // so the clickjacking protection headers below cover every page; the
-    // auth check and /ee rewriting are still gated on their route prefixes
-    // inside proxy() itself.
+    // Everything except /api and Next internals/static assets, so the frame
+    // protection headers cover every page. Auth check and /ee rewriting are
+    // still gated on their route prefixes inside proxy().
     "/((?!api$|api/|_next/|favicon.ico).*)",
   ],
 };
@@ -44,19 +41,12 @@ const EE_ROUTES = [
   "/agents/stats",
 ];
 
-// frame-ancestors controls who may embed a page in an iframe (clickjacking
-// protection). Pages get 'self' only, except the /nrf pages which are
-// embedded by the Chrome extension (new tab + side panel). The extension's
-// origin can't be pinned to an ID since unpacked dev installs and store
-// installs have different IDs, so the chrome-extension: scheme is allowed
-// for those routes only.
-//
-// These headers are emitted here rather than from next.config.js headers()
-// because config headers are resolved at build time — emitting them at
-// request time is what makes the DISABLE_FRAME_PROTECTION kill switch work
-// without a rebuild. Headers set here REPLACE same-named headers from
-// next.config.js, which is why the full CSP (shared via security-headers.js)
-// is emitted and not just the frame-ancestors directive.
+// Clickjacking protection. Pages get frame-ancestors 'self', except the /nrf
+// pages embedded by the Chrome extension iframes — the extension ID differs
+// between store and unpacked installs, so the scheme is allowed instead.
+// Emitted here (not next.config.js, which is resolved at build time) so the
+// DISABLE_* env switches work at runtime; see security-headers.js for why
+// the full CSP must be emitted.
 const STRICT_CSP_HEADER = buildCspHeader("'self'");
 const EXTENSION_EMBEDDABLE_CSP_HEADER = buildCspHeader(
   "'self' chrome-extension:"
@@ -75,8 +65,6 @@ function withFrameProtectionHeaders(
   }
 
   const pathname = request.nextUrl.pathname;
-  // With the /nrf pages disabled there is no extension-embeddable surface,
-  // so every route (including the /nrf redirect itself) gets the strict CSP.
   const isExtensionEmbeddable =
     !SERVER_SIDE_ONLY__DISABLE_NRF_PAGE && isNrfRoute(pathname);
 
@@ -84,9 +72,8 @@ function withFrameProtectionHeaders(
     "Content-Security-Policy",
     isExtensionEmbeddable ? EXTENSION_EMBEDDABLE_CSP_HEADER : STRICT_CSP_HEADER
   );
-  // Legacy fallback for browsers without CSP frame-ancestors support. Modern
-  // browsers ignore this header when frame-ancestors is present, so the
-  // chrome-extension: allowance still applies for the /nrf pages.
+  // Legacy fallback; browsers ignore XFO when frame-ancestors is present,
+  // so the /nrf extension allowance above still applies.
   response.headers.set("X-Frame-Options", "SAMEORIGIN");
   return response;
 }
@@ -94,12 +81,9 @@ function withFrameProtectionHeaders(
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  // All-or-nothing switch for the extension-embeddable /nrf pages. When
-  // disabled, the pages are unreachable and (via withFrameProtectionHeaders
-  // above) the chrome-extension: frame-ancestors allowance is never emitted,
-  // so no part of the app can be framed by the extension. The redirect
-  // target / carries frame-ancestors 'self', so inside an extension iframe
-  // the browser refuses to render it.
+  // With /nrf disabled the pages are unreachable and the chrome-extension:
+  // allowance is never emitted, so the extension can't frame anything — the
+  // redirect target / carries frame-ancestors 'self'.
   if (SERVER_SIDE_ONLY__DISABLE_NRF_PAGE && isNrfRoute(pathname)) {
     return withFrameProtectionHeaders(
       request,

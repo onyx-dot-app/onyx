@@ -37,21 +37,14 @@ export const TENANT_ID_COOKIE_NAME = "onyx_tid";
 export const SERVER_SIDE_ONLY__AUTH_COOKIE_NAME =
   process.env.AUTH_COOKIE_NAME || "fastapiusersauth";
 
-// Runtime kill switch for the clickjacking protection headers (CSP
-// frame-ancestors + X-Frame-Options) emitted by src/proxy.ts. Read at server
-// start, so it can be flipped with an env change + restart — no rebuild.
-// Server-side only: read in the proxy (middleware).
+// Runtime kill switch for the clickjacking headers (frame-ancestors + XFO)
+// emitted by src/proxy.ts; flipped with an env change + restart, no rebuild.
 export const SERVER_SIDE_ONLY__DISABLE_FRAME_PROTECTION =
   process.env.DISABLE_FRAME_PROTECTION?.toLowerCase() === "true";
 
-// All-or-nothing runtime switch for the /nrf pages (the surfaces the Chrome
-// extension embeds in its new-tab and side-panel iframes). When true,
-// src/proxy.ts redirects /nrf and /nrf/* to / and stops emitting the relaxed
-// "frame-ancestors 'self' chrome-extension:" CSP, so the whole app is
-// strictly 'self' — nothing is extension-embeddable. Lets security-conscious
-// deployments that don't use the extension remove that surface entirely.
-// Same runtime semantics as DISABLE_FRAME_PROTECTION above: env change +
-// restart, no rebuild. Server-side only: read in the proxy (middleware).
+// All-or-nothing runtime switch: src/proxy.ts redirects /nrf* to / and drops
+// the chrome-extension: frame-ancestors allowance, so nothing in the app is
+// embeddable by the Chrome extension.
 export const SERVER_SIDE_ONLY__DISABLE_NRF_PAGE =
   process.env.DISABLE_NRF_PAGE?.toLowerCase() === "true";
 

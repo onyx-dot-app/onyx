@@ -4,13 +4,10 @@ const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
 
 const { buildCspHeader } = require("./src/lib/security-headers");
 
-// Base CSP without frame-ancestors. Clickjacking protection (frame-ancestors
-// + X-Frame-Options) is emitted at request time from src/proxy.ts so it can
-// be disabled at runtime via DISABLE_FRAME_PROTECTION — headers defined here
-// are baked into the build manifest and cannot be toggled without a rebuild.
-// This header only takes effect on routes the proxy does not cover (static
-// assets, /api), since proxy-set headers replace same-named headers from
-// here. Do NOT add frame-ancestors back to this one.
+// Fallback CSP for routes the proxy doesn't cover (static assets, /api).
+// frame-ancestors + X-Frame-Options live in src/proxy.ts (runtime-toggleable
+// via DISABLE_FRAME_PROTECTION); headers here are baked in at build time, so
+// do NOT add frame-ancestors back.
 const baseCspHeader = buildCspHeader(null);
 
 /** @type {import('next').NextConfig} */
